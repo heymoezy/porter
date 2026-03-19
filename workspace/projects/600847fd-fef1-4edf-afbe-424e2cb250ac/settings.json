@@ -1,6 +1,7 @@
 {
   "project_id": "600847fd-fef1-4edf-afbe-424e2cb250ac",
-  "name": "YMC Capital Website",
+  "name": "YMC Capital",
   "memory_isolation": "project",
-  "agents": []
+  "agents": [],
+  "type": "website"
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.22 — Fix project chat rendering"""
+"""Porter v0.33.26 — Tools workspace redesign"""
 
 
 import email
@@ -883,6 +883,39 @@ def _db_init():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_crm_pc_project ON crm_project_contacts(project_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_crm_pc_contact ON crm_project_contacts(contact_id)")
+    _crm_contact_cols = [r["name"] for r in conn.execute("PRAGMA table_info(crm_contacts)").fetchall()]
+    if "honorific" not in _crm_contact_cols:
+        conn.execute("ALTER TABLE crm_contacts ADD COLUMN honorific TEXT DEFAULT ''")
+    if "photo_path" not in _crm_contact_cols:
+        conn.execute("ALTER TABLE crm_contacts ADD COLUMN photo_path TEXT DEFAULT ''")
+    if "summary" not in _crm_contact_cols:
+        conn.execute("ALTER TABLE crm_contacts ADD COLUMN summary TEXT DEFAULT ''")
+    _crm_company_cols = [r["name"] for r in conn.execute("PRAGMA table_info(crm_companies)").fetchall()]
+    if "summary" not in _crm_company_cols:
+        conn.execute("ALTER TABLE crm_companies ADD COLUMN summary TEXT DEFAULT ''")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS workspace_user_profiles (
+            username TEXT PRIMARY KEY,
+            prefix TEXT DEFAULT '',
+            title TEXT DEFAULT '',
+            phone TEXT DEFAULT '',
+            social_json TEXT DEFAULT '{}',
+            summary TEXT DEFAULT '',
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS workspace_user_activities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            body TEXT NOT NULL DEFAULT '',
+            created_by TEXT DEFAULT '',
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_profile_username ON workspace_user_profiles(username)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_activities_username ON workspace_user_activities(username, created_at DESC)")
 
     
     # 1. Migrate users from _config if table is empty
@@ -3232,8 +3265,87 @@ def _project_by_id(project_id: str | None) -> dict | None:
         return None
     for proj in _config.get("projects", []):
         if str(proj.get("id") or "").strip() == pid:
+            _normalize_project_assigned_personas(proj, persist=False)
             return proj
     return None
+
+
+def _normalize_project_assigned_personas(proj: dict | None, persist: bool = False) -> list[str]:
+    if not isinstance(proj, dict):
+        return []
+    raw_ids = [str(x).strip() for x in (proj.get("assigned_personas") or []) if str(x).strip()]
+    if not raw_ids:
+        proj["assigned_personas"] = []
+        return []
+    unique_ids = []
+    seen_ids = set()
+    for aid in raw_ids:
+        if aid not in seen_ids:
+            seen_ids.add(aid)
+            unique_ids.append(aid)
+    changed = unique_ids != raw_ids
+    try:
+        conn = _db_conn()
+        cols = {str(r[1]) for r in conn.execute("PRAGMA table_info(personas)").fetchall()}
+        has_owner = "owner" in cols
+        has_managed = "managed_by_porter" in cols
+        has_created = "created_at" in cols
+        select_cols = ["id", "name"]
+        if has_owner:
+            select_cols.append("owner")
+        if has_managed:
+            select_cols.append("managed_by_porter")
+        if has_created:
+            select_cols.append("created_at")
+        rows = {}
+        for aid in unique_ids:
+            row = conn.execute(f"SELECT {', '.join(select_cols)} FROM personas WHERE id=?", (aid,)).fetchone()
+            if row:
+                if isinstance(row, sqlite3.Row):
+                    rows[aid] = {k: row[k] for k in row.keys()}
+                else:
+                    rows[aid] = {select_cols[i]: row[i] for i in range(len(select_cols))}
+        conn.close()
+        owner = str(proj.get("owner") or "").strip().lower()
+        chosen = {}
+        order = []
+        for idx, aid in enumerate(unique_ids):
+            row = rows.get(aid)
+            if not row:
+                changed = True
+                continue
+            name_key = str((row.get("name") or aid)).strip().lower()
+            candidate = {
+                "id": aid,
+                "name_key": name_key,
+                "owner_match": 1 if owner and str(row.get("owner") or "").strip().lower() == owner else 0,
+                "managed": 1 if row.get("managed_by_porter") else 0,
+                "created_at": str(row.get("created_at") or ""),
+                "index": idx,
+            }
+            current = chosen.get(name_key)
+            if not current:
+                chosen[name_key] = candidate
+                order.append(name_key)
+                continue
+            better = False
+            if candidate["owner_match"] != current["owner_match"]:
+                better = candidate["owner_match"] > current["owner_match"]
+            elif candidate["managed"] != current["managed"]:
+                better = candidate["managed"] > current["managed"]
+            elif candidate["created_at"] and current["created_at"] and candidate["created_at"] < current["created_at"]:
+                better = True
+            if better:
+                chosen[name_key] = candidate
+            changed = True
+        normalized = [chosen[k]["id"] for k in order if k in chosen]
+    except Exception:
+        normalized = unique_ids
+    proj["assigned_personas"] = normalized
+    if changed and persist:
+        proj["updated_at"] = time.time()
+        save_config(_config)
+    return normalized
 
 
 def _task_by_id(task_id: str | None) -> dict | None:
@@ -10710,54 +10822,353 @@ def _persona_is_orchestrator_only(persona: dict | None) -> bool:
     return bool(persona and int(persona.get("orchestrator_only") or 0))
 
 
+def _persona_role_family(persona: dict | None) -> str:
+    if not persona:
+        return "general"
+    text = " ".join([
+        str(persona.get("name", "") or ""),
+        str(persona.get("role", "") or ""),
+        str(persona.get("agent_group", "") or ""),
+    ]).lower()
+    if bool(persona.get("orchestrator_only")) or re.search(r"porter|orchestrat|director|chief of staff|command", text):
+        return "orchestrator"
+    if re.search(r"joke|comed|humou?r|funny|comic", text):
+        return "comedy"
+    if re.search(r"writer|copy|content|editor|story|script|social|marketing", text):
+        return "writing"
+    if re.search(r"research|analy|investig|insight|briefing|intelligence", text):
+        return "research"
+    if re.search(r"design|ux|ui|brand|visual|creative|art", text):
+        return "design"
+    if re.search(r"qa|quality|test|review|bug", text):
+        return "qa"
+    if re.search(r"engineer|developer|backend|frontend|full.?stack|software|code", text):
+        return "engineering"
+    if re.search(r"trading|finance|market|risk|portfolio|bitcoin|crypto|fund", text):
+        return "finance"
+    if re.search(r"ops|operations|coordinator|scheduler|operator|producer|project", text):
+        return "operations"
+    if re.search(r"sales|support|success|community|customer|crm|investor", text):
+        return "relationship"
+    return "general"
+
+
+def _persona_character_label(persona: dict | None) -> str:
+    return {
+        "orchestrator": "Orchestrator",
+        "comedy": "Comedian",
+        "writing": "Writer",
+        "research": "Researcher",
+        "design": "Designer",
+        "qa": "Reviewer",
+        "engineering": "Builder",
+        "finance": "Analyst",
+        "operations": "Operator",
+        "relationship": "Liaison",
+        "general": "Specialist",
+    }.get(_persona_role_family(persona), "Specialist")
+
+
+def _persona_profile_defaults(persona: dict | None) -> dict:
+    family = _persona_role_family(persona)
+    role = str((persona or {}).get("role") or "Specialist worker").strip()
+    defaults = {
+        "orchestrator": {
+            "doctrine": "Run the work through clear delegation, explicit approvals, and constant state awareness.",
+            "style": "Decisive, concise, supervisory.",
+            "workflow": [
+                "Read project state and blockers first.",
+                "Choose the next worker, task, or approval step.",
+                "Push execution until a real decision boundary appears.",
+                "Report only the delta: what changed, what is blocked, and what needs input.",
+            ],
+            "outputs": ["Assignments", "approvals", "task updates", "project direction changes"],
+            "boundaries": [
+                "Do not fabricate progress.",
+                "Do not hide uncertainty or blockers.",
+                "Escalate when direction or approval is unclear.",
+            ],
+        },
+        "comedy": {
+            "doctrine": "Produce short, high-hit-rate humor that fits the requested tone and audience.",
+            "style": "Playful, crisp, never rambling.",
+            "workflow": [
+                "Read the active tone, audience, and constraints.",
+                "Find the strongest joke angle quickly.",
+                "Self-check for repetition, weak rhythm, and tone mismatch.",
+                "Return the cleanest final line and only add a variant if useful.",
+            ],
+            "outputs": ["Daily joke", "alternate joke", "tone revision"],
+            "boundaries": [
+                "Do not drift off-tone.",
+                "Do not pad with explanations unless asked.",
+                "Escalate if the humor style conflicts with directives.",
+            ],
+        },
+        "writing": {
+            "doctrine": "Turn intent into clear, audience-aware written output with as little friction as possible.",
+            "style": "Clear, structured, concise.",
+            "workflow": [
+                "Clarify audience, objective, and tone from project state.",
+                "Draft the smallest complete version that satisfies the ask.",
+                "Tighten structure and remove fluff before handoff.",
+            ],
+            "outputs": ["Draft copy", "revision", "final deliverable"],
+            "boundaries": [
+                "Do not invent facts.",
+                "Keep the tone aligned to project directives.",
+            ],
+        },
+        "research": {
+            "doctrine": "Reduce uncertainty quickly and return the most decision-useful findings first.",
+            "style": "Analytical, evidence-led, compact.",
+            "workflow": [
+                "Frame the question and success criteria.",
+                "Gather the minimum evidence needed to answer it well.",
+                "Separate facts from inference and recommend the next move.",
+            ],
+            "outputs": ["Findings", "risks", "recommendation"],
+            "boundaries": [
+                "Flag missing evidence instead of bluffing.",
+                "Do not overclaim certainty.",
+            ],
+        },
+        "design": {
+            "doctrine": "Create work that is visually clear, intentional, and consistent with the project standard.",
+            "style": "Tasteful, direct, high-signal.",
+            "workflow": [
+                "Read the brief, audience, and brand constraints.",
+                "Choose a clear visual direction instead of averaging styles.",
+                "Refine for hierarchy, consistency, and usability before handoff.",
+            ],
+            "outputs": ["Design direction", "UI revision", "asset recommendation"],
+            "boundaries": [
+                "Avoid generic filler design.",
+                "Keep the system visually coherent across surfaces.",
+            ],
+        },
+        "qa": {
+            "doctrine": "Protect quality by finding truth, not by rubber-stamping progress.",
+            "style": "Skeptical, concrete, evidence-based.",
+            "workflow": [
+                "Check the claimed outcome against real behavior.",
+                "Surface failures, regressions, and missing proof first.",
+                "Only sign off when the result is actually defensible.",
+            ],
+            "outputs": ["Findings", "verification result", "release risk"],
+            "boundaries": [
+                "Do not claim success without evidence.",
+                "Prioritize real defects over commentary.",
+            ],
+        },
+        "engineering": {
+            "doctrine": "Turn requirements into working, verifiable changes with the minimum necessary complexity.",
+            "style": "Pragmatic, technical, direct.",
+            "workflow": [
+                "Inspect the existing implementation first.",
+                "Make the smallest coherent change that solves the real problem.",
+                "Verify behavior before handoff.",
+            ],
+            "outputs": ["Code change", "fix", "implementation note"],
+            "boundaries": [
+                "Do not patch blindly.",
+                "Do not hide unverified assumptions.",
+            ],
+        },
+        "finance": {
+            "doctrine": "Keep financial reasoning precise, risk-aware, and decision-useful.",
+            "style": "Measured, clear, disciplined.",
+            "workflow": [
+                "Check the market or fund context first.",
+                "Frame the key exposure, opportunity, or risk clearly.",
+                "Return the smallest useful decision package.",
+            ],
+            "outputs": ["Market note", "risk note", "analysis summary"],
+            "boundaries": [
+                "Separate observation from recommendation.",
+                "Do not overstate certainty.",
+            ],
+        },
+        "operations": {
+            "doctrine": "Keep work moving by clarifying ownership, timing, and next actions.",
+            "style": "Operational, calm, concise.",
+            "workflow": [
+                "Check current task state, owners, and blockers.",
+                "Tighten the next steps, cadence, and follow-ups.",
+                "Escalate only when approval or missing input is truly required.",
+            ],
+            "outputs": ["Task update", "schedule update", "next-step plan"],
+            "boundaries": [
+                "Do not leave ownership ambiguous.",
+                "Do not create process for its own sake.",
+            ],
+        },
+        "relationship": {
+            "doctrine": "Keep stakeholders and collaborators aligned to the work without creating noise.",
+            "style": "Clear, warm, professional.",
+            "workflow": [
+                "Identify who matters to this step and why.",
+                "Return the cleanest message or handoff needed.",
+                "Keep relationship context tied to the project.",
+            ],
+            "outputs": ["Outreach draft", "stakeholder note", "contact update"],
+            "boundaries": [
+                "Do not lose project context.",
+                "Avoid vague relationship-management language.",
+            ],
+        },
+        "general": {
+            "doctrine": "Own a clearly defined slice of work and report progress without drama.",
+            "style": "Direct, practical, calm.",
+            "workflow": [
+                "Read the assigned context and objective.",
+                "Do the next meaningful step.",
+                "Report the result, blocker, or handoff cleanly.",
+            ],
+            "outputs": ["Task result", "handoff note", "status update"],
+            "boundaries": [
+                "Do not invent scope.",
+                "Escalate when the assignment is ambiguous.",
+            ],
+        },
+    }
+    base = dict(defaults.get(family, defaults["general"]))
+    base["family"] = family
+    base["role"] = role
+    return base
+
+
+def _persona_generated_soul_text(persona: dict | None) -> str:
+    persona = persona or {}
+    name = str(persona.get("name") or "Worker").strip()
+    spec = _persona_profile_defaults(persona)
+    return (
+        f"# {name}\n\n"
+        "## Core Doctrine\n\n"
+        f"{spec['doctrine']}\n\n"
+        "## Working Style\n\n"
+        f"- {spec['style']}\n"
+        "- Prefer compact, high-signal communication.\n"
+        "- Keep Porter and project state updated when work changes.\n\n"
+        "## Boundaries\n\n"
+        + "\n".join(f"- {line}" for line in spec["boundaries"])
+        + "\n\n## Escalate When\n\n"
+        "- Approval is required.\n"
+        "- The goal, tone, or owner is unclear.\n"
+        "- A blocker prevents clean forward movement.\n\n"
+        "## Collaboration\n\n"
+        "- Stay inside the assigned project context.\n"
+        "- Handoffs should be concise, explicit, and tied to current tasks and files.\n"
+    )
+
+
+def _persona_generated_identity_text(persona: dict | None, created_at: str = "") -> str:
+    persona = persona or {}
+    name = str(persona.get("name") or "Worker").strip()
+    role = str(persona.get("role") or "").strip()
+    backend = str(persona.get("preferred_backend") or "").strip() or "Bridge-selected"
+    appearance = str(persona.get("appearance_style") or "").strip() or "minecraft"
+    mode = "Command Core" if bool(persona.get("orchestrator_only")) else ("Temporary Worker" if bool(persona.get("is_temporary")) else "Persistent Worker")
+    return (
+        f"# {name}\n\n"
+        + (f"**Role:** {role}\n" if role else "")
+        + f"**Character:** {_persona_character_label(persona)}\n"
+        + f"**Character Style:** {appearance.replace('-', ' ').title()}\n"
+        + f"**Runtime Preference:** {backend}\n"
+        + f"**Operating Mode:** {mode}\n"
+        + (f"\n**Created:** {created_at}\n" if created_at else "")
+    )
+
+
+def _persona_generated_role_card_text(persona: dict | None) -> str:
+    persona = persona or {}
+    name = str(persona.get("name") or "Worker").strip()
+    spec = _persona_profile_defaults(persona)
+    workflow = "\n".join(f"{i + 1}. {step}" for i, step in enumerate(spec["workflow"]))
+    outputs = "\n".join(f"- {item}" for item in spec["outputs"])
+    return (
+        f"# {name} — Role Card\n\n"
+        f"**Mission:** {spec['role']}\n\n"
+        "## Responsibilities\n\n"
+        f"- Own the assigned {spec['family']} work without drifting out of scope.\n"
+        "- Keep Porter updated when execution, blockers, or outputs change.\n"
+        "- Produce outputs ready for review, handoff, or publication.\n\n"
+        "## Workflow\n\n"
+        f"{workflow}\n\n"
+        "## Outputs\n\n"
+        f"{outputs}\n\n"
+        "## System Memory Access\n\n"
+        "- Read project directives, workflow state, assigned tasks, linked files, and reviewed concepts relevant to the current project.\n"
+        "- Write back task status, activity events, deliverable updates, and reviewed notes through Porter-managed project state.\n"
+        "- Do not treat unrelated uploads or global noise as this worker's memory.\n\n"
+        "## Approval Boundaries\n\n"
+        "- Stop when a human approval, policy decision, or ambiguous scope change is required.\n"
+        "- Do not claim hidden work as complete if the project surface cannot verify it.\n"
+    )
+
+
+_WORKER_SKILL_MAP = {
+    "comedy": ["humor-writer", "project-operator"],
+    "writing": ["content-writer", "project-operator"],
+    "research": ["research-analyst", "project-operator"],
+    "design": ["design-critic", "project-operator"],
+    "qa": ["quality-reviewer", "project-operator"],
+    "engineering": ["code-implementer", "quality-reviewer"],
+    "finance": ["research-analyst", "project-operator"],
+    "operations": ["project-operator", "quality-reviewer"],
+    "relationship": ["content-writer", "project-operator"],
+    "general": ["project-operator"],
+}
+
+
+_WORKER_SKILL_DENYLIST = {
+    "coding-agent", "github", "gh-issues", "gemini", "gog", "healthcheck", "weather",
+    "skill-creator", "skill-installer", "avatar-art-director", "runtime-auditor",
+    "chat-orchestrator", "project-architect", "delegation-governor", "worker-architect",
+    "handoff-director", "approval-governor", "roster-curator", "directive-librarian",
+    "runtime-selector", "memory-curator",
+}
+
+
 
 
 def _persona_skill_recommendation_reason(persona: dict | None, skill: dict | None) -> str:
     if not persona or not skill:
         return ""
-    role = f"{persona.get('role', '')} {persona.get('agent_group', '')}".lower()
-    text = f"{skill.get('name', '')} {skill.get('id', '')} {skill.get('description', '')}".lower()
-    checks = [
-        ("technical execution", re.compile(r"engineer|technical|cto|backend|frontend|dev"), re.compile(r"git|docker|test|lint|build|deploy|db|sql|code|ci|cd|pipeline")),
-        ("creative and content work", re.compile(r"design|creative|ux|copy|market"), re.compile(r"doc|write|web|search|browse|image|figma|design|sketch|css")),
-        ("research and analysis", re.compile(r"research|strateg|analy"), re.compile(r"search|web|fetch|ai|llm|doc|scrape|data|report")),
-        ("quality assurance", re.compile(r"qa|quality|test|bug"), re.compile(r"test|lint|check|format|security|scan|audit")),
-        ("release and operations", re.compile(r"deploy|release|ops|infra|sre"), re.compile(r"deploy|docker|k8s|kube|ci|cd|pipeline|build|release|monitor")),
-        ("finance and market work", re.compile(r"trad|market|analyst|risk|execut|reconcil|financ|crypto"), re.compile(r"stripe|trade|market|price|balance|ledger|portfolio|payment|invoice|billing")),
-    ]
-    for reason, role_re, skill_re in checks:
-        if role_re.search(role) and skill_re.search(text):
-            return reason
-    if re.search(r"orchestrat|lead|manage|direct", role) and re.search(r"ai|llm|deploy|git|search|doc", text):
-        return "coordination coverage"
+    name = str(skill.get("name") or skill.get("id") or "").strip()
+    norm = _norm_skill_name(name)
+    family = _persona_role_family(persona)
+    if family == "orchestrator":
+        porter_pool = {_norm_skill_name(s) for s in (_PORTER_PRIMARY_SKILLS + _PORTER_INTERNAL_SKILLS + _PORTER_RESERVE_SKILLS)}
+        return "coordination coverage" if norm in porter_pool else ""
+    if norm in {_norm_skill_name(s) for s in _WORKER_SKILL_DENYLIST}:
+        return ""
+    targets = {_norm_skill_name(s) for s in _WORKER_SKILL_MAP.get(family, _WORKER_SKILL_MAP["general"])}
+    if norm in targets:
+        return f"{family} coverage"
     return ""
 
 
 def _recommended_skill_names_for_persona(persona: dict | None, available_skills: list[dict] | None = None, limit: int = 6) -> list[str]:
     if not persona:
         return []
+    if _persona_role_family(persona) == "orchestrator":
+        return []
     skills = available_skills if available_skills is not None else _load_openclaw_skills()
-    recommended: list[str] = []
-    fallback: list[str] = []
+    targets = [_norm_skill_name(s) for s in _WORKER_SKILL_MAP.get(_persona_role_family(persona), _WORKER_SKILL_MAP["general"])]
+    by_norm: dict[str, str] = {}
     for sk in skills or []:
         name = str(sk.get("name") or sk.get("id") or "").strip()
         if not name:
             continue
-        reason = _persona_skill_recommendation_reason(persona, sk)
-        if reason:
-            recommended.append(name)
-        elif sk.get("installed") or sk.get("manual"):
-            fallback.append(name)
-    ordered = []
-    seen = set()
-    for bucket in (recommended, fallback):
-        for name in bucket:
-            if name in seen:
-                continue
-            seen.add(name)
-            ordered.append(name)
+        by_norm[_norm_skill_name(name)] = name
+    ordered: list[str] = []
+    for norm in targets:
+        actual = by_norm.get(norm)
+        if actual and actual not in ordered:
+            ordered.append(actual)
             if len(ordered) >= limit:
-                return ordered
+                break
     return ordered
 
 
@@ -10789,6 +11200,51 @@ def _persona_set_skill_names(persona_id: str, skill_names: list[str], managed_by
     conn.commit()
     conn.close()
     return deduped
+
+
+def _persona_write_profile_bundle(persona: dict | None, *, soul_text: str = "", overwrite_identity: bool = True,
+                                  overwrite_role: bool = True, overwrite_soul: bool = False) -> None:
+    if not persona:
+        return
+    pid = str(persona.get("id") or "").strip()
+    if not pid:
+        return
+    pdir = PERSONAS_DIR / pid
+    pdir.mkdir(parents=True, exist_ok=True)
+    (pdir / "memory").mkdir(exist_ok=True)
+    created_at = str(persona.get("created_at") or "").strip()
+    identity_text = _persona_generated_identity_text(persona, created_at=created_at)
+    role_text = _persona_generated_role_card_text(persona)
+    soul_final = soul_text.strip() if str(soul_text or "").strip() else _persona_generated_soul_text(persona)
+    soul_path = pdir / "SOUL.md"
+    identity_path = pdir / "IDENTITY.md"
+    role_path = pdir / "ROLE_CARD.md"
+    if overwrite_soul or not soul_path.exists():
+        soul_path.write_text(soul_final, encoding="utf-8")
+    if overwrite_identity or not identity_path.exists():
+        identity_path.write_text(identity_text, encoding="utf-8")
+    if overwrite_role or not role_path.exists():
+        role_path.write_text(role_text, encoding="utf-8")
+    memory_path = pdir / "MEMORY.md"
+    if not memory_path.exists():
+        memory_path.write_text(
+            f"# {persona.get('name', 'Worker')} — Memory\n\n"
+            "Project-linked durable directives, reviewed concepts, and task-relevant context.\n\n"
+            "## Directives\n\n## Working Context\n\n## Decisions\n",
+            encoding="utf-8",
+        )
+    user_path = pdir / "USER.md"
+    if not user_path.exists():
+        _op_name = _config.get("display_name", "") or _config.get("username", "Operator")
+        _op_tz = _config.get("preferences", {}).get("timezone", "UTC")
+        user_path.write_text(
+            f"# User Context for {persona.get('name', 'Worker')}\n\n"
+            f"**Human:** {_op_name}\n"
+            f"**Timezone:** {_op_tz}\n"
+            "**Style:** Direct, practical\n",
+            encoding="utf-8",
+        )
+    (pdir / "heartbeat.md").write_text("", encoding="utf-8")
 
 
 _PORTER_PRIMARY_SKILLS = [
@@ -11669,6 +12125,43 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
             elif action == "create_worker" and data.get("name"):
                 _wname = str(data["name"]).strip()
                 _wrole = str(data.get("role", "")).strip()
+                _wname_l = _wname.lower()
+                _existing_id = None
+                _existing_name = _wname
+                try:
+                    _wconn = _db_conn()
+                    _assigned_ids = [str(x).strip() for x in (proj.get("assigned_personas") or []) if str(x).strip()]
+                    for _aid in _assigned_ids:
+                        _arow = _wconn.execute("SELECT id, name FROM personas WHERE id=?", (_aid,)).fetchone()
+                        if _arow and str((_arow["name"] if isinstance(_arow, sqlite3.Row) else _arow[1]) or "").strip().lower() == _wname_l:
+                            _existing_id = str(_arow["id"] if isinstance(_arow, sqlite3.Row) else _arow[0]).strip()
+                            _existing_name = str(_arow["name"] if isinstance(_arow, sqlite3.Row) else _arow[1]).strip() or _wname
+                            break
+                    if not _existing_id:
+                        _project_owner = str(proj.get("owner") or "").strip()
+                        _q = "SELECT id, name FROM personas WHERE LOWER(name)=?"
+                        _params = [_wname_l]
+                        if _project_owner:
+                            _q += " AND (owner='' OR owner=? OR owner IS NULL)"
+                            _params.append(_project_owner)
+                        _q += " ORDER BY CASE WHEN owner=? THEN 0 ELSE 1 END, created_at DESC LIMIT 1" if _project_owner else " ORDER BY created_at DESC LIMIT 1"
+                        if _project_owner:
+                            _params.append(_project_owner)
+                        _row = _wconn.execute(_q, tuple(_params)).fetchone()
+                        if _row:
+                            _existing_id = str(_row["id"] if isinstance(_row, sqlite3.Row) else _row[0]).strip()
+                            _existing_name = str(_row["name"] if isinstance(_row, sqlite3.Row) else _row[1]).strip() or _wname
+                    _wconn.close()
+                except Exception:
+                    _existing_id = None
+                if _existing_id:
+                    proj.setdefault("assigned_personas", [])
+                    if _existing_id not in proj["assigned_personas"]:
+                        proj["assigned_personas"].append(_existing_id)
+                    _normalize_project_assigned_personas(proj, persist=True)
+                    log.info("Chat action: reused existing worker '%s' (id=%s) for project %s", _existing_name, _existing_id, project_id)
+                    results.append({"ok": True, "action": "create_worker", "name": _existing_name, "id": _existing_id, "reused": True})
+                    continue
                 # v0.31.48 — Use project route hint instead of hardcoded backend (F6)
                 _cw_backend = _project_route_hint(project_id=project_id) or _smart_route("", project_id=project_id)[0] or "openclaw"
                 _wresult = _persona_create({
@@ -11682,7 +12175,7 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
                     proj.setdefault("assigned_personas", [])
                     if _wresult["id"] not in proj["assigned_personas"]:
                         proj["assigned_personas"].append(_wresult["id"])
-                        save_config(_config)
+                    _normalize_project_assigned_personas(proj, persist=True)
                     log.info("Chat action: created worker '%s' (id=%s) for project %s", _wname, _wresult["id"], project_id)
                     results.append({"ok": True, "action": "create_worker", "name": _wname, "id": _wresult["id"]})
                 else:
@@ -12146,17 +12639,69 @@ def _requested_chat_model_id(message: str, current_model: str = "") -> str:
 
 # ── helpers ───────────────────────────────────────────────────────────────
 
+def _serve_root_candidates(root_key: str) -> list[Path]:
+    candidates: list[Path] = []
+    root_key = str(root_key or "").strip()
+    if not root_key:
+        return candidates
+    direct = SERVE_DIRS.get(root_key)
+    if direct is not None:
+        candidates.append(Path(direct))
+    repo_root = Path(__file__).resolve().parent
+    home = Path.home()
+    aliases = {
+        "documents": [
+            home / "documents",
+            home / "Documents",
+        ],
+        "workspace": [
+            AGENT_WORKSPACE_DIR,
+            repo_root / "workspace",
+            home / "documents" / "porter" / "workspace",
+            home / "Documents" / "porter" / "workspace",
+        ],
+        "projects": [
+            AGENT_WORKSPACE_DIR / "projects",
+            repo_root / "workspace" / "projects",
+            home / "documents" / "porter" / "workspace" / "projects",
+            home / "Documents" / "porter" / "workspace" / "projects",
+        ],
+    }
+    candidates.extend(aliases.get(root_key, []))
+    seen = set()
+    out: list[Path] = []
+    for cand in candidates:
+        try:
+            resolved = Path(cand).expanduser().resolve()
+        except Exception:
+            continue
+        key = str(resolved)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(resolved)
+    return out
+
+def _serve_root(root_key: str) -> Path | None:
+    candidates = _serve_root_candidates(root_key)
+    for root in candidates:
+        if root.exists():
+            return root
+    return candidates[0] if candidates else None
+
 def safe_resolve(root_key, rel=""):
-    root = SERVE_DIRS.get(root_key)
-    if root is None:
-        return None
-    try:
-        target = (root / unquote(rel)).resolve() if rel else root.resolve()
-        target.relative_to(root.resolve())
-        return target
-    except Exception as e:
-        log.warning("Error: %s", e)
-        return None
+    fallback = None
+    for root in _serve_root_candidates(root_key):
+        try:
+            target = (root / unquote(rel)).resolve() if rel else root.resolve()
+            target.relative_to(root.resolve())
+            if target.exists():
+                return target
+            if fallback is None:
+                fallback = target
+        except Exception:
+            continue
+    return fallback
 
 def is_writable(path: Path) -> bool:
     return path.exists() and path.stat().st_uid == os.getuid()
@@ -12230,7 +12775,7 @@ def list_dir(root_key, rel):
     }
 
 def walk_search(root_key, q):
-    root = SERVE_DIRS.get(root_key)
+    root = _serve_root(root_key)
     if root is None:
         return []
     q = q.lower()
@@ -12265,7 +12810,7 @@ def walk_search(root_key, q):
     return results
 
 def disk_info(root_key):
-    root = SERVE_DIRS.get(root_key)
+    root = _serve_root(root_key)
     if root is None:
         return None
     try:
@@ -12675,8 +13220,11 @@ body.sidebar-collapsed .mount-item { padding-left: 0; justify-content: center; }
   width:100%; text-align:left; font-family:inherit; }
 .mnav-item:hover { background:var(--raised); color:var(--text); }
 .mnav-item.active { background:rgba(247,147,26,.10); color:var(--accent); font-weight:500; }
+.mnav-badge { margin-left:auto; display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 6px; border-radius:999px; background:#f59e0b; color:#140f07; font-size:10px; font-weight:800; line-height:1; }
+.mnav-badge.dim { background:color-mix(in srgb,var(--border) 85%, transparent); color:var(--text3); }
 .mnav-sep { height:1px; background:var(--border); margin:6px 0; }
 body.sidebar-collapsed .mnav-label { display:none; }
+body.sidebar-collapsed .mnav-badge { display:none; }
 body.sidebar-collapsed .mnav-item { justify-content:center; padding:8px; }
 body.sidebar-collapsed .module-nav { padding:8px 4px; }
 #loc-subnav { display:none; }
@@ -13348,6 +13896,26 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   0%,80%,100% { opacity:.3; transform:scale(.8); }
   40% { opacity:1; transform:scale(1.1); }
 }
+#pd-chat-shell {
+  display:flex;
+  flex-direction:column;
+  flex:1;
+  min-height:0;
+  padding:10px 12px 12px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%, transparent),color-mix(in srgb,#f59e0b 4%, var(--bg)));
+  border:1px solid color-mix(in srgb,#f59e0b 32%, var(--border));
+  border-radius:16px;
+  box-sizing:border-box;
+}
+#pd-chat-thread {
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:4px 2px 14px;
+}
 .pd-chat-empty {
   padding:22px 18px;
   border:1px solid color-mix(in srgb,var(--border) 72%, transparent);
@@ -13436,8 +14004,18 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   border-radius:14px;
   padding:10px 8px 8px;
   font-size:13px;
+  font-family:inherit;
+  font-weight:400;
+  letter-spacing:normal;
   line-height:1.5;
   overflow-y:auto;
+}
+.pd-chat-input::placeholder {
+  font-family:inherit;
+  font-weight:400;
+  letter-spacing:normal;
+  color:color-mix(in srgb,var(--text2) 82%, var(--text3));
+  opacity:1;
 }
 .pd-send-btn {
   align-self:stretch;
@@ -13608,12 +14186,29 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   border-color:color-mix(in srgb,#f59e0b 34%, var(--border));
   box-shadow:0 0 0 2px color-mix(in srgb,#f59e0b 15%, transparent);
 }
+.project-detail-active .slash-hint { display:none !important; }
+#projects-list-view { min-height:0; flex:1 1 auto; overflow:auto; }
+#project-detail-view { min-height:0; flex:1 1 auto; height:auto; overflow:hidden; flex-direction:column; }
+.proj-detail-shell { display:flex; flex-direction:column; gap:12px; min-height:0; height:100%; overflow:hidden; }
+#proj-detail-content { flex:1 1 auto; min-height:0; overflow:auto; padding-bottom:10px; }
 .proj-chat-top {
-  border:1px solid var(--border); border-radius:12px; background:var(--surface);
-  padding:12px 14px; margin-bottom:16px;
+  position:relative;
+  z-index:2;
+  flex-shrink:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  border:1px solid color-mix(in srgb,#f59e0b 42%, var(--border));
+  border-radius:16px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%, transparent),color-mix(in srgb,#f59e0b 5%, var(--surface)));
+  box-shadow:0 -12px 30px rgba(0,0,0,.14), 0 0 0 1px color-mix(in srgb,#f59e0b 8%, transparent) inset;
+  padding:10px 12px 12px;
+  margin:0;
+  box-sizing:border-box;
+  overflow:visible;
 }
 .proj-chat-thread {
-  min-height:80px; max-height:320px; overflow-y:auto; padding:0 2px 8px;
+  min-height:160px; max-height:min(22vh, 210px); overflow-y:auto; padding:2px 2px 8px;
   scroll-behavior:smooth;
 }
 .proj-chat-thread:empty::before {
@@ -14002,15 +14597,16 @@ progress.ubar::-webkit-progress-value { background: var(--accent); }
 }
 .preview-panel.open { right: 0; }
 .preview-header {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap;
   padding: 14px 16px; border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .preview-filename {
-  flex: 1; font-size: 13px; font-weight: 500;
+  flex: 1 1 220px; min-width: 0; font-size: 13px; font-weight: 500;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.preview-actions { display: flex; gap: 6px; }
+.preview-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; max-width: 100%; }
+.preview-actions .btn { white-space: nowrap; }
 .preview-body {
   flex: 1; overflow: auto; position: relative;
 }
@@ -14180,7 +14776,8 @@ body.density-compact .file-name { padding: 6px 0; }
 #settingsPanel.open { display: flex; }
 .settings-nav { width: 200px; min-width: 200px; background: var(--surface);
   border-right: 1px solid var(--border);
-  padding: 20px 0; display: flex; flex-direction: column; }
+  padding: 20px 0; display: flex; flex-direction: column; transition: width .18s ease, min-width .18s ease, border-color .18s ease; overflow:hidden; }
+.settings-nav.collapsed { width: 0; min-width: 0; border-right-color: transparent; padding-top: 20px; padding-bottom: 20px; }
 .settings-nav-title { padding: 0 16px 16px; font-size: 11px; font-weight: 600;
   letter-spacing: .8px; color: var(--text3); text-transform: uppercase; }
 .settings-nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px;
@@ -14191,11 +14788,18 @@ body.density-compact .file-name { padding: 6px 0; }
 .settings-nav-item.active { color: var(--accent); border-left-color: var(--accent);
   background: rgba(247,147,26,.06); }
 .settings-content { flex: 1; overflow-y: auto; padding: 28px 32px; position: relative; }
+.settings-shell { max-width: 720px; }
+.settings-compact { display:flex; flex-direction:column; gap:18px; max-width:520px; }
+.settings-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 18px 16px; }
+.settings-card-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:12px; }
+.settings-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:18px; }
+.settings-shell.compact-nav .settings-content { padding-left:24px; }
 .settings-page { display: none; }
 .settings-page.active { display: block; }
 .module-panel { display:none; position:relative; flex:1; flex-direction:column;
   overflow-y:auto; padding:24px 28px; background:var(--bg); }
 .module-panel.active { display:flex; animation:panelFadeIn .15s ease; }
+#projects-module.module-panel.active { overflow:hidden; }
 @keyframes panelFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 #agents-module.configuring { padding: 0; overflow: hidden; }
 #agents-module.configuring > *:not(#agent-workspace) { display: none !important; }
@@ -14307,6 +14911,66 @@ body.density-compact .file-name { padding: 6px 0; }
 .cap-card-link { font-size:11px; margin-top:4px; }
 .cap-card-link a { color:var(--accent); text-decoration:none; }
 .cap-card-link a:hover { text-decoration:underline; }
+.tools-summary-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:10px 0 12px; }
+.tools-summary-stat { border:1px solid var(--border); border-radius:12px; background:linear-gradient(180deg, color-mix(in srgb, var(--surface) 88%, var(--bg)), var(--surface)); padding:12px 14px; min-width:0; }
+.tools-summary-label { font-size:10px; text-transform:uppercase; letter-spacing:.12em; color:var(--text3); margin-bottom:5px; }
+.tools-summary-value { font-size:20px; font-weight:700; color:var(--text); line-height:1.1; }
+.tools-summary-copy { font-size:11px; color:var(--text3); margin-top:4px; line-height:1.4; }
+.tools-service-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 12px; padding:10px 12px; border:1px solid color-mix(in srgb, var(--border) 78%, transparent); border-radius:12px; background:color-mix(in srgb, var(--surface) 96%, var(--bg)); }
+.tools-service-copy { min-width:0; }
+.tools-service-title { font-size:12px; font-weight:650; color:var(--text); }
+.tools-service-sub { font-size:11px; color:var(--text3); margin-top:2px; line-height:1.4; }
+.tools-service-actions { display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0; }
+.tools-filter-strip { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+.tools-filter-chip { padding:6px 10px; border-radius:999px; border:1px solid var(--border); background:var(--surface); color:var(--text2); font-size:11px; cursor:pointer; transition:all .15s; }
+.tools-filter-chip:hover { border-color:var(--accent); color:var(--text); }
+.tools-filter-chip.active { background:color-mix(in srgb, var(--accent) 10%, var(--surface)); border-color:color-mix(in srgb, var(--accent) 34%, var(--border)); color:var(--accent); }
+.tools-sections { display:flex; flex-direction:column; gap:14px; }
+.tools-section { border:1px solid var(--border); border-radius:14px; background:linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, var(--bg)), var(--surface)); overflow:hidden; }
+.tools-section-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; padding:14px 16px 10px; border-bottom:1px solid color-mix(in srgb, var(--border) 55%, transparent); }
+.tools-section-title { font-size:15px; font-weight:650; color:var(--text); }
+.tools-section-copy { font-size:11px; color:var(--text3); line-height:1.45; margin-top:3px; max-width:620px; }
+.tools-section-count { font-size:11px; color:var(--text3); white-space:nowrap; padding-top:3px; }
+.tools-setup-hero { border:1px solid color-mix(in srgb, var(--accent) 20%, var(--border)); border-radius:16px; background:linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, var(--surface)) 0%, var(--surface) 72%); padding:18px 18px 16px; margin:10px 0 14px; }
+.tools-setup-eyebrow { font-size:10px; text-transform:uppercase; letter-spacing:.14em; color:var(--accent); margin-bottom:8px; }
+.tools-setup-title { font-size:18px; font-weight:700; color:var(--text); line-height:1.15; margin-bottom:6px; }
+.tools-setup-copy { font-size:12px; color:var(--text2); line-height:1.5; max-width:720px; }
+.tools-setup-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:14px; }
+.tools-setup-card { border:1px solid color-mix(in srgb, var(--border) 88%, transparent); border-radius:12px; background:color-mix(in srgb, var(--surface) 95%, var(--bg)); padding:12px; min-width:0; }
+.tools-setup-card-title { font-size:13px; font-weight:650; color:var(--text); margin-bottom:4px; }
+.tools-setup-card-copy { font-size:11px; color:var(--text3); line-height:1.45; margin-bottom:9px; }
+.tools-setup-card .tool-btn { width:100%; justify-content:center; display:inline-flex; }
+.tools-card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:10px; padding:12px 14px 14px; }
+.tool-card { padding:10px 14px; background:var(--raised); border:1px solid var(--border); border-radius:8px; transition:border-color .15s; display:flex; flex-direction:column; gap:6px; min-height:0; }
+.tool-card:hover { border-color:var(--accent); }
+.tool-card.ready { }
+.tool-card.setup { }
+.tool-card.connected { }
+.tool-card-head { display:flex; align-items:center; gap:10px; }
+.tool-card-signal { width:8px; height:8px; border-radius:50%; flex-shrink:0; background:var(--text3); opacity:.55; }
+.tool-card-signal.ok { background:#22c55e; opacity:1; }
+.tool-card-signal.warn { background:#f59e0b; opacity:1; }
+.tool-card-signal.off { background:var(--text3); opacity:.55; }
+.tool-card-main { min-width:0; flex:1; }
+.tool-card-name { font-size:15px; font-weight:600; color:var(--text); }
+.tool-card-sub { font-size:12px; color:var(--text2); line-height:1.45; white-space:normal; overflow-wrap:anywhere; }
+.tool-card-meta { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.tool-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:999px; border:1px solid var(--border); font-size:10px; color:var(--text2); background:var(--bg); white-space:nowrap; }
+.tool-chip.good { border-color:color-mix(in srgb,#22c55e 35%,var(--border)); color:#22c55e; }
+.tool-chip.warn { border-color:color-mix(in srgb,#f59e0b 40%,var(--border)); color:#f59e0b; }
+.tool-chip.live { border-color:color-mix(in srgb,var(--accent) 35%,var(--border)); color:var(--accent); }
+.tool-card-body { display:flex; flex-direction:column; gap:8px; }
+.tool-card-features { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:2px; }
+.tool-card-features button { font-size:11px; padding:2px 8px; border-radius:4px; background:color-mix(in srgb,var(--accent) 12%,var(--bg)); color:var(--accent); border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border)); cursor:pointer; transition:all .15s; }
+.tool-card-features button:hover { border-color:var(--accent); }
+.tool-card-features button.active { background:color-mix(in srgb,var(--accent) 18%,var(--bg)); }
+.tool-card-actions { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:6px; padding-top:8px; border-top:1px solid var(--border); }
+.tool-btn { padding:6px 9px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text2); font-size:11px; cursor:pointer; transition:all .15s; min-width:0; text-align:center; justify-content:center; }
+.tool-btn:hover { border-color:var(--accent); color:var(--text); }
+.tool-btn.primary { background:color-mix(in srgb,var(--accent) 11%,var(--surface)); border-color:color-mix(in srgb,var(--accent) 28%,var(--border)); color:var(--accent); }
+.tool-card-actions .tool-btn:only-child { grid-column:1 / -1; }
+.tool-empty { padding:22px 16px; color:var(--text3); font-size:12px; text-align:center; }
+.tool-card-group { display:flex; flex-direction:column; gap:10px; }
 .proj-drop-zone { border:2px dashed var(--border); border-radius:10px; padding:24px; text-align:center; color:var(--text3); font-size:12px; margin-bottom:12px; transition:all .2s; cursor:pointer; }
 .proj-drop-zone:hover { border-color:var(--accent); color:var(--text2); }
 .proj-drop-zone.drag-over { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent); color:var(--text); }
@@ -14432,26 +15096,46 @@ body.density-compact .file-name { padding: 6px 0; }
 .office-view-toggle button.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,.15); }
 .office-view-toggle button:hover:not(.active) { color:var(--text2); }
 /* ── People / CRM Module ──────────────────────────────────── */
-.people-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:12px; margin-top:12px; }
-.people-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; gap:12px; align-items:flex-start; transition:border-color .15s, transform .15s; cursor:default; }
-.people-card:hover { border-color:color-mix(in srgb, var(--accent) 30%, var(--border)); transform:translateY(-1px); }
-.people-card-avatar { width:44px; height:44px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; color:var(--text); flex-shrink:0; overflow:hidden; }
+.people-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:10px; margin-top:8px; }
+.people-card { position:relative; background:linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, var(--bg)), var(--surface)); border:1px solid color-mix(in srgb, var(--border) 88%, transparent); border-radius:12px; padding:10px 10px 9px; display:flex; flex-direction:column; gap:6px; align-items:stretch; transition:border-color .15s, transform .15s, box-shadow .15s; cursor:pointer; min-height:112px; overflow:hidden; box-shadow:inset 0 1px 0 rgba(255,255,255,.03); }
+.people-card::before { content:''; position:absolute; inset:0; pointer-events:none; opacity:.08; background-image:repeating-linear-gradient(0deg, transparent 0 11px, color-mix(in srgb, var(--border) 50%, transparent) 11px 12px), repeating-linear-gradient(90deg, transparent 0 11px, color-mix(in srgb, var(--border) 50%, transparent) 11px 12px); }
+.people-card:hover { border-color:color-mix(in srgb, var(--accent) 32%, var(--border)); transform:translateY(-2px); box-shadow:0 10px 24px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.03); }
+.people-grid > .people-card { animation:cardDealIn .32s ease both; }
+.people-card-top { display:flex; gap:10px; align-items:flex-start; justify-content:space-between; }
+.people-card-avatar { width:34px; height:34px; border-radius:9px; background:
+  linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, var(--raised)), var(--raised)),
+  repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 6px, rgba(0,0,0,.04) 6px 12px),
+  repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 6px, rgba(0,0,0,.05) 6px 12px);
+  display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--text); flex-shrink:0; overflow:hidden; border:1px solid color-mix(in srgb, var(--border) 86%, transparent); box-shadow:inset 0 1px 0 rgba(255,255,255,.04); margin-left:10px; }
 .people-card-avatar img { width:100%; height:100%; object-fit:cover; }
 .people-card-meta { flex:1; min-width:0; }
-.people-card-name { font-size:13px; font-weight:600; color:var(--text); }
-.people-card-role { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.3px; margin-top:2px; }
+.people-card-name { font-size:13px; font-weight:650; color:var(--text); line-height:1.2; }
+.people-card-role { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; margin-top:2px; }
 .people-card-email { font-size:11px; color:var(--text3); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.people-card-joined { font-size:10px; color:var(--text3); margin-top:6px; opacity:.7; }
-.people-card-actions { display:flex; gap:4px; flex-shrink:0; }
-.people-card-actions button { background:none; border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-size:10px; color:var(--text3); cursor:pointer; transition:all .15s; }
-.people-card-actions button:hover { border-color:var(--accent); color:var(--text); }
-.people-card-actions button.danger:hover { border-color:#ef4444; color:#ef4444; }
-.people-card.is-you { border-color:color-mix(in srgb, var(--accent) 25%, var(--border)); }
-.people-card.is-you .people-card-name::after { content:'(you)'; font-size:10px; font-weight:400; color:var(--accent); margin-left:6px; }
+.people-card-joined { font-size:10px; color:var(--text3); margin-top:2px; opacity:.82; }
+.people-card-summary { font-size:11px; line-height:1.45; color:var(--text2); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.people-card-meta-row { display:flex; gap:8px; flex-wrap:wrap; font-size:10px; color:var(--text3); min-height:14px; }
+.people-card-badges { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.people-card-pill { font-size:9px; padding:3px 8px; border-radius:999px; border:1px solid color-mix(in srgb, var(--border) 90%, transparent); background:color-mix(in srgb, var(--bg) 40%, var(--surface)); color:var(--text3); font-weight:600; letter-spacing:.2px; }
+.people-card-pill.you { color:var(--accent); border-color:color-mix(in srgb, var(--accent) 30%, var(--border)); background:color-mix(in srgb, var(--accent) 10%, transparent); }
+.people-card-pill.linked { color:#22c55e; border-color:color-mix(in srgb, #22c55e 30%, var(--border)); background:color-mix(in srgb, #22c55e 10%, transparent); }
+.people-card.is-you { border-color:color-mix(in srgb, var(--accent) 30%, var(--border)); background:linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, var(--surface)), var(--surface)); }
+.people-card-stamp { display:flex; align-items:flex-start; justify-content:flex-end; }
 .people-empty { text-align:center; padding:40px 20px; color:var(--text3); font-size:12px; }
-.people-stats { display:flex; gap:16px; margin-bottom:12px; flex-wrap:wrap; }
-.people-stat { font-size:20px; font-weight:700; color:var(--text); line-height:1; }
-.people-stat-label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.3px; margin-top:4px; }
+.people-stats { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+.people-stat-chip {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 10px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:color-mix(in srgb, var(--surface) 92%, transparent);
+  font-size:11px;
+  color:var(--text2);
+}
+.people-stat { font-size:12px; font-weight:700; color:var(--text); line-height:1; }
+.people-stat-label { font-size:11px; color:var(--text3); }
 /* CRM sub-tabs */
 .crm-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:12px; }
 .crm-tab { padding:8px 16px; font-size:12px; font-weight:500; color:var(--text3); cursor:pointer; border-bottom:2px solid transparent; transition:all .15s; background:none; border-top:none; border-left:none; border-right:none; }
@@ -14459,13 +15143,94 @@ body.density-compact .file-name { padding: 6px 0; }
 .crm-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
 .crm-tab .crm-tab-count { font-size:10px; color:var(--text3); margin-left:4px; opacity:.7; }
 /* CRM filter bar */
-.crm-filters { display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+.crm-filters { display:flex; gap:8px; align-items:center; margin-bottom:14px; flex-wrap:wrap; padding-bottom:12px; border-bottom:1px solid color-mix(in srgb, var(--border) 65%, transparent); }
 .crm-search { flex:1; min-width:160px; max-width:300px; padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-size:12px; outline:none; transition:border-color .15s; }
 .crm-search:focus { border-color:var(--accent); }
 .crm-chip { padding:4px 10px; font-size:11px; border-radius:99px; border:1px solid var(--border); background:none; color:var(--text3); cursor:pointer; transition:all .15s; font-weight:500; }
 .crm-chip:hover { border-color:var(--accent); color:var(--text); }
 .crm-chip.active { background:color-mix(in srgb, var(--accent) 12%, transparent); border-color:var(--accent); color:var(--accent); }
-.crm-select { padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-size:11px; cursor:pointer; outline:none; }
+.crm-select {
+  padding:6px 34px 6px 10px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background-color:var(--surface);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='rgba(255,255,255,.45)' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 12px center;
+  color:var(--text);
+  font-size:11px;
+  cursor:pointer;
+  outline:none;
+  -webkit-appearance:none;
+  appearance:none;
+}
+.crm-select:hover { border-color:color-mix(in srgb, var(--accent) 34%, var(--border)); }
+.crm-select:focus { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent); }
+.crm-inline-choice {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  width:100%;
+  padding:6px 10px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--surface);
+  color:var(--text);
+  font-size:11px;
+  cursor:pointer;
+}
+.crm-inline-choice:hover { border-color:color-mix(in srgb, var(--accent) 34%, var(--border)); }
+.crm-inline-choice-caret { color:var(--text3); font-size:10px; flex-shrink:0; }
+.crm-inline-menu {
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  margin-top:6px;
+  padding:6px;
+  border:1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius:10px;
+  background:color-mix(in srgb, var(--surface) 96%, transparent);
+  box-shadow:0 12px 28px rgba(0,0,0,.18);
+}
+.crm-inline-search {
+  width:100%;
+  padding:7px 9px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--surface);
+  color:var(--text);
+  font-size:11px;
+  outline:none;
+  font-family:inherit;
+}
+.crm-inline-search:focus {
+  border-color:var(--accent);
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.crm-inline-empty {
+  padding:8px 9px;
+  color:var(--text3);
+  font-size:11px;
+}
+.crm-inline-option {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  width:100%;
+  padding:7px 8px;
+  border:none;
+  border-radius:8px;
+  background:transparent;
+  color:var(--text2);
+  font-size:11px;
+  text-align:left;
+  cursor:pointer;
+}
+.crm-inline-option:hover { background:color-mix(in srgb, var(--accent) 10%, transparent); color:var(--text); }
+.crm-inline-option.active { background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); font-weight:600; }
+.crm-inline-option-check { font-size:10px; color:inherit; }
 .crm-toggle-label { font-size:11px; color:var(--text3); display:flex; align-items:center; gap:4px; cursor:pointer; }
 .crm-toggle-label input { accent-color:var(--accent); }
 /* CRM contact rows */
@@ -14492,30 +15257,51 @@ body.density-compact .file-name { padding: 6px 0; }
 #people-module.detail-open #people-detail-view { display:block; }
 .crm-editable { cursor:pointer; padding:1px 4px; border-radius:4px; transition:background .15s; }
 .crm-editable:hover { background:color-mix(in srgb, var(--accent) 8%, transparent); }
-.fm-pane { border:1px solid var(--border); border-radius:8px; background:var(--surface); margin-bottom:16px; overflow:hidden; }
-.fm-pane-hdr { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); background:var(--bg); }
-.fm-pane-title { font-size:11px; font-weight:600; color:var(--text); text-transform:uppercase; letter-spacing:.3px; }
-.fm-pane-empty { padding:32px 14px; text-align:center; color:var(--text3); font-size:12px; }
-.fm-row-actions { display:none; gap:2px; flex-shrink:0; }
-.fm-row:hover .fm-row-actions { display:flex; }
+.fm-shell {
+  display:flex; flex-direction:column; min-height:420px;
+  border-radius:12px;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--surface) 97%, transparent) 0%, color-mix(in srgb, var(--bg) 76%, transparent) 100%);
+  transition:outline-color .15s, background .15s;
+}
+.fm-shell.drop-active {
+  outline:2px dashed var(--accent);
+  outline-offset:-3px;
+  background:color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+.fm-pane { border:1px solid color-mix(in srgb, var(--border) 84%, transparent); border-radius:12px; background:color-mix(in srgb, var(--surface) 97%, transparent); margin-bottom:12px; overflow:hidden; }
+.fm-pane-hdr { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 12px; border-bottom:1px solid color-mix(in srgb, var(--border) 84%, transparent); background:transparent; }
+.fm-pane-titlewrap { display:flex; align-items:baseline; gap:8px; min-width:0; }
+.fm-pane-title { font-size:11px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:.45px; }
+.fm-pane-sub { font-size:11px; color:var(--text3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fm-pane-empty { padding:24px 14px; text-align:center; color:var(--text3); font-size:12px; }
+.fm-row-actions { display:flex; gap:4px; flex-shrink:0; opacity:0; pointer-events:none; transition:opacity .12s ease; }
+.fm-row:hover .fm-row-actions { opacity:1; pointer-events:auto; }
 .fm-row:hover .fm-row-date { display:none; }
-.fm-act { background:none; border:none; color:var(--text3); font-size:11px; padding:2px 6px; border-radius:4px; cursor:pointer; }
+.fm-act { background:none; border:none; color:var(--text3); font-size:10px; padding:3px 7px; border-radius:999px; cursor:pointer; }
 .fm-act:hover { color:var(--text); background:var(--raised); }
 .fm-act.danger:hover { color:#ef4444; }
+.fm-inline-rename {
+  width:100%;
+  min-width:0;
+  padding:4px 8px;
+  border:1px solid var(--accent);
+  border-radius:8px;
+  background:var(--surface);
+  color:var(--text);
+  font-size:13px;
+  font-family:inherit;
+  outline:none;
+}
 /* Finder-like file list (v0.33.16) */
-.fm-col-hdr { display:flex; align-items:center; gap:10px; padding:5px 12px; border-bottom:1px solid var(--border); background:var(--bg); font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; user-select:none; }
+.fm-col-hdr { display:flex; align-items:center; gap:10px; padding:6px 12px; border-bottom:1px solid color-mix(in srgb, var(--border) 84%, transparent); background:color-mix(in srgb, var(--bg) 72%, transparent); font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; user-select:none; }
 .fm-col-hdr span { cursor:pointer; display:flex; align-items:center; gap:3px; }
 .fm-col-hdr span:hover { color:var(--text); }
 .fm-col-hdr .sort-arrow { font-size:8px; opacity:.6; }
-.fm-status-bar { display:flex; align-items:center; gap:12px; padding:6px 12px; border-top:1px solid var(--border); font-size:11px; color:var(--text3); background:var(--bg); border-radius:0 0 8px 8px; }
-.fm-search { padding:5px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); font-size:12px; outline:none; width:200px; transition:border-color .15s; }
-.fm-search:focus { border-color:var(--accent); }
+.fm-status-bar { display:flex; align-items:center; gap:12px; padding:6px 12px; border-top:1px solid color-mix(in srgb, var(--border) 84%, transparent); font-size:11px; color:var(--text3); background:transparent; border-radius:0 0 12px 12px; }
+.fm-search { padding:6px 11px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-size:12px; outline:none; width:220px; transition:border-color .15s, box-shadow .15s; }
+.fm-search:focus { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent); }
 .fm-row:nth-child(even) { background:color-mix(in srgb, var(--bg) 30%, var(--surface)); }
-.fm-pane { border:1px solid var(--border); border-radius:8px; background:var(--surface); margin-bottom:16px; }
-.fm-pane-hdr { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); }
-.fm-pane-title { font-size:12px; font-weight:600; color:var(--text); text-transform:uppercase; letter-spacing:.3px; }
 .fm-pane-body { min-height:60px; transition:border-color .15s; }
-.fm-pane-empty { padding:24px 14px; text-align:center; color:var(--text3); font-size:12px; }
 .crm-detail-hdr { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .crm-detail-hdr-avatar { width:48px; height:48px; border-radius:50%; background:var(--raised); display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:700; color:var(--text); flex-shrink:0; }
 .crm-detail-hdr-info { flex:1; min-width:0; }
@@ -14532,16 +15318,34 @@ body.density-compact .file-name { padding: 6px 0; }
 .crm-detail-notes { width:100%; min-height:60px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-size:12px; resize:vertical; font-family:inherit; outline:none; }
 .crm-detail-notes:focus { border-color:var(--accent); }
 /* CRM dense detail layout */
-.crm-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 32px; }
-@media (max-width:640px) { .crm-detail-grid { grid-template-columns:1fr; } }
+.crm-detail-layout { display:grid; grid-template-columns:minmax(0, 1.15fr) minmax(300px, .85fr); gap:16px; align-items:start; }
+@media (max-width:980px) { .crm-detail-layout { grid-template-columns:1fr; } }
+.crm-detail-grid { display:grid; grid-template-columns:1fr; gap:0; }
 .crm-detail-col { }
 .crm-detail-field { display:flex; align-items:baseline; gap:6px; padding:5px 0; border-bottom:1px solid color-mix(in srgb, var(--border) 30%, transparent); }
 .crm-detail-field:last-child { border-bottom:none; }
 .crm-detail-field-label { font-size:11px; color:var(--text3); min-width:72px; flex-shrink:0; font-weight:500; }
 .crm-detail-field-value { font-size:12px; color:var(--text); word-break:break-word; flex:1; }
+.crm-summary-box { padding:12px 14px; border:1px solid color-mix(in srgb, var(--border) 88%, transparent); border-radius:12px; background:linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, var(--surface)), var(--surface)); font-size:12px; line-height:1.6; color:var(--text2); margin-bottom:12px; min-height:72px; }
+.crm-summary-box.empty { color:var(--text3); }
+.crm-files-pane { border:1px solid color-mix(in srgb, var(--border) 88%, transparent); border-radius:12px; background:var(--surface); min-height:360px; overflow:hidden; }
+.crm-profile-avatar { width:44px; height:44px; border-radius:10px; background:
+  linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, var(--raised)), var(--raised)),
+  repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 6px, rgba(0,0,0,.04) 6px 12px),
+  repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0 6px, rgba(0,0,0,.05) 6px 12px);
+  display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; color:var(--text); flex-shrink:0; overflow:hidden; border:1px solid color-mix(in srgb, var(--border) 86%, transparent); box-shadow:inset 0 1px 0 rgba(255,255,255,.04); }
+.crm-profile-avatar img { width:100%; height:100%; object-fit:cover; image-rendering:auto; }
+.crm-profile-avatar.clickable { cursor:pointer; transition:border-color .15s, transform .15s, box-shadow .15s; }
+.crm-profile-avatar.clickable:hover { border-color:color-mix(in srgb, var(--accent) 46%, var(--border)); transform:translateY(-1px); box-shadow:0 8px 20px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.05); }
+.crm-files-head { display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--border); background:var(--bg); }
+.crm-files-title { font-size:11px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; }
+.crm-files-actions { margin-left:auto; display:flex; align-items:center; gap:6px; }
+.crm-files-body { min-height:280px; }
+.crm-files-drop { min-height:220px; display:flex; align-items:center; justify-content:center; text-align:center; padding:24px; color:var(--text3); font-size:12px; border:2px dashed color-mix(in srgb, var(--border) 92%, transparent); margin:12px; border-radius:12px; transition:all .18s; }
+.crm-files-drop.active { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent); color:var(--text); }
+.crm-files-list { display:flex; flex-direction:column; }
+.crm-files-empty { padding:28px 16px; text-align:center; color:var(--text3); font-size:12px; }
 .crm-quick-add { display:flex; gap:8px; align-items:center; padding:10px 0; margin-bottom:8px; }
-.crm-quick-add select { padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); font-size:11px; cursor:pointer; outline:none; }
-.crm-quick-add select:focus { border-color:var(--accent); }
 .crm-quick-add input { flex:1; padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); font-size:12px; outline:none; }
 .crm-quick-add input:focus { border-color:var(--accent); }
 .crm-quick-add button { padding:5px 12px; border:1px solid var(--accent); border-radius:6px; background:color-mix(in srgb, var(--accent) 10%, transparent); color:var(--accent); font-size:11px; font-weight:600; cursor:pointer; transition:all .15s; }
@@ -14572,6 +15376,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .crm-timeline { display:flex; flex-direction:column; gap:0; }
 .crm-timeline-item { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid color-mix(in srgb, var(--border) 40%, transparent); }
 .crm-timeline-item:last-child { border-bottom:none; }
+.crm-timeline-item.editable:hover .crm-timeline-text { color:var(--accent); }
 .crm-timeline-icon { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
 .crm-timeline-icon.note { background:color-mix(in srgb, #3b82f6 18%, transparent); color:#60a5fa; }
 .crm-timeline-icon.call { background:color-mix(in srgb, #22c55e 18%, transparent); color:#4ade80; }
@@ -14580,6 +15385,15 @@ body.density-compact .file-name { padding: 6px 0; }
 .crm-timeline-icon.task { background:color-mix(in srgb, #f97316 18%, transparent); color:#fb923c; }
 .crm-timeline-icon.update { background:color-mix(in srgb, var(--text3) 18%, transparent); color:var(--text3); }
 .crm-timeline-body { flex:1; min-width:0; }
+.crm-timeline-text { font-size:12px; color:var(--text); line-height:1.5; white-space:pre-wrap; word-break:break-word; cursor:text; }
+.crm-timeline-meta { margin-top:4px; font-size:10px; color:var(--text3); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.crm-timeline-actions { margin-left:auto; display:flex; align-items:center; gap:4px; opacity:0; transition:opacity .15s; }
+.crm-timeline-item:hover .crm-timeline-actions { opacity:1; }
+.crm-timeline-action { background:none; border:1px solid var(--border); color:var(--text3); font-size:10px; padding:2px 8px; border-radius:999px; cursor:pointer; transition:all .15s; }
+.crm-timeline-action:hover { border-color:var(--accent); color:var(--text); }
+.crm-timeline-action.danger:hover { border-color:#ef4444; color:#ef4444; }
+.crm-timeline-editbox { width:100%; min-height:76px; padding:8px 10px; border:1px solid var(--accent); border-radius:10px; background:var(--surface); color:var(--text); font-size:12px; line-height:1.5; resize:vertical; outline:none; font-family:inherit; }
+.crm-timeline-edithint { margin-top:6px; font-size:10px; color:var(--text3); }
 .crm-timeline-text { font-size:12px; color:var(--text); }
 .crm-timeline-meta { font-size:10px; color:var(--text3); margin-top:2px; }
 /* CRM detail actions */
@@ -14607,7 +15421,15 @@ body.density-compact .file-name { padding: 6px 0; }
 .models-load-status span { font-size:11px; color:var(--text3); }
 .models-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:10px; }
 @media (max-width:700px) { .models-grid { grid-template-columns:1fr; } }
+.models-summary-strip { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:0 0 12px; }
+@media (max-width:900px) { .models-summary-strip { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:560px) { .models-summary-strip { grid-template-columns:1fr; } }
+.models-summary-stat { padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:color-mix(in srgb,var(--surface) 84%, transparent); }
+.models-summary-label { font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); font-weight:700; }
+.models-summary-value { font-size:18px; font-weight:800; color:var(--text); line-height:1.1; margin-top:6px; }
+.models-summary-copy { font-size:11px; color:var(--text3); line-height:1.45; margin-top:4px; }
 .models-skeleton-card { position:relative; overflow:hidden; min-height:240px; border:1px solid var(--border); border-radius:14px; padding:14px; background:linear-gradient(180deg,color-mix(in srgb,var(--bg2) 86%, transparent),color-mix(in srgb,var(--surface) 70%, transparent)); }
+.models-skeleton-card::after { content:''; position:absolute; inset:0; background:linear-gradient(100deg, transparent 0%, rgba(255,255,255,.04) 35%, rgba(255,255,255,.1) 50%, rgba(255,255,255,.04) 65%, transparent 100%); transform:translateX(-130%); animation:modelSkeletonSweep 1.5s ease-in-out infinite; }
 .models-skeleton-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
 .models-skeleton-dot { width:10px; height:10px; border-radius:999px; background:color-mix(in srgb,var(--text3) 20%, transparent); }
 .models-skeleton-line { height:10px; border-radius:999px; background:linear-gradient(90deg,color-mix(in srgb,var(--surface) 70%, transparent),color-mix(in srgb,var(--surface2) 95%, transparent),color-mix(in srgb,var(--surface) 70%, transparent)); background-size:200% 100%; animation:shimmer 1.4s ease infinite; }
@@ -14618,7 +15440,18 @@ body.density-compact .file-name { padding: 6px 0; }
 .models-skeleton-item { display:flex; align-items:center; gap:8px; }
 .models-skeleton-item .models-skeleton-line:last-child { margin-left:auto; width:52px; }
 .models-load-stage { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:linear-gradient(90deg,color-mix(in srgb,var(--surface) 80%, transparent),color-mix(in srgb,var(--accent) 7%, var(--surface)),color-mix(in srgb,var(--surface) 80%, transparent)); background-size:200% 100%; animation:shimmer 1.6s ease infinite; }
+.models-load-stage-copy { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.models-load-stage-copy strong { font-size:12px; color:var(--text); }
+.models-load-stage-copy span { font-size:11px; color:var(--text3); }
+.models-load-stage-steps { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.models-load-step { display:inline-flex; align-items:center; gap:5px; padding:4px 8px; border-radius:999px; border:1px solid color-mix(in srgb, var(--border) 88%, transparent); background:color-mix(in srgb, var(--bg) 62%, transparent); font-size:10px; color:var(--text3); }
+.models-load-step::before { content:''; width:6px; height:6px; border-radius:999px; background:color-mix(in srgb, var(--text3) 24%, transparent); }
+.models-load-step.active { color:var(--text2); border-color:color-mix(in srgb, var(--accent) 28%, var(--border)); }
+.models-load-step.active::before { background:var(--accent); animation:pulse-dot .9s ease-in-out infinite alternate; }
+.models-load-step.done { color:var(--text2); }
+.models-load-step.done::before { background:#22c55e; }
 .model-card { padding:10px 14px;background:var(--raised);border:1px solid var(--border);border-radius:8px;transition:border-color .15s;display:flex;flex-direction:column;gap:6px;min-height:0; }
+.model-card.hydrating { animation:modelCardIn .28s ease-out both; }
 .model-card:hover { border-color:var(--accent); }
 .model-card.offline { opacity:.55; }
 .model-card-head { display:flex;align-items:center;gap:10px; }
@@ -14645,6 +15478,10 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-action.update strong { color:var(--accent); }
 .model-card-alert { margin-top:auto; }
 .model-card-footer { margin-top:auto; display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding-top:8px; border-top:1px solid var(--border); }
+.model-card-subline { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.model-card-use { font-size:11px; color:var(--text3); line-height:1.45; }
+.model-card-note { font-size:11px; color:var(--text3); line-height:1.45; }
+.model-card-modelmeta { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px; }
 .model-card-activity { display:flex;align-items:center;gap:8px;font-size:12px; }
 .model-card-activity.working { color:var(--accent);font-weight:500; }
 .model-card-activity.idle { color:var(--text3);font-style:italic; }
@@ -14656,6 +15493,8 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-run-meta { color:var(--text3);white-space:nowrap; }
 /* ── Model Activity Slide-Out Panel ── */
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+@keyframes modelSkeletonSweep { from { transform:translateX(-130%); } to { transform:translateX(130%); } }
+@keyframes modelCardIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 @keyframes pulse-grid-drift { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 24px, 32px 0, 0 0; } }
 @keyframes pulse-scan-sweep { 0% { transform: translateX(-120%); opacity: 0; } 20% { opacity: .4; } 100% { transform: translateX(140%); opacity: 0; } }
 /* Pulse hero/card/stage removed (v0.33.18) */
@@ -14711,6 +15550,23 @@ body.density-compact .file-name { padding: 6px 0; }
 .ma-summary-role { font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text3);margin-bottom:2px; }
 .model-card-activity .pulse-dot { width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse-dot .8s ease-in-out infinite alternate; }
 .model-card-selector { margin-top:8px; }
+.model-update-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:99999; display:flex; align-items:center; justify-content:center; padding:24px; }
+.model-update-modal { width:min(680px,100%); max-height:82vh; overflow:hidden; display:flex; flex-direction:column; background:var(--surface); border:1px solid var(--border); border-radius:18px; box-shadow:0 28px 90px rgba(0,0,0,.35); }
+.model-update-head { display:flex; align-items:flex-start; gap:12px; padding:16px 18px 14px; border-bottom:1px solid var(--border); }
+.model-update-title { font-size:16px; font-weight:800; color:var(--text); }
+.model-update-copy { font-size:12px; color:var(--text3); line-height:1.5; margin-top:4px; }
+.model-update-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:10px; border:1px solid var(--border); color:var(--text2); background:var(--bg); white-space:nowrap; }
+.model-update-body { padding:16px 18px 18px; display:flex; flex-direction:column; gap:12px; overflow:auto; }
+.model-update-status { padding:12px 14px; border-radius:14px; border:1px solid var(--border); background:color-mix(in srgb,var(--surface) 82%, transparent); }
+.model-update-status strong { display:block; font-size:13px; color:var(--text); }
+.model-update-status span { display:block; font-size:12px; color:var(--text3); line-height:1.5; margin-top:4px; }
+.model-update-status.running { border-color:color-mix(in srgb,var(--accent) 35%, var(--border)); background:color-mix(in srgb,var(--accent) 8%, transparent); }
+.model-update-status.ok { border-color:color-mix(in srgb,#22c55e 35%, var(--border)); background:color-mix(in srgb,#22c55e 8%, transparent); }
+.model-update-status.err { border-color:color-mix(in srgb,#ef4444 35%, var(--border)); background:color-mix(in srgb,#ef4444 8%, transparent); }
+.model-update-details { display:none; padding:12px 14px; border:1px solid var(--border); border-radius:14px; background:var(--bg); }
+.model-update-details.open { display:block; }
+.model-update-pre { margin:0; font-size:11px; line-height:1.55; color:var(--text2); white-space:pre-wrap; word-break:break-word; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+.model-update-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; padding-top:2px; }
 .model-select { width:100%;padding:6px 10px;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;outline:none; }
 .model-select:focus { border-color:var(--accent); }
 @keyframes pulse-dot { from{opacity:1;transform:scale(1)} to{opacity:.4;transform:scale(.7)} }
@@ -14796,6 +15652,10 @@ body.density-compact .file-name { padding: 6px 0; }
   white-space:nowrap;
 }
 .persona-card.orchestrator .persona-card-role { font-size:9px; max-width:120px; }
+@keyframes agentCardIn {
+  0% { opacity:0; transform:translateY(8px); }
+  100% { opacity:1; transform:translateY(0); }
+}
 @keyframes pixel-walk {
   0%,100% { transform:translateY(0) rotate(0deg); }
   25% { transform:translateY(-2px) rotate(-1deg); }
@@ -14850,16 +15710,200 @@ body.density-compact .file-name { padding: 6px 0; }
 .agent-detail-tabs { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; border-bottom:none; flex-wrap:wrap; }
 .agent-detail-tabs .pd-tab { padding:8px 16px; border-radius:999px; border:1px solid transparent; }
 .agent-detail-content { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; min-height:0; flex:1; display:flex; flex-direction:column; overflow:hidden; }
+#project-detail-view .agent-detail-content { background:transparent; border:none; border-radius:0; padding:0; overflow:visible; }
 .project-detail-tabs { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; flex-wrap:wrap; margin-bottom:14px; }
 .project-tab-rail .pd-tab { padding:8px 15px; border-radius:999px; border:1px solid transparent; }
 .project-tab-rail .pd-tab.active { border-color:color-mix(in srgb,var(--accent) 24%, var(--border)); background:color-mix(in srgb,var(--accent) 8%, transparent); }
 .project-stage { display:grid; grid-template-columns:minmax(320px,1.05fr) minmax(280px,.95fr); gap:16px; align-items:start; }
 .project-stage-panel { padding:18px 20px; border:1px solid color-mix(in srgb,var(--accent) 16%, var(--border)); border-radius:22px; background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%,transparent),color-mix(in srgb,var(--bg) 98%,transparent)); box-shadow:0 20px 60px rgba(0,0,0,.14); }
+.proj-workspace { display:flex; flex-direction:column; gap:14px; min-height:0; }
+.proj-live-strip { display:none; }
+.proj-status-box { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:10px; align-items:start; padding:10px 12px; border:1px solid color-mix(in srgb,var(--border) 82%, transparent); border-radius:14px; background:color-mix(in srgb,var(--surface) 84%, transparent); }
+.proj-status-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:6px; }
+.proj-status-kicker { font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--text3); font-weight:700; }
+.proj-status-title { font-size:13px; font-weight:700; color:var(--text); line-height:1.35; margin-top:2px; }
+.proj-status-copy { font-size:11px; color:var(--text3); line-height:1.5; max-width:720px; }
+.proj-status-stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.proj-status-stat { padding:7px 9px; border:1px solid color-mix(in srgb,var(--border) 82%, transparent); border-radius:10px; background:color-mix(in srgb,var(--bg) 92%, transparent); }
+.proj-status-stat-label { font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); }
+.proj-status-stat-value { font-size:14px; font-weight:800; color:var(--text); margin-top:3px; line-height:1.1; }
+.proj-status-stat-sub { font-size:10px; color:var(--text3); margin-top:3px; line-height:1.4; }
+.proj-status-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+.proj-status-meta { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+.proj-status-meta .proj-mini-chip { background:color-mix(in srgb,var(--surface) 76%, transparent); }
+.proj-mission-strip { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:8px 0 12px; border-bottom:1px solid color-mix(in srgb,var(--border) 82%, transparent); }
+.proj-mission-main { min-width:0; flex:1; }
+.proj-mission-kicker { font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); font-weight:700; }
+.proj-mission-title { font-size:14px; color:var(--text); line-height:1.55; margin-top:4px; }
+.proj-mission-side { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; max-width:46%; }
+.proj-mission-chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; border:1px solid color-mix(in srgb,var(--border) 78%, transparent); background:color-mix(in srgb,var(--surface) 68%, transparent); font-size:10px; color:var(--text2); white-space:nowrap; }
+.proj-mission-chip strong { color:var(--text); font-weight:700; }
+.proj-live-chip { padding:10px 12px; border:1px solid color-mix(in srgb,var(--border) 65%, transparent); border-radius:14px; background:color-mix(in srgb,var(--surface) 76%, transparent); }
+.proj-live-label { font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); }
+.proj-live-value { font-size:15px; font-weight:800; color:var(--text); margin-top:3px; line-height:1.1; }
+.proj-live-sub { font-size:11px; color:var(--text3); margin-top:4px; line-height:1.45; }
+.proj-user-queue { padding:0; border:none; border-radius:0; background:transparent; }
+.proj-user-queue-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+.proj-user-queue-kicker { font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#f59e0b; font-weight:700; }
+.proj-user-queue-title { font-size:13px; font-weight:700; color:var(--text); }
+.proj-user-queue-copy { font-size:11px; color:var(--text3); line-height:1.55; margin-bottom:10px; max-width:760px; }
+.proj-user-queue-list { display:flex; flex-direction:column; gap:8px; }
+.proj-user-card { padding:10px 12px; border:none; border-left:2px solid color-mix(in srgb,#f59e0b 74%, transparent); border-radius:10px; background:color-mix(in srgb,var(--surface) 68%, transparent); display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; align-items:center; }
+.proj-user-card-title { font-size:12px; font-weight:700; color:var(--text); }
+.proj-user-card-copy { font-size:11px; color:var(--text3); line-height:1.5; grid-column:1 / 2; }
+.proj-user-card-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; grid-column:2 / 3; grid-row:1 / span 2; align-self:center; }
+.proj-main-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:14px; align-items:start; }
+.proj-column { display:flex; flex-direction:column; gap:16px; min-width:0; }
+.proj-panel { padding:0; border:none; border-radius:0; background:transparent; min-width:0; }
+.proj-panel + .proj-panel { padding-top:14px; border-top:1px solid color-mix(in srgb,var(--border) 82%, transparent); }
+.proj-panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+.proj-panel-title { font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--text3); font-weight:700; }
+.proj-panel-note { font-size:11px; color:var(--text3); }
+.proj-agent-board { display:flex; flex-direction:column; gap:6px; }
+.proj-agent-card { padding:8px 10px; border:1px solid color-mix(in srgb,var(--border) 72%, transparent); border-radius:10px; background:color-mix(in srgb,var(--surface) 70%, transparent); display:flex; align-items:center; gap:10px; min-height:0; cursor:pointer; transition:border-color .16s ease, background .16s ease, transform .16s ease; }
+.proj-agent-card:hover { border-color:color-mix(in srgb,var(--accent) 38%, var(--border)); background:color-mix(in srgb,var(--surface) 84%, transparent); transform:translateY(-1px); }
+.proj-agent-head { display:flex; align-items:center; gap:8px; min-width:0; flex:1; }
+.proj-agent-avatar-wrap { width:34px; height:34px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.proj-agent-name { font-size:13px; font-weight:700; color:var(--text); }
+.proj-agent-role { font-size:11px; color:var(--text3); margin-top:1px; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.proj-agent-status { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border-radius:999px; border:1px solid var(--border); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; white-space:nowrap; flex-shrink:0; }
+.proj-agent-status-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.proj-agent-summary { font-size:11px; color:var(--text2); line-height:1.5; }
+.proj-agent-task { min-width:0; flex:1; display:flex; align-items:center; gap:8px; }
+.proj-agent-task-kicker { display:none; }
+.proj-agent-task-title { font-size:12px; font-weight:600; color:var(--text); line-height:1.35; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.proj-agent-task-meta { display:flex; gap:6px; flex-wrap:wrap; flex-shrink:0; }
+.proj-agent-actions { display:none; }
+.proj-mini-chip { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:var(--bg); font-size:10px; color:var(--text2); white-space:nowrap; }
+.proj-mini-chip.warn { color:#f59e0b; border-color:color-mix(in srgb,#f59e0b 28%, var(--border)); }
+.proj-mini-chip.err { color:#ef4444; border-color:color-mix(in srgb,#ef4444 28%, var(--border)); }
+.proj-mini-chip.ok { color:#22c55e; border-color:color-mix(in srgb,#22c55e 28%, var(--border)); }
+.proj-plan-list, .proj-activity-feed, .proj-people-listing { display:flex; flex-direction:column; gap:10px; }
+.proj-plan-row, .proj-activity-row, .proj-people-row { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border:none; border-bottom:1px solid color-mix(in srgb,var(--border) 78%, transparent); background:transparent; }
+.proj-plan-list > :last-child, .proj-activity-feed > :last-child, .proj-people-listing > :last-child { border-bottom:none; }
+.proj-plan-icon, .proj-activity-icon, .proj-people-icon { width:28px; height:28px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:var(--bg); color:var(--accent); flex-shrink:0; font-size:12px; }
+.proj-plan-copy, .proj-activity-copy, .proj-people-copy { min-width:0; flex:1; }
+.proj-plan-title, .proj-activity-title, .proj-people-title { font-size:12px; font-weight:700; color:var(--text); line-height:1.45; }
+.proj-plan-sub, .proj-activity-sub, .proj-people-sub { font-size:11px; color:var(--text3); line-height:1.55; margin-top:3px; }
+.proj-activity-feed { gap:6px; }
+.proj-activity-row { position:relative; align-items:center; gap:12px; padding:8px 0 8px 14px; }
+.proj-activity-row::before { content:''; position:absolute; left:0; top:10px; bottom:10px; width:2px; border-radius:999px; background:var(--activity-tone, color-mix(in srgb,var(--border) 82%, transparent)); }
+.proj-activity-icon { width:22px; height:22px; border-radius:999px; font-size:10px; background:transparent; }
+.proj-activity-meta { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:3px; }
+.proj-activity-chip { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:color-mix(in srgb,var(--surface) 72%, transparent); font-size:10px; color:var(--text3); white-space:nowrap; }
+.proj-activity-chip.ok { color:#22c55e; border-color:color-mix(in srgb,#22c55e 24%, var(--border)); }
+.proj-activity-chip.warn { color:#f59e0b; border-color:color-mix(in srgb,#f59e0b 24%, var(--border)); }
+.proj-activity-chip.err { color:#ef4444; border-color:color-mix(in srgb,#ef4444 24%, var(--border)); }
+.proj-files-list { display:flex; flex-direction:column; gap:0; border-top:1px solid color-mix(in srgb,var(--border) 78%, transparent); }
+.proj-file-row { display:grid; grid-template-columns:40px minmax(0,1fr) auto auto; gap:10px; align-items:center; padding:10px 0; border-bottom:1px solid color-mix(in srgb,var(--border) 78%, transparent); }
+.proj-file-thumb { width:40px; height:32px; border-radius:8px; overflow:hidden; background:color-mix(in srgb,var(--bg) 92%, transparent); display:flex; align-items:center; justify-content:center; color:var(--text3); font-size:16px; }
+.proj-file-thumb img { width:100%; height:100%; object-fit:cover; }
+.proj-file-name { font-size:12px; font-weight:700; color:var(--text); line-height:1.35; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.proj-file-meta { font-size:10px; color:var(--text3); display:flex; gap:6px; flex-wrap:wrap; margin-top:3px; }
+.proj-file-kind { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.08em; }
+.proj-empty-note { padding:14px 16px; border:none; border-radius:12px; color:var(--text3); text-align:center; font-size:12px; line-height:1.6; background:color-mix(in srgb,var(--surface) 62%, transparent); }
+.proj-drop-hint { font-size:11px; color:var(--text3); margin-top:8px; }
+.proj-files-shell {
+  display:flex;
+  flex-direction:column;
+  min-height:360px;
+  border:1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius:12px;
+  background:color-mix(in srgb, var(--surface) 96%, transparent);
+  padding:12px;
+}
+.proj-files-shell .fm-pane {
+  border:none;
+  border-radius:0;
+  background:transparent;
+  margin-bottom:10px;
+}
+.proj-files-shell .fm-pane-hdr {
+  padding:6px 0 8px;
+  border-bottom:1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+.proj-files-shell .fm-col-hdr {
+  padding-left:0;
+  padding-right:0;
+  background:transparent;
+  border-bottom:1px solid color-mix(in srgb, var(--border) 68%, transparent);
+}
+.proj-files-shell .fm-row {
+  padding-left:0 !important;
+  padding-right:0 !important;
+  border-bottom:1px solid color-mix(in srgb, var(--border) 62%, transparent) !important;
+}
+.proj-files-shell .fm-status-bar {
+  padding-left:0;
+  padding-right:0;
+  border-top:none;
+  background:transparent;
+}
+.proj-files-shell .fm-pane-empty {
+  padding-left:0;
+  padding-right:0;
+}
+.proj-command-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0; }
+.proj-command-tools .pd-chat-toolbtn { padding:7px 11px; }
+.proj-chat-dock-label { font-size:11px; color:var(--text2); font-weight:700; margin-right:2px; }
+.proj-chat-head { display:none; }
+.proj-chat-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; align-items:start; min-height:0; }
+.proj-chat-main { min-width:0; }
+.proj-chat-working { display:none; align-items:center; gap:8px; margin:0 0 10px; font-size:11px; color:#f5b041; }
+.proj-chat-working.active { display:flex; }
+.proj-chat-working-dot { width:8px; height:8px; border-radius:50%; background:#f59e0b; box-shadow:0 0 0 0 rgba(245,158,11,.5); animation:proj-working-pulse 1.2s ease-out infinite; }
+@keyframes proj-working-pulse { 0% { box-shadow:0 0 0 0 rgba(245,158,11,.45); opacity:1; } 100% { box-shadow:0 0 0 10px rgba(245,158,11,0); opacity:.7; } }
+.proj-chat-hint { display:none; align-items:center; gap:8px; margin:0 0 10px; padding:8px 10px; border-radius:12px; background:color-mix(in srgb,#f59e0b 10%, transparent); border:1px solid color-mix(in srgb,#f59e0b 24%, var(--border)); color:var(--text2); font-size:11px; }
+.proj-chat-hint.active { display:flex; animation:proj-chat-hint-in .28s ease, proj-chat-hint-glow 1.4s ease-out 1; }
+.proj-chat-hint-dot { width:8px; height:8px; border-radius:50%; background:#f59e0b; flex-shrink:0; box-shadow:0 0 0 0 rgba(245,158,11,.45); animation:proj-working-pulse 1.2s ease-out infinite; }
+@keyframes proj-chat-hint-in { 0% { opacity:0; transform:translateY(4px); } 100% { opacity:1; transform:translateY(0); } }
+@keyframes proj-chat-hint-glow { 0% { box-shadow:0 0 0 0 rgba(245,158,11,.22); } 100% { box-shadow:0 0 0 12px rgba(245,158,11,0); } }
+.proj-chat-composer { display:flex; align-items:flex-end; gap:10px; padding:10px 12px; border:1px solid color-mix(in srgb,#f59e0b 36%, var(--border)); border-radius:22px; background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%, transparent),color-mix(in srgb,#f59e0b 4%, var(--bg))); box-shadow:inset 0 1px 0 rgba(255,255,255,.04); }
+.proj-chat-composer.pulse { animation:proj-chat-composer-pulse .7s ease; }
+@keyframes proj-chat-composer-pulse {
+  0% { box-shadow:0 0 0 0 rgba(245,158,11,.18), inset 0 1px 0 rgba(255,255,255,.04); }
+  50% { box-shadow:0 0 0 8px rgba(245,158,11,.08), inset 0 1px 0 rgba(255,255,255,.04); }
+  100% { box-shadow:0 0 0 0 rgba(245,158,11,0), inset 0 1px 0 rgba(255,255,255,.04); }
+}
+#proj-cmd-bar .pd-chat-input { min-height:86px; max-height:180px; border:1px solid transparent; border-radius:14px; padding:12px 12px 10px; background:color-mix(in srgb,var(--bg) 88%, transparent); }
+#proj-cmd-bar .pd-chat-input:focus { border-color:transparent; background:color-mix(in srgb,var(--bg) 94%, transparent); }
+#proj-cmd-bar .pd-chat-input::placeholder { color:color-mix(in srgb,var(--text2) 90%, var(--text3)); }
+.proj-chat-need { display:none !important; }
+.proj-chat-need-label { font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#f59e0b; font-weight:700; }
+.proj-chat-need-copy { font-size:11px; color:var(--text2); line-height:1.45; margin-top:3px; }
+.proj-chat-need .proj-next-btn { margin-top:0; flex-shrink:0; justify-content:center; }
+.proj-top-need { margin:-4px 0 14px; padding:10px 12px; border:1px solid color-mix(in srgb,#f59e0b 24%, var(--border)); border-radius:14px; background:color-mix(in srgb,#f59e0b 7%, transparent); display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.proj-top-need-copy { min-width:0; flex:1; }
+.proj-top-need-label { font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#f59e0b; font-weight:700; }
+.proj-top-need-text { font-size:12px; color:var(--text2); line-height:1.5; margin-top:4px; }
+.proj-top-need-meta { display:flex; align-items:center; gap:8px; font-size:10px; color:var(--text3); margin-top:6px; }
+.proj-top-need-controls { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.proj-top-need-btn { display:inline-flex; align-items:center; justify-content:center; min-width:32px; height:30px; padding:0 10px; border-radius:999px; border:1px solid var(--border); background:color-mix(in srgb,var(--surface) 72%, transparent); color:var(--text2); cursor:pointer; font-size:12px; }
+.proj-top-need-btn:hover { border-color:var(--accent); color:var(--text); }
+.proj-inline-edit { display:block; width:100%; cursor:pointer; border-radius:8px; transition:background .15s ease,color .15s ease; }
+.proj-inline-edit:hover { background:color-mix(in srgb,var(--accent) 6%, transparent); }
+@media (max-width: 1100px) {
+  .proj-main-grid { grid-template-columns:1fr; }
+  .proj-status-box { grid-template-columns:1fr; }
+  .proj-chat-layout { grid-template-columns:1fr; }
+}
+@media (max-width: 760px) {
+  .proj-live-strip { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .proj-user-queue-list, .proj-agent-board { grid-template-columns:1fr; }
+}
 .project-roster { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
 .project-card { border:1px solid var(--border); border-radius:10px; background:var(--surface); cursor:pointer; transition:border-color .15s ease,box-shadow .15s ease; overflow:hidden; display:flex; flex-direction:column; }
 .project-card:hover { border-color:color-mix(in srgb,var(--accent) 30%, var(--border)); box-shadow:0 4px 16px rgba(0,0,0,.1); }
 @keyframes cardDealIn { 0% { opacity:0; transform:translateY(18px) scale(0.95); } 100% { opacity:1; transform:translateY(0) scale(1); } }
 .project-roster > .project-card { animation:cardDealIn .32s ease both; }
+@keyframes filesSectionIn {
+  0% { opacity:0; transform:translateY(20px) scale(.97); }
+  100% { opacity:1; transform:translateY(0) scale(1); }
+}
+@keyframes filesRowIn {
+  0% { opacity:0; transform:translateX(-10px); }
+  100% { opacity:1; transform:translateX(0); }
+}
 .project-card.is-active { border-color:color-mix(in srgb,var(--accent) 50%, var(--border)); }
 .project-card-cover { height:56px; position:relative; overflow:hidden; }
 .project-card-body { padding:10px 12px; flex:1; display:flex; flex-direction:column; gap:4px; }
@@ -15004,6 +16048,70 @@ body.density-compact .file-name { padding: 6px 0; }
 
 .proj-status-toggle { font-size:12px; font-weight:600; padding:4px 12px; border-radius:20px; border:1px solid var(--border2); background:none; color:var(--text3); cursor:pointer; white-space:nowrap; }
 .proj-status-toggle.active { background:rgba(34,197,94,.12); color:#22c55e; border-color:rgba(34,197,94,.3); }
+.proj-workflow-board {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+  gap:12px;
+  align-items:start;
+}
+.proj-workflow-col {
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  min-width:0;
+  padding:14px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:var(--surface);
+}
+.proj-workflow-head {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+}
+.proj-workflow-name {
+  font-size:13px;
+  font-weight:700;
+  color:var(--text);
+}
+.proj-workflow-meta {
+  font-size:11px;
+  color:var(--text3);
+  line-height:1.45;
+}
+.proj-workflow-list {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  min-width:0;
+}
+.proj-workflow-task {
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--bg);
+  cursor:pointer;
+  transition:border-color .15s ease, background-color .15s ease, transform .15s ease;
+  min-width:0;
+}
+.proj-workflow-task:hover {
+  border-color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 4%, var(--bg));
+  transform:translateY(-1px);
+}
+.proj-workflow-task-title {
+  font-size:12px;
+  font-weight:600;
+  color:var(--text);
+  line-height:1.45;
+}
+.proj-workflow-task-sub {
+  font-size:11px;
+  color:var(--text3);
+  line-height:1.45;
+  margin-top:5px;
+}
 .badge-production { background:#dcfce7; color:#15803d; font-size:10px; padding:2px 7px;
   border-radius:20px; font-weight:600; }
 .badge-test { background:#fef9c3; color:#854d0e; font-size:10px; padding:2px 7px;
@@ -15110,7 +16218,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .policy-active-pill { display:inline-block; margin-top:8px; font-size:11px;
                       background:var(--accent); color:#fff; padding:2px 8px;
                       border-radius:20px; font-weight:600; }
-.settings-field { margin-bottom: 12px; }
+.settings-field { margin-bottom: 10px; max-width: 460px; }
 .settings-field label { display: block; font-size: 12px; font-weight: 500;
   color: var(--text2); margin-bottom: 5px; }
 .settings-fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -15211,6 +16319,38 @@ input[type="number"].settings-input { min-width: 60px; }
 .pw-section-title { font-size: 12px; font-weight: 600; color: var(--text3);
   text-transform: uppercase; letter-spacing: .6px; margin-bottom: 16px; }
 
+/* Porter selects: remove browser-default dropdown chrome everywhere */
+select,
+.settings-input[type="select"],
+.admin-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text3) 50%),
+    linear-gradient(135deg, var(--text3) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) calc(50% - 2px),
+    calc(100% - 11px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 30px !important;
+  border-radius: 8px;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+select:hover,
+.admin-select:hover {
+  border-color: var(--accent);
+}
+select:focus,
+.admin-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+select::-ms-expand { display: none; }
+
 /* scrollbar */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -15250,37 +16390,36 @@ input[type="number"].settings-input { min-width: 60px; }
   </div>
   <nav class="module-nav">
     <div class="mnav-group-label">Work</div>
-    <button class="mnav-item active" id="mnav-projects" onclick="switchModule('projects')">
+    <button class="mnav-item active" id="mnav-projects" onclick="mainNavModule('projects')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
       <span class="mnav-label">Projects</span>
     </button>
-    <button class="mnav-item" id="mnav-files" onclick="switchModule('allfiles')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-      <span class="mnav-label">Files</span>
-    </button>
-    <button class="mnav-item" id="mnav-people" onclick="switchModule('people')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      <span class="mnav-label">People</span>
-    </button>
-    <div class="mnav-group-label">AI Agents</div>
-    <button class="mnav-item" id="mnav-agents" onclick="switchModule('agents')">
+    <button class="mnav-item" id="mnav-agents" onclick="mainNavModule('agents')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6" y2="6"/><line x1="6" y1="18" x2="6" y2="18"/></svg>
       <span class="mnav-label">AI Agents</span>
     </button>
+    <button class="mnav-item" id="mnav-files" onclick="mainNavModule('allfiles')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      <span class="mnav-label">Files</span>
+    </button>
+    <button class="mnav-item" id="mnav-people" onclick="mainNavModule('people')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span class="mnav-label">People</span>
+    </button>
     <div class="mnav-group-label">Inspect</div>
-    <button class="mnav-item" id="mnav-models" onclick="switchModule('models')">
+    <button class="mnav-item" id="mnav-models" onclick="mainNavModule('models')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
       <span class="mnav-label">Models</span>
     </button>
-    <button class="mnav-item" id="mnav-capabilities" onclick="switchModule('capabilities')">
+    <button class="mnav-item" id="mnav-capabilities" onclick="mainNavModule('capabilities')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span class="mnav-label">Tools</span>
     </button>
-    <button class="mnav-item" id="mnav-memory" onclick="switchModule('memory')">
+    <button class="mnav-item" id="mnav-memory" onclick="mainNavModule('memory')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
       <span class="mnav-label">Memory</span>
     </button>
-    <button class="mnav-item" id="mnav-logs" onclick="switchModule('logs')">
+    <button class="mnav-item" id="mnav-logs" onclick="mainNavModule('logs')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <span class="mnav-label">Logs</span>
     </button>
@@ -15322,10 +16461,10 @@ input[type="number"].settings-input { min-width: 60px; }
       <div id="sidebar-username" style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
       <div id="sidebar-role" style="font-size:10px;color:var(--text3);text-transform:capitalize"></div>
     </div>
-    <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
+    <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.22</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.26</div>
   </div>
 </aside>
 
@@ -15485,9 +16624,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <!-- Agent Grid -->
     <div id="agents-grid-view">
       <div id="persona-org-chart" style="margin-bottom:16px">
-        <div id="persona-cards-row" class="persona-cards-row">
-          <div class="loading-indicator">Loading personas...</div>
-        </div>
+        <div id="persona-cards-row" class="persona-cards-row"></div>
       </div>
     </div>
 
@@ -15522,7 +16659,7 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
       <div class="agent-identity-shell">
         <div class="agent-identity-card">
-          <div class="agent-identity-avatar" id="pd-avatar2" onclick="_editCardField('avatar')" style="cursor:pointer" title="Click to edit">&#x1f916;</div>
+          <div class="agent-identity-avatar" id="pd-avatar2" title="Minecraft character preview">&#x1f916;</div>
           <div class="agent-identity-meta">
             <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
               <div class="agent-identity-name" id="pd-name2" onclick="_editCardField('name')" style="cursor:pointer" title="Click to edit"></div>
@@ -15541,7 +16678,7 @@ input[type="number"].settings-input { min-width: 60px; }
         <button class="pd-tab" onclick="switchPdTab('activity')">Activity</button>
         <button class="pd-tab" onclick="switchPdTab('skills')">Skills</button>
         <button class="pd-tab" onclick="switchPdTab('concepts')">Concepts</button>
-        <button class="pd-tab" onclick="switchPdTab('config')">Config</button>
+        <button class="pd-tab" onclick="switchPdTab('config')">Runtime</button>
         <div style="flex:1"></div>
         <div id="pd-tab-actions" style="display:flex;gap:8px;padding-right:8px"></div>
       </div>
@@ -15606,8 +16743,10 @@ input[type="number"].settings-input { min-width: 60px; }
           <div id="wiz-ai-status" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
         </div>
         <div class="wizard-step" data-step="3">
-          <label class="wizard-label">Pick a worker avatar</label>
-          <div id="wiz-emoji-grid" class="emoji-grid"></div>
+          <label class="wizard-label">Character</label>
+          <div style="padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--raised);font-size:12px;color:var(--text2);line-height:1.6">
+            Porter will generate this worker's Minecraft-style character automatically from the role and personality.
+          </div>
         </div>
         <div class="wizard-step" data-step="4">
           <label class="wizard-label">Which model should they primarily use?</label>
@@ -15772,31 +16911,58 @@ input[type="number"].settings-input { min-width: 60px; }
   <div id="projects-module" class="module-panel active">
     <div class="module-hdr">
       <span class="module-title">Projects</span>
-      <button class="btn btn-ghost" onclick="_askPorterToCreate('project')" style="font-size:12px">+ New Project</button>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <input type="text" class="fm-search" id="proj-search" placeholder="Search projects..." oninput="_projFilterList()" style="width:240px">
+        <button class="btn btn-ghost" id="proj-module-back" onclick="_projBack()" style="font-size:12px;display:none">&larr; Back</button>
+        <button class="btn btn-ghost" onclick="_askPorterToCreate('project')" style="font-size:12px">+ New Project</button>
+      </div>
     </div>
 
     <div id="projects-list-view" style="padding:0">
-      <div id="proj-grid" class="project-roster">
-        <div class="loading-indicator">Loading projects...</div>
-      </div>
+      <div id="proj-grid" class="project-roster"></div>
     </div>
     <div id="project-detail-view" style="display:none">
       <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-ghost" onclick="_projBack()" style="font-size:12px">&larr; Back To Projects</button>
-        <span id="proj-detail-name" style="font-size:16px;font-weight:600;color:var(--text)"></span>
+        <span id="proj-detail-name" class="proj-inline-edit" onclick="_projInlineEdit('name')" title="Click to rename this project" style="font-size:16px;font-weight:600;color:var(--text)"></span>
         <span id="proj-detail-status" style="font-size:10px;padding:2px 8px;border-radius:4px"></span>
+        <span id="proj-detail-type" style="font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);color:var(--text3)"></span>
         </div>
         <div id="proj-detail-actions" style="display:flex;gap:8px;flex-wrap:wrap"></div>
       </div>
-      <div id="proj-cmd-bar" class="proj-chat-top">
-        <div id="proj-chat-thread" class="proj-chat-thread"></div>
-        <div style="display:flex;align-items:flex-end;gap:6px">
-          <textarea id="proj-chat-input" class="pd-chat-input" placeholder="Tell Porter what to do with this project..." rows="1" onkeydown="_projChatKey(event)" oninput="_chatAutoGrow(this)" style="flex:1"></textarea>
-          <button class="pd-send-btn" onclick="_projChatSend()" style="flex-shrink:0"><span>Send</span></button>
+      <div id="proj-detail-tabs" class="project-detail-tabs project-tab-rail" style="margin-bottom:14px"></div>
+      <div id="proj-top-need" class="proj-top-need" style="display:none"></div>
+      <div class="proj-detail-shell">
+        <div id="proj-detail-content" class="agent-detail-content"></div>
+        <div id="proj-cmd-bar" class="proj-chat-top">
+          <div class="proj-command-tools pd-chat-toolbar">
+            <div class="proj-chat-dock-label">Plan With Porter</div>
+            <button class="pd-chat-toolbtn" onclick="_projNewChat()">＋ New Chat</button>
+            <button class="pd-chat-toolbtn" onclick="_projOpenHistory()">History</button>
+            <button class="pd-chat-toolbtn" onclick="_projChooseFiles()">Upload Files</button>
+            <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap">
+              <div id="proj-chat-model-picker" class="chat-ctx-sel" onclick="_projChatModelToggle(event)" style="font-size:11px;padding:4px 10px">
+                <span class="ctx-label" id="proj-chat-model-label">Model: Auto</span><span class="ctx-arrow">▾</span>
+                <div class="chat-ctx-dropdown" id="proj-chat-model-dd"></div>
+              </div>
+            </div>
+          </div>
+          <div class="proj-chat-layout">
+            <div class="proj-chat-main">
+              <div id="proj-chat-working" class="proj-chat-working"><span class="proj-chat-working-dot"></span><span id="proj-chat-working-copy">Working…</span></div>
+              <div id="proj-chat-hint" class="proj-chat-hint"><span class="proj-chat-hint-dot"></span><span id="proj-chat-hint-copy">Ready for your next move.</span></div>
+              <div id="proj-chat-thread" class="proj-chat-thread"></div>
+              <div class="proj-chat-composer">
+                <textarea id="proj-chat-input" class="pd-chat-input" placeholder="Tell Porter what should happen next..." rows="1" onkeydown="_projChatKey(event)" oninput="_chatAutoGrow(this)" onfocus="_projChatPlaceholderFocus()" onblur="_projChatPlaceholderBlur()" style="flex:1"></textarea>
+                <button id="proj-chat-send-btn" class="pd-send-btn" onclick="_projChatSend()" style="flex-shrink:0"><span>Send</span></button>
+              </div>
+            </div>
+            <div id="proj-chat-need" class="proj-chat-need" style="display:none"></div>
+          </div>
+          <div id="proj-chat-drop-zone" class="pd-chat-drop-zone" style="display:none">Drop files into this project lane</div>
+          <input id="proj-chat-file-input" type="file" multiple style="display:none" onchange="_projChatHandleFileInput(event)">
         </div>
       </div>
-      <div id="proj-detail-content" class="agent-detail-content"></div>
     </div>
   </div>
 
@@ -15805,15 +16971,13 @@ input[type="number"].settings-input { min-width: 60px; }
       <span class="module-title">Files</span>
       <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
         <input type="text" class="fm-search" id="fm-search" placeholder="Search files..." oninput="_fmFilterFiles()">
-        <button class="btn btn-ghost" style="font-size:11px" onclick="_fmNewFolder()">+ Folder</button>
-        <label class="btn btn-ghost" style="font-size:11px;cursor:pointer">Upload<input type="file" multiple style="display:none" onchange="_fmUploadFiles(this.files)"></label>
-        <button class="btn btn-ghost" onclick="loadAllFiles()">&#8635;</button>
+        <button class="btn btn-ghost" style="font-size:12px" onclick="_fmNewFolder()">+ Folder</button>
+        <label class="btn btn-ghost" style="font-size:12px;cursor:pointer">Upload<input type="file" multiple style="display:none" onchange="_fmUploadFiles(this.files)"></label>
+        <button class="btn btn-ghost" style="font-size:12px" onclick="loadAllFiles()">&#8635;</button>
       </div>
     </div>
     <div id="fm-breadcrumbs" style="display:flex;align-items:center;gap:2px;padding:0 0 8px;font-size:12px;flex-wrap:wrap"></div>
-    <div id="allfiles-list" style="display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;background:var(--surface);min-height:400px;transition:border-color .15s" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'" ondragleave="this.style.borderColor='var(--border)'" ondrop="event.preventDefault();this.style.borderColor='var(--border)';_fmUploadFiles(event.dataTransfer.files)">
-      <div class="loading-indicator" style="padding:24px">Loading files...</div>
-    </div>
+    <div id="allfiles-list" class="fm-shell" ondragover="event.preventDefault()" ondragleave="" ondrop="event.preventDefault();_fmUploadFiles(event.dataTransfer.files)"></div>
   </div>
 
   <div id="memory-module" class="module-panel">
@@ -15824,24 +16988,24 @@ input[type="number"].settings-input { min-width: 60px; }
         <button class="btn btn-ghost" style="font-size:11px" onclick="loadMemory()">&#8635;</button>
       </div>
     </div>
-    <div id="memory-dashboard" style="display:flex;flex-direction:column;gap:14px">
-      <div class="loading-indicator">Loading memory dashboard...</div>
-    </div>
+    <div id="memory-dashboard" style="display:flex;flex-direction:column;gap:14px"></div>
   </div>
 
     <div id="capabilities-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Tools</span>
       <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
-        <input type="text" id="cap-search" placeholder="Search tools…" oninput="_filterTools()" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;width:160px;outline:none">
+        <input type="text" id="cap-search" placeholder="Search tools…" oninput="_filterTools()" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;width:180px;outline:none">
         <span id="cap-summary" style="font-size:11px;color:var(--text3)"></span>
+        <button class="btn btn-ghost" onclick="_toolsAddConnection()">+ Connection</button>
         <button class="btn btn-ghost" onclick="loadCapabilities()">&#8635; Scan</button>
       </div>
     </div>
-    <div class="module-intro">Environment tools available on this machine. Porter auto-detects installed CLIs, runtimes, and services.</div>
-    <div id="capabilities-list" class="cap-grid">
-      <div class="loading-indicator">Loading tools...</div>
-    </div>
+    <div class="module-intro">What Porter can actually use right now: connected services, local tools on this machine, and setup gaps that still need attention.</div>
+    <div id="tools-overview" class="tools-summary-strip"></div>
+    <div id="tools-services-row"></div>
+    <div id="tools-filter-strip" class="tools-filter-strip"></div>
+    <div id="capabilities-list" class="tools-sections"></div>
   </div>
 
   <div id="models-module" class="module-panel">
@@ -15854,11 +17018,10 @@ input[type="number"].settings-input { min-width: 60px; }
     </div>
     <!-- Backends sub-tab -->
     <div id="models-backends-tab">
-      <div class="module-intro">AI runtimes available to Porter. As each gateway comes online, Porter discovers its models and current runtime state here.</div>
+      <div class="module-intro">What Porter can use right now. Each runtime shows whether it is ready, what it is best for, which models are available, and whether anything needs attention.</div>
+      <div id="models-overview" class="models-summary-strip"></div>
       <div id="models-load-status" class="models-load-status"></div>
-      <div id="models-grid" class="models-grid">
-        <div class="loading-indicator">Loading models...</div>
-      </div>
+      <div id="models-grid" class="models-grid"></div>
     </div>
 
   </div>
@@ -15866,19 +17029,19 @@ input[type="number"].settings-input { min-width: 60px; }
   <div id="people-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">People</span>
-      <div style="flex:1"></div>
-      <button class="btn btn-ghost" onclick="loadPeople()">&#8635;</button>
-      <button class="btn btn-ghost" onclick="_crmAddContact()" style="font-size:12px">+ Person</button>
-      <button class="btn btn-ghost" onclick="_crmAddCompany()" style="font-size:12px">+ Company</button>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" class="fm-search" id="crm-search" placeholder="Search people & companies..." oninput="_crmFilterDebounced()" style="width:240px">
+        <button class="btn btn-ghost" id="people-module-back" onclick="_crmCloseDetail()" style="font-size:12px;display:none">&larr; Back</button>
+        <button class="btn btn-ghost" onclick="_crmAddContact()" style="font-size:12px">+ Person</button>
+        <button class="btn btn-ghost" onclick="_crmAddCompany()" style="font-size:12px">+ Company</button>
+      </div>
     </div>
     <div class="crm-filters" id="crm-filters" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
-      <input type="text" class="crm-search" id="crm-search" placeholder="Search people & companies..." oninput="_crmFilterDebounced()" style="flex:1;min-width:200px">
       <div id="crm-filter-chips" style="display:flex;gap:4px;flex-wrap:wrap">
         <button class="crm-chip active" data-filter="all" onclick="_crmSetFilter('all')">All</button>
         <button class="crm-chip" data-filter="people" onclick="_crmSetFilter('people')">People</button>
         <button class="crm-chip" data-filter="companies" onclick="_crmSetFilter('companies')">Companies</button>
         <button class="crm-chip" data-filter="internal" onclick="_crmSetFilter('internal')">Internal</button>
-        <button class="crm-chip" data-filter="linked" onclick="_crmSetFilter('linked')">Project-linked</button>
       </div>
     </div>
     <div class="people-stats" id="people-stats" style="display:none"></div>
@@ -15971,7 +17134,7 @@ input[type="number"].settings-input { min-width: 60px; }
 <!-- API Keys moved to Extensions tab -->
 
       <div style="flex:1"></div>
-      <div style="padding:12px 16px;border-top:1px solid var(--border)">
+      <div style="padding:12px 16px;margin:0;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="switchSettingsTab('changelog')" style="width:100%;justify-content:flex-start;gap:8px;font-size:12px;color:var(--text3);margin-bottom:4px">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           Release Notes
@@ -15982,6 +17145,7 @@ input[type="number"].settings-input { min-width: 60px; }
 
     <!-- right content -->
     <div class="settings-content">
+      <div class="settings-shell" id="settings-shell">
 
       <!-- close / back button -->
       <button class="btn btn-icon" onclick="closeSettings()"
@@ -15992,7 +17156,10 @@ input[type="number"].settings-input { min-width: 60px; }
 
       <!-- Profile page -->
       <div class="settings-page active" id="spage-profile">
-        <div class="settings-page-title">Profile</div>
+        <div class="settings-toolbar"><div class="settings-page-title" style="margin:0">Profile</div></div>
+        <div class="settings-compact">
+        <div class="settings-card">
+          <div class="settings-card-title">Identity</div>
         <div class="avatar-section">
           <div class="avatar-large" id="saAvatar" onclick="triggerAvatarUpload()" title="Click to change photo"></div>
           <div>
@@ -16019,6 +17186,8 @@ input[type="number"].settings-input { min-width: 60px; }
         </div>
         <div class="settings-save-row">
           <button class="btn btn-primary" onclick="saveAccount()">Save changes</button>
+        </div>
+        </div>
         </div>
 
 
@@ -16119,7 +17288,9 @@ input[type="number"].settings-input { min-width: 60px; }
 
       <!-- Password page -->
       <div class="settings-page" id="spage-password">
-        <div class="settings-page-title">Password</div>
+        <div class="settings-toolbar"><div class="settings-page-title" style="margin:0">Password</div></div>
+        <div class="settings-compact">
+        <div class="settings-card">
         <div class="pw-helper">Choose a new password.</div>
         <div class="settings-field" style="margin-top:14px">
           <label>New password <span style="color:var(--text3);font-weight:400">(min 8 chars)</span></label>
@@ -16131,6 +17302,8 @@ input[type="number"].settings-input { min-width: 60px; }
         </div>
         <div class="settings-save-row">
           <button class="btn btn-primary" onclick="changePassword()">Update password</button>
+        </div>
+        </div>
         </div>
       </div>
 
@@ -16183,13 +17356,14 @@ input[type="number"].settings-input { min-width: 60px; }
       </div>
 
       <div class="settings-page" id="spage-changelog">
-        <div class="settings-page-title">What's new</div>
+        <div class="settings-toolbar"><div class="settings-page-title" style="margin:0">What's new</div></div>
         <div id="changelog-content">
           <div class="loading-indicator" style="padding:8px 0">Loading release notes</div>
           <ul class="cl-notes"><li>If this persists, refresh once. Porter will repopulate this panel automatically.</li></ul>
         </div>
       </div>
 
+      </div><!-- /settings-shell -->
     </div><!-- /settings-content -->
 
   </div><!-- /settingsPanel -->
@@ -16242,7 +17416,7 @@ input[type="number"].settings-input { min-width: 60px; }
   <div class="porter-popup-thread" id="popup-chat-thread"></div>
   <div class="porter-popup-composer">
     <textarea class="porter-popup-input" id="popup-chat-input" rows="1" placeholder="Ask Porter..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_popupChatSend()}" oninput="_chatAutoGrow(this)"></textarea>
-    <button class="porter-popup-send" onclick="_popupChatSend()">Send</button>
+    <button id="popup-chat-send" class="porter-popup-send" onclick="_popupChatSend()">Send</button>
   </div>
 </div>
 <div id="toasts"></div>
@@ -16304,6 +17478,89 @@ var _fhomeInitDone = false;
 // ── helpers ──
 function enc(s) { return encodeURIComponent(s); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escJs(s) { return String(s == null ? '' : s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,''); }
+window._runtimeUpdateState = window._runtimeUpdateState || {};
+function _inferRuntimeFromCommand(cmd) {
+  var s = String(cmd || '').toLowerCase();
+  if (s.indexOf('ollama') >= 0) return 'ollama';
+  if (s.indexOf('openclaw') >= 0) return 'openclaw';
+  if (s.indexOf('gemini') >= 0) return 'gemini';
+  if (s.indexOf('codex') >= 0) return 'codex';
+  return '';
+}
+function _setRuntimeUpdating(runtime, on) {
+  if (!runtime) return;
+  if (!window._runtimeUpdateState) window._runtimeUpdateState = {};
+  if (on) window._runtimeUpdateState[runtime] = { started_at: Date.now() };
+  else delete window._runtimeUpdateState[runtime];
+  _syncRuntimeUpdateButtons();
+}
+function _runtimeLabelVariants(runtime) {
+  var map = {
+    ollama: ['ollama'],
+    openclaw: ['openclaw', 'open claw'],
+    gemini: ['gemini'],
+    codex: ['codex']
+  };
+  return map[runtime] || [runtime];
+}
+function _syncRuntimeUpdateButtons() {
+  var state = window._runtimeUpdateState || {};
+  var now = Date.now();
+  Object.keys(state).forEach(function(key) {
+    if (now - Number((state[key] || {}).started_at || 0) > 120000) delete state[key];
+  });
+  var buttons = document.querySelectorAll('#models-grid button');
+  buttons.forEach(function(btn) {
+    var card = btn.closest('.model-card, .backend-card, .models-card, [data-backend], [data-runtime]') || btn.closest('div');
+    var cardText = String((card && card.textContent) || '').toLowerCase();
+    var matched = '';
+    Object.keys(state).forEach(function(runtime) {
+      if (matched) return;
+      var hits = _runtimeLabelVariants(runtime).some(function(label) { return cardText.indexOf(label) >= 0; });
+      if (hits) matched = runtime;
+    });
+    if (matched && /update/i.test(btn.textContent || '')) {
+      if (!btn.dataset.origLabel) btn.dataset.origLabel = btn.textContent;
+      btn.textContent = 'Updating…';
+      btn.disabled = true;
+      btn.classList.add('is-updating');
+      return;
+    }
+    if (btn.dataset.origLabel && btn.classList.contains('is-updating')) {
+      btn.textContent = btn.dataset.origLabel;
+      btn.disabled = false;
+      btn.classList.remove('is-updating');
+      delete btn.dataset.origLabel;
+    }
+  });
+}
+if (!window._runtimeUpdateFetchPatch) {
+  window._runtimeUpdateFetchPatch = true;
+  (function() {
+    var _origFetch = window.fetch.bind(window);
+    window.fetch = function(input, init) {
+      var url = typeof input === 'string' ? input : ((input && input.url) || '');
+      var runtime = '';
+      if (url.indexOf('/api/terminal/exec') >= 0) {
+        try {
+          var body = init && init.body;
+          if (typeof body === 'string') runtime = _inferRuntimeFromCommand((JSON.parse(body) || {}).cmd || '');
+        } catch (e) {}
+        if (runtime) _setRuntimeUpdating(runtime, true);
+      }
+      var p = _origFetch(input, init);
+      return p.then(function(res) {
+        if (url.indexOf('/api/models') >= 0) setTimeout(_syncRuntimeUpdateButtons, 0);
+        return res;
+      }).catch(function(err) {
+        if (runtime) _setRuntimeUpdating(runtime, false);
+        throw err;
+      });
+    };
+  })();
+  setInterval(_syncRuntimeUpdateButtons, 1200);
+}
 function esc(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
 function _emitClientLog(payload) {
   try {
@@ -16382,6 +17639,9 @@ var _modelStructureSignature = '';
 var _modelsLoadSeq = 0;
 var _modelsRenderedOnce = false;
 var _modelsStatusCheckSeq = 0;
+var _modelsLoadingStageState = { bootstrap:false, snapshot:false, health:false, versions:false };
+var _modelsDeepRefreshTimer = null;
+var _modelsLastDeepRefreshTs = 0;
 var _modelsStatusCheckTimer = null;
 var _modelsStatusIdleHandle = null;
 function _modelsStructureSignature(snap) {
@@ -16443,6 +17703,10 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.26', date:'2026-03-19', notes:['Tools is now one real workspace surface instead of a raw environment grid: connected services, local ready tools, and setup gaps land as separate sections with summary counts and staged loading','Workspace connections are now folded into Tools directly, with quick add/connect/disconnect/rename/delete actions and clearer Porter-language states instead of machine-inventory sludge','The Tools page now answers what Porter can use now, what still needs setup, and which services are actually attached to projects, while the old legacy tools path is no longer the visible product story'] },
+  { ver:'v0.33.25', date:'2026-03-19', notes:['Models is now more product-like: a compact summary strip lands first, cards emphasize readiness, selected models, and best-use guidance instead of defaulting to benchmark/scheduler clutter','Runtime updates now open a Porter-style progress modal with plain-language status and useful retry/details actions instead of the old terminal slab that could leak nonsense like exit undefined','Models still hydrates progressively, but deep version refresh is deferred and the visible runtime surface carries less legacy operator-console residue'] },
+  { ver:'v0.33.25', date:'2026-03-19', notes:['People/CRM is now a real workspace surface: normal workspace writers can update contacts and companies, company names resolve/create inline, and contact/company detail now has a proper files pane instead of a tiny upload target','Settings is tighter: the gear toggles the secondary settings nav like a hamburger, Profile and Password are compact again, and the release/version surface is back in sync across workspace and admin shells','Projects now has a global search bar on the roster so you can filter projects by name, mission, status, type, and assigned agents from the main Projects page'] },
+  { ver:'v0.33.23', date:'2026-03-19', notes:['Release discipline reset: version, health, SSE welcome, startup banner, and release notes are back in sync','Standardized Porter-styled dropdown treatment across the product, cleaned agent detail runtime/header behavior, and kept agent tabs stable between Porter and workers','Project chat now recommends the next move plainly, keeps focus after send, and Workflow task columns render correctly again instead of collapsing into merged text'] },
   { ver:'v0.33.22', date:'2026-03-19', notes:['Fix project chat: remove stale CSS hiding chat bar, fix render call for greeting'] },
   { ver:'v0.33.21', date:'2026-03-19', notes:['Chat-driven projects: chat at top, project dashboard below, interactive building'] },
   { ver:'v0.33.20', date:'2026-03-19', notes:['Drag-drop: CRM company detail also accepts file drops'] },
@@ -16466,7 +17730,7 @@ const CHANGELOG = [
   { ver:'v0.33.2', date:'2026-03-17', notes:["Fix: memory signals counter only counts active (was showing dismissed)","Projects: removed stats bar (redundant clutter)"] },
   { ver:'v0.33.1', date:'2026-03-17', notes:["Fix: chat actions now work from any module (persona_name always sent)","Fix: Escape key closes project and CRM detail views","CRM: single-column profiles, all fields editable inline","CRM: removed button zoo (Edit/Add Note) — use chat or click fields","New action: crm_update_contact via chat","Chat context: full contact profile injected for People module","Fix: crm_add_interaction column name (body not summary)","Fix: crm_create_contact schema (removed nonexistent company_name column)"] },
   { ver:'v0.33.0', date:'2026-03-17', notes:["Universal chat actions from People/Memory/Agents","CRM: full-page contact/company views, inline editing","CRM: + Person / + Company header buttons","AI Agents: + Create from Template in header","Timeline: vertical graphical nodes","Memory: system noise filtered","Chat context: proper display names","Dead code cleanup"] },
-  { ver:'v0.32.1', date:'2026-03-17', notes:["CRM: unified directory replaces 3-tab split (Contacts/Team/Companies)","CRM: filter chips for People, Companies, Internal, Project-linked","CRM: inline search across all entities","CRM: /people search <query> slash command","CRM spec by GPT-5.4 (research/crm-redesign-spec.md)"] },
+  { ver:'v0.32.1', date:'2026-03-17', notes:["CRM: unified directory replaces 3-tab split (Contacts/Team/Companies)","CRM: filter chips for People, Companies, Internal","CRM: inline search across all entities","CRM: /people search <query> slash command","CRM spec by GPT-5.4 (research/crm-redesign-spec.md)"] },
   { ver:'v0.32.0', date:'2026-03-17', notes:["Removed duplicate projects chat input — global popup chat is the single command interface","Popup chat auto-opens on first projects load","Ctrl+K / Cmd+K command palette shortcut","Dead code cleanup: removed 6 unreachable tab branches, orphaned _showPorterAbout","DO THIS NEXT card updated for 4-view tab names"] },
   { ver:'v0.31.99', date:'2026-03-17', notes:["Command grammar: /new project|agent, /open <project>, /show active|all, /find <query>","Autocomplete shows new commands with descriptions","Updated /help to include new command grammar"] },
   { ver:'v0.31.98', date:'2026-03-17', notes:["CRM: fun empty states with Porter personality for contacts, team, companies","CRM: Team tab loads user cards immediately, enriches project counts async","CRM: empty contacts/companies use guided prompts"] },
@@ -18406,19 +19670,6 @@ function isTailscaleNodeConnected(node) {
     if (!online) return false;
     return names.includes(nIp) || names.includes(nHost) || names.includes(nLabel);
   });
-  // v0.31.81 — Update badge on Models nav
-  var _mnm = document.getElementById('mnav-models');
-  if (_mnm) {
-    var _existBadge = _mnm.querySelector('.nav-update-badge');
-    if (_existBadge) _existBadge.remove();
-    if (_updateCount > 0) {
-      var _badge = document.createElement('span');
-      _badge.className = 'nav-update-badge';
-      _badge.style.cssText = 'font-size:9px;background:#f59e0b;color:#000;padding:1px 5px;border-radius:8px;margin-left:auto;font-weight:700';
-      _badge.textContent = _updateCount;
-      _mnm.appendChild(_badge);
-    }
-  }
 }
 
 // Returns 'online' | 'relay' | 'offline' for a node.
@@ -18596,9 +19847,98 @@ function renderConfigSummary(d) {
 // ── module system ──
 let _currentModule = 'projects';
 let _overviewRefreshTimer = null;
+let _projectsAutoChatShown = false;
 window._lastAgents = [];
+function _projectDetailActive() {
+  var detail = document.getElementById('project-detail-view');
+  return _currentModule === 'projects' && !!(detail && detail.style.display !== 'none');
+}
+function _focusProjectCommand() {
+  var input = document.getElementById('proj-chat-input');
+  if (input) {
+    input.focus();
+    return true;
+  }
+  return false;
+}
+function _spinnerOnlyMarkup(minHeight, padding) {
+  var style = ['justify-content:center'];
+  if (padding) style.push('padding:' + padding);
+  if (minHeight) style.push('min-height:' + minHeight + 'px');
+  return '<div class="loading-indicator" style="' + style.join(';') + '" aria-label="Loading"><span class="loading-spinner"></span></div>';
+}
 function _isCoordinationEventType(type) {
   return typeof type === 'string' && type.indexOf('coordination:') === 0;
+}
+function _resetModuleLanding(name) {
+  if (name === 'projects') {
+    if (typeof _projBack === 'function') _projBack();
+    return;
+  }
+  if (name === 'people') {
+    if (typeof _crmCloseDetail === 'function') _crmCloseDetail();
+    return;
+  }
+  if (name === 'agents') {
+    if (typeof closePersonaDetail === 'function') closePersonaDetail();
+    if (typeof _setAgentView === 'function') _setAgentView('grid');
+    return;
+  }
+  if (name === 'allfiles') {
+    if (typeof closePreview === 'function') closePreview().catch(function(){});
+    if (typeof loadAllFiles === 'function') loadAllFiles();
+    return;
+  }
+  if (name === 'logs') {
+    if (typeof mcCloseDrawer === 'function') mcCloseDrawer();
+    return;
+  }
+}
+function _moduleAtLanding(name) {
+  if (name === 'projects') return !_projectDetailActive();
+  if (name === 'people') {
+    var pm = document.getElementById('people-module');
+    return !(pm && pm.classList.contains('detail-open'));
+  }
+  if (name === 'agents') {
+    var detail = document.getElementById('agent-detail-view');
+    var templates = document.getElementById('agents-templates-view');
+    var detailOpen = !!(detail && detail.classList.contains('open'));
+    var templatesOpen = !!(templates && templates.style.display === '');
+    return !detailOpen && !templatesOpen;
+  }
+  if (name === 'allfiles') {
+    var pp = document.getElementById('previewPanel');
+    var previewOpen = !!(pp && pp.classList.contains('open'));
+    return !previewOpen && !_fhomeActive && (!_fmCurrentPath || _fmCurrentPath === '/');
+  }
+  if (name === 'logs') {
+    var drawer = document.getElementById('mc-drawer');
+    return !(drawer && drawer.classList.contains('open'));
+  }
+  return true;
+}
+function mainNavModule(name) {
+  if (name === _currentModule && _moduleAtLanding(name)) {
+    var _panelName = name === 'templates' ? 'agents' : name;
+    var _panel = document.getElementById(_panelName + '-module');
+    if (_panel) _panel.scrollTop = 0;
+    var _activeNav = name === 'allfiles' ? 'files' : name;
+    document.querySelectorAll('.mnav-item').forEach(function(el) {
+      el.classList.toggle('active', el.id === 'mnav-' + _activeNav);
+    });
+    return;
+  }
+  if (name === _currentModule) {
+    _resetModuleLanding(name);
+    var _activeNav2 = name === 'allfiles' ? 'files' : name;
+    document.querySelectorAll('.mnav-item').forEach(function(el) {
+      el.classList.toggle('active', el.id === 'mnav-' + _activeNav2);
+    });
+    return;
+  }
+  _resetModuleLanding(name);
+  switchModule(name);
 }
 function switchModule(name) {
   if (name === 'system') name = 'admin';
@@ -18638,6 +19978,8 @@ function switchModule(name) {
     if (_projActivityRefreshTimer) { clearTimeout(_projActivityRefreshTimer); _projActivityRefreshTimer = null; }
     if (_projActivitySseId) { _sseUnsubscribe(_projActivitySseId); _projActivitySseId = null; }
     window._projActivityCurrent = '';
+    document.body.classList.remove('project-detail-active');
+    if (typeof _popupChatClose === 'function') _popupChatClose();
   }
 
   // v0.31.60 — F3 fix: clear stale chat context when leaving modules
@@ -18666,8 +20008,9 @@ function switchModule(name) {
   if (name === 'skills') name = 'agents';
   _currentModule = name;
   if (typeof _popupChatUpdateCtx === 'function') _popupChatUpdateCtx();
+  var activeNav = name === 'allfiles' ? 'files' : name;
   document.querySelectorAll('.mnav-item').forEach(el =>
-    el.classList.toggle('active', el.id === 'mnav-' + name));
+    el.classList.toggle('active', el.id === 'mnav-' + activeNav));
   var _panelName = name; if (name === 'templates') _panelName = 'agents';
   document.querySelectorAll('.module-panel').forEach(el => {
     var isActive = el.id === _panelName + '-module' || (name === 'settings' && el.id === 'settingsPanel');
@@ -18765,11 +20108,19 @@ function switchModule(name) {
       if (_d) _d.style.display = 'none';
       _selectedPersonaId = null;
       _loadTemplates();
-    }, projects: function() { loadProjects(); if (!window._projPopupOpened) { window._projPopupOpened = true; setTimeout(_popupChatOpen, 400); } }, admin: loadAdmin,
+    }, projects: function() { loadProjects(); }, admin: loadAdmin,
     allfiles: loadAllFiles, files: loadLocations, policies: loadPolicy,
     models: loadModels, tools: loadTools, audit: loadAudit, people: loadPeople, capabilities: loadCapabilities, memory: loadMemory, system: loadLogs, admin: loadLogs, logs: loadLogs, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
+  if (name === 'projects' && !_projectsAutoChatShown) {
+    _projectsAutoChatShown = true;
+    setTimeout(function() {
+      if (_currentModule !== 'projects') return;
+      if (_projectDetailActive()) return;
+      if (typeof _popupChatOpen === 'function') _popupChatOpen();
+    }, 120);
+  }
 }
 
 
@@ -18779,7 +20130,7 @@ async function loadMemory() {
   var el = document.getElementById('memory-dashboard');
   if (!el) return;
   var _isPlatAdmin = currentUser && currentUser.role === 'platform_admin';
-  el.innerHTML = '<div class="loading-indicator">Loading memory dashboard...</div>';
+  el.innerHTML = _spinnerOnlyMarkup(140, '18px 0');
   try {
     var [statsRes, queueRes] = await Promise.all([
       api('/api/memory/stats' + (_isPlatAdmin ? '' : '?exclude_system=1')),
@@ -19510,10 +20861,11 @@ async function removeSkill(id, name) {
 }
 
 // ── Projects (v0.29.32 — real project containers) ─────────────────────
-var _projList = [], _projActive = null, _projTab = 'now';
+var _projList = [], _projActive = null, _projTab = 'now', _projSearch = '';
 var _projActivitySseId = null;
 var _projActivityPoller = null;
 var _projActivityRefreshTimer = null;
+var _fmSectionOpen = { user: true, projects: true };
 
 // Pixel art cover generator — deterministic from project ID
 function _projPixelCover(id, type, w, h) {
@@ -19595,13 +20947,14 @@ function _projStatusBadge(proj) {
 }
 
 async function loadProjects() {
+  var grid = document.getElementById('proj-grid');
+  if (grid) grid.innerHTML = _spinnerOnlyMarkup(160, '18px 0');
   try {
     var data = await api('/api/projects');
     _projList = (data && data.projects) || [];
     _projActive = data && data.active_project_id;
     _renderProjList();
   } catch(e) {
-    var grid = document.getElementById('proj-grid');
     if (grid) grid.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:16px">Could not load projects</div>';
   }
 }
@@ -19609,35 +20962,74 @@ async function loadProjects() {
 function _renderProjList() {
   var grid = document.getElementById('proj-grid');
   if (!grid) return;
+  var rawQuery = _projSearch || '';
+  var q = rawQuery.trim().toLowerCase();
+  var visible = !_projList.length ? [] : _projList.filter(function(p) {
+    if (!q) return true;
+    var bag = [
+      p.name || '',
+      p.description || '',
+      p.objective || '',
+      p.success_bar || '',
+      p.type || '',
+      p.status || ''
+    ];
+    (p.assigned_personas || []).forEach(function(ap) {
+      if (!ap) return;
+      bag.push(ap.name || '');
+      bag.push(ap.role || '');
+    });
+    return bag.join(' ').toLowerCase().indexOf(q) !== -1;
+  });
   if (!_projList.length) {
     grid.innerHTML = '<div class="proj-guide-empty" style="padding:32px 20px"><div style="display:flex;justify-content:center;margin-bottom:12px">' + _personaAvatarMarkup({ name: 'Porter', orchestrator_only: true, appearance_style: 'minecraft' }, 72) + '</div><div class="proj-guide-empty-title" style="font-size:15px">Hey! I\x27m Porter.</div><div class="proj-guide-empty-hint" style="max-width:320px;margin:0 auto 14px">I\x27ll help you plan, staff, and ship your projects. Let\x27s create your first one together.</div><div class="proj-next-actions" style="justify-content:center"><button class="proj-next-btn" onclick="_askPorterToCreate(\x27project\x27)" style="font-size:13px;padding:8px 20px">Create Your First Project</button></div></div>';
+    return;
+  }
+  if (!visible.length) {
+    grid.innerHTML = '<div class="proj-guide-empty" style="padding:28px 20px"><div class="proj-guide-empty-title" style="font-size:15px">No projects match.</div><div class="proj-guide-empty-hint" style="max-width:340px;margin:0 auto">Try a different search or clear the query.</div></div>';
     return;
   }
 
 
   var html = '';
-  _projList.forEach(function(p) {
+  visible.forEach(function(p) {
     var isActive = p.id === _projActive;
     var agentCount = (p.assigned_personas || []).length;
     var milestones = p.milestones || [];
     var msDone = milestones.filter(function(m) { return m.done; }).length;
+    var phases = p.phases || [];
+    var activePhase = phases.find(function(ph) { return ph.status === 'active'; }) || phases.find(function(ph) { return ph.status === 'in_progress'; }) || phases[0] || null;
+    var schedule = p.schedule || {};
+    var checkpoints = schedule.checkpoints || [];
+    var nextCheckpoint = checkpoints.find(function(cp) { return !cp.done; }) || checkpoints[0] || null;
+    var progressBase = Math.max(milestones.length || 0, 1);
+    var progressPct = milestones.length ? Math.round((msDone / progressBase) * 100) : 0;
     html += '<div class="project-card' + (isActive ? ' is-active' : '') + '" data-pid="' + p.id + '" onclick="_projOpen(\x27' + p.id + '\x27)">';
     html += '<div class="project-card-cover" data-cover-id="' + p.id + '" data-cover-type="' + (p.type || 'custom') + '"></div>';
     html += '<div class="project-card-body">';
     html += '<div class="project-card-title">' + escHtml(p.name || 'Untitled') + '</div>';
     if (p.description || p.success_bar) html += '<div class="project-card-desc">' + escHtml(p.description || p.success_bar || '') + '</div>';
+    if (activePhase || nextCheckpoint || agentCount) {
+      html += '<div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">';
+      if (activePhase) html += '<div style="font-size:10px;color:var(--text2)">Now: ' + escHtml(activePhase.name) + '</div>';
+      if (nextCheckpoint || schedule.next_review) html += '<div style="font-size:10px;color:var(--text3)">Next: ' + escHtml((nextCheckpoint && nextCheckpoint.label) || schedule.next_review || 'review') + '</div>';
+      if (agentCount) html += '<div style="font-size:10px;color:var(--text3)">' + agentCount + ' agent' + (agentCount === 1 ? '' : 's') + ' attached</div>';
+      html += '</div>';
+    }
     html += '<div class="project-card-footer">';
     html += _projTypeBadge(p.type) + _projStatusBadge(p);
-    if (agentCount) html += '<span style="font-size:10px;color:var(--text3)">' + agentCount + ' worker' + (agentCount !== 1 ? 's' : '') + '</span>';
-    if (milestones.length) html += '<span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span>';
+    if (milestones.length) html += '<span style="font-size:10px;color:var(--text3)">' + progressPct + '% done</span>';
     if (p.deadline) html += '<span style="font-size:10px;color:var(--text3)">Due ' + _projFmtShortDate(p.deadline) + '</span>';
     html += '</div></div></div>';
   });
-  // Always-visible "New Project" card
-  html += '<div class="project-card" style="border:1px dashed var(--border);cursor:pointer;min-height:120px;opacity:.85;transition:opacity .15s" onclick="_askPorterToCreate(\'project\')" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.85"><div class="project-card-cover" style="background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 15%,var(--surface)),var(--surface));height:60px;display:flex;align-items:center;justify-content:center"><div style="width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#000">P</div></div><div class="project-card-body"><div class="project-card-title" style="color:var(--accent)">New Project</div><div class="project-card-desc">Porter will guide you</div></div></div>';
   grid.innerHTML = html;
   // Stagger entrance
-  grid.querySelectorAll('.project-card').forEach(function(c, i) { c.style.animationDelay = (i * 55) + 'ms'; });
+  grid.querySelectorAll('.project-card').forEach(function(c, i) {
+    c.style.animation = 'none';
+    c.offsetHeight;
+    c.style.animation = 'cardDealIn .36s ease both';
+    c.style.animationDelay = (i * 55) + 'ms';
+  });
   // Render pixel art covers
   document.querySelectorAll('[data-cover-id]').forEach(function(el) {
     var cvs = _projPixelCover(el.dataset.coverId, el.dataset.coverType);
@@ -19662,6 +21054,24 @@ function _renderProjList() {
   });
 }
 
+function _fmToggleSection(key) {
+  _fmSectionOpen[key] = !_fmSectionOpen[key];
+  if (!_fmCurrentPath || _fmCurrentPath === '/') loadAllFiles('/');
+}
+
+function _fmSectionHeader(title, subtitle, key) {
+  var open = _fmSectionOpen[key] !== false;
+  return '<div class="fm-pane-hdr" style="cursor:pointer" onclick="_fmToggleSection(\'' + escHtml(key) + '\')">'
+    + '<div class="fm-pane-titlewrap"><span class="fm-pane-title">' + escHtml(title) + '</span><span class="fm-pane-sub">' + escHtml(subtitle || '') + '</span></div>'
+    + '<span class="proj-card-chevron' + (open ? ' open' : '') + '" style="font-size:10px">▸</span></div>';
+}
+
+function _projFilterList() {
+  var input = document.getElementById('proj-search');
+  _projSearch = ((input && input.value) || '').trim();
+  _renderProjList();
+}
+
 async function _projCreate() {
   _porterPrompt('New Project', [
     {name: 'name', label: 'Name', placeholder: 'Project name'},
@@ -19681,8 +21091,16 @@ async function _projCreate() {
 function _projBack() {
   document.getElementById('projects-list-view').style.display = '';
   document.getElementById('project-detail-view').style.display = 'none';
+  document.body.classList.remove('project-detail-active');
+  var hdrBack = document.getElementById('proj-module-back');
+  if (hdrBack) hdrBack.style.display = 'none';
   var actions = document.getElementById('proj-detail-actions');
   if (actions) actions.innerHTML = '';
+}
+
+function _projOpenGlobalChat() {
+  _popupChatForceGlobal = true;
+  _popupChatOpen();
 }
 
 async function _projAddMilestone(pid) {
@@ -19889,6 +21307,8 @@ async function _projReload(pid) {
     // Update header
     var nameEl = document.getElementById('proj-detail-name');
     if (nameEl) nameEl.textContent = updated.name || 'Untitled';
+    var typeEl = document.getElementById('proj-detail-type');
+    if (typeEl) typeEl.textContent = 'Type: ' + (_projTypeInfo(updated.type).label || 'Custom');
     var sb = document.getElementById('proj-detail-status');
     if (sb) {
       var done = !!updated.completed_at;
@@ -19951,11 +21371,18 @@ async function _projOpen(id) {
   var proj = _projList.find(function(p) { return p.id === id; });
   if (!proj) return;
   document.getElementById('projects-list-view').style.display = 'none';
-  document.getElementById('project-detail-view').style.display = '';
+  document.getElementById('project-detail-view').style.display = 'flex';
+  document.body.classList.add('project-detail-active');
+  var hdrBack = document.getElementById('proj-module-back');
+  if (hdrBack) hdrBack.style.display = '';
+  if (typeof _popupChatClose === 'function') _popupChatClose();
   document.getElementById('proj-detail-name').textContent = proj.name || 'Untitled';
   var sb = document.getElementById('proj-detail-status');
   if (sb) { _projUpdateStatusBadge(sb, proj); }
+  var tb = document.getElementById('proj-detail-type');
+  if (tb) tb.textContent = 'Type: ' + (_projTypeInfo(proj.type).label || 'Custom');
   window._projCurrent = proj;
+  _projTab = 'chat';
   var actions = document.getElementById('proj-detail-actions');
   if (actions) {
     var pid = proj.id;
@@ -19970,12 +21397,10 @@ async function _projOpen(id) {
       ah += '<div onclick="_projSetStatus(\x27' + pid + '\x27,\x27' + s + '\x27);this.parentElement.style.display=\'none\'" style="padding:6px 10px;font-size:11px;border-radius:4px;cursor:pointer;color:' + (s===curStatus ? 'var(--accent)' : 'var(--text)') + '" onmouseover="this.style.background=\'var(--raised)\'" onmouseout="this.style.background=\'\'">' + s.charAt(0).toUpperCase() + s.slice(1) + (s===curStatus ? ' \u2713' : '') + '</div>';
     });
     ah += '</div></div>';
-    ah += '<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" onclick="_projEditInline(\x27' + pid + '\x27)">Edit</button>';
-    ah += '<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;color:var(--danger,#ef4444)" onclick="_projDelete(\x27' + pid + '\x27)">Delete</button>';
+    ah += '<button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;color:var(--danger,#ef4444)" onclick="_projDelete(\x27' + pid + '\x27)">Delete Project</button>';
     actions.innerHTML = ah;
   }
-  var tabs = document.getElementById('proj-detail-tabs');
-  if (tabs) tabs.innerHTML = '';
+  _renderProjTabs();
   _renderProjTabContent();
 }
 function _projUpdateStatusBadge(sb, proj) {
@@ -19986,35 +21411,146 @@ function _projUpdateStatusBadge(sb, proj) {
   sb.style.background = 'color-mix(in srgb,' + c + ' 15%,transparent)';
   sb.style.color = c;
 }
-async function _projEditInline(pid) {
-  var proj = _projList.find(function(p) { return p.id === pid; });
-  if (!proj) return;
-  _porterPrompt('Edit Project', [
-    {name:'name', label:'Name', type:'text', value:proj.name||''},
-    {name:'desc', label:'Description', type:'textarea', value:proj.description||''},
-    {name:'success', label:'Success criteria', type:'text', value:proj.success_bar||''},
-    {name:'start', label:'Start date', type:'text', value:proj.start_date||'', placeholder:'YYYY-MM-DD'},
-    {name:'deadline', label:'Deadline', type:'text', value:proj.deadline||'', placeholder:'YYYY-MM-DD'}
-  ], async function(vals) {
-    var updates = {action:'update', project_id:pid};
-    if (vals.name !== undefined) updates.name = vals.name;
-    if (vals.desc !== undefined) updates.description = vals.desc;
-    if (vals.success !== undefined) updates.success_bar = vals.success;
-    if (vals.start !== undefined) updates.start_date = vals.start;
-    if (vals.deadline !== undefined) updates.deadline = vals.deadline;
+function _projInlineEditInPlace(field, el, opts) {
+  opts = opts || {};
+  var proj = window._projCurrent;
+  if (!proj || !el || el.querySelector('input,textarea')) return;
+  var current = String(opts.value != null ? opts.value : (el.textContent || '')).trim();
+  var multiline = !!opts.multiline;
+  var input = document.createElement(multiline ? 'textarea' : 'input');
+  if (!multiline) input.type = 'text';
+  input.className = 'settings-input';
+  input.value = current;
+  input.style.display = 'block';
+  input.style.width = '100%';
+  input.style.boxSizing = 'border-box';
+  input.style.margin = '0';
+  input.style.fontSize = multiline ? '12px' : '14px';
+  input.style.fontFamily = 'inherit';
+  input.style.lineHeight = multiline ? '1.6' : 'inherit';
+  if (multiline) {
+    input.rows = Math.max(3, Math.min(8, (current.match(/\n/g) || []).length + 2));
+    input.style.resize = 'vertical';
+    input.style.minHeight = '96px';
+    input.style.padding = '8px 10px';
+  } else {
+    input.style.padding = '8px 10px';
+  }
+  var original = el.innerHTML;
+  el.innerHTML = '';
+  el.appendChild(input);
+  input.focus();
+  input.select();
+  var done = false;
+  function cancel() {
+    if (done) return;
+    done = true;
+    el.innerHTML = original;
+  }
+  async function save() {
+    if (done) return;
+    done = true;
+    var val = String(input.value || '').trim();
+    if (!val && field === 'name') val = current;
+    var updates = { action:'update', project_id:proj.id };
+    updates[field] = val;
     var r = await api('/api/projects', updates);
-    if (r && r.ok) {
-      toast('Saved', 'ok');
-      await loadProjects();
-      var updated = _projList.find(function(p) { return p.id === pid; });
-      if (updated) { window._projCurrent = updated; document.getElementById('proj-detail-name').textContent = updated.name || 'Untitled'; _renderProjectPage(); }
-    } else { toast(r && r.error || 'Failed', 'err'); }
+    if (!(r && r.ok)) {
+      el.innerHTML = original;
+      toast((r && r.error) || 'Failed', 'err');
+      return;
+    }
+    await loadProjects();
+    var updated = _projList.find(function(p) { return p.id === proj.id; });
+    if (updated) window._projCurrent = updated;
+    var nameEl = document.getElementById('proj-detail-name');
+    if (nameEl && window._projCurrent) nameEl.textContent = window._projCurrent.name || 'Untitled';
+    _renderProjTabs();
+    _renderProjectPage();
+    toast('Saved', 'ok');
+  }
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      cancel();
+      return;
+    }
+    if (!multiline && e.key === 'Enter') {
+      e.preventDefault();
+      input.blur();
+      return;
+    }
+    if (multiline && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      input.blur();
+    }
+  });
+  input.addEventListener('blur', save);
+}
+async function _projInlineEdit(field) {
+  var proj = window._projCurrent;
+  if (!proj) return;
+  if (field === 'name') {
+    return _projInlineEditInPlace('name', document.getElementById('proj-detail-name'), { value: proj.name || '' });
+  }
+  if (field === 'description') {
+    return _projInlineEditInPlace('description', document.getElementById('proj-mission-copy'), { value: proj.description || proj.objective || '', multiline: true });
+  }
+  var map = {
+    success_bar: { label:'Success bar', key:'success_bar', value: proj.success_bar || '', type:'text' },
+    start_date: { label:'Start date', key:'start_date', value: proj.start_date || '', type:'text', placeholder:'YYYY-MM-DD' },
+    deadline: { label:'Deadline', key:'deadline', value: proj.deadline || '', type:'text', placeholder:'YYYY-MM-DD' }
+  };
+  var cfg = map[field];
+  if (!cfg) return;
+  _porterPrompt('Edit ' + cfg.label, [
+    {name:'value', label:cfg.label, type:cfg.type, value:cfg.value, placeholder:cfg.placeholder || ''}
+  ], async function(vals) {
+    var updates = {action:'update', project_id:proj.id};
+    updates[cfg.key] = vals.value;
+    var r = await api('/api/projects', updates);
+    if (!(r && r.ok)) { toast(r && r.error || 'Failed', 'err'); return; }
+    toast('Saved', 'ok');
+    await loadProjects();
+    var updated = _projList.find(function(p) { return p.id === proj.id; });
+    if (updated) {
+      window._projCurrent = updated;
+      var nameEl = document.getElementById('proj-detail-name');
+      if (nameEl) nameEl.textContent = updated.name || 'Untitled';
+      _renderProjTabs();
+      _renderProjectPage();
+    }
   });
 }
 
-function _renderProjTabs() { /* V2: no tabs */ }
+function _renderProjTabs() {
+  var proj = window._projCurrent;
+  var tabs = document.getElementById('proj-detail-tabs');
+  if (!tabs || !proj) return;
+  var counts = {
+    workflow: (proj.milestones || []).length + (((proj.schedule || {}).checkpoints || []).length),
+    artifacts: 0,
+    people: 0,
+    timeline: ((proj.milestones || []).length + (((proj.schedule || {}).checkpoints || []).length) + ((proj.quality_gates || []).length))
+  };
+  var defs = [
+    { key:'chat', label:'Plan' },
+    { key:'workflow', label:'Workflow', count: counts.workflow },
+    { key:'artifacts', label:'Files', count: counts.artifacts },
+    { key:'people', label:'People', count: counts.people },
+    { key:'timeline', label:'Timeline', count: counts.timeline }
+  ];
+  tabs.innerHTML = defs.map(function(tab) {
+    var label = tab.label + (tab.count ? ' ' + tab.count : '');
+    return '<button class="pd-tab' + ((_projTab || 'chat') === tab.key ? ' active' : '') + '" onclick="_projSwitchTab(\'' + tab.key + '\')">' + escHtml(label) + '</button>';
+  }).join('');
+}
 
-function _projSwitchTab(t) { _renderProjectPage(); }
+function _projSwitchTab(t) {
+  _projTab = (t === 'agents' ? 'workflow' : (t || 'chat'));
+  _renderProjTabs();
+  _renderProjectPage();
+}
 
 function _projNextCard(proj, tab) {
   tab = tab || _projTab || 'overview';
@@ -20088,15 +21624,6 @@ function _projNextCard(proj, tab) {
   return h;
 }
 
-function _projChatPrefill(text) {
-  // Open popup chat and prefill with text
-  if (typeof _popupChatOpen === 'function') _popupChatOpen();
-  setTimeout(function() {
-    var input = document.getElementById('popup-chat-input');
-    if (input) { input.value = text; input.focus(); }
-  }, 150);
-}
-
 // ── Plan tab interaction helpers ──
 function _projShowAllSuggestions() {
   var proj = window._projCurrent;
@@ -20137,6 +21664,313 @@ function _projAllSuggestions(proj, tab) {
   return suggestions;
 }
 
+function _projChatModelToggle(event) {
+  event.stopPropagation();
+  var dd = document.getElementById('proj-chat-model-dd');
+  if (!dd) return;
+  var wasOpen = dd.classList.contains('open');
+  _closeChatCtxDropdowns();
+  if (wasOpen) return;
+  var proj = window._projCurrent;
+  var state = proj ? _projChatGetState(proj.id) : {};
+  var cur = state.modelOverride || '';
+  var opts = _pdChatModelOptions();
+  var html = '';
+  opts.forEach(function(opt, i) {
+    var sel = (cur === opt.value) ? ' selected' : '';
+    html += '<div class="chat-ctx-opt' + sel + '" onclick="event.stopPropagation();_projChatModelPick(\'' + opt.value + '\')">' + escHtml(opt.label) + '</div>';
+    if (i === 0) html += '<div class="chat-ctx-divider"></div>';
+  });
+  dd.innerHTML = html;
+  var rect = event.currentTarget.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  if (spaceBelow < 220) {
+    dd.style.top = '';
+    dd.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+  } else {
+    dd.style.bottom = '';
+    dd.style.top = (rect.bottom + 4) + 'px';
+  }
+  dd.style.left = Math.max(4, rect.left) + 'px';
+  dd.classList.add('open');
+}
+
+function _projPrefillNeedHelp() {
+  _projChatPrefill('Porter, tell me exactly what you need from me next on this project, what the agents are doing right now, what is blocked, and what deliverables are moving.');
+}
+
+function _projChatPrefill(text) {
+  var input = document.getElementById('proj-chat-input');
+  if (!input) return;
+  input.value = text || '';
+  _chatAutoGrow(input);
+  input.focus();
+}
+
+function _projChooseFiles() {
+  var input = document.getElementById('proj-chat-file-input');
+  if (input) input.click();
+}
+
+function _projOpenAgentChat(personaId) {
+  var pid = String(personaId || '').trim();
+  if (!pid) return;
+  switchModule('agents');
+  setTimeout(function() {
+    try {
+      if (typeof selectPersona === 'function') selectPersona(pid);
+      if (typeof switchPdTab === 'function') switchPdTab('overview');
+    } catch (e) {}
+  }, 40);
+}
+
+async function _projEditTask(taskId) {
+  var tid = String(taskId || '').trim();
+  if (!tid) return;
+  var proj = window._projCurrent;
+  if (!proj) return;
+  var tasksRes = await api('/api/workspace/tasks', {action:'list', project_id:proj.id}).catch(function(){ return null; });
+  var tasks = (tasksRes && tasksRes.ok && tasksRes.tasks) ? tasksRes.tasks : [];
+  var task = tasks.find(function(t) { return String(t.id || '') === tid; });
+  if (!task) { toast('Task not found', 'err'); return; }
+  var ownerOptions = [{ value:'', label:'Unassigned' }].concat(((_personas || []).filter(function(p) {
+    return (proj.assigned_personas || []).indexOf(p.id) >= 0;
+  })).map(function(p) {
+    return { value: p.id, label: p.name || p.id };
+  }));
+  _porterPrompt('Edit Task', [
+    { name:'title', label:'Task', value: task.title || '', placeholder:'Task title' },
+    { name:'status', label:'Status', type:'select', value: task.status || 'todo', options:[
+      { value:'todo', label:'Queued' },
+      { value:'in_progress', label:'Working now' },
+      { value:'done', label:'Done' }
+    ]},
+    { name:'owner', label:'Owner', type:'select', value: task.owner || '', options: ownerOptions },
+    { name:'workstream', label:'Workstream', value: task.workstream || '', placeholder:'Optional' },
+    { name:'due_date', label:'Due date', value: task.due_date || '', placeholder:'YYYY-MM-DD' }
+  ], async function(vals) {
+    var r = await api('/api/workspace/tasks', {
+      action:'update',
+      task_id: tid,
+      title: vals.title || task.title || '',
+      status: vals.status || task.status || 'todo',
+      owner: vals.owner || '',
+      workstream: vals.workstream || '',
+      due_date: vals.due_date || ''
+    });
+    if (!(r && r.ok)) { toast((r && r.error) || 'Failed', 'err'); return; }
+    toast('Task updated', 'ok');
+    _renderProjectPage();
+  }, { okLabel:'Save' });
+}
+
+function _projClassifyUpload(file) {
+  var mime = String((file && file.type) || '').toLowerCase();
+  var name = String((file && file.name) || '');
+  var ext = name.indexOf('.') >= 0 ? name.split('.').pop().toLowerCase() : '';
+  if (mime.indexOf('image/') === 0) return { contentType: 'image', artifactKind: 'image' };
+  if (mime.indexOf('video/') === 0) return { contentType: 'video', artifactKind: 'video' };
+  if (mime.indexOf('audio/') === 0) return { contentType: 'audio', artifactKind: 'audio' };
+  if (mime === 'application/pdf' || ext === 'pdf') return { contentType: 'document', artifactKind: 'pdf' };
+  return { contentType: 'document', artifactKind: 'file' };
+}
+
+async function _projAttachFilesToProject(fileList, options) {
+  var proj = window._projCurrent;
+  if (!proj || !fileList || !fileList.length) return 0;
+  var files = Array.from(fileList);
+  var uploaded = 0;
+  for (var i = 0; i < files.length; i++) {
+    var file = files[i];
+    var r = await _uploadToPath(file, proj.id + '/_files');
+    if (!(r && r.ok)) continue;
+    var kind = _projClassifyUpload(file);
+    await api('/api/projects', {
+      action: 'add_content',
+      project_id: proj.id,
+      content_type: kind.contentType,
+      category: 'file',
+      title: file.name,
+      file_path: proj.id + '/_files/' + file.name,
+      mime_type: file.type || '',
+      file_size: file.size || 0
+    });
+    uploaded++;
+  }
+  if (uploaded) {
+    toast(uploaded + ' artifact' + (uploaded === 1 ? '' : 's') + ' added', 'ok');
+    if (!(options && options.silent)) {
+      var state = _projChatGetState(proj.id);
+      state.messages.push({
+        role: 'assistant',
+        label: 'Porter',
+        content: 'Added ' + uploaded + ' artifact' + (uploaded === 1 ? '' : 's') + ' to ' + (proj.name || 'this project') + '. I can sort them into deliverables, tasks, or approvals next.',
+        meta: 'project lane'
+      });
+      _projChatRender(proj.id);
+    }
+    await _projReload(proj.id);
+  } else {
+    toast('Upload failed', 'err');
+  }
+  return uploaded;
+}
+
+function _projChatHandleFileInput(e) {
+  var files = e && e.target ? e.target.files : null;
+  if (files && files.length) _projAttachFilesToProject(files);
+  if (e && e.target) e.target.value = '';
+}
+
+function _projChatDragEnter(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  var shell = document.getElementById('proj-cmd-bar');
+  if (shell) shell.classList.add('drag-over');
+  var zone = document.getElementById('proj-chat-drop-zone');
+  if (zone) zone.style.display = '';
+}
+
+function _projChatDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function _projChatDragLeave(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  var shell = document.getElementById('proj-cmd-bar');
+  if (!shell) return;
+  var rect = shell.getBoundingClientRect();
+  var x = Number(e.clientX || 0);
+  var y = Number(e.clientY || 0);
+  if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return;
+  shell.classList.remove('drag-over');
+  var zone = document.getElementById('proj-chat-drop-zone');
+  if (zone) zone.style.display = 'none';
+}
+
+function _projChatDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  var shell = document.getElementById('proj-cmd-bar');
+  if (shell) shell.classList.remove('drag-over');
+  var zone = document.getElementById('proj-chat-drop-zone');
+  if (zone) zone.style.display = 'none';
+  var files = e && e.dataTransfer ? e.dataTransfer.files : null;
+  if (files && files.length) _projAttachFilesToProject(files);
+}
+
+function _projCardTone(status) {
+  var s = String(status || '').toLowerCase();
+  if (s === 'done' || s === 'complete' || s === 'completed' || s === 'ok') return 'ok';
+  if (s === 'failed' || s === 'error' || s === 'blocked') return 'err';
+  if (s === 'waiting' || s === 'pending' || s === 'paused') return 'warn';
+  return '';
+}
+
+function _projAgentStatusMeta(task, event) {
+  var status = 'idle';
+  var copy = '';
+  if (task) {
+    var ts = String(task.status || '').toLowerCase();
+    if (ts === 'in_progress') {
+      status = 'working';
+      copy = 'Working now.';
+    } else if (ts === 'todo') {
+      status = 'queued';
+      copy = 'Queued and ready.';
+    } else if (ts === 'done') {
+      status = 'done';
+      copy = 'Latest task complete.';
+    } else if (ts) {
+      status = ts;
+      copy = ts.replace(/_/g, ' ');
+    }
+  }
+  if (event) {
+    var es = String(event.status || '').toLowerCase();
+    if (es === 'failed' || es === 'error' || es === 'blocked') {
+      status = 'blocked';
+      copy = 'Latest activity shows a blocker or failure.';
+    } else if (es === 'complete' && !task) {
+      status = 'done';
+      copy = 'Latest activity completed cleanly.';
+    }
+  }
+  var map = {
+    working: { label: 'Working', color: '#22c55e' },
+    queued: { label: 'Queued', color: '#3b82f6' },
+    blocked: { label: 'Blocked', color: '#ef4444' },
+    waiting: { label: 'Waiting', color: '#f59e0b' },
+    done: { label: 'Done', color: '#22c55e' },
+    idle: { label: 'Idle', color: 'var(--text3)' }
+  };
+  return map[status] ? { status: status, label: map[status].label, color: map[status].color, copy: copy } : { status: status, label: status.replace(/_/g, ' '), color: '#3b82f6', copy: copy };
+}
+
+function _projCompactRoleLabel(persona) {
+  var role = String((persona && persona.role) || '').trim();
+  if (!role) return 'Worker';
+  role = role.replace(/[.]+$/g, '');
+  var words = role.split(/\s+/).filter(Boolean);
+  if (words.length <= 3 && role.length <= 28) return role;
+  return words.slice(0, 2).join(' ');
+}
+
+function _projSyncChatDockPadding() {
+  var content = document.getElementById('proj-detail-content');
+  var cmdBar = document.getElementById('proj-cmd-bar');
+  if (!content) return;
+  var pad = 12;
+  if ((_projTab || 'chat') !== 'chat' || !cmdBar || cmdBar.style.display === 'none') {
+    content.style.paddingBottom = pad + 'px';
+    content.style.scrollPaddingBottom = pad + 'px';
+    return;
+  }
+  content.style.paddingBottom = pad + 'px';
+  content.style.scrollPaddingBottom = pad + 'px';
+}
+
+function _projRenderArtifactThumb(a) {
+  var kind = String(a.kind || a.artifact_type || '').toLowerCase();
+  var path = String(a.path || '');
+  var dlUrl = _projArtifactUrl(path, true);
+  if (kind === 'image' && dlUrl) return '<img src="' + escHtml(dlUrl) + '" alt="' + escHtml(a.name || a.title || 'artifact') + '">';
+  if (kind === 'video') return '🎬';
+  if (kind === 'audio') return '🎵';
+  if (kind === 'pdf') return '📑';
+  if (kind === 'code') return '💻';
+  return '📦';
+}
+
+function _projArtifactUrl(path, inline) {
+  path = String(path || '').trim();
+  if (!path) return '';
+  var clean = path.replace(/^\/+/, '');
+  var root = 'documents';
+  if (clean.indexOf('/home/lobster/workspace/') === 0) {
+    clean = clean.replace('/home/lobster/workspace/', '');
+    root = 'workspace';
+  } else if (clean.indexOf('/home/lobster/documents/') === 0) {
+    clean = clean.replace('/home/lobster/documents/', '');
+    root = 'documents';
+  } else {
+    if (clean.indexOf('workspace/') === 0) {
+      clean = clean.replace(/^workspace\//, '');
+      root = 'workspace';
+    } else if (clean.indexOf('projects/') === 0) {
+      root = 'workspace';
+    } else {
+      clean = 'projects/' + clean;
+      root = 'workspace';
+    }
+  }
+  var url = '/download?root=' + encodeURIComponent(root) + '&path=' + encodeURIComponent(clean);
+  if (inline) url += '&inline=1';
+  return url;
+}
+
 async function _renderProjectPage() {
   var proj = window._projCurrent;
   if (!proj) return;
@@ -20144,190 +21978,348 @@ async function _renderProjectPage() {
   if (!el) return;
   if (!_personas || !_personas.length) { try { await loadPersonas(); } catch(e) {} }
   var pid = proj.id;
-  var [tasksRes, contentRes, collabRes, actRes] = await Promise.all([
+  var [tasksRes, contentRes, collabRes, contactsRes, artRes, actRes] = await Promise.all([
     api('/api/workspace/tasks', {action:'list', project_id:pid}),
     api('/api/projects', {action:'list_content', project_id:pid}).catch(function() { return {ok:true,content:[]}; }),
     api('/api/projects', {action:'list_collaborators', project_id:pid}).catch(function() { return {ok:true,collaborators:[]}; }),
-    fetch('/api/projects/' + encodeURIComponent(pid) + '/activity?limit=15', {credentials:'same-origin'}).then(function(r){return r.json()}).catch(function(){return {events:[]};})
+    api('/api/workspace/crm', {action:'project_contacts.list', project_id:pid}).catch(function() { return {ok:true,links:[]}; }),
+    api('/api/projects/' + pid + '/artifacts').catch(function() { return {ok:true,artifacts:[]}; }),
+    api('/api/projects/' + pid + '/activity?limit=18').catch(function() { return {ok:true,activity:[]}; })
   ]);
   var tasks = (tasksRes && tasksRes.tasks) || [];
   var allContent = (contentRes && contentRes.content) || [];
-  var inputs = allContent.filter(function(c) { return c.category === 'input'; });
-  var outputs = allContent.filter(function(c) { return c.category === 'output'; });
-  var files = allContent.filter(function(c) { return c.category === 'file' || (!c.category || c.category === 'general'); });
   var collabs = (collabRes && collabRes.collaborators) || [];
-  var activity = (actRes && actRes.events) || [];
+  var contactLinks = (contactsRes && contactsRes.links) || [];
+  var artifacts = (artRes && artRes.artifacts) || [];
+  var projectDocs = (artRes && artRes.project_docs) || [];
+  var activity = (actRes && (actRes.activity || actRes.events)) || [];
   var workers = proj.assigned_personas || [];
   var milestones = proj.milestones || [];
   var objective = proj.objective || proj.description || '';
+  var phases = proj.phases || [];
+  var schedule = proj.schedule || {};
+  var qualityGates = proj.quality_gates || [];
   var todoTasks = tasks.filter(function(t) { return t.status === 'todo'; });
   var ipTasks = tasks.filter(function(t) { return t.status === 'in_progress'; });
   var doneTasks = tasks.filter(function(t) { return t.status === 'done'; });
-  var h = '';
-  // ── Meta bar ──
-  var metaParts = [];
-  var typeInfo = _projTypeInfo(proj.type);
-  metaParts.push('<span style="color:' + typeInfo.color + '">' + escHtml(typeInfo.label) + '</span>');
-  if (proj.start_date) metaParts.push('Started ' + escHtml(proj.start_date));
-  if (proj.deadline) metaParts.push('<span style="color:var(--accent)">Due ' + escHtml(proj.deadline) + '</span>');
-  if (workers.length) metaParts.push(workers.length + ' worker' + (workers.length > 1 ? 's' : ''));
-  h += '<div style="display:flex;gap:12px;font-size:11px;color:var(--text3);margin-bottom:14px;flex-wrap:wrap">' + metaParts.join('<span style="opacity:.3"> \u00b7 </span>') + '</div>';
-  // ── Objective ──
-  if (objective) {
-    h += '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:16px;max-width:600px">' + escHtml(objective) + '</div>';
-  }
-  if (proj.success_bar) {
-    h += '<div style="font-size:11px;color:var(--text3);margin-bottom:16px"><span style="font-weight:600;color:var(--text2)">Success:</span> ' + escHtml(proj.success_bar) + '</div>';
-  }
-  // ── Progress bar ──
-  if (tasks.length) {
-    var pct = Math.round(doneTasks.length / tasks.length * 100);
-    h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">';
-    h += '<div style="flex:1;height:3px;background:var(--border);border-radius:2px"><div style="height:100%;width:' + pct + '%;background:' + (pct === 100 ? '#22c55e' : 'var(--accent)') + ';border-radius:2px;transition:width .3s"></div></div>';
-    h += '<span style="font-size:11px;color:var(--text3);white-space:nowrap">' + pct + '%</span>';
-    h += '</div>';
-  }
-  // ── Two-column layout ──
-  h += '<div style="display:grid;grid-template-columns:1fr 260px;gap:24px;align-items:start">';
-  // === LEFT: Tasks + Content ===
-  h += '<div style="display:flex;flex-direction:column;gap:20px;min-width:0">';
-  // Tasks section (always show)
-  h += '<div>';
-  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
-  h += '<span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Tasks</span>';
-  if (tasks.length) h += '<span style="font-size:10px;color:var(--text3)">' + doneTasks.length + '/' + tasks.length + '</span>';
-  h += '</div>';
-  h += '<div style="display:flex;gap:6px;margin-bottom:8px">';
-  h += '<input type="text" id="proj-task-input" placeholder="Add a task..." onkeydown="if(event.key===\'Enter\')_projAddTask(\x27' + pid + '\x27)" style="flex:1;font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none" onfocus="this.style.borderColor=\'var(--accent)\'" onblur="this.style.borderColor=\'var(--border)\'">';
-  h += '<button onclick="_projAddTask(\x27' + pid + '\x27)" class="btn btn-ghost" style="font-size:11px;padding:5px 10px">Add</button>';
-  h += '</div>';
-  h += '<div id="proj-task-list" style="font-size:12px;color:var(--text3)"></div>';
-  h += '</div>';
-  // Inputs / Outputs
-  if (inputs.length || outputs.length) {
-    h += '<div>';
-    if (inputs.length) {
-      h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Inputs</div>';
-      inputs.forEach(function(c) {
-        h += '<div style="padding:2px 0;font-size:12px">';
-        if (c.url) h += '<a href="' + escHtml(c.url) + '" target="_blank" style="color:var(--accent);text-decoration:none">' + escHtml(c.title || c.url) + '</a>';
-        else h += '<span style="color:var(--text)">' + escHtml(c.title || 'Untitled') + '</span>';
-        h += '</div>';
-      });
-    }
-    if (outputs.length) {
-      h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin:' + (inputs.length ? '12px' : '0') + ' 0 6px">Outputs</div>';
-      outputs.forEach(function(c) { h += '<div style="padding:2px 0;font-size:12px;color:var(--text)">' + escHtml(c.title || 'Untitled') + '</div>'; });
-    }
-    h += '</div>';
-  }
-  // Milestones
-  if (milestones.length) {
-    h += '<div>';
-    var msDone = milestones.filter(function(m) { return m.done; }).length;
-    h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Milestones</span><span style="font-size:10px;color:var(--text3)">' + msDone + '/' + milestones.length + '</span></div>';
-    milestones.forEach(function(m, i) {
-      h += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:12px"><input type="checkbox" ' + (m.done ? 'checked' : '') + ' onchange="_projToggleMilestone(\x27' + pid + '\x27,' + i + ')" style="margin:0;cursor:pointer;accent-color:var(--accent)"><span style="color:' + (m.done ? 'var(--text3)' : 'var(--text)') + ';' + (m.done ? 'text-decoration:line-through;' : '') + '">' + escHtml(m.name || m.title || '?') + '</span></div>';
-    });
-    h += '</div>';
-  }
-  h += '</div>'; // end left
-  // === RIGHT: Team + Files + Links ===
-  h += '<div style="display:flex;flex-direction:column;gap:20px">';
-  // Team
-  h += '<div>';
-  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Team</span><span style="font-size:10px;color:var(--text3)">' + (workers.length + collabs.length) + '</span></div>';
-  if (workers.length) {
-    workers.forEach(function(wid) {
-      var p = (_personas || []).find(function(x) { return x.id === wid; });
-      var wName = p ? (p.name || wid) : wid.slice(0,8);
-      var wRole = p ? (p.role || 'Worker') : 'Worker';
-      h += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer" onclick="switchModule(\x27agents\x27);selectPersona(\x27' + wid + '\x27)">';
-      h += '<div style="width:24px;height:24px;flex-shrink:0">' + (p ? _personaAvatarMarkup(p, 24) : '\ud83e\udd16') + '</div>';
-      h += '<div style="min-width:0"><div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(wName) + '</div>';
-      h += '<div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(wRole) + '</div></div></div>';
+  var activePhase = phases.find(function(p) { return p.status === 'active'; }) || phases.find(function(p) { return p.status === 'in_progress'; }) || phases[0] || null;
+  var checkpoints = schedule.checkpoints || [];
+  var nextCheckpoint = checkpoints.find(function(cp) { return !cp.done; }) || checkpoints[0] || null;
+  var doneMilestones = milestones.filter(function(m) { return m.done; }).length;
+  var doneGates = qualityGates.filter(function(g) { return g.done; }).length;
+  var progressBase = Math.max(milestones.length || 0, tasks.length || 0, 1);
+  var progressDone = milestones.length ? doneMilestones : doneTasks.length;
+  var progressPct = Math.max(0, Math.min(100, Math.round((progressDone / progressBase) * 100)));
+  var contactPeople = contactLinks.filter(function(link) { return String(link.contact_id || '').trim(); });
+  var totalPeople = collabs.length + contactPeople.length;
+  var artifactShelf = artifacts.slice(0, 6);
+  if (!artifactShelf.length) {
+    artifactShelf = allContent.filter(function(c) { return c.file_path || c.url; }).slice(0, 6).map(function(c) {
+      return { name: c.title || c.file_path || c.url, kind: c.content_type || 'file', path: c.file_path || '', modified_ago: '', size_human: '' };
     });
   }
-  if (collabs.length) {
-    collabs.forEach(function(c) {
-      h += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0">';
-      h += '<div style="width:24px;height:24px;border-radius:50%;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--text);flex-shrink:0">' + escHtml((c.display_name||c.username||'?')[0].toUpperCase()) + '</div>';
-      h += '<div><div style="font-size:12px;color:var(--text)">' + escHtml(c.display_name || c.username) + '</div><div style="font-size:10px;color:var(--text3)">' + escHtml(c.role || 'member') + '</div></div></div>';
-    });
-  }
-  if (!workers.length && !collabs.length) h += '<div style="font-size:11px;color:var(--text3);padding:4px 0">No team members</div>';
-  h += '<button onclick="_projAssignAgent(\x27' + pid + '\x27)" class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-top:4px">+ Assign</button>';
-  h += '</div>';
-  // Files
-  if (files.length) {
-    h += '<div><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Files</div>';
-    files.forEach(function(f) { h += '<div style="padding:2px 0;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(f.title || f.file_path || 'File') + '</div>'; });
-    h += '</div>';
-  }
-  // Links
-  var links = proj.links || {};
-  var hasLinks = links.repo || links.live_url || links.docs || (links.custom && links.custom.length);
-  if (hasLinks) {
-    h += '<div><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Links</div>';
-    if (links.repo) h += '<a href="' + escHtml(links.repo) + '" target="_blank" style="display:block;font-size:11px;color:var(--accent);text-decoration:none;padding:1px 0">\u2192 Repo</a>';
-    if (links.live_url) h += '<a href="' + escHtml(links.live_url) + '" target="_blank" style="display:block;font-size:11px;color:var(--accent);text-decoration:none;padding:1px 0">\u2192 Live</a>';
-    if (links.docs) h += '<a href="' + escHtml(links.docs) + '" target="_blank" style="display:block;font-size:11px;color:var(--accent);text-decoration:none;padding:1px 0">\u2192 Docs</a>';
-    (links.custom || []).forEach(function(lk) { h += '<a href="' + escHtml(lk.url || '') + '" target="_blank" style="display:block;font-size:11px;color:var(--accent);text-decoration:none;padding:1px 0">\u2192 ' + escHtml(lk.label || 'Link') + '</a>'; });
-    h += '</div>';
-  }
-  // Linked projects
-  var linkedProjs = proj.linked_projects || [];
-  if (linkedProjs.length) {
-    h += '<div><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Linked</div>';
-    linkedProjs.forEach(function(lp) {
-      var linked = _projList.find(function(p) { return p.id === lp.project_id; });
-      var lName = linked ? linked.name : lp.project_id.slice(0,8);
-      h += '<div onclick="_projOpen(\x27' + escHtml(lp.project_id) + '\x27)" style="cursor:pointer;font-size:11px;color:var(--accent);padding:2px 0">\u2192 ' + escHtml(lName) + '</div>';
-    });
-    h += '</div>';
-  }
-  h += '</div>'; // end right
-  h += '</div>'; // end grid
-  // ── Timeline ──
-  if (activity.length) {
-    h += '<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">';
-    h += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Recent</div>';
-    activity.slice(0, 8).forEach(function(ev) {
-      var ts = ev.ts ? new Date(ev.ts * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short'}) : '';
-      h += '<div style="display:flex;gap:8px;padding:2px 0;font-size:11px"><span style="color:var(--text3);min-width:50px">' + ts + '</span><span style="color:var(--text2)">' + escHtml((ev.summary || ev.text || ev.action || '').slice(0, 120)) + '</span></div>';
-    });
-    h += '</div>';
-  }
-  el.innerHTML = h;
-  _projLoadTasks(pid);
-  // v0.33.19 — Drop zone: drag files into project
-  _setupDropZone(el, async function(files) {
-    var uploaded = 0;
-    for (var i = 0; i < files.length; i++) {
-      var r = await _uploadToPath(files[i], pid + '/_files');
-      if (r && r.ok) {
-        await api('/api/projects', {action:'add_content', project_id:pid, content_type:'document', category:'file', title:files[i].name, file_path:pid+'/_files/'+files[i].name, mime_type:files[i].type||'', file_size:files[i].size||0});
-        uploaded++;
-      }
-    }
-    if (uploaded) { toast(uploaded + ' file(s) added', 'ok'); _renderProjectPage(); }
-    else toast('Upload failed', 'err');
+  var taskByOwner = {};
+  var tasksByOwner = {};
+  tasks.forEach(function(task) {
+    var owner = String(task.owner || task.assigned_to || '').trim().toLowerCase();
+    if (!owner) return;
+    if (!taskByOwner[owner] || String(task.status || '') === 'in_progress') taskByOwner[owner] = task;
+    if (!tasksByOwner[owner]) tasksByOwner[owner] = [];
+    tasksByOwner[owner].push(task);
   });
+  var latestActivityByAgent = {};
+  activity.forEach(function(ev) {
+    var agentName = String(ev.agent_name || '').trim();
+    if (agentName && !latestActivityByAgent[agentName]) latestActivityByAgent[agentName] = ev;
+  });
+  var userNeeds = [];
+  if (!objective) userNeeds.push({ title:'Define the brief', copy:'Porter still needs a crisp objective before the agents can run hard.', action:"_projChatPrefill('Set the project brief and operating objective for this project.')", btn:'Set brief' });
+  if (!workers.length) userNeeds.push({ title:'Assign the first agent', copy:'No agent owns this project yet. Porter should create or attach one immediately.', action:"_projKickoff('worker')", btn:'Create worker' });
+  if (!tasks.length) userNeeds.push({ title:'Approve the first task stack', copy:'There is no active task board yet. Porter should break the mission into immediate work.', action:"_projChatPrefill('Break this project into concrete tasks, workstreams, and first deliverables.')", btn:'Generate tasks' });
+  var unownedTasks = tasks.filter(function(t) { return !String(t.owner || t.assigned_to || '').trim(); });
+  if (tasks.length && unownedTasks.length) userNeeds.unshift({ title:'Review the task stack', copy: String(unownedTasks.length) + ' queued task' + (unownedTasks.length === 1 ? ' has' : 's have') + ' no owner yet. Adjust titles, tone, or ownership in Workflow.', action:"_projSwitchTab('workflow')", btn:'Review tasks' });
+  if (!schedule.next_review && !checkpoints.length) userNeeds.push({ title:'Set the cadence', copy:'There is no next review or checkpoint on the clock yet.', action:"_projChatPrefill('Set a review cadence and the next checkpoints for this project.')", btn:'Set schedule' });
+  if (!qualityGates.length) userNeeds.push({ title:'Define quality gates', copy:'Porter needs explicit finish criteria before this can ship cleanly.', action:"_projChatPrefill('Add quality gates and approval checks for this project.')", btn:'Add gates' });
+  var recentFailure = activity.find(function(ev) { return /failed|error|blocked/i.test(String(ev.status || '')); });
+  if (recentFailure) userNeeds.unshift({ title:'Resolve the latest blocker', copy:(recentFailure.agent_name || 'An agent') + ' hit a blocker: ' + (recentFailure.summary || recentFailure.action || 'failure'), action:"_projChatPrefill('Resolve the latest blocker in this project and tell me what you need from me.')", btn:'Resolve blocker' });
+  if (!userNeeds.length) userNeeds.push({ title:'Stay in review', copy:'Porter has enough structure to keep moving. Ask what needs approval, what changed, or what is blocked.', action:"_projPrefillNeedHelp()", btn:'Show me' });
+  var blockedCount = activity.filter(function(ev) { return /failed|error|blocked/i.test(String(ev.status || '')); }).length;
+  var waitingCount = userNeeds.length;
+  var workingAgents = workers.filter(function(wid) {
+    var persona = (_personas || []).find(function(p) { return p.id === wid; });
+    var agentName = persona ? (persona.name || wid) : wid.slice(0, 8);
+    var task = taskByOwner[agentName.toLowerCase()] || taskByOwner[wid.toLowerCase()] || null;
+    return task && String(task.status || '').toLowerCase() === 'in_progress';
+  }).length;
+  var timelineRows = [];
+  if (activePhase) timelineRows.push({ icon:'↗', title:'Active phase', sub:activePhase.name + ' · ' + (activePhase.status || 'pending').replace(/_/g, ' '), cls:'pending' });
+  milestones.slice(0, 6).forEach(function(ms) {
+    timelineRows.push({ icon: ms.done ? '✓' : '○', title: ms.name || ms.title || 'Milestone', sub: ms.due ? ('Due ' + ms.due) : 'Open milestone', cls: ms.done ? 'complete' : 'pending' });
+  });
+  if (nextCheckpoint) timelineRows.push({ icon:'⚑', title: nextCheckpoint.label || 'Checkpoint', sub:(nextCheckpoint.date || 'Date unset') + (nextCheckpoint.done ? ' · done' : ' · open'), cls: nextCheckpoint.done ? 'complete' : 'pending' });
+  qualityGates.slice(0, 4).forEach(function(gate) {
+    timelineRows.push({ icon: gate.done ? '✓' : '□', title: gate.item || 'Quality gate', sub: gate.done ? 'Passed' : 'Open', cls: gate.done ? 'complete' : 'pending' });
+  });
+  if (!timelineRows.length) timelineRows.push({ icon:'…', title:'No timeline yet', sub:'Set milestones, checkpoints, and gates for this project.', cls:'pending' });
+  var needState = _projNeedGetState(pid);
+  var visibleNeeds = userNeeds.filter(function(item) { return !needState.dismissed[_projNeedKey(item)]; });
+  needState.items = visibleNeeds.slice();
+  if (needState.index >= visibleNeeds.length) needState.index = Math.max(0, visibleNeeds.length - 1);
+  var topNeed = visibleNeeds.length ? visibleNeeds[needState.index || 0] : null;
+  var activeTab = (_projTab === 'agents' ? 'workflow' : (_projTab || 'chat'));
+  var projectFilesLoose = [];
+  projectDocs.forEach(function(doc) {
+    if (!doc || !doc.exists) return;
+    projectFilesLoose.push({
+      name: doc.key || doc.label || 'File',
+      kind: 'file',
+      path: 'projects/' + pid + '/' + String(doc.key || '').replace(/^\/+/, ''),
+      size_human: doc.size_human || '',
+      modified_ago: doc.modified_ago || '',
+      is_project_doc: true
+    });
+  });
+  artifacts.forEach(function(a) {
+    var rel = String(a.relative_path || '');
+    if (!rel || rel.indexOf('/') >= 0) {
+      return;
+    }
+    projectFilesLoose.push({
+      name: a.name || rel,
+      kind: a.kind || 'file',
+      path: a.path || '',
+      size_human: a.size_human || '',
+      modified_ago: a.modified_ago || '',
+      is_project_doc: false
+    });
+  });
+  var projectDirsMap = {};
+  artifacts.forEach(function(a) {
+    var rel = String(a.relative_path || '');
+    if (!rel || rel.indexOf('/') < 0) return;
+    var rootDir = rel.split('/')[0];
+    if (!rootDir) return;
+    if (!projectDirsMap[rootDir]) projectDirsMap[rootDir] = { name: rootDir, count: 0, latest: '' };
+    projectDirsMap[rootDir].count += 1;
+    if (!projectDirsMap[rootDir].latest && a.modified_ago) projectDirsMap[rootDir].latest = a.modified_ago;
+  });
+  var projectDirs = Object.keys(projectDirsMap).sort().map(function(key) { return projectDirsMap[key]; });
+  var chatState = _projChatGetState(proj.id);
+  var liveActivity = activity.slice();
+  if (activeTab === 'chat' && chatState && chatState.streaming) {
+    liveActivity.unshift({
+      agent_name: 'Porter',
+      action: 'working',
+      summary: chatState.pendingSummary || 'Working on your request…',
+      status: 'in_progress',
+      ts: (Date.now() / 1000),
+      _live: true
+    });
+  }
+  var h = '<div class="proj-workspace">';
+  if (activeTab === 'chat') {
+    var missionChips = [];
+    if (workers.length) missionChips.push('<span class="proj-mission-chip"><strong>' + escHtml(String(workers.length)) + '</strong> agents</span>');
+    if ((workingAgents || ipTasks.length || 0) > 0) missionChips.push('<span class="proj-mission-chip"><strong>' + escHtml(String(workingAgents || ipTasks.length || 0)) + '</strong> working now</span>');
+    if (blockedCount > 0) missionChips.push('<span class="proj-mission-chip"><strong>' + escHtml(String(blockedCount)) + '</strong> blocker' + (blockedCount === 1 ? '' : 's') + '</span>');
+    if (nextCheckpoint) missionChips.push('<span class="proj-mission-chip"><strong>Next</strong> ' + escHtml(nextCheckpoint.label || 'Checkpoint') + (nextCheckpoint.date ? (' · ' + escHtml(nextCheckpoint.date)) : '') + '</span>');
+    else if (schedule.next_review) missionChips.push('<span class="proj-mission-chip"><strong>Next</strong> ' + escHtml(schedule.next_review) + '</span>');
+    h += '<section class="proj-mission-strip"><div class="proj-mission-main"><div class="proj-mission-kicker">Mission</div><div id="proj-mission-copy" class="proj-mission-title proj-inline-edit" onclick="_projInlineEdit(\'description\')" title="Click to edit the mission">' + escHtml(objective || (proj.name || 'Project')) + '</div></div>' + (missionChips.length ? ('<div class="proj-mission-side">' + missionChips.join('') + '</div>') : '') + '</section>';
+  }
+  h += '<div class="proj-main-grid"><div class="proj-column">';
+  if (activeTab === 'chat') {
+  h += '<section class="proj-panel"><div class="proj-panel-head"><div class="proj-panel-title">Agents</div>' + (workers.length ? ('<div class="proj-panel-note">' + escHtml(ipTasks.length + ' active · ' + todoTasks.length + ' queued tasks') + '</div>') : '') + '</div>';
+  if (workers.length) {
+    h += '<div class="proj-agent-board">' + workers.map(function(wid) {
+      var persona = (_personas || []).find(function(p) { return p.id === wid; });
+      var agentName = persona ? (persona.name || wid) : wid.slice(0, 8);
+      var task = taskByOwner[agentName.toLowerCase()] || taskByOwner[wid.toLowerCase()] || null;
+      var agentTasks = (tasksByOwner[agentName.toLowerCase()] || tasksByOwner[wid.toLowerCase()] || []).slice().sort(function(a, b) {
+        var rank = { in_progress: 0, todo: 1, blocked: 2, done: 3 };
+        return (rank[String(a.status || '').toLowerCase()] ?? 9) - (rank[String(b.status || '').toLowerCase()] ?? 9);
+      }).slice(0, 4);
+      var event = latestActivityByAgent[agentName] || latestActivityByAgent[wid] || null;
+      var tone = _projAgentStatusMeta(task, event);
+      var lastSeen = event ? _relativeTime(event.ts) : '';
+      var blockerChip = event && /failed|error|blocked/i.test(String(event.status || '')) ? '<span class="proj-mini-chip err">Needs attention</span>' : '';
+      var compactRole = _projCompactRoleLabel(persona);
+      var taskTitle = task ? task.title : '';
+      var summary = '';
+      if (taskTitle) summary = taskTitle;
+      else if (event && (event.summary || event.action)) summary = event.summary || event.action;
+      else summary = 'No task yet.';
+      return '<div class="proj-agent-card" onclick="openAgentDetail(\'' + escHtml(wid).replace(/'/g, "\\'") + '\')">'
+        + '<div class="proj-agent-head"><div class="proj-agent-avatar-wrap">' + (persona ? _personaAvatarMarkup(persona, 34) : '🤖') + '</div><div style="min-width:0"><div class="proj-agent-name">' + escHtml(agentName) + '</div><div class="proj-agent-role">' + escHtml(compactRole) + '</div></div></div>'
+        + '<div class="proj-agent-task"><div class="proj-agent-task-title">' + escHtml(summary) + '</div><div class="proj-agent-task-meta">'
+        + (task && task.priority ? '<span class="proj-mini-chip">' + escHtml(task.priority) + '</span>' : '')
+        + (task && task.workstream ? '<span class="proj-mini-chip">' + escHtml(task.workstream) + '</span>' : '')
+        + (lastSeen ? '<span class="proj-mini-chip">' + escHtml(lastSeen) + '</span>' : '')
+        + (agentTasks.length ? '<span class="proj-mini-chip">' + escHtml(String(agentTasks.length) + ' task' + (agentTasks.length === 1 ? '' : 's')) + '</span>' : '')
+        + blockerChip + '</div></div>'
+        + '<div class="proj-agent-status" style="color:' + tone.color + ';border-color:color-mix(in srgb,' + tone.color + ' 24%, var(--border));background:color-mix(in srgb,' + tone.color + ' 10%, transparent)"><span class="proj-agent-status-dot" style="background:' + tone.color + '"></span>' + escHtml(tone.label) + '</div>'
+        + '</div>';
+    }).join('') + '</div>';
+  } else {
+    h += '<div class="proj-empty-note">No agents are assigned yet. Porter should attach the cast that will actually run this project.</div>';
+  }
+  h += '</section>';
+  h += '<section class="proj-panel"><div class="proj-panel-head"><div class="proj-panel-title">Live Activity</div></div>';
+  if (liveActivity.length) {
+    h += '<div class="proj-activity-feed">' + liveActivity.slice(0, 8).map(function(ev) {
+      var tone = _projCardTone(ev.status);
+      var icon = tone === 'err' ? '!' : tone === 'ok' ? '✓' : '↻';
+      var color = tone === 'err' ? '#ef4444' : tone === 'ok' ? '#22c55e' : tone === 'warn' ? '#f59e0b' : 'var(--accent)';
+      var actionLabel = String(ev.action || '').replace(/_/g, ' ');
+      var statusLabel = ev._live ? 'working' : String(ev.status || 'signal').replace(/_/g, ' ');
+      var showActionChip = !!actionLabel && actionLabel.toLowerCase() !== statusLabel.toLowerCase() && actionLabel.toLowerCase() !== 'project created';
+      return '<div class="proj-activity-row' + (ev._live ? ' is-live' : '') + '" style="--activity-tone:' + color + '"><div class="proj-activity-icon" style="color:' + color + '">' + icon + '</div><div class="proj-activity-copy"><div class="proj-activity-title">' + escHtml(ev.agent_name || 'Porter') + '</div><div class="proj-activity-sub">' + escHtml(ev.summary || '(no summary)') + (ev._live ? '<span class="pd-chat-pulse" style="margin-left:8px;vertical-align:middle"><span class="pd-chat-pulse-dot"></span><span class="pd-chat-pulse-dot"></span><span class="pd-chat-pulse-dot"></span></span>' : '') + '</div><div class="proj-activity-meta"><span class="proj-activity-chip ' + (tone || '') + '">' + escHtml(statusLabel) + '</span>' + (showActionChip ? '<span class="proj-activity-chip">' + escHtml(actionLabel) + '</span>' : '') + (ev.task_id ? '<span class="proj-activity-chip">task ' + escHtml(String(ev.task_id)) + '</span>' : '') + '<span class="proj-activity-chip">' + escHtml(ev._live ? 'now' : _relativeTime(ev.ts)) + '</span></div></div></div>';
+    }).join('') + '</div>';
+  } else {
+    h += '<div class="proj-empty-note">No visible execution yet. Once Porter or an agent moves, this feed should stream work in real time.</div>';
+  }
+  h += '</section>';
+  } else if (activeTab === 'workflow') {
+  var workflowGroups = [
+    { key:'in_progress', title:'Working now', items: ipTasks, empty:'No tasks are actively moving.' },
+    { key:'todo', title:'Queued', items: todoTasks, empty:'No queued tasks yet.' },
+    { key:'done', title:'Done', items: doneTasks, empty:'No completed tasks yet.' }
+  ];
+  h += '<section class="proj-panel"><div class="proj-panel-head"><div class="proj-panel-title">Workflow</div><div class="proj-panel-note">' + escHtml(tasks.length ? (tasks.length + ' tasks tracked') : 'No task board yet') + '</div></div>';
+  h += '<div class="proj-plan-list">';
+  if (nextCheckpoint || schedule.next_review || timelineRows.length) {
+    h += '<div class="proj-plan-row"><div class="proj-plan-icon">⚑</div><div class="proj-plan-copy"><div class="proj-plan-title">' + escHtml(nextCheckpoint ? (nextCheckpoint.label || 'Next checkpoint') : 'Next review') + '</div><div class="proj-plan-sub">' + escHtml(nextCheckpoint ? ((nextCheckpoint.date || 'Date unset') + (nextCheckpoint.done ? ' · done' : ' · open')) : (schedule.next_review || 'Not scheduled yet')) + '</div></div></div>';
+  }
+  if (activePhase) {
+    h += '<div class="proj-plan-row"><div class="proj-plan-icon">↗</div><div class="proj-plan-copy"><div class="proj-plan-title">Current phase</div><div class="proj-plan-sub">' + escHtml(activePhase.name + ' · ' + (activePhase.status || 'pending').replace(/_/g, ' ')) + '</div></div></div>';
+  }
+  if (!activePhase && !nextCheckpoint && !schedule.next_review) {
+    h += '<div class="proj-empty-note">' + escHtml(tasks.length ? 'Task flow is live. Add checkpoints or a review cadence when you want more structure.' : 'Porter has not built a workflow yet.') + '</div>';
+  }
+  h += '</div></section>';
+  h += '<section class="proj-panel"><div class="proj-panel-head"><div class="proj-panel-title">Task Board</div><div class="proj-panel-note">' + escHtml(workers.length ? (workers.length + ' agents assigned') : 'No agents assigned yet') + '</div></div>';
+  h += '<div class="proj-workflow-board">';
+  workflowGroups.forEach(function(group) {
+    h += '<div class="proj-workflow-col"><div class="proj-workflow-head"><div style="min-width:0"><div class="proj-workflow-name">' + escHtml(group.title) + '</div><div class="proj-workflow-meta">' + escHtml(group.items.length ? (group.items.length + ' task' + (group.items.length === 1 ? '' : 's')) : group.empty) + '</div></div></div>';
+    if (group.items.length) {
+      h += '<div class="proj-workflow-list">';
+      group.items.slice(0, 10).forEach(function(task) {
+        var ownerId = String(task.owner || task.assigned_to || '').trim();
+        var ownerPersona = (_personas || []).find(function(p) { return p.id === ownerId || String(p.name || '').trim().toLowerCase() === ownerId.toLowerCase(); });
+        var ownerName = ownerPersona ? (ownerPersona.name || ownerId) : (ownerId || 'Unassigned');
+        var due = task.due_date ? ('Due ' + task.due_date) : '';
+        h += '<div class="proj-workflow-task" onclick="_projEditTask(\'' + escHtml(task.id).replace(/'/g, "\\'") + '\')"><div class="proj-workflow-task-title">' + escHtml((group.key === 'done' ? '✓ ' : (group.key === 'in_progress' ? '↻ ' : '• ')) + (task.title || 'Task')) + '</div><div class="proj-workflow-task-sub">' + escHtml([ownerName, task.workstream || '', due].filter(Boolean).join(' · ') || 'No owner yet') + '</div></div>';
+      });
+    } else {
+      h += '<div class="proj-empty-note" style="padding:12px 14px;text-align:left">' + escHtml(group.empty) + '</div>';
+    }
+    h += '</div>';
+  });
+  h += '</div></section>';
+  } else if (activeTab === 'timeline') {
+  h += '<section class="proj-panel"><div class="proj-panel-head"><div class="proj-panel-title">Timeline</div><div class="proj-panel-note">' + escHtml(timelineRows.length + ' project markers') + '</div></div>';
+  h += '<div class="proj-timeline">' + timelineRows.map(function(r) {
+    return '<div class="proj-timeline-item"><div class="proj-timeline-node ' + escHtml(r.cls || 'pending') + '"></div><div class="proj-timeline-card"><div class="proj-plan-title">' + escHtml(r.title) + '</div><div class="proj-plan-sub">' + escHtml(r.sub) + '</div></div></div>';
+  }).join('') + '</div></section>';
+  } else if (activeTab === 'artifacts') {
+  h += '<section class="proj-panel"><div class="proj-panel-head"><div class="proj-panel-title">Files</div></div>';
+  h += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">';
+  h += '<input type="text" class="fm-search" id="proj-fm-search" placeholder="Search files..." oninput="_projFmFilter(\'' + escHtml(proj.id).replace(/'/g, "\\'") + '\')">';
+  h += '<button class="btn btn-ghost" style="font-size:11px" onclick="_projFmNewFolder(\'' + escHtml(proj.id).replace(/'/g, "\\'") + '\')">+ Folder</button>';
+  h += '<label class="btn btn-ghost" style="font-size:11px;cursor:pointer">Upload<input id="proj-fm-upload-input" type="file" multiple style="display:none" onchange="_projFmUploadFiles(\'' + escHtml(proj.id).replace(/'/g, "\\'") + '\', this.files)"></label>';
+  h += '<button class="btn btn-ghost" onclick="_projLoadFiles()">&#8635;</button>';
+  h += '</div>';
+  h += '<div id="proj-fm-breadcrumbs" style="display:flex;align-items:center;gap:2px;padding:0 0 8px;font-size:12px;flex-wrap:wrap"></div>';
+  h += '<div id="proj-fm-list" class="proj-files-shell" style="display:flex;flex-direction:column;min-height:400px;transition:border-color .15s"></div>';
+  h += '</section>';
+  } else if (activeTab === 'people') {
+  h += '<section class="proj-panel"><div class="proj-panel-head"><div class="proj-panel-title">People</div><div class="proj-panel-note">' + escHtml(totalPeople ? (totalPeople + ' linked people') : 'No one linked yet') + '</div></div>';
+  if (collabs.length || contactPeople.length) {
+    h += '<div class="proj-people-listing">';
+    collabs.forEach(function(c) {
+      h += '<div class="proj-people-row"><div class="proj-people-icon">' + escHtml((c.display_name || c.username || '?').charAt(0).toUpperCase()) + '</div><div class="proj-people-copy"><div class="proj-people-title">' + escHtml(c.display_name || c.username) + '</div><div class="proj-people-sub">' + escHtml((c.role || 'member') + ' · workspace collaborator') + '</div></div></div>';
+    });
+    contactPeople.forEach(function(link) {
+      var fullName = [link.first_name || '', link.last_name || ''].join(' ').trim() || link.email || 'Contact';
+      var sub = [link.role || 'stakeholder', link.company_name || '', link.title || ''].filter(Boolean).join(' · ');
+      h += '<div class="proj-people-row" onclick="_crmOpenContact(' + (link.contact_id || 0) + ');switchModule(\'people\')"><div class="proj-people-icon">•</div><div class="proj-people-copy"><div class="proj-people-title">' + escHtml(fullName) + '</div><div class="proj-people-sub">' + escHtml(sub || 'Project contact') + '</div></div></div>';
+    });
+    h += '</div>';
+  } else {
+    h += '<div class="proj-empty-note">No collaborators or external contacts are linked. The project should show who owns approvals, stakeholders, and outside relationships.</div>';
+  }
+  h += '</section>';
+  }
+  h += '</div></div></div>';
+  el.innerHTML = h;
+  var topNeedEl = document.getElementById('proj-top-need');
+  if (topNeedEl) {
+    if (topNeed) {
+      topNeedEl.style.display = '';
+      topNeedEl.innerHTML = '<div class="proj-top-need-copy"><div class="proj-top-need-label">Needs you</div><div class="proj-top-need-text">' + escHtml(topNeed.title + '. ' + topNeed.copy) + '</div><div class="proj-top-need-meta"><span>' + escHtml(String((needState.index || 0) + 1) + ' of ' + visibleNeeds.length) + '</span>' + (visibleNeeds.length > 1 ? '<span>Use arrows to cycle</span>' : '') + '</div></div><div class="proj-top-need-controls">' + (visibleNeeds.length > 1 ? '<button class="proj-top-need-btn" onclick="_projNeedShift(-1)" title="Previous need">←</button><button class="proj-top-need-btn" onclick="_projNeedShift(1)" title="Next need">→</button>' : '') + '<button class="proj-next-btn" onclick="' + topNeed.action + '">' + escHtml(topNeed.btn) + '</button><button class="proj-top-need-btn" onclick="_projNeedDismiss()" title="Dismiss this need">Dismiss</button></div>';
+    } else {
+      topNeedEl.style.display = 'none';
+      topNeedEl.innerHTML = '';
+    }
+  }
+  var needEl = document.getElementById('proj-chat-need');
+  if (needEl) {
+    needEl.style.display = 'none';
+    needEl.innerHTML = '';
+  }
+  var cmdBar = document.getElementById('proj-cmd-bar');
+  if (cmdBar) cmdBar.style.display = activeTab === 'chat' ? '' : 'none';
+  _projSyncChatDockPadding();
+  if (cmdBar) {
+    cmdBar.ondragover = _projChatDragOver;
+    cmdBar.ondragenter = _projChatDragEnter;
+    cmdBar.ondragleave = _projChatDragLeave;
+    cmdBar.ondrop = _projChatDrop;
+  }
+  if (activeTab === 'artifacts') _projLoadFiles();
+  _setupDropZone(el, function(files) { return _projAttachFilesToProject(files, {silent:true}); });
 }
 
 async function _renderProjTabContent() {
   await _renderProjectPage();
   // v0.33.21 — Auto-render chat thread with greeting
   var proj = window._projCurrent;
-  if (proj) _projChatRender(proj.id);
+  if (proj) {
+    var state = _projChatGetState(proj.id);
+    _projChatSetModel(state.modelOverride || '');
+    _projChatSetBusy(proj.id, !!state.streaming);
+    _projChatRender(proj.id);
+    _connectProjActivityLive();
+  }
 }
 window._projChatState = window._projChatState || {};
 
 function _projChatGetState(pid) {
   if (!window._projChatState[pid]) {
-    window._projChatState[pid] = { messages: [], chatId: '', sessionSeq: 0, greetingSeed: Date.now(), modelOverride: '' };
+    window._projChatState[pid] = { messages: [], chatId: '', sessionSeq: 0, greetingSeed: Date.now(), modelOverride: '', streaming: false, pendingSummary: '' };
   }
   return window._projChatState[pid];
+}
+
+function _projChatSetBusy(projectId, busy) {
+  var project = window._projCurrent;
+  if (!project || project.id !== projectId) return;
+  var input = document.getElementById('proj-chat-input');
+  var send = document.getElementById('proj-chat-send-btn');
+  var working = document.getElementById('proj-chat-working');
+  var workingCopy = document.getElementById('proj-chat-working-copy');
+  var state = _projChatGetState(projectId);
+  if (input) {
+    input.disabled = !!busy;
+    input.style.opacity = busy ? '0.65' : '';
+  }
+  if (send) {
+    send.disabled = !!busy;
+    send.style.opacity = busy ? '0.55' : '';
+    send.style.pointerEvents = busy ? 'none' : '';
+  }
+  if (working) working.classList.toggle('active', !!busy);
+  if (workingCopy) workingCopy.textContent = busy ? (state.pendingSummary || 'Working…') : '';
+  _projSyncChatDockPadding();
 }
 
 function _projChatEnsureId(projectId, state) {
@@ -20352,23 +22344,63 @@ function _projChatSetModel(value) {
 
 function _projChatModelPick(value) {
   _projChatSetModel(value);
-  document.querySelectorAll('.chat-ctx-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+  _closeChatCtxDropdowns();
+}
+
+window._projNeedState = window._projNeedState || {};
+function _projNeedGetState(pid) {
+  if (!window._projNeedState[pid]) window._projNeedState[pid] = { index: 0, dismissed: {} };
+  return window._projNeedState[pid];
+}
+function _projNeedKey(item) {
+  return String((item && (item.title || item.copy || item.btn || 'need')) || 'need');
+}
+function _projNeedShift(delta) {
+  var proj = window._projCurrent;
+  if (!proj) return;
+  var state = _projNeedGetState(proj.id);
+  state.index = Math.max(0, Number(state.index || 0) + Number(delta || 0));
+  _renderProjectPage();
+}
+function _projNeedDismiss() {
+  var proj = window._projCurrent;
+  if (!proj) return;
+  var state = _projNeedGetState(proj.id);
+  var items = state.items || [];
+  var idx = Math.max(0, Math.min(Number(state.index || 0), Math.max(0, items.length - 1)));
+  var current = items[idx];
+  if (!current) return;
+  state.dismissed[_projNeedKey(current)] = true;
+  if (idx >= items.length - 1) state.index = Math.max(0, idx - 1);
+  _renderProjectPage();
 }
 
 function _projChatComposePrompt(project, state, userText) {
   // v0.33.21 — Rich client-side context: everything the user sees
-  var parts = ['Project: ' + (project.name || 'Untitled') + ' [' + (project.status || 'active') + ']'];
+  var parts = [
+    'You are Porter inside a live project workspace.',
+    'Respond very briefly.',
+    'Prefer 1 short paragraph or at most 3 short bullets.',
+    'Do not narrate your reasoning or process.',
+    'Keep the project moving by default. When the next step is obvious, do it instead of asking "if you want" or stopping early.',
+    'Use plain operator language. Avoid product jargon like durable, blocker, state, workflow structure, or inputs moved.',
+    'When something changes, say it plainly in visible terms, for example: "I saved the prompt. There are still 4 tasks. None are assigned yet. Next I should draft tomorrow\'s joke."',
+    'Do not claim hidden progress the page cannot prove.',
+    'Do not repeat obvious project context.',
+    'Only ask for user input when something truly needs approval or missing information.',
+    'Project: ' + (project.name || 'Untitled') + ' [' + (project.status || 'active') + ']'
+  ];
   if (project.type) parts.push('Type: ' + project.type);
   if (project.objective || project.description) parts.push('Objective: ' + (project.objective || project.description));
   if (project.success_bar) parts.push('Success: ' + project.success_bar);
   if (project.start_date) parts.push('Started: ' + project.start_date);
   if (project.deadline) parts.push('Deadline: ' + project.deadline);
-  var ms = project.milestones || [];
+  var ms = (project.milestones || []).slice(0, 4);
   if (ms.length) {
     var msDone = ms.filter(function(m) { return m.done; }).length;
     parts.push('Milestones: ' + msDone + '/' + ms.length + ' done (' + ms.map(function(m) { return (m.done?'[x]':'[ ]') + ' ' + (m.name||m.title||'?'); }).join(', ') + ')');
   }
-  var workers = project.assigned_personas || [];
+  var workers = (project.assigned_personas || []).slice(0, 6);
   if (workers.length) {
     var wNames = workers.map(function(wid) {
       var p = (_personas || []).find(function(x) { return x.id === wid; });
@@ -20376,13 +22408,35 @@ function _projChatComposePrompt(project, state, userText) {
     });
     parts.push('Workers: ' + wNames.join(', '));
   }
+  var phases = (project.phases || []).slice(0, 4);
+  if (phases.length) {
+    parts.push('Workstreams: ' + phases.map(function(phase) {
+      return (phase.name || '?') + ' [' + (phase.status || 'pending') + ']';
+    }).join(', '));
+  }
+  var schedule = project.schedule || {};
+  if (schedule.cadence || schedule.next_review || (schedule.checkpoints || []).length) {
+    parts.push('Schedule: cadence=' + (schedule.cadence || 'unset') + ', next_review=' + (schedule.next_review || 'unset') + ', checkpoints=' + (schedule.checkpoints || []).slice(0, 3).map(function(cp) {
+      return (cp.done ? '[x] ' : '[ ] ') + (cp.label || '?') + (cp.date ? (' @ ' + cp.date) : '');
+    }).join(', '));
+  }
+  var gates = (project.quality_gates || []).slice(0, 4);
+  if (gates.length) {
+    parts.push('Quality gates: ' + gates.map(function(gate) {
+      return (gate.done ? '[x] ' : '[ ] ') + (gate.item || '?');
+    }).join(', '));
+  }
   var links = project.links || {};
   var lp = [];
   if (links.repo) lp.push('repo');
   if (links.live_url) lp.push('live');
   if (links.docs) lp.push('docs');
   if (lp.length) parts.push('Links: ' + lp.join(', '));
-  var hist = (state.messages || []).filter(function(m) { return m.role === 'user' || m.role === 'assistant'; }).slice(-3);
+  var taskList = document.getElementById('proj-task-list');
+  if ((_projTab || 'chat') === 'chat' && taskList && taskList.textContent) {
+    parts.push('Visible task board: ' + taskList.textContent.replace(/\s+/g, ' ').trim().slice(0, 500));
+  }
+  var hist = (state.messages || []).filter(function(m) { return m.role === 'user' || m.role === 'assistant'; }).slice(-2);
   if (hist.length) {
     parts.push('Recent conversation:\n' + hist.map(function(m) {
       return (m.role === 'user' ? 'User: ' : 'Porter: ') + String(m.content || '').slice(0, 280);
@@ -20393,23 +22447,42 @@ function _projChatComposePrompt(project, state, userText) {
 }
 
 function _projGreetingCopy(project, state) {
-  var name = project.name || 'this project';
-  var hasContent = (project.milestones || []).length || (project.assigned_personas || []).length || project.objective;
-  if (hasContent) {
-    var greetings = [
-      "What should happen next on " + name + "?",
-      "I'm on " + name + ". Add tasks, assign workers, upload files — just tell me.",
-      name + " is live. What needs to change?"
-    ];
-  } else {
-    var greetings = [
-      "Tell me about " + name + " and I'll set it up — milestones, tasks, workers, files.",
-      "Describe what " + name + " needs to deliver. I'll shape the plan, assign workers, and track progress.",
-      "Let's build " + name + ". Tell me the goal and I'll create the structure."
-    ];
+  var tasks = (project && project.tasks) || [];
+  var workers = (project && project.assigned_personas) || [];
+  var schedule = (project && project.schedule) || {};
+  var openTasks = tasks.filter(function(task) {
+    return !/done|complete|cancelled/i.test(String(task.status || ''));
+  });
+  var unownedTasks = openTasks.filter(function(task) {
+    return !String(task.assigned_persona_id || task.owner_id || task.owner || '').trim();
+  });
+  var inProgress = openTasks.filter(function(task) {
+    return /in_progress|working|active/i.test(String(task.status || ''));
+  });
+  var checkpoints = (schedule.checkpoints || []).filter(function(cp) {
+    return !cp.done;
+  });
+  var prompts = [];
+  if (!workers.length) {
+    prompts.push('Next move: assign the first worker so Porter can start execution.');
   }
-  var seed = Number(state && state.greetingSeed ? state.greetingSeed : Date.now());
-  return greetings[Math.abs(seed) % greetings.length];
+  if (unownedTasks.length) {
+    prompts.push('Next move: review and assign the queued tasks so work can start.');
+  }
+  if (!schedule.cadence && !schedule.next_review && !checkpoints.length) {
+    prompts.push('Next move: set the cadence or next checkpoint so the project has a clock.');
+  }
+  if (openTasks.length && !inProgress.length) {
+    prompts.push('Next move: move the first task into progress and let Porter run it.');
+  }
+  if (!openTasks.length) {
+    prompts.push('Next move: break the mission into the first task stack.');
+  }
+  if (!prompts.length) {
+    prompts.push('Next move: review the live work, then redirect Porter only if priorities changed.');
+  }
+  var seed = Number(state && state.greetingSeed ? state.greetingSeed : (Date.now() + Math.floor(Math.random() * 100000)));
+  return prompts[Math.abs(seed) % prompts.length];
 }
 
 function _stripActionTags(s) {
@@ -20424,6 +22497,7 @@ function _projChatRender(pid) {
   var state = _projChatGetState(pid);
   if (!state.messages.length) {
     panel.innerHTML = '<div class="pd-chat-empty">' + escHtml(_projGreetingCopy(project, state)) + '</div>';
+    _projSyncChatDockPadding();
     return;
   }
   panel.innerHTML = state.messages.map(function(m) {
@@ -20448,6 +22522,7 @@ function _projChatRender(pid) {
       + '</div>';
   }).join('');
   panel.scrollTop = panel.scrollHeight;
+  _projSyncChatDockPadding();
 }
 
 function _projNewChat() {
@@ -20561,14 +22636,52 @@ function _projKickoff(kind) {
   _projTab = 'chat';
   _renderProjTabs();
   _renderProjTabContent();
-  var state = _projChatGetState(project.id);
   var message = kind === 'worker'
-    ? 'Tell Porter what this worker should own inside ' + (project.name || 'this project') + '. He will keep the assignment tied to this project and wait for approval before creating anything.'
-    : 'Tell Porter what should change in ' + (project.name || 'this project') + '. He will tighten the scope, success bar, or structure without making a mess of the lane.';
-  state.messages.push({ role: 'assistant', label: 'Porter', content: message, meta: 'project lane' });
-  _projChatRender(project.id);
+    ? 'Tell Porter what this agent should handle for this project. A short mission is enough.'
+    : 'Tell Porter what should change here. He will tighten the scope, structure, or next steps without making a mess.';
   var input = document.getElementById('proj-chat-input');
-  if (input) input.focus();
+  if (input) {
+    input.value = '';
+    input.placeholder = message;
+    input.focus();
+    _chatAutoGrow(input);
+  }
+  _projShowKickoffHint(message);
+}
+
+var _projChatHintTimer = null;
+function _projShowKickoffHint(message) {
+  var hint = document.getElementById('proj-chat-hint');
+  var copy = document.getElementById('proj-chat-hint-copy');
+  var composer = document.querySelector('#proj-cmd-bar .proj-chat-composer');
+  if (copy) copy.textContent = message;
+  if (hint) {
+    hint.classList.remove('active');
+    void hint.offsetWidth;
+    hint.classList.add('active');
+  }
+  if (composer) {
+    composer.classList.remove('pulse');
+    void composer.offsetWidth;
+    composer.classList.add('pulse');
+  }
+  if (_projChatHintTimer) clearTimeout(_projChatHintTimer);
+  _projChatHintTimer = setTimeout(function() {
+    if (hint) hint.classList.remove('active');
+    if (composer) composer.classList.remove('pulse');
+  }, 2200);
+}
+
+function _projChatPlaceholderFocus() {
+  var input = document.getElementById('proj-chat-input');
+  if (input) input.placeholder = '';
+}
+
+function _projChatPlaceholderBlur() {
+  var input = document.getElementById('proj-chat-input');
+  if (input && !String(input.value || '').trim()) {
+    input.placeholder = 'Tell Porter what should happen next...';
+  }
 }
 
 function _projChatKey(e) {
@@ -20578,21 +22691,38 @@ function _projChatKey(e) {
   }
 }
 
+function _projChatRefocus() {
+  setTimeout(function() {
+    var input = document.getElementById('proj-chat-input');
+    if (!input) return;
+    input.focus();
+    var len = input.value.length;
+    try { input.setSelectionRange(len, len); } catch (e) {}
+  }, 0);
+}
+
 async function _projChatSend() {
   var project = window._projCurrent;
   var input = document.getElementById('proj-chat-input');
   if (!project || !input) return;
+  var state = _projChatGetState(project.id);
+  if (state.streaming) return;
   var text = input.value.trim();
   if (!text) return;
-  var state = _projChatGetState(project.id);
   var promptBody = _projChatComposePrompt(project, state, text);
+  state.pendingSummary = 'Working on: ' + text;
   state.messages.push({ role: 'user', label: 'You', content: text });
-  state.messages.push({ role: 'pending', label: 'Porter', content: '...', meta: state.modelOverride ? _pdChatModelLabel(state.modelOverride) : 'Auto' });
+  state.messages.push({ role: 'pending', label: 'Porter', content: '...', meta: '' });
+  state.streaming = true;
   input.value = '';
+  _projChatSetBusy(project.id, true);
+  _renderProjectPage();
   _projChatRender(project.id);
+  _projChatRefocus();
   await new Promise(function(resolve) {
     var idx = state.messages.length - 1;
     var chatId = _projChatEnsureId(project.id, state);
+    var responseMeta = state.modelOverride ? _pdChatModelLabel(state.modelOverride) : 'Auto';
     var url = '/api/chat/stream?model=' + encodeURIComponent(state.modelOverride || 'auto')
       + '&prompt=' + encodeURIComponent(promptBody)
       + '&route=general'
@@ -20609,7 +22739,7 @@ async function _projChatSend() {
         full += buffered;
         buffered = '';
       }
-      state.messages[idx] = { role: 'assistant', label: 'Porter', content: full, meta: state.messages[idx] && state.messages[idx].meta ? state.messages[idx].meta : (state.modelOverride ? _pdChatModelLabel(state.modelOverride) : 'Auto'), streaming: !force };
+      state.messages[idx] = { role: 'assistant', label: 'Porter', content: full, meta: responseMeta, streaming: !force };
       _projChatRender(project.id);
       if (flushTimer) {
         clearTimeout(flushTimer);
@@ -20621,27 +22751,28 @@ async function _projChatSend() {
       try {
         var data = JSON.parse(e.data);
         if (data.error) {
-          state.messages[idx] = { role: 'error', label: 'Porter', content: data.error, meta: data.runtime_label || (state.modelOverride ? _pdChatModelLabel(state.modelOverride) : 'Auto') };
+          state.messages[idx] = { role: 'error', label: 'Porter', content: data.error, meta: '' };
+          state.streaming = false;
+          state.pendingSummary = '';
+          _projChatSetBusy(project.id, false);
+          _renderProjectPage();
           _projChatRender(project.id);
+          _projChatRefocus();
           evtSource.close();
           resolve();
           return;
         }
         if (data.runtime_label && !data.token && !data.done) {
-          var existing = state.messages[idx] || { role: 'pending', label: 'Porter', content: '...' };
-          existing.meta = data.runtime_label;
-          state.messages[idx] = existing;
-          _projChatRender(project.id);
+          responseMeta = data.runtime_label;
           return;
         }
         if (data.token) {
-          if (data.runtime_label && state.messages[idx]) state.messages[idx].meta = data.runtime_label;
           buffered += data.token;
           if (!flushTimer) flushTimer = setTimeout(function() { flushBuffered(false); }, 45);
           return;
         }
         if (data.actions_executed) {
-        _projReloadList();
+        _projReload(project.id);
         // v0.31.47 — Toast feedback for chat actions (F8)
         var _axr = data.actions_executed;
         if (Array.isArray(_axr) && _axr.length > 0) {
@@ -20656,22 +22787,26 @@ async function _projChatSend() {
             loadProjects().then(function() {
               var pid = window._projCurrent.id;
               var updated = _projList.find(function(p) { return p.id === pid; });
-              if (updated) { window._projCurrent = updated; _renderProjTabs(); }
+              if (updated) { window._projCurrent = updated; _renderProjTabs(); _renderProjectPage(); }
             });
           }, 300);
         }
       }
         if (data.done) {
-          if (data.runtime_label && state.messages[idx]) state.messages[idx].meta = data.runtime_label;
           flushBuffered(true);
           state.messages[idx] = {
             role: 'assistant',
             label: 'Porter',
             content: data.full_response || full || '(no response)',
-            meta: data.runtime_label || _runtimeLabel(data.backend_used, data.model_used, state.modelOverride ? _pdChatModelLabel(state.modelOverride) : 'Auto'),
+            meta: responseMeta,
             streaming: false
           };
+          state.streaming = false;
+          state.pendingSummary = '';
+          _projChatSetBusy(project.id, false);
+          _renderProjectPage();
           _projChatRender(project.id);
+          _projChatRefocus();
           evtSource.close();
           resolve();
         }
@@ -20682,9 +22817,14 @@ evtSource.onerror = function() {
   if (_gcDone) { evtSource.close(); if (_chatEventSource === evtSource) _chatEventSource = null; return; }
       flushBuffered(true);
       if (!full) {
-        state.messages[idx] = { role: 'error', label: 'Porter', content: 'Connection lost before Porter could respond.', meta: state.modelOverride ? _pdChatModelLabel(state.modelOverride) : 'Auto' };
+        state.messages[idx] = { role: 'error', label: 'Porter', content: 'Connection lost before Porter could respond.', meta: '' };
         _projChatRender(project.id);
       }
+      state.streaming = false;
+      state.pendingSummary = '';
+      _projChatSetBusy(project.id, false);
+      _renderProjectPage();
+      _projChatRefocus();
       evtSource.close();
       resolve();
     };
@@ -20727,12 +22867,14 @@ async function _projLoadActivity(pid) {
 }
 
 function _scheduleProjActivityRefresh(delayMs) {
-  if (_currentModule !== 'projects' || _projTab !== 'activity' || !window._projActivityCurrent) return;
+  if (_currentModule !== 'projects') return;
+  var detail = document.getElementById('project-detail-view');
+  if (!detail || detail.style.display === 'none' || !window._projCurrent) return;
   if (_projActivityRefreshTimer) return;
   _projActivityRefreshTimer = setTimeout(function() {
     _projActivityRefreshTimer = null;
-    if (_currentModule === 'projects' && _projTab === 'activity' && window._projActivityCurrent) {
-      _projLoadActivity(window._projActivityCurrent);
+    if (_currentModule === 'projects' && window._projCurrent) {
+      _projReload(window._projCurrent.id);
     }
   }, Math.max(80, delayMs || 250));
 }
@@ -20747,8 +22889,9 @@ function _connectProjActivityLive() {
   });
   if (!_projActivityPoller) {
     _projActivityPoller = setInterval(function() {
-      if (_currentModule === 'projects' && _projTab === 'activity' && window._projActivityCurrent) {
-        _projLoadActivity(window._projActivityCurrent);
+      var detail = document.getElementById('project-detail-view');
+      if (_currentModule === 'projects' && detail && detail.style.display !== 'none' && window._projCurrent) {
+        _projReload(window._projCurrent.id);
       }
     }, 30000);
   }
@@ -20773,7 +22916,7 @@ async function _projLoadArtifacts(pid) {
     artifacts.forEach(function(a) {
       var kind = String(a.kind || 'file');
       var path = a.path || '';
-      var dlUrl = '/download?root=documents&path=' + encodeURIComponent(path.replace('/home/lobster/documents/', '')) + '&inline=1';
+      var dlUrl = _projArtifactUrl(path, true);
       var iconClass = 'file';
       var icon = '\u{1F4C4}';
       if (kind === 'image') { iconClass = 'img'; icon = '\u{1F5BC}'; }
@@ -20846,29 +22989,33 @@ async function _projDetachApp(pid, connId) {
 }
 
 function _projPreviewArtifact(url, kind, name, rowEl) {
-  var pv = document.getElementById('proj-artifact-preview');
-  if (!pv) return;
-  // Toggle off if clicking same item
-  if (pv.style.display !== 'none' && pv.dataset.url === url) {
-    pv.style.display = 'none';
-    pv.innerHTML = '';
-    return;
-  }
-  pv.dataset.url = url;
-  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:11px;font-weight:600;color:var(--text)">' + escHtml(name) + '</span><button onclick="document.getElementById(\x27proj-artifact-preview\x27).style.display=\x27none\x27" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px">&times;</button></div>';
+  _projClosePreviewModal();
+  var overlay = document.createElement('div');
+  overlay.id = 'proj-artifact-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:10040;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.52);padding:24px';
+  var html = '<div style="width:min(960px,92vw);max-height:86vh;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:18px;background:var(--raised);box-shadow:0 28px 90px rgba(0,0,0,.38);overflow:hidden">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)"><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(name) + '</span><button onclick="_projClosePreviewModal()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px">&times;</button></div>'
+    + '<div style="padding:16px;overflow:auto">';
   if (kind === 'image') {
-    html += '<img src="' + escHtml(url) + '" style="max-width:100%;max-height:400px;border-radius:6px;object-fit:contain">';
+    html += '<img src="' + escHtml(url) + '" style="display:block;max-width:100%;max-height:72vh;margin:0 auto;border-radius:10px;object-fit:contain">';
   } else if (kind === 'video') {
-    html += '<video controls preload="auto" style="width:100%;max-height:400px;border-radius:6px;background:#000"><source src="' + escHtml(url) + '"></video>';
+    html += '<video controls preload="auto" style="width:100%;max-height:72vh;border-radius:10px;background:#000"><source src="' + escHtml(url) + '"></video>';
   } else if (kind === 'audio') {
     html += '<audio controls preload="auto" style="width:100%"><source src="' + escHtml(url) + '"></audio>';
   } else if (kind === 'pdf') {
-    html += '<iframe src="' + escHtml(url) + '" style="width:100%;height:400px;border:none;border-radius:6px"></iframe>';
+    html += '<iframe src="' + escHtml(url) + '" style="width:100%;height:72vh;border:none;border-radius:10px"></iframe>';
   } else {
     html += '<div style="font-size:11px;color:var(--text3)">No preview available. <a href="' + escHtml(url.replace('&inline=1','')) + '" style="color:var(--accent)">Download</a></div>';
   }
-  pv.innerHTML = html;
-  pv.style.display = '';
+  html += '</div></div>';
+  overlay.innerHTML = html;
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) _projClosePreviewModal(); });
+  document.body.appendChild(overlay);
+}
+
+function _projClosePreviewModal() {
+  var overlay = document.getElementById('proj-artifact-modal');
+  if (overlay) overlay.remove();
 }
 
 async function _projLoadState(pid) {
@@ -20974,7 +23121,7 @@ async function _projDelete(pid) {
         loadProjects();
       } else { toast(r && r.error || 'Failed', 'err'); }
     } catch(e) { toast('Failed', 'err'); }
-  }, {danger: true, okLabel: 'Delete'});
+  }, {danger: true, okLabel: 'Delete Project'});
 }
 
 // ── Capabilities / System module ──────────────────────────────────────────
@@ -21051,7 +23198,7 @@ async function _crmLoadDirectory() {
   var el = document.getElementById('crm-content');
   var stats = document.getElementById('people-stats');
   if (!el) return;
-  el.innerHTML = '<div class="loading-indicator"><span class="loading-spinner"></span> Loading...</div>';
+  el.innerHTML = _spinnerOnlyMarkup(140, '18px 0');
   var search = (document.getElementById('crm-search') || {}).value || '';
   try {
     // Fetch contacts, team, and companies in parallel
@@ -21091,32 +23238,44 @@ async function _crmLoadDirectory() {
 
     // Stats
     if (stats) {
-      stats.innerHTML = '<div><div class="people-stat">' + contacts.length + '</div><div class="people-stat-label">Contacts</div></div>'
-        + '<div><div class="people-stat">' + users.length + '</div><div class="people-stat-label">Team</div></div>'
-        + '<div><div class="people-stat">' + companies.length + '</div><div class="people-stat-label">Companies</div></div>';
+      stats.innerHTML =
+        '<div class="people-stat-chip"><span class="people-stat">' + contacts.length + '</span><span class="people-stat-label">Contacts</span></div>'
+        + '<div class="people-stat-chip"><span class="people-stat">' + users.length + '</span><span class="people-stat-label">Internal</span></div>'
+        + '<div class="people-stat-chip"><span class="people-stat">' + companies.length + '</span><span class="people-stat-label">Companies</span></div>';
+      stats.style.display = '';
     }
 
     if (!items.length) {
-      el.innerHTML = '<div class="proj-guide-empty" style="padding:28px 20px"><div style="display:flex;justify-content:center;margin-bottom:10px">' + _personaAvatarMarkup({ name: 'Porter', orchestrator_only: true, appearance_style: 'minecraft' }, 56) + '</div><div class="proj-guide-empty-title">Your network starts here</div><div class="proj-guide-empty-hint" style="max-width:300px;margin:0 auto 12px">Add contacts, companies, or team members. Porter will help you track relationships and link them to projects.</div><div class="proj-next-actions" style="justify-content:center"><button class="proj-next-btn" onclick="_crmNewAction()">Add Someone</button></div></div>';
+      el.innerHTML = '<div class="proj-guide-empty" style="padding:28px 20px"><div style="display:flex;justify-content:center;margin-bottom:10px">' + _personaAvatarMarkup({ name: 'Porter', orchestrator_only: true, appearance_style: 'minecraft' }, 56) + '</div><div class="proj-guide-empty-title">Your network starts here</div><div class="proj-guide-empty-hint" style="max-width:300px;margin:0 auto 12px">Add contacts, companies, or internal profiles. Porter will help you track relationships and link them to projects.</div><div class="proj-next-actions" style="justify-content:center"><button class="proj-next-btn" onclick="_crmNewAction()">Add Someone</button></div></div>';
       return;
     }
 
     // Render cards
     var html = '<div class="people-grid">';
     items.forEach(function(i) {
+      var isYou = !!(i.internal && currentUser && String((i.raw || {}).username || '') === String(currentUser.username || ''));
       var initials = i.name ? (i.name.split(' ').map(function(w){return w[0]||''}).join('').slice(0,2).toUpperCase()) : '?';
-      var typeBadge = '<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent)">' + escHtml(i.sub) + '</span>';
-      if (i.type === 'company') typeBadge = '<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:color-mix(in srgb,#a855f7 10%,transparent);color:#a855f7">company</span>';
-      if (i.internal) typeBadge = '<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:color-mix(in srgb,#22c55e 10%,transparent);color:#22c55e">internal</span>';
-      html += '<div class="people-card" onclick="' + (i.type === 'company' ? '_crmOpenCompany(' + (i.raw.id||0) + ')' : (i.internal ? '' : '_crmOpenContact(' + (i.raw.id||0) + ')')) + '" style="cursor:pointer">';
-      html += '<div class="people-card-avatar">' + escHtml(initials) + '</div>';
+      var summary = _crmCleanSummaryText(((i.raw || {}).summary) || '');
+      var chips = [];
+      if (i.internal) chips.push('<span class="people-card-pill' + (isYou ? ' you' : '') + '">' + (isYou ? 'Me' : 'Internal') + '</span>');
+      chips.push('<span class="people-card-pill">' + escHtml(i.type === 'company' ? 'Company' : (i.internal ? ((i.raw || {}).role || 'operator') : i.sub)) + '</span>');
+      html += '<div class="people-card' + (isYou ? ' is-you' : '') + '" onclick="' + (i.type === 'company' ? '_crmOpenCompany(' + (i.raw.id||0) + ')' : (i.internal ? '_crmOpenInternalUser(\'' + escHtml(i.raw.username || '').replace(/'/g, "\\'") + '\')' : '_crmOpenContact(' + (i.raw.id||0) + ')')) + '" style="cursor:pointer">';
+      html += '<div class="people-card-top">';
       html += '<div class="people-card-meta">';
       html += '<div class="people-card-name">' + escHtml(i.name) + '</div>';
-      html += '<div style="display:flex;gap:4px;margin-top:2px">' + typeBadge;
-      if (i.company) html += '<span style="font-size:10px;color:var(--text3)">' + escHtml(i.company) + '</span>';
-      html += '</div>';
+      html += '<div class="people-card-badges">' + chips.join('') + '</div>';
       if (i.email) html += '<div class="people-card-email">' + escHtml(i.email) + '</div>';
-      html += '</div></div>';
+      html += '</div>';
+      html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">';
+      html += '<div class="people-card-stamp">' + _crmProfileAvatarMarkup({ name: i.name, photo_path: ((i.raw || {}).photo_path || ''), photo_url: (isYou ? ('/api/avatar?_=' + Date.now()) : ''), internal: !!i.internal && !isYou, size: 34 }) + '</div>';
+      html += '</div>';
+      html += '</div>';
+      if (summary) html += '<div class="people-card-summary">' + escHtml(summary) + '</div>';
+      html += '<div class="people-card-meta-row">';
+      if (i.company) html += '<span>' + escHtml(i.company) + '</span>';
+      if (i.phone) html += '<span>' + escHtml(i.phone) + '</span>';
+      html += '</div>';
+      html += '</div>';
     });
     html += '</div>';
     el.innerHTML = html;
@@ -21204,29 +23363,35 @@ async function _crmLoadTeam() {
       stats.innerHTML = '<div><div class="people-stat">' + users.length + '</div><div class="people-stat-label">Users</div></div>'
         + '<div><div class="people-stat">' + admins + '</div><div class="people-stat-label">Admins</div></div>'
         + '<div><div class="people-stat">' + operators + '</div><div class="people-stat-label">Operators</div></div>';
+      stats.style.display = '';
     }
     if (!users.length) { el.innerHTML = '<div class="proj-guide-empty" style="padding:28px 20px"><div class="proj-guide-empty-title">No team members yet</div><div class="proj-guide-empty-hint">Invite people to your workspace to collaborate on projects.</div></div>'; return; }
     var html = '<div class="people-grid">';
     users.forEach(function(u) {
       var isYou = u.username === myUsername;
-      var initials = avatarInitials(u.display_name || u.username);
       var joined = u.created_at ? new Date(u.created_at * 1000).toLocaleDateString('en-US', {year:'numeric', month:'short', day:'numeric'}) : '';
-      html += '<div class="people-card' + (isYou ? ' is-you' : '') + '">';
-      html += '<div class="people-card-avatar">' + escHtml(initials) + '</div>';
+      html += '<div class="people-card' + (isYou ? ' is-you' : '') + '" onclick="_crmOpenInternalUser(\'' + escHtml(u.username || '').replace(/'/g, "\\'") + '\')">';
+      html += '<div class="people-card-top">';
       html += '<div class="people-card-meta">';
       html += '<div class="people-card-name">' + escHtml(u.display_name || u.username) + '</div>';
-      html += '<div class="people-card-role">' + escHtml(u.role || 'operator') + '</div>';
+      html += '<div class="people-card-badges"><span class="people-card-pill' + (isYou ? ' you' : '') + '">' + (isYou ? 'Me' : 'Internal') + '</span><span class="people-card-pill">' + escHtml(u.role || 'operator') + '</span></div>';
       if (u.email) html += '<div class="people-card-email">' + escHtml(u.email) + '</div>';
-      if (u._project_count !== undefined) html += '<div class="people-card-joined">' + u._project_count + ' project' + (u._project_count !== 1 ? 's' : '') + '</div>';
-      if (u._last_active) html += '<div class="people-card-joined">Active ' + escHtml(u._last_active) + '</div>';
-      else if (joined) html += '<div class="people-card-joined">Joined ' + escHtml(joined) + '</div>';
       html += '</div>';
+      html += '<div class="people-card-stamp">' + _crmProfileAvatarMarkup({ name: u.display_name || u.username, internal: !isYou, photo_url: isYou ? ('/api/avatar?_=' + Date.now()) : '', size: 34 }) + '</div>';
       html += '<div class="people-card-actions">';
       if (currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin')) {
-        html += '<button onclick="_peopleEditRole(\x27' + escHtml(u.username) + '\x27,\x27' + escHtml(u.role || 'operator') + '\x27)">Role</button>';
-        if (!isYou) html += '<button class="danger" onclick="_peopleDelete(\x27' + escHtml(u.username) + '\x27)">Remove</button>';
+        html += '<button onclick="event.stopPropagation();_peopleEditRole(\x27' + escHtml(u.username) + '\x27,\x27' + escHtml(u.role || 'operator') + '\x27)">Role</button>';
+        if (!isYou) html += '<button class="danger" onclick="event.stopPropagation();_peopleDelete(\x27' + escHtml(u.username) + '\x27)">Remove</button>';
       }
       html += '</div></div>';
+      var uSummary = _crmCleanSummaryText(u.summary || '');
+      if (uSummary) html += '<div class="people-card-summary">' + escHtml(uSummary) + '</div>';
+      html += '<div class="people-card-meta-row">';
+      if (u._project_count !== undefined) html += '<span>' + u._project_count + ' project' + (u._project_count !== 1 ? 's' : '') + '</span>';
+      if (u._last_active) html += '<span>Active ' + escHtml(u._last_active) + '</span>';
+      else if (joined) html += '<span>Joined ' + escHtml(joined) + '</span>';
+      html += '</div>';
+      html += '</div>';
     });
     html += '</div>';
     el.innerHTML = html;
@@ -21288,30 +23453,371 @@ function _crmEditableField(label, value, contactId, field) {
     + '<span class="crm-detail-field-label">' + label + '</span>'
     + '<span class="crm-detail-field-value">' + (value ? escHtml(value) : '<span style="color:var(--text3)">-</span>') + '</span></div>';
 }
+function _crmEditableSummaryBox(value, entityId, field, emptyText) {
+  var text = _crmCleanSummaryText(value);
+  return '<div class="crm-summary-box crm-editable-summary' + (!text ? ' empty' : '') + '" data-field="' + escHtml(field) + '" data-cid="' + escHtml(entityId) + '" onclick="_crmInlineSummaryEdit(this)" title="Click to edit">'
+    + escHtml(text || emptyText || 'Add a summary')
+    + '</div>';
+}
+function _crmCleanSummaryText(value) {
+  var text = String(value || '').trim();
+  if (!text) return '';
+  var legacy = [
+    'No summary yet. Porter should learn who this person is, what matters, and how they relate to the work.',
+    'No summary yet. Porter should build a clearer picture of this company from files, interactions, and linked people.',
+    'Use this profile to tell Porter who I am, how I work, what I care about, and what should stay top of mind across my projects.',
+    'Add context Porter should understand about this internal user.'
+  ];
+  if (legacy.indexOf(text) !== -1) return '';
+  return text;
+}
+function _crmAutoSummary(kind, entity) {
+  entity = entity || {};
+  if (kind === 'contact') {
+    var parts = [];
+    if (entity.title) parts.push(entity.title);
+    if (entity.company_name) parts.push('at ' + entity.company_name);
+    if (entity.contact_type && entity.contact_type !== 'other') parts.push(entity.contact_type);
+    var base = parts.join(' ');
+    var projCount = ((entity.projects || []).length || 0);
+    var interactionCount = ((entity.interactions || []).length || 0);
+    var extras = [];
+    if (projCount) extras.push(projCount + ' project' + (projCount === 1 ? '' : 's'));
+    if (interactionCount) extras.push(interactionCount + ' activity' + (interactionCount === 1 ? '' : ' entries'));
+    if (base && extras.length) return base + ' · ' + extras.join(' · ');
+    if (base) return base;
+    if (extras.length) return extras.join(' · ');
+    return 'No summary yet.';
+  }
+  if (kind === 'company') {
+    var parts = [];
+    if (entity.company_type && entity.company_type !== 'other') parts.push(entity.company_type);
+    if (entity.industry) parts.push(entity.industry);
+    if (entity.country) parts.push(entity.country);
+    var base = parts.join(' · ');
+    var contactCount = ((entity.contacts || []).length || 0);
+    var interactionCount = ((entity.interactions || []).length || 0);
+    var extras = [];
+    if (contactCount) extras.push(contactCount + ' contact' + (contactCount === 1 ? '' : 's'));
+    if (interactionCount) extras.push(interactionCount + ' activity' + (interactionCount === 1 ? '' : ' entries'));
+    if (base && extras.length) return base + ' · ' + extras.join(' · ');
+    if (base) return base;
+    if (extras.length) return extras.join(' · ');
+    return 'No summary yet.';
+  }
+  if (kind === 'user') {
+    var parts = [];
+    if (entity.title) parts.push(entity.title);
+    if (entity.role) parts.push(entity.role);
+    var base = parts.join(' · ');
+    var projCount = ((entity.projects || []).length || entity._project_count || 0);
+    var activityCount = ((entity.activity || []).length || 0);
+    var extras = [];
+    if (projCount) extras.push(projCount + ' project' + (projCount === 1 ? '' : 's'));
+    if (activityCount) extras.push(activityCount + ' activity' + (activityCount === 1 ? '' : ' entries'));
+    if (base && extras.length) return base + ' · ' + extras.join(' · ');
+    if (base) return base;
+    if (extras.length) return extras.join(' · ');
+    return 'No summary yet.';
+  }
+  return 'No summary yet.';
+}
+function _crmProfileAvatarMarkup(opts) {
+  opts = opts || {};
+  var size = opts.size || 44;
+  var photoUrl = String(opts.photo_url || '').trim();
+  var photo = String(opts.photo_path || '').trim();
+  var extraClass = opts.clickable ? ' clickable' : '';
+  var titleAttr = opts.title ? ' title="' + escHtml(opts.title) + '"' : '';
+  var clickAttr = opts.onclick ? ' onclick="' + String(opts.onclick).replace(/"/g, '&quot;') + '"' : '';
+  if (photoUrl) {
+    return '<div class="crm-profile-avatar' + extraClass + '" style="width:' + size + 'px;height:' + size + 'px"' + titleAttr + clickAttr + '><img src="' + escHtml(photoUrl) + '" alt="' + escHtml(opts.name || 'profile') + '"></div>';
+  }
+  if (photo) {
+    return '<div class="crm-profile-avatar' + extraClass + '" style="width:' + size + 'px;height:' + size + 'px"' + titleAttr + clickAttr + '><img src="/api/files/download?path=' + encodeURIComponent(photo) + '" alt="' + escHtml(opts.name || 'profile') + '"></div>';
+  }
+  if (opts.internal) {
+    return '<div class="crm-profile-avatar' + extraClass + '" style="width:' + size + 'px;height:' + size + 'px;padding:0;overflow:hidden"' + titleAttr + clickAttr + '>' + _personaAvatarMarkup({ name: opts.name || 'Me', appearance_style: 'minecraft' }, size) + '</div>';
+  }
+  var initials = avatarInitials(opts.name || '?');
+  return '<div class="crm-profile-avatar' + extraClass + '" style="width:' + size + 'px;height:' + size + 'px"' + titleAttr + clickAttr + '>' + escHtml(initials) + '</div>';
+}
+function _crmSlug(text) {
+  return String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'record';
+}
+function _crmFileBase(kind, entity) {
+  var me = window.currentUser;
+  var user = me ? me.username : 'default';
+  var name = kind === 'company'
+    ? (entity.name || '')
+    : (kind === 'user'
+      ? (entity.display_name || entity.username || '')
+      : [entity.first_name || '', entity.last_name || ''].join(' ').trim());
+  var scope = kind === 'company' ? 'companies' : (kind === 'user' ? 'users' : 'contacts');
+  return '_files/' + user + '/people/' + scope + '/' + String(entity.id) + '-' + _crmSlug(name);
+}
+async function _crmLoadFilePane(kind, entity) {
+  var listEl = document.getElementById('crm-files-list');
+  var dropEl = document.getElementById('crm-files-drop');
+  if (!listEl) return;
+  var basePath = _crmFileBase(kind, entity);
+  listEl.innerHTML = '<div class="loading-indicator" style="padding:18px">Loading files...</div>';
+  if (dropEl) {
+    dropEl.classList.remove('active');
+    _setupDropZone(dropEl, async function(files) {
+      dropEl.classList.add('active');
+      await _crmUploadFiles(kind, entity, files);
+      setTimeout(function() { dropEl.classList.remove('active'); }, 180);
+    });
+  }
+  try {
+    var data = await fetch('/api/files/list?path=' + encodeURIComponent(basePath), {credentials:'same-origin'}).then(function(r) { return r.json(); });
+    var items = (data && data.ok && data.items) ? data.items : [];
+    if (!items.length) {
+      listEl.innerHTML = '<div class="crm-files-empty">No files yet. Drop files here or use Upload.</div>';
+      return;
+    }
+    var html = _fmColHeader();
+    _fmSortItems(items).forEach(function(f) {
+      html += _fmRow(f);
+    });
+    html += _fmStatusBar(items);
+    listEl.innerHTML = html;
+  } catch(e) {
+    listEl.innerHTML = '<div class="crm-files-empty">Failed to load files.</div>';
+  }
+}
+async function _crmUploadFiles(kind, entity, files) {
+  var basePath = _crmFileBase(kind, entity);
+  var uploaded = 0;
+  for (var i = 0; i < files.length; i++) {
+    var r = await _uploadToPath(files[i], basePath);
+    if (r && r.ok) {
+      var sz = files[i].size > 1048576 ? (files[i].size/1048576).toFixed(1)+'MB' : (files[i].size/1024).toFixed(0)+'KB';
+      if (kind !== 'user') {
+        var payload = {action:'interactions.create', interaction_type:'note', body:'📎 File attached: ' + files[i].name + ' (' + sz + ')'};
+        if (kind === 'company') payload.company_id = entity.id;
+        else payload.contact_id = entity.id;
+        await api('/api/workspace/crm', payload);
+      }
+      uploaded++;
+    }
+  }
+  if (uploaded) {
+    toast(uploaded + ' file(s) attached', 'ok');
+    if (kind === 'company') _crmOpenCompany(entity.id);
+    else if (kind === 'user') _crmOpenInternalUser(entity.username || entity.id);
+    else _crmOpenContact(entity.id);
+  } else {
+    toast('Upload failed', 'err');
+  }
+}
+function _crmRefreshDirectorySoon() {
+  setTimeout(function() {
+    try { _crmLoadDirectory(); } catch(e) {}
+  }, 0);
+}
+function _crmTriggerContactPhotoUpload() {
+  var inp = document.getElementById('crm-contact-photo-input');
+  if (inp) inp.click();
+}
+async function _crmHandleContactPhotoUpload(contactId, file) {
+  if (!contactId || !file) return;
+  var ext = '';
+  var m = String(file.name || '').match(/(\.[A-Za-z0-9]+)$/);
+  if (m) ext = m[1].toLowerCase();
+  var basePath = '_files/' + (currentUser && currentUser.username ? currentUser.username : 'default') + '/people/contacts/' + String(contactId) + '/profile';
+  var filename = 'photo-' + Date.now() + (ext || '.png');
+  var uploaded = await _uploadToPath(file, basePath);
+  if (!uploaded || !uploaded.ok) {
+    toast((uploaded && uploaded.error) || 'Upload failed', 'err');
+    return;
+  }
+  var storedPath = basePath + '/' + filename;
+  var moved = await api('/api/files/rename', { path: basePath + '/' + file.name, name: filename });
+  if (moved && moved.ok) storedPath = basePath + '/' + filename;
+  else storedPath = basePath + '/' + file.name;
+  var r = await api('/api/workspace/crm', { action:'contacts.update', id:contactId, photo_path:storedPath });
+  if (r && r.ok) {
+    toast('Photo updated', 'ok');
+    _crmRefreshDirectorySoon();
+    _crmOpenContact(contactId);
+  } else {
+    toast((r && r.error) || 'Failed', 'err');
+  }
+}
 function _crmInlineEdit(el) {
   var valEl = el.querySelector('.crm-detail-field-value');
-  if (!valEl || valEl.querySelector('input') || valEl.querySelector('select')) return;
-  var contactId = parseInt(el.dataset.cid);
+  if (!valEl || valEl.querySelector('input') || valEl.querySelector('select') || valEl.querySelector('.crm-inline-choice') || valEl.querySelector('.crm-inline-menu')) return;
+  var contactId = String(el.dataset.cid || '').trim();
   var field = el.dataset.field;
   var current = valEl.textContent.trim();
   if (current === '-') current = '';
   var isCompany = _crmDetailType === 'company';
-  var apiAction = isCompany ? 'companies.update' : 'contacts.update';
-  // Select dropdown for type fields
-  if (field === 'contact_type' || field === 'company_type') {
-    var sel = document.createElement('select');
-    sel.style.cssText = 'width:100%;padding:2px 6px;border:1px solid var(--accent);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;outline:none';
-    var opts = field === 'contact_type' ? ['client','collaborator','partner','vendor','stakeholder','lead','other'] : ['client','partner','vendor','agency','other'];
-    opts.forEach(function(o) { var op = document.createElement('option'); op.value = o; op.textContent = o; if (o === current) op.selected = true; sel.appendChild(op); });
-    valEl.textContent = ''; valEl.appendChild(sel); sel.focus();
-    sel.addEventListener('change', async function() {
-      var newVal = sel.value;
-      var payload = {action:apiAction, id:contactId};
-      payload[field] = newVal;
+  var isUser = _crmDetailType === 'user';
+  var apiAction = isUser ? 'update_profile' : (isCompany ? 'companies.update' : 'contacts.update');
+  if (field === 'company_name' && !isCompany && !isUser) {
+    var wrap = document.createElement('div');
+    wrap.style.width = '100%';
+    var trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'crm-inline-choice';
+    trigger.innerHTML = '<span>' + escHtml(current || 'Choose company…') + '</span><span class="crm-inline-choice-caret">▾</span>';
+    trigger.onclick = function(ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    };
+    var menu = document.createElement('div');
+    menu.className = 'crm-inline-menu';
+    var search = document.createElement('input');
+    search.type = 'text';
+    search.className = 'crm-inline-search';
+    search.placeholder = 'Search companies...';
+    search.value = current;
+    var list = document.createElement('div');
+    var closed = false;
+    var blurTimer = null;
+    async function chooseCompany(name) {
+      if (closed) return;
+      closed = true;
+      var payload = {action:'contacts.update', id:contactId, company_name:name || ''};
       var r = await api('/api/workspace/crm', payload);
-      if (r && r.ok) { toast('Updated', 'ok'); if (!isCompany) _crmOpenContact(contactId); else _crmOpenCompany(contactId); }
+      if (r && r.ok) {
+        toast('Updated', 'ok');
+        _crmRefreshDirectorySoon();
+        _crmOpenContact(contactId);
+        return;
+      }
+      valEl.innerHTML = current ? escHtml(current) : '<span style="color:var(--text3)">-</span>';
+      toast((r && r.error) || 'Failed', 'err');
+    }
+    async function renderCompanies(query) {
+      var q = String(query || '').trim();
+      var r = await api('/api/workspace/crm', {action:'companies.list', search:q, status:'active', limit:12});
+      if (closed) return;
+      var companies = (r && r.ok && Array.isArray(r.companies)) ? r.companies : [];
+      list.innerHTML = '';
+      var noneBtn = document.createElement('button');
+      noneBtn.type = 'button';
+      noneBtn.className = 'crm-inline-option' + (!current ? ' active' : '');
+      noneBtn.innerHTML = '<span>No company</span>' + (!current ? '<span class="crm-inline-option-check">✓</span>' : '');
+      noneBtn.onmousedown = function(ev) { ev.preventDefault(); };
+      noneBtn.onclick = function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        chooseCompany('');
+      };
+      list.appendChild(noneBtn);
+      var exact = false;
+      companies.forEach(function(c) {
+        var name = String(c.name || '').trim();
+        if (!name) return;
+        if (q && name.toLowerCase() === q.toLowerCase()) exact = true;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'crm-inline-option' + (name === current ? ' active' : '');
+        btn.innerHTML = '<span>' + escHtml(name) + '</span>' + (name === current ? '<span class="crm-inline-option-check">✓</span>' : '');
+        btn.onmousedown = function(ev) { ev.preventDefault(); };
+        btn.onclick = function(ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          chooseCompany(name);
+        };
+        list.appendChild(btn);
+      });
+      if (q && !exact) {
+        var createBtn = document.createElement('button');
+        createBtn.type = 'button';
+        createBtn.className = 'crm-inline-option';
+        createBtn.innerHTML = '<span>Create "' + escHtml(q) + '"</span>';
+        createBtn.onmousedown = function(ev) { ev.preventDefault(); };
+        createBtn.onclick = function(ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          chooseCompany(q);
+        };
+        list.appendChild(createBtn);
+      }
+      if (!list.children.length) {
+        list.innerHTML = '<div class="crm-inline-empty">No companies found.</div>';
+      }
+    }
+    search.addEventListener('input', function() { renderCompanies(search.value); });
+    search.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closed = true;
+        valEl.innerHTML = current ? escHtml(current) : '<span style="color:var(--text3)">-</span>';
+      }
     });
-    sel.addEventListener('blur', function() { valEl.innerHTML = current ? escHtml(current) : '<span style="color:var(--text3)">-</span>'; });
+    search.addEventListener('blur', function() {
+      blurTimer = setTimeout(function() {
+        if (closed) return;
+        valEl.innerHTML = current ? escHtml(current) : '<span style="color:var(--text3)">-</span>';
+      }, 120);
+    });
+    menu.appendChild(search);
+    menu.appendChild(list);
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    valEl.textContent = '';
+    valEl.appendChild(wrap);
+    renderCompanies(current);
+    setTimeout(function() { search.focus(); search.select(); }, 0);
+    return;
+  }
+  // Select dropdown for enum-like fields
+  if (field === 'contact_type' || field === 'company_type' || field === 'honorific' || field === 'prefix') {
+    var opts = field === 'contact_type'
+      ? ['client','collaborator','partner','vendor','stakeholder','lead','other']
+      : (field === 'company_type'
+        ? ['client','partner','vendor','agency','other']
+        : ['', 'Mr', 'Ms', 'Mrs', 'Dr', 'Mx', 'Prof']);
+    var selected = current;
+    var wrap = document.createElement('div');
+    wrap.style.width = '100%';
+    var trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'crm-inline-choice';
+    trigger.innerHTML = '<span>' + escHtml(selected || 'Choose…') + '</span><span class="crm-inline-choice-caret">▾</span>';
+    trigger.onclick = function(ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    };
+    var menu = document.createElement('div');
+    menu.className = 'crm-inline-menu';
+    var closed = false;
+    async function choose(newVal) {
+      if (closed) return;
+      closed = true;
+      var payload = isUser ? {action:apiAction, username:contactId} : {action:apiAction, id:contactId};
+      payload[field] = newVal;
+      var r = await api(isUser ? '/api/workspace/people' : '/api/workspace/crm', payload);
+      if (r && r.ok) {
+        toast('Updated', 'ok');
+        _crmRefreshDirectorySoon();
+        if (isUser) _crmOpenInternalUser(contactId); else if (!isCompany) _crmOpenContact(contactId); else _crmOpenCompany(contactId);
+        return;
+      }
+      valEl.innerHTML = current ? escHtml(current) : '<span style="color:var(--text3)">-</span>';
+    }
+    opts.forEach(function(o) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'crm-inline-option' + (o === selected ? ' active' : '');
+      btn.innerHTML = '<span>' + escHtml(o || 'None') + '</span>' + (o === selected ? '<span class="crm-inline-option-check">✓</span>' : '');
+      btn.onclick = function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        choose(o);
+      };
+      menu.appendChild(btn);
+    });
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    valEl.textContent = '';
+    valEl.appendChild(wrap);
     return;
   }
   var inp = document.createElement('input');
@@ -21323,7 +23829,7 @@ function _crmInlineEdit(el) {
   inp.addEventListener('blur', async function() {
     var newVal = inp.value.trim();
     if (newVal !== current) {
-      var payload = {action:apiAction, id:contactId};
+      var payload = isUser ? {action:apiAction, username:contactId} : {action:apiAction, id:contactId};
       if (field === 'tags_json') {
         payload.tags = newVal ? newVal.split(',').map(function(t) { return t.trim(); }).filter(Boolean) : [];
       } else if (field.startsWith('social.')) {
@@ -21334,8 +23840,11 @@ function _crmInlineEdit(el) {
       } else {
         payload[field] = newVal;
       }
-      var r = await api('/api/workspace/crm', payload);
-      if (r && r.ok) toast('Updated', 'ok');
+      var r = await api(isUser ? '/api/workspace/people' : '/api/workspace/crm', payload);
+      if (r && r.ok) {
+        toast('Updated', 'ok');
+        _crmRefreshDirectorySoon();
+      }
     }
     valEl.innerHTML = newVal ? escHtml(newVal) : '<span style="color:var(--text3)">-</span>';
   });
@@ -21343,6 +23852,136 @@ function _crmInlineEdit(el) {
     if (e.key === 'Enter') inp.blur();
     if (e.key === 'Escape') { valEl.innerHTML = current ? escHtml(current) : '<span style="color:var(--text3)">-</span>'; }
   });
+}
+function _crmInlineSummaryEdit(el) {
+  if (!el || el.querySelector('textarea')) return;
+  var current = String(el.textContent || '').trim();
+  var entityId = String(el.dataset.cid || '').trim();
+  var field = String(el.dataset.field || 'summary').trim();
+  var isCompany = _crmDetailType === 'company';
+  var isUser = _crmDetailType === 'user';
+  var ta = document.createElement('textarea');
+  ta.className = 'settings-input';
+  ta.value = current;
+  ta.rows = 5;
+  ta.style.width = '100%';
+  ta.style.minHeight = '110px';
+  ta.style.resize = 'vertical';
+  el.innerHTML = '';
+  el.appendChild(ta);
+  ta.focus();
+  ta.select();
+  async function save() {
+    var val = String(ta.value || '').trim();
+    var payload = isUser ? {action:'update_profile', username:entityId} : {action:(isCompany ? 'companies.update' : 'contacts.update'), id:entityId};
+    payload[field] = val;
+    var r = await api(isUser ? '/api/workspace/people' : '/api/workspace/crm', payload);
+    if (r && r.ok) {
+      _crmRefreshDirectorySoon();
+      if (isUser) _crmOpenInternalUser(entityId);
+      else if (isCompany) _crmOpenCompany(entityId);
+      else _crmOpenContact(entityId);
+    } else {
+      toast((r && r.error) || 'Failed', 'err');
+    }
+  }
+  ta.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (isUser) _crmOpenInternalUser(entityId);
+      else if (isCompany) _crmOpenCompany(entityId);
+      else _crmOpenContact(entityId);
+      return;
+    }
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      ta.blur();
+    }
+  });
+  ta.addEventListener('blur', save);
+}
+function _crmHeaderNameMarkup(kind, entityId, value) {
+  var safeKind = String(kind || '').replace(/'/g, "\\'");
+  var safeId = String(entityId || '').replace(/'/g, "\\'");
+  return '<div class="crm-header-name" data-kind="' + escHtml(kind) + '" data-entity-id="' + escHtml(entityId) + '" onclick="_crmInlineHeaderEdit(this)" title="Click to edit">' + escHtml(value || '') + '</div>';
+}
+async function _crmInlineHeaderEdit(el) {
+  if (!el || el.querySelector('input')) return;
+  var kind = String(el.dataset.kind || '').trim();
+  var entityId = String(el.dataset.entityId || '').trim();
+  var current = String(el.textContent || '').trim();
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.value = current;
+  input.className = 'settings-input';
+  input.style.width = '100%';
+  input.style.minWidth = '0';
+  input.style.fontSize = '16px';
+  input.style.lineHeight = '1.3';
+  input.style.fontWeight = '600';
+  input.style.padding = '0';
+  input.style.border = '0';
+  input.style.borderBottom = '1px solid var(--accent)';
+  input.style.borderRadius = '0';
+  input.style.background = 'transparent';
+  input.style.color = 'var(--text)';
+  input.style.boxShadow = 'none';
+  el.innerHTML = '';
+  el.appendChild(input);
+  input.focus();
+  input.select();
+  function restore(text) {
+    el.textContent = text || current || '';
+  }
+  async function save() {
+    var next = String(input.value || '').trim();
+    if (!next) { restore(current); return; }
+    if (next === current) { restore(current); return; }
+    var payload = null;
+    var endpoint = '';
+    if (kind === 'contact') {
+      var parts = next.split(/\s+/).filter(Boolean);
+      payload = {
+        action: 'contacts.update',
+        id: Number(entityId || 0),
+        first_name: parts.shift() || next,
+        last_name: parts.join(' ')
+      };
+      endpoint = '/api/workspace/crm';
+    } else if (kind === 'company') {
+      payload = { action: 'companies.update', id: Number(entityId || 0), name: next };
+      endpoint = '/api/workspace/crm';
+    } else if (kind === 'user') {
+      payload = { action: 'update_profile', username: entityId, full_name: next, display_name: next };
+      endpoint = '/api/workspace/people';
+    } else {
+      restore(current);
+      return;
+    }
+    var r = await api(endpoint, payload);
+    if (r && r.ok) {
+      toast('Updated', 'ok');
+      _crmRefreshDirectorySoon();
+      if (kind === 'contact') _crmOpenContact(Number(entityId || 0));
+      else if (kind === 'company') _crmOpenCompany(Number(entityId || 0));
+      else _crmOpenInternalUser(entityId);
+      return;
+    }
+    restore(current);
+    toast((r && r.error) || 'Failed', 'err');
+  }
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      input.blur();
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      restore(current);
+    }
+  });
+  input.addEventListener('blur', save);
 }
 async function _crmOpenContact(id) {
   _crmDetailType = 'contact'; _crmDetailId = id;
@@ -21354,45 +23993,45 @@ async function _crmOpenContact(id) {
   var tags = []; try { tags = JSON.parse(c.tags_json || '[]'); } catch(e) {}
   document.getElementById('people-module').classList.add('detail-open');
   var dv = document.getElementById('people-detail-view');
-  var isAdmin = currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin');
+  if (dv) dv.dataset.socialJson = JSON.stringify(social || {});
+  var canManage = currentUser && ['operator','admin','platform_admin'].indexOf(currentUser.role) >= 0;
   var h = '';
-  // Header: back + name + actions
-  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">';
-  h += '<button class="btn btn-ghost" onclick="_crmCloseDetail()" style="font-size:12px;padding:4px 8px">&larr;</button>';
-  h += '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">';
-  h += '<div style="width:44px;height:44px;border-radius:50%;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:var(--text);flex-shrink:0">' + escHtml(avatarInitials(name)) + '</div>';
-  h += '<div style="min-width:0">';
-  h += '<div style="font-size:16px;font-weight:600;color:var(--text)">' + escHtml(name) + '</div>';
+  var backBtn = document.getElementById('people-module-back'); if (backBtn) backBtn.style.display = 'inline-flex';
+  // Header: name + actions
+  h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">';
+  h += '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">';
+  h += _crmProfileAvatarMarkup({ name: name, photo_path: c.photo_path || '', size: 44, clickable: true, title: 'Click to change photo', onclick: '_crmTriggerContactPhotoUpload()' });
+  h += '<div style="min-width:0;flex:1">';
+  h += _crmHeaderNameMarkup('contact', c.id, name);
   var subtitle = [];
   if (c.contact_type && c.contact_type !== 'other') subtitle.push(c.contact_type);
   if (c.title) subtitle.push(c.title);
   if (c.company_name) subtitle.push('at ' + c.company_name);
   if (subtitle.length) h += '<div style="font-size:11px;color:var(--text3);margin-top:1px">' + escHtml(subtitle.join(' \u00b7 ')) + '</div>';
   h += '</div></div>';
-  if (isAdmin && c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveContact(' + c.id + ')" style="font-size:11px;color:var(--text3)">Archive</button>';
+  if (canManage && c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveContact(' + c.id + ')" style="font-size:11px;color:var(--text3)">Archive</button><button class="btn btn-ghost" onclick="_crmDeleteContact(' + c.id + ')" style="font-size:11px;color:#ef4444">Delete</button>';
   h += '</div>';
-  // Two-column dense field grid
+  h += '<div class="crm-detail-layout">';
+  h += '<div>';
+  h += _crmEditableSummaryBox((c.summary || '').trim(), c.id, 'summary', _crmAutoSummary('contact', c));
   h += '<div class="crm-detail-grid">';
-  // Left column: identity
   h += '<div class="crm-detail-col">';
-  h += _crmEditableField('Title', c.title || '', c.id, 'title');
+  h += _crmEditableField('Title', c.honorific || '', c.id, 'honorific');
+  h += _crmEditableField('Job Title', c.title || '', c.id, 'title');
   h += _crmEditableField('Company', c.company_name || '', c.id, 'company_name');
   h += _crmEditableField('Type', c.contact_type || '', c.id, 'contact_type');
   h += _crmEditableField('Tags', tags.join(', '), c.id, 'tags_json');
   h += _crmEditableField('Status', c.status || 'active', c.id, 'status');
   h += '</div>';
-  // Right column: contact info
   h += '<div class="crm-detail-col">';
   h += _crmEditableField('Email', c.email || '', c.id, 'email');
   h += _crmEditableField('Phone', c.phone || '', c.id, 'phone');
-  // Social — always show all fields
-  var socialFields = {linkedin:'LinkedIn', twitter:'Twitter', telegram:'Telegram', whatsapp:'WhatsApp', website:'Website'};
+  var socialFields = {linkedin:'LinkedIn', x:'X', whatsapp:'WhatsApp', instagram:'Instagram', facebook:'Facebook', website:'Website'};
   Object.keys(socialFields).forEach(function(k) {
     h += _crmEditableField(socialFields[k], social[k] || '', c.id, 'social.' + k);
   });
   h += '</div>';
-  h += '</div>'; // end grid
-  // Projects section (chips, not a boring list)
+  h += '</div>';
   if (c.projects && c.projects.length) {
     h += '<div class="crm-section-hdr">Projects <span class="count">(' + c.projects.length + ')</span></div>';
     h += '<div style="display:flex;flex-wrap:wrap;gap:0">';
@@ -21405,46 +24044,22 @@ async function _crmOpenContact(id) {
     });
     h += '</div>';
   }
-  // Notes — auto-save
-  h += '<div class="crm-section-hdr">Notes</div>';
-  h += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Add notes..." style="min-height:60px">' + escHtml(c.notes || '') + '</textarea>';
-  // Quick interaction add
   h += '<div class="crm-section-hdr">Activity</div>';
   h += '<div class="crm-quick-add">';
-  h += '<select id="crm-interaction-type"><option value="note">Note</option><option value="call">Call</option><option value="email">Email</option><option value="meeting">Meeting</option><option value="task">Task</option></select>';
-  h += '<input id="crm-interaction-body" placeholder="Log an interaction..." onkeydown="if(event.key===\'Enter\')_crmQuickInteraction(' + c.id + ',\'contact\')">';
+  h += '<input id="crm-interaction-body" placeholder="Add activity..." onkeydown="if(event.key===\'Enter\')_crmQuickInteraction(' + c.id + ',\'contact\')">';
   h += '<button onclick="_crmQuickInteraction(' + c.id + ',\'contact\')">Add</button>';
   h += '</div>';
-  // Timeline
   h += _crmRenderTimeline(c.interactions || []);
+  h += '</div>';
+  h += '<div class="crm-files-pane"><div class="crm-files-head"><div class="crm-files-title">Files</div><div class="crm-files-actions"><label class="btn btn-ghost" style="font-size:11px;cursor:pointer">Upload<input id="crm-file-upload-input" type="file" multiple style="display:none"></label></div></div><div class="crm-files-body"><div class="crm-files-drop" id="crm-files-drop">Drop files for this person here</div><div id="crm-files-list"></div></div></div>';
+  h += '<input id="crm-contact-photo-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none">';
+  h += '</div>';
   dv.innerHTML = h;
-  // Notes auto-save
-  var notesEl = document.getElementById('crm-detail-notes');
-  if (notesEl) {
-    var _noteTimer = null;
-    notesEl.addEventListener('input', function() {
-      clearTimeout(_noteTimer);
-      _noteTimer = setTimeout(function() {
-        api('/api/workspace/crm', {action:'contacts.update', id:c.id, notes:notesEl.value});
-      }, 1000);
-    });
-  }
-  // v0.33.19 — Drop zone: drag files into contact
-  _setupDropZone(dv, async function(files) {
-    var me = window.currentUser;
-    var basePath = '_files/' + (me ? me.username : 'default');
-    var uploaded = 0;
-    for (var i = 0; i < files.length; i++) {
-      var r = await _uploadToPath(files[i], basePath);
-      if (r && r.ok) {
-        var sz = files[i].size > 1048576 ? (files[i].size/1048576).toFixed(1)+'MB' : (files[i].size/1024).toFixed(0)+'KB';
-        await api('/api/workspace/crm', {action:'interactions.create', contact_id:c.id, interaction_type:'note', body:'\u{1F4CE} File attached: '+files[i].name+' ('+sz+')'});
-        uploaded++;
-      }
-    }
-    if (uploaded) { toast(uploaded + ' file(s) attached', 'ok'); _crmOpenContact(c.id); }
-    else toast('Upload failed', 'err');
-  });
+  var contactUploadInput = document.getElementById('crm-file-upload-input');
+  if (contactUploadInput) contactUploadInput.onchange = function() { _crmUploadFiles('contact', c, this.files); this.value = ''; };
+  var contactPhotoInput = document.getElementById('crm-contact-photo-input');
+  if (contactPhotoInput) contactPhotoInput.onchange = function() { var file = this.files && this.files[0]; this.value = ''; _crmHandleContactPhotoUpload(c.id, file); };
+  _crmLoadFilePane('contact', c);
 }
 
 async function _crmOpenCompany(id) {
@@ -21454,24 +24069,26 @@ async function _crmOpenCompany(id) {
   var c = d.company;
   document.getElementById('people-module').classList.add('detail-open');
   var dv = document.getElementById('people-detail-view');
-  var isAdmin = currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin');
+  var canManage = currentUser && ['operator','admin','platform_admin'].indexOf(currentUser.role) >= 0;
   var h = '';
-  // Header: back + name + actions
-  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">';
-  h += '<button class="btn btn-ghost" onclick="_crmCloseDetail()" style="font-size:12px;padding:4px 8px">&larr;</button>';
-  h += '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">';
-  h += '<div style="width:44px;height:44px;border-radius:10px;background:var(--raised);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:var(--text);flex-shrink:0">' + escHtml(avatarInitials(c.name)) + '</div>';
-  h += '<div style="min-width:0">';
-  h += '<div style="font-size:16px;font-weight:600;color:var(--text)">' + escHtml(c.name) + '</div>';
+  var backBtn = document.getElementById('people-module-back'); if (backBtn) backBtn.style.display = 'inline-flex';
+  // Header: name + actions
+  h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">';
+  h += '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">';
+  h += _crmProfileAvatarMarkup({ name: c.name, size: 44 });
+  h += '<div style="min-width:0;flex:1">';
+  h += _crmHeaderNameMarkup('company', c.id, c.name);
   var subtitle = [];
   if (c.company_type && c.company_type !== 'other') subtitle.push(c.company_type);
   if (c.industry) subtitle.push(c.industry);
   if (c.country) subtitle.push(c.country);
   if (subtitle.length) h += '<div style="font-size:11px;color:var(--text3);margin-top:1px">' + escHtml(subtitle.join(' \u00b7 ')) + '</div>';
   h += '</div></div>';
-  if (isAdmin && c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveCompany(' + c.id + ')" style="font-size:11px;color:var(--text3)">Archive</button>';
+  if (canManage && c.status === 'active') h += '<button class="btn btn-ghost" onclick="_crmArchiveCompany(' + c.id + ')" style="font-size:11px;color:var(--text3)">Archive</button><button class="btn btn-ghost" onclick="_crmDeleteCompany(' + c.id + ')" style="font-size:11px;color:#ef4444">Delete</button>';
   h += '</div>';
-  // Two-column dense field grid
+  h += '<div class="crm-detail-layout">';
+  h += '<div>';
+  h += _crmEditableSummaryBox((c.summary || '').trim(), c.id, 'summary', _crmAutoSummary('company', c));
   h += '<div class="crm-detail-grid">';
   h += '<div class="crm-detail-col">';
   h += _crmEditableField('Industry', c.industry || '', c.id, 'industry');
@@ -21498,68 +24115,135 @@ async function _crmOpenCompany(id) {
     });
     h += '</div>';
   }
-  // Notes
-  h += '<div class="crm-section-hdr">Notes</div>';
-  h += '<textarea class="crm-detail-notes" id="crm-detail-notes" placeholder="Add notes..." style="min-height:60px">' + escHtml(c.notes || '') + '</textarea>';
-  // Quick interaction add
   h += '<div class="crm-section-hdr">Activity</div>';
   h += '<div class="crm-quick-add">';
-  h += '<select id="crm-interaction-type"><option value="note">Note</option><option value="call">Call</option><option value="email">Email</option><option value="meeting">Meeting</option><option value="task">Task</option></select>';
-  h += '<input id="crm-interaction-body" placeholder="Log an interaction..." onkeydown="if(event.key===\'Enter\')_crmQuickInteraction(' + c.id + ',\'company\')">';
+  h += '<input id="crm-interaction-body" placeholder="Add activity..." onkeydown="if(event.key===\'Enter\')_crmQuickInteraction(' + c.id + ',\'company\')">';
   h += '<button onclick="_crmQuickInteraction(' + c.id + ',\'company\')">Add</button>';
   h += '</div>';
   h += _crmRenderTimeline(c.interactions || []);
+  h += '</div>';
+  h += '<div class="crm-files-pane"><div class="crm-files-head"><div class="crm-files-title">Files</div><div class="crm-files-actions"><label class="btn btn-ghost" style="font-size:11px;cursor:pointer">Upload<input id="crm-file-upload-input" type="file" multiple style="display:none"></label></div></div><div class="crm-files-body"><div class="crm-files-drop" id="crm-files-drop">Drop files for this company here</div><div id="crm-files-list"></div></div></div>';
+  h += '</div>';
   dv.innerHTML = h;
-  var notesEl = document.getElementById('crm-detail-notes');
-  if (notesEl) {
-    var _noteTimer = null;
-    notesEl.addEventListener('input', function() {
-      clearTimeout(_noteTimer);
-      _noteTimer = setTimeout(function() {
-        api('/api/workspace/crm', {action:'companies.update', id:c.id, notes:notesEl.value});
-      }, 1000);
-    });
-  }
-  // v0.33.20 — Drop zone: drag files into company
-  _setupDropZone(dv, async function(files) {
-    var me = window.currentUser;
-    var basePath = '_files/' + (me ? me.username : 'default');
-    var uploaded = 0;
-    for (var i = 0; i < files.length; i++) {
-      var r = await _uploadToPath(files[i], basePath);
-      if (r && r.ok) {
-        var sz = files[i].size > 1048576 ? (files[i].size/1048576).toFixed(1)+'MB' : (files[i].size/1024).toFixed(0)+'KB';
-        await api('/api/workspace/crm', {action:'interactions.create', company_id:c.id, interaction_type:'note', body:'\u{1F4CE} File attached: '+files[i].name+' ('+sz+')'});
-        uploaded++;
-      }
-    }
-    if (uploaded) { toast(uploaded + ' file(s) attached', 'ok'); _crmOpenCompany(c.id); }
-    else toast('Upload failed', 'err');
+  var companyUploadInput = document.getElementById('crm-file-upload-input');
+  if (companyUploadInput) companyUploadInput.onchange = function() { _crmUploadFiles('company', c, this.files); this.value = ''; };
+  _crmLoadFilePane('company', c);
+}
+
+async function _crmOpenInternalUser(username) {
+  var uname = String(username || '').trim();
+  if (!uname) return;
+  var bundle = await Promise.all([
+    api('/api/workspace/people', {action:'get', username:uname}).catch(function(){ return null; }),
+    api('/api/projects').catch(function(){ return { projects: [] }; })
+  ]);
+  var d = bundle[0];
+  var projData = bundle[1] || { projects: [] };
+  if (!d || !d.ok) { toast('Could not load profile', 'err'); return; }
+  var u = d.user || null;
+  if (!u) { toast('Profile not found', 'err'); return; }
+  u.activity = Array.isArray(d.activity) ? d.activity : [];
+  var userProjects = ((projData && projData.projects) || []).filter(function(p) {
+    if (String(p.owner || '') === uname) return true;
+    var collabs = p.collaborators || [];
+    return collabs.some(function(c) { return String(c.username || '') === uname; });
   });
+  _crmDetailType = 'user';
+  _crmDetailId = uname;
+  document.getElementById('people-module').classList.add('detail-open');
+  var backBtn = document.getElementById('people-module-back'); if (backBtn) backBtn.style.display = 'inline-flex';
+  var dv = document.getElementById('people-detail-view');
+  var joined = u.created_at ? new Date(u.created_at * 1000).toLocaleDateString('en-US', {year:'numeric', month:'short', day:'numeric'}) : '';
+  var social = {}; try { social = JSON.parse(u.social_json || '{}'); } catch(e) {}
+  u.projects = userProjects;
+  var h = '';
+  h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">';
+  h += '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">';
+  var _isMe = !!(currentUser && String(currentUser.username || '') === uname);
+  h += _crmProfileAvatarMarkup({ name: u.display_name || u.username || '?', internal: !_isMe, photo_url: _isMe ? ('/api/avatar?_=' + Date.now()) : '', size: 44, clickable: _isMe, title: _isMe ? 'Click to change photo' : '', onclick: _isMe ? 'triggerAvatarUpload()' : '' });
+  h += '<div style="min-width:0;flex:1">';
+  h += _crmHeaderNameMarkup('user', uname, u.display_name || u.full_name || u.username || 'Profile');
+  h += '<div style="font-size:11px;color:var(--text3);margin-top:1px">Me · ' + escHtml(u.role || 'operator') + '</div>';
+  h += '</div></div>';
+  h += '</div>';
+  h += '<div class="crm-detail-layout">';
+  h += '<div>';
+  h += _crmEditableSummaryBox((u.summary || '').trim(), uname, 'summary', _crmAutoSummary('user', u));
+  h += '<div class="crm-detail-grid">';
+  h += '<div class="crm-detail-col">';
+  h += _crmEditableField('Name', u.full_name || u.display_name || u.username || '', uname, 'full_name');
+  h += _crmEditableField('Display', u.display_name || u.username || '', uname, 'display_name');
+  h += _crmEditableField('Title', u.prefix || '', uname, 'prefix');
+  h += _crmEditableField('Job Title', u.title || '', uname, 'title');
+  h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Username</span><span class="crm-detail-field-value">' + escHtml(u.username || '-') + '</span></div>';
+  h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Role</span><span class="crm-detail-field-value">' + escHtml(u.role || 'operator') + '</span></div>';
+  h += '</div>';
+  h += '<div class="crm-detail-col">';
+  h += _crmEditableField('Email', u.email || '', uname, 'email');
+  h += _crmEditableField('Phone', u.phone || '', uname, 'phone');
+  h += _crmEditableField('LinkedIn', social.linkedin || '', uname, 'social.linkedin');
+  h += _crmEditableField('X', social.x || '', uname, 'social.x');
+  h += _crmEditableField('WhatsApp', social.whatsapp || '', uname, 'social.whatsapp');
+  h += _crmEditableField('Instagram', social.instagram || '', uname, 'social.instagram');
+  h += _crmEditableField('Facebook', social.facebook || '', uname, 'social.facebook');
+  h += _crmEditableField('Website', social.website || '', uname, 'social.website');
+  h += '<div class="crm-detail-field"><span class="crm-detail-field-label">Joined</span><span class="crm-detail-field-value">' + escHtml(joined || '-') + '</span></div>';
+  h += '</div>';
+  h += '</div>';
+  if (userProjects.length) {
+    h += '<div class="crm-section-hdr">Projects <span class="count">(' + userProjects.length + ')</span></div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:0">';
+    userProjects.forEach(function(p) {
+      h += '<div class="crm-project-chip" onclick="_projOpen(\'' + escHtml(p.id || '').replace(/'/g, "\\'") + '\');switchModule(\'projects\')">';
+      h += '<span>' + escHtml(p.name || p.id || '?') + '</span>';
+      if (String(p.owner || '') === uname) h += '<span class="chip-role">Owner</span>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  h += '<div class="crm-section-hdr">Activity</div>';
+  h += '<div class="crm-quick-add">';
+  h += '<input id="crm-interaction-body" placeholder="Add activity..." onkeydown="if(event.key===\'Enter\')_crmQuickInteraction(\'' + escHtml(uname).replace(/'/g, "\\'") + '\',\'user\')">';
+  h += '<button onclick="_crmQuickInteraction(\'' + escHtml(uname).replace(/'/g, "\\'") + '\',\'user\')">Add</button>';
+  h += '</div>';
+  h += _crmRenderTimeline(u.activity || []);
+  h += '<div class="crm-section-hdr">Context</div>';
+  h += '<div style="font-size:12px;line-height:1.6;color:var(--text2)">Files on this profile are where Porter should learn about ' + (_isMe ? 'me' : 'this person') + ': bio, preferences, priorities, contacts, and anything else he should carry into the workspace.</div>';
+  h += '</div>';
+  h += '<div class="crm-files-pane"><div class="crm-files-head"><div class="crm-files-title">Files</div><div class="crm-files-actions"><label class="btn btn-ghost" style="font-size:11px;cursor:pointer">Upload<input id="crm-file-upload-input" type="file" multiple style="display:none"></label></div></div><div class="crm-files-body"><div class="crm-files-drop" id="crm-files-drop">Drop files for this profile here</div><div id="crm-files-list"></div></div></div>';
+  h += '</div>';
+  dv.innerHTML = h;
+  dv.dataset.socialJson = JSON.stringify(social || {});
+  var entity = { id: u.username || uname, username: u.username || uname, display_name: u.display_name || u.username || uname };
+  var uploadInput = document.getElementById('crm-file-upload-input');
+  if (uploadInput) uploadInput.onchange = function() { _crmUploadFiles('user', entity, this.files); this.value = ''; };
+  _crmLoadFilePane('user', entity);
 }
 
 function _crmCloseDetail() {
   document.getElementById('people-module').classList.remove('detail-open');
+  var backBtn = document.getElementById('people-module-back'); if (backBtn) backBtn.style.display = 'none';
   _crmDetailType = null; _crmDetailId = null;
 }
 
 async function _crmQuickInteraction(entityId, entityType) {
-  var typeEl = document.getElementById('crm-interaction-type');
   var bodyEl = document.getElementById('crm-interaction-body');
-  if (!typeEl || !bodyEl) return;
-  var itype = typeEl.value;
+  if (!bodyEl) return;
   var body = bodyEl.value.trim();
   if (!body) { bodyEl.focus(); return; }
-  var payload = {action:'interactions.create', interaction_type:itype, body:body};
+  var payload = {action:'interactions.create', interaction_type:'note', body:body};
   if (entityType === 'contact') payload.contact_id = entityId;
-  else payload.company_id = entityId;
-  var r = await api('/api/workspace/crm', payload);
+  else if (entityType === 'company') payload.company_id = entityId;
+  var r = entityType === 'user'
+    ? await api('/api/workspace/people', {action:'activity.create', username:entityId, body:body})
+    : await api('/api/workspace/crm', payload);
   if (r && r.ok) {
     toast('Logged', 'ok');
     bodyEl.value = '';
     // Refresh the detail view
     if (entityType === 'contact') _crmOpenContact(entityId);
-    else _crmOpenCompany(entityId);
+    else if (entityType === 'company') _crmOpenCompany(entityId);
+    else _crmOpenInternalUser(entityId);
   } else {
     toast((r && r.error) || 'Failed', 'err');
   }
@@ -21569,29 +24253,134 @@ function _crmRenderTimeline(interactions) {
   if (!interactions.length) return '<div style="padding:12px 0;color:var(--text3);font-size:12px">No activity yet. Use the form above to log calls, notes, and meetings.</div>';
   var h = '<div class="crm-timeline">';
   interactions.forEach(function(i) {
-    var icon = _crmInteractionIcons[i.interaction_type] || '\u21BB';
+    var icon = '\u270E';
     var ts = i.created_at ? new Date(i.created_at * 1000).toLocaleDateString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
-    h += '<div class="crm-timeline-item">';
-    h += '<div class="crm-timeline-icon ' + escHtml(i.interaction_type) + '">' + icon + '</div>';
-    h += '<div class="crm-timeline-body"><div class="crm-timeline-text">' + escHtml(i.body) + '</div>';
-    h += '<div class="crm-timeline-meta">' + escHtml(i.interaction_type) + (i.created_by ? ' by ' + escHtml(i.created_by) : '') + ' · ' + escHtml(ts) + '</div></div></div>';
+    h += '<div class="crm-timeline-item editable" data-interaction-id="' + (i.id || 0) + '">';
+    h += '<div class="crm-timeline-icon update">' + icon + '</div>';
+    h += '<div class="crm-timeline-body"><div class="crm-timeline-text" onclick="_crmStartInlineInteractionEdit(' + (i.id || 0) + ', this)">' + escHtml(i.body) + '</div>';
+    h += '<div class="crm-timeline-meta"><span>' + (i.created_by ? 'by ' + escHtml(i.created_by) + ' · ' : '') + escHtml(ts) + '</span>';
+    h += '<div class="crm-timeline-actions"><button class="crm-timeline-action" onclick="event.stopPropagation();_crmStartInlineInteractionEdit(' + (i.id || 0) + ', this.parentNode.parentNode.parentNode.querySelector(\'.crm-timeline-text\'))">Edit</button><button class="crm-timeline-action danger" onclick="event.stopPropagation();_crmDeleteInteraction(' + (i.id || 0) + ')">Delete</button></div>';
+    h += '</div></div></div>';
   });
   h += '</div>';
   return h;
+}
+
+function _crmRenderAuditTimeline(entries) {
+  if (!entries || !entries.length) return '<div style="padding:12px 0;color:var(--text3);font-size:12px">No activity yet.</div>';
+  var h = '<div class="crm-timeline">';
+  entries.forEach(function(i) {
+    var action = String(i.action || '');
+    var icon = '\u21BB';
+    if (action.indexOf('auth.login') === 0) icon = '\u2713';
+    else if (action.indexOf('auth.logout') === 0) icon = '\u21AA';
+    else if (action.indexOf('crm.') === 0) icon = '\u270E';
+    else if (action.indexOf('task_') === 0 || action.indexOf('task.') === 0) icon = '\u25B6';
+    else if (action.indexOf('user.') === 0) icon = '\u{1F464}';
+    var ts = i.ts ? new Date(i.ts * 1000).toLocaleDateString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+    var label = action.replace(/\./g, ' ').replace(/_/g, ' ').trim();
+    h += '<div class="crm-timeline-item">';
+    h += '<div class="crm-timeline-icon update">' + icon + '</div>';
+    h += '<div class="crm-timeline-body"><div class="crm-timeline-text">' + escHtml(label) + '</div>';
+    h += '<div class="crm-timeline-meta"><span>' + escHtml(ts) + '</span></div></div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+function _crmRefreshCurrentDetail() {
+  if (_crmDetailType === 'contact') _crmOpenContact(_crmDetailId);
+  else if (_crmDetailType === 'company') _crmOpenCompany(_crmDetailId);
+  else if (_crmDetailType === 'user') _crmOpenInternalUser(_crmDetailId);
+}
+
+function _crmStartInlineInteractionEdit(id, textEl) {
+  if (!textEl || textEl.querySelector('textarea')) return;
+  var item = textEl.closest('.crm-timeline-item');
+  if (!item || item.querySelector('.crm-timeline-editbox')) return;
+  var current = String(textEl.textContent || '').trim();
+  var cancelled = false;
+  var box = document.createElement('textarea');
+  box.className = 'crm-timeline-editbox';
+  box.value = current;
+  var hint = document.createElement('div');
+  hint.className = 'crm-timeline-edithint';
+  hint.textContent = 'Enter to save · Shift+Enter for newline · Escape to cancel';
+  textEl.innerHTML = '';
+  textEl.appendChild(box);
+  textEl.appendChild(hint);
+  box.focus();
+  box.setSelectionRange(box.value.length, box.value.length);
+  async function save() {
+    var body = String(box.value || '').trim();
+    if (!body) {
+      toast('Activity cannot be empty', 'err');
+      _crmRefreshCurrentDetail();
+      return;
+    }
+    if (body === current) {
+      _crmRefreshCurrentDetail();
+      return;
+    }
+    var r = _crmDetailType === 'user'
+      ? await api('/api/workspace/people', {action:'activity.update', id:id, body:body})
+      : await api('/api/workspace/crm', {action:'interactions.update', id:id, body:body});
+    if (r && r.ok) {
+      toast('Updated', 'ok');
+      _crmRefreshCurrentDetail();
+    } else {
+      toast((r && r.error) || 'Failed', 'err');
+      _crmRefreshCurrentDetail();
+    }
+  }
+  box.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelled = true;
+      _crmRefreshCurrentDetail();
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      box.blur();
+    }
+  });
+  box.addEventListener('blur', function() {
+    if (cancelled) return;
+    save();
+  });
+}
+
+function _crmDeleteInteraction(id) {
+  _porterConfirm('Delete Activity', 'Delete this activity entry?', async function() {
+    var r = _crmDetailType === 'user'
+      ? await api('/api/workspace/people', {action:'activity.delete', id:id})
+      : await api('/api/workspace/crm', {action:'interactions.delete', id:id});
+    if (r && r.ok) {
+      toast('Deleted', 'ok');
+      _crmRefreshCurrentDetail();
+    } else {
+      toast((r && r.error) || 'Failed', 'err');
+    }
+  }, {okLabel:'Delete'});
 }
 
 // ── CRM Create/Edit Flows ──
 async function _crmAddContact() {
   var firstName = await porterPrompt('New Contact', 'First name:', '');
   if (!firstName) return;
+  var honorific = await porterPrompt('Prefix', 'Name prefix like Mr, Ms, Dr, or leave blank:', '');
   var lastName = await porterPrompt('Last Name', 'Last name:', '');
   var email = await porterPrompt('Email', 'Email address (optional):', '');
   var contactType = await porterPrompt('Type', 'client, collaborator, partner, vendor, stakeholder, lead, or other:', 'client');
   contactType = (contactType || 'other').toLowerCase();
   var validTypes = ['client','collaborator','partner','vendor','stakeholder','lead','other'];
   if (validTypes.indexOf(contactType) === -1) contactType = 'other';
-  var title = await porterPrompt('Title', 'Job title (optional):', '');
-  var r = await api('/api/workspace/crm', {action:'contacts.create', first_name:firstName, last_name:lastName||'', email:email||'', contact_type:contactType, title:title||''});
+  var title = await porterPrompt('Job Title', 'Job title (optional):', '');
+  var companyName = await porterPrompt('Company', 'Company name (creates it if missing):', '');
+  var r = await api('/api/workspace/crm', {action:'contacts.create', first_name:firstName, last_name:lastName||'', email:email||'', contact_type:contactType, title:title||'', honorific:honorific||'', company_name:companyName||''});
   if (r && r.ok) { toast('Contact created', 'ok'); _crmLoadContacts(); if (r.id) _crmOpenContact(r.id); }
   else { toast((r && r.error) || 'Failed', 'err'); }
 }
@@ -21601,6 +24390,14 @@ function _crmArchiveContact(id) {
     var r = await api('/api/workspace/crm', {action:'contacts.archive', id:id});
     if (r && r.ok) { toast('Archived', 'ok'); _crmCloseDetail(); _crmLoadContacts(); }
   }, {okLabel:'Archive'});
+}
+
+function _crmDeleteContact(id) {
+  _porterConfirm('Delete Contact', 'Delete this contact permanently? This also removes linked activity and project links.', async function() {
+    var r = await api('/api/workspace/crm', {action:'contacts.delete', id:id});
+    if (r && r.ok) { toast('Deleted', 'ok'); _crmCloseDetail(); _crmLoadDirectory(); }
+    else { toast((r && r.error) || 'Failed', 'err'); }
+  }, {okLabel:'Delete', danger:true});
 }
 
 async function _crmAddCompany() {
@@ -21623,6 +24420,14 @@ function _crmArchiveCompany(id) {
     var r = await api('/api/workspace/crm', {action:'companies.archive', id:id});
     if (r && r.ok) { toast('Archived', 'ok'); _crmCloseDetail(); _crmLoadCompanies(); }
   }, {okLabel:'Archive'});
+}
+
+function _crmDeleteCompany(id) {
+  _porterConfirm('Delete Company', 'Delete this company permanently? Contacts keep their records but lose the company link.', async function() {
+    var r = await api('/api/workspace/crm', {action:'companies.delete', id:id});
+    if (r && r.ok) { toast('Deleted', 'ok'); _crmCloseDetail(); _crmLoadDirectory(); }
+    else { toast((r && r.error) || 'Failed', 'err'); }
+  }, {okLabel:'Delete', danger:true});
 }
 
 // ── Team management (preserved from old People) ──
@@ -21660,79 +24465,540 @@ function _peopleDelete(username) {
 
 async function loadCapabilities() {
   var el = document.getElementById('capabilities-list');
-  if (el) el.innerHTML = '<div class="loading-indicator">Loading tools...</div>';
-  // Load cached first, then force-refresh
-  fetch('/api/capabilities', {credentials:'same-origin'})
+  if (el) el.innerHTML = _renderToolsLoadingShell();
+  fetch('/api/workspace/tools', {credentials:'same-origin'})
     .then(function(r) { return r.ok ? r.json() : null; })
     .then(function(d) {
-      if (d && d.capabilities) { window._lastCapabilities = d.capabilities; renderCapabilities(d.capabilities); }
-      return fetch('/api/capabilities?force=1', {credentials:'same-origin'});
+      if (d && d.ok) {
+        window._lastToolWorkspace = d;
+        renderCapabilities(d);
+      }
+      return fetch('/api/workspace/tools?force=1', {credentials:'same-origin'});
     })
     .then(function(r) { return r && r.ok ? r.json() : null; })
     .then(function(d) {
-      if (d && d.capabilities) { window._lastCapabilities = d.capabilities; renderCapabilities(d.capabilities); }
+      if (d && d.ok) {
+        window._lastToolWorkspace = d;
+        renderCapabilities(d);
+      }
     })
-    .catch(function(e) { if (el) el.innerHTML = '<div style="color:var(--danger);font-size:13px">Could not load: ' + escHtml(e.message) + '</div>'; });
+    .catch(function(e) {
+      if (el) el.innerHTML = '<div class="tools-section"><div class="tool-empty" style="color:var(--danger)">Could not load Tools: ' + escHtml(e.message) + '</div></div>';
+    });
 }
 
 // v0.31.39 — Integrations section removed (redundant with Models tab)
 
 // _intCard removed v0.31.39
 
-function renderCapabilities(caps) {
+function renderCapabilities(payload) {
   var el = document.getElementById('capabilities-list');
   if (!el) return;
-  // Summary badge
-  var okCount = caps.filter(function(c) { return c.ok; }).length;
+  var caps = ((payload && payload.capabilities) || []).filter(function(c) {
+    return _toolsVisibleIds().indexOf(String(c.id || '')) >= 0;
+  });
+  var connections = (payload && payload.connections) || [];
+  var rawSummary = (payload && payload.summary) || {};
+  var summary = _curatedToolsSummary(caps, connections, rawSummary);
+  var search = ((document.getElementById('cap-search') || {}).value || '').trim().toLowerCase();
+  var filter = window._toolsFilter || 'all';
   var sumEl = document.getElementById('cap-summary');
-  if (sumEl) sumEl.textContent = okCount + '/' + caps.length + ' available';
-  if (!caps.length) {
-    el.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--text3);font-size:13px">No tools detected. Porter auto-scans for installed tools.</div>';
+  if (sumEl) sumEl.textContent = (summary.local_ready || 0) + ' ready · ' + (summary.connections_live || 0) + ' connected';
+  _renderToolsOverview(summary, connections);
+  _renderToolsFilters(caps, connections);
+  if (!caps.length && !connections.length) {
+    el.innerHTML = '<div class="tools-section"><div class="tool-empty">Porter has not detected any connected services or local tools yet.</div></div>';
     return;
   }
-  // Sort: installed first, then alphabetical
   var sorted = caps.slice().sort(function(a, b) {
     if (a.ok && !b.ok) return -1;
     if (!a.ok && b.ok) return 1;
     return (a.label || '').localeCompare(b.label || '');
   });
-  el.innerHTML = sorted.map(function(c) {
-    var ok = c.ok;
-    var rawVer = ok && c.version ? c.version : '';
-    // Clean up version string — extract version number only
-    var cleanVer = rawVer.split('\n')[0].trim();
-    // Extract semver-like pattern (e.g. "vite/8.0.0 linux-x64..." → "8.0.0")
-    var verMatch = cleanVer.match(/(\d+\.\d+[\.\d]*)/);
-    if (verMatch) cleanVer = verMatch[1];
-    if (cleanVer.length > 20) cleanVer = cleanVer.slice(0, 20);
-    var feats = (c.features || []).join(' \u00b7 ');
-    var siteUrl = c.install || '';
-    var siteLabel = siteUrl.replace('https://','').replace('http://','').replace(/\/$/,'');
-    var link = '';
-    if (siteUrl) {
-      link = '<div class="cap-card-link"><a href="' + escHtml(siteUrl) + '" target="_blank">' + escHtml(siteLabel) + '</a></div>';
+  var liveConnections = connections.filter(function(c) { return String(c.status || '').toLowerCase() === 'active'; });
+  var readyTools = sorted.filter(function(c) { return !!c.ok; });
+  var setupTools = sorted.filter(function(c) { return !c.ok; });
+  var attentionTools = sorted.filter(function(c) {
+    return !!c.last_error || String(c.status || '').toLowerCase() === 'error' || String(c.status || '').toLowerCase() === 'offline';
+  });
+  var hero = '';
+  if (!liveConnections.length || readyTools.length < 3) {
+    hero = _renderToolsSetupHero(summary, sorted, connections);
+  }
+  var sections = [];
+  if (hero) sections.push(hero);
+  if (filter === 'all' || filter === 'connected' || filter === 'attention') {
+    var connRows = connections.filter(function(c) {
+      if (filter === 'connected') return String(c.status || '').toLowerCase() === 'active';
+      if (filter === 'attention') return String(c.status || '').toLowerCase() !== 'active' || !!c.last_error;
+      return true;
+    }).filter(function(c) { return _toolsMatchesSearch(c, search); });
+    if (connRows.length || filter !== 'all') {
+      sections.push(_renderToolsSection('Connected accounts', 'Accounts and external systems Porter can use for this workspace.', connRows.length, connRows.map(_renderConnectionCard).join('') || '<div class="tool-empty">No accounts or external systems are connected yet.</div>'));
     }
-    var installHint = !ok ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;font-style:italic">Not installed</div>' : '';
-    return '<div class="cap-card">'
-      + '<div class="cap-card-hdr">'
-      + '<div class="cap-card-dot ' + (ok ? 'ok' : 'off') + '"></div>'
-      + '<span class="cap-card-name">' + escHtml(c.label) + '</span>'
-      + (cleanVer ? '<span class="cap-card-ver">' + escHtml(cleanVer) + '</span>' : '')
-      + '</div>'
-      + (feats ? '<div class="cap-card-feat">' + escHtml(feats) + '</div>' : '')
-      + installHint + link
-      + '</div>';
-  }).join('');
+  }
+  if (filter === 'all' || filter === 'ready' || _isToolsRoleFilter(filter, caps)) {
+    var readyRows = readyTools.filter(function(c) { return _toolsMatchesSearch(c, search) && _toolsFilterMatchesRole(c, filter); });
+    sections.push(_renderToolsSection('Ready on this machine', 'Installed local tools Porter can use immediately.', readyRows.length, readyRows.map(_renderLocalToolCard).join('') || '<div class="tool-empty">No ready local tools match this filter.</div>'));
+  }
+  if (filter === 'all' || filter === 'setup' || _isToolsRoleFilter(filter, caps)) {
+    var setupRows = setupTools.filter(function(c) { return _toolsMatchesSearch(c, search) && _toolsFilterMatchesRole(c, filter); });
+    sections.push(_renderToolsSection('Needs setup', 'Useful tools Porter knows about but cannot use yet.', setupRows.length, setupRows.map(_renderLocalToolCard).join('') || '<div class="tool-empty">Nothing missing right now.</div>'));
+  }
+  if (filter === 'attention') {
+    var attentionRows = attentionTools.filter(function(c) { return _toolsMatchesSearch(c, search) && _toolsFilterMatchesRole(c, filter); });
+    sections.push(_renderToolsSection('Needs attention', 'Tools that look broken, offline, or erroring right now.', attentionRows.length, attentionRows.map(_renderLocalToolCard).join('') || '<div class="tool-empty">No broken tools right now.</div>'));
+  }
+  el.innerHTML = sections.join('');
 }
 
 function _filterTools() {
-  var q = (document.getElementById('cap-search').value || '').toLowerCase();
-  var cards = document.querySelectorAll('#capabilities-list .cap-card');
-  cards.forEach(function(card) {
-    var name = (card.querySelector('.cap-card-name') || {}).textContent || '';
-    var feat = (card.querySelector('.cap-card-feat') || {}).textContent || '';
-    card.style.display = (name.toLowerCase().indexOf(q) >= 0 || feat.toLowerCase().indexOf(q) >= 0) ? '' : 'none';
+  if (window._lastToolWorkspace) renderCapabilities(window._lastToolWorkspace);
+}
+
+function _toolsVisibleIds() {
+  return [
+    'ollama',
+    'git', 'github', 'python', 'pip', 'node', 'npm',
+    'playwright',
+    'wkhtmltopdf', 'ffmpeg', 'pandoc', 'pdftotext', 'ocrmypdf', 'docling',
+    'd2',
+    'brave_search', 'firecrawl',
+    'docker', 'postgres', 'sqlite'
+  ];
+}
+
+function _renderToolsLoadingShell() {
+  return [
+    '<div class="tools-section"><div class="tools-section-head"><div><div class="tools-section-title">External services</div><div class="tools-section-copy">Loading connected services…</div></div></div><div class="tool-empty">' + _spinnerOnlyMarkup(72, '0') + '</div></div>',
+    '<div class="tools-section"><div class="tools-section-head"><div><div class="tools-section-title">Ready on this machine</div><div class="tools-section-copy">Scanning local tools…</div></div></div><div class="tool-empty">' + _spinnerOnlyMarkup(72, '0') + '</div></div>'
+  ].join('');
+}
+
+function _curatedToolsSummary(caps, connections, rawSummary) {
+  caps = caps || [];
+  connections = connections || [];
+  var activeConnections = connections.filter(function(c) { return String(c.status || '').toLowerCase() === 'active'; }).length;
+  var ready = caps.filter(function(c) { return !!c.ok; }).length;
+  var setup = caps.filter(function(c) { return !c.ok; }).length;
+  var disconnected = connections.filter(function(c) {
+    return String(c.status || '').toLowerCase() !== 'active' || !!c.last_error;
+  }).length;
+  return {
+    connections_live: activeConnections,
+    needs_attention: disconnected,
+    local_ready: ready,
+    total_tools: caps.length,
+    local_missing: setup,
+    connections_total: connections.length,
+    raw_total_tools: (rawSummary && rawSummary.total_tools) || caps.length
+  };
+}
+
+function _renderToolsOverview(summary, connections) {
+  var host = document.getElementById('tools-overview');
+  if (!host) return;
+  host.innerHTML = [
+    _toolSummaryStat('Services', summary.connections_live || 0, 'External services Porter can use now.'),
+    _toolSummaryStat('Needs setup', summary.local_missing || 0, 'Useful tools Porter knows about but cannot use yet.'),
+    _toolSummaryStat('Needs attention', summary.needs_attention || 0, 'Broken or disconnected services that need attention.'),
+    _toolSummaryStat('Local ready', summary.local_ready || 0, 'Installed tools available on this machine.'),
+    _toolSummaryStat('Known tools', summary.total_tools || 0, 'Total local tools Porter tracks here.')
+  ].join('');
+  var servicesHost = document.getElementById('tools-services-row');
+  if (!servicesHost) return;
+  if ((connections || []).length) {
+    var live = (connections || []).filter(function(c) { return String(c.status || '').toLowerCase() === 'active'; }).length;
+    var total = (connections || []).length;
+    servicesHost.innerHTML = '<div class="tools-service-row">'
+      + '<div class="tools-service-copy">'
+      + '<div class="tools-service-title">External services</div>'
+      + '<div class="tools-service-sub">' + escHtml((live ? String(live) + ' live' : 'No live services') + ' out of ' + String(total) + '. Porter can use these through connected credentials or APIs.') + '</div>'
+      + '</div>'
+      + '<div class="tools-service-actions">'
+      + '<button class="tool-btn" onclick="_setToolsFilter(\'connected\')">View services</button>'
+      + '<button class="tool-btn" onclick="_toolsAddConnection()">+ Connection</button>'
+      + '</div></div>';
+  } else {
+    servicesHost.innerHTML = '<div class="tools-service-row">'
+      + '<div class="tools-service-copy">'
+      + '<div class="tools-service-title">External services</div>'
+      + '<div class="tools-service-sub">Connect GitHub, search, or other external services here when Porter needs them.</div>'
+      + '</div>'
+      + '<div class="tools-service-actions">'
+      + '<button class="tool-btn" onclick="_setToolsFilter(\'connected\')">See services</button>'
+      + '<button class="tool-btn primary" onclick="_toolsAddConnection()">+ Connection</button>'
+      + '</div></div>';
+  }
+}
+
+function _toolSummaryStat(label, value, copy) {
+  return '<div class="tools-summary-stat"><div class="tools-summary-label">' + escHtml(label) + '</div><div class="tools-summary-value">' + escHtml(String(value)) + '</div><div class="tools-summary-copy">' + escHtml(copy) + '</div></div>';
+}
+
+function _renderToolsFilters(caps, connections) {
+  var host = document.getElementById('tools-filter-strip');
+  if (!host) return;
+  var filters = [
+    {id:'all', label:'All'},
+    {id:'connected', label:'Connected'},
+    {id:'ready', label:'Local ready'},
+    {id:'setup', label:'Needs setup'},
+    {id:'attention', label:'Needs attention'}
+  ];
+  _availableToolRoleFilters(caps).forEach(function(f) { filters.push(f); });
+  host.innerHTML = filters.map(function(f) {
+    return '<button class="tools-filter-chip ' + ((window._toolsFilter || 'all') === f.id ? 'active' : '') + '" onclick="_setToolsFilter(\'' + escJs(f.id) + '\')">' + escHtml(f.label) + '</button>';
+  }).join('');
+}
+
+function _setToolsFilter(filter) {
+  var current = window._toolsFilter || 'all';
+  window._toolsFilter = (current === filter && filter !== 'all') ? 'all' : filter;
+  if (window._lastToolWorkspace) renderCapabilities(window._lastToolWorkspace);
+}
+
+function _toolsMatchesSearch(item, search) {
+  if (!search) return true;
+  var hay = [
+    item.label, item.id, item.provider, item.display_name, item.kind, item.status,
+    (item.features || []).join(' '), item.last_error
+  ].join(' ').toLowerCase();
+  return hay.indexOf(search) >= 0;
+}
+
+function _toolsFilterMatchesRole(item, filter) {
+  if (!filter || ['all','connected','ready','setup','attention'].indexOf(filter) >= 0) return true;
+  var label = _toolFilterLabel(filter);
+  if (!label) return true;
+  return _toolRoleTags(item.id, item.features || []).indexOf(label) >= 0;
+}
+
+function _availableToolRoleFilters(caps) {
+  var labels = [];
+  (caps || []).forEach(function(c) {
+    _toolRoleTags(c.id, c.features || []).forEach(function(tag) {
+      if (labels.indexOf(tag) < 0) labels.push(tag);
+    });
   });
+  var preferred = ['Local AI', 'Coding', 'Verification', 'Files', 'Design', 'Research', 'Routing', 'Media', 'Workspace', 'General'];
+  labels.sort(function(a, b) {
+    var ai = preferred.indexOf(a);
+    var bi = preferred.indexOf(b);
+    if (ai >= 0 && bi >= 0) return ai - bi;
+    if (ai >= 0) return -1;
+    if (bi >= 0) return 1;
+    return a.localeCompare(b);
+  });
+  return labels.map(function(label) {
+    return { id:_toolFilterId(label), label:label };
+  });
+}
+
+function _toolFilterId(label) {
+  return String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function _toolFilterLabel(filter) {
+  var map = {};
+  _availableToolRoleFilters((window._lastToolWorkspace && window._lastToolWorkspace.capabilities) || []).forEach(function(f) {
+    map[f.id] = f.label;
+  });
+  return map[filter] || null;
+}
+
+function _isToolsRoleFilter(filter, caps) {
+  if (!filter) return false;
+  return _availableToolRoleFilters(caps || ((window._lastToolWorkspace && window._lastToolWorkspace.capabilities) || [])).some(function(f) {
+    return f.id === filter;
+  });
+}
+
+function _renderToolsSection(title, copy, count, body) {
+  return '<section class="tools-section">'
+    + '<div class="tools-section-head"><div><div class="tools-section-title">' + escHtml(title) + '</div><div class="tools-section-copy">' + escHtml(copy) + '</div></div><div class="tools-section-count">' + escHtml(String(count)) + '</div></div>'
+    + '<div class="tools-card-grid">' + body + '</div></section>';
+}
+
+function _renderToolsSetupHero(summary, caps, connections) {
+  var recommended = _pickRecommendedTools(caps);
+  var disconnected = (connections || []).filter(function(c) { return String(c.status || '').toLowerCase() !== 'active'; }).slice(0, 2);
+  var cards = [];
+  recommended.forEach(function(tool) {
+    cards.push(
+      '<div class="tools-setup-card">'
+      + '<div class="tools-setup-card-title">' + escHtml(tool.label) + '</div>'
+      + '<div class="tools-setup-card-copy">' + escHtml(tool.why) + '</div>'
+      + '<button class="tool-btn primary" onclick="_toolsOpenInstall(\'' + escJs(tool.install || '') + '\')">Set up</button>'
+      + '</div>'
+    );
+  });
+  disconnected.forEach(function(conn) {
+    cards.push(
+      '<div class="tools-setup-card">'
+      + '<div class="tools-setup-card-title">' + escHtml(conn.display_name || conn.provider || 'Connection') + '</div>'
+      + '<div class="tools-setup-card-copy">Reconnect this service so Porter can use it again.</div>'
+      + '<button class="tool-btn primary" onclick="_toolsSetConnectionStatus(\'' + escJs(conn.id || '') + '\', \'active\')">Reconnect</button>'
+      + '</div>'
+    );
+  });
+  if (!cards.length) return '';
+  return '<section class="tools-setup-hero">'
+    + '<div class="tools-setup-eyebrow">Set Up Porter</div>'
+    + '<div class="tools-setup-title">Get this machine ready faster</div>'
+    + '<div class="tools-setup-copy">'
+    + escHtml(_toolsSetupCopy(summary))
+    + '</div>'
+    + '<div class="tools-setup-grid">' + cards.join('') + '</div>'
+    + '</section>';
+}
+
+function _toolsSetupCopy(summary) {
+  if ((summary.connections_live || 0) === 0 && (summary.local_ready || 0) === 0) {
+    return 'This machine is basically empty. Start with a few core installs or reconnect a service and Porter will take it from there.';
+  }
+  if ((summary.connections_live || 0) === 0) {
+    return 'Local tools exist, but Porter still has no live connected services. Reconnect a service or finish the next install.';
+  }
+  if ((summary.local_ready || 0) < 3) {
+    return 'Porter can work here, but a few more local tools will unlock a much better setup.';
+  }
+  return 'A few setup items are still missing. Knock these out and Porter will have a more complete workspace.';
+}
+
+function _pickRecommendedTools(caps) {
+  var missing = (caps || []).filter(function(c) { return !c.ok; });
+  var chosen = [];
+  var preferredRoles = ['Local AI', 'Coding', 'Verification', 'Design', 'Research', 'Files'];
+  preferredRoles.forEach(function(role) {
+    var hit = missing.find(function(c) {
+      return chosen.indexOf(c) < 0 && _toolRoleTags(c.id, c.features || []).indexOf(role) >= 0;
+    });
+    if (hit && chosen.length < 4) chosen.push(hit);
+  });
+  ['ollama', 'python', 'pip', 'git', 'node', 'npm', 'playwright', 'docling', 'pandoc', 'ocrmypdf', 'pdftotext', 'firecrawl', 'd2', 'github'].forEach(function(id) {
+    var hit = missing.find(function(c) { return c.id === id && chosen.indexOf(c) < 0; });
+    if (hit && chosen.length < 4) chosen.push(hit);
+  });
+  return chosen.map(function(c) {
+    return {
+      id: c.id,
+      label: c.label || c.id,
+      install: c.install || '',
+      why: _toolWhy(c.id, c.features || [])
+    };
+  });
+}
+
+function _toolWhy(id, features) {
+  var map = {
+    ollama: 'Run local models on a machine with no cloud dependency.',
+    python: 'Needed for scripts, automation, document pipelines, and a lot of Porter tooling.',
+    pip: 'Install Python packages Porter depends on for richer workflows.',
+    git: 'Needed for repo-aware work, history, and changes.',
+    node: 'Unlock browser automation and frontend tooling.',
+    npm: 'Install the rest of the JavaScript toolchain Porter expects.',
+    playwright: 'Lets Porter verify pages and flows instead of guessing.',
+    docling: 'Convert long PDFs and documents into structured markdown Porter can actually use.',
+    pandoc: 'Convert documents cleanly between formats, especially into markdown.',
+    pdftotext: 'Fast plain-text extraction for digital PDFs.',
+    ocrmypdf: 'Add OCR first when a PDF is scanned instead of text-based.',
+    firecrawl: 'Turn live websites into usable research and structured content.',
+    d2: 'Generate cleaner diagrams and system views from text.',
+    github: 'Connect repos, PRs, and issues more directly.'
+  };
+  return map[id] || ((features && features.length) ? features.slice(0, 2).join(' · ') : 'Useful capability Porter can enable on this machine.');
+}
+
+function _toolRoleTags(id, features) {
+  var explicit = {
+    ollama: ['Local AI'],
+    python: ['Coding'],
+    pip: ['Coding'],
+    git: ['Coding'],
+    github: ['Coding'],
+    node: ['Coding'],
+    npm: ['Coding'],
+    playwright: ['Verification'],
+    wkhtmltopdf: ['Files'],
+    pandoc: ['Files'],
+    pdftotext: ['Files'],
+    ocrmypdf: ['Files'],
+    docling: ['Files', 'Research'],
+    ffmpeg: ['Media'],
+    d2: ['Design'],
+    firecrawl: ['Research'],
+    brave_search: ['Research'],
+    docker: ['Coding'],
+    postgres: ['Coding'],
+    sqlite: ['Files'],
+    gws: ['Workspace']
+  };
+  var tags = explicit[id] ? explicit[id].slice() : [];
+  if (!tags.length) {
+    var hay = ((features || []).join(' ') || '').toLowerCase();
+    if (hay.indexOf('browser') >= 0 || hay.indexOf('testing') >= 0) tags.push('Verification');
+    if (hay.indexOf('pdf') >= 0 || hay.indexOf('file') >= 0) tags.push('Files');
+    if (hay.indexOf('design') >= 0 || hay.indexOf('asset') >= 0) tags.push('Design');
+    if (hay.indexOf('search') >= 0 || hay.indexOf('crawl') >= 0) tags.push('Research');
+    if (hay.indexOf('code') >= 0 || hay.indexOf('repo') >= 0 || hay.indexOf('build') >= 0) tags.push('Coding');
+  }
+  if (!tags.length) tags.push('General');
+  return tags.slice(0, 3);
+}
+
+function _renderConnectionCard(conn) {
+  var status = String(conn.status || '').toLowerCase();
+  var live = status === 'active';
+  var signal = live ? 'ok' : (conn.last_error ? 'warn' : 'off');
+  var name = conn.display_name || conn.provider || 'Connection';
+  var projectCount = Number(conn.project_count || 0);
+  var sub = _connectedServiceDescription(conn.provider || conn.kind || 'service');
+  return '<article class="tool-card connected">'
+    + '<div class="tool-card-head">'
+    + '<span class="tool-card-signal ' + signal + '"></span>'
+    + '<div class="tool-card-main">'
+    + '<div class="tool-card-name">' + escHtml(name) + '</div>'
+    + '</div>'
+    + '</div>'
+    + '<div class="tool-card-sub">' + escHtml(sub) + '</div>'
+    + '<div class="tool-card-meta">'
+    + '<span class="tool-chip">' + escHtml(conn.kind || 'api_key') + '</span>'
+    + (projectCount ? '<span class="tool-chip live">' + escHtml(projectCount + ' project' + (projectCount === 1 ? '' : 's')) + '</span>' : '')
+    + (conn.last_error ? '<span class="tool-chip warn">Issue</span>' : '')
+    + '</div>'
+    + '<div class="tool-card-body">'
+    + '<div class="tool-card-features">'
+    + '<button type="button" onclick="_setToolsFilter(\'connected\')">Connected</button>'
+    + '<button type="button" onclick="_setToolsFilter(\'all\')">' + escHtml(conn.provider || 'Account') + '</button>'
+    + '</div>'
+    + '<div class="tool-card-actions">'
+    + '<button class="tool-btn ' + (live ? '' : 'primary') + '" onclick="_toolsSetConnectionStatus(\'' + escJs(conn.id || '') + '\', \'' + escJs(live ? 'disconnected' : 'active') + '\')">' + escHtml(live ? 'Disconnect' : 'Connect') + '</button>'
+    + '<button class="tool-btn" onclick="_toolsRenameConnection(\'' + escJs(conn.id || '') + '\', \'' + escJs(name) + '\')">Rename</button>'
+    + '<button class="tool-btn" onclick="_toolsDeleteConnection(\'' + escJs(conn.id || '') + '\', \'' + escJs(name) + '\')">Delete</button>'
+    + '</div></div></article>';
+}
+
+function _renderLocalToolCard(c) {
+  var ok = !!c.ok;
+  var roleTags = _toolRoleTags(c.id, c.features || []);
+  var sub = _toolWhy(c.id, c.features || []);
+  return '<article class="tool-card ' + (ok ? 'ready' : 'setup') + '">'
+    + '<div class="tool-card-head">'
+    + '<span class="tool-card-signal ' + (ok ? 'ok' : 'off') + '"></span>'
+    + '<div class="tool-card-main">'
+    + '<div class="tool-card-name">' + escHtml(c.label || c.id || 'Tool') + '</div>'
+    + '</div>'
+    + '</div>'
+    + '<div class="tool-card-sub">' + escHtml(sub) + '</div>'
+    + '<div class="tool-card-body">'
+    + '<div class="tool-card-features">' + (roleTags.map(function(f) {
+      var id = _toolFilterId(f);
+      var active = (window._toolsFilter || 'all') === id ? ' active' : '';
+      return '<button type="button" class="' + active.trim() + '" onclick="_setToolsFilter(\'' + escJs(id) + '\')">' + escHtml(f) + '</button>';
+    }).join('') || '<button type="button" onclick="_setToolsFilter(\'general\')">General</button>') + '</div>'
+    + '<div class="tool-card-actions">'
+    + (c.install ? '<button class="tool-btn ' + (ok ? '' : 'primary') + '" onclick="_toolsOpenInstall(\'' + escJs(c.install) + '\')">' + escHtml(ok ? 'Info' : 'Setup') + '</button>' : '')
+    + '</div></div></article>';
+}
+
+function _toolsOpenInstall(url) {
+  if (!url) return;
+  window.open(url, '_blank', 'noopener');
+}
+
+async function _toolsAddConnection() {
+  var services = _toolsServiceCatalog();
+  _porterSelect('Connect Service', services, function(choice) {
+    if (!choice || !choice.provider) return;
+    _porterPrompt('Connect ' + choice.label, [
+      {name:'display_name', label:'Name', value:choice.label},
+      {name:'kind', label:'Connection Type', type:'select', defaultValue:choice.kind || 'api_key', options:[
+        {value:'api_key', label:'API key'},
+        {value:'oauth', label:'OAuth'},
+        {value:'webhook', label:'Webhook'},
+        {value:'local', label:'Local'}
+      ]}
+    ], async function(vals) {
+      var r = await api('/api/workspace/connections', {
+        action:'create',
+        provider:choice.provider,
+        display_name:(vals.display_name || choice.label).trim(),
+        kind:(vals.kind || choice.kind || 'api_key').trim()
+      });
+      if (r && r.ok) {
+        toast('Connection added', 'ok');
+        loadCapabilities();
+      } else {
+        toast((r && r.error) || 'Could not add connection', 'err');
+      }
+    }, {okLabel:'Connect'});
+  });
+}
+
+function _toolsServiceCatalog() {
+  return [
+    {provider:'github', label:'GitHub', sub:'Repos, issues, pull requests', kind:'oauth'},
+    {provider:'brave_search', label:'Brave Search', sub:'Search and research access', kind:'api_key'},
+    {provider:'firecrawl', label:'Firecrawl', sub:'Website scraping and crawl jobs', kind:'api_key'},
+    {provider:'openai', label:'OpenAI', sub:'Hosted model access', kind:'api_key'},
+    {provider:'anthropic', label:'Anthropic', sub:'Hosted Claude access', kind:'api_key'},
+    {provider:'google', label:'Google / Gemini', sub:'Hosted Gemini access', kind:'api_key'},
+    {provider:'slack', label:'Slack', sub:'Messages, channels, and team workflows', kind:'oauth'},
+    {provider:'notion', label:'Notion', sub:'Docs and workspace pages', kind:'oauth'},
+    {provider:'linear', label:'Linear', sub:'Issues and project tracking', kind:'oauth'},
+    {provider:'jira', label:'Jira', sub:'Tickets and workflow tracking', kind:'oauth'}
+  ];
+}
+
+function _connectedServiceDescription(provider) {
+  var map = {
+    github: 'Repos, issues, and pull requests',
+    brave_search: 'Search and research access',
+    firecrawl: 'Website crawling and extraction',
+    openai: 'Hosted model access',
+    anthropic: 'Hosted Claude access',
+    google: 'Hosted Gemini access',
+    slack: 'Messages and channels',
+    notion: 'Docs and workspace pages',
+    linear: 'Issues and project tracking',
+    jira: 'Tickets and workflows'
+  };
+  return map[String(provider || '').toLowerCase()] || 'External service Porter can use through this workspace';
+}
+
+async function _toolsSetConnectionStatus(id, status) {
+  var r = await api('/api/workspace/connections', {action:'update', id:id, status:status});
+  if (r && r.ok) {
+    toast(status === 'active' ? 'Connection activated' : 'Connection disconnected', 'ok');
+    loadCapabilities();
+  } else {
+    toast((r && r.error) || 'Could not update connection', 'err');
+  }
+}
+
+async function _toolsRenameConnection(id, currentName) {
+  var next = await porterPrompt('Rename Connection', 'Connection name:', currentName || '');
+  if (!next || next === currentName) return;
+  var r = await api('/api/workspace/connections', {action:'update', id:id, display_name:next.trim()});
+  if (r && r.ok) {
+    toast('Connection renamed', 'ok');
+    loadCapabilities();
+  } else {
+    toast((r && r.error) || 'Could not rename connection', 'err');
+  }
+}
+
+function _toolsDeleteConnection(id, name) {
+  _porterConfirm('Delete Connection', 'Delete ' + name + '? Any project using it will lose access.', async function() {
+    var r = await api('/api/workspace/connections', {action:'delete', id:id});
+    if (r && r.ok) {
+      toast('Connection deleted', 'ok');
+      loadCapabilities();
+    } else {
+      toast((r && r.error) || 'Could not delete connection', 'err');
+    }
+  }, {danger:true, okLabel:'Delete'});
 }
 
 // Memory tab v6 — compact layout
@@ -22285,9 +25551,11 @@ function _pdChatSetModel(value) {
 
 function _pdChatModelToggle(event) {
   event.stopPropagation();
-  document.querySelectorAll('.chat-ctx-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
   var dd = document.getElementById('pd-chat-model-dd');
   if (!dd) return;
+  var wasOpen = dd.classList.contains('open');
+  _closeChatCtxDropdowns();
+  if (wasOpen) return;
   var p = window._selectedPersona;
   var state = p ? _pdChatGetState(p.id) : {};
   var cur = state.modelOverride || '';
@@ -22313,7 +25581,7 @@ function _pdChatModelToggle(event) {
 
 function _pdChatModelPick(value) {
   _pdChatSetModel(value);
-  document.querySelectorAll('.chat-ctx-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+  _closeChatCtxDropdowns();
 }
 
 function _pdChatEnsureId(persona, state) {
@@ -23112,6 +26380,7 @@ async function _pdChatSend() {
   var p = window._selectedPersona;
   var input = document.getElementById('pd-chat-input');
   if (!p || !input) return;
+  if (_chatStreaming) return;
   var text = input.value.trim();
   if (!text) return;
   var state = _pdChatGetState(p.id);
@@ -23791,6 +27060,10 @@ function openSettings(tab = 'profile') {
   if (typeof _popupChatUpdateCtx === 'function') _popupChatUpdateCtx();
   const panel = document.getElementById('settingsPanel');
   if (panel) panel.classList.add('open');
+  const nav = document.querySelector('.settings-nav');
+  const shell = document.getElementById('settings-shell');
+  if (nav) nav.classList.remove('collapsed');
+  if (shell) shell.classList.remove('compact-nav');
 }
 function closeSettings() {
   stopTsPolling();
@@ -23800,6 +27073,14 @@ function closeSettings() {
   const pc = document.getElementById('sa-pwConfirm');
   if (pn) pn.value = '';
   if (pc) pc.value = '';
+}
+function toggleSettingsNav() {
+  const panel = document.getElementById('settingsPanel');
+  if (!panel || !panel.classList.contains('open')) { openSettings('profile'); return; }
+  const nav = document.querySelector('.settings-nav');
+  const shell = document.getElementById('settings-shell');
+  if (nav) nav.classList.toggle('collapsed');
+  if (shell) shell.classList.toggle('compact-nav');
 }
 function switchSettingsTab(tab) {
   if (tab === 'usage') tab = 'agents';
@@ -24445,6 +27726,7 @@ function renderChatMessages(streamUpdate) {
     if (inputArea) inputArea.style.display = 'none';
     if (routeBar) routeBar.style.display = 'none';
     _updateStopBtn(false);
+    _setGlobalChatBusy(false);
     return;
   }
   // Has messages: show bottom-pinned input + header
@@ -24472,7 +27754,22 @@ function renderChatMessages(streamUpdate) {
   _renderMermaidDiagrams(el);
   if (!_chatStreaming || el.scrollHeight - el.scrollTop - el.clientHeight < 150) el.scrollTop = el.scrollHeight;
   _updateStopBtn(_chatStreaming);
+  _setGlobalChatBusy(_chatStreaming);
   if (!streamUpdate) _saveChatMessages();
+}
+
+function _setGlobalChatBusy(busy) {
+  ['chat-input', 'chat-input-welcome'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = !!busy;
+    el.style.opacity = busy ? '0.65' : '';
+  });
+  document.querySelectorAll('#chat-main .chat-attach-btn').forEach(function(btn) {
+    btn.disabled = !!busy;
+    btn.style.opacity = busy ? '0.55' : '';
+    btn.style.pointerEvents = busy ? 'none' : '';
+  });
 }
 
 function _chatTransitionToBottom() {
@@ -27070,7 +30367,7 @@ async function _fmSplitView(el) {
   var me = currentUser ? currentUser.username : 'default';
   var userPath = '_files/' + me;
   var bcEl = document.getElementById('fm-breadcrumbs');
-  if (bcEl) bcEl.innerHTML = '<span style="color:var(--text);font-weight:600">Files</span>';
+  if (bcEl) bcEl.innerHTML = '<span style="color:var(--text);font-weight:600">Files</span><span style="color:var(--text3)">/</span><span style="color:var(--text3)">workspace</span>';
   try {
     var [rootData, userFilesData] = await Promise.all([
       fetch('/api/files/list?path=/', {credentials:'same-origin'}).then(function(r){return r.json()}),
@@ -27084,27 +30381,41 @@ async function _fmSplitView(el) {
     var h = '';
     // My Files section
     h += '<div class="fm-pane" style="margin-bottom:12px">';
-    h += '<div class="fm-pane-hdr"><span class="fm-pane-title">My Files</span></div>';
-    h += _fmColHeader();
-    h += '<div style="min-height:60px" ondragover="event.preventDefault();event.stopPropagation();this.style.background=\'color-mix(in srgb, var(--accent) 5%, var(--surface))\';this.style.outline=\'2px dashed var(--accent)\';this.style.outlineOffset=\'-4px\'" ondragleave="this.style.background=\'\';this.style.outline=\'\'" ondrop="event.preventDefault();event.stopPropagation();this.style.background=\'\';this.style.outline=\'\';_fmUploadFiles(event.dataTransfer.files)">';
-    if (userItems.length) {
-      _fmSortItems(userItems).forEach(function(f) { h += _fmRow(f); });
-    } else {
-      h += '<div class="fm-pane-empty">Drop files here or click Upload</div>';
+    h += _fmSectionHeader('My Files', userItems.length + ' item' + (userItems.length === 1 ? '' : 's'), 'user');
+    if (_fmSectionOpen.user !== false) {
+      h += _fmColHeader();
+      h += '<div style="min-height:60px" ondragover="event.preventDefault();event.stopPropagation();this.style.background=\'color-mix(in srgb, var(--accent) 5%, var(--surface))\';this.style.outline=\'2px dashed var(--accent)\';this.style.outlineOffset=\'-4px\'" ondragleave="this.style.background=\'\';this.style.outline=\'\'" ondrop="event.preventDefault();event.stopPropagation();this.style.background=\'\';this.style.outline=\'\';_fmUploadFiles(event.dataTransfer.files)">';
+      if (userItems.length) {
+        _fmSortItems(userItems).forEach(function(f) { h += _fmRow(f); });
+      } else {
+        h += '<div class="fm-pane-empty">Drop files here or click Upload</div>';
+      }
+      h += '</div>';
+      h += _fmStatusBar(userItems);
     }
-    h += '</div>';
-    h += _fmStatusBar(userItems);
     h += '</div>';
     // Projects section
     h += '<div class="fm-pane">';
-    h += '<div class="fm-pane-hdr"><span class="fm-pane-title">Projects</span></div>';
-    if (projItems.length) {
-      projItems.forEach(function(f) { h += _fmRow(f); });
-    } else {
-      h += '<div class="fm-pane-empty">No project files yet</div>';
+    h += _fmSectionHeader('Project Directories', projItems.length + ' linked path' + (projItems.length === 1 ? '' : 's'), 'projects');
+    if (_fmSectionOpen.projects !== false) {
+      if (projItems.length) {
+        projItems.forEach(function(f) { h += _fmRow(f); });
+      } else {
+        h += '<div class="fm-pane-empty">No project files yet</div>';
+      }
     }
     h += '</div>';
     el.innerHTML = h;
+    el.querySelectorAll('.fm-pane').forEach(function(pane, i) {
+      pane.style.animation = 'none';
+      pane.offsetHeight;
+      pane.style.animation = 'filesSectionIn .42s cubic-bezier(.2,.9,.2,1) both';
+      pane.style.animationDelay = (i * 90) + 'ms';
+    });
+    el.querySelectorAll('.fm-row').forEach(function(row, i) {
+      row.style.animation = 'filesRowIn .34s ease both';
+      row.style.animationDelay = (80 + (i * 26)) + 'ms';
+    });
   } catch(e) {
     el.innerHTML = '<div style="padding:24px;color:var(--err,#ef4444)">Error: ' + escHtml(e.message) + '</div>';
   }
@@ -27120,13 +30431,13 @@ function _fmRow(f) {
   var onclick = isDir ? 'loadAllFiles(\x27' + escHtml(f.path) + '\x27)' : '_fmPreview(\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)';
   var size = (!isDir && f.size) ? _fmFmtBytes(f.size) : '';
   var date = f.modified ? new Date(f.modified * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',year:'numeric'}) : '';
-  return '<div class="fm-row" style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="' + onclick + '" oncontextmenu="_fmCtx(event,\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)">'
+  return '<div class="fm-row" data-path="' + escHtml(f.path) + '" style="display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid color-mix(in srgb, var(--border) 84%, transparent);cursor:pointer" onclick="' + onclick + '" oncontextmenu="_fmCtx(event,\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)">'
     + icon
-    + '<span style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(f.name) + '</span>'
+    + '<span class="fm-name-label" style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(f.name) + '</span>'
     + '<span style="font-size:11px;color:var(--text3);min-width:60px;text-align:right">' + size + '</span>'
     + '<span class="fm-row-date" style="font-size:11px;color:var(--text3);min-width:80px;text-align:right">' + date + '</span>'
     + '<div class="fm-row-actions">'
-    + '<button class="fm-act" onclick="event.stopPropagation();_fmRename(\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)" title="Rename">Rename</button>'
+    + '<button class="fm-act" onclick="event.stopPropagation();_fmRename(this.closest(\'.fm-row\'),\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)" title="Rename">Rename</button>'
     + '<button class="fm-act danger" onclick="event.stopPropagation();_fmDelete(\x27' + escHtml(f.path) + '\x27,\x27' + escHtml(f.name) + '\x27)" title="Delete">Delete</button>'
     + '</div></div>';
 }
@@ -27166,12 +30477,64 @@ async function _uploadToPath(file, path) {
   } catch(e) { return {ok:false, error:e.message}; }
 }
 
-async function _fmRename(path, name) {
-  var newName = await porterPrompt('Rename', 'New name:', name);
-  if (!newName || newName === name) return;
-  var r = await api('/api/files/rename', {path: path, new_name: newName});
-  if (r && r.ok) { toast('Renamed', 'ok'); loadAllFiles(); }
-  else toast((r && r.error) || 'Failed', 'err');
+function _fmStartInlineRename(rowEl, currentName, saveFn) {
+  if (!rowEl) return;
+  var label = rowEl.querySelector('.fm-name-label');
+  if (!label || label.querySelector('input')) return;
+  var current = String(currentName || '').trim();
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'fm-inline-rename';
+  input.value = current;
+  var cancelled = false;
+  label.innerHTML = '';
+  label.appendChild(input);
+  input.focus();
+  input.select();
+  function restore(text) {
+    label.textContent = text || current || '';
+  }
+  async function commit() {
+    if (cancelled) return;
+    var next = String(input.value || '').trim();
+    if (!next || next === current) { restore(current); return; }
+    var ok = await saveFn(next);
+    if (ok) return;
+    restore(current);
+  }
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelled = true;
+      restore(current);
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      input.blur();
+    }
+  });
+  input.addEventListener('blur', commit);
+}
+
+function _fmFindRow(path) {
+  if (!path) return null;
+  return document.querySelector('.fm-row[data-path="' + CSS.escape(String(path)) + '"]');
+}
+
+function _fmRename(rowEl, path, name) {
+  _fmStartInlineRename(rowEl, name, async function(newName) {
+    var r = await api('/api/files/rename', {path: path, name: newName});
+    if (r && r.ok) {
+      toast('Renamed', 'ok');
+      loadAllFiles();
+      return true;
+    }
+    toast((r && r.error) || 'Failed', 'err');
+    return false;
+  });
 }
 
 async function _fmDelete(path, name) {
@@ -27186,7 +30549,7 @@ async function loadAllFiles(path) {
   if (path !== undefined) _fmCurrentPath = path;
   var el = document.getElementById('allfiles-list');
   if (!el) return;
-  el.innerHTML = '<div class="loading-indicator" style="padding:24px">Loading...</div>';
+  el.innerHTML = _spinnerOnlyMarkup(140, '18px 0');
   if (!_fmCurrentPath || _fmCurrentPath === '/') { _fmSplitView(el); return; }
   try {
     var data = await fetch('/api/files/list?path=' + encodeURIComponent(_fmCurrentPath), {credentials:'same-origin'}).then(function(r) { return r.json(); });
@@ -27199,7 +30562,7 @@ async function loadAllFiles(path) {
         var isLast = i === data.breadcrumbs.length - 1;
         return sep + (isLast
           ? '<span style="color:var(--text);font-weight:600">' + escHtml(b.name) + '</span>'
-          : '<a href="#" onclick="loadAllFiles(\x27' + escHtml(b.path) + '\x27);return false" style="color:var(--accent);text-decoration:none">' + escHtml(b.name) + '</a>');
+          : '<a href="#" onclick="loadAllFiles(\x27' + escHtml(b.path) + '\x27);return false" style="color:var(--text2);text-decoration:none">' + escHtml(b.name) + '</a>');
       }).join('');
     }
     _fmAllItems = items;
@@ -27294,7 +30657,7 @@ function _fmCtx(event, path, name) {
   renameBtn.style.cssText = 'padding:6px 14px;cursor:pointer;color:var(--text)';
   renameBtn.onmouseover = function(){this.style.background='var(--surface)'};
   renameBtn.onmouseout = function(){this.style.background=''};
-  renameBtn.onclick = async function() { ov.remove(); var n = await porterPrompt('Rename','New name:',name); if(!n||n===name)return; var r=await api('/api/files/rename',{path:path,name:n}); if(r&&r.ok){toast('Renamed','ok');loadAllFiles();}else toast((r&&r.error)||'Failed','err'); };
+  renameBtn.onclick = function() { ov.remove(); _fmRename(_fmFindRow(path), path, name); };
   var delBtn = document.createElement('div');
   delBtn.textContent = 'Delete';
   delBtn.style.cssText = 'padding:6px 14px;cursor:pointer;color:#ef4444';
@@ -27307,9 +30670,278 @@ function _fmCtx(event, path, name) {
   document.body.appendChild(ov);
 }
 
+function _closeChatCtxDropdowns() {
+  document.querySelectorAll('.chat-ctx-dropdown.open').forEach(function(el) {
+    el.classList.remove('open');
+  });
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.chat-ctx-sel') && !e.target.closest('.chat-ctx-dropdown')) _closeChatCtxDropdowns();
+}, true);
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') _closeChatCtxDropdowns();
+}, true);
+
+window._projFmState = window._projFmState || {};
+
+function _projFmGetState(projectId) {
+  if (!window._projFmState[projectId]) window._projFmState[projectId] = { path: projectId, items: [], sections: { files: true, dirs: true } };
+  return window._projFmState[projectId];
+}
+
+function _projFmPath(projectId) {
+  var state = _projFmGetState(projectId);
+  return _projFmNormalizePath(projectId, state.path || projectId);
+}
+
+function _projFmToggleSection(projectId, key) {
+  var state = _projFmGetState(projectId);
+  state.sections = state.sections || { files: true, dirs: true };
+  state.sections[key] = !state.sections[key];
+  _projLoadFiles(_projFmPath(projectId));
+}
+
+function _projFmSectionHeader(projectId, title, subtitle, key) {
+  var state = _projFmGetState(projectId);
+  var open = !state.sections || state.sections[key] !== false;
+  return '<div class="fm-pane-hdr" style="cursor:pointer" onclick="_projFmToggleSection(\'' + escHtml(projectId).replace(/'/g, "\\'") + '\',\'' + escHtml(key) + '\')">'
+    + '<div class="fm-pane-titlewrap"><span class="fm-pane-title">' + escHtml(title) + '</span><span class="fm-pane-sub">' + escHtml(subtitle || '') + '</span></div>'
+    + '<span class="proj-card-chevron' + (open ? ' open' : '') + '" style="font-size:10px">▸</span></div>';
+}
+
+function _projFmNormalizePath(projectId, path) {
+  var root = String(projectId || '').trim();
+  var next = String(path || '').trim();
+  if (!root) return next;
+  if (!next || next === '/' || next === '.') return root;
+  if (next === root) return root;
+  if (next.indexOf(root + '/') === 0) return next;
+  return root;
+}
+
+function _projFmColHeader(projectId) {
+  var arrow = function(col) { return _fmSortCol === col ? '<span class="sort-arrow">' + (_fmSortAsc ? '▲' : '▼') + '</span>' : ''; };
+  return '<div class="fm-col-hdr">'
+    + '<span style="flex:1;min-width:0;padding-left:26px" onclick="_projFmSetSort(\'' + escHtml(projectId).replace(/'/g, "\\'") + '\',\'name\')">Name ' + arrow('name') + '</span>'
+    + '<span style="min-width:60px;text-align:right" onclick="_projFmSetSort(\'' + escHtml(projectId).replace(/'/g, "\\'") + '\',\'size\')">Size ' + arrow('size') + '</span>'
+    + '<span style="min-width:80px;text-align:right" onclick="_projFmSetSort(\'' + escHtml(projectId).replace(/'/g, "\\'") + '\',\'date\')">Modified ' + arrow('date') + '</span>'
+    + '<span style="min-width:60px"></span>'
+    + '</div>';
+}
+
+function _projFmRow(projectId, f) {
+  var isDir = f.type === 'folder';
+  var ext = isDir ? '' : (f.name || '').split('.').pop().toLowerCase();
+  var iconClr = isDir ? '#f59e0b' : ({'py':'#3b82f6','js':'#f59e0b','ts':'#3178c6','md':'#8b949e','json':'#22c55e','html':'#ef4444','css':'#a855f7'}[ext] || 'var(--text3)');
+  var icon = isDir
+    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="' + iconClr + '" stroke="none"><path d="M2 4a2 2 0 012-2h4l2 2h8a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V4z"/></svg>'
+    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="' + iconClr + '" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
+  var onclick = isDir
+    ? '_projLoadFiles(\'' + escHtml(_projFmNormalizePath(projectId, f.path)).replace(/'/g, "\\'") + '\')'
+    : '_fmPreview(\'' + escHtml(f.path).replace(/'/g, "\\'") + '\',\'' + escHtml(f.name).replace(/'/g, "\\'") + '\')';
+  var size = (!isDir && f.size) ? _fmFmtBytes(f.size) : '';
+  var date = f.modified ? new Date(f.modified * 1000).toLocaleDateString('en-SG', {day:'numeric',month:'short',year:'numeric'}) : '';
+  return '<div class="fm-row" style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--border) 62%, transparent);cursor:pointer" onclick="' + onclick + '" oncontextmenu="_projFmCtx(event,\'' + escHtml(projectId).replace(/'/g, "\\'") + '\',\'' + escHtml(f.path).replace(/'/g, "\\'") + '\',\'' + escHtml(f.name).replace(/'/g, "\\'") + '\')">'
+    + icon
+    + '<span class="fm-name-label" style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(f.name) + '</span>'
+    + '<span style="font-size:11px;color:var(--text3);min-width:60px;text-align:right">' + size + '</span>'
+    + '<span class="fm-row-date" style="font-size:11px;color:var(--text3);min-width:80px;text-align:right">' + date + '</span>'
+    + '<div class="fm-row-actions">'
+    + '<button class="fm-act" onclick="event.stopPropagation();_projFmRename(this.closest(\'.fm-row\'),\'' + escHtml(projectId).replace(/'/g, "\\'") + '\',\'' + escHtml(f.path).replace(/'/g, "\\'") + '\',\'' + escHtml(f.name).replace(/'/g, "\\'") + '\')" title="Rename">Rename</button>'
+    + '<button class="fm-act danger" onclick="event.stopPropagation();_projFmDelete(\'' + escHtml(projectId).replace(/'/g, "\\'") + '\',\'' + escHtml(f.path).replace(/'/g, "\\'") + '\',\'' + escHtml(f.name).replace(/'/g, "\\'") + '\')" title="Delete">Delete</button>'
+    + '</div></div>';
+}
+
+function _projFmStatusBar(items) { return _fmStatusBar(items || []); }
+
+function _projFmFilter(projectId) {
+  var q = (document.getElementById('proj-fm-search') || {}).value || '';
+  q = q.toLowerCase().trim();
+  if (!q) { _projLoadFiles(); return; }
+  var proj = window._projCurrent;
+  if (!proj) return;
+  var state = _projFmGetState(projectId || proj.id);
+  var el = document.getElementById('proj-fm-list');
+  if (!el || !state.items || !state.items.length) return;
+  var filtered = state.items.filter(function(f) { return (f.name || '').toLowerCase().indexOf(q) !== -1; });
+  var path = _projFmPath(projectId || proj.id);
+  if (path === (projectId || proj.id)) {
+    var looseFiles = filtered.filter(function(f) { return f.type !== 'folder'; });
+    var dirs = filtered.filter(function(f) { return f.type === 'folder'; });
+    var sec = (state.sections || { files: true, dirs: true });
+    var h = '';
+    h += '<div class="fm-pane" style="margin-bottom:12px">' + _projFmSectionHeader(projectId || proj.id, 'My Files', looseFiles.length + ' item' + (looseFiles.length === 1 ? '' : 's'), 'files');
+    if (sec.files !== false) {
+      h += _projFmColHeader(projectId || proj.id);
+      h += '<div>';
+      if (looseFiles.length) h += _fmSortItems(looseFiles).map(function(f) { return _projFmRow(projectId || proj.id, f); }).join('');
+      else h += '<div class="fm-pane-empty">No files at the project root</div>';
+      h += '</div>' + _projFmStatusBar(looseFiles);
+    }
+    h += '</div>';
+    h += '<div class="fm-pane">' + _projFmSectionHeader(projectId || proj.id, 'Directories', dirs.length + ' folder' + (dirs.length === 1 ? '' : 's'), 'dirs');
+    if (sec.dirs !== false) {
+      if (dirs.length) h += _fmSortItems(dirs).map(function(f) { return _projFmRow(projectId || proj.id, f); }).join('');
+      else h += '<div class="fm-pane-empty">No directories yet</div>';
+      h += _projFmStatusBar(dirs);
+    }
+    h += '</div>';
+    el.innerHTML = h;
+    return;
+  }
+  el.innerHTML = _projFmColHeader(projectId || proj.id) + _fmSortItems(filtered).map(function(f) { return _projFmRow(projectId || proj.id, f); }).join('') + _projFmStatusBar(filtered);
+}
+
+function _projFmSetSort(projectId, col) {
+  if (_fmSortCol === col) _fmSortAsc = !_fmSortAsc;
+  else { _fmSortCol = col; _fmSortAsc = true; }
+  _projLoadFiles(_projFmPath(projectId));
+}
+
+function _projFmRename(rowEl, projectId, path, name) {
+  _fmStartInlineRename(rowEl, name, async function(newName) {
+    var r = await api('/api/files/rename', {path: path, name: newName});
+    if (r && r.ok) {
+      toast('Renamed', 'ok');
+      _projLoadFiles(_projFmPath(projectId));
+      return true;
+    }
+    toast((r && r.error) || 'Failed', 'err');
+    return false;
+  });
+}
+
+async function _projFmDelete(projectId, path, name) {
+  _porterConfirm('Delete', 'Delete "' + name + '"? This cannot be undone.', async function() {
+    var r = await api('/api/files/delete', {path: path});
+    if (r && r.ok) { toast('Deleted', 'ok'); _projLoadFiles(_projFmPath(projectId)); }
+    else toast((r && r.error) || 'Failed', 'err');
+  }, {danger:true, okLabel:'Delete'});
+}
+
+function _projFmCtx(event, projectId, path, name) {
+  event.preventDefault(); event.stopPropagation();
+  var old = document.getElementById('fm-ctx-overlay'); if (old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'fm-ctx-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99998';
+  ov.onclick = function() { ov.remove(); };
+  var menu = document.createElement('div');
+  menu.style.cssText = 'position:fixed;left:' + event.clientX + 'px;top:' + event.clientY + 'px;background:var(--raised);border:1px solid var(--border);border-radius:8px;padding:4px 0;min-width:120px;box-shadow:0 8px 24px rgba(0,0,0,.3);z-index:99999;font-size:12px';
+  var renameBtn = document.createElement('div');
+  renameBtn.textContent = 'Rename';
+  renameBtn.style.cssText = 'padding:6px 14px;cursor:pointer;color:var(--text)';
+  renameBtn.onmouseover = function(){this.style.background='var(--surface)'};
+  renameBtn.onmouseout = function(){this.style.background=''};
+  renameBtn.onclick = function(){ ov.remove(); _projFmRename(_fmFindRow(path), projectId, path, name); };
+  var delBtn = document.createElement('div');
+  delBtn.textContent = 'Delete';
+  delBtn.style.cssText = 'padding:6px 14px;cursor:pointer;color:#ef4444';
+  delBtn.onmouseover = function(){this.style.background='var(--surface)'};
+  delBtn.onmouseout = function(){this.style.background=''};
+  delBtn.onclick = function(){ ov.remove(); _projFmDelete(projectId, path, name); };
+  menu.appendChild(renameBtn);
+  menu.appendChild(delBtn);
+  ov.appendChild(menu);
+  document.body.appendChild(ov);
+}
+
+async function _projFmNewFolder(projectId) {
+  var name = await porterPrompt('New Folder', 'Folder name:', '');
+  if (!name) return;
+  var r = await api('/api/files/mkdir', {path: _projFmPath(projectId), name: name});
+  if (r && r.ok) { toast('Folder created', 'ok'); _projLoadFiles(_projFmPath(projectId)); }
+  else toast((r && r.error) || 'Failed', 'err');
+}
+
+async function _projFmUploadFiles(projectId, files) {
+  if (!files || !files.length) return;
+  var path = _projFmPath(projectId);
+  for (var i = 0; i < files.length; i++) {
+    try {
+      var res = await fetch('/api/files/upload?path=' + encodeURIComponent(path) + '&filename=' + encodeURIComponent(files[i].name), {method:'POST', body:files[i], credentials:'same-origin'});
+      var d = await res.json();
+      if (!d.ok) toast('Upload failed: ' + (d.error || ''), 'err');
+    } catch(e) {
+      toast('Upload error', 'err');
+    }
+  }
+  toast(files.length + ' file(s) uploaded', 'ok');
+  _projLoadFiles(path);
+  var inp = document.getElementById('proj-fm-upload-input'); if (inp) inp.value = '';
+}
+
+async function _projLoadFiles(path) {
+  var proj = window._projCurrent;
+  if (!proj) return;
+  var state = _projFmGetState(proj.id);
+  if (path !== undefined) state.path = _projFmNormalizePath(proj.id, path || proj.id);
+  var currentPath = _projFmPath(proj.id);
+  var el = document.getElementById('proj-fm-list');
+  var bcEl = document.getElementById('proj-fm-breadcrumbs');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-indicator" style="padding:24px">Loading...</div>';
+  try {
+    var data = await fetch('/api/files/list?path=' + encodeURIComponent(currentPath), {credentials:'same-origin'}).then(function(r) { return r.json(); });
+    if (!data || !data.ok) {
+      el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3)">' + escHtml((data && data.error) || 'Failed') + '</div>';
+      return;
+    }
+    state.items = data.items || [];
+    if (bcEl && data.breadcrumbs) {
+      var crumbs = (data.breadcrumbs || []).filter(function(b) {
+        return _projFmNormalizePath(proj.id, b.path || proj.id) === (b.path || proj.id) || String(b.name || '') === 'Files';
+      });
+      bcEl.innerHTML = crumbs.map(function(b, i) {
+        var sep = i > 0 ? '<span style="color:var(--text3);margin:0 2px">/</span>' : '';
+        var isLast = i === crumbs.length - 1;
+        var safePath = _projFmNormalizePath(proj.id, b.path || proj.id);
+        return sep + (isLast
+          ? '<span style="color:var(--text);font-weight:600">' + escHtml(b.name) + '</span>'
+          : '<a href="#" onclick="_projLoadFiles(\'' + escHtml(safePath).replace(/'/g, "\\'") + '\');return false" style="color:var(--accent);text-decoration:none">' + escHtml(b.name) + '</a>');
+      }).join('');
+    }
+    if (currentPath === proj.id) {
+      var looseFiles = state.items.filter(function(f) { return f.type !== 'folder'; });
+      var dirs = state.items.filter(function(f) { return f.type === 'folder'; });
+      state.sections = state.sections || { files: true, dirs: true };
+      var html = '';
+      html += '<div class="fm-pane" style="margin-bottom:12px">' + _projFmSectionHeader(proj.id, 'My Files', looseFiles.length + ' item' + (looseFiles.length === 1 ? '' : 's'), 'files');
+      if (state.sections.files !== false) {
+        html += _projFmColHeader(proj.id);
+        html += '<div>';
+        if (looseFiles.length) html += _fmSortItems(looseFiles).map(function(f) { return _projFmRow(proj.id, f); }).join('');
+        else html += '<div class="fm-pane-empty">Drop files here or use Upload</div>';
+        html += '</div>' + _projFmStatusBar(looseFiles);
+      }
+      html += '</div>';
+      html += '<div class="fm-pane">' + _projFmSectionHeader(proj.id, 'Directories', dirs.length + ' folder' + (dirs.length === 1 ? '' : 's'), 'dirs');
+      if (state.sections.dirs !== false) {
+        if (dirs.length) html += _fmSortItems(dirs).map(function(f) { return _projFmRow(proj.id, f); }).join('');
+        else html += '<div class="fm-pane-empty">No directories yet</div>';
+        html += _projFmStatusBar(dirs);
+      }
+      html += '</div>';
+      el.innerHTML = html;
+    } else if (!state.items.length) {
+      el.innerHTML = '<div style="padding:48px 32px;text-align:center;color:var(--text3)"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;opacity:.4"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg><div style="font-size:13px;margin-bottom:4px">Drop files here or use Upload</div><div style="font-size:11px">You can also create folders with + Folder</div></div>';
+    } else {
+      el.innerHTML = _projFmColHeader(proj.id) + _fmSortItems(state.items).map(function(f) { return _projFmRow(proj.id, f); }).join('') + _projFmStatusBar(state.items);
+    }
+    _setupDropZone(el, function(files) { return _projFmUploadFiles(proj.id, files); });
+  } catch(e) {
+    el.innerHTML = '<div style="padding:24px;color:var(--err,#ef4444)">Error: ' + escHtml(e.message) + '</div>';
+  }
+}
+
 /* _fmtBytes removed — use _fmFmtBytes */
 
 async function loadAgents() {
+  var row = document.getElementById('persona-cards-row');
+  _personasLoading = true;
+  if (row) row.innerHTML = _spinnerOnlyMarkup(140, '18px 0');
   loadPersonas(); // Also refresh persona org chart
   const [data, localData] = await Promise.all([
     api('/api/agents'),
@@ -27631,6 +31263,90 @@ function _refreshSchedulerSummary(backendId) {
   if (host) host.innerHTML = _renderModelSchedulerSummary(backendId);
 }
 
+function _modelUseText(backendId) {
+  var defs = {
+    openclaw: 'Porter routing, local bridge work, and managed runtime control.',
+    claude: 'Reasoning, drafting, planning, and careful implementation work.',
+    codex: 'Coding, patches, terminal-heavy implementation, and technical edits.',
+    gemini: 'Long context, multimodal work, and broad document/image inspection.',
+    ollama: 'Private local execution when you want Porter to stay on-device.'
+  };
+  return defs[backendId] || 'General-purpose model runtime for Porter.';
+}
+
+function _renderModelsOverview() {
+  var host = document.getElementById('models-overview');
+  if (!host) return;
+  var providers = Array.isArray(window._modelProviders) ? window._modelProviders : [];
+  if (!providers.length) {
+    host.innerHTML = '';
+    return;
+  }
+  var versions = window._modelVersions || {};
+  var backends = _modelAvailableData || {};
+  var health = window._backendHealthData || {};
+  var ready = 0;
+  var attention = 0;
+  var updates = 0;
+  var discovered = 0;
+  providers.forEach(function(p) {
+    if (p && p.available) ready += 1;
+    var h = health[p.id] || {};
+    var hasIssue = !p.available || h.status === 'rate_limited' || h.status === 'recovering' || (h.failures || 0) > 0;
+    if (hasIssue) attention += 1;
+    var vd = versions[p.id] || {};
+    if (vd.version && vd.latest && _compareVersionish(vd.latest, vd.version) > 0) updates += 1;
+    var models = ((backends[p.id] || {}).models) || [];
+    models.forEach(function(m) {
+      if (m && m.id && m.id !== 'auto') discovered += 1;
+    });
+  });
+  var stats = [
+    { label:'Ready', value:String(ready), copy: ready === 1 ? 'runtime available now' : 'runtimes available now' },
+    { label:'Needs Attention', value:String(attention), copy: attention ? 'Porter found at least one issue to repair' : 'nothing urgent needs repair right now' },
+    { label:'Updates', value:String(updates), copy: updates ? 'runtime updates available' : 'all detected runtimes look current' },
+    { label:'Models', value:String(discovered), copy: discovered ? 'discovered models Porter can route into' : 'model inventory still coming online' }
+  ];
+  host.innerHTML = stats.map(function(stat) {
+    return '<div class="models-summary-stat">'
+      + '<div class="models-summary-label">' + escHtml(stat.label) + '</div>'
+      + '<div class="models-summary-value">' + escHtml(stat.value) + '</div>'
+      + '<div class="models-summary-copy">' + escHtml(stat.copy) + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function _modelsAttentionCount() {
+  var providers = Array.isArray(window._modelProviders) ? window._modelProviders : [];
+  if (!providers.length) return 0;
+  var versions = window._modelVersions || {};
+  var health = window._backendHealthData || {};
+  var count = 0;
+  providers.forEach(function(p) {
+    if (!p) return;
+    var vd = versions[p.id] || {};
+    var h = health[p.id] || {};
+    var hasUpdate = !!(vd.version && vd.latest && _compareVersionish(vd.latest, vd.version) > 0);
+    var hasIssue = !p.available || h.status === 'rate_limited' || h.status === 'recovering' || (h.failures || 0) > 0;
+    if (hasUpdate || hasIssue) count += 1;
+  });
+  return count;
+}
+
+function _updateModelsNavBadge() {
+  var nav = document.getElementById('mnav-models');
+  if (!nav) return;
+  var existing = nav.querySelector('.mnav-badge');
+  if (existing) existing.remove();
+  var count = _modelsAttentionCount();
+  if (!count) return;
+  var badge = document.createElement('span');
+  badge.className = 'mnav-badge';
+  badge.textContent = String(count);
+  badge.title = count === 1 ? '1 model runtime needs attention' : (count + ' model runtimes need attention');
+  nav.appendChild(badge);
+}
+
 function _formatDuration(ms) {
   if (!ms) return '';
   if (ms < 1000) return ms + 'ms';
@@ -27711,6 +31427,8 @@ function _applyBackendHealthChips(healthData) {
       chip.style.display = 'none';
     }
   });
+  _renderModelsOverview();
+  _updateModelsNavBadge();
 }
 
 function _applyBackendStatus(provider) {
@@ -28030,42 +31748,93 @@ async function _showUpdateCommand(backend) {
   var vd = (window._modelVersions || {})[backend] || {};
   var cmd = vd.update_cmd || 'echo "No update command"';
   var ov = document.createElement('div');
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
+  ov.className = 'model-update-overlay';
   var box = document.createElement('div');
-  box.style.cssText = 'background:#0d1117;border:1px solid #30363d;border-radius:10px;width:560px;max-height:80vh;display:flex;flex-direction:column;font-family:monospace;overflow:hidden';
-  box.innerHTML = '<div style="padding:10px 14px;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:8px">'
-    + '<span style="font-size:12px;color:#8b949e">Terminal</span>'
-    + '<span style="font-size:11px;color:#58a6ff">' + escHtml(backend) + '</span>'
-    + '<span style="font-size:10px;color:#8b949e">' + escHtml((vd.version||'?') + ' \u2192 ' + (vd.latest||'?')) + '</span>'
-    + '<div style="flex:1"></div>'
-    + '<button onclick="this.closest(\'.tm-overlay\').remove()" style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:14px">\u2715</button>'
+  box.className = 'model-update-modal';
+  box.innerHTML = '<div class="model-update-head">'
+    + '<div style="min-width:0;flex:1">'
+    + '<div class="model-update-title">Update ' + escHtml(backend) + '</div>'
+    + '<div class="model-update-copy">Porter will run the runtime update command, then show a plain-language result. Raw command output stays hidden unless you ask for details.</div>'
     + '</div>'
-    + '<div style="padding:12px 14px;flex:1;overflow-y:auto;font-size:12px;line-height:1.6;color:#c9d1d9" id="_term_output">'
-    + '<div style="color:#8b949e">$ ' + escHtml(cmd) + '</div>'
-    + '<div style="color:#58a6ff">Running...</div>'
+    + '<span class="model-update-badge">' + escHtml((vd.version || '?') + ' \u2192 ' + (vd.latest || '?')) + '</span>'
+    + '<button class="btn btn-ghost" type="button" id="model-update-close">\u2715</button>'
+    + '</div>'
+    + '<div class="model-update-body">'
+    + '<div class="model-update-status running" id="model-update-status"><strong>Updating now</strong><span>Porter is running the runtime update command for ' + escHtml(backend) + '.</span></div>'
+    + '<div class="model-update-details" id="model-update-details"><pre class="model-update-pre" id="model-update-pre"></pre></div>'
+    + '<div class="model-update-actions">'
+    + '<button class="btn btn-ghost" type="button" id="model-update-copy">Copy command</button>'
+    + '<button class="btn btn-ghost" type="button" id="model-update-toggle">Show details</button>'
+    + '<button class="btn btn-ghost" type="button" id="model-update-retry" style="display:none">Retry</button>'
+    + '<button class="btn btn-primary" type="button" id="model-update-done">Close</button>'
+    + '</div>'
     + '</div>';
-  ov.className = 'tm-overlay';
-  ov.onclick = function(e) { if (e.target === ov) ov.remove(); };
   ov.appendChild(box);
+  ov.onclick = function(e) { if (e.target === ov) ov.remove(); };
   document.body.appendChild(ov);
-  // Execute
-  fetch('/api/terminal/exec', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({command:cmd}), credentials:'same-origin'})
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      var out = document.getElementById('_term_output');
-      if (!out) return;
-      var html = '<div style="color:#8b949e">$ ' + escHtml(cmd) + '</div>';
-      if (d.stdout) html += '<pre style="margin:0;white-space:pre-wrap;color:#c9d1d9">' + escHtml(d.stdout) + '</pre>';
-      if (d.stderr) html += '<pre style="margin:0;white-space:pre-wrap;color:#f85149">' + escHtml(d.stderr) + '</pre>';
-      html += '<div style="margin-top:8px;color:' + (d.ok ? '#3fb950' : '#f85149') + '">' + (d.ok ? '\u2713 Done' : '\u2717 Failed (exit ' + d.exit_code + ')') + '</div>';
-      if (d.ok) html += '<div style="color:#8b949e;margin-top:4px">Restart Porter to pick up the update.</div>';
-      out.innerHTML = html;
-      if (d.ok) _refreshModelVersions(true);
-    })
-    .catch(function(e) {
-      var out = document.getElementById('_term_output');
-      if (out) out.innerHTML += '<div style="color:#f85149">Error: ' + escHtml(e.message || e) + '</div>';
-    });
+  var closeBtn = box.querySelector('#model-update-close');
+  var doneBtn = box.querySelector('#model-update-done');
+  var copyBtn = box.querySelector('#model-update-copy');
+  var toggleBtn = box.querySelector('#model-update-toggle');
+  var retryBtn = box.querySelector('#model-update-retry');
+  var statusEl = box.querySelector('#model-update-status');
+  var detailsEl = box.querySelector('#model-update-details');
+  var preEl = box.querySelector('#model-update-pre');
+  function closeOverlay() { ov.remove(); }
+  if (closeBtn) closeBtn.onclick = closeOverlay;
+  if (doneBtn) doneBtn.onclick = closeOverlay;
+  if (copyBtn) copyBtn.onclick = function() {
+    if (!navigator.clipboard) return;
+    navigator.clipboard.writeText(cmd).then(function() { toast('Command copied', 'ok'); }).catch(function() {});
+  };
+  if (toggleBtn) toggleBtn.onclick = function() {
+    var open = detailsEl.classList.toggle('open');
+    toggleBtn.textContent = open ? 'Hide details' : 'Show details';
+  };
+  function setDetails(text) {
+    if (preEl) preEl.textContent = text || '$ ' + cmd;
+  }
+  async function runUpdate() {
+    if (retryBtn) retryBtn.style.display = 'none';
+    if (statusEl) statusEl.className = 'model-update-status running';
+    if (statusEl) statusEl.innerHTML = '<strong>Updating now</strong><span>Porter is running the runtime update command for ' + escHtml(backend) + '.</span>';
+    setDetails('$ ' + cmd);
+    try {
+      var r = await fetch('/api/terminal/exec', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({command:cmd}), credentials:'same-origin'});
+      var d = await r.json();
+      var detailBits = ['$ ' + cmd];
+      if (d.stdout) detailBits.push(d.stdout);
+      if (d.stderr) detailBits.push(d.stderr);
+      setDetails(detailBits.join('\n\n'));
+      if (d && d.ok) {
+        if (statusEl) {
+          statusEl.className = 'model-update-status ok';
+          statusEl.innerHTML = '<strong>Update complete</strong><span>' + escHtml(backend) + ' finished updating. Porter will refresh the version info in the background.</span>';
+        }
+        _refreshModelVersions(true);
+        return;
+      }
+      var failure = (d && d.error) || (d && d.stderr) || (d && d.stdout) || 'The installer failed before it reported a usable result.';
+      if (String(failure || '').trim().toLowerCase() === 'forbidden') {
+        failure = 'Your current Porter role does not have permission to update runtimes from this page.';
+      }
+      var exitCopy = (d && typeof d.exit_code !== 'undefined') ? (' Exit code ' + d.exit_code + '.') : '';
+      if (statusEl) {
+        statusEl.className = 'model-update-status err';
+        statusEl.innerHTML = '<strong>Update failed</strong><span>' + escHtml(String(failure).trim() + exitCopy) + '</span>';
+      }
+      if (retryBtn) retryBtn.style.display = '';
+    } catch (e) {
+      setDetails('$ ' + cmd + '\n\n' + String((e && e.message) || e || 'Unknown error'));
+      if (statusEl) {
+        statusEl.className = 'model-update-status err';
+        statusEl.innerHTML = '<strong>Update failed</strong><span>' + escHtml((e && e.message) || 'Porter could not run the update command.') + '</span>';
+      }
+      if (retryBtn) retryBtn.style.display = '';
+    }
+  }
+  if (retryBtn) retryBtn.onclick = runUpdate;
+  runUpdate();
 }
 
 async function _showRepairAction(backendId) {
@@ -28245,6 +32014,8 @@ function _applyModelVersions(versionMap) {
     }
     if (showUpdate) _updateCount++;
   });
+  _renderModelsOverview();
+  _updateModelsNavBadge();
 }
 
 function _refreshModelVersions(force) {
@@ -28278,6 +32049,8 @@ function _applyModelsSnapshot(snap, opts) {
   _modelSchedulerData = snap.scheduler || {};
   window._modelProviders = snap.providers || [];
   window._modelRuntimes = snap.runtimes || {};
+  _renderModelsOverview();
+  _updateModelsNavBadge();
   if (shouldRenderCards) {
     _renderModelCards({ providers: window._modelProviders }, _modelActivityData);
     _modelStructureSignature = nextSig;
@@ -28293,7 +32066,20 @@ function _renderModelsLoading(stage, opts) {
   if (rail) {
     if (stage) {
       rail.classList.add('show');
-      rail.innerHTML = '<strong>' + escHtml(stage) + '</strong><span>' + escHtml(opts.detail || 'Porter is checking runtimes, models, and versions in the background.') + '</span>';
+      var state = _modelsLoadingStageState || {};
+      var steps = [
+        { key:'bootstrap', label:'Gateways' },
+        { key:'snapshot', label:'Models' },
+        { key:'health', label:'Health' },
+        { key:'versions', label:'Versions' }
+      ];
+      rail.innerHTML = '<div class="models-load-stage-copy"><strong>' + escHtml(stage) + '</strong><span>' + escHtml(opts.detail || 'Porter is checking runtimes, models, and versions in the background.') + '</span></div>'
+        + '<div class="models-load-stage-steps">'
+        + steps.map(function(step) {
+          var cls = state[step.key] ? 'done' : ((opts.activeStep === step.key) ? 'active' : '');
+          return '<span class="models-load-step ' + cls + '">' + escHtml(step.label) + '</span>';
+        }).join('')
+        + '</div>';
     } else {
       rail.classList.remove('show');
       rail.innerHTML = '';
@@ -28301,9 +32087,9 @@ function _renderModelsLoading(stage, opts) {
   }
 }
 
-function _renderModelsProgress(step, detail) {
+function _renderModelsProgress(step, detail, activeStep) {
   var label = step || 'Loading models...';
-  _renderModelsLoading(label, { detail: detail || '' });
+  _renderModelsLoading(label, { detail: detail || '', activeStep: activeStep || '' });
 }
 
 function _showModelsLoadFailure(message) {
@@ -28330,16 +32116,83 @@ function _modelsDiscoveredCount(payload) {
   return total;
 }
 
+function _scheduleModelsDeepRefresh(loadSeq) {
+  if (_modelsDeepRefreshTimer) {
+    clearTimeout(_modelsDeepRefreshTimer);
+    _modelsDeepRefreshTimer = null;
+  }
+  var now = Date.now();
+  if (_modelsLastDeepRefreshTs && (now - _modelsLastDeepRefreshTs) < 300000) return;
+  _modelsDeepRefreshTimer = setTimeout(function() {
+    _modelsDeepRefreshTimer = null;
+    if (_currentModule !== 'models') return;
+    if (loadSeq !== _modelsLoadSeq) return;
+    _modelsLastDeepRefreshTs = Date.now();
+    fetch('/api/models/versions?refresh=1', {credentials:'same-origin'})
+      .then(function(r) { return r && r.ok ? r.json() : null; })
+      .then(function(vers) {
+        if (loadSeq !== _modelsLoadSeq) return;
+        _applyModelVersions((vers && vers.versions) ? vers.versions : {});
+      })
+      .catch(function(e) {
+        _reportModelsClientError('models-versions-deferred', e || new Error('Deferred version refresh failed'));
+      });
+  }, 1600);
+}
+
+function _modelsPlaceholderProviders() {
+  if (Array.isArray(window._modelProviders) && window._modelProviders.length) {
+    return window._modelProviders.slice();
+  }
+  return [
+    { id:'openclaw', label:'OpenClaw', description:'Porter bridge and local routing runtime.' },
+    { id:'codex', label:'Codex', description:'OpenAI coding and agent runtime.' },
+    { id:'claude', label:'Claude', description:'Anthropic reasoning and implementation runtime.' },
+    { id:'gemini', label:'Gemini', description:'Google multimodal and long-context runtime.' },
+    { id:'ollama', label:'Ollama', description:'Local model runtime for on-device execution.' }
+  ];
+}
+
+function _renderModelSkeletonCards(providers) {
+  var grid = document.getElementById('models-grid');
+  if (!grid) return;
+  providers = Array.isArray(providers) ? providers : [];
+  if (!providers.length) providers = _modelsPlaceholderProviders();
+  grid.innerHTML = providers.map(function(p, idx) {
+    return '<div class="models-skeleton-card" style="animation:modelCardIn .22s ease-out both;animation-delay:' + (idx * 35) + 'ms">'
+      + '<div class="models-skeleton-row"><span class="models-skeleton-dot"></span><div class="models-skeleton-line" style="width:132px"></div></div>'
+      + '<div class="models-skeleton-line sm" style="width:88%"></div>'
+      + '<div class="models-skeleton-line sm" style="width:64%;margin-top:6px"></div>'
+      + '<div class="models-skeleton-runtime"><div class="models-skeleton-line pill"></div><div class="models-skeleton-line pill" style="width:74px"></div></div>'
+      + '<div class="models-skeleton-list">'
+      + '<div class="models-skeleton-item"><span class="models-skeleton-dot"></span><div class="models-skeleton-line" style="width:56%"></div><div class="models-skeleton-line sm" style="width:56px"></div></div>'
+      + '<div class="models-skeleton-item"><span class="models-skeleton-dot"></span><div class="models-skeleton-line" style="width:72%"></div><div class="models-skeleton-line sm" style="width:48px"></div></div>'
+      + '<div class="models-skeleton-item"><span class="models-skeleton-dot"></span><div class="models-skeleton-line" style="width:48%"></div><div class="models-skeleton-line sm" style="width:52px"></div></div>'
+      + '</div>'
+      + '<div style="position:absolute;left:14px;right:14px;bottom:12px;font-size:11px;color:var(--text3)">' + escHtml((p && p.label) || 'Gateway') + '</div>'
+      + '</div>';
+  }).join('');
+}
+
 async function loadModels() {
   var loadSeq = ++_modelsLoadSeq;
+  var grid = document.getElementById('models-grid');
+  _modelsLoadingStageState = { bootstrap:false, snapshot:false, health:false, versions:false };
+  if (grid && !_modelsRenderedOnce) _renderModelSkeletonCards(_modelsPlaceholderProviders());
   try {
     var loadingState = { bootstrap: false, snapshot: false, health: false, versions: false };
     function markProgress(step, detail) {
       if (loadSeq !== _modelsLoadSeq) return;
-      _renderModelsProgress(step, detail);
+      var activeKey = '';
+      if (!loadingState.bootstrap) activeKey = 'bootstrap';
+      else if (!loadingState.snapshot) activeKey = 'snapshot';
+      else if (!loadingState.health) activeKey = 'health';
+      else if (!loadingState.versions) activeKey = 'versions';
+      _renderModelsProgress(step, detail, activeKey);
     }
     function markDone(key) {
       loadingState[key] = true;
+      _modelsLoadingStageState[key] = true;
       if (loadSeq !== _modelsLoadSeq) return;
       if (_modelsRenderedOnce && (loadingState.snapshot || loadingState.bootstrap)) {
         setTimeout(function() {
@@ -28348,9 +32201,9 @@ async function loadModels() {
       }
     }
     if (!_modelsRenderedOnce) {
-      _renderModelsProgress('Bringing model gateways online', 'Porter will paint the runtime cards first, then fill them in as each backend reports ready.');
+      _renderModelsProgress('Bringing model gateways online', 'Porter is laying out the gateway cards first, then filling them in as each backend reports ready.', 'bootstrap');
     } else {
-      _renderModelsProgress('Refreshing model status', 'Cards stay visible while Porter refreshes them in the background.');
+      _renderModelsProgress('Refreshing model status', 'Cards stay visible while Porter refreshes them in the background.', 'bootstrap');
     }
     if (!_modelSseId) _connectModelSSE();
     var snapshotApplied = false;
@@ -28399,13 +32252,14 @@ async function loadModels() {
       }
       markDone('health');
     }).catch(function() { markDone('health'); });
-    fetch('/api/models/versions?refresh=1', {credentials:'same-origin'})
+    fetch('/api/models/versions', {credentials:'same-origin'})
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(vers) {
         if (loadSeq !== _modelsLoadSeq) return;
         _applyModelVersions((vers && vers.versions) ? vers.versions : {});
         markProgress('Versions checked', 'Installed and latest versions are now filled in for each backend.');
         markDone('versions');
+        _scheduleModelsDeepRefresh(loadSeq);
       }).catch(function(e) {
         if (loadSeq !== _modelsLoadSeq) return;
         _reportModelsClientError('models-versions', e || new Error('Version probe failed'));
@@ -29276,24 +33130,6 @@ function _renderModelCards(data, act) {
     // Activity data
     var ba = (act || {})[p.id] || {};
     var activeRuns = ba.active || [];
-    var stats = ba.stats || {};
-    // 24h stats (only shown when there's data)
-    var statsHtml = '';
-    if (stats.total > 0) {
-      statsHtml = '<div class="model-card-stats">' + stats.total + ' requests today'
-        + (stats.complete < stats.total ? ' · ' + (stats.total - stats.complete) + ' failed' : '')
-        + (stats.avg_ms > 0 ? ' · ' + _formatDuration(stats.avg_ms) + ' avg response' : '')
-        + '</div>';
-    }
-    var benchmarkHtml = _renderModelBenchmarkSummary(p.id);
-    var schedulerHtml = _renderModelSchedulerSummary(p.id);
-
-    // Live Trace button (only when actively dispatching)
-    var liveTraceBtn = '';
-    if (activeRuns.length > 0) {
-      liveTraceBtn = '<div style="margin-top:4px"><button class="btn btn-ghost" style="font-size:10px;width:100%;color:var(--accent)" onclick="_openModelActivity(\'' + escHtml(p.id) + '\')">Live Trace</button></div>';
-    }
-    var lastPromptBtn = '';
 
     // Install hint for unavailable backends
     var _healthChipHtml = '<div id="backend-health-chip-' + p.id + '" style="display:none;margin:4px 0"></div>';
@@ -29315,6 +33151,7 @@ function _renderModelCards(data, act) {
     _avModels.forEach(function(m) { if (m.id === _avResolved) _resolvedName = m.name; });
     if (!_resolvedName) _resolvedName = _avResolved || (p.label || p.id);
     var _runtimeHtml = _renderModelRuntimeBadges(p, _rt, _avBk);
+    var _discoveredCount = _avModels.filter(function(m) { return m && m.id && m.id !== 'auto'; }).length;
     // Build model list (replaces dropdown)
     var _selHtml = '';
     if (_avModels.length > 0) {
@@ -29341,13 +33178,15 @@ function _renderModelCards(data, act) {
     var _statusBadge = activeRuns.length > 0
       ? '<span style="font-size:10px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:3px"><span class="pulse-dot"></span>' + activeRuns.length + ' active</span>'
       : '';
+    var _selectedSummary = _resolvedName ? ('Selected: ' + _resolvedName) : 'No active model selected yet.';
+    var _selectedMeta = '<div class="model-card-modelmeta">'
+      + '<span class="model-card-chip dim">' + escHtml(_selectedSummary) + '</span>'
+      + (_discoveredCount ? '<span class="model-card-chip dim">' + escHtml(_discoveredCount + ' discovered') + '</span>' : '')
+      + '</div>';
+    var _useHtml = '<div class="model-card-use">' + escHtml(_modelUseText(p.id)) + '</div>';
 
     var updateFootHtml = '<div id="backend-update-foot-' + escHtml(p.id) + '" class="model-card-alert"></div>';
     var statusFootHtml = '<div id="backend-status-foot-' + escHtml(p.id) + '" class="model-card-alert"></div>';
-    var footerBody = '<div id="backend-bench-' + escHtml(p.id) + '">' + benchmarkHtml + '</div>'
-      + '<div id="backend-sched-' + escHtml(p.id) + '">' + schedulerHtml + '</div>'
-      + statsHtml + liveTraceBtn + lastPromptBtn;
-    var footerHtml = (benchmarkHtml || schedulerHtml || statsHtml || liveTraceBtn || lastPromptBtn) ? '<div class="model-card-footer">' + footerBody + '</div>' : '';
 
     return '<div class="model-card' + offClass + '" data-model-id="' + escHtml(p.id) + '">'
       + '<div class="model-card-head" style="justify-content:space-between">'
@@ -29361,14 +33200,24 @@ function _renderModelCards(data, act) {
       + '<div id="backend-status-' + escHtml(p.id) + '" style="flex:1"></div>'
       + '</div>'
       + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
+      + '<div class="model-card-subline">' + _useHtml + _statusBadge + '</div>'
+      + _selectedMeta
       + _runtimeHtml
       + _healthChipHtml
       + (p.available ? _selHtml : _installHtml)
       + updateFootHtml
       + statusFootHtml
-      + footerHtml
       + '</div>';
   }).join('');
+
+  Array.prototype.forEach.call(grid.querySelectorAll('.model-card'), function(card, idx) {
+    card.classList.add('hydrating');
+    card.style.animationDelay = (idx * 32) + 'ms';
+    setTimeout(function() {
+      card.classList.remove('hydrating');
+      card.style.animationDelay = '';
+    }, 420 + (idx * 32));
+  });
 
 
   // Start elapsed timers for working models
@@ -29615,14 +33464,16 @@ let _personas = [];
 let _selectedPersonaId = null;
 let _wizCurrentStep = 1;
 let _wizSelectedEmoji = '🤖';
+let _personasLoading = false;
 
 const PERSONA_EMOJIS = ['🤖','🐙','💎','🔧','🔍','📊','🎯','🧪','📝','🛡️','⚡','🌐','🧠','💡','🎨','🦊','🐺','🦉','🐱','🐻'];
 
 async function loadPersonas() {
+  _personasLoading = true;
   try {
     const r = await api('/api/personas');
     if (r.ok) {
-      _personas = r.personas || [];
+      _personas = _dedupePersonaRoster((r.personas || []));
       // v0.28.54 — Fetch cortex stats and merge into persona data
       try {
         var statsR = await api('/api/personas/stats');
@@ -29643,6 +33494,82 @@ async function loadPersonas() {
       populateChatPersonaBar();
     }
   } catch(e) { console.error('loadPersonas failed', e); }
+  finally { _personasLoading = false; }
+}
+
+function _dedupePersonaRoster(personas) {
+  var rows = Array.isArray(personas) ? personas.slice() : [];
+  var byName = {};
+  rows.forEach(function(p) {
+    var key = String(p && p.name || '').trim().toLowerCase();
+    if (!key) return;
+    var current = byName[key];
+    if (!current) {
+      byName[key] = p;
+      return;
+    }
+    var currentOwnerMatch = currentUser && current.owner && current.owner === currentUser.username;
+    var nextOwnerMatch = currentUser && p.owner && p.owner === currentUser.username;
+    if (nextOwnerMatch && !currentOwnerMatch) {
+      byName[key] = p;
+      return;
+    }
+    var currentOwner = String(current.owner || '').trim();
+    var nextOwner = String(p.owner || '').trim();
+    if (nextOwner && !currentOwner) {
+      byName[key] = p;
+      return;
+    }
+    var currentManaged = Number(current.managed_by_porter || 0);
+    var nextManaged = Number(p.managed_by_porter || 0);
+    if (nextManaged && !currentManaged) {
+      byName[key] = p;
+      return;
+    }
+    var currentCreated = Date.parse(current.created_at || '') || 0;
+    var nextCreated = Date.parse(p.created_at || '') || 0;
+    if (nextCreated < currentCreated) byName[key] = p;
+  });
+  return Object.values(byName);
+}
+
+function _agentRoleSummary(p) {
+  var name = String((p && p.name) || '').trim().toLowerCase();
+  var role = String((p && p.role) || '').trim().toLowerCase();
+  var text = (name + ' ' + role).trim();
+  var picks = [
+    { test: /joke|comed/i, label: 'Comedian' },
+    { test: /investor|fundrais|ir\b/, label: 'Investor Relations' },
+    { test: /project manager|project\b/, label: 'Project Lead' },
+    { test: /product manager|product\b/, label: 'Product Lead' },
+    { test: /design|ui|ux|brand/, label: 'Designer' },
+    { test: /frontend|react|vue|ui engineer/, label: 'Frontend' },
+    { test: /backend|api|server|database/, label: 'Backend' },
+    { test: /full.?stack/, label: 'Full Stack' },
+    { test: /qa|test|quality/, label: 'QA' },
+    { test: /research|analyst/, label: 'Researcher' },
+    { test: /writer|content|copy/, label: 'Writer' },
+    { test: /editor/, label: 'Editor' },
+    { test: /seo/, label: 'SEO' },
+    { test: /growth|marketing/, label: 'Marketer' },
+    { test: /sales|outbound|account/, label: 'Sales' },
+    { test: /support|customer/, label: 'Support' },
+    { test: /ops|operations/, label: 'Operator' },
+    { test: /devops|sre|infra/, label: 'DevOps' },
+    { test: /security/, label: 'Security' },
+    { test: /data engineer|pipeline/, label: 'Data Engineer' },
+    { test: /data|analytics/, label: 'Analyst' },
+    { test: /orchestrator|porter/, label: 'Orchestrator' }
+  ];
+  for (var i = 0; i < picks.length; i++) {
+    if (picks[i].test.test(text)) return picks[i].label;
+  }
+  var raw = String((p && p.role) || '').trim();
+  if (!raw) return 'Worker';
+  var words = raw.replace(/[^\w\s-]/g, ' ').split(/\s+/).filter(Boolean);
+  if (!words.length) return 'Worker';
+  if (words.length === 1) return words[0];
+  return words.slice(0, 2).join(' ');
 }
 
 function populateChatPersonaBar() {
@@ -29960,9 +33887,17 @@ function _porterConfirm(title, msg, onYes, opts) {
     + '</div>';
   ov.appendChild(box);
   document.body.appendChild(ov);
-  ov.onclick = function(e) { if (e.target === ov) { ov.remove(); } };
-  box.querySelector('._pc-cancel').onclick = function() { ov.remove(); };
-  box.querySelector('._pc-ok').onclick = function() { ov.remove(); if (onYes) onYes(); };
+  function _close() {
+    document.removeEventListener('keydown', _onEsc, true);
+    ov.remove();
+  }
+  function _onEsc(e) {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _close(); }
+  }
+  document.addEventListener('keydown', _onEsc, true);
+  ov.onclick = function(e) { if (e.target === ov) { _close(); } };
+  box.querySelector('._pc-cancel').onclick = function() { _close(); };
+  box.querySelector('._pc-ok').onclick = function() { _close(); if (onYes) onYes(); };
   box.querySelector('._pc-ok').focus();
 }
 
@@ -30001,18 +33936,31 @@ function _porterPrompt(title, fields, onOk, opts) {
     + '</div>';
   ov.appendChild(box);
   document.body.appendChild(ov);
-  ov.onclick = function(e) { if (e.target === ov) { ov.remove(); } };
-  box.querySelector('._pp-cancel').onclick = function() { ov.remove(); };
+  function _close() {
+    document.removeEventListener('keydown', _onEsc, true);
+    ov.remove();
+  }
+  function _onEsc(e) {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _close(); }
+  }
+  document.addEventListener('keydown', _onEsc, true);
+  ov.onclick = function(e) { if (e.target === ov) { _close(); } };
+  box.querySelector('._pp-cancel').onclick = function() { _close(); };
   box.querySelector('._pp-ok').onclick = function() {
     var result = {};
     box.querySelectorAll('._pp-field').forEach(function(el) {
       result[el.dataset.name] = el.tagName === 'TEXTAREA' ? el.value : el.value.trim();
     });
-    ov.remove();
+    _close();
     if (onOk) onOk(result);
   };
-  var first = box.querySelector('input._pp-field');
-  if (first) { first.focus(); first.onkeydown = function(e) { if (e.key === 'Enter') box.querySelector('._pp-ok').click(); }; }
+  var first = box.querySelector('input._pp-field, textarea._pp-field, select._pp-field');
+  if (first) {
+    first.focus();
+    first.onkeydown = function(e) {
+      if (e.key === 'Enter' && first.tagName !== 'TEXTAREA') box.querySelector('._pp-ok').click();
+    };
+  }
 }
 
 function _porterSelect(title, items, onSelect) {
@@ -30304,6 +34252,10 @@ function renderPersonaOrg() {
   const row = document.getElementById('persona-cards-row');
   if (!row) return;
   if (!_personas.length) {
+    if (_personasLoading) {
+      row.innerHTML = '<div class="loading-indicator" style="justify-content:center;padding:28px 0;min-height:120px" aria-label="Loading agents"><span class="loading-spinner"></span></div>';
+      return;
+    }
     row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:18px 12px">No workers yet. Ask Porter to create the right worker when the work demands it.</div>';
     return;
   }
@@ -30323,10 +34275,16 @@ function renderPersonaOrg() {
     return '<div class="persona-card' + (isSelected ? ' selected' : '') + (isOrch ? ' orchestrator' : '') + (isBusy ? ' is-busy' : '') + '" data-persona-id="' + p.id + '" onclick="selectPersona(\'' + p.id + '\')">'
       + '<div class="persona-card-avatar" style="display:flex;align-items:center;justify-content:center;overflow:hidden">' + _personaAvatarMarkup(p, 96) + '</div>'
       + '<div class="persona-card-name">' + escHtml(p.name) + '</div>'
-      + '<div class="persona-card-role">' + escHtml(p.role || (isOrch ? 'Master Orchestrator' : 'Worker')) + '</div>'
+      + '<div class="persona-card-role">' + escHtml(_agentRoleSummary(p)) + '</div>'
       + '</div>';
   }
   row.innerHTML = '<div class="persona-cards-row" style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">' + sorted.map(cardHtml).join('') + '</div>';
+  Array.prototype.forEach.call(row.querySelectorAll('.persona-card'), function(card, idx) {
+    card.style.animation = 'none';
+    card.offsetHeight;
+    card.style.animation = 'agentCardIn .26s ease-out both';
+    card.style.animationDelay = (idx * 28) + 'ms';
+  });
 }
 
 // ── Agent Office View ────────────────────────────────────────
@@ -30365,6 +34323,11 @@ function _renderOffice() {
   });
 
   var html = '';
+  function _agentRoleLabel(p) {
+    var isOrch = p.agent_group === 'Orchestrator' || p.orchestrator_only;
+    var raw = String(p.role || (isOrch ? 'Master Orchestrator' : 'Worker')).trim();
+    return raw || (isOrch ? 'Orchestrator' : 'Worker');
+  }
   sorted.forEach(function(p) {
     var isOrch = p.agent_group === 'Orchestrator' || p.orchestrator_only;
     var isBusy = String(p.status || '').toLowerCase() !== 'idle' && String(p.status || '').toLowerCase() !== '';
@@ -30376,7 +34339,7 @@ function _renderOffice() {
     html += '<div class="office-agent">';
     html += '<div class="office-agent-avatar">' + _personaAvatarMarkup(p, avatarSize) + '<div class="office-status"><div class="office-status-bubble ' + statusClass + '">' + statusIcon + '</div></div></div>';
     html += '<div class="office-agent-name">' + escHtml(p.name) + '</div>';
-    html += '<div class="office-agent-role">' + escHtml(p.role || (isOrch ? 'Orchestrator' : 'Worker')) + '</div>';
+    html += '<div class="office-agent-role">' + escHtml(_agentRoleLabel(p)) + '</div>';
     html += '</div>';
     html += '<div class="office-desk-surface"></div>';
     html += '<div class="office-desk-legs"></div>';
@@ -30550,7 +34513,7 @@ function _pCleanup() {
 function openAgentDetail(personaId) {
   if (!personaId) return;
   switchModule('agents');
-  setTimeout(function() { selectPersona(personaId); }, 150);
+  selectPersona(personaId);
 }
 
 async function selectPersona(id) {
@@ -30584,9 +34547,30 @@ async function selectPersona(id) {
     }
     if (nm) nm.textContent = p.name || 'Unnamed';
     if (rl) rl.textContent = p.role || 'No role assigned';
-    if (gb) { gb.textContent = isOrchestrator ? 'Command Core' : (p.is_temporary ? 'Temporary Worker' : 'Persistent Worker'); gb.style.borderColor = isOrchestrator ? '#f59e0b' : 'var(--border)'; gb.style.color = isOrchestrator ? '#f59e0b' : 'var(--text2)'; }
-    if (sb) { sb.textContent = p.managed_by_porter ? 'Porter-managed' : 'Manual'; sb.style.color = p.managed_by_porter ? 'var(--accent)' : 'var(--text3)'; }
-    if (bb) bb.textContent = isOrchestrator ? 'Delegates work' : (p.preferred_backend || 'Bridge-selected at run time');
+    if (gb) {
+      if (isOrchestrator) {
+        gb.textContent = 'Command Core';
+        gb.style.display = '';
+        gb.style.borderColor = '#f59e0b';
+        gb.style.color = '#f59e0b';
+      } else if (p.is_temporary) {
+        gb.textContent = 'Temporary';
+        gb.style.display = '';
+        gb.style.borderColor = 'var(--border)';
+        gb.style.color = 'var(--text2)';
+      } else {
+        gb.style.display = 'none';
+        gb.textContent = '';
+      }
+    }
+    if (sb) {
+      sb.style.display = 'none';
+      sb.textContent = '';
+    }
+    if (bb) {
+      bb.textContent = isOrchestrator ? 'Delegates work' : (p.preferred_backend || 'Bridge-selected');
+      bb.style.display = isOrchestrator || p.preferred_backend ? '' : 'none';
+    }
     if (delBtn) delBtn.style.display = isLocked ? 'none' : '';
     if (spBtn) spBtn.textContent = isOrchestrator ? 'Who Is Porter' : 'System Prompt';
     var _dtTitle = document.getElementById('pd-detail-title');
@@ -30597,9 +34581,7 @@ async function selectPersona(id) {
         : '';
     }
     document.querySelectorAll('.pd-tab').forEach(function(btn) {
-      var _t = btn.textContent.trim().toLowerCase();
-      if (isLocked && (_t === 'identity' || _t === 'config')) btn.style.display = 'none';
-      else btn.style.display = '';
+      btn.style.display = '';
     });
     switchPdTab('overview');
   } catch(e) { console.error('selectPersona failed', e); if (typeof toast === 'function') toast('Failed to open agent','err'); }
@@ -30660,8 +34642,8 @@ function switchPdTab(tab) {
   if (!p) return;
   if (tab === 'overview') {
     if (!p) { content.innerHTML = '<div class="loading-indicator">Select an agent</div>'; return; }
-    content.innerHTML = '<section id="pd-chat-shell" class="pd-chat-shell" style="display:flex;flex-direction:column;flex:1;min-height:0;padding:4px 2px 2px;background:transparent;box-sizing:border-box" ondragover="_pdChatDragOver(event)" ondrop="_pdChatDrop(event)" ondragleave="_pdChatDragLeave(event)" ondragenter="_pdChatDragEnter(event)">'
-      + '<div id="pd-chat-thread" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 14px"></div>'
+    content.innerHTML = '<section id="pd-chat-shell" class="pd-chat-shell" ondragover="_pdChatDragOver(event)" ondrop="_pdChatDrop(event)" ondragleave="_pdChatDragLeave(event)" ondragenter="_pdChatDragEnter(event)">'
+      + '<div id="pd-chat-thread"></div>'
       + '<div style="margin-top:8px;padding-top:4px">'
       + '<div class="pd-chat-toolbar">'
       + '<button class="pd-chat-toolbtn" onclick="_pdNewChat()">＋ New Chat</button>'
@@ -30732,7 +34714,13 @@ function switchPdTab(tab) {
         var tasks = (tasksResp && tasksResp.tasks) || [];
         var assignedProject = p.project_id ? projects.find(function(pr) { return pr.id === p.project_id; }) : null;
         var workerProjects = projects.filter(function(pr) { return (pr.assigned_personas || []).indexOf(p.id) >= 0; });
-        var peerWorkers = workers.filter(function(w) { return w.id !== p.id; });
+        var projectIds = new Set(workerProjects.map(function(pr) { return pr.id; }));
+        var personaTasks = tasks.filter(function(task) { return String(task.assigned_persona_id || '') === String(p.id || ''); });
+        var openTasks = personaTasks.filter(function(task) { return !/complete|done|cancelled/i.test(String(task.status || '')); });
+        var peerWorkers = workers.filter(function(w) {
+          if (w.id === p.id) return false;
+          return workerProjects.some(function(pr) { return (pr.assigned_personas || []).indexOf(w.id) >= 0; });
+        });
         var html = '<div style="display:flex;flex-direction:column;gap:16px">';
         if (p.orchestrator_only) {
           html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
@@ -30752,16 +34740,32 @@ function switchPdTab(tab) {
         } else {
           html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
             + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Reports To</div><div style="font-size:18px;font-weight:800;color:var(--text);margin-top:6px">Porter</div></div>'
-            + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Project Lanes</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + workerProjects.length + '</div></div>'
-            + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Peer Workers</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + peerWorkers.length + '</div></div>'
+            + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Assigned Projects</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + workerProjects.length + '</div></div>'
+            + '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Owned Tasks</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + openTasks.length + '</div></div>'
             + '</div>';
           html += '<div style="display:grid;grid-template-columns:minmax(220px,280px) 1fr;gap:14px">'
-            + '<div style="padding:16px;border:1px solid color-mix(in srgb,#f59e0b 30%, var(--border));border-radius:18px;background:color-mix(in srgb,#f59e0b 6%, var(--bg))"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Chain Of Command</div><div style="font-size:18px;font-weight:800;color:var(--text)">Porter → ' + escHtml(p.name || 'Worker') + '</div><div style="font-size:12px;color:var(--text2);line-height:1.55;margin-top:8px">This worker executes inside Porter\'s orchestration layer and should inherit project context, tasks, and handoffs from the assigned lane.</div></div>'
+            + '<div style="padding:16px;border:1px solid color-mix(in srgb,#f59e0b 30%, var(--border));border-radius:18px;background:color-mix(in srgb,#f59e0b 6%, var(--bg))"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Chain Of Command</div><div style="font-size:18px;font-weight:800;color:var(--text)">Porter → ' + escHtml(p.name || 'Worker') + '</div><div style="font-size:12px;color:var(--text2);line-height:1.55;margin-top:8px">This worker should operate from project directives, assigned tasks, linked files, and reviewed concept memory. It should not free-roam outside its active lanes.</div></div>'
             + '<div style="display:flex;flex-direction:column;gap:10px">'
             + (workerProjects.length ? workerProjects.map(function(pr) {
-                return '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px"><div style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(pr.name || 'Project') + '</div><span class="model-card-chip dim" style="font-size:10px">' + escHtml(pr.type === 'autonomous' ? 'Autonomous' : 'Manual') + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(pr.description || pr.success_bar || 'No project brief yet.') + '</div></div>';
+                var owned = openTasks.filter(function(task) { return String(task.project_id || '') === String(pr.id || ''); });
+                var nextTask = owned[0];
+                return '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px"><div style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(pr.name || 'Project') + '</div><span class="model-card-chip dim" style="font-size:10px">' + escHtml(pr.type === 'autonomous' ? 'Autonomous' : 'Manual') + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + owned.length + ' owned</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(pr.description || pr.success_bar || 'No project brief yet.') + '</div>' + (nextTask ? '<div style="margin-top:8px;font-size:11px;color:var(--text3)">Next owned task: <span style="color:var(--text2)">' + escHtml(nextTask.title || 'Task') + '</span></div>' : '') + '</div>';
               }).join('') : '<div style="padding:14px;border:1px dashed var(--border);border-radius:16px;background:var(--bg);font-size:12px;color:var(--text3)">This worker is not attached to a project lane yet.</div>')
             + '</div></div>';
+          html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">';
+          html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Closest Working Set</div>'
+            + (peerWorkers.length ? peerWorkers.slice(0, 8).map(function(w) {
+                var wProjects = workerProjects.filter(function(pr) { return (pr.assigned_personas || []).indexOf(w.id) >= 0; });
+                return '<div style="padding:10px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><div style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(w.name || 'Worker') + '</div><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml((wProjects[0] && wProjects[0].name) || 'Shared lane') + '</span></div><div style="font-size:11px;color:var(--text2);margin-top:4px">' + escHtml(w.role || 'Worker') + '</div></div>';
+              }).join('') : '<div style="font-size:12px;color:var(--text3)">No peer workers are sharing this worker’s active projects yet.</div>')
+            + '</section>';
+          html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Current Owned Tasks</div>'
+            + (openTasks.length ? openTasks.slice(0, 8).map(function(task) {
+                var project = projects.find(function(pr) { return String(pr.id || '') === String(task.project_id || ''); });
+                return '<div style="padding:10px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><div style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(task.title || 'Task') + '</div><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(String(task.status || 'pending').replace(/_/g, ' ')) + '</span></div><div style="font-size:11px;color:var(--text2);margin-top:4px">' + escHtml((project && project.name) || task.project_name || 'No project') + '</div></div>';
+              }).join('') : '<div style="font-size:12px;color:var(--text3)">This worker does not currently own any open tasks.</div>')
+            + '</section>';
+          html += '</div>';
         }
         content.innerHTML = html + '</div>';
       } catch (e) {
@@ -30829,7 +34833,7 @@ function switchPdTab(tab) {
       var durations = runs.map(function(run) { return run.duration_ms || 0; }).filter(Boolean);
       var avg = durations.length ? Math.round(durations.reduce(function(a, b) { return a + b; }, 0) / durations.length) : 0;
       var approvalItems = [];
-      var handoffItems = runs.slice(0, 4).map(function(run) {
+      var handoffItems = runs.slice(0, 6).map(function(run) {
         return {
           title: (run.backend || 'bridge') + ' lane',
           detail: (run.prompt_preview || run.message || 'Recent coordination activity').substring(0, 140),
@@ -30837,12 +34841,37 @@ function switchPdTab(tab) {
           ok: run.status === 'complete'
         };
       });
+      var projectMap = {};
+      projects.forEach(function(pr) { projectMap[String(pr.id || '')] = pr; });
+      var streamRows = [];
+      openTasks.slice(0, 10).forEach(function(task) {
+        streamRows.push({
+          kind: 'task',
+          tone: /blocked|failed|error/i.test(String(task.status || '')) ? '#ef4444' : (/in_progress|working/i.test(String(task.status || '')) ? 'var(--accent)' : '#64748b'),
+          title: task.title || 'Task',
+          sub: ((projectMap[String(task.project_id || '')] || {}).name || task.project_name || 'No project') + ' · ' + String(task.status || 'pending').replace(/_/g, ' '),
+          meta: task.priority || 'task',
+          ts: task.updated_at || task.created_at || 0,
+        });
+      });
+      handoffItems.forEach(function(item) {
+        streamRows.push({
+          kind: 'run',
+          tone: item.ok ? '#22c55e' : '#f59e0b',
+          title: item.title,
+          sub: item.detail,
+          meta: item.ok ? 'complete' : 'attention',
+          ts: item.ts || 0,
+        });
+      });
+      streamRows.sort(function(a, b) { return Number(b.ts || 0) - Number(a.ts || 0); });
       var html = '<div style="display:flex;flex-direction:column;gap:16px">'
-        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">'
-        + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Recent Runs</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + runs.length + '</div></div>'
-        + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Open Tasks</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + openTasks.length + '</div></div>'
-        + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Projects In View</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + (p.orchestrator_only ? projects.length : (p.project_id ? 1 : 0)) + '</div></div>'
-        + '<div style="padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text3)">Avg Response</div><div style="font-size:26px;font-weight:800;color:var(--text);margin-top:4px">' + (avg ? (avg + 'ms') : '—') + '</div></div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+        + (runs.length ? '<span class="model-card-chip dim" style="font-size:10px">' + runs.length + ' recent runs</span>' : '')
+        + (openTasks.length ? '<span class="model-card-chip dim" style="font-size:10px">' + openTasks.length + ' open tasks</span>' : '')
+        + (successCount ? '<span class="model-card-chip ok" style="font-size:10px">' + successCount + ' complete</span>' : '')
+        + (failCount ? '<span class="model-card-chip warn" style="font-size:10px">' + failCount + ' failed</span>' : '')
+        + (avg ? '<span class="model-card-chip dim" style="font-size:10px">avg ' + avg + 'ms</span>' : '')
         + '</div>'
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">';
       if (p.orchestrator_only) {
@@ -30851,14 +34880,14 @@ function switchPdTab(tab) {
             return '<div style="padding:12px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><span class="model-card-chip warn" style="font-size:10px">' + escHtml(item.state) + '</span><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(item.title) + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(item.detail) + '</div></div>';
           }).join('') : '<div style="font-size:12px;color:var(--text3)">No approvals are waiting right now.</div>') + '</section>';
       }
-      html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Recent Tasks</div>'
-        + ((openTasks.length ? openTasks : personaTasks.slice(0, 4)).map(function(task) {
-            return '<div style="padding:12px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(task.priority || 'normal') + '</span><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(task.title || 'Task') + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(task.status || 'pending') + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(task.description || task.project_name || 'Task tracked through Porter.') + '</div></div>';
+      html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Current Work</div>'
+        + ((openTasks.length ? openTasks : personaTasks.slice(0, 6)).map(function(task) {
+            return '<div style="padding:10px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><span class="model-card-chip dim" style="font-size:10px">' + escHtml(task.priority || 'normal') + '</span><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(task.title || 'Task') + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(String(task.status || 'pending').replace(/_/g, ' ')) + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(task.description || ((projectMap[String(task.project_id || '')] || {}).name) || task.project_name || 'Task tracked through Porter.') + '</div></div>';
           }).join('') || '<div style="font-size:12px;color:var(--text3)">No tracked tasks yet.</div>') + '</section>';
-      html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">' + (p.orchestrator_only ? 'Handoffs & Oversight' : 'Recent Work') + '</div>'
-        + (handoffItems.length ? handoffItems.map(function(item) {
-            return '<div style="padding:12px 0;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:' + (item.ok ? '#22c55e' : '#f59e0b') + '"></span><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(item.title) + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + escHtml(_relativeTime(item.ts)) + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(item.detail) + '</div></div>';
-          }).join('') : '<div style="font-size:12px;color:var(--text3)">No recent orchestration history yet.</div>') + '</section>';
+      html += '<section style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">' + (p.orchestrator_only ? 'Oversight Stream' : 'Execution Stream') + '</div>'
+        + (streamRows.length ? streamRows.slice(0, 12).map(function(item) {
+            return '<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--border)"><span style="width:8px;height:8px;border-radius:50%;background:' + item.tone + ';margin-top:5px;flex-shrink:0"></span><div style="min-width:0;flex:1"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(item.title) + '</span><span class="model-card-chip dim" style="font-size:10px;margin-left:auto">' + escHtml(item.meta) + '</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:4px;overflow-wrap:anywhere">' + escHtml(item.sub || '') + '</div><div style="font-size:10px;color:var(--text3);margin-top:4px">' + escHtml(_relativeTime(item.ts)) + '</div></div></div>';
+          }).join('') : '<div style="font-size:12px;color:var(--text3)">No recent worker activity yet.</div>') + '</section>';
       html += '</div></div>';
       content.innerHTML = html;
     });
@@ -30912,7 +34941,7 @@ function switchPdTab(tab) {
           var gRes = await api('/api/memory/by-scope?scope=global&kind=directive&limit=50');
           memories = ((gRes && gRes.memories) || []).concat(memories);
         }
-        var reviewRes = await api('/api/memory/review-queue?limit=20');
+        var reviewRes = await api('/api/memory/review-queue?scope=agent&scope_id=' + encodeURIComponent(p.id) + '&limit=20');
         var queue = (reviewRes && reviewRes.queue) || [];
         var directives = memories.filter(function(m) { return m.memory_kind === 'directive'; });
         var concepts = memories.filter(function(m) { return m.memory_kind === 'concept'; });
@@ -30967,12 +34996,12 @@ function switchPdTab(tab) {
           html += '</div></details></section>';
         }
         if (queue.length) {
-          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#f59e0b;margin-bottom:10px">Needs Review <span style="display:inline-block;padding:2px 8px;border-radius:99px;background:#f59e0b;color:#000;font-size:10px;font-weight:700;vertical-align:middle">' + queue.length + '</span></div><div style="display:flex;flex-direction:column;gap:8px">';
+          html += '<section><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#f59e0b;margin-bottom:8px">Needs Review <span style="display:inline-block;padding:2px 8px;border-radius:99px;background:#f59e0b;color:#000;font-size:10px;font-weight:700;vertical-align:middle">' + queue.length + '</span></div><div style="display:flex;flex-direction:column;gap:6px;min-width:0">';
           queue.forEach(function(s) {
-            html += '<div style="padding:12px;background:color-mix(in srgb,#f59e0b 4%, var(--bg));border:1px solid color-mix(in srgb,#f59e0b 20%, var(--border));border-radius:12px">'
-              + '<div style="font-size:12px;line-height:1.5;color:var(--text)">' + escHtml(s.preview || '') + '</div>'
-              + '<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><span style="font-size:10px;color:var(--text3)">' + escHtml(s.source_category || 'signal') + '</span>'
-              + '<div style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-ghost btn-sm" style="font-size:10px;color:#22c55e" onclick="_memPromote(' + s.id + ',\'concept\',\'medium\')">Promote</button>'
+            html += '<div style="padding:9px 10px;background:color-mix(in srgb,#f59e0b 4%, var(--bg));border:1px solid color-mix(in srgb,#f59e0b 20%, var(--border));border-radius:10px;min-width:0">'
+              + '<div style="font-size:11px;line-height:1.45;color:var(--text);overflow-wrap:anywhere;word-break:break-word">' + escHtml(s.preview || '') + '</div>'
+              + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;min-width:0"><span style="font-size:10px;color:var(--text3)">' + escHtml(s.source_category || 'signal') + '</span>'
+              + '<div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" style="font-size:10px;color:#22c55e" onclick="_memPromote(' + s.id + ',\'concept\',\'medium\')">Promote</button>'
               + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:#ef4444" onclick="_memDismiss(' + s.id + ')">Dismiss</button></div></div></div>';
           });
           html += '</div></section>';
@@ -30985,30 +35014,16 @@ function switchPdTab(tab) {
     })();
   } else if (tab === 'config') {
     if (p.is_locked) {
-      content.innerHTML = '<div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2)">Porter is orchestrator-only. Runtime policy, delegation posture, and approvals should be configured at the platform level rather than through per-agent worker settings.</div>';
+      content.innerHTML = '<div style="display:flex;flex-direction:column;gap:12px">'
+        + '<div style="padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);font-size:12px;color:var(--text2)">Porter is orchestrator-only. Runtime policy, delegation posture, and approvals should be configured at the platform level rather than through per-agent worker settings.</div>'
+        + '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Runtime</div><div style="font-size:12px;color:var(--text);font-weight:600">Bridge-selected orchestration</div><div style="font-size:11px;color:var(--text3);margin-top:4px">Porter chooses the right lane at send time and delegates work across worker runtimes as needed.</div></div>';
       return;
     }
     let fb = [];
     try { fb = JSON.parse(p.fallback_backends || '[]'); } catch(e){}
     var backends = Object.keys(window._providerRegistry || {openclaw:1,claude:1,gemini:1,codex:1,ollama:1});
-    content.innerHTML = '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Profile</div>'
-      + '<div style="display:grid;grid-template-columns:60px 1fr 1fr;gap:12px;margin-bottom:16px">'
-      + '<div class="settings-field"><label>Avatar</label>'
-      + '  <div style="position:relative;display:inline-block">'
-      + '    <button class="settings-input" id="pd-edit-avatar" onclick="_openEmojiPicker(this)" style="width:48px;text-align:center;font-size:20px;cursor:pointer;border:1px solid var(--border);border-radius:6px;background:var(--surface)">' + (p.avatar || '\u{1F916}') + '</button>'
-      + '    <div id="pd-emoji-picker" style="display:none;position:absolute;top:100%;left:0;z-index:100;width:260px;max-height:280px;background:var(--raised);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.3);padding:8px;margin-top:4px">'
-      + '      <input class="settings-input" id="pd-emoji-search" placeholder="Search emoji..." style="width:100%;font-size:12px;padding:4px 8px;margin-bottom:6px" oninput="_filterEmoji(this.value)">'
-      + '      <div id="pd-emoji-grid" style="display:grid;grid-template-columns:repeat(8,1fr);gap:2px;max-height:210px;overflow-y:auto"></div>'
-      + '    </div>'
-      + '  </div></div>'
-      + '<div class="settings-field"><label>Name</label>'
-      + '  <input class="settings-input" id="pd-edit-name" value="' + escHtml(p.name) + '"></div>'
-      + '<div class="settings-field"><label>Role</label>'
-      + '  <input class="settings-input" id="pd-edit-role" value="' + escHtml(p.role || '') + '"></div>'
-      + '</div>'
-      + '<div style="margin-bottom:16px"><button class="btn btn-ghost" onclick="savePersonaMeta()" style="font-size:11px">Save Profile</button></div>'
-      + '<div style="padding-top:12px;border-top:1px solid var(--border)">'
-      + '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Routing</div>'
+    content.innerHTML = '<div style="display:flex;flex-direction:column;gap:16px">'
+      + '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Runtime Policy</div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
       + '<div class="settings-field"><label>Preferred Backend</label>'
       + '  <select class="settings-input" id="pd-cfg-backend">'
@@ -31026,9 +35041,9 @@ function switchPdTab(tab) {
         }).join('')
       + '  </div></div>'
       + '</div>'
-      + '<div style="margin-top:10px"><button class="btn btn-ghost" onclick="_saveAgentConfig()" style="font-size:11px">Save Routing</button></div>'
-      + '<div style="margin-top:20px;padding-top:12px;border-top:1px solid var(--border)">'
-      + '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Hook Profile</div>'
+      + '<div style="margin-top:10px;display:flex;gap:8px;align-items:center"><button class="btn btn-ghost" onclick="_saveAgentConfig()" style="font-size:11px">Save Runtime</button><span style="font-size:11px;color:var(--text3)">Porter can override this at dispatch time if the task needs a better lane.</span></div></div>'
+      + '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)">'
+      + '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Verification Posture</div>'
       + '<div style="display:flex;gap:8px;margin-bottom:8px">'
       + [['relaxed','Relaxed','Fast dispatch, minimal checks. Good for trusted tasks.','#22c55e'],
          ['balanced','Balanced','Standard verification. Recommended for most agents.','var(--accent)'],
@@ -31042,19 +35057,20 @@ function switchPdTab(tab) {
             + '</button>';
         }).join('')
       + '</div></div>'
-      + '<div style="margin-top:20px;padding-top:12px;border-top:1px solid var(--border)">'
+      + '<div style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)">'
+      + '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Lifecycle</div>'
       + '<div style="display:flex;align-items:center;gap:8px">'
       + '  <button class="btn btn-ghost" onclick="wakePersona(\'' + p.id + '\')" style="font-size:12px">Wake</button>'
       + '  <button class="btn btn-ghost" onclick="sleepPersona(\'' + p.id + '\')" style="font-size:12px">Sleep</button>'
       + '  <button class="btn btn-ghost" onclick="_deletePersona(\'' + p.id + '\')" style="font-size:12px;color:var(--err,#ef4444)">Delete Agent</button>'
       + '</div></div>'
-      + '<div id="pd-eval-results" style="margin-top:20px;padding-top:12px;border-top:1px solid var(--border);display:none">'
+      + '<div id="pd-eval-results" style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface);display:none">'
       + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
       + '  <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Self-Test Results</div>'
       + '  <button class="btn btn-ghost" onclick="_runAgentEval(\'' + p.id + '\')" style="font-size:10px;padding:2px 8px">Run Test</button>'
       + '</div>'
       + '<div id="pd-eval-table"></div>'
-      + '</div>';
+      + '</div></div>';
     // Load eval results
     _loadAgentEvalResults(p.id);
   }
@@ -31179,9 +35195,9 @@ function _renderPersonaSkills() {
 
   // Toolbar: toggle + search
   var html = '<div style="margin-bottom:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2)">'
-    + 'Porter manages starter skill coverage for workers and can re-curate it when the role changes.'
+    + 'Porter curates this worker loadout from role, project assignment, and current operating lane.'
     + (_psManagedByPorter
-        ? ' <span style="color:#22c55e">This worker is currently on Porter-managed defaults.</span>'
+        ? ' <span style="color:#22c55e">Porter-managed loadout is active.</span>'
         : ' <span style="color:var(--text3)">This worker currently has manual overrides.</span>')
     + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'
     + '<button class="btn btn-ghost btn-sm" onclick="_autoCuratePersonaSkills(\'' + pid + '\')" style="font-size:11px">Re-curate Skills</button>'
@@ -31420,7 +35436,6 @@ async function savePersonaMeta() {
     name: document.getElementById('pd-edit-name').value,
     role: document.getElementById('pd-edit-role').value,
     preferred_backend: (document.getElementById('pd-cfg-backend') || {}).value || '',
-    avatar: (document.getElementById('pd-edit-avatar').value || document.getElementById('pd-edit-avatar').textContent || '').trim(),
   };
   const r = await api('/api/personas/' + p.id, data);
   if (r.ok) {
@@ -31759,9 +35774,8 @@ async function _wizAiSuggest() {
     + ' "role" (1-5 word job title),'
     + ' "personality" (2-4 personality traits, comma-separated),'
     + ' "focus" (2-3 focus areas, comma-separated),'
-    + ' "style" (brief communication style description),'
-    + ' "avatar" (single emoji that fits this agent).'
-    + ' Example: {"role":"QA Lead","personality":"Meticulous, thorough, direct","focus":"Testing, code quality, regression","style":"Technical, concise, uses bullet points","avatar":"🧪"}';
+    + ' "style" (brief communication style description).'
+    + ' Example: {"role":"QA Lead","personality":"Meticulous, thorough, direct","focus":"Testing, code quality, regression","style":"Technical, concise, uses bullet points"}';
   try {
     var resp = await fetch('/api/chat/stream?model=auto&prompt=' + encodeURIComponent(prompt) + '&route=general&chat_id=wizard-' + Date.now());
     var reader = resp.body.getReader();
@@ -31791,15 +35805,6 @@ async function _wizAiSuggest() {
       if (ai.personality) document.getElementById('wiz-personality').value = ai.personality;
       if (ai.focus) document.getElementById('wiz-focus').value = ai.focus;
       if (ai.style) document.getElementById('wiz-style').value = ai.style;
-      if (ai.avatar) {
-        _wizSelectedEmoji = ai.avatar;
-        var emojiGrid = document.getElementById('wiz-emoji-grid');
-        if (emojiGrid) {
-          emojiGrid.querySelectorAll('.emoji-btn').forEach(function(b) {
-            b.classList.toggle('selected', b.textContent === ai.avatar);
-          });
-        }
-      }
       if (status) status.textContent = 'Fields auto-filled! Review and adjust as needed.';
       toast('AI suggestions applied');
     } else {
@@ -31819,7 +35824,6 @@ async function createPersonaFromWizard() {
   const data = {
     name,
     role: role,
-    avatar: _wizSelectedEmoji,
     preferred_backend: document.getElementById('wiz-backend').value || '',
     personality: document.getElementById('wiz-personality').value || '',
     focus: document.getElementById('wiz-focus').value || '',
@@ -32360,6 +36364,28 @@ function closeConfigPanel() {
 // Global Escape key — close any open panel or modal (innermost first)
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
+  var _activeEl = document.activeElement;
+  if (_activeEl && _activeEl.classList && _activeEl.classList.contains('crm-timeline-editbox')) return;
+  var projModal = document.getElementById('proj-artifact-modal');
+  if (projModal && typeof _projClosePreviewModal === 'function') {
+    _projClosePreviewModal(); e.stopPropagation(); return;
+  }
+  var genericOverlay = document.getElementById('overlay');
+  if (genericOverlay && genericOverlay.style.display !== 'none' && typeof closeModal === 'function') {
+    closeModal(); e.stopPropagation(); return;
+  }
+  var createTaskModal = document.getElementById('create-task-modal');
+  if (createTaskModal && createTaskModal.style.display !== 'none' && typeof closeCreateTaskModal === 'function') {
+    closeCreateTaskModal(); e.stopPropagation(); return;
+  }
+  var popupChat = document.getElementById('porter-popup-chat');
+  if (popupChat && popupChat.classList.contains('open') && typeof _popupChatClose === 'function') {
+    _popupChatClose(); e.stopPropagation(); return;
+  }
+  var kbOverlay = document.getElementById('kbOverlay');
+  if (kbOverlay && kbOverlay.classList.contains('open')) {
+    kbOverlay.classList.remove('open'); e.stopPropagation(); return;
+  }
   var logDrawer = document.getElementById('mc-right-panel');
   if (logDrawer && logDrawer.classList.contains('open') && typeof mcCloseDrawer === 'function') {
     mcCloseDrawer(); e.stopPropagation(); return;
@@ -32404,6 +36430,10 @@ document.addEventListener('keydown', function(e) {
 document.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault();
+    if (_projectDetailActive()) {
+      _focusProjectCommand();
+      return;
+    }
     _popupChatOpen();
   }
 });
@@ -33463,6 +37493,9 @@ document.getElementById('avatarInput').onchange = async function() {
       currentUser.has_avatar = true;
       renderAvatar(document.getElementById('ucAvatar'), currentUser);
       renderAvatar(document.getElementById('saAvatar'), currentUser);
+      if (_crmDetailType === 'user' && currentUser && _crmDetailId === currentUser.username) {
+        _crmOpenInternalUser(currentUser.username);
+      }
       toast('Photo updated', 'ok');
     } else { toast(data.error || 'Upload failed', 'err'); }
   } catch(e) { toast('Upload error', 'err'); }
@@ -35050,10 +39083,14 @@ document.addEventListener('keydown', function(e) {
   const inInput = tag === 'input' || tag === 'textarea' || document.activeElement.isContentEditable;
 
   if (e.key === 'Escape') {
+    const activeEl = document.activeElement;
+    if (activeEl && activeEl.classList && activeEl.classList.contains('crm-timeline-editbox')) return;
+    if (document.getElementById('proj-artifact-modal')) { _projClosePreviewModal(); return; }
     if (document.getElementById('pd-history-overlay')) { _pdCloseHistoryOverlay(); return; }
     if (document.getElementById('shortcutsOverlay').style.display !== 'none') { toggleShortcuts(); return; }
     if (document.getElementById('fpOverlay').style.display !== 'none') { closeFolderPicker(); return; }
     if (document.getElementById('overlay').style.display !== 'none') { closeModal(); return; }
+    if (document.getElementById('create-task-modal') && document.getElementById('create-task-modal').style.display !== 'none') { closeCreateTaskModal(); return; }
     const settingsPanel = document.getElementById('settingsPanel');
     if (settingsPanel && settingsPanel.classList.contains('open')) { closeSettings(); return; }
     const agentsModule = document.getElementById('agents-module');
@@ -35190,21 +39227,27 @@ function toast(msg, type='') {
 var _popupChatMessages = [];
 var _popupChatStreaming = false;
 var _popupChatAttachments = [];
+var _popupChatForceGlobal = false;
 
 function _popupChatOpen() {
+  if (_projectDetailActive() && !_popupChatForceGlobal) {
+    _popupChatForceGlobal = true;
+  }
   var el = document.getElementById('porter-popup-chat');
   if (!el) return;
   // Build context label from current location
   var ctx = '';
-  if (window._projCurrent && _currentModule === 'projects') {
+  if (!_popupChatForceGlobal && window._projCurrent && _currentModule === 'projects') {
     ctx = window._projCurrent.name || 'Project';
     if (_projTab) ctx += ' / ' + _projTab.charAt(0).toUpperCase() + _projTab.slice(1);
   } else if (_currentModule) {
-    ctx = _currentModule.charAt(0).toUpperCase() + _currentModule.slice(1);
+    ctx = _popupChatForceGlobal ? 'Global Porter' : (_currentModule.charAt(0).toUpperCase() + _currentModule.slice(1));
   }
   var ctxEl = document.getElementById('popup-chat-ctx');
   if (ctxEl) {
-    if (window._projCurrent && _currentModule === 'projects') {
+    if (_popupChatForceGlobal) {
+      ctxEl.textContent = 'Global Porter';
+    } else if (window._projCurrent && _currentModule === 'projects') {
       ctxEl.innerHTML = '<span style="background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent);padding:1px 6px;border-radius:4px;font-size:9px;font-weight:600">' + escHtml(window._projCurrent.name || 'Project') + '</span> ' + escHtml((_projTab || 'overview'));
     } else {
       ctxEl.textContent = ctx;
@@ -35255,7 +39298,9 @@ function _popupChatRemoveAttachment(idx) {
 function _popupChatUpdateCtx() {
   var ctxEl = document.getElementById('popup-chat-ctx');
   if (!ctxEl) return;
-  if (window._projCurrent && _currentModule === 'projects') {
+  if (_popupChatForceGlobal) {
+    ctxEl.textContent = 'Global Porter';
+  } else if (window._projCurrent && _currentModule === 'projects') {
     ctxEl.innerHTML = '<span style="background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent);padding:1px 6px;border-radius:4px;font-size:9px;font-weight:600">' + escHtml(window._projCurrent.name || 'Project') + '</span> ' + escHtml((_projTab || 'now'));
   } else if (_currentModule) {
     var _mdn={allfiles:'Files',capabilities:'Tools',people:'People',agents:'AI Agents',models:'Models',memory:'Memory',logs:'Logs',settings:'Settings',admin:'Admin',audit:'Audit',templates:'Templates'};ctxEl.textContent=_mdn[_currentModule]||(_currentModule.charAt(0).toUpperCase()+_currentModule.slice(1));
@@ -35265,6 +39310,7 @@ function _popupChatUpdateCtx() {
 function _popupChatClose() {
   var el = document.getElementById('porter-popup-chat');
   if (el) el.classList.remove('open');
+  _popupChatForceGlobal = false;
 }
 
 function _popupChatRender(tokenUpdate) {
@@ -35290,6 +39336,20 @@ function _popupChatRender(tokenUpdate) {
   thread.scrollTop = thread.scrollHeight;
 }
 
+function _popupChatSetBusy(busy) {
+  var input = document.getElementById('popup-chat-input');
+  var send = document.getElementById('popup-chat-send');
+  if (input) {
+    input.disabled = !!busy;
+    input.style.opacity = busy ? '0.65' : '';
+  }
+  if (send) {
+    send.disabled = !!busy;
+    send.style.opacity = busy ? '0.55' : '';
+    send.style.pointerEvents = busy ? 'none' : '';
+  }
+}
+
 async function _popupChatSend() {
   if (_popupChatStreaming) return;
   var input = document.getElementById('popup-chat-input');
@@ -35302,14 +39362,14 @@ async function _popupChatSend() {
   var _popupProjectId = '';
   var _popupPersona = 'Porter';
   var _popupChatId = 'porter-global';
-  if (window._projCurrent && _currentModule === 'projects') {
+  if (!_popupChatForceGlobal && window._projCurrent && _currentModule === 'projects') {
     _popupProjectId = window._projCurrent.id || '';
     _popupChatId = 'popup-proj-' + _popupProjectId;
     ctxParts.push('User is viewing project "' + (window._projCurrent.name || '') + '".');
     if (window._projCurrent.objective) ctxParts.push('Objective: ' + window._projCurrent.objective);
     else if (window._projCurrent.description) ctxParts.push('Project: ' + window._projCurrent.description);
-  } else {
-    ctxParts.push('User is on ' + (_currentModule || 'main') + '.');
+    } else {
+      ctxParts.push('User is on ' + (_currentModule || 'main') + '.');
     // Inject page-specific context so Porter can "see" what's on screen
     if (_currentModule === 'memory') {
       var memStats = document.querySelectorAll('#memory-dashboard div[title]');
@@ -35352,6 +39412,7 @@ async function _popupChatSend() {
   input.value = '';
   _popupChatRender();
   _popupChatStreaming = true;
+  _popupChatSetBusy(true);
 
   try {
     var url = '/api/chat/stream?model=auto&prompt=' + encodeURIComponent(fullPrompt) + '&route=general&chat_id=' + encodeURIComponent(_popupChatId)
@@ -35406,6 +39467,7 @@ async function _popupChatSend() {
           _popupChatRender();
           es.close();
           _popupChatStreaming = false;
+          _popupChatSetBusy(false);
         }
         if (data.error) {
           _esDone = true;
@@ -35413,6 +39475,7 @@ async function _popupChatSend() {
           _popupChatRender();
           es.close();
           _popupChatStreaming = false;
+          _popupChatSetBusy(false);
         }
       } catch(e) {}
     };
@@ -35424,12 +39487,14 @@ async function _popupChatSend() {
       }
       es.close();
       _popupChatStreaming = false;
+      _popupChatSetBusy(false);
     };
   } catch(e) {
     var lastIdx = _popupChatMessages.length - 1;
     _popupChatMessages[lastIdx] = { role: 'assistant', content: 'Failed to connect.' };
     _popupChatRender();
     _popupChatStreaming = false;
+    _popupChatSetBusy(false);
   }
 }
 
@@ -35465,10 +39530,17 @@ document.addEventListener('keydown', function(e) {
 
   // Escape: close overlays
   if (e.key === 'Escape') {
+    var activeEl = document.activeElement;
+    if (activeEl && activeEl.classList && activeEl.classList.contains('crm-timeline-editbox')) return;
+    if (document.getElementById('proj-artifact-modal')) { _projClosePreviewModal(); return; }
+    var genericOverlay = document.getElementById('overlay');
+    if (genericOverlay && genericOverlay.style.display !== 'none') { closeModal(); return; }
     var popup = document.getElementById('porter-popup-chat');
     if (popup && popup.classList.contains('open')) { _popupChatClose(); return; }
     var kb = document.getElementById('kbOverlay');
     if (kb && kb.classList.contains('open')) { kb.classList.remove('open'); return; }
+    var ctm = document.getElementById('create-task-modal');
+    if (ctm && ctm.style.display !== 'none') { closeCreateTaskModal(); return; }
     // Close file viewer
     var fv = document.getElementById('mem-split-pane');
     if (fv && fv.style.display !== 'none') { closeMemFileViewer(); return; }
@@ -35480,6 +39552,11 @@ document.addEventListener('keydown', function(e) {
 
   // / — open popup chat overlay (stays on current context)
   if (e.key === '/') {
+    if (_projectDetailActive()) {
+      e.preventDefault();
+      _focusProjectCommand();
+      return;
+    }
     e.preventDefault();
     _popupChatOpen();
     return;
@@ -38423,17 +42500,19 @@ def _persona_create(data):
     from datetime import datetime, timezone as _tz
     now_iso = datetime.now(_tz.utc).isoformat()
 
-    # Build SOUL.md from wizard answers or raw text
+    # Build SOUL.md from wizard answers or a stronger generated profile
     soul_text = data.get("soul_text", "")
     if not soul_text:
-        personality = data.get("personality", "")
-        focus = data.get("focus", "")
-        style = data.get("style", "")
-        soul_text = f"# {name}\n\n"
-        if role: soul_text += f"**Role:** {role}\n\n"
-        if personality: soul_text += f"**Personality:** {personality}\n\n"
-        if focus: soul_text += f"**Focus:** {focus}\n\n"
-        if style: soul_text += f"**Communication style:** {style}\n\n"
+        soul_text = _persona_generated_soul_text({
+            "id": pid,
+            "name": name,
+            "role": role,
+            "agent_group": data.get("agent_group", ""),
+            "preferred_backend": preferred_backend,
+            "is_temporary": is_temporary,
+            "orchestrator_only": orchestrator_only,
+            "appearance_style": appearance_style,
+        })
 
     soul_hash = hashlib.sha256(soul_text.encode()).hexdigest()[:16]
 
@@ -38452,54 +42531,20 @@ def _persona_create(data):
         log.error("Failed to create persona: %s", e)
         return None
 
-    # Filesystem — 5-file base pack (ClawOps standard)
+    # Filesystem — managed worker profile bundle
     pdir = PERSONAS_DIR / pid
     pdir.mkdir(parents=True, exist_ok=True)
-    (pdir / "memory").mkdir(exist_ok=True)
-
-    # 1. SOUL.md — personality, values, style
-    (pdir / "SOUL.md").write_text(soul_text)
-
-    # 2. IDENTITY.md — who this agent is
-    identity_text = f"# {name}\n\n"
-    identity_text += f"**Role:** {role}\n" if role else ""
-    identity_text += f"**Avatar:** {avatar}\n" if avatar else ""
-    identity_text += f"**Backend:** {preferred_backend}\n" if preferred_backend else ""
-    identity_text += f"\n**Created:** {now_iso}\n"
-    if not (pdir / "IDENTITY.md").exists():
-        (pdir / "IDENTITY.md").write_text(identity_text)
-
-    # 3. MEMORY.md — long-term learned patterns
-    if not (pdir / "MEMORY.md").exists():
-        (pdir / "MEMORY.md").write_text(
-            f"# {name} — Memory\n\n"
-            f"Durable rules and learned patterns for {name}.\n\n"
-            "## Hard Rules\n\n## Learned Patterns\n\n## Context\n"
-        )
-
-    # 4. USER.md — operator preferences
-    if not (pdir / "USER.md").exists():
-        _op_name = _config.get("display_name", "") or _config.get("username", "Operator")
-        _op_tz = _config.get("preferences", {}).get("timezone", "UTC")
-        (pdir / "USER.md").write_text(
-            f"# User Context for {name}\n\n"
-            f"**Human:** {_op_name}\n"
-            f"**Timezone:** {_op_tz}\n"
-            "**Style:** Direct, practical\n"
-        )
-
-    # 5. ROLE_CARD.md — mission, inputs, outputs, authority
-    if not (pdir / "ROLE_CARD.md").exists():
-        (pdir / "ROLE_CARD.md").write_text(
-            f"# {name} — Role Card\n\n"
-            f"**Mission:** {role or 'General assistant'}\n\n"
-            "## Inputs\n\n- Shared docs from project 00_SHARED/ (`WHY.md`, `REPO_MAP.md`, `RULES.md`, `WORKFLOWS.md`)\n\n"
-            "## Outputs\n\n- Role-specific deliverables\n- Learning flush updates\n\n"
-            "## Authority\n\n- Can flag quality/risk concerns\n"
-        )
-
-    # Legacy compatibility
-    (pdir / "heartbeat.md").write_text("")
+    _persona_write_profile_bundle({
+        "id": pid,
+        "name": name,
+        "role": role,
+        "preferred_backend": preferred_backend,
+        "is_temporary": is_temporary,
+        "orchestrator_only": orchestrator_only,
+        "appearance_style": appearance_style,
+        "created_at": now_iso,
+        "agent_group": data.get("agent_group", ""),
+    }, soul_text=soul_text, overwrite_identity=True, overwrite_role=True, overwrite_soul=True)
 
     if not is_locked:
         try:
@@ -38570,6 +42615,18 @@ def _persona_update(persona_id, data):
         conn.execute(f"UPDATE personas SET {', '.join(sets)} WHERE id=?", vals)
         conn.commit()
         conn.close()
+        refreshed = _persona_by_id(persona_id)
+        if refreshed and not _persona_is_orchestrator_only(refreshed):
+            _persona_write_profile_bundle(
+                refreshed,
+                soul_text=(soul_text if soul_text is not None else ""),
+                overwrite_identity=True,
+                overwrite_role=True,
+                overwrite_soul=bool(refreshed.get("managed_by_porter")) or soul_text is not None,
+            )
+            if bool(refreshed.get("managed_by_porter")) and not _persona_is_locked(refreshed):
+                recommended = _recommended_skill_names_for_persona(refreshed)
+                _persona_set_skill_names(persona_id, recommended, managed_by_porter=True)
         return True
     except Exception as e:
         log.error("Failed to update persona %s: %s", persona_id, e)
@@ -41821,7 +45878,7 @@ def _stream_chunk(run_id, backend, token):
     _emit_event("bridge:chunk", {"run_id": run_id, "backend": backend, "text": token})
 
 
-ADMIN_PAGE = '<!DOCTYPE html>\n<html lang="en"><head>\n<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n<title>Porter Admin Console</title>\n<style>\n*{margin:0;padding:0;box-sizing:border-box}\n:root{--bg:#0b0f14;--surface:#141a24;--raised:#1c2433;--border:#283040;--text:#e8ecf2;--text2:#a0aab8;--text3:#6b7688;--accent:#3b82f6;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--purple:#a855f7}\nbody{font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}\n.admin-nav{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}\n.admin-nav-brand{padding:16px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}\n.admin-nav-brand svg{color:var(--accent)}\n.admin-nav-brand-text{font-size:14px;font-weight:700;letter-spacing:.3px}\n.admin-nav-brand-sub{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px}\n.admin-nav-section{padding:12px 0 4px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding-left:18px}\n.admin-nav-item{display:flex;align-items:center;gap:10px;padding:9px 18px;font-size:13px;color:var(--text2);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .15s;border-left:2px solid transparent}\n.admin-nav-item:hover{background:var(--raised);color:var(--text)}\n.admin-nav-item.active{background:var(--raised);color:var(--text);font-weight:600;border-left-color:var(--accent)}\n.admin-nav-footer{margin-top:auto;padding:14px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}\n.admin-nav-footer a{color:var(--text3);font-size:11px;text-decoration:none;display:flex;align-items:center;gap:6px}\n.admin-nav-footer a:hover{color:var(--text)}\n.admin-main{flex:1;overflow-y:auto;padding:28px 36px}\n.admin-title{font-size:20px;font-weight:700;margin-bottom:4px}\n.admin-subtitle{font-size:12px;color:var(--text3);margin-bottom:24px}\n.admin-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px}\n.admin-card-title{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px}\n.admin-stat{font-size:32px;font-weight:800;line-height:1.1}\n.admin-stat-sub{font-size:11px;color:var(--text3);margin-top:4px}\n.admin-stat.green{color:var(--green)}.admin-stat.red{color:var(--red)}.admin-stat.blue{color:var(--accent)}.admin-stat.purple{color:var(--purple)}.admin-stat.yellow{color:var(--yellow)}\n.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:20px}\n.admin-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}\n.admin-table{width:100%;border-collapse:collapse;font-size:12px}\n.admin-table th{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.4px}\n.admin-table td{padding:8px 12px;border-bottom:1px solid var(--border)}\n.admin-table tr:hover td{background:var(--raised)}\n.admin-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}\n.admin-badge.green{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}\n.admin-badge.blue{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n.admin-badge.yellow{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}\n.admin-badge.red{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}\n.admin-badge.purple{background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)}\n.admin-btn{padding:7px 16px;border-radius:6px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-size:12px;cursor:pointer;transition:all .15s}\n.admin-btn:hover{background:var(--surface);border-color:var(--text3)}\n.admin-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}\n.admin-btn.primary:hover{opacity:.9}\n.admin-btn.danger{border-color:var(--red);color:var(--red)}\n.admin-btn.danger:hover{background:color-mix(in srgb,var(--red) 10%,transparent)}\n.admin-btn.sm{padding:4px 10px;font-size:11px}\n.admin-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:16px}\n.admin-toolbar .spacer{flex:1}\n.admin-log-line{font-family:\'SF Mono\',Menlo,Monaco,monospace;font-size:11px;padding:3px 0;color:var(--text2);white-space:pre-wrap;word-break:break-all;line-height:1.5}\n.admin-log-line:hover{background:var(--raised)}\n.admin-kv{display:grid;grid-template-columns:160px 1fr;gap:0;font-size:12px}\n.admin-kv dt{padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border)}\n.admin-kv dd{padding:6px 10px;border-bottom:1px solid var(--border);word-break:break-all}\n.admin-empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}\n.admin-modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center}\n.admin-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:360px;max-width:480px}\n.admin-modal h3{font-size:15px;margin-bottom:16px}\n.admin-modal label{display:block;font-size:11px;color:var(--text2);margin-bottom:4px;margin-top:12px}\n.admin-modal .admin-input,.admin-modal .admin-select{width:100%;margin-bottom:4px}\n.admin-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}\n.admin-input{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n.admin-input:focus{border-color:var(--accent)}\n.admin-select{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}\n.pulse{animation:pulse 2s ease-in-out infinite}\n</style>\n</head><body>\n<div class="admin-nav">\n  <div class="admin-nav-brand">\n    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>\n    <div>\n      <div class="admin-nav-brand-text">Porter Admin</div>\n      <div class="admin-nav-brand-sub">SaaS Control</div>\n    </div>\n  </div>\n  <div class="admin-nav-section">Monitor</div>\n  <button class="admin-nav-item active" onclick="_at(\'overview\',this)">Overview</button>\n  <button class="admin-nav-item" onclick="_at(\'health\',this)">Health</button>\n  <div class="admin-nav-section">Manage</div>\n  <button class="admin-nav-item" onclick="_at(\'users\',this)">Users</button>\n  <button class="admin-nav-item" onclick="_at(\'sessions\',this)">Sessions</button>\n  <button class="admin-nav-item" onclick="_at(\'projects\',this)">Projects</button>\n  <button class="admin-nav-item" onclick="_at(\'templates\',this)">Templates</button>\n  <button class="admin-nav-item" onclick="_at(\'directives\',this)">Directives</button>\n  <button class="admin-nav-item" onclick="_at(\'connections\',this)">Connections</button>\n  <div class="admin-nav-section">System</div>\n  <button class="admin-nav-item" onclick="_at(\'config\',this)">Config</button>\n  <button class="admin-nav-item" onclick="_at(\'logs\',this)">Logs</button>\n  <button class="admin-nav-item" onclick="_at(\'audit\',this)">Audit</button>\n  <div class="admin-nav-footer">\n    <a href="/">&#8592; Porter Workspace</a>\n    <span style="font-size:10px;color:var(--text3)">v0.31.84</span>\n  </div>\n</div>\n<div class="admin-main" id="admin-content"><div class="admin-title">Loading...</div></div>\n<div id="admin-modal-root"></div>\n<script>\nvar _adminCurrentTab=\'overview\';\nasync function _api(u,b){var o=b?{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},credentials:\'same-origin\',body:JSON.stringify(b)}:{credentials:\'same-origin\'};try{var r=await fetch(u,o);if(!r.ok&&r.status===403)return{error:\'forbidden\'};return r.json();}catch(e){return{error:e.message};}}\nfunction _at(t,el){_adminCurrentTab=t;document.querySelectorAll(\'.admin-nav-item\').forEach(function(b){b.classList.remove(\'active\')});if(el)el.classList.add(\'active\');var fn={overview:_loadOverview,users:_loadUsers,sessions:_loadSessions,health:_loadHealth,projects:_loadProjects,config:_loadConfig,logs:_loadLogs,audit:_loadAudit,templates:_loadTemplates,directives:_loadDirectives,connections:_loadConnections};if(fn[t])fn[t]();}\nfunction _escH(s){var d=document.createElement(\'div\');d.textContent=s;return d.innerHTML;}\nfunction _fmtUp(s){var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return(d?d+\'d \':\'\')+ h+\'h \'+m+\'m\';}\nfunction _fmtDate(ts){if(!ts)return\'-\';var d=new Date(typeof ts===\'number\'?ts*1000:ts);return d.toLocaleDateString(\'en-GB\',{day:\'2-digit\',month:\'short\',year:\'numeric\'})+\' \'+d.toLocaleTimeString(\'en-GB\',{hour:\'2-digit\',minute:\'2-digit\'});}\nfunction _fmtAgo(ts){if(!ts)return\'-\';var now=Date.now()/1000,diff=now-ts;if(diff<60)return\'just now\';if(diff<3600)return Math.floor(diff/60)+\'m ago\';if(diff<86400)return Math.floor(diff/3600)+\'h ago\';return Math.floor(diff/86400)+\'d ago\';}\nfunction _roleBadge(r){var c=r===\'platform_admin\'?\'purple\':r===\'admin\'?\'yellow\':r===\'operator\'?\'blue\':\'green\';return\'<span class="admin-badge \'+c+\'">\'+_escH(r)+\'</span>\';}\nfunction _modal(h){document.getElementById(\'admin-modal-root\').innerHTML=h;}\nfunction _closeModal(){document.getElementById(\'admin-modal-root\').innerHTML=\'\';}\n\nasync async function _appendUsageStats(){\n  try{\n    var res=await fetch(\'/api/admin/usage\',{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var users=(res&&res.users)||[];\n    if(users.length===0)return;\n    var el=document.getElementById(\'admin-content\');\n    var html=\'<div class="admin-title" style="margin-top:24px">User Activity</div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>Sessions</th><th>Active Now</th><th>Last Active</th></tr>\';\n    users.forEach(function(u){\n      var la=u.last_active_at?new Date(u.last_active_at*1000).toLocaleString(\'en-SG\',{hour12:false,timeZone:\'Asia/Singapore\'}):\'Never\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\'</td>\';\n      html+=\'<td>\'+_escH(u.role)+\'</td>\';\n      html+=\'<td>\'+u.session_count+\'</td>\';\n      html+=\'<td>\'+u.active_sessions+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px">\'+la+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML+=html;\n  }catch(e){}\n}\nfunction _loadOverview(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div><div class="pulse" style="color:var(--text3)">Loading dashboard...</div>\';\n  try{\n    var [health,users,projects]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/users\',{action:\'list\'}),_api(\'/api/projects\')]);\n    var h=health||{},userList=(users&&users.users)||[],projList=(projects&&projects.projects)||[];\n    var activeProjects=projList.filter(function(p){return p.status===\'active\'}).length;\n    var adminCount=userList.filter(function(u){return u.role===\'admin\'||u.role===\'platform_admin\'}).length;\n    var opCount=userList.filter(function(u){return u.role===\'operator\'}).length;\n    var html=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div>\';\n    html+=\'<div class="admin-grid">\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System Status</div><div class="admin-stat green">Online</div><div class="admin-stat-sub">PID \'+(h.porter_pid||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Version</div><div class="admin-stat blue" style="font-size:22px">v\'+(h.porter_version||\'?\')+\'</div><div class="admin-stat-sub">Python \'+(h.python_version||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Uptime</div><div class="admin-stat" style="font-size:20px;color:var(--text)">\'+_fmtUp(h.uptime_seconds||0)+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div><div class="admin-stat blue">\'+userList.length+\'</div><div class="admin-stat-sub">\'+adminCount+\' admin, \'+opCount+\' operators</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Projects</div><div class="admin-stat purple">\'+projList.length+\'</div><div class="admin-stat-sub">\'+activeProjects+\' active</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-grid-3">\';\n    var cpuC=(h.cpu_percent||0)>80?\'red\':(h.cpu_percent||0)>50?\'yellow\':\'green\';\n    var memC=(h.memory_percent||0)>80?\'red\':(h.memory_percent||0)>50?\'yellow\':\'green\';\n    var diskC=(h.disk_percent||0)>90?\'red\':(h.disk_percent||0)>70?\'yellow\':\'green\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">CPU</div><div class="admin-stat \'+cpuC+\'">\'+(h.cpu_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Memory</div><div class="admin-stat \'+memC+\'">\'+(h.memory_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Disk</div><div class="admin-stat \'+diskC+\'">\'+(h.disk_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Services</div>\';\n    var svcs=h.services||[];\n    if(svcs.length){\n      html+=\'<table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>URL</th></tr>\';\n      svcs.forEach(function(s){var b=s.status===\'ok\'?\'green\':\'red\';html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+b+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table>\';\n    }else{html+=\'<div class="admin-empty">No services detected</div>\';}\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div>\';\n    html+=\'<table class="admin-table"><tr><th>User</th><th>Role</th><th>Created</th></tr>\';\n    userList.slice(0,10).forEach(function(u){html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\' <span style="color:var(--text3);font-weight:400">@\'+_escH(u.username)+\'</span></td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td></tr>\';});\n    html+=\'</table></div>\';\n    el.innerHTML=html;_appendUsageStats();\n  }catch(e){el.innerHTML=\'<div class="admin-title">Overview</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadUsers(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">User Management</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/users\',{action:\'list\'});\n    var users=(data&&data.users)||[];\n    var html=\'<div class="admin-title">User Management</div><div class="admin-subtitle">\'+users.length+\' registered users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showCreateUser()">+ Create User</button><button class="admin-btn" onclick="_showCreateInvite()">Invite User</button><div class="spacer"></div><button class="admin-btn" onclick="_loadUsers()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Display Name</th><th>Role</th><th>Email</th><th>Created</th><th style="width:140px">Actions</th></tr>\';\n    users.forEach(function(u){\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.username)+\'</td><td>\'+_escH(u.display_name||\'\')+\'</td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_escH(u.email||\'-\')+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px"><button class="admin-btn sm" onclick="_showEditRole(\\\'\'+_escH(u.username)+\'\\\',\\\'\'+_escH(u.role)+\'\\\')">Role</button>\';\n      html+=\'<button class="admin-btn sm" onclick="_resetPassword(\\\'\'+_escH(u.username)+\'\\\')">Reset</button>\';\n      if(u.username!==\'system\')html+=\'<button class="admin-btn sm danger" onclick="_deleteUser(\\\'\'+_escH(u.username)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n    try{var _inv_res=await fetch(\'/api/admin/invites\',{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},body:JSON.stringify({action:\'list\'}),credentials:\'same-origin\'}).then(function(r){return r.json();});var _invs=(_inv_res&&_inv_res.invites)||[];if(_invs.length>0){var ih=\'<div class="admin-title" style="margin-top:24px">Invites</div>\';ih+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';ih+=\'<tr><th>Code</th><th>Role</th><th>By</th><th>Uses</th><th>Status</th><th>Actions</th></tr>\';_invs.forEach(function(inv){var st=inv.status===\'active\'?\'\u25cf Active\':\'\u25cf \'+inv.status;ih+=\'<tr><td style="font-family:monospace;font-size:12px">\'+_escH(inv.code.slice(0,8))+\'...</td><td>\'+_escH(inv.role)+\'</td><td>\'+_escH(inv.created_by)+\'</td><td>\'+inv.use_count+\'/\'+inv.max_uses+\'</td><td>\'+st+\'</td><td>\';if(inv.status===\'active\')ih+=\'<button class="admin-btn sm danger" onclick="_revokeInvite(\\\'\'+_escH(inv.code)+\'\\\')">Revoke</button>\';ih+=\'</td></tr>\';});ih+=\'</table></div>\';el.innerHTML+=ih;}}catch(_ie){}\n  }catch(e){el.innerHTML=\'<div class="admin-title">Users</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nfunction _showCreateUser(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create User</h3><label>Username</label><input class="admin-input" id="_cu_user" placeholder="lowercase, no spaces"><label>Display Name</label><input class="admin-input" id="_cu_name" placeholder="Full display name"><label>Role</label><select class="admin-select" id="_cu_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option><option value="platform_admin">Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateUser()">Create</button></div></div></div>\');\n  document.getElementById(\'_cu_user\').focus();\n}\nasync function _doCreateUser(){\n  var u=document.getElementById(\'_cu_user\').value.trim(),n=document.getElementById(\'_cu_name\').value.trim()||u,r=document.getElementById(\'_cu_role\').value;\n  if(!u)return;\n  var res=await _api(\'/api/admin/users\',{action:\'create\',username:u,display_name:n,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nfunction _showEditRole(username,currentRole){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Change Role &#8212; \'+_escH(username)+\'</h3><label>New Role</label><select class="admin-select" id="_er_role"><option value="operator"\'+(currentRole===\'operator\'?\' selected\':\'\')+\'>Operator</option><option value="admin"\'+(currentRole===\'admin\'?\' selected\':\'\')+\'>Admin</option><option value="viewer"\'+(currentRole===\'viewer\'?\' selected\':\'\')+\'>Viewer</option><option value="platform_admin"\'+(currentRole===\'platform_admin\'?\' selected\':\'\')+\'>Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doEditRole(\\\'\'+_escH(username)+\'\\\')">Save</button></div></div></div>\');\n}\nasync function _doEditRole(username){\n  var r=document.getElementById(\'_er_role\').value;\n  var res=await _api(\'/api/admin/users\',{action:\'update_role\',username:username,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _deleteUser(username){if(!confirm(\'Delete user \'+username+\'? This cannot be undone.\'))return;var res=await _api(\'/api/admin/users\',{action:\'delete\',username:username});if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n\n\nvar _auditPage=0;var _auditFilters={actor:\'\',action:\'\',from:\'\',to:\'\'};\nasync function _loadAudit(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Audit Log</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var qs=\'limit=50&offset=\'+(_auditPage*50);\n    if(_auditFilters.actor)qs+=\'&actor=\'+encodeURIComponent(_auditFilters.actor);\n    if(_auditFilters.action)qs+=\'&action=\'+encodeURIComponent(_auditFilters.action);\n    var data=await fetch(\'/api/admin/audit?\'+qs,{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var stats=await fetch(\'/api/admin/audit/stats\',{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var events=(data&&data.events)||[];var total=(data&&data.total)||0;\n    var s24=(stats&&stats.period_24h)||{};\n    var html=\'<div class="admin-title">Audit Log</div>\';\n    html+=\'<div class="admin-subtitle">\'+total+\' total events | 24h: \'+(s24.total||0)+\' events</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:8px">\';\n    html+=\'<input class="admin-input" id="_af_actor" placeholder="Actor" value="\'+_escH(_auditFilters.actor)+\'" style="width:120px">\';\n    html+=\'<input class="admin-input" id="_af_action" placeholder="Action" value="\'+_escH(_auditFilters.action)+\'" style="width:150px">\';\n    html+=\'<button class="admin-btn primary" onclick="_auditApplyFilter()">Filter</button>\';\n    html+=\'<button class="admin-btn" onclick="_auditClearFilter()">Clear</button>\';\n    html+=\'<div class="spacer"></div><button class="admin-btn" onclick="_loadAudit()">Refresh</button>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>IP</th></tr>\';\n    events.forEach(function(e){\n      var dt=new Date(e.ts*1000);var ts=dt.toLocaleString(\'en-SG\',{hour12:false,timeZone:\'Asia/Singapore\'});\n      var det=JSON.stringify(e.details||{});if(det===\'{}\')det=\'-\';if(det.length>60)det=det.slice(0,57)+\'...\';\n      html+=\'<tr><td style="white-space:nowrap;color:var(--text3);font-size:12px">\'+_escH(ts)+\'</td>\';\n      html+=\'<td style="font-weight:600">\'+_escH(e.actor)+\'</td>\';\n      html+=\'<td><span style="background:var(--surface);padding:2px 8px;border-radius:4px;font-size:12px">\'+_escH(e.action)+\'</span></td>\';\n      html+=\'<td>\'+_escH(e.target||\'-\')+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(det)+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px">\'+_escH(e.ip_address||\'-\')+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    var pages=Math.ceil(total/50);\n    if(pages>1){\n      html+=\'<div style="display:flex;gap:8px;margin-top:12px;justify-content:center">\';\n      if(_auditPage>0)html+=\'<button class="admin-btn sm" onclick="_auditPage--;_loadAudit()">&laquo; Prev</button>\';\n      html+=\'<span style="color:var(--text3);padding:6px">Page \'+(_auditPage+1)+\' of \'+pages+\'</span>\';\n      if(_auditPage<pages-1)html+=\'<button class="admin-btn sm" onclick="_auditPage++;_loadAudit()">Next &raquo;</button>\';\n      html+=\'</div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Audit</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}}\nfunction _auditApplyFilter(){\n  _auditFilters.actor=document.getElementById(\'_af_actor\').value.trim();\n  _auditFilters.action=document.getElementById(\'_af_action\').value.trim();\n  _auditPage=0;_loadAudit();}\nfunction _auditClearFilter(){_auditFilters={actor:\'\',action:\'\',from:\'\',to:\'\'};_auditPage=0;_loadAudit();}\nasync function _showCreateInvite(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create Invite</h3><label>Role</label><select class="admin-select" id="_inv_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option></select><label>Max Uses</label><input class="admin-input" id="_inv_max" type="number" value="1" min="1"><label>Expires (hours, 0=never)</label><input class="admin-input" id="_inv_hours" type="number" value="72" min="0"><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateInvite()">Create</button></div></div></div>\');\n}\nasync function _doCreateInvite(){\n  var role=document.getElementById(\'_inv_role\').value;\n  var max=document.getElementById(\'_inv_max\').value;\n  var hours=document.getElementById(\'_inv_hours\').value;\n  var res=await _api(\'/api/admin/invites\',{action:\'create\',role:role,max_uses:parseInt(max),expires_hours:parseInt(hours)});\n  _closeModal();\n  if(res&&res.ok){\n    _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Invite Created</h3><p>Share this code:</p><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-family:monospace;font-size:14px;text-align:center;margin:12px 0;user-select:all;word-break:break-all">\'+_escH(res.code)+\'</div><p style="color:var(--text3);font-size:12px">Role: \'+_escH(res.role)+\' | Max uses: \'+res.max_uses+\'</p><div class="admin-modal-actions"><button class="admin-btn primary" onclick="_closeModal();_loadUsers()">Done</button></div></div></div>\');\n  }else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n}\nasync function _revokeInvite(code){\n  if(!confirm(\'Revoke this invite code?\'))return;\n  var res=await _api(\'/api/admin/invites\',{action:\'revoke\',code:code});\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _resetPassword(username){if(!confirm(\'Reset password for \'+username+\'? A temporary password will be generated.\'))return;var res=await _api(\'/api/admin/users\',{action:\'reset_password\',username:username});if(res&&res.ok){_modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Password Reset</h3><p>Temporary password for <b>\'+_escH(username)+\'</b>:</p><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-family:monospace;font-size:16px;text-align:center;margin:12px 0;user-select:all">\'+_escH(res.temp_password)+\'</div><p style="color:var(--text3);font-size:12px">User must change this on next login.</p><div class="admin-modal-actions"><button class="admin-btn primary" onclick="_closeModal()">Done</button></div></div></div>\');}else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}}\nasync function _loadSessions(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Active Sessions</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/sessions\');\n    var sessions=(data&&data.sessions)||[];\n    var html=\'<div class="admin-title">Active Sessions</div><div class="admin-subtitle">\'+sessions.length+\' active sessions</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadSessions()">Refresh</button></div>\';\n    if(!sessions.length){html+=\'<div class="admin-empty">No active sessions</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>IP</th><th>User Agent</th><th>Created</th><th>Last Active</th><th>Actions</th></tr>\';\n    sessions.forEach(function(s){\n      var ua=(s.user_agent||\'\').substring(0,40);\n      html+=\'<tr><td style="font-weight:600">\'+_escH(s.username||\'?\')+\'</td><td>\'+_roleBadge(s.role||\'operator\')+\'</td><td style="font-family:monospace;font-size:11px">\'+_escH(s.ip||\'-\')+\'</td><td style="font-size:10px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(ua)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.created_at)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.last_active)+\'</td><td><button class="admin-btn sm danger" onclick="_revokeSession(\\\'\'+_escH(s.token_prefix||\'\')+\'\\\')">Revoke</button></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Sessions</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _revokeSession(tp){if(!confirm(\'Revoke this session?\'))return;await _api(\'/api/admin/sessions\',{action:\'revoke\',token_prefix:tp});_loadSessions();}\n\nasync function _loadProjects(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">All Projects</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/projects\');\n    var projects=(data&&data.projects)||[];\n    var html=\'<div class="admin-title">All Projects</div><div class="admin-subtitle">\'+projects.length+\' total projects across all users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadProjects()">Refresh</button></div>\';\n    if(!projects.length){html+=\'<div class="admin-empty">No projects</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Project</th><th>Owner</th><th>Type</th><th>Status</th><th>Created</th></tr>\';\n    projects.forEach(function(p){\n      var sb=p.status===\'active\'?\'green\':p.status===\'completed\'?\'blue\':\'yellow\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(p.name||\'Untitled\')+\'</td><td>\'+_escH(p.owner||\'-\')+\'</td><td style="color:var(--text3)">\'+_escH(p.type||\'custom\')+\'</td><td><span class="admin-badge \'+sb+\'">\'+_escH(p.status||\'active\')+\'</span></td><td style="color:var(--text3)">\'+_fmtDate(p.created_at)+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Projects</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadHealth(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Health</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var h=await _api(\'/api/admin/health\');\n    var html=\'<div class="admin-title">System Health</div><div class="admin-subtitle">Detailed system diagnostics</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadHealth()">Refresh</button></div>\';\n    html+=\'<div class="admin-grid">\';\n    var metrics=[\n      {k:\'cpu_percent\',l:\'CPU Usage\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'memory_percent\',l:\'Memory\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'disk_percent\',l:\'Disk\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:70,crit:90},\n      {k:\'uptime_seconds\',l:\'Uptime\',fmt:_fmtUp},\n      {k:\'porter_pid\',l:\'Process ID\',fmt:function(v){return v}},\n      {k:\'porter_size_kb\',l:\'Binary Size\',fmt:function(v){return(v/1024).toFixed(1)+\' MB\'}},\n      {k:\'porter_lines\',l:\'Lines of Code\',fmt:function(v){return v.toLocaleString()}},\n      {k:\'python_version\',l:\'Python\',fmt:function(v){return v}},\n      {k:\'porter_version\',l:\'Porter Version\',fmt:function(v){return\'v\'+v}}\n    ];\n    metrics.forEach(function(m){\n      if(h[m.k]===undefined)return;var v=h[m.k];\n      var color=\'var(--text)\';\n      if(m.crit&&v>=m.crit)color=\'var(--red)\';else if(m.warn&&v>=m.warn)color=\'var(--yellow)\';else if(m.crit)color=\'var(--green)\';\n      html+=\'<div class="admin-card"><div class="admin-card-title">\'+m.l+\'</div><div style="font-size:20px;font-weight:700;color:\'+color+\'">\'+m.fmt(v)+\'</div></div>\';\n    });\n    html+=\'</div>\';\n    if(h.services&&h.services.length){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Service Probes</div><table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>Endpoint</th></tr>\';\n      h.services.forEach(function(s){html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+(s.status===\'ok\'?\'green\':\'red\')+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Health</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync async function _loadWorkspaceConfig(){\n  var res=await _api(\'/api/admin/workspace\',{action:\'get\'});\n  var s=(res&&res.settings)||{};\n  var html=\'<div class="admin-title" style="margin-top:24px">Workspace Identity</div>\';\n  html+=\'<div class="admin-card">\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Workspace Name</label><input class="admin-input" id="_ws_name" value="\'+_escH(s.workspace_name||\'\')+\'" style="margin-top:4px"></div>\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Description</label><input class="admin-input" id="_ws_desc" value="\'+_escH(s.workspace_description||\'\')+\'" style="margin-top:4px"></div>\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Accent Color</label><input class="admin-input" id="_ws_accent" type="color" value="\'+_escH(s.workspace_accent||\'\')+\'" style="margin-top:4px;width:60px;height:32px;padding:2px"></div>\';\n  html+=\'<button class="admin-btn primary" onclick="_saveWorkspaceConfig()">Save</button>\';\n  html+=\'</div>\';\n  return html;\n}\nasync function _saveWorkspaceConfig(){\n  var name=document.getElementById(\'_ws_name\').value;\n  var desc=document.getElementById(\'_ws_desc\').value;\n  var accent=document.getElementById(\'_ws_accent\').value;\n  var res=await _api(\'/api/admin/workspace\',{action:\'update\',workspace_name:name,workspace_description:desc,workspace_accent:accent});\n  if(res&&res.ok){alert(\'Saved!\');_loadConfig();}else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n}\nfunction _loadConfig(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Configuration</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var [health,hyg]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/hygiene\')]);\n    var html=\'<div class="admin-title">System Configuration</div><div class="admin-subtitle">Read-only view of current system settings</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadConfig()">Refresh</button></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System</div><dl class="admin-kv">\';\n    var sk=[[\'Porter Version\',\'v\'+(health.porter_version||\'?\')],[\'Python\',health.python_version||\'?\'],[\'PID\',health.porter_pid||\'?\'],[\'Binary Size\',(health.porter_size_kb||0).toFixed(0)+\' KB\'],[\'Lines\',health.porter_lines||\'?\']];\n    sk.forEach(function(kv){html+=\'<dt>\'+kv[0]+\'</dt><dd>\'+_escH(String(kv[1]))+\'</dd>\';});\n    html+=\'</dl></div>\';\n    if(hyg&&!hyg.error){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Hygiene System</div><dl class="admin-kv">\';\n      Object.keys(hyg).filter(function(k){return typeof hyg[k]!==\'object\'}).forEach(function(k){html+=\'<dt>\'+_escH(k)+\'</dt><dd>\'+_escH(String(hyg[k]))+\'</dd>\';});\n      html+=\'</dl></div>\';\n    }\n    var wsHtml=await _loadWorkspaceConfig();html+=wsHtml;el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Config</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadLogs(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Logs</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/logs\');\n    var lines=(data&&data.lines)||[];\n    var html=\'<div class="admin-title">System Logs</div><div class="admin-subtitle">\'+lines.length+\' log lines</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadLogs()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="max-height:calc(100vh - 180px);overflow-y:auto;font-family:monospace;padding:12px">\';\n    lines.slice(-300).forEach(function(l){html+=\'<div class="admin-log-line">\'+_escH(l)+\'</div>\';});\n    html+=\'</div>\';\n    el.innerHTML=html;\n    var lb=el.querySelector(\'.admin-card\');if(lb)lb.scrollTop=lb.scrollHeight;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Logs</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nvar _tmplFilter=\'\';\nasync function _loadTemplates(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Worker Templates</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var url=\'/api/templates\';\n    if(_tmplFilter)url+=\'?category=\'+encodeURIComponent(_tmplFilter);\n    var data=await _api(url);\n    var all=await _api(\'/api/templates\');\n    var templates=(data&&data.templates)||[];\n    var allTemplates=(all&&all.templates)||[];\n    var cats={};allTemplates.forEach(function(t){var c=t.category||\'other\';cats[c]=(cats[c]||0)+1;});\n    var catList=Object.keys(cats).sort();\n    var html=\'<div class="admin-title">Worker Templates</div><div class="admin-subtitle">\'+allTemplates.length+\' archetypes across \'+catList.length+\' categories</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:6px">\';\n    html+=\'<button class="admin-btn\'+(!_tmplFilter?\' primary\':\'\')+\'" onclick="_tmplFilter=\\\'\\\';_loadTemplates()">All (\'+allTemplates.length+\')</button>\';\n    catList.forEach(function(c){\n      var active=_tmplFilter===c;\n      html+=\'<button class="admin-btn\'+(active?\' primary\':\'\')+\'" onclick="_tmplFilter=\\\'\'+_escH(c)+\'\\\'\\\';_loadTemplates()">\'+_escH(c.charAt(0).toUpperCase()+c.slice(1))+\' (\'+cats[c]+\')</button>\';\n    });\n    html+=\'</div>\';\n    if(!templates.length){html+=\'<div class="admin-empty">No templates in this category</div>\';el.innerHTML=html;return;}\n    html+=\'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">\';\n    templates.forEach(function(t){\n      html+=\'<div class="admin-card" style="cursor:pointer;transition:border-color .15s" onclick="_tmplDetail(\\\'\'+_escH(t.id)+\'\\\')" onmouseenter="this.style.borderColor=\\\'var(--accent)\\\'" onmouseleave="this.style.borderColor=\\\'var(--border)\\\'">\';\n      html+=\'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">\';\n      html+=\'<div style="font-size:14px;font-weight:700;color:var(--text)">\'+_escH(t.name)+\'</div>\';\n      html+=\'</div>\';\n      html+=\'<div style="font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:8px">\'+_escH(t.description)+\'</div>\';\n      html+=\'<div style="display:flex;gap:4px;flex-wrap:wrap">\';\n      html+=\'<span class="admin-badge blue">\'+_escH(t.category)+\'</span>\';\n      (t.tags||[]).slice(0,4).forEach(function(tag){\n        html+=\'<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">\'+_escH(tag)+\'</span>\';\n      });\n      html+=\'</div></div>\';\n    });\n    html+=\'</div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Templates</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _tmplDetail(tid){\n  try{\n    var data=await _api(\'/api/templates/\'+tid);\n    if(!data||data.error){alert(\'Template not found\');return;}\n    var html=\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal" style="max-width:560px;max-height:80vh;overflow-y:auto">\';\n    html+=\'<h3 style="margin-bottom:4px">\'+_escH(data.name||tid)+\'</h3>\';\n    html+=\'<div style="font-size:11px;color:var(--text3);margin-bottom:12px"><span class="admin-badge blue">\'+_escH(data.cat||\'\')+\'</span> <span class="admin-badge green">\'+_escH(data.archetype||\'\')+\'</span></div>\';\n    html+=\'<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:14px">\'+_escH(data.desc||\'\')+\'</div>\';\n    if(data.mission){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Mission</div><div style="font-size:12px;color:var(--text)">\'+_escH(data.mission)+\'</div></div>\';}\n    if(data.soul&&data.soul.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Soul Traits</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.soul.forEach(function(s){html+=\'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)">\'+_escH(s)+\'</span>\';});html+=\'</div></div>\';}\n    if(data.authority&&data.authority.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Authority</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.authority.forEach(function(a){html+=\'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">\'+_escH(a)+\'</span>\';});html+=\'</div></div>\';}\n    if(data.inputs&&data.inputs.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Inputs</div><div style="font-size:11px;color:var(--text2)">\'+data.inputs.map(function(i){return _escH(i)}).join(\' &middot; \')+\'</div></div>\';}\n    if(data.outputs&&data.outputs.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Outputs</div><div style="font-size:11px;color:var(--text2)">\'+data.outputs.map(function(o){return _escH(o)}).join(\' &middot; \')+\'</div></div>\';}\n    if(data.tags&&data.tags.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Tags</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.tags.forEach(function(t){html+=\'<span style="font-size:9px;padding:2px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">\'+_escH(t)+\'</span>\';});html+=\'</div></div>\';}\n    html+=\'<div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Close</button></div>\';\n    html+=\'</div></div>\';\n    _modal(html);\n  }catch(e){alert(\'Error: \'+e.message);}\n}\nvar _dirScope=\'\';\nasync function _loadDirectives(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Directives</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var url=\'/api/state/directives\';\n    var params=[];\n    if(_dirScope)params.push(\'scope_type=\'+encodeURIComponent(_dirScope));\n    params.push(\'include_dismissed=1\');\n    if(params.length)url+=\'?\'+params.join(\'&\');\n    var data=await _api(url);\n    var dirs=(data&&data.directives)||[];\n    var active=dirs.filter(function(d){return d.status===\'active\'});\n    var dismissed=dirs.filter(function(d){return d.status!==\'active\'});\n    var scopes={};dirs.forEach(function(d){var s=d.scope_type||\'global\';scopes[s]=(scopes[s]||0)+1;});\n    var scopeList=Object.keys(scopes).sort();\n    var html=\'<div class="admin-title">Directives</div><div class="admin-subtitle">\'+active.length+\' active, \'+dismissed.length+\' dismissed/superseded</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:6px">\';\n    html+=\'<button class="admin-btn\'+(!_dirScope?\' primary\':\'\')+\'" onclick="_dirScope=\\\'\\\';_loadDirectives()">All (\'+dirs.length+\')</button>\';\n    scopeList.forEach(function(s){\n      html+=\'<button class="admin-btn\'+(_dirScope===s?\' primary\':\'\')+\'" onclick="_dirScope=\\\'\'+_escH(s)+\'\\\'\\\';_loadDirectives()">\'+_escH(s.charAt(0).toUpperCase()+s.slice(1))+\' (\'+scopes[s]+\')</button>\';\n    });\n    html+=\'<div class="spacer"></div>\';\n    html+=\'<button class="admin-btn primary" onclick="_showAddDirective()">+ Add Directive</button>\';\n    html+=\'</div>\';\n    if(!dirs.length){html+=\'<div class="admin-empty">No directives yet</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>ID</th><th>Scope</th><th>Directive</th><th>Status</th><th>Source</th><th>Created</th><th>Actions</th></tr>\';\n    dirs.forEach(function(d){\n      var sb=d.status===\'active\'?\'green\':d.status===\'dismissed\'?\'red\':\'yellow\';\n      var scopeLabel=d.scope_type===\'project\'?d.scope_type+\' (\'+_escH((d.scope_id||\'\').substring(0,8))+\')\':d.scope_type;\n      html+=\'<tr><td style="font-family:monospace;font-size:11px">#\'+d.id+\'</td>\';\n      html+=\'<td><span class="admin-badge blue">\'+_escH(scopeLabel)+\'</span></td>\';\n      html+=\'<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\'+_escH(d.text||\'\')+\'</td>\';\n      html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(d.status||\'active\')+\'</span></td>\';\n      html+=\'<td style="color:var(--text3);font-size:11px">\'+_escH(d.source||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_fmtAgo(d.created_at)+\'</td>\';\n      html+=\'<td>\';\n      if(d.status===\'active\')html+=\'<button class="admin-btn sm danger" onclick="_dismissDir(\'+d.id+\')">Dismiss</button>\';\n      else html+=\'<button class="admin-btn sm" onclick="_activateDir(\'+d.id+\')">Reactivate</button>\';\n      html+=\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Directives</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _dismissDir(id){\n  await _api(\'/api/state/directives/\'+id+\'/status\',{status:\'dismissed\'});\n  _loadDirectives();\n}\nasync function _activateDir(id){\n  await _api(\'/api/state/directives/\'+id+\'/status\',{status:\'active\'});\n  _loadDirectives();\n}\nfunction _showAddDirective(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Add Directive</h3><label>Scope</label><select class="admin-select" id="_ad_scope"><option value="global">Global</option><option value="project">Project</option><option value="agent">Agent</option></select><label>Scope ID (for project/agent)</label><input class="admin-input" id="_ad_sid" placeholder="Project or agent ID"><label>Directive Text</label><textarea class="admin-input" id="_ad_text" rows="3" placeholder="Always do X when Y happens..."></textarea><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doAddDirective()">Add</button></div></div></div>\');\n}\nasync function _doAddDirective(){\n  var scope=document.getElementById(\'_ad_scope\').value;\n  var sid=document.getElementById(\'_ad_sid\').value.trim();\n  var text=document.getElementById(\'_ad_text\').value.trim();\n  if(!text)return;\n  var res=await _api(\'/api/state/directives\',{action:\'create\',scope_type:scope,scope_id:sid,text:text});\n  _closeModal();\n  if(res&&res.ok)_loadDirectives();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _loadConnections(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Connections</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/connections\',{action:\'list\'});\n    var conns=(data&&data.connections)||[];\n    var active=conns.filter(function(c){return c.status===\'active\'}).length;\n    var html=\'<div class="admin-title">Workspace Connections</div><div class="admin-subtitle">\'+conns.length+\' connections (\'+active+\' active)</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showAddConnection()">+ Add Connection</button><div class="spacer"></div><button class="admin-btn" onclick="_loadConnections()">Refresh</button></div>\';\n    if(!conns.length){html+=\'<div class="admin-empty">No connections yet. Add one to connect external services.</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>ID</th><th>Provider</th><th>Name</th><th>Kind</th><th>Status</th><th>Installed By</th><th>Created</th><th>Actions</th></tr>\';\n    conns.forEach(function(c){\n      var sb=c.status===\'active\'?\'green\':c.status===\'disconnected\'?\'yellow\':\'red\';\n      html+=\'<tr><td style="font-family:monospace;font-size:10px">\'+_escH((c.id||\'\').substring(0,12))+\'</td>\';\n      html+=\'<td style="font-weight:600">\'+_escH(c.provider||\'\')+\'</td>\';\n      html+=\'<td>\'+_escH(c.display_name||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_escH(c.kind||\'api_key\')+\'</td>\';\n      html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(c.status||\'disconnected\')+\'</span></td>\';\n      html+=\'<td style="color:var(--text3)">\'+_escH(c.installed_by||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_fmtAgo(c.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px">\';\n      if(c.status!==\'active\')html+=\'<button class="admin-btn sm" onclick="_connSetStatus(\\\'\'+_escH(c.id)+\'\\\',\\\'active\\\')">Activate</button>\';\n      else html+=\'<button class="admin-btn sm" onclick="_connSetStatus(\\\'\'+_escH(c.id)+\'\\\',\\\'disconnected\\\')">Disconnect</button>\';\n      html+=\'<button class="admin-btn sm danger" onclick="_connDelete(\\\'\'+_escH(c.id)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    // Environment tools section\n    var envData=await _api(\'/api/admin/env-tools\');\n    var tools=(envData&&envData.tools)||[];\n    if(tools.length){\n      html+=\'<div class="admin-title" style="margin-top:28px">Environment Tools</div><div class="admin-subtitle">Auto-detected local tools</div>\';\n      html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n      html+=\'<tr><th>Tool</th><th>Status</th><th>Version</th><th>Last Checked</th></tr>\';\n      tools.forEach(function(t){\n        var sb=t.health===\'ok\'?\'green\':t.health===\'missing\'?\'red\':\'yellow\';\n        html+=\'<tr><td style="font-weight:600">\'+_escH(t.tool_key||\'\')+\'</td>\';\n        html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(t.detected?\'detected\':\'missing\')+\'</span></td>\';\n        html+=\'<td style="font-size:11px;color:var(--text2)">\'+_escH(t.version||\'-\')+\'</td>\';\n        html+=\'<td style="color:var(--text3)">\'+_fmtAgo(t.last_checked_at)+\'</td></tr>\';\n      });\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Connections</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _connSetStatus(id,status){\n  await _api(\'/api/admin/connections\',{action:\'update\',id:id,status:status});\n  _loadConnections();\n}\nasync function _connDelete(id){\n  if(!confirm(\'Delete this connection? Projects using it will be disconnected.\'))return;\n  await _api(\'/api/admin/connections\',{action:\'delete\',id:id});\n  _loadConnections();\n}\nfunction _showAddConnection(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Add Connection</h3><label>Provider</label><input class="admin-input" id="_ac_provider" placeholder="e.g. github, slack, google"><label>Display Name</label><input class="admin-input" id="_ac_name" placeholder="My GitHub"><label>Kind</label><select class="admin-select" id="_ac_kind"><option value="api_key">API Key</option><option value="oauth">OAuth</option><option value="webhook">Webhook</option><option value="local">Local</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doAddConnection()">Add</button></div></div></div>\');\n}\nasync function _doAddConnection(){\n  var provider=document.getElementById(\'_ac_provider\').value.trim();\n  var name=document.getElementById(\'_ac_name\').value.trim()||provider;\n  var kind=document.getElementById(\'_ac_kind\').value;\n  if(!provider)return;\n  var res=await _api(\'/api/admin/connections\',{action:\'create\',provider:provider,display_name:name,kind:kind});\n  _closeModal();\n  if(res&&res.ok)_loadConnections();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\n_loadOverview();\n</script>\n</body></html>'
+ADMIN_PAGE = '<!DOCTYPE html>\n<html lang="en"><head>\n<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n<title>Porter Admin Console</title>\n<style>\n*{margin:0;padding:0;box-sizing:border-box}\n:root{--bg:#0b0f14;--surface:#141a24;--raised:#1c2433;--border:#283040;--text:#e8ecf2;--text2:#a0aab8;--text3:#6b7688;--accent:#3b82f6;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--purple:#a855f7}\nbody{font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}\n.admin-nav{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}\n.admin-nav-brand{padding:16px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}\n.admin-nav-brand svg{color:var(--accent)}\n.admin-nav-brand-text{font-size:14px;font-weight:700;letter-spacing:.3px}\n.admin-nav-brand-sub{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px}\n.admin-nav-section{padding:12px 0 4px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding-left:18px}\n.admin-nav-item{display:flex;align-items:center;gap:10px;padding:9px 18px;font-size:13px;color:var(--text2);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .15s;border-left:2px solid transparent}\n.admin-nav-item:hover{background:var(--raised);color:var(--text)}\n.admin-nav-item.active{background:var(--raised);color:var(--text);font-weight:600;border-left-color:var(--accent)}\n.admin-nav-footer{margin-top:auto;padding:14px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}\n.admin-nav-footer a{color:var(--text3);font-size:11px;text-decoration:none;display:flex;align-items:center;gap:6px}\n.admin-nav-footer a:hover{color:var(--text)}\n.admin-main{flex:1;overflow-y:auto;padding:28px 36px}\n.admin-title{font-size:20px;font-weight:700;margin-bottom:4px}\n.admin-subtitle{font-size:12px;color:var(--text3);margin-bottom:24px}\n.admin-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px}\n.admin-card-title{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px}\n.admin-stat{font-size:32px;font-weight:800;line-height:1.1}\n.admin-stat-sub{font-size:11px;color:var(--text3);margin-top:4px}\n.admin-stat.green{color:var(--green)}.admin-stat.red{color:var(--red)}.admin-stat.blue{color:var(--accent)}.admin-stat.purple{color:var(--purple)}.admin-stat.yellow{color:var(--yellow)}\n.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:20px}\n.admin-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}\n.admin-table{width:100%;border-collapse:collapse;font-size:12px}\n.admin-table th{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.4px}\n.admin-table td{padding:8px 12px;border-bottom:1px solid var(--border)}\n.admin-table tr:hover td{background:var(--raised)}\n.admin-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}\n.admin-badge.green{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}\n.admin-badge.blue{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n.admin-badge.yellow{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}\n.admin-badge.red{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}\n.admin-badge.purple{background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)}\n.admin-btn{padding:7px 16px;border-radius:6px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-size:12px;cursor:pointer;transition:all .15s}\n.admin-btn:hover{background:var(--surface);border-color:var(--text3)}\n.admin-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}\n.admin-btn.primary:hover{opacity:.9}\n.admin-btn.danger{border-color:var(--red);color:var(--red)}\n.admin-btn.danger:hover{background:color-mix(in srgb,var(--red) 10%,transparent)}\n.admin-btn.sm{padding:4px 10px;font-size:11px}\n.admin-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:16px}\n.admin-toolbar .spacer{flex:1}\n.admin-log-line{font-family:\'SF Mono\',Menlo,Monaco,monospace;font-size:11px;padding:3px 0;color:var(--text2);white-space:pre-wrap;word-break:break-all;line-height:1.5}\n.admin-log-line:hover{background:var(--raised)}\n.admin-kv{display:grid;grid-template-columns:160px 1fr;gap:0;font-size:12px}\n.admin-kv dt{padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border)}\n.admin-kv dd{padding:6px 10px;border-bottom:1px solid var(--border);word-break:break-all}\n.admin-empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}\n.admin-modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center}\n.admin-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:360px;max-width:480px}\n.admin-modal h3{font-size:15px;margin-bottom:16px}\n.admin-modal label{display:block;font-size:11px;color:var(--text2);margin-bottom:4px;margin-top:12px}\n.admin-modal .admin-input,.admin-modal .admin-select{width:100%;margin-bottom:4px}\n.admin-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}\n.admin-input{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n.admin-input:focus{border-color:var(--accent)}\n.admin-select{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}\n.pulse{animation:pulse 2s ease-in-out infinite}\n</style>\n</head><body>\n<div class="admin-nav">\n  <div class="admin-nav-brand">\n    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>\n    <div>\n      <div class="admin-nav-brand-text">Porter Admin</div>\n      <div class="admin-nav-brand-sub">SaaS Control</div>\n    </div>\n  </div>\n  <div class="admin-nav-section">Monitor</div>\n  <button class="admin-nav-item active" onclick="_at(\'overview\',this)">Overview</button>\n  <button class="admin-nav-item" onclick="_at(\'health\',this)">Health</button>\n  <div class="admin-nav-section">Manage</div>\n  <button class="admin-nav-item" onclick="_at(\'users\',this)">Users</button>\n  <button class="admin-nav-item" onclick="_at(\'sessions\',this)">Sessions</button>\n  <button class="admin-nav-item" onclick="_at(\'projects\',this)">Projects</button>\n  <button class="admin-nav-item" onclick="_at(\'templates\',this)">Templates</button>\n  <button class="admin-nav-item" onclick="_at(\'directives\',this)">Directives</button>\n  <button class="admin-nav-item" onclick="_at(\'connections\',this)">Connections</button>\n  <div class="admin-nav-section">System</div>\n  <button class="admin-nav-item" onclick="_at(\'config\',this)">Config</button>\n  <button class="admin-nav-item" onclick="_at(\'logs\',this)">Logs</button>\n  <button class="admin-nav-item" onclick="_at(\'audit\',this)">Audit</button>\n  <div class="admin-nav-footer">\n    <a href="/">&#8592; Porter Workspace</a>\n    <span style="font-size:10px;color:var(--text3)">v0.33.25</span>\n  </div>\n</div>\n<div class="admin-main" id="admin-content"><div class="admin-title">Loading...</div></div>\n<div id="admin-modal-root"></div>\n<script>\nvar _adminCurrentTab=\'overview\';\nasync function _api(u,b){var o=b?{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},credentials:\'same-origin\',body:JSON.stringify(b)}:{credentials:\'same-origin\'};try{var r=await fetch(u,o);if(!r.ok&&r.status===403)return{error:\'forbidden\'};return r.json();}catch(e){return{error:e.message};}}\nfunction _at(t,el){_adminCurrentTab=t;document.querySelectorAll(\'.admin-nav-item\').forEach(function(b){b.classList.remove(\'active\')});if(el)el.classList.add(\'active\');var fn={overview:_loadOverview,users:_loadUsers,sessions:_loadSessions,health:_loadHealth,projects:_loadProjects,config:_loadConfig,logs:_loadLogs,audit:_loadAudit,templates:_loadTemplates,directives:_loadDirectives,connections:_loadConnections};if(fn[t])fn[t]();}\nfunction _escH(s){var d=document.createElement(\'div\');d.textContent=s;return d.innerHTML;}\nfunction _fmtUp(s){var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return(d?d+\'d \':\'\')+ h+\'h \'+m+\'m\';}\nfunction _fmtDate(ts){if(!ts)return\'-\';var d=new Date(typeof ts===\'number\'?ts*1000:ts);return d.toLocaleDateString(\'en-GB\',{day:\'2-digit\',month:\'short\',year:\'numeric\'})+\' \'+d.toLocaleTimeString(\'en-GB\',{hour:\'2-digit\',minute:\'2-digit\'});}\nfunction _fmtAgo(ts){if(!ts)return\'-\';var now=Date.now()/1000,diff=now-ts;if(diff<60)return\'just now\';if(diff<3600)return Math.floor(diff/60)+\'m ago\';if(diff<86400)return Math.floor(diff/3600)+\'h ago\';return Math.floor(diff/86400)+\'d ago\';}\nfunction _roleBadge(r){var c=r===\'platform_admin\'?\'purple\':r===\'admin\'?\'yellow\':r===\'operator\'?\'blue\':\'green\';return\'<span class="admin-badge \'+c+\'">\'+_escH(r)+\'</span>\';}\nfunction _modal(h){document.getElementById(\'admin-modal-root\').innerHTML=h;}\nfunction _closeModal(){document.getElementById(\'admin-modal-root\').innerHTML=\'\';}\n\nasync async function _appendUsageStats(){\n  try{\n    var res=await fetch(\'/api/admin/usage\',{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var users=(res&&res.users)||[];\n    if(users.length===0)return;\n    var el=document.getElementById(\'admin-content\');\n    var html=\'<div class="admin-title" style="margin-top:24px">User Activity</div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>Sessions</th><th>Active Now</th><th>Last Active</th></tr>\';\n    users.forEach(function(u){\n      var la=u.last_active_at?new Date(u.last_active_at*1000).toLocaleString(\'en-SG\',{hour12:false,timeZone:\'Asia/Singapore\'}):\'Never\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\'</td>\';\n      html+=\'<td>\'+_escH(u.role)+\'</td>\';\n      html+=\'<td>\'+u.session_count+\'</td>\';\n      html+=\'<td>\'+u.active_sessions+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px">\'+la+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML+=html;\n  }catch(e){}\n}\nfunction _loadOverview(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div><div class="pulse" style="color:var(--text3)">Loading dashboard...</div>\';\n  try{\n    var [health,users,projects]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/users\',{action:\'list\'}),_api(\'/api/projects\')]);\n    var h=health||{},userList=(users&&users.users)||[],projList=(projects&&projects.projects)||[];\n    var activeProjects=projList.filter(function(p){return p.status===\'active\'}).length;\n    var adminCount=userList.filter(function(u){return u.role===\'admin\'||u.role===\'platform_admin\'}).length;\n    var opCount=userList.filter(function(u){return u.role===\'operator\'}).length;\n    var html=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div>\';\n    html+=\'<div class="admin-grid">\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System Status</div><div class="admin-stat green">Online</div><div class="admin-stat-sub">PID \'+(h.porter_pid||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Version</div><div class="admin-stat blue" style="font-size:22px">v\'+(h.porter_version||\'?\')+\'</div><div class="admin-stat-sub">Python \'+(h.python_version||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Uptime</div><div class="admin-stat" style="font-size:20px;color:var(--text)">\'+_fmtUp(h.uptime_seconds||0)+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div><div class="admin-stat blue">\'+userList.length+\'</div><div class="admin-stat-sub">\'+adminCount+\' admin, \'+opCount+\' operators</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Projects</div><div class="admin-stat purple">\'+projList.length+\'</div><div class="admin-stat-sub">\'+activeProjects+\' active</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-grid-3">\';\n    var cpuC=(h.cpu_percent||0)>80?\'red\':(h.cpu_percent||0)>50?\'yellow\':\'green\';\n    var memC=(h.memory_percent||0)>80?\'red\':(h.memory_percent||0)>50?\'yellow\':\'green\';\n    var diskC=(h.disk_percent||0)>90?\'red\':(h.disk_percent||0)>70?\'yellow\':\'green\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">CPU</div><div class="admin-stat \'+cpuC+\'">\'+(h.cpu_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Memory</div><div class="admin-stat \'+memC+\'">\'+(h.memory_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Disk</div><div class="admin-stat \'+diskC+\'">\'+(h.disk_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Services</div>\';\n    var svcs=h.services||[];\n    if(svcs.length){\n      html+=\'<table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>URL</th></tr>\';\n      svcs.forEach(function(s){var b=s.status===\'ok\'?\'green\':\'red\';html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+b+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table>\';\n    }else{html+=\'<div class="admin-empty">No services detected</div>\';}\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div>\';\n    html+=\'<table class="admin-table"><tr><th>User</th><th>Role</th><th>Created</th></tr>\';\n    userList.slice(0,10).forEach(function(u){html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\' <span style="color:var(--text3);font-weight:400">@\'+_escH(u.username)+\'</span></td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td></tr>\';});\n    html+=\'</table></div>\';\n    el.innerHTML=html;_appendUsageStats();\n  }catch(e){el.innerHTML=\'<div class="admin-title">Overview</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadUsers(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">User Management</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/users\',{action:\'list\'});\n    var users=(data&&data.users)||[];\n    var html=\'<div class="admin-title">User Management</div><div class="admin-subtitle">\'+users.length+\' registered users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showCreateUser()">+ Create User</button><button class="admin-btn" onclick="_showCreateInvite()">Invite User</button><div class="spacer"></div><button class="admin-btn" onclick="_loadUsers()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Display Name</th><th>Role</th><th>Email</th><th>Created</th><th style="width:140px">Actions</th></tr>\';\n    users.forEach(function(u){\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.username)+\'</td><td>\'+_escH(u.display_name||\'\')+\'</td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_escH(u.email||\'-\')+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px"><button class="admin-btn sm" onclick="_showEditRole(\\\'\'+_escH(u.username)+\'\\\',\\\'\'+_escH(u.role)+\'\\\')">Role</button>\';\n      html+=\'<button class="admin-btn sm" onclick="_resetPassword(\\\'\'+_escH(u.username)+\'\\\')">Reset</button>\';\n      if(u.username!==\'system\')html+=\'<button class="admin-btn sm danger" onclick="_deleteUser(\\\'\'+_escH(u.username)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n    try{var _inv_res=await fetch(\'/api/admin/invites\',{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},body:JSON.stringify({action:\'list\'}),credentials:\'same-origin\'}).then(function(r){return r.json();});var _invs=(_inv_res&&_inv_res.invites)||[];if(_invs.length>0){var ih=\'<div class="admin-title" style="margin-top:24px">Invites</div>\';ih+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';ih+=\'<tr><th>Code</th><th>Role</th><th>By</th><th>Uses</th><th>Status</th><th>Actions</th></tr>\';_invs.forEach(function(inv){var st=inv.status===\'active\'?\'\u25cf Active\':\'\u25cf \'+inv.status;ih+=\'<tr><td style="font-family:monospace;font-size:12px">\'+_escH(inv.code.slice(0,8))+\'...</td><td>\'+_escH(inv.role)+\'</td><td>\'+_escH(inv.created_by)+\'</td><td>\'+inv.use_count+\'/\'+inv.max_uses+\'</td><td>\'+st+\'</td><td>\';if(inv.status===\'active\')ih+=\'<button class="admin-btn sm danger" onclick="_revokeInvite(\\\'\'+_escH(inv.code)+\'\\\')">Revoke</button>\';ih+=\'</td></tr>\';});ih+=\'</table></div>\';el.innerHTML+=ih;}}catch(_ie){}\n  }catch(e){el.innerHTML=\'<div class="admin-title">Users</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nfunction _showCreateUser(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create User</h3><label>Username</label><input class="admin-input" id="_cu_user" placeholder="lowercase, no spaces"><label>Display Name</label><input class="admin-input" id="_cu_name" placeholder="Full display name"><label>Role</label><select class="admin-select" id="_cu_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option><option value="platform_admin">Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateUser()">Create</button></div></div></div>\');\n  document.getElementById(\'_cu_user\').focus();\n}\nasync function _doCreateUser(){\n  var u=document.getElementById(\'_cu_user\').value.trim(),n=document.getElementById(\'_cu_name\').value.trim()||u,r=document.getElementById(\'_cu_role\').value;\n  if(!u)return;\n  var res=await _api(\'/api/admin/users\',{action:\'create\',username:u,display_name:n,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nfunction _showEditRole(username,currentRole){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Change Role &#8212; \'+_escH(username)+\'</h3><label>New Role</label><select class="admin-select" id="_er_role"><option value="operator"\'+(currentRole===\'operator\'?\' selected\':\'\')+\'>Operator</option><option value="admin"\'+(currentRole===\'admin\'?\' selected\':\'\')+\'>Admin</option><option value="viewer"\'+(currentRole===\'viewer\'?\' selected\':\'\')+\'>Viewer</option><option value="platform_admin"\'+(currentRole===\'platform_admin\'?\' selected\':\'\')+\'>Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doEditRole(\\\'\'+_escH(username)+\'\\\')">Save</button></div></div></div>\');\n}\nasync function _doEditRole(username){\n  var r=document.getElementById(\'_er_role\').value;\n  var res=await _api(\'/api/admin/users\',{action:\'update_role\',username:username,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _deleteUser(username){if(!confirm(\'Delete user \'+username+\'? This cannot be undone.\'))return;var res=await _api(\'/api/admin/users\',{action:\'delete\',username:username});if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n\n\nvar _auditPage=0;var _auditFilters={actor:\'\',action:\'\',from:\'\',to:\'\'};\nasync function _loadAudit(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Audit Log</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var qs=\'limit=50&offset=\'+(_auditPage*50);\n    if(_auditFilters.actor)qs+=\'&actor=\'+encodeURIComponent(_auditFilters.actor);\n    if(_auditFilters.action)qs+=\'&action=\'+encodeURIComponent(_auditFilters.action);\n    var data=await fetch(\'/api/admin/audit?\'+qs,{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var stats=await fetch(\'/api/admin/audit/stats\',{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var events=(data&&data.events)||[];var total=(data&&data.total)||0;\n    var s24=(stats&&stats.period_24h)||{};\n    var html=\'<div class="admin-title">Audit Log</div>\';\n    html+=\'<div class="admin-subtitle">\'+total+\' total events | 24h: \'+(s24.total||0)+\' events</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:8px">\';\n    html+=\'<input class="admin-input" id="_af_actor" placeholder="Actor" value="\'+_escH(_auditFilters.actor)+\'" style="width:120px">\';\n    html+=\'<input class="admin-input" id="_af_action" placeholder="Action" value="\'+_escH(_auditFilters.action)+\'" style="width:150px">\';\n    html+=\'<button class="admin-btn primary" onclick="_auditApplyFilter()">Filter</button>\';\n    html+=\'<button class="admin-btn" onclick="_auditClearFilter()">Clear</button>\';\n    html+=\'<div class="spacer"></div><button class="admin-btn" onclick="_loadAudit()">Refresh</button>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>IP</th></tr>\';\n    events.forEach(function(e){\n      var dt=new Date(e.ts*1000);var ts=dt.toLocaleString(\'en-SG\',{hour12:false,timeZone:\'Asia/Singapore\'});\n      var det=JSON.stringify(e.details||{});if(det===\'{}\')det=\'-\';if(det.length>60)det=det.slice(0,57)+\'...\';\n      html+=\'<tr><td style="white-space:nowrap;color:var(--text3);font-size:12px">\'+_escH(ts)+\'</td>\';\n      html+=\'<td style="font-weight:600">\'+_escH(e.actor)+\'</td>\';\n      html+=\'<td><span style="background:var(--surface);padding:2px 8px;border-radius:4px;font-size:12px">\'+_escH(e.action)+\'</span></td>\';\n      html+=\'<td>\'+_escH(e.target||\'-\')+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(det)+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px">\'+_escH(e.ip_address||\'-\')+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    var pages=Math.ceil(total/50);\n    if(pages>1){\n      html+=\'<div style="display:flex;gap:8px;margin-top:12px;justify-content:center">\';\n      if(_auditPage>0)html+=\'<button class="admin-btn sm" onclick="_auditPage--;_loadAudit()">&laquo; Prev</button>\';\n      html+=\'<span style="color:var(--text3);padding:6px">Page \'+(_auditPage+1)+\' of \'+pages+\'</span>\';\n      if(_auditPage<pages-1)html+=\'<button class="admin-btn sm" onclick="_auditPage++;_loadAudit()">Next &raquo;</button>\';\n      html+=\'</div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Audit</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}}\nfunction _auditApplyFilter(){\n  _auditFilters.actor=document.getElementById(\'_af_actor\').value.trim();\n  _auditFilters.action=document.getElementById(\'_af_action\').value.trim();\n  _auditPage=0;_loadAudit();}\nfunction _auditClearFilter(){_auditFilters={actor:\'\',action:\'\',from:\'\',to:\'\'};_auditPage=0;_loadAudit();}\nasync function _showCreateInvite(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create Invite</h3><label>Role</label><select class="admin-select" id="_inv_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option></select><label>Max Uses</label><input class="admin-input" id="_inv_max" type="number" value="1" min="1"><label>Expires (hours, 0=never)</label><input class="admin-input" id="_inv_hours" type="number" value="72" min="0"><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateInvite()">Create</button></div></div></div>\');\n}\nasync function _doCreateInvite(){\n  var role=document.getElementById(\'_inv_role\').value;\n  var max=document.getElementById(\'_inv_max\').value;\n  var hours=document.getElementById(\'_inv_hours\').value;\n  var res=await _api(\'/api/admin/invites\',{action:\'create\',role:role,max_uses:parseInt(max),expires_hours:parseInt(hours)});\n  _closeModal();\n  if(res&&res.ok){\n    _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Invite Created</h3><p>Share this code:</p><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-family:monospace;font-size:14px;text-align:center;margin:12px 0;user-select:all;word-break:break-all">\'+_escH(res.code)+\'</div><p style="color:var(--text3);font-size:12px">Role: \'+_escH(res.role)+\' | Max uses: \'+res.max_uses+\'</p><div class="admin-modal-actions"><button class="admin-btn primary" onclick="_closeModal();_loadUsers()">Done</button></div></div></div>\');\n  }else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n}\nasync function _revokeInvite(code){\n  if(!confirm(\'Revoke this invite code?\'))return;\n  var res=await _api(\'/api/admin/invites\',{action:\'revoke\',code:code});\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _resetPassword(username){if(!confirm(\'Reset password for \'+username+\'? A temporary password will be generated.\'))return;var res=await _api(\'/api/admin/users\',{action:\'reset_password\',username:username});if(res&&res.ok){_modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Password Reset</h3><p>Temporary password for <b>\'+_escH(username)+\'</b>:</p><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-family:monospace;font-size:16px;text-align:center;margin:12px 0;user-select:all">\'+_escH(res.temp_password)+\'</div><p style="color:var(--text3);font-size:12px">User must change this on next login.</p><div class="admin-modal-actions"><button class="admin-btn primary" onclick="_closeModal()">Done</button></div></div></div>\');}else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}}\nasync function _loadSessions(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Active Sessions</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/sessions\');\n    var sessions=(data&&data.sessions)||[];\n    var html=\'<div class="admin-title">Active Sessions</div><div class="admin-subtitle">\'+sessions.length+\' active sessions</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadSessions()">Refresh</button></div>\';\n    if(!sessions.length){html+=\'<div class="admin-empty">No active sessions</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>IP</th><th>User Agent</th><th>Created</th><th>Last Active</th><th>Actions</th></tr>\';\n    sessions.forEach(function(s){\n      var ua=(s.user_agent||\'\').substring(0,40);\n      html+=\'<tr><td style="font-weight:600">\'+_escH(s.username||\'?\')+\'</td><td>\'+_roleBadge(s.role||\'operator\')+\'</td><td style="font-family:monospace;font-size:11px">\'+_escH(s.ip||\'-\')+\'</td><td style="font-size:10px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(ua)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.created_at)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.last_active)+\'</td><td><button class="admin-btn sm danger" onclick="_revokeSession(\\\'\'+_escH(s.token_prefix||\'\')+\'\\\')">Revoke</button></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Sessions</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _revokeSession(tp){if(!confirm(\'Revoke this session?\'))return;await _api(\'/api/admin/sessions\',{action:\'revoke\',token_prefix:tp});_loadSessions();}\n\nasync function _loadProjects(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">All Projects</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/projects\');\n    var projects=(data&&data.projects)||[];\n    var html=\'<div class="admin-title">All Projects</div><div class="admin-subtitle">\'+projects.length+\' total projects across all users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadProjects()">Refresh</button></div>\';\n    if(!projects.length){html+=\'<div class="admin-empty">No projects</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Project</th><th>Owner</th><th>Type</th><th>Status</th><th>Created</th></tr>\';\n    projects.forEach(function(p){\n      var sb=p.status===\'active\'?\'green\':p.status===\'completed\'?\'blue\':\'yellow\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(p.name||\'Untitled\')+\'</td><td>\'+_escH(p.owner||\'-\')+\'</td><td style="color:var(--text3)">\'+_escH(p.type||\'custom\')+\'</td><td><span class="admin-badge \'+sb+\'">\'+_escH(p.status||\'active\')+\'</span></td><td style="color:var(--text3)">\'+_fmtDate(p.created_at)+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Projects</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadHealth(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Health</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var h=await _api(\'/api/admin/health\');\n    var html=\'<div class="admin-title">System Health</div><div class="admin-subtitle">Detailed system diagnostics</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadHealth()">Refresh</button></div>\';\n    html+=\'<div class="admin-grid">\';\n    var metrics=[\n      {k:\'cpu_percent\',l:\'CPU Usage\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'memory_percent\',l:\'Memory\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'disk_percent\',l:\'Disk\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:70,crit:90},\n      {k:\'uptime_seconds\',l:\'Uptime\',fmt:_fmtUp},\n      {k:\'porter_pid\',l:\'Process ID\',fmt:function(v){return v}},\n      {k:\'porter_size_kb\',l:\'Binary Size\',fmt:function(v){return(v/1024).toFixed(1)+\' MB\'}},\n      {k:\'porter_lines\',l:\'Lines of Code\',fmt:function(v){return v.toLocaleString()}},\n      {k:\'python_version\',l:\'Python\',fmt:function(v){return v}},\n      {k:\'porter_version\',l:\'Porter Version\',fmt:function(v){return\'v\'+v}}\n    ];\n    metrics.forEach(function(m){\n      if(h[m.k]===undefined)return;var v=h[m.k];\n      var color=\'var(--text)\';\n      if(m.crit&&v>=m.crit)color=\'var(--red)\';else if(m.warn&&v>=m.warn)color=\'var(--yellow)\';else if(m.crit)color=\'var(--green)\';\n      html+=\'<div class="admin-card"><div class="admin-card-title">\'+m.l+\'</div><div style="font-size:20px;font-weight:700;color:\'+color+\'">\'+m.fmt(v)+\'</div></div>\';\n    });\n    html+=\'</div>\';\n    if(h.services&&h.services.length){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Service Probes</div><table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>Endpoint</th></tr>\';\n      h.services.forEach(function(s){html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+(s.status===\'ok\'?\'green\':\'red\')+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Health</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync async function _loadWorkspaceConfig(){\n  var res=await _api(\'/api/admin/workspace\',{action:\'get\'});\n  var s=(res&&res.settings)||{};\n  var html=\'<div class="admin-title" style="margin-top:24px">Workspace Identity</div>\';\n  html+=\'<div class="admin-card">\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Workspace Name</label><input class="admin-input" id="_ws_name" value="\'+_escH(s.workspace_name||\'\')+\'" style="margin-top:4px"></div>\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Description</label><input class="admin-input" id="_ws_desc" value="\'+_escH(s.workspace_description||\'\')+\'" style="margin-top:4px"></div>\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Accent Color</label><input class="admin-input" id="_ws_accent" type="color" value="\'+_escH(s.workspace_accent||\'\')+\'" style="margin-top:4px;width:60px;height:32px;padding:2px"></div>\';\n  html+=\'<button class="admin-btn primary" onclick="_saveWorkspaceConfig()">Save</button>\';\n  html+=\'</div>\';\n  return html;\n}\nasync function _saveWorkspaceConfig(){\n  var name=document.getElementById(\'_ws_name\').value;\n  var desc=document.getElementById(\'_ws_desc\').value;\n  var accent=document.getElementById(\'_ws_accent\').value;\n  var res=await _api(\'/api/admin/workspace\',{action:\'update\',workspace_name:name,workspace_description:desc,workspace_accent:accent});\n  if(res&&res.ok){alert(\'Saved!\');_loadConfig();}else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n}\nfunction _loadConfig(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Configuration</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var [health,hyg]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/hygiene\')]);\n    var html=\'<div class="admin-title">System Configuration</div><div class="admin-subtitle">Read-only view of current system settings</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadConfig()">Refresh</button></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System</div><dl class="admin-kv">\';\n    var sk=[[\'Porter Version\',\'v\'+(health.porter_version||\'?\')],[\'Python\',health.python_version||\'?\'],[\'PID\',health.porter_pid||\'?\'],[\'Binary Size\',(health.porter_size_kb||0).toFixed(0)+\' KB\'],[\'Lines\',health.porter_lines||\'?\']];\n    sk.forEach(function(kv){html+=\'<dt>\'+kv[0]+\'</dt><dd>\'+_escH(String(kv[1]))+\'</dd>\';});\n    html+=\'</dl></div>\';\n    if(hyg&&!hyg.error){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Hygiene System</div><dl class="admin-kv">\';\n      Object.keys(hyg).filter(function(k){return typeof hyg[k]!==\'object\'}).forEach(function(k){html+=\'<dt>\'+_escH(k)+\'</dt><dd>\'+_escH(String(hyg[k]))+\'</dd>\';});\n      html+=\'</dl></div>\';\n    }\n    var wsHtml=await _loadWorkspaceConfig();html+=wsHtml;el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Config</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadLogs(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Logs</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/logs\');\n    var lines=(data&&data.lines)||[];\n    var html=\'<div class="admin-title">System Logs</div><div class="admin-subtitle">\'+lines.length+\' log lines</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadLogs()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="max-height:calc(100vh - 180px);overflow-y:auto;font-family:monospace;padding:12px">\';\n    lines.slice(-300).forEach(function(l){html+=\'<div class="admin-log-line">\'+_escH(l)+\'</div>\';});\n    html+=\'</div>\';\n    el.innerHTML=html;\n    var lb=el.querySelector(\'.admin-card\');if(lb)lb.scrollTop=lb.scrollHeight;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Logs</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nvar _tmplFilter=\'\';\nasync function _loadTemplates(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Worker Templates</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var url=\'/api/templates\';\n    if(_tmplFilter)url+=\'?category=\'+encodeURIComponent(_tmplFilter);\n    var data=await _api(url);\n    var all=await _api(\'/api/templates\');\n    var templates=(data&&data.templates)||[];\n    var allTemplates=(all&&all.templates)||[];\n    var cats={};allTemplates.forEach(function(t){var c=t.category||\'other\';cats[c]=(cats[c]||0)+1;});\n    var catList=Object.keys(cats).sort();\n    var html=\'<div class="admin-title">Worker Templates</div><div class="admin-subtitle">\'+allTemplates.length+\' archetypes across \'+catList.length+\' categories</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:6px">\';\n    html+=\'<button class="admin-btn\'+(!_tmplFilter?\' primary\':\'\')+\'" onclick="_tmplFilter=\\\'\\\';_loadTemplates()">All (\'+allTemplates.length+\')</button>\';\n    catList.forEach(function(c){\n      var active=_tmplFilter===c;\n      html+=\'<button class="admin-btn\'+(active?\' primary\':\'\')+\'" onclick="_tmplFilter=\\\'\'+_escH(c)+\'\\\'\\\';_loadTemplates()">\'+_escH(c.charAt(0).toUpperCase()+c.slice(1))+\' (\'+cats[c]+\')</button>\';\n    });\n    html+=\'</div>\';\n    if(!templates.length){html+=\'<div class="admin-empty">No templates in this category</div>\';el.innerHTML=html;return;}\n    html+=\'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">\';\n    templates.forEach(function(t){\n      html+=\'<div class="admin-card" style="cursor:pointer;transition:border-color .15s" onclick="_tmplDetail(\\\'\'+_escH(t.id)+\'\\\')" onmouseenter="this.style.borderColor=\\\'var(--accent)\\\'" onmouseleave="this.style.borderColor=\\\'var(--border)\\\'">\';\n      html+=\'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">\';\n      html+=\'<div style="font-size:14px;font-weight:700;color:var(--text)">\'+_escH(t.name)+\'</div>\';\n      html+=\'</div>\';\n      html+=\'<div style="font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:8px">\'+_escH(t.description)+\'</div>\';\n      html+=\'<div style="display:flex;gap:4px;flex-wrap:wrap">\';\n      html+=\'<span class="admin-badge blue">\'+_escH(t.category)+\'</span>\';\n      (t.tags||[]).slice(0,4).forEach(function(tag){\n        html+=\'<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">\'+_escH(tag)+\'</span>\';\n      });\n      html+=\'</div></div>\';\n    });\n    html+=\'</div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Templates</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _tmplDetail(tid){\n  try{\n    var data=await _api(\'/api/templates/\'+tid);\n    if(!data||data.error){alert(\'Template not found\');return;}\n    var html=\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal" style="max-width:560px;max-height:80vh;overflow-y:auto">\';\n    html+=\'<h3 style="margin-bottom:4px">\'+_escH(data.name||tid)+\'</h3>\';\n    html+=\'<div style="font-size:11px;color:var(--text3);margin-bottom:12px"><span class="admin-badge blue">\'+_escH(data.cat||\'\')+\'</span> <span class="admin-badge green">\'+_escH(data.archetype||\'\')+\'</span></div>\';\n    html+=\'<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:14px">\'+_escH(data.desc||\'\')+\'</div>\';\n    if(data.mission){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Mission</div><div style="font-size:12px;color:var(--text)">\'+_escH(data.mission)+\'</div></div>\';}\n    if(data.soul&&data.soul.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Soul Traits</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.soul.forEach(function(s){html+=\'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)">\'+_escH(s)+\'</span>\';});html+=\'</div></div>\';}\n    if(data.authority&&data.authority.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Authority</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.authority.forEach(function(a){html+=\'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">\'+_escH(a)+\'</span>\';});html+=\'</div></div>\';}\n    if(data.inputs&&data.inputs.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Inputs</div><div style="font-size:11px;color:var(--text2)">\'+data.inputs.map(function(i){return _escH(i)}).join(\' &middot; \')+\'</div></div>\';}\n    if(data.outputs&&data.outputs.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Outputs</div><div style="font-size:11px;color:var(--text2)">\'+data.outputs.map(function(o){return _escH(o)}).join(\' &middot; \')+\'</div></div>\';}\n    if(data.tags&&data.tags.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Tags</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.tags.forEach(function(t){html+=\'<span style="font-size:9px;padding:2px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">\'+_escH(t)+\'</span>\';});html+=\'</div></div>\';}\n    html+=\'<div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Close</button></div>\';\n    html+=\'</div></div>\';\n    _modal(html);\n  }catch(e){alert(\'Error: \'+e.message);}\n}\nvar _dirScope=\'\';\nasync function _loadDirectives(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Directives</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var url=\'/api/state/directives\';\n    var params=[];\n    if(_dirScope)params.push(\'scope_type=\'+encodeURIComponent(_dirScope));\n    params.push(\'include_dismissed=1\');\n    if(params.length)url+=\'?\'+params.join(\'&\');\n    var data=await _api(url);\n    var dirs=(data&&data.directives)||[];\n    var active=dirs.filter(function(d){return d.status===\'active\'});\n    var dismissed=dirs.filter(function(d){return d.status!==\'active\'});\n    var scopes={};dirs.forEach(function(d){var s=d.scope_type||\'global\';scopes[s]=(scopes[s]||0)+1;});\n    var scopeList=Object.keys(scopes).sort();\n    var html=\'<div class="admin-title">Directives</div><div class="admin-subtitle">\'+active.length+\' active, \'+dismissed.length+\' dismissed/superseded</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:6px">\';\n    html+=\'<button class="admin-btn\'+(!_dirScope?\' primary\':\'\')+\'" onclick="_dirScope=\\\'\\\';_loadDirectives()">All (\'+dirs.length+\')</button>\';\n    scopeList.forEach(function(s){\n      html+=\'<button class="admin-btn\'+(_dirScope===s?\' primary\':\'\')+\'" onclick="_dirScope=\\\'\'+_escH(s)+\'\\\'\\\';_loadDirectives()">\'+_escH(s.charAt(0).toUpperCase()+s.slice(1))+\' (\'+scopes[s]+\')</button>\';\n    });\n    html+=\'<div class="spacer"></div>\';\n    html+=\'<button class="admin-btn primary" onclick="_showAddDirective()">+ Add Directive</button>\';\n    html+=\'</div>\';\n    if(!dirs.length){html+=\'<div class="admin-empty">No directives yet</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>ID</th><th>Scope</th><th>Directive</th><th>Status</th><th>Source</th><th>Created</th><th>Actions</th></tr>\';\n    dirs.forEach(function(d){\n      var sb=d.status===\'active\'?\'green\':d.status===\'dismissed\'?\'red\':\'yellow\';\n      var scopeLabel=d.scope_type===\'project\'?d.scope_type+\' (\'+_escH((d.scope_id||\'\').substring(0,8))+\')\':d.scope_type;\n      html+=\'<tr><td style="font-family:monospace;font-size:11px">#\'+d.id+\'</td>\';\n      html+=\'<td><span class="admin-badge blue">\'+_escH(scopeLabel)+\'</span></td>\';\n      html+=\'<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\'+_escH(d.text||\'\')+\'</td>\';\n      html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(d.status||\'active\')+\'</span></td>\';\n      html+=\'<td style="color:var(--text3);font-size:11px">\'+_escH(d.source||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_fmtAgo(d.created_at)+\'</td>\';\n      html+=\'<td>\';\n      if(d.status===\'active\')html+=\'<button class="admin-btn sm danger" onclick="_dismissDir(\'+d.id+\')">Dismiss</button>\';\n      else html+=\'<button class="admin-btn sm" onclick="_activateDir(\'+d.id+\')">Reactivate</button>\';\n      html+=\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Directives</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _dismissDir(id){\n  await _api(\'/api/state/directives/\'+id+\'/status\',{status:\'dismissed\'});\n  _loadDirectives();\n}\nasync function _activateDir(id){\n  await _api(\'/api/state/directives/\'+id+\'/status\',{status:\'active\'});\n  _loadDirectives();\n}\nfunction _showAddDirective(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Add Directive</h3><label>Scope</label><select class="admin-select" id="_ad_scope"><option value="global">Global</option><option value="project">Project</option><option value="agent">Agent</option></select><label>Scope ID (for project/agent)</label><input class="admin-input" id="_ad_sid" placeholder="Project or agent ID"><label>Directive Text</label><textarea class="admin-input" id="_ad_text" rows="3" placeholder="Always do X when Y happens..."></textarea><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doAddDirective()">Add</button></div></div></div>\');\n}\nasync function _doAddDirective(){\n  var scope=document.getElementById(\'_ad_scope\').value;\n  var sid=document.getElementById(\'_ad_sid\').value.trim();\n  var text=document.getElementById(\'_ad_text\').value.trim();\n  if(!text)return;\n  var res=await _api(\'/api/state/directives\',{action:\'create\',scope_type:scope,scope_id:sid,text:text});\n  _closeModal();\n  if(res&&res.ok)_loadDirectives();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _loadConnections(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Connections</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/connections\',{action:\'list\'});\n    var conns=(data&&data.connections)||[];\n    var active=conns.filter(function(c){return c.status===\'active\'}).length;\n    var html=\'<div class="admin-title">Workspace Connections</div><div class="admin-subtitle">\'+conns.length+\' connections (\'+active+\' active)</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showAddConnection()">+ Add Connection</button><div class="spacer"></div><button class="admin-btn" onclick="_loadConnections()">Refresh</button></div>\';\n    if(!conns.length){html+=\'<div class="admin-empty">No connections yet. Add one to connect external services.</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>ID</th><th>Provider</th><th>Name</th><th>Kind</th><th>Status</th><th>Installed By</th><th>Created</th><th>Actions</th></tr>\';\n    conns.forEach(function(c){\n      var sb=c.status===\'active\'?\'green\':c.status===\'disconnected\'?\'yellow\':\'red\';\n      html+=\'<tr><td style="font-family:monospace;font-size:10px">\'+_escH((c.id||\'\').substring(0,12))+\'</td>\';\n      html+=\'<td style="font-weight:600">\'+_escH(c.provider||\'\')+\'</td>\';\n      html+=\'<td>\'+_escH(c.display_name||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_escH(c.kind||\'api_key\')+\'</td>\';\n      html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(c.status||\'disconnected\')+\'</span></td>\';\n      html+=\'<td style="color:var(--text3)">\'+_escH(c.installed_by||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_fmtAgo(c.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px">\';\n      if(c.status!==\'active\')html+=\'<button class="admin-btn sm" onclick="_connSetStatus(\\\'\'+_escH(c.id)+\'\\\',\\\'active\\\')">Activate</button>\';\n      else html+=\'<button class="admin-btn sm" onclick="_connSetStatus(\\\'\'+_escH(c.id)+\'\\\',\\\'disconnected\\\')">Disconnect</button>\';\n      html+=\'<button class="admin-btn sm danger" onclick="_connDelete(\\\'\'+_escH(c.id)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    // Environment tools section\n    var envData=await _api(\'/api/admin/env-tools\');\n    var tools=(envData&&envData.tools)||[];\n    if(tools.length){\n      html+=\'<div class="admin-title" style="margin-top:28px">Environment Tools</div><div class="admin-subtitle">Auto-detected local tools</div>\';\n      html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n      html+=\'<tr><th>Tool</th><th>Status</th><th>Version</th><th>Last Checked</th></tr>\';\n      tools.forEach(function(t){\n        var sb=t.health===\'ok\'?\'green\':t.health===\'missing\'?\'red\':\'yellow\';\n        html+=\'<tr><td style="font-weight:600">\'+_escH(t.tool_key||\'\')+\'</td>\';\n        html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(t.detected?\'detected\':\'missing\')+\'</span></td>\';\n        html+=\'<td style="font-size:11px;color:var(--text2)">\'+_escH(t.version||\'-\')+\'</td>\';\n        html+=\'<td style="color:var(--text3)">\'+_fmtAgo(t.last_checked_at)+\'</td></tr>\';\n      });\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Connections</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _connSetStatus(id,status){\n  await _api(\'/api/admin/connections\',{action:\'update\',id:id,status:status});\n  _loadConnections();\n}\nasync function _connDelete(id){\n  if(!confirm(\'Delete this connection? Projects using it will be disconnected.\'))return;\n  await _api(\'/api/admin/connections\',{action:\'delete\',id:id});\n  _loadConnections();\n}\nfunction _showAddConnection(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Add Connection</h3><label>Provider</label><input class="admin-input" id="_ac_provider" placeholder="e.g. github, slack, google"><label>Display Name</label><input class="admin-input" id="_ac_name" placeholder="My GitHub"><label>Kind</label><select class="admin-select" id="_ac_kind"><option value="api_key">API Key</option><option value="oauth">OAuth</option><option value="webhook">Webhook</option><option value="local">Local</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doAddConnection()">Add</button></div></div></div>\');\n}\nasync function _doAddConnection(){\n  var provider=document.getElementById(\'_ac_provider\').value.trim();\n  var name=document.getElementById(\'_ac_name\').value.trim()||provider;\n  var kind=document.getElementById(\'_ac_kind\').value;\n  if(!provider)return;\n  var res=await _api(\'/api/admin/connections\',{action:\'create\',provider:provider,display_name:name,kind:kind});\n  _closeModal();\n  if(res&&res.ok)_loadConnections();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\n_loadOverview();\n</script>\n</body></html>'
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -41972,6 +46029,21 @@ class Handler(BaseHTTPRequestHandler):
             return False
         # No valid auth
         self.reply_json({"error": "unauthorized"}, 401)
+        return False
+
+    def auth_has_cap(self, capability: str) -> bool:
+        """Capability check without emitting a response."""
+        token = self.get_session_token()
+        ip = self.client_address[0]
+        ua = self.headers.get("User-Agent", "")
+        if token:
+            session = get_session(token, ip=ip, ua=ua)
+            if session:
+                role = session.get("role", "operator")
+                return capability in ROLE_CAPS.get(role, set())
+        agent = self.get_agent_from_bearer()
+        if agent:
+            return capability in ROLE_CAPS.get(agent.get("role", "viewer"), set())
         return False
 
     def do_GET(self):
@@ -42523,7 +46595,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.22"})
+            self.reply_json({"v": "0.33.26"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -42685,7 +46757,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.33.11"
+                health["porter_version"] = "0.33.26"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -43274,13 +47346,30 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/memory/review-queue":
             if not self.auth_check(redirect=False): return
             limit = min(100, max(1, int(qs.get("limit", ["20"])[0])))
+            scope = qs.get("scope", [""])[0].strip()
+            scope_id = qs.get("scope_id", [""])[0].strip()
             try:
                 conn = _db_conn()
-                rows = conn.execute(
+                where = [
+                    "review_state='pending'",
+                    "status='active'",
+                    "NOT (source_type='system' AND source_category='discovery' AND text LIKE 'File uploaded:%')",
+                ]
+                params = []
+                if scope:
+                    where.append("scope = ?")
+                    params.append(scope)
+                if scope_id:
+                    where.append("scope_id = ?")
+                    params.append(scope_id)
+                sql = (
                     "SELECT id, substr(text, 1, 200) as preview, memory_kind, trust_tier, scope, scope_id, "
                     "source_type, source_category, confidence, importance, created_at "
-                    "FROM memories WHERE review_state='pending' AND status='active' "
-                    "ORDER BY importance DESC, created_at DESC LIMIT ?", (limit,)).fetchall()
+                    "FROM memories WHERE " + " AND ".join(where) + " "
+                    "ORDER BY importance DESC, created_at DESC LIMIT ?"
+                )
+                params.append(limit)
+                rows = conn.execute(sql, params).fetchall()
                 conn.close()
                 self.reply_json({"ok": True, "queue": [dict(r) for r in rows], "count": len(rows)})
             except Exception as e:
@@ -44474,6 +48563,7 @@ class Handler(BaseHTTPRequestHandler):
                 projects = [p for p in all_projects if p.get("owner") == _proj_user or p.get("id") in _collab_pids]
             result = []
             for p in projects:
+                _normalize_project_assigned_personas(p, persist=True)
                 wp = AGENT_WORKSPACE_DIR / "projects" / str(p.get("id", ""))
                 result.append({**p, "type": p.get("type", "custom"),
                     "status": p.get("status", "active"),
@@ -44814,8 +48904,53 @@ class Handler(BaseHTTPRequestHandler):
             _run_cap_checks(force=force)
             # Filter to non-AI tools only (AI providers served via /api/ai-providers)
             ai_ids = {p["id"] for p in AI_PROVIDERS}
-            caps = [v for v in _capabilities_cache.values() if v["id"] not in ai_ids]
+            _visible_tool_ids = {
+                "node", "npm", "puppeteer", "playwright", "d2", "git", "ffmpeg", "wkhtmltopdf",
+                "tailwindcss", "postcss", "vite", "brave_search", "gws", "github",
+                "docker", "figma", "firecrawl", "postgres", "ollama"
+            }
+            caps = [v for v in _capabilities_cache.values() if v["id"] not in ai_ids and v["id"] in _visible_tool_ids]
             self.reply_json({"capabilities": caps})
+
+        elif parsed.path == "/api/workspace/tools":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            force = qs.get("force", [""])[0] == "1"
+            _run_cap_checks(force=force)
+            ai_ids = {p["id"] for p in AI_PROVIDERS}
+            caps = [v for v in _capabilities_cache.values() if v["id"] not in ai_ids]
+            _wconn = _db_conn()
+            try:
+                rows = _wconn.execute(
+                    "SELECT wc.*, COUNT(pc.connection_id) AS project_count "
+                    "FROM workspace_connections wc "
+                    "LEFT JOIN project_connections pc ON pc.connection_id = wc.id AND pc.status='active' "
+                    "GROUP BY wc.id "
+                    "ORDER BY CASE WHEN wc.status='active' THEN 0 ELSE 1 END, wc.updated_at DESC, wc.created_at DESC"
+                ).fetchall()
+                conns = [dict(r) for r in rows]
+            finally:
+                _wconn.close()
+            local_ready = sum(1 for c in caps if c.get("ok"))
+            local_missing = sum(1 for c in caps if not c.get("ok"))
+            connections_live = sum(1 for c in conns if str(c.get("status", "")).lower() == "active")
+            disconnected = sum(1 for c in conns if str(c.get("status", "")).lower() != "active")
+            errors = sum(1 for c in conns if str(c.get("last_error", "")).strip())
+            self.reply_json({
+                "ok": True,
+                "capabilities": caps,
+                "connections": conns,
+                "summary": {
+                    "connections_live": connections_live,
+                    "connections_total": len(conns),
+                    "connections_disconnected": disconnected,
+                    "local_ready": local_ready,
+                    "local_missing": local_missing,
+                    "total_tools": len(caps),
+                    "needs_attention": disconnected + errors + local_missing,
+                },
+                "checked_at": _capabilities_cache_ts,
+            })
 
         elif parsed.path == "/api/ai-providers":
             if not self.auth_check(redirect=False): return
@@ -45019,7 +49154,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.22'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.26'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -49066,7 +53201,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.33.11"
+                _ws_health["porter_version"] = "0.33.26"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -49150,6 +53285,46 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             else:
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
 
+        elif parsed.path == "/api/workspace/tools":
+            if not self.auth_check(redirect=False): return
+            qs = parse_qs(parsed.query)
+            force = qs.get("force", [""])[0] == "1"
+            _run_cap_checks(force=force)
+            ai_ids = {p["id"] for p in AI_PROVIDERS}
+            caps = [v for v in _capabilities_cache.values() if v["id"] not in ai_ids]
+            _wconn = _db_conn()
+            try:
+                rows = _wconn.execute(
+                    "SELECT wc.*, COUNT(pc.connection_id) AS project_count "
+                    "FROM workspace_connections wc "
+                    "LEFT JOIN project_connections pc ON pc.connection_id = wc.id AND pc.status='active' "
+                    "GROUP BY wc.id "
+                    "ORDER BY CASE WHEN wc.status='active' THEN 0 ELSE 1 END, wc.updated_at DESC, wc.created_at DESC"
+                ).fetchall()
+                conns = [dict(r) for r in rows]
+            finally:
+                _wconn.close()
+            local_ready = sum(1 for c in caps if c.get("ok"))
+            local_missing = sum(1 for c in caps if not c.get("ok"))
+            connections_live = sum(1 for c in conns if str(c.get("status", "")).lower() == "active")
+            disconnected = sum(1 for c in conns if str(c.get("status", "")).lower() != "active")
+            errors = sum(1 for c in conns if str(c.get("last_error", "")).strip())
+            self.reply_json({
+                "ok": True,
+                "capabilities": caps,
+                "connections": conns,
+                "summary": {
+                    "connections_live": connections_live,
+                    "connections_total": len(conns),
+                    "connections_disconnected": disconnected,
+                    "local_ready": local_ready,
+                    "local_missing": local_missing,
+                    "total_tools": len(caps),
+                    "needs_attention": disconnected + errors + local_missing,
+                },
+                "checked_at": _capabilities_cache_ts,
+            })
+
         # v0.31.68 — Workspace People API (SaaS Control Split Phase 1)
         elif parsed.path == "/api/workspace/people":
             if not self.auth_check(redirect=False): return
@@ -49163,7 +53338,12 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     _wp_user = (_wp_session or {}).get("username", "")
                     conn = _db_conn()
                     if _wp_role == "platform_admin":
-                        rows = conn.execute("SELECT username, display_name, full_name, email, role, created_at FROM users").fetchall()
+                        rows = conn.execute("""
+                            SELECT u.username, u.display_name, u.full_name, u.email, u.role, u.created_at,
+                                   up.summary, up.title, up.phone
+                            FROM users u
+                            LEFT JOIN workspace_user_profiles up ON up.username = u.username
+                        """).fetchall()
                     else:
                         _collab_users = set()
                         try:
@@ -49176,9 +53356,160 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                             pass
                         _visible = {_wp_user} | _collab_users
                         _ph = ",".join("?" * len(_visible))
-                        rows = conn.execute(f"SELECT username, display_name, full_name, email, role, created_at FROM users WHERE username IN ({_ph})", list(_visible)).fetchall()
+                        rows = conn.execute(f"""
+                            SELECT u.username, u.display_name, u.full_name, u.email, u.role, u.created_at,
+                                   up.summary, up.title, up.phone
+                            FROM users u
+                            LEFT JOIN workspace_user_profiles up ON up.username = u.username
+                            WHERE u.username IN ({_ph})
+                        """, list(_visible)).fetchall()
                     conn.close()
                     self.reply_json({"ok": True, "users": [dict(r) for r in rows]})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+            elif action == "get":
+                try:
+                    target_user = str(data.get("username", "") or "").strip()
+                    if not target_user:
+                        self.reply_json({"ok": False, "error": "username required"}, 400); return
+                    _wp_token = self.get_session_token()
+                    _wp_session = get_session(_wp_token, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _wp_token else None
+                    _wp_role = (_wp_session or {}).get("role", "operator")
+                    _wp_user = (_wp_session or {}).get("username", "")
+                    conn = _db_conn()
+                    row = conn.execute("""
+                        SELECT u.username, u.display_name, u.full_name, u.email, u.role, u.created_at,
+                               up.prefix, up.title, up.phone, up.social_json, up.summary
+                        FROM users u
+                        LEFT JOIN workspace_user_profiles up ON up.username = u.username
+                        WHERE u.username = ?
+                    """, (target_user,)).fetchone()
+                    if not row:
+                        conn.close()
+                        self.reply_json({"ok": False, "error": "Not found"}, 404); return
+                    if _wp_role != "platform_admin" and target_user != _wp_user:
+                        _my_projects = [p.get("id", "") for p in _config.get("projects", []) if p.get("owner") == _wp_user]
+                        _shared = False
+                        if _my_projects:
+                            _ph = ",".join("?" * len(_my_projects))
+                            _shared_row = conn.execute(
+                                f"SELECT 1 FROM project_collaborators WHERE username = ? AND project_id IN ({_ph}) LIMIT 1",
+                                [target_user] + _my_projects
+                            ).fetchone()
+                            _shared = bool(_shared_row)
+                        if not _shared:
+                            conn.close()
+                            self.reply_json({"ok": False, "error": "forbidden"}, 403); return
+                    activity = [dict(r) for r in conn.execute(
+                        "SELECT id, body, created_by, created_at FROM workspace_user_activities WHERE username = ? ORDER BY created_at DESC LIMIT 50",
+                        (target_user,)
+                    ).fetchall()]
+                    conn.close()
+                    self.reply_json({"ok": True, "user": dict(row), "activity": activity})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+            elif action == "update_profile":
+                try:
+                    target_user = str(data.get("username", "") or "").strip()
+                    if not target_user:
+                        self.reply_json({"ok": False, "error": "username required"}, 400); return
+                    _wp_token2 = self.get_session_token()
+                    _wp_session2 = get_session(_wp_token2, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _wp_token2 else None
+                    _wp_role2 = (_wp_session2 or {}).get("role", "operator")
+                    _wp_user2 = (_wp_session2 or {}).get("username", "")
+                    if target_user != _wp_user2 and _wp_role2 not in ("platform_admin", "admin"):
+                        self.reply_json({"ok": False, "error": "forbidden"}, 403); return
+                    user_allowed = {"full_name", "display_name", "email"}
+                    profile_allowed = {"prefix", "title", "phone", "summary"}
+                    conn = _db_conn()
+                    user_sets, user_vals = [], []
+                    for key in user_allowed:
+                        if key in data:
+                            user_sets.append(f"{key} = ?")
+                            user_vals.append(str(data.get(key, "") or "").strip())
+                    if user_sets:
+                        user_vals.append(target_user)
+                        conn.execute(f"UPDATE users SET {', '.join(user_sets)} WHERE username = ?", user_vals)
+                    profile_fields = {}
+                    for key in profile_allowed:
+                        if key in data:
+                            profile_fields[key] = str(data.get(key, "") or "").strip()
+                    if "social" in data:
+                        try:
+                            profile_fields["social_json"] = json.dumps(data.get("social") or {})
+                        except Exception:
+                            profile_fields["social_json"] = "{}"
+                    if profile_fields:
+                        existing = conn.execute("SELECT username FROM workspace_user_profiles WHERE username = ?", (target_user,)).fetchone()
+                        if not existing:
+                            conn.execute("INSERT INTO workspace_user_profiles (username) VALUES (?)", (target_user,))
+                        sets = [f"{k} = ?" for k in profile_fields.keys()]
+                        vals = list(profile_fields.values()) + [target_user]
+                        conn.execute(f"UPDATE workspace_user_profiles SET {', '.join(sets)}, updated_at = strftime('%s','now') WHERE username = ?", vals)
+                    conn.commit(); conn.close()
+                    self.reply_json({"ok": True})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+            elif action == "activity.create":
+                try:
+                    target_user = str(data.get("username", "") or "").strip()
+                    body = str(data.get("body", "") or "").strip()
+                    if not target_user or not body:
+                        self.reply_json({"ok": False, "error": "username and body required"}, 400); return
+                    _wp_token2 = self.get_session_token()
+                    _wp_session2 = get_session(_wp_token2, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _wp_token2 else None
+                    _wp_role2 = (_wp_session2 or {}).get("role", "operator")
+                    _wp_user2 = (_wp_session2 or {}).get("username", "")
+                    if target_user != _wp_user2 and _wp_role2 not in ("platform_admin", "admin"):
+                        self.reply_json({"ok": False, "error": "forbidden"}, 403); return
+                    conn = _db_conn()
+                    cur = conn.execute(
+                        "INSERT INTO workspace_user_activities (username, body, created_by) VALUES (?, ?, ?)",
+                        (target_user, body, _wp_user2 or "unknown")
+                    )
+                    conn.commit(); conn.close()
+                    self.reply_json({"ok": True, "id": cur.lastrowid})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+            elif action == "activity.update":
+                try:
+                    aid = data.get("id")
+                    body = str(data.get("body", "") or "").strip()
+                    if not aid or not body:
+                        self.reply_json({"ok": False, "error": "id and body required"}, 400); return
+                    _wp_token2 = self.get_session_token()
+                    _wp_session2 = get_session(_wp_token2, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _wp_token2 else None
+                    _wp_role2 = (_wp_session2 or {}).get("role", "operator")
+                    _wp_user2 = (_wp_session2 or {}).get("username", "")
+                    conn = _db_conn()
+                    row = conn.execute("SELECT username FROM workspace_user_activities WHERE id = ?", (aid,)).fetchone()
+                    if not row:
+                        conn.close(); self.reply_json({"ok": False, "error": "Not found"}, 404); return
+                    if row["username"] != _wp_user2 and _wp_role2 not in ("platform_admin", "admin"):
+                        conn.close(); self.reply_json({"ok": False, "error": "forbidden"}, 403); return
+                    conn.execute("UPDATE workspace_user_activities SET body = ? WHERE id = ?", (body, aid))
+                    conn.commit(); conn.close()
+                    self.reply_json({"ok": True})
+                except Exception as e:
+                    self.reply_json({"ok": False, "error": str(e)}, 500)
+            elif action == "activity.delete":
+                try:
+                    aid = data.get("id")
+                    if not aid:
+                        self.reply_json({"ok": False, "error": "id required"}, 400); return
+                    _wp_token2 = self.get_session_token()
+                    _wp_session2 = get_session(_wp_token2, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _wp_token2 else None
+                    _wp_role2 = (_wp_session2 or {}).get("role", "operator")
+                    _wp_user2 = (_wp_session2 or {}).get("username", "")
+                    conn = _db_conn()
+                    row = conn.execute("SELECT username FROM workspace_user_activities WHERE id = ?", (aid,)).fetchone()
+                    if not row:
+                        conn.close(); self.reply_json({"ok": False, "error": "Not found"}, 404); return
+                    if row["username"] != _wp_user2 and _wp_role2 not in ("platform_admin", "admin"):
+                        conn.close(); self.reply_json({"ok": False, "error": "forbidden"}, 403); return
+                    conn.execute("DELETE FROM workspace_user_activities WHERE id = ?", (aid,))
+                    conn.commit(); conn.close()
+                    self.reply_json({"ok": True})
                 except Exception as e:
                     self.reply_json({"ok": False, "error": str(e)}, 500)
             elif action == "create":
@@ -49257,6 +53588,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             _crm_tok = self.get_session_token()
             _crm_sess = get_session(_crm_tok, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _crm_tok else None
             current_user = (_crm_sess or {}).get("username", "unknown")
+            can_crm_write = self.auth_has_cap("write")
 
             # ── contacts.list ──
             if action == "contacts.list":
@@ -49311,40 +53643,79 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
             # ── contacts.create ──
             elif action == "contacts.create":
-                if not self.auth_check_cap("admin"): return
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                 fn = data.get("first_name", "").strip()
                 if not fn:
                     self.reply_json({"ok": False, "error": "first_name required"}, 400); return
                 conn = _db_conn()
+                company_id = data.get("company_id") or None
+                company_name = str(data.get("company_name", "") or "").strip()
+                if not company_id and company_name:
+                    existing = conn.execute("SELECT id FROM crm_companies WHERE lower(name) = lower(?) LIMIT 1", (company_name,)).fetchone()
+                    if existing:
+                        company_id = existing["id"]
+                    else:
+                        cur_co = conn.execute("""
+                            INSERT INTO crm_companies (name, company_type, created_by)
+                            VALUES (?, ?, ?)
+                        """, (company_name, "other", current_user))
+                        company_id = cur_co.lastrowid
                 cur = conn.execute("""
-                    INSERT INTO crm_contacts (first_name, last_name, email, phone, title,
-                        company_id, contact_type, tags_json, notes, social_json, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO crm_contacts (first_name, last_name, email, phone, title, honorific,
+                        company_id, contact_type, tags_json, notes, social_json, summary, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     fn, data.get("last_name", ""), data.get("email", ""),
                     data.get("phone", ""), data.get("title", ""),
-                    data.get("company_id") or None,
+                    data.get("honorific", ""),
+                    company_id,
                     data.get("contact_type", "other"),
                     json.dumps(data.get("tags", [])),
                     data.get("notes", ""),
                     json.dumps(data.get("social", {})),
+                    data.get("summary", ""),
                     current_user
                 ))
                 conn.commit()
                 new_id = cur.lastrowid
+                try:
+                    conn.execute("""
+                        INSERT INTO crm_interactions (interaction_type, body, contact_id, created_by)
+                        VALUES (?, ?, ?, ?)
+                    """, ("update", "Contact created", new_id, current_user))
+                    conn.commit()
+                except Exception:
+                    pass
                 conn.close()
                 _append_audit("crm.contact.create", str(new_id), current_user, details={"name": fn})
                 self.reply_json({"ok": True, "id": new_id})
 
             # ── contacts.update ──
             elif action == "contacts.update":
-                if not self.auth_check_cap("admin"): return
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                 cid = data.get("id")
                 if not cid:
                     self.reply_json({"ok": False, "error": "id required"}, 400); return
                 allowed = {"first_name", "last_name", "email", "phone", "title",
-                           "company_id", "contact_type", "notes", "status"}
+                           "company_id", "contact_type", "notes", "status", "honorific", "summary", "photo_path"}
                 sets, vals = [], []
+                conn = _db_conn()
+                if "company_name" in data:
+                    company_name = str(data.get("company_name", "") or "").strip()
+                    if company_name:
+                        existing = conn.execute("SELECT id FROM crm_companies WHERE lower(name) = lower(?) LIMIT 1", (company_name,)).fetchone()
+                        if existing:
+                            sets.append("company_id = ?"); vals.append(existing["id"])
+                        else:
+                            cur_co = conn.execute("""
+                                INSERT INTO crm_companies (name, company_type, created_by)
+                                VALUES (?, ?, ?)
+                            """, (company_name, "other", current_user))
+                            sets.append("company_id = ?"); vals.append(cur_co.lastrowid)
+                    else:
+                        sets.append("company_id = ?"); vals.append(None)
                 for k in allowed:
                     if k in data:
                         sets.append(f"{k} = ?"); vals.append(data[k])
@@ -49356,15 +53727,32 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     self.reply_json({"ok": False, "error": "Nothing to update"}, 400); return
                 sets.append("updated_at = strftime('%s','now')")
                 vals.append(cid)
-                conn = _db_conn()
                 conn.execute(f"UPDATE crm_contacts SET {', '.join(sets)} WHERE id = ?", vals)
+                if sets:
+                    try:
+                        _recent = conn.execute("""
+                            SELECT id FROM crm_interactions
+                            WHERE contact_id = ? AND interaction_type = 'update' AND body = 'Contact updated' AND created_by = ?
+                              AND created_at >= (strftime('%s','now') - 180)
+                            ORDER BY created_at DESC LIMIT 1
+                        """, (cid, current_user)).fetchone()
+                        if _recent:
+                            conn.execute("UPDATE crm_interactions SET created_at = strftime('%s','now') WHERE id = ?", (_recent["id"],))
+                        else:
+                            conn.execute("""
+                                INSERT INTO crm_interactions (interaction_type, body, contact_id, created_by)
+                                VALUES (?, ?, ?, ?)
+                            """, ("update", "Contact updated", cid, current_user))
+                    except Exception:
+                        pass
                 conn.commit(); conn.close()
                 _append_audit("crm.contact.update", str(cid), current_user)
                 self.reply_json({"ok": True})
 
             # ── contacts.archive ──
             elif action == "contacts.archive":
-                if not self.auth_check_cap("admin"): return
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                 cid = data.get("id")
                 if not cid:
                     self.reply_json({"ok": False, "error": "id required"}, 400); return
@@ -49376,7 +53764,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
             # ── contacts.delete ──
             elif action == "contacts.delete":
-                if not self.auth_check_cap("admin"): return
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                 cid = data.get("id")
                 if not cid:
                     self.reply_json({"ok": False, "error": "id required"}, 400); return
@@ -49437,32 +53826,42 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
             # ── companies.create ──
             elif action == "companies.create":
-                if not self.auth_check_cap("admin"): return
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                 name = data.get("name", "").strip()
                 if not name:
                     self.reply_json({"ok": False, "error": "name required"}, 400); return
                 conn = _db_conn()
                 cur = conn.execute("""
-                    INSERT INTO crm_companies (name, industry, company_type, website, country, notes, tags_json, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO crm_companies (name, industry, company_type, website, country, notes, tags_json, summary, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     name, data.get("industry", ""), data.get("company_type", "other"),
                     data.get("website", ""), data.get("country", ""),
-                    data.get("notes", ""), json.dumps(data.get("tags", [])), current_user
+                    data.get("notes", ""), json.dumps(data.get("tags", [])), data.get("summary", ""), current_user
                 ))
                 conn.commit()
                 new_id = cur.lastrowid
+                try:
+                    conn.execute("""
+                        INSERT INTO crm_interactions (interaction_type, body, company_id, created_by)
+                        VALUES (?, ?, ?, ?)
+                    """, ("update", "Company created", new_id, current_user))
+                    conn.commit()
+                except Exception:
+                    pass
                 conn.close()
                 _append_audit("crm.company.create", str(new_id), current_user, details={"name": name})
                 self.reply_json({"ok": True, "id": new_id})
 
             # ── companies.update ──
             elif action == "companies.update":
-                if not self.auth_check_cap("admin"): return
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                 cid = data.get("id")
                 if not cid:
                     self.reply_json({"ok": False, "error": "id required"}, 400); return
-                allowed = {"name", "industry", "company_type", "website", "country", "notes", "status"}
+                allowed = {"name", "industry", "company_type", "website", "country", "notes", "status", "summary"}
                 sets, vals = [], []
                 for k in allowed:
                     if k in data:
@@ -49475,13 +53874,31 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 vals.append(cid)
                 conn = _db_conn()
                 conn.execute(f"UPDATE crm_companies SET {', '.join(sets)} WHERE id = ?", vals)
+                if sets:
+                    try:
+                        _recent = conn.execute("""
+                            SELECT id FROM crm_interactions
+                            WHERE company_id = ? AND interaction_type = 'update' AND body = 'Company updated' AND created_by = ?
+                              AND created_at >= (strftime('%s','now') - 180)
+                            ORDER BY created_at DESC LIMIT 1
+                        """, (cid, current_user)).fetchone()
+                        if _recent:
+                            conn.execute("UPDATE crm_interactions SET created_at = strftime('%s','now') WHERE id = ?", (_recent["id"],))
+                        else:
+                            conn.execute("""
+                                INSERT INTO crm_interactions (interaction_type, body, company_id, created_by)
+                                VALUES (?, ?, ?, ?)
+                            """, ("update", "Company updated", cid, current_user))
+                    except Exception:
+                        pass
                 conn.commit(); conn.close()
                 _append_audit("crm.company.update", str(cid), current_user)
                 self.reply_json({"ok": True})
 
             # ── companies.archive ──
             elif action == "companies.archive":
-                if not self.auth_check_cap("admin"): return
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                 cid = data.get("id")
                 if not cid:
                     self.reply_json({"ok": False, "error": "id required"}, 400); return
@@ -49489,6 +53906,21 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 conn.execute("UPDATE crm_companies SET status = 'archived', updated_at = strftime('%s','now') WHERE id = ?", (cid,))
                 conn.commit(); conn.close()
                 _append_audit("crm.company.archive", str(cid), current_user)
+                self.reply_json({"ok": True})
+
+            # ── companies.delete ──
+            elif action == "companies.delete":
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
+                cid = data.get("id")
+                if not cid:
+                    self.reply_json({"ok": False, "error": "id required"}, 400); return
+                conn = _db_conn()
+                conn.execute("UPDATE crm_contacts SET company_id = NULL, updated_at = strftime('%s','now') WHERE company_id = ?", (cid,))
+                conn.execute("DELETE FROM crm_interactions WHERE company_id = ?", (cid,))
+                conn.execute("DELETE FROM crm_companies WHERE id = ?", (cid,))
+                conn.commit(); conn.close()
+                _append_audit("crm.company.delete", str(cid), current_user)
                 self.reply_json({"ok": True})
 
             # ── interactions.list ──
@@ -49515,7 +53947,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
             # ── interactions.create ──
             elif action == "interactions.create":
-                if not self.auth_check_cap("admin"): return
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                 itype = data.get("interaction_type", "note")
                 body = data.get("body", "").strip()
                 if not body:
@@ -49540,8 +53973,25 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": True, "id": new_id})
 
             # ── interactions.delete ──
+            elif action == "interactions.update":
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
+                iid = data.get("id")
+                body = str(data.get("body", "") or "").strip()
+                if not iid:
+                    self.reply_json({"ok": False, "error": "id required"}, 400); return
+                if not body:
+                    self.reply_json({"ok": False, "error": "body required"}, 400); return
+                conn = _db_conn()
+                conn.execute("UPDATE crm_interactions SET body = ? WHERE id = ?", (body, iid))
+                conn.commit(); conn.close()
+                _append_audit("crm.interaction.update", str(iid), current_user)
+                self.reply_json({"ok": True})
+
+            # ── interactions.delete ──
             elif action == "interactions.delete":
-                if not self.auth_check_cap("admin"): return
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                 iid = data.get("id")
                 if not iid:
                     self.reply_json({"ok": False, "error": "id required"}, 400); return
@@ -49557,14 +54007,41 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 contact_id = data.get("contact_id")
                 conn = _db_conn()
                 if project_id:
+                    project_aliases = [project_id]
+                    try:
+                        proj_cfg = next((p for p in (_config.get("projects", []) or []) if str(p.get("id") or "") == str(project_id)), None)
+                        proj_name = str((proj_cfg or {}).get("name") or "").strip().lower()
+                        if proj_name == "first mission" and "first-mission" not in project_aliases:
+                            project_aliases.append("first-mission")
+                    except Exception:
+                        pass
+                    placeholders = ",".join(["?"] * len(project_aliases))
                     rows = conn.execute("""
-                        SELECT pc.*, c.first_name, c.last_name, c.email, c.title, c.contact_type,
-                               co.name as company_name
-                        FROM crm_project_contacts pc
-                        JOIN crm_contacts c ON pc.contact_id = c.id
+                        SELECT
+                            c.id as contact_id,
+                            ? as project_id,
+                            COALESCE(pc.role, 'stakeholder') as role,
+                            COALESCE(pc.added_by, ci.created_by, '') as added_by,
+                            COALESCE(pc.added_at, ci.created_at, strftime('%s','now')) as added_at,
+                            c.first_name,
+                            c.last_name,
+                            c.email,
+                            c.title,
+                            c.contact_type,
+                            co.name as company_name
+                        FROM crm_contacts c
                         LEFT JOIN crm_companies co ON c.company_id = co.id
-                        WHERE pc.project_id = ? ORDER BY pc.added_at DESC
-                    """, (project_id,)).fetchall()
+                        LEFT JOIN crm_project_contacts pc
+                          ON pc.contact_id = c.id AND pc.project_id IN (""" + placeholders + """)
+                        LEFT JOIN (
+                          SELECT contact_id, MAX(created_at) as created_at, MAX(created_by) as created_by
+                          FROM crm_interactions
+                          WHERE project_id IN (""" + placeholders + """) AND contact_id IS NOT NULL
+                          GROUP BY contact_id
+                        ) ci ON ci.contact_id = c.id
+                        WHERE pc.contact_id IS NOT NULL OR ci.contact_id IS NOT NULL
+                        ORDER BY COALESCE(pc.added_at, ci.created_at, 0) DESC
+                    """, tuple([project_id] + project_aliases + project_aliases)).fetchall()
                 elif contact_id:
                     rows = conn.execute("""
                         SELECT pc.* FROM crm_project_contacts pc WHERE pc.contact_id = ?
@@ -49578,7 +54055,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
             # ── project_contacts.add ──
             elif action == "project_contacts.add":
-                if not self.auth_check_cap("admin"): return
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                 pid = data.get("project_id", "")
                 cid = data.get("contact_id")
                 role = data.get("role", "stakeholder")
@@ -49590,6 +54068,10 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                         INSERT INTO crm_project_contacts (project_id, contact_id, role, added_by)
                         VALUES (?, ?, ?, ?)
                     """, (pid, cid, role, current_user))
+                    conn.execute("""
+                        INSERT INTO crm_interactions (interaction_type, body, contact_id, project_id, created_by)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, ("update", "Added to project " + pid, cid, pid, current_user))
                     conn.commit()
                 except Exception:
                     conn.close()
@@ -49600,7 +54082,8 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
 
             # ── project_contacts.remove ──
             elif action == "project_contacts.remove":
-                if not self.auth_check_cap("admin"): return
+                if not can_crm_write:
+                    self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                 pid = data.get("project_id", "")
                 cid = data.get("contact_id")
                 if not pid or not cid:
@@ -50148,18 +54631,6 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 dest.write_bytes(body)
                 # v0.31.84 — Analyze uploaded file
                 analysis = _analyze_file(dest)
-                # v0.31.90 — Memory V2: generate signal for file upload
-                try:
-                    _proj_id = rel_path.split("/")[0] if "/" in rel_path else ""
-                    _summary = analysis.get("summary", "")[:100]
-                    _tags = ",".join(analysis.get("tags", [])[:5])
-                    _mem_insert(memory_kind='signal', text=f'File uploaded: {filename} ({len(body)} bytes). {_summary}',
-                                scope='project' if _proj_id else 'global', scope_id=_proj_id,
-                                trust_tier='low', source_type='system', source_category='discovery',
-                                confidence=0.4, importance=3, review_state='pending',
-                                keywords=f'file,upload,{filename},{_tags}')
-                except Exception:
-                    pass
                 self.reply_json({"ok": True, "size": len(body), "analysis": {
                     "word_count": analysis.get("word_count", 0),
                     "lang": analysis.get("lang", ""),
@@ -50223,7 +54694,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
 
         elif parsed.path == "/api/terminal/exec":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check_cap("orch_write"): return
             data = self.read_json_body()
             cmd = data.get("command", "").strip()
             if not cmd:
@@ -50231,14 +54702,28 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
             # Whitelist: only allow npm/pip update commands
             import shlex
             parts = shlex.split(cmd)
-            allowed_prefixes = ["npm", "pip3", "pip", "gemini", "ollama"]
+            allowed_prefixes = ["npm", "pip3", "pip", "gemini", "ollama", "curl", "sh", "bash", "brew"]
             if not parts or parts[0] not in allowed_prefixes:
-                self.reply_json({"ok": False, "error": "Only npm/pip/ollama/gemini commands allowed"}, 403); return
+                mlog.emit("warn", "models", "runtime.update.blocked", "Blocked runtime update command", reason="unsupported_command", command=cmd[:240])
+                self.reply_json({"ok": False, "error": "Only vetted runtime update commands are allowed here"}, 403); return
+            if parts and parts[0] in ("curl", "sh", "bash", "brew"):
+                _cmd_l = cmd.lower()
+                if ("ollama" not in _cmd_l) and ("gemini" not in _cmd_l) and ("openclaw" not in _cmd_l) and ("codex" not in _cmd_l):
+                    mlog.emit("warn", "models", "runtime.update.blocked", "Blocked runtime update command", reason="unvetted_runtime", command=cmd[:240])
+                    self.reply_json({"ok": False, "error": "Only vetted runtime update commands are allowed here"}, 403); return
             try:
                 import subprocess
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=120,
-                                        env={**dict(__import__('os').environ), "PATH": "/usr/local/bin:/usr/bin:/bin:" + str(Path.home() / ".npm-global/bin")})
+                mlog.emit("info", "models", "runtime.update.requested", "Runtime update requested", command=cmd[:240])
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    env={**dict(__import__('os').environ), "PATH": "/usr/local/bin:/usr/bin:/bin:" + str(Path.home() / ".npm-global/bin")}
+                )
                 _append_audit("terminal.exec", cmd[:50], get_session(self.get_session_token())["username"], details={"exit_code": result.returncode})
+                mlog.emit("info" if result.returncode == 0 else "error", "models", "runtime.update.finished", "Runtime update command finished", command=cmd[:240], exit_code=result.returncode)
                 self.reply_json({
                     "ok": result.returncode == 0,
                     "exit_code": result.returncode,
@@ -50246,6 +54731,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                     "stderr": result.stderr[-2000:] if result.stderr else "",
                 })
             except subprocess.TimeoutExpired:
+                mlog.emit("error", "models", "runtime.update.timeout", "Runtime update command timed out", command=cmd[:240])
                 self.reply_json({"ok": False, "error": "Command timed out (120s)"}, 504)
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
@@ -50579,7 +55065,28 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                         proj = p; break
                 if not proj:
                     self.reply_json({"ok": False, "error": "project not found"}); return
-                assigned = proj.get("assigned_personas", [])
+                assigned = _normalize_project_assigned_personas(proj, persist=False)
+                _new_name_key = ""
+                try:
+                    _aconn = _db_conn()
+                    _has_owner_col = any(str(r[1]) == "owner" for r in _aconn.execute("PRAGMA table_info(personas)").fetchall())
+                    _new_row = _aconn.execute("SELECT id, name" + (", owner" if _has_owner_col else "") + " FROM personas WHERE id=?", (persona_id,)).fetchone()
+                    if _new_row:
+                        _new_name_key = str((_new_row["name"] if isinstance(_new_row, sqlite3.Row) else _new_row[1]) or "").strip().lower()
+                    if _new_name_key:
+                        _filtered = []
+                        for _aid in assigned:
+                            _row = _aconn.execute("SELECT id, name FROM personas WHERE id=?", (_aid,)).fetchone()
+                            if not _row:
+                                continue
+                            _name_key = str((_row["name"] if isinstance(_row, sqlite3.Row) else _row[1]) or "").strip().lower()
+                            if _name_key == _new_name_key and str(_aid).strip() != persona_id:
+                                continue
+                            _filtered.append(_aid)
+                        assigned = _filtered
+                    _aconn.close()
+                except Exception:
+                    pass
                 if persona_id not in assigned:
                     assigned.append(persona_id)
                     proj["assigned_personas"] = assigned
@@ -50594,6 +55101,14 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                             sj.write_text(json.dumps(sd, indent=2))
                         except Exception: pass
                     _state_add_project_note(pid, "assignment", f"Assigned worker {persona_id} to project {pid}.", source="system", created_by="porter")
+                try:
+                    _assigned_persona = _persona_by_id(persona_id) or {}
+                    if bool(_assigned_persona.get("managed_by_porter")) and not bool(_assigned_persona.get("orchestrator_only")) and not _persona_is_locked(_assigned_persona):
+                        _recommended = _recommended_skill_names_for_persona(_assigned_persona)
+                        if _recommended:
+                            _persona_set_skill_names(persona_id, _recommended, managed_by_porter=True)
+                except Exception:
+                    pass
                 mlog.emit("info", "project", "project.assign_agent", f"Assigned persona {persona_id} to project {pid}", project_id=pid, persona_id=persona_id)
                 self.reply_json({"ok": True, "assigned_personas": proj.get("assigned_personas", [])})
 
@@ -52066,7 +56581,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.22 ready (localhost only)")
+    print(f"\n  Porter v0.33.26 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

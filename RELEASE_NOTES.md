@@ -1,5 +1,29 @@
 # Porter Release Notes
 
+## v0.33.26 (2026-03-19)
+
+- Tools is now one real workspace surface instead of a raw environment grid: connected services, local ready tools, and setup gaps land as separate sections with summary counts and staged loading.
+- Workspace connections are now folded into Tools directly, with quick add/connect/disconnect/rename/delete actions and clearer Porter-language states instead of machine-inventory sludge.
+- The Tools page now answers what Porter can use now, what still needs setup, and which services are actually attached to projects, instead of acting like a generic machine inventory panel.
+
+## v0.33.25 (2026-03-19)
+
+- Models is now more product-like: a compact summary strip lands first, cards emphasize readiness, selected models, and best-use guidance, and the old benchmark/scheduler clutter is no longer the default story.
+- Runtime updates now open a Porter-style progress modal with plain-language status, retry, and optional raw details instead of a terminal slab that could leak nonsense like `exit undefined`.
+- Models still hydrates progressively, but version refresh no longer blocks first paint and the visible runtime surface carries less legacy operator-console residue.
+
+## v0.33.24 (2026-03-19)
+
+- People/CRM is now a real workspace surface: normal workspace writers can update contacts and companies, company names resolve or create inline, and contact/company detail now has a proper files pane instead of a tiny upload zone.
+- Settings is tighter: the gear now toggles the secondary settings nav like a hamburger, Profile and Password are compact again, and the workspace/admin version surface is back in sync.
+- Projects now has a global search bar on the roster so you can filter by project name, mission, status, type, and assigned agents from the main Projects page.
+
+## v0.33.23 (2026-03-19)
+
+- Reset release discipline so Porter now reports one consistent version across the app footer, SSE welcome event, health/status APIs, startup banner, and release notes.
+- Standardized Porter-styled dropdown treatment across the product and cleaned the worker detail surface so tabs stay stable, runtime config is smaller, and noisy worker header badges are reduced.
+- Project chat now recommends the next move in plain language, keeps focus after send, and the Workflow board renders as real task columns again instead of collapsing into merged text.
+
 ## v0.31.17 (2026-03-12)
 
 - Chat model selectors now use explicit `Model` language instead of `Lane`, so model switching reads consistently in Porter and project chats.

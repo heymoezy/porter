@@ -1,6 +1,24 @@
-# Task Queue — v0.31.83
+# Task Queue — v0.31.84
 
-## Done this session (v0.31.72-83)
+## Done this session (v0.31.84)
+- [x] Nav restructure: Cast | Work | Intelligence | System
+- [x] "Who is Porter" button moved to sidebar header
+- [x] Kraken CLI removed, 25 real tools registered
+- [x] OpenClaw integration: multi-agent routing
+- [x] OpenClaw integration: channels/messaging surface
+- [x] OpenClaw integration: browser/nodes/devices
+- [x] OpenClaw integration: skill/hook lifecycle
+- [x] OpenClaw integration: resolved model/auth status
+- [x] OpenClaw integration: real ops/security tooling
+- [x] OpenClaw integration: session system
+- [x] File analysis on upload (summary, tags, word count, lang)
+- [x] Fix _analyze_file indentation + scope (moved to module level)
+- [x] Fix _sync_project_artifact_record indentation
+- [x] Skill recommendation engine expanded (business, legal, support, design, data)
+- [x] OpenAI-compatible chat completions format for gateway dispatch
+- [x] Version bump + ship + 27/27 tests green
+
+## Done previous session (v0.31.72-83)
 - [x] Phase 3: Auth hardening (forced pw change, reset)
 - [x] Phase 4: Audit tab (SQLite dual-write, filterable)
 - [x] Phase 5: Invite system (registration page)

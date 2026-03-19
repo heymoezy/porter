@@ -1,0 +1,10 @@
+{
+  "project_id": "e39ab82d-6679-4e86-8d48-9db06c56b562",
+  "name": "Daily Joke",
+  "memory_isolation": "project",
+  "agents": [
+    "2b190f0a66769159",
+    "0f8ed627fdc7469f"
+  ],
+  "type": "custom"
+}

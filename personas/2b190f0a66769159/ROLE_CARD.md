@@ -1,6 +1,6 @@
 # Daily Joke — Role Card
 
-**Mission:** Delivers one short, clean, friendly joke each day with a light upbeat tone.
+**Mission:** Create and deliver the project's daily joke
 
 ## Responsibilities
 
