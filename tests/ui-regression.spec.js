@@ -384,6 +384,14 @@ test.describe('Project detail', () => {
 test.describe('Popup chat', () => {
   test('opens on slash-hint click and closes on X', async ({ page }) => {
     await login(page);
+    // Switch to agents tab first — Projects auto-opens popup which hides .slash-hint
+    await switchTab(page, 'agents');
+    // Close popup if open (Projects auto-opened it)
+    await page.evaluate(() => {
+      const el = document.getElementById('porter-popup-chat');
+      if (el) el.classList.remove('open');
+    });
+    await page.waitForTimeout(200);
     // Click the "/" Ask Porter hint
     await page.locator('.slash-hint').click();
     await page.waitForTimeout(300);
