@@ -1,5 +1,11 @@
 # Porter Release Notes
 
+## v0.33.28 (2026-03-19)
+
+- Agent detail skills tab now scrolls instead of cutting off. Squad button removed from skill cards.
+- Tool cards left-aligned to match card patterns across the product.
+- Skills card names use ellipsis for overflow.
+
 ## v0.33.27 (2026-03-19)
 
 - Nav restructured: Work / System / Inspect. Connections is now a dedicated module under System alongside Models and Tools.
