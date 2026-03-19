@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.20 — Drag-drop: CRM company detail"""
+"""Porter v0.33.21 — Chat-driven projects"""
 
 
 import email
@@ -13608,6 +13608,20 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   border-color:color-mix(in srgb,#f59e0b 34%, var(--border));
   box-shadow:0 0 0 2px color-mix(in srgb,#f59e0b 15%, transparent);
 }
+.proj-chat-top {
+  border:1px solid var(--border); border-radius:12px; background:var(--surface);
+  padding:12px 14px; margin-bottom:16px;
+}
+.proj-chat-thread {
+  min-height:80px; max-height:320px; overflow-y:auto; padding:0 2px 8px;
+  scroll-behavior:smooth;
+}
+.proj-chat-thread:empty::before {
+  content:''; display:none;
+}
+.pd-chat-empty {
+  text-align:center; padding:16px 12px; font-size:12px; color:var(--text3); line-height:1.6;
+}
 .pd-chat-drop-zone {
   margin:0 0 10px;
   padding:20px 16px;
@@ -15312,7 +15326,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.20</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.21</div>
   </div>
 </aside>
 
@@ -15776,15 +15790,14 @@ input[type="number"].settings-input { min-width: 60px; }
         </div>
         <div id="proj-detail-actions" style="display:flex;gap:8px;flex-wrap:wrap"></div>
       </div>
-      <div id="proj-detail-tabs" class="agent-detail-tabs project-detail-tabs project-tab-rail"></div>
-      <div id="proj-detail-content" class="agent-detail-content"></div>
-      <div id="proj-cmd-bar" style="border-top:1px solid var(--border);padding:6px 0 2px;margin-top:8px">
-        <div id="proj-chat-thread" style="max-height:200px;overflow-y:auto;padding:0 2px 6px;display:none"></div>
+      <div id="proj-cmd-bar" class="proj-chat-top">
+        <div id="proj-chat-thread" class="proj-chat-thread"></div>
         <div style="display:flex;align-items:flex-end;gap:6px">
-          <textarea id="proj-chat-input" class="pd-chat-input" placeholder="Ask Porter about this project..." rows="1" onkeydown="_projChatKey(event)" oninput="_chatAutoGrow(this)" style="flex:1"></textarea>
+          <textarea id="proj-chat-input" class="pd-chat-input" placeholder="Tell Porter what to do with this project..." rows="1" onkeydown="_projChatKey(event)" oninput="_chatAutoGrow(this)" style="flex:1"></textarea>
           <button class="pd-send-btn" onclick="_projChatSend()" style="flex-shrink:0"><span>Send</span></button>
         </div>
       </div>
+      <div id="proj-detail-content" class="agent-detail-content"></div>
     </div>
   </div>
 
@@ -16431,6 +16444,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.21', date:'2026-03-19', notes:['Chat-driven projects: chat at top, project dashboard below, interactive building'] },
   { ver:'v0.33.20', date:'2026-03-19', notes:['Drag-drop: CRM company detail also accepts file drops'] },
   { ver:'v0.33.19', date:'2026-03-19', notes:['Drag-drop everywhere: drop files onto projects, CRM contacts, popup chat'] },
   { ver:'v0.33.18', date:'2026-03-18', notes:['Dead code cleanup: legacy CSS from removed features'] },
@@ -20301,7 +20315,12 @@ async function _renderProjectPage() {
   });
 }
 
-async function _renderProjTabContent() { return _renderProjectPage(); }
+async function _renderProjTabContent() {
+  await _renderProjectPage();
+  // v0.33.21 — Auto-render chat thread with greeting
+  var proj = window._projCurrent;
+  if (proj) _projChatRender(proj.id);
+}
 window._projChatState = window._projChatState || {};
 
 function _projChatGetState(pid) {
@@ -20337,13 +20356,36 @@ function _projChatModelPick(value) {
 }
 
 function _projChatComposePrompt(project, state, userText) {
-  var parts = ['Project: ' + (project.name || 'Untitled')];
-  if (project.description) parts.push('Project brief: ' + project.description);
-  if (project.success_bar) parts.push('Success bar: ' + project.success_bar);
-  var hist = (state.messages || []).filter(function(m) { return m.role === 'user' || m.role === 'assistant'; }).slice(-2);
+  // v0.33.21 — Rich client-side context: everything the user sees
+  var parts = ['Project: ' + (project.name || 'Untitled') + ' [' + (project.status || 'active') + ']'];
+  if (project.type) parts.push('Type: ' + project.type);
+  if (project.objective || project.description) parts.push('Objective: ' + (project.objective || project.description));
+  if (project.success_bar) parts.push('Success: ' + project.success_bar);
+  if (project.start_date) parts.push('Started: ' + project.start_date);
+  if (project.deadline) parts.push('Deadline: ' + project.deadline);
+  var ms = project.milestones || [];
+  if (ms.length) {
+    var msDone = ms.filter(function(m) { return m.done; }).length;
+    parts.push('Milestones: ' + msDone + '/' + ms.length + ' done (' + ms.map(function(m) { return (m.done?'[x]':'[ ]') + ' ' + (m.name||m.title||'?'); }).join(', ') + ')');
+  }
+  var workers = project.assigned_personas || [];
+  if (workers.length) {
+    var wNames = workers.map(function(wid) {
+      var p = (_personas || []).find(function(x) { return x.id === wid; });
+      return p ? p.name : wid.slice(0,8);
+    });
+    parts.push('Workers: ' + wNames.join(', '));
+  }
+  var links = project.links || {};
+  var lp = [];
+  if (links.repo) lp.push('repo');
+  if (links.live_url) lp.push('live');
+  if (links.docs) lp.push('docs');
+  if (lp.length) parts.push('Links: ' + lp.join(', '));
+  var hist = (state.messages || []).filter(function(m) { return m.role === 'user' || m.role === 'assistant'; }).slice(-3);
   if (hist.length) {
     parts.push('Recent conversation:\n' + hist.map(function(m) {
-      return (m.role === 'user' ? 'User: ' : 'Assistant: ') + String(m.content || '').slice(0, 280);
+      return (m.role === 'user' ? 'User: ' : 'Porter: ') + String(m.content || '').slice(0, 280);
     }).join('\n\n'));
   }
   parts.push('New request:\n' + userText);
@@ -20351,12 +20393,21 @@ function _projChatComposePrompt(project, state, userText) {
 }
 
 function _projGreetingCopy(project, state) {
-  var greetings = [
-    "Hi, I'm Porter. Let's move " + (project.name || 'this project') + " forward. What should happen next?",
-    "I'm on " + (project.name || 'this project') + ". I can tighten the plan, create the right worker, or organize the next step.",
-    "Let's run " + (project.name || 'this project') + " cleanly. What should Porter shape first?",
-    "Porter here. Tell me the next move for " + (project.name || 'this project') + " and I'll keep the lane organized."
-  ];
+  var name = project.name || 'this project';
+  var hasContent = (project.milestones || []).length || (project.assigned_personas || []).length || project.objective;
+  if (hasContent) {
+    var greetings = [
+      "What should happen next on " + name + "?",
+      "I'm on " + name + ". Add tasks, assign workers, upload files — just tell me.",
+      name + " is live. What needs to change?"
+    ];
+  } else {
+    var greetings = [
+      "Tell me about " + name + " and I'll set it up — milestones, tasks, workers, files.",
+      "Describe what " + name + " needs to deliver. I'll shape the plan, assign workers, and track progress.",
+      "Let's build " + name + ". Tell me the goal and I'll create the structure."
+    ];
+  }
   var seed = Number(state && state.greetingSeed ? state.greetingSeed : Date.now());
   return greetings[Math.abs(seed) % greetings.length];
 }
@@ -42472,7 +42523,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.20"})
+            self.reply_json({"v": "0.33.21"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44968,7 +45019,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.20'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.21'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -52015,7 +52066,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.20 ready (localhost only)")
+    print(f"\n  Porter v0.33.21 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

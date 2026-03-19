@@ -12,7 +12,7 @@ Project-specific rules for Porter development. These supplement the global `~/CL
 - **Service file:** `~/.config/systemd/user/porter.service`
 - **Config:** `porter_config.json` (via `PORTER_DATA_DIR` env var in systemd unit)
 - **Access:** SSH tunnel — `ssh -fN -L 8877:127.0.0.1:8877 lobster@100.85.184.74`
-- **Tests:** `cd /home/lobster/documents/porter/tests && npx playwright test` (28 tests)
+- **Tests:** `cd /home/lobster/documents/porter/tests && npx playwright test` (35 tests)
 
 ### Serve Roots
 `SERVE_DIRS` dict at top of `porter.py` maps label → `Path`:
