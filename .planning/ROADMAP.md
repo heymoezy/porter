@@ -34,7 +34,17 @@ ShiftSG is an AI-first shift marketplace for Singapore's F&B and retail industry
   4. A business (restaurant or retail store) can onboard with UEN verification, select their industry (F&B/retail), acknowledge the poaching protection clause, and is geofenced to the launch cluster
   5. Every active shift is automatically covered by work injury insurance baked into the platform markup — no manual enrollment
   6. A lawyer-reviewed independent contractor agreement is accepted by every worker before their first bid
-**Plans**: TBD
+**Plans**: 8 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Test infrastructure: Vitest + Playwright + MockPass + 13 stub files
+- [ ] 01-02-PLAN.md — Database schema: all identity, verification, contract, insurance tables
+- [ ] 01-03-PLAN.md — SingPass service: JWKS endpoint, PAR/PKCE/DPoP flow, MyInfo parser
+- [ ] 01-04-PLAN.md — Worker verification services: FHD2H cert tracker, work permit, Inngest expiry job
+- [ ] 01-05-PLAN.md — Business services: UEN verifier, cluster gate, contract acceptance, insurance activation
+- [ ] 01-06-PLAN.md — Worker onboarding UI + API: SingPass routes + 5 onboarding screens
+- [ ] 01-07-PLAN.md — Business onboarding UI + API: UEN, profile, cluster gate, poaching clause screens
+- [ ] 01-08-PLAN.md — Admin cert queue, completion screens, human verification checkpoint
 
 ### Phase 2: Core Marketplace
 **Goal**: An F&B or retail business can post a shift and have a qualified, verified worker accepted and clocked in within 30 minutes
@@ -159,7 +169,7 @@ Note: Phase 7 depends on Phase 2 (not Phase 6) — can begin parallel to Phases 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Legal & Identity | 0/TBD | Not started | - |
+| 1. Legal & Identity | 0/8 | Not started | - |
 | 2. Core Marketplace | 0/TBD | Not started | - |
 | 3. Shift Lifecycle & Protection | 0/TBD | Not started | - |
 | 4. Trust & Quality | 0/TBD | Not started | - |
@@ -173,3 +183,4 @@ Note: Phase 7 depends on Phase 2 (not Phase 6) — can begin parallel to Phases 
 ---
 *Roadmap created: 2026-03-19*
 *Coverage: 59/59 v1 requirements mapped*
+*Phase 1 planned: 2026-03-19 — 8 plans, 5 waves*
