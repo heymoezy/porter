@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.21 — Chat-driven projects"""
+"""Porter v0.33.22 — Fix project chat rendering"""
 
 
 import email
@@ -14489,7 +14489,6 @@ body.density-compact .file-name { padding: 6px 0; }
 /* CRM detail panel (520px slide-out) */
 #people-module.detail-open #crm-filters, #people-module.detail-open #people-stats, #people-module.detail-open #crm-content { display:none !important; }
 #people-detail-view { display:none; }
-#proj-cmd-bar { display:none !important; }
 #people-module.detail-open #people-detail-view { display:block; }
 .crm-editable { cursor:pointer; padding:1px 4px; border-radius:4px; transition:background .15s; }
 .crm-editable:hover { background:color-mix(in srgb, var(--accent) 8%, transparent); }
@@ -15326,7 +15325,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.21</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.22</div>
   </div>
 </aside>
 
@@ -16444,6 +16443,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.22', date:'2026-03-19', notes:['Fix project chat: remove stale CSS hiding chat bar, fix render call for greeting'] },
   { ver:'v0.33.21', date:'2026-03-19', notes:['Chat-driven projects: chat at top, project dashboard below, interactive building'] },
   { ver:'v0.33.20', date:'2026-03-19', notes:['Drag-drop: CRM company detail also accepts file drops'] },
   { ver:'v0.33.19', date:'2026-03-19', notes:['Drag-drop everywhere: drop files onto projects, CRM contacts, popup chat'] },
@@ -19976,7 +19976,7 @@ async function _projOpen(id) {
   }
   var tabs = document.getElementById('proj-detail-tabs');
   if (tabs) tabs.innerHTML = '';
-  _renderProjectPage();
+  _renderProjTabContent();
 }
 function _projUpdateStatusBadge(sb, proj) {
   var s = proj.status || (proj.completed_at ? 'completed' : 'active');
@@ -42523,7 +42523,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.21"})
+            self.reply_json({"v": "0.33.22"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -45019,7 +45019,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.21'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.22'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -52066,7 +52066,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.21 ready (localhost only)")
+    print(f"\n  Porter v0.33.22 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
