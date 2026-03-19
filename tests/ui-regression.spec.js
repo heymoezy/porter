@@ -296,6 +296,113 @@ test.describe('Nav bar structure', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// FILES TAB — toolbar and file list render
+// ═══════════════════════════════════════════════════════════════════════════════
+
+test.describe('Files tab', () => {
+  test.beforeEach(async ({ page }) => {
+    await login(page);
+    await switchTab(page, 'files');
+  });
+
+  test('has module-title "Files"', async ({ page }) => {
+    await expect(page.locator('#allfiles-module .module-title')).toHaveText('Files');
+  });
+
+  test('has upload button and file area', async ({ page }) => {
+    const uploadLabel = page.locator('#allfiles-module label', { hasText: 'Upload' });
+    await expect(uploadLabel).toBeVisible();
+    const fileArea = page.locator('#allfiles-list');
+    await expect(fileArea).toBeVisible();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AGENTS TAB — cards render
+// ═══════════════════════════════════════════════════════════════════════════════
+
+test.describe('Agents tab', () => {
+  test.beforeEach(async ({ page }) => {
+    await login(page);
+    await switchTab(page, 'agents');
+  });
+
+  test('has persona cards rendered', async ({ page }) => {
+    await page.waitForSelector('.persona-card', { timeout: 8000 });
+    const cardCount = await page.locator('.persona-card').count();
+    expect(cardCount).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MEMORY + LOGS — basic title checks
+// ═══════════════════════════════════════════════════════════════════════════════
+
+test.describe('Memory tab', () => {
+  test('has module-title "Memory"', async ({ page }) => {
+    await login(page);
+    await switchTab(page, 'memory');
+    await expect(page.locator('#memory-module .module-title')).toHaveText('Memory');
+  });
+});
+
+test.describe('Logs tab', () => {
+  test('has title "Logs"', async ({ page }) => {
+    await login(page);
+    await switchTab(page, 'logs');
+    await expect(page.locator('#logs-module .mc-title')).toHaveText('Logs');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROJECT DETAIL — clicking a project opens the detail view
+// ═══════════════════════════════════════════════════════════════════════════════
+
+test.describe('Project detail', () => {
+  test('clicking project card opens detail page', async ({ page }) => {
+    await login(page);
+    await switchTab(page, 'projects');
+    await page.waitForSelector('.project-card', { timeout: 8000 });
+    const cardCount = await page.locator('.project-card').count();
+    if (cardCount > 0) {
+      await page.locator('.project-card').first().click();
+      await page.waitForTimeout(800);
+      const detailVisible = await page.evaluate(() => {
+        const el = document.getElementById('proj-detail-content');
+        return el && el.innerHTML.trim().length > 0;
+      });
+      expect(detailVisible).toBe(true);
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POPUP CHAT — opens and closes
+// ═══════════════════════════════════════════════════════════════════════════════
+
+test.describe('Popup chat', () => {
+  test('opens on slash-hint click and closes on X', async ({ page }) => {
+    await login(page);
+    // Click the "/" Ask Porter hint
+    await page.locator('.slash-hint').click();
+    await page.waitForTimeout(300);
+    const popupOpen = await page.evaluate(() => {
+      const el = document.getElementById('porter-popup-chat');
+      return el && el.classList.contains('open');
+    });
+    expect(popupOpen).toBe(true);
+    // Close it
+    await page.locator('.porter-popup-close').click();
+    await page.waitForTimeout(200);
+    const popupClosed = await page.evaluate(() => {
+      const el = document.getElementById('porter-popup-chat');
+      return !el || !el.classList.contains('open');
+    });
+    expect(popupClosed).toBe(true);
+  });
+});
+
 test.describe('Screenshot baseline', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
