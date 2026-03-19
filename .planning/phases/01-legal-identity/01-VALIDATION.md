@@ -17,18 +17,18 @@ created: 2026-03-19
 
 | Property | Value |
 |----------|-------|
-| **Framework** | jest 29.x + Playwright (E2E) |
-| **Config file** | none — Wave 0 installs |
-| **Quick run command** | `npx jest --testPathPattern=auth` |
-| **Full suite command** | `npx jest && npx playwright test` |
+| **Framework** | Vitest 1.x (unit) + Playwright 1.x (E2E) |
+| **Config file** | none — Wave 0 installs vitest.config.ts and playwright.config.ts |
+| **Quick run command** | `npx vitest run --reporter=verbose tests/auth/` |
+| **Full suite command** | `npx vitest run && npx playwright test` |
 | **Estimated runtime** | ~30 seconds |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run `npx jest --testPathPattern=auth`
-- **After every plan wave:** Run `npx jest && npx playwright test`
+- **After every task commit:** Run `npx vitest run tests/auth/`
+- **After every plan wave:** Run `npx vitest run && npx playwright test`
 - **Before `/gsd:verify-work`:** Full suite must be green
 - **Max feedback latency:** 30 seconds
 
@@ -38,12 +38,12 @@ created: 2026-03-19
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 01-01-01 | 01 | 1 | AUTH-01 | integration | `npx jest tests/auth/singpass.test.ts` | ❌ W0 | ⬜ pending |
-| 01-01-02 | 01 | 1 | AUTH-02 | unit | `npx jest tests/auth/fhd2h.test.ts` | ❌ W0 | ⬜ pending |
-| 01-01-03 | 01 | 1 | AUTH-03 | unit | `npx jest tests/auth/workpermit.test.ts` | ❌ W0 | ⬜ pending |
-| 01-02-01 | 02 | 1 | AUTH-04 | unit | `npx jest tests/auth/insurance.test.ts` | ❌ W0 | ⬜ pending |
-| 01-02-02 | 02 | 1 | AUTH-05 | integration | `npx jest tests/auth/uen.test.ts` | ❌ W0 | ⬜ pending |
-| 01-02-03 | 02 | 1 | AUTH-06 | unit | `npx jest tests/auth/contract.test.ts` | ❌ W0 | ⬜ pending |
+| 01-01-01 | 01 | 1 | AUTH-01 | integration | `npx vitest run tests/auth/singpass.test.ts` | ❌ W0 | ⬜ pending |
+| 01-01-02 | 01 | 1 | AUTH-02 | unit | `npx vitest run tests/auth/fhd2h.test.ts` | ❌ W0 | ⬜ pending |
+| 01-01-03 | 01 | 1 | AUTH-03 | unit | `npx vitest run tests/auth/workpermit.test.ts` | ❌ W0 | ⬜ pending |
+| 01-02-01 | 02 | 1 | AUTH-04 | unit | `npx vitest run tests/auth/insurance.test.ts` | ❌ W0 | ⬜ pending |
+| 01-02-02 | 02 | 1 | AUTH-05 | integration | `npx vitest run tests/auth/uen.test.ts` | ❌ W0 | ⬜ pending |
+| 01-02-03 | 02 | 1 | AUTH-06 | unit | `npx vitest run tests/auth/contract.test.ts` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -57,8 +57,8 @@ created: 2026-03-19
 - [ ] `tests/auth/insurance.test.ts` — per-shift insurance activation stubs
 - [ ] `tests/auth/uen.test.ts` — UEN/ACRA business verification stubs
 - [ ] `tests/auth/contract.test.ts` — contract acceptance and versioning stubs
-- [ ] `tests/conftest.ts` — shared fixtures (mock SingPass, mock DB)
-- [ ] Jest + ts-jest installation if not present
+- [ ] `src/lib/test-utils/mockpass-setup.ts` — shared MockPass helper
+- [ ] Vitest + Playwright installation via Wave 0 plan (01-01)
 
 ---
 
