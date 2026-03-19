@@ -1,5 +1,13 @@
 # Porter Release Notes
 
+## v0.33.27 (2026-03-19)
+
+- Nav restructured: Work / System / Inspect. Connections is now a dedicated module under System alongside Models and Tools.
+- Tool and connection cards polished: filter-tag buttons and meta chips removed, version in header, description clamped, left-aligned card grid.
+- Tools page shows all 40+ tools. Connections catalog expanded to 30 services (Gmail, Calendar, Drive, Sheets, Slack, Stripe, etc).
+- Skills loading cached (60s TTL). Skills card overflow fixed for long names.
+- Settings separator aligned with main nav.
+
 ## v0.33.26 (2026-03-19)
 
 - Tools is now one real workspace surface instead of a raw environment grid: connected services, local ready tools, and setup gaps land as separate sections with summary counts and staged loading.

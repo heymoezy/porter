@@ -66,7 +66,7 @@ test.describe('Tab Headers — every tab must have a title', () => {
     { id: 'agents', title: 'AI Agents', selector: '#agents-module .module-title' },
     { id: 'projects', title: 'Projects', selector: '#projects-module .module-title' },
     { id: 'people', title: 'People', selector: '#people-module .module-title' },
-    { id: 'capabilities', title: 'Tools', selector: '#capabilities-module .module-title' },
+    { id: 'tools', title: 'Tools', selector: '#tools-module .module-title' },
     { id: 'models', title: 'Models', selector: '#models-module .module-title' },
   ];
 
@@ -86,7 +86,7 @@ test.describe('Header alignment — all headers same height', () => {
   });
 
   test('all module-hdr elements have consistent height', async ({ page }) => {
-    const tabs = ['agents', 'projects', 'capabilities', 'people'];
+    const tabs = ['agents', 'projects', 'tools', 'people'];
     const heights = [];
     for (const tab of tabs) {
       await switchTab(page, tab);
@@ -190,7 +190,7 @@ test.describe('Tab switching — no stale elements', () => {
   });
 
   test('only one module-panel is active at a time', async ({ page }) => {
-    const tabs = ['agents', 'projects', 'capabilities', 'people', 'models'];
+    const tabs = ['agents', 'projects', 'tools', 'connections', 'people', 'models'];
     for (const tab of tabs) {
       await switchTab(page, tab);
       const activeCount = await page.evaluate(() =>
@@ -207,7 +207,7 @@ test.describe('Nav regression — all tabs render content', () => {
   });
 
   // Current visible nav tabs (for operator role — admin hidden, logs visible)
-  const allTabs = ['agents', 'projects', 'models', 'people', 'capabilities', 'logs'];
+  const allTabs = ['agents', 'projects', 'models', 'people', 'tools', 'connections', 'logs'];
 
   test('every tab shows content when clicked', async ({ page }) => {
     for (const tab of allTabs) {
@@ -242,7 +242,7 @@ test.describe('Nav bar structure', () => {
 
   // Current visible nav items (for operator role — Logs visible)
   const expectedNavItems = [
-    'Projects', 'Files', 'People', 'AI Agents', 'Models', 'Tools', 'Memory', 'Logs'
+    'Projects', 'Files', 'People', 'AI Agents', 'Models', 'Tools', 'Connections', 'Memory', 'Logs'
   ];
 
   test('sidebar contains all expected nav buttons', async ({ page }) => {
@@ -420,7 +420,7 @@ test.describe('Screenshot baseline', () => {
     { id: 'agents', name: 'agents' },
     { id: 'projects', name: 'projects' },
     { id: 'people', name: 'people' },
-    { id: 'capabilities', name: 'connections' },
+    { id: 'connections', name: 'connections' },
     { id: 'models', name: 'models' },
   ];
 

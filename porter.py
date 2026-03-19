@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.26 — Tools workspace redesign"""
+"""Porter v0.33.27 — Nav restructure, Connections module, tool/model card polish"""
 
 
 import email
@@ -1105,6 +1105,7 @@ _LEGACY_INTERNAL_PERSONAS = {
 # Each entry: id, label, install URL, features list, check lambda → {ok, version}
 _capabilities_cache: dict = {}  # id -> result dict, refreshed on startup + /api/capabilities
 _capabilities_cache_ts: float = 0.0  # last check timestamp
+_skills_cache: dict = {"data": None, "ts": 0}  # openclaw skills cache (60s TTL)
 _gw_pid_history: list = []  # [(pid, timestamp), ...]
 
 
@@ -14940,37 +14941,23 @@ body.density-compact .file-name { padding: 6px 0; }
 .tools-setup-card-title { font-size:13px; font-weight:650; color:var(--text); margin-bottom:4px; }
 .tools-setup-card-copy { font-size:11px; color:var(--text3); line-height:1.45; margin-bottom:9px; }
 .tools-setup-card .tool-btn { width:100%; justify-content:center; display:inline-flex; }
-.tools-card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:10px; padding:12px 14px 14px; }
-.tool-card { padding:10px 14px; background:var(--raised); border:1px solid var(--border); border-radius:8px; transition:border-color .15s; display:flex; flex-direction:column; gap:6px; min-height:0; }
+.tools-card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,320px)); gap:10px; padding:12px 14px 14px; }
+.tool-card { padding:12px 14px; background:var(--raised); border:1px solid var(--border); border-radius:10px; transition:border-color .15s; display:flex; flex-direction:column; gap:0; }
 .tool-card:hover { border-color:var(--accent); }
-.tool-card.ready { }
-.tool-card.setup { }
-.tool-card.connected { }
-.tool-card-head { display:flex; align-items:center; gap:10px; }
-.tool-card-signal { width:8px; height:8px; border-radius:50%; flex-shrink:0; background:var(--text3); opacity:.55; }
-.tool-card-signal.ok { background:#22c55e; opacity:1; }
-.tool-card-signal.warn { background:#f59e0b; opacity:1; }
-.tool-card-signal.off { background:var(--text3); opacity:.55; }
-.tool-card-main { min-width:0; flex:1; }
-.tool-card-name { font-size:15px; font-weight:600; color:var(--text); }
-.tool-card-sub { font-size:12px; color:var(--text2); line-height:1.45; white-space:normal; overflow-wrap:anywhere; }
-.tool-card-meta { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
-.tool-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:999px; border:1px solid var(--border); font-size:10px; color:var(--text2); background:var(--bg); white-space:nowrap; }
-.tool-chip.good { border-color:color-mix(in srgb,#22c55e 35%,var(--border)); color:#22c55e; }
-.tool-chip.warn { border-color:color-mix(in srgb,#f59e0b 40%,var(--border)); color:#f59e0b; }
-.tool-chip.live { border-color:color-mix(in srgb,var(--accent) 35%,var(--border)); color:var(--accent); }
-.tool-card-body { display:flex; flex-direction:column; gap:8px; }
-.tool-card-features { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:2px; }
-.tool-card-features button { font-size:11px; padding:2px 8px; border-radius:4px; background:color-mix(in srgb,var(--accent) 12%,var(--bg)); color:var(--accent); border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border)); cursor:pointer; transition:all .15s; }
-.tool-card-features button:hover { border-color:var(--accent); }
-.tool-card-features button.active { background:color-mix(in srgb,var(--accent) 18%,var(--bg)); }
-.tool-card-actions { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:6px; padding-top:8px; border-top:1px solid var(--border); }
-.tool-btn { padding:6px 9px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text2); font-size:11px; cursor:pointer; transition:all .15s; min-width:0; text-align:center; justify-content:center; }
+.tool-card-head { display:flex; align-items:center; gap:9px; margin-bottom:6px; }
+.tool-card-signal { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.tool-card-signal.ok { background:#22c55e; }
+.tool-card-signal.warn { background:#f59e0b; }
+.tool-card-signal.off { background:var(--text3); opacity:.4; }
+.tool-card-name { font-size:13px; font-weight:600; color:var(--text); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tool-card-version { font-size:10px; color:var(--text3); font-family:ui-monospace,monospace; flex-shrink:0; }
+.tool-card-sub { font-size:11.5px; color:var(--text3); line-height:1.4; margin-bottom:10px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.tool-card-actions { display:flex; gap:6px; }
+.tool-btn { padding:5px 10px; border:1px solid var(--border); border-radius:6px; background:none; color:var(--text2); font-size:11px; cursor:pointer; transition:all .12s; white-space:nowrap; }
 .tool-btn:hover { border-color:var(--accent); color:var(--text); }
-.tool-btn.primary { background:color-mix(in srgb,var(--accent) 11%,var(--surface)); border-color:color-mix(in srgb,var(--accent) 28%,var(--border)); color:var(--accent); }
-.tool-card-actions .tool-btn:only-child { grid-column:1 / -1; }
+.tool-btn.primary { border-color:color-mix(in srgb,var(--accent) 30%,var(--border)); color:var(--accent); }
+.tool-btn.danger:hover { border-color:var(--danger,#ef4444); color:var(--danger,#ef4444); }
 .tool-empty { padding:22px 16px; color:var(--text3); font-size:12px; text-align:center; }
-.tool-card-group { display:flex; flex-direction:column; gap:10px; }
 .proj-drop-zone { border:2px dashed var(--border); border-radius:10px; padding:24px; text-align:center; color:var(--text3); font-size:12px; margin-bottom:12px; transition:all .2s; cursor:pointer; }
 .proj-drop-zone:hover { border-color:var(--accent); color:var(--text2); }
 .proj-drop-zone.drag-over { border-color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent); color:var(--text); }
@@ -15419,7 +15406,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .models-load-status.show { display:flex; }
 .models-load-status strong { font-size:12px; color:var(--text); }
 .models-load-status span { font-size:11px; color:var(--text3); }
-.models-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:10px; }
+.models-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px; }
 @media (max-width:700px) { .models-grid { grid-template-columns:1fr; } }
 .models-summary-strip { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:0 0 12px; }
 @media (max-width:900px) { .models-summary-strip { grid-template-columns:repeat(2,minmax(0,1fr)); } }
@@ -15450,7 +15437,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .models-load-step.active::before { background:var(--accent); animation:pulse-dot .9s ease-in-out infinite alternate; }
 .models-load-step.done { color:var(--text2); }
 .models-load-step.done::before { background:#22c55e; }
-.model-card { padding:10px 14px;background:var(--raised);border:1px solid var(--border);border-radius:8px;transition:border-color .15s;display:flex;flex-direction:column;gap:6px;min-height:0; }
+.model-card { padding:12px 14px;background:var(--raised);border:1px solid var(--border);border-radius:10px;transition:border-color .15s;display:flex;flex-direction:column;gap:6px;min-height:0; }
 .model-card.hydrating { animation:modelCardIn .28s ease-out both; }
 .model-card:hover { border-color:var(--accent); }
 .model-card.offline { opacity:.55; }
@@ -16406,15 +16393,20 @@ select::-ms-expand { display: none; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       <span class="mnav-label">People</span>
     </button>
-    <div class="mnav-group-label">Inspect</div>
+    <div class="mnav-group-label">System</div>
     <button class="mnav-item" id="mnav-models" onclick="mainNavModule('models')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
       <span class="mnav-label">Models</span>
     </button>
-    <button class="mnav-item" id="mnav-capabilities" onclick="mainNavModule('capabilities')">
+    <button class="mnav-item" id="mnav-tools" onclick="mainNavModule('tools')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span class="mnav-label">Tools</span>
     </button>
+    <button class="mnav-item" id="mnav-connections" onclick="mainNavModule('connections')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+      <span class="mnav-label">Connections</span>
+    </button>
+    <div class="mnav-group-label">Inspect</div>
     <button class="mnav-item" id="mnav-memory" onclick="mainNavModule('memory')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
       <span class="mnav-label">Memory</span>
@@ -16428,7 +16420,7 @@ select::-ms-expand { display: none; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/><circle cx="18" cy="14" r="4"/></svg>
       <span class="mnav-label">Policies</span>
     </button>
-    <button class="mnav-item" id="mnav-tools" style="display:none" onclick="switchModule('tools')">
+    <button class="mnav-item" id="mnav-tool-registry" style="display:none" onclick="switchModule('tool-registry')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
       <span class="mnav-label">Tools</span>
     </button>
@@ -16464,7 +16456,7 @@ select::-ms-expand { display: none; }
     <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.26</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.27</div>
   </div>
 </aside>
 
@@ -16826,7 +16818,7 @@ select::-ms-expand { display: none; }
     </div>
   </div>
 
-  <div id="tools-module" class="module-panel">
+  <div id="tool-registry-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Tools</span>
       <button class="btn btn-primary" onclick="openAddTool()">+ Register Tool</button>
@@ -16991,21 +16983,28 @@ select::-ms-expand { display: none; }
     <div id="memory-dashboard" style="display:flex;flex-direction:column;gap:14px"></div>
   </div>
 
-    <div id="capabilities-module" class="module-panel">
+    <div id="tools-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Tools</span>
       <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
-        <input type="text" id="cap-search" placeholder="Search tools…" oninput="_filterTools()" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;width:180px;outline:none">
-        <span id="cap-summary" style="font-size:11px;color:var(--text3)"></span>
-        <button class="btn btn-ghost" onclick="_toolsAddConnection()">+ Connection</button>
+        <input type="text" id="tools-search" placeholder="Search tools…" oninput="_filterTools()" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;width:180px;outline:none">
+        <span id="tools-summary" style="font-size:11px;color:var(--text3)"></span>
         <button class="btn btn-ghost" onclick="loadCapabilities()">&#8635; Scan</button>
       </div>
     </div>
-    <div class="module-intro">What Porter can actually use right now: connected services, local tools on this machine, and setup gaps that still need attention.</div>
-    <div id="tools-overview" class="tools-summary-strip"></div>
-    <div id="tools-services-row"></div>
-    <div id="tools-filter-strip" class="tools-filter-strip"></div>
-    <div id="capabilities-list" class="tools-sections"></div>
+    <div id="tools-list-main" class="tools-sections"></div>
+  </div>
+
+  <div id="connections-module" class="module-panel">
+    <div class="module-hdr">
+      <span class="module-title">Connections</span>
+      <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+        <span id="conn-summary" style="font-size:11px;color:var(--text3)"></span>
+        <button class="btn btn-ghost" onclick="_toolsAddConnection()">+ Connection</button>
+        <button class="btn btn-ghost" onclick="loadConnections()">&#8635;</button>
+      </div>
+    </div>
+    <div id="connections-list"></div>
   </div>
 
   <div id="models-module" class="module-panel">
@@ -17703,7 +17702,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.33.26', date:'2026-03-19', notes:['Tools is now one real workspace surface instead of a raw environment grid: connected services, local ready tools, and setup gaps land as separate sections with summary counts and staged loading','Workspace connections are now folded into Tools directly, with quick add/connect/disconnect/rename/delete actions and clearer Porter-language states instead of machine-inventory sludge','The Tools page now answers what Porter can use now, what still needs setup, and which services are actually attached to projects, while the old legacy tools path is no longer the visible product story'] },
+  { ver:'v0.33.27', date:'2026-03-19', notes:['Nav restructured to Work / System / Inspect. Connections is now its own dedicated module under System alongside Models and Tools.','Tool and connection cards cleaned up: removed filter-tag buttons and meta chips from cards, version shown in header, description clamped to 2 lines, left-aligned grid.','Tools page shows all 40+ tools instead of a filtered 17. Connections catalog expanded to 30 services including Gmail, Calendar, Drive, Sheets, Slack, Stripe, and more.','Skills loading cached (60s TTL) to avoid slow CLI calls on every view. Skills card layout overflow fixed for long names.','Settings separator aligned with main nav username separator.'] },
   { ver:'v0.33.25', date:'2026-03-19', notes:['Models is now more product-like: a compact summary strip lands first, cards emphasize readiness, selected models, and best-use guidance instead of defaulting to benchmark/scheduler clutter','Runtime updates now open a Porter-style progress modal with plain-language status and useful retry/details actions instead of the old terminal slab that could leak nonsense like exit undefined','Models still hydrates progressively, but deep version refresh is deferred and the visible runtime surface carries less legacy operator-console residue'] },
   { ver:'v0.33.25', date:'2026-03-19', notes:['People/CRM is now a real workspace surface: normal workspace writers can update contacts and companies, company names resolve/create inline, and contact/company detail now has a proper files pane instead of a tiny upload target','Settings is tighter: the gear toggles the secondary settings nav like a hamburger, Profile and Password are compact again, and the release/version surface is back in sync across workspace and admin shells','Projects now has a global search bar on the roster so you can filter projects by name, mission, status, type, and assigned agents from the main Projects page'] },
   { ver:'v0.33.23', date:'2026-03-19', notes:['Release discipline reset: version, health, SSE welcome, startup banner, and release notes are back in sync','Standardized Porter-styled dropdown treatment across the product, cleaned agent detail runtime/header behavior, and kept agent tabs stable between Porter and workers','Project chat now recommends the next move plainly, keeps focus after send, and Workflow task columns render correctly again instead of collapsing into merged text'] },
@@ -20003,8 +20002,8 @@ function switchModule(name) {
   }
   if (name === 'files') name = 'projects';
   if (name === 'cortex') name = 'projects';
-  if (name === 'extensions') name = 'capabilities';
-  if (name === 'connections') name = 'capabilities';
+  if (name === 'extensions') name = 'tools';
+  // connections is now its own module
   if (name === 'skills') name = 'agents';
   _currentModule = name;
   if (typeof _popupChatUpdateCtx === 'function') _popupChatUpdateCtx();
@@ -20110,7 +20109,7 @@ function switchModule(name) {
       _loadTemplates();
     }, projects: function() { loadProjects(); }, admin: loadAdmin,
     allfiles: loadAllFiles, files: loadLocations, policies: loadPolicy,
-    models: loadModels, tools: loadTools, audit: loadAudit, people: loadPeople, capabilities: loadCapabilities, memory: loadMemory, system: loadLogs, admin: loadLogs, logs: loadLogs, settings: syncSettingsUI,
+    models: loadModels, 'tool-registry': loadTools, tools: loadCapabilities, audit: loadAudit, people: loadPeople,  connections: loadConnections, memory: loadMemory, system: loadLogs, admin: loadLogs, logs: loadLogs, settings: syncSettingsUI,
   };
   if (loaders[name]) loaders[name]();
   if (name === 'projects' && !_projectsAutoChatShown) {
@@ -20703,7 +20702,7 @@ function _renderSkillsTab() {
     html += '<div>'
       + '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;padding:0 2px">'
       + catInfo.icon + ' ' + catInfo.label + ' <span style="font-weight:400;opacity:.6">(' + catSkills.length + ')</span></div>'
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px">';
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;overflow:hidden">';
     catSkills.forEach(function(sk) {
       html += _buildSkillCard(sk);
     });
@@ -20789,10 +20788,10 @@ function _buildSkillCard(sk) {
     reqs += '<div style="font-size:10px;color:var(--danger,#ef4444);margin-top:2px">Missing: ' + sk.missing.bins.join(', ') + '</div>';
   }
 
-  return '<div style="padding:10px 14px;border:1px solid ' + (installed ? 'var(--border)' : 'var(--border2)') + ';border-radius:8px;background:' + (installed ? 'var(--surface)' : 'var(--surface2)') + ';opacity:' + (installed ? '1' : '0.8') + ';transition:opacity 0.15s">'
+  return '<div style="padding:10px 14px;border:1px solid ' + (installed ? 'var(--border)' : 'var(--border2)') + ';border-radius:8px;background:' + (installed ? 'var(--surface)' : 'var(--surface2)') + ';opacity:' + (installed ? '1' : '0.8') + ';transition:opacity 0.15s;min-width:0;overflow:hidden">'
     + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
     + '<span style="font-size:16px">' + emoji + '</span>'
-    + '<span style="font-weight:500;font-size:13px;color:var(--text);flex:1;min-width:0;overflow-wrap:break-word">' + name + '</span>'
+    + '<span style="font-weight:500;font-size:13px;color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + name + '</span>'
     + statusBadge
     + '</div>'
     + '<div style="font-size:11px;color:var(--text3);line-height:1.4;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">' + desc + '</div>'
@@ -24464,7 +24463,7 @@ function _peopleDelete(username) {
 }
 
 async function loadCapabilities() {
-  var el = document.getElementById('capabilities-list');
+  var el = document.getElementById('tools-list-main');
   if (el) el.innerHTML = _renderToolsLoadingShell();
   fetch('/api/workspace/tools', {credentials:'same-origin'})
     .then(function(r) { return r.ok ? r.json() : null; })
@@ -24492,22 +24491,15 @@ async function loadCapabilities() {
 // _intCard removed v0.31.39
 
 function renderCapabilities(payload) {
-  var el = document.getElementById('capabilities-list');
+  var el = document.getElementById('tools-list-main');
   if (!el) return;
-  var caps = ((payload && payload.capabilities) || []).filter(function(c) {
-    return _toolsVisibleIds().indexOf(String(c.id || '')) >= 0;
-  });
-  var connections = (payload && payload.connections) || [];
-  var rawSummary = (payload && payload.summary) || {};
-  var summary = _curatedToolsSummary(caps, connections, rawSummary);
-  var search = ((document.getElementById('cap-search') || {}).value || '').trim().toLowerCase();
-  var filter = window._toolsFilter || 'all';
-  var sumEl = document.getElementById('cap-summary');
-  if (sumEl) sumEl.textContent = (summary.local_ready || 0) + ' ready · ' + (summary.connections_live || 0) + ' connected';
-  _renderToolsOverview(summary, connections);
-  _renderToolsFilters(caps, connections);
-  if (!caps.length && !connections.length) {
-    el.innerHTML = '<div class="tools-section"><div class="tool-empty">Porter has not detected any connected services or local tools yet.</div></div>';
+  var caps = (payload && payload.capabilities) || [];
+  var search = ((document.getElementById('tools-search') || {}).value || '').trim().toLowerCase();
+  var sumEl = document.getElementById('tools-summary');
+  var readyCount = caps.filter(function(c) { return !!c.ok; }).length;
+  if (sumEl) sumEl.textContent = readyCount + ' ready · ' + caps.length + ' total';
+  if (!caps.length) {
+    el.innerHTML = '<div class="tools-section"><div class="tool-empty">No tools detected on this machine.</div></div>';
     return;
   }
   var sorted = caps.slice().sort(function(a, b) {
@@ -24515,41 +24507,19 @@ function renderCapabilities(payload) {
     if (!a.ok && b.ok) return 1;
     return (a.label || '').localeCompare(b.label || '');
   });
-  var liveConnections = connections.filter(function(c) { return String(c.status || '').toLowerCase() === 'active'; });
+  if (search) {
+    sorted = sorted.filter(function(c) { return _toolsMatchesSearch(c, search); });
+  }
   var readyTools = sorted.filter(function(c) { return !!c.ok; });
   var setupTools = sorted.filter(function(c) { return !c.ok; });
-  var attentionTools = sorted.filter(function(c) {
-    return !!c.last_error || String(c.status || '').toLowerCase() === 'error' || String(c.status || '').toLowerCase() === 'offline';
-  });
-  var hero = '';
-  if (!liveConnections.length || readyTools.length < 3) {
-    hero = _renderToolsSetupHero(summary, sorted, connections);
-  }
   var sections = [];
-  if (hero) sections.push(hero);
-  if (filter === 'all' || filter === 'connected' || filter === 'attention') {
-    var connRows = connections.filter(function(c) {
-      if (filter === 'connected') return String(c.status || '').toLowerCase() === 'active';
-      if (filter === 'attention') return String(c.status || '').toLowerCase() !== 'active' || !!c.last_error;
-      return true;
-    }).filter(function(c) { return _toolsMatchesSearch(c, search); });
-    if (connRows.length || filter !== 'all') {
-      sections.push(_renderToolsSection('Connected accounts', 'Accounts and external systems Porter can use for this workspace.', connRows.length, connRows.map(_renderConnectionCard).join('') || '<div class="tool-empty">No accounts or external systems are connected yet.</div>'));
-    }
+  if (readyTools.length) {
+    sections.push(_renderToolsSection('Ready', 'Installed tools Porter can use now.', readyTools.length, readyTools.map(_renderLocalToolCard).join('')));
   }
-  if (filter === 'all' || filter === 'ready' || _isToolsRoleFilter(filter, caps)) {
-    var readyRows = readyTools.filter(function(c) { return _toolsMatchesSearch(c, search) && _toolsFilterMatchesRole(c, filter); });
-    sections.push(_renderToolsSection('Ready on this machine', 'Installed local tools Porter can use immediately.', readyRows.length, readyRows.map(_renderLocalToolCard).join('') || '<div class="tool-empty">No ready local tools match this filter.</div>'));
+  if (setupTools.length) {
+    sections.push(_renderToolsSection('Not Installed', 'Tools Porter knows about but cannot use yet.', setupTools.length, setupTools.map(_renderLocalToolCard).join('')));
   }
-  if (filter === 'all' || filter === 'setup' || _isToolsRoleFilter(filter, caps)) {
-    var setupRows = setupTools.filter(function(c) { return _toolsMatchesSearch(c, search) && _toolsFilterMatchesRole(c, filter); });
-    sections.push(_renderToolsSection('Needs setup', 'Useful tools Porter knows about but cannot use yet.', setupRows.length, setupRows.map(_renderLocalToolCard).join('') || '<div class="tool-empty">Nothing missing right now.</div>'));
-  }
-  if (filter === 'attention') {
-    var attentionRows = attentionTools.filter(function(c) { return _toolsMatchesSearch(c, search) && _toolsFilterMatchesRole(c, filter); });
-    sections.push(_renderToolsSection('Needs attention', 'Tools that look broken, offline, or erroring right now.', attentionRows.length, attentionRows.map(_renderLocalToolCard).join('') || '<div class="tool-empty">No broken tools right now.</div>'));
-  }
-  el.innerHTML = sections.join('');
+  el.innerHTML = sections.join('') || '<div class="tool-empty">No tools match this search.</div>';
 }
 
 function _filterTools() {
@@ -24792,20 +24762,52 @@ function _pickRecommendedTools(caps) {
 
 function _toolWhy(id, features) {
   var map = {
-    ollama: 'Run local models on a machine with no cloud dependency.',
-    python: 'Needed for scripts, automation, document pipelines, and a lot of Porter tooling.',
-    pip: 'Install Python packages Porter depends on for richer workflows.',
-    git: 'Needed for repo-aware work, history, and changes.',
-    node: 'Unlock browser automation and frontend tooling.',
-    npm: 'Install the rest of the JavaScript toolchain Porter expects.',
-    playwright: 'Lets Porter verify pages and flows instead of guessing.',
-    docling: 'Convert long PDFs and documents into structured markdown Porter can actually use.',
-    pandoc: 'Convert documents cleanly between formats, especially into markdown.',
-    pdftotext: 'Fast plain-text extraction for digital PDFs.',
-    ocrmypdf: 'Add OCR first when a PDF is scanned instead of text-based.',
-    firecrawl: 'Turn live websites into usable research and structured content.',
-    d2: 'Generate cleaner diagrams and system views from text.',
-    github: 'Connect repos, PRs, and issues more directly.'
+    ollama: 'Run local AI models with no cloud dependency.',
+    python: 'Scripts, automation, and document pipelines.',
+    pip: 'Python package management for richer workflows.',
+    git: 'Version control, history, and diffs.',
+    node: 'Browser automation and frontend tooling.',
+    npm: 'JavaScript package management.',
+    playwright: 'Browser automation and E2E testing.',
+    puppeteer: 'PDF and screenshot export from web pages.',
+    docling: 'Convert PDFs and docs into structured markdown.',
+    pandoc: 'Document format conversion, especially to markdown.',
+    pdftotext: 'Fast text extraction from digital PDFs.',
+    ocrmypdf: 'OCR for scanned PDFs before text extraction.',
+    firecrawl: 'Website scraping and structured extraction.',
+    d2: 'Architecture diagrams from text definitions.',
+    github: 'Repos, PRs, issues, and GitHub Actions.',
+    docker: 'Container runtime, image builds, and Compose.',
+    postgres: 'SQL database, warehousing, and full-text search.',
+    sqlite: 'Local embedded database.',
+    ffmpeg: 'Audio and video processing and conversion.',
+    wkhtmltopdf: 'HTML to PDF rendering.',
+    brave_search: 'Web search and real-time research.',
+    tailwindcss: 'Utility-first CSS framework.',
+    postcss: 'CSS transformations and processing.',
+    vite: 'Fast frontend build tool.',
+    gws: 'Gmail, Drive, Calendar, Sheets, Docs access.',
+    slack: 'Messaging, channels, and workflow triggers.',
+    linear: 'Issue tracking and sprint planning.',
+    stripe: 'Payment processing and webhook testing.',
+    hubspot: 'CRM management and contact sync.',
+    figma: 'Design export and component inspection.',
+    twilio: 'SMS, voice calls, and WhatsApp messaging.',
+    aws_cli: 'Cloud infrastructure, S3, and Lambda.',
+    vercel: 'Frontend deployment and serverless functions.',
+    cloudinary: 'Image optimization and asset management.',
+    sendgrid: 'Transactional email and templates.',
+    docusign: 'E-signatures and document workflows.',
+    sentry: 'Error tracking and release management.',
+    datadog: 'Monitoring, log management, and APM.',
+    zendesk: 'Support tickets and knowledge base.',
+    snyk: 'Vulnerability scanning and dependency audit.',
+    elevenlabs: 'Text-to-speech and voice generation.',
+    wordpress: 'Site management and content publishing.',
+    bigquery: 'Data analytics and SQL warehouse.',
+    terraform: 'Infrastructure as code provisioning.',
+    serpapi: 'Search engine results and SERP data.',
+    notion: 'Pages, databases, and workspace search.'
   };
   return map[id] || ((features && features.length) ? features.slice(0, 2).join(' · ') : 'Useful capability Porter can enable on this machine.');
 }
@@ -24857,54 +24859,86 @@ function _renderConnectionCard(conn) {
   return '<article class="tool-card connected">'
     + '<div class="tool-card-head">'
     + '<span class="tool-card-signal ' + signal + '"></span>'
-    + '<div class="tool-card-main">'
-    + '<div class="tool-card-name">' + escHtml(name) + '</div>'
+    + '<span class="tool-card-name">' + escHtml(name) + '</span>'
     + '</div>'
-    + '</div>'
-    + '<div class="tool-card-sub">' + escHtml(sub) + '</div>'
-    + '<div class="tool-card-meta">'
-    + '<span class="tool-chip">' + escHtml(conn.kind || 'api_key') + '</span>'
-    + (projectCount ? '<span class="tool-chip live">' + escHtml(projectCount + ' project' + (projectCount === 1 ? '' : 's')) + '</span>' : '')
-    + (conn.last_error ? '<span class="tool-chip warn">Issue</span>' : '')
-    + '</div>'
-    + '<div class="tool-card-body">'
-    + '<div class="tool-card-features">'
-    + '<button type="button" onclick="_setToolsFilter(\'connected\')">Connected</button>'
-    + '<button type="button" onclick="_setToolsFilter(\'all\')">' + escHtml(conn.provider || 'Account') + '</button>'
-    + '</div>'
+    + '<div class="tool-card-sub">' + escHtml(sub + (projectCount ? ' \u00b7 ' + projectCount + ' project' + (projectCount === 1 ? '' : 's') : '')) + '</div>'
     + '<div class="tool-card-actions">'
     + '<button class="tool-btn ' + (live ? '' : 'primary') + '" onclick="_toolsSetConnectionStatus(\'' + escJs(conn.id || '') + '\', \'' + escJs(live ? 'disconnected' : 'active') + '\')">' + escHtml(live ? 'Disconnect' : 'Connect') + '</button>'
     + '<button class="tool-btn" onclick="_toolsRenameConnection(\'' + escJs(conn.id || '') + '\', \'' + escJs(name) + '\')">Rename</button>'
-    + '<button class="tool-btn" onclick="_toolsDeleteConnection(\'' + escJs(conn.id || '') + '\', \'' + escJs(name) + '\')">Delete</button>'
-    + '</div></div></article>';
+    + '<button class="tool-btn danger" onclick="_toolsDeleteConnection(\'' + escJs(conn.id || '') + '\', \'' + escJs(name) + '\')">Delete</button>'
+    + '</div></article>';
 }
 
 function _renderLocalToolCard(c) {
   var ok = !!c.ok;
   var roleTags = _toolRoleTags(c.id, c.features || []);
   var sub = _toolWhy(c.id, c.features || []);
+  var version = (ok && c.version) ? String(c.version).replace(/^v/i, '') : '';
   return '<article class="tool-card ' + (ok ? 'ready' : 'setup') + '">'
     + '<div class="tool-card-head">'
     + '<span class="tool-card-signal ' + (ok ? 'ok' : 'off') + '"></span>'
-    + '<div class="tool-card-main">'
-    + '<div class="tool-card-name">' + escHtml(c.label || c.id || 'Tool') + '</div>'
-    + '</div>'
+    + '<span class="tool-card-name">' + escHtml(c.label || c.id || 'Tool') + '</span>'
+    + (version ? '<span class="tool-card-version">' + escHtml(version) + '</span>' : '')
     + '</div>'
     + '<div class="tool-card-sub">' + escHtml(sub) + '</div>'
-    + '<div class="tool-card-body">'
-    + '<div class="tool-card-features">' + (roleTags.map(function(f) {
-      var id = _toolFilterId(f);
-      var active = (window._toolsFilter || 'all') === id ? ' active' : '';
-      return '<button type="button" class="' + active.trim() + '" onclick="_setToolsFilter(\'' + escJs(id) + '\')">' + escHtml(f) + '</button>';
-    }).join('') || '<button type="button" onclick="_setToolsFilter(\'general\')">General</button>') + '</div>'
-    + '<div class="tool-card-actions">'
-    + (c.install ? '<button class="tool-btn ' + (ok ? '' : 'primary') + '" onclick="_toolsOpenInstall(\'' + escJs(c.install) + '\')">' + escHtml(ok ? 'Info' : 'Setup') + '</button>' : '')
-    + '</div></div></article>';
+    + (c.install ? '<div class="tool-card-actions">'
+    + '<button class="tool-btn ' + (ok ? '' : 'primary') + '" onclick="_toolsOpenInstall(\'' + escJs(c.install) + '\')">' + escHtml(ok ? 'Info' : 'Setup') + '</button>'
+    + '</div>' : '')
+    + '</article>';
 }
 
 function _toolsOpenInstall(url) {
   if (!url) return;
   window.open(url, '_blank', 'noopener');
+}
+
+async function loadConnections() {
+  var el = document.getElementById('connections-list');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3)">' + _spinnerOnlyMarkup(48, '0') + '</div>';
+  try {
+    var r = await fetch('/api/workspace/connections', {method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'list'})});
+    var d = r.ok ? await r.json() : null;
+    if (d && d.ok) _renderConnectionsList(d.connections || []);
+    else el.innerHTML = '<div class="tool-empty">Could not load connections.</div>';
+  } catch(e) {
+    el.innerHTML = '<div class="tool-empty" style="color:var(--danger)">Error: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+function _renderConnectionsList(connections) {
+  var el = document.getElementById('connections-list');
+  if (!el) return;
+  var sumEl = document.getElementById('conn-summary');
+  var live = connections.filter(function(c) { return String(c.status||'').toLowerCase()==='active'; }).length;
+  if (sumEl) sumEl.textContent = live + ' active \u00b7 ' + connections.length + ' total';
+  if (!connections.length) {
+    el.innerHTML = '<div class="tool-empty">No connections yet. Connect external services like GitHub, Brave Search, or Slack so Porter can use them.</div>';
+    return;
+  }
+  el.innerHTML = '<div class="tools-card-grid">' + connections.map(_renderConnModuleCard).join('') + '</div>';
+}
+
+function _renderConnModuleCard(conn) {
+  var status = String(conn.status || '').toLowerCase();
+  var live = status === 'active';
+  var signal = live ? 'ok' : (conn.last_error ? 'warn' : 'off');
+  var name = conn.display_name || conn.provider || 'Connection';
+  var projectCount = Number(conn.project_count || 0);
+  var sub = _connectedServiceDescription(conn.provider || conn.kind || 'service');
+  if (projectCount) sub += ' \u00b7 ' + projectCount + ' project' + (projectCount === 1 ? '' : 's');
+  return '<article class="tool-card connected">'
+    + '<div class="tool-card-head">'
+    + '<span class="tool-card-signal ' + signal + '"></span>'
+    + '<span class="tool-card-name">' + escHtml(name) + '</span>'
+    + '</div>'
+    + '<div class="tool-card-sub">' + escHtml(sub) + '</div>'
+    + '<div class="tool-card-actions">'
+    + '<button class="tool-btn ' + (live ? '' : 'primary') + '" onclick="_toolsSetConnectionStatus(\'' + escJs(conn.id || '') + '\', \'' + escJs(live ? 'disconnected' : 'active') + '\')">' + escHtml(live ? 'Disconnect' : 'Connect') + '</button>'
+    + '<button class="tool-btn" onclick="_toolsRenameConnection(\'' + escJs(conn.id || '') + '\', \'' + escJs(name) + '\')">Rename</button>'
+    + '<button class="tool-btn danger" onclick="_toolsDeleteConnection(\'' + escJs(conn.id || '') + '\', \'' + escJs(name) + '\')">Delete</button>'
+    + '</div></article>';
 }
 
 async function _toolsAddConnection() {
@@ -24929,6 +24963,7 @@ async function _toolsAddConnection() {
       if (r && r.ok) {
         toast('Connection added', 'ok');
         loadCapabilities();
+        if (typeof loadConnections === 'function') loadConnections();
       } else {
         toast((r && r.error) || 'Could not add connection', 'err');
       }
@@ -24938,33 +24973,74 @@ async function _toolsAddConnection() {
 
 function _toolsServiceCatalog() {
   return [
-    {provider:'github', label:'GitHub', sub:'Repos, issues, pull requests', kind:'oauth'},
-    {provider:'brave_search', label:'Brave Search', sub:'Search and research access', kind:'api_key'},
-    {provider:'firecrawl', label:'Firecrawl', sub:'Website scraping and crawl jobs', kind:'api_key'},
-    {provider:'openai', label:'OpenAI', sub:'Hosted model access', kind:'api_key'},
-    {provider:'anthropic', label:'Anthropic', sub:'Hosted Claude access', kind:'api_key'},
-    {provider:'google', label:'Google / Gemini', sub:'Hosted Gemini access', kind:'api_key'},
-    {provider:'slack', label:'Slack', sub:'Messages, channels, and team workflows', kind:'oauth'},
-    {provider:'notion', label:'Notion', sub:'Docs and workspace pages', kind:'oauth'},
-    {provider:'linear', label:'Linear', sub:'Issues and project tracking', kind:'oauth'},
-    {provider:'jira', label:'Jira', sub:'Tickets and workflow tracking', kind:'oauth'}
+    {provider:'github', label:'GitHub', sub:'Repos, issues, pull requests, actions', kind:'oauth'},
+    {provider:'gmail', label:'Gmail', sub:'Email send, receive, search, labels', kind:'oauth'},
+    {provider:'google_calendar', label:'Google Calendar', sub:'Events, scheduling, availability', kind:'oauth'},
+    {provider:'google_drive', label:'Google Drive', sub:'Files, folders, shared drives', kind:'oauth'},
+    {provider:'google_sheets', label:'Google Sheets', sub:'Spreadsheets, data import/export', kind:'oauth'},
+    {provider:'google_docs', label:'Google Docs', sub:'Documents, templates, collaboration', kind:'oauth'},
+    {provider:'slack', label:'Slack', sub:'Messages, channels, workflows', kind:'oauth'},
+    {provider:'notion', label:'Notion', sub:'Docs, databases, workspace pages', kind:'oauth'},
+    {provider:'linear', label:'Linear', sub:'Issues, sprints, project tracking', kind:'oauth'},
+    {provider:'jira', label:'Jira', sub:'Tickets, boards, workflow tracking', kind:'oauth'},
+    {provider:'openai', label:'OpenAI', sub:'GPT models, embeddings, images', kind:'api_key'},
+    {provider:'anthropic', label:'Anthropic', sub:'Claude models and API access', kind:'api_key'},
+    {provider:'google_ai', label:'Google AI / Gemini', sub:'Gemini models and API access', kind:'api_key'},
+    {provider:'brave_search', label:'Brave Search', sub:'Web search and research', kind:'api_key'},
+    {provider:'firecrawl', label:'Firecrawl', sub:'Website scraping and extraction', kind:'api_key'},
+    {provider:'stripe', label:'Stripe', sub:'Payments, invoices, subscriptions', kind:'api_key'},
+    {provider:'twilio', label:'Twilio', sub:'SMS, voice, WhatsApp messaging', kind:'api_key'},
+    {provider:'sendgrid', label:'SendGrid', sub:'Transactional email and templates', kind:'api_key'},
+    {provider:'hubspot', label:'HubSpot', sub:'CRM, contacts, deal pipeline', kind:'api_key'},
+    {provider:'airtable', label:'Airtable', sub:'Databases, forms, automations', kind:'api_key'},
+    {provider:'dropbox', label:'Dropbox', sub:'File storage and sharing', kind:'oauth'},
+    {provider:'figma', label:'Figma', sub:'Design files, components, assets', kind:'api_key'},
+    {provider:'vercel', label:'Vercel', sub:'Deployments, domains, serverless', kind:'api_key'},
+    {provider:'supabase', label:'Supabase', sub:'Database, auth, storage, realtime', kind:'api_key'},
+    {provider:'cloudflare', label:'Cloudflare', sub:'DNS, CDN, workers, images', kind:'api_key'},
+    {provider:'sentry', label:'Sentry', sub:'Error tracking, releases, alerts', kind:'api_key'},
+    {provider:'discord', label:'Discord', sub:'Messages, channels, bots', kind:'oauth'},
+    {provider:'whatsapp', label:'WhatsApp Business', sub:'Messaging, templates, media', kind:'api_key'},
+    {provider:'zapier', label:'Zapier', sub:'Workflow automation across apps', kind:'api_key'},
+    {provider:'make', label:'Make (Integromat)', sub:'Visual workflow automation', kind:'api_key'}
   ];
 }
 
 function _connectedServiceDescription(provider) {
   var map = {
-    github: 'Repos, issues, and pull requests',
-    brave_search: 'Search and research access',
-    firecrawl: 'Website crawling and extraction',
-    openai: 'Hosted model access',
-    anthropic: 'Hosted Claude access',
-    google: 'Hosted Gemini access',
-    slack: 'Messages and channels',
-    notion: 'Docs and workspace pages',
-    linear: 'Issues and project tracking',
-    jira: 'Tickets and workflows'
+    github: 'Repos, issues, pull requests, actions',
+    gmail: 'Email send, receive, search, labels',
+    google_calendar: 'Events, scheduling, availability',
+    google_drive: 'Files, folders, shared drives',
+    google_sheets: 'Spreadsheets, data import/export',
+    google_docs: 'Documents, templates, collaboration',
+    google_ai: 'Gemini models and API access',
+    google: 'Gemini models and API access',
+    brave_search: 'Web search and research',
+    firecrawl: 'Website scraping and extraction',
+    openai: 'GPT models, embeddings, images',
+    anthropic: 'Claude models and API access',
+    slack: 'Messages, channels, workflows',
+    notion: 'Docs, databases, workspace pages',
+    linear: 'Issues, sprints, project tracking',
+    jira: 'Tickets, boards, workflow tracking',
+    stripe: 'Payments, invoices, subscriptions',
+    twilio: 'SMS, voice, WhatsApp messaging',
+    sendgrid: 'Transactional email and templates',
+    hubspot: 'CRM, contacts, deal pipeline',
+    airtable: 'Databases, forms, automations',
+    dropbox: 'File storage and sharing',
+    figma: 'Design files, components, assets',
+    vercel: 'Deployments, domains, serverless',
+    supabase: 'Database, auth, storage, realtime',
+    cloudflare: 'DNS, CDN, workers, images',
+    sentry: 'Error tracking, releases, alerts',
+    discord: 'Messages, channels, bots',
+    whatsapp: 'Messaging, templates, media',
+    zapier: 'Workflow automation across apps',
+    make: 'Visual workflow automation'
   };
-  return map[String(provider || '').toLowerCase()] || 'External service Porter can use through this workspace';
+  return map[String(provider || '').toLowerCase()] || 'External service';
 }
 
 async function _toolsSetConnectionStatus(id, status) {
@@ -24972,6 +25048,7 @@ async function _toolsSetConnectionStatus(id, status) {
   if (r && r.ok) {
     toast(status === 'active' ? 'Connection activated' : 'Connection disconnected', 'ok');
     loadCapabilities();
+    if (typeof loadConnections === 'function') loadConnections();
   } else {
     toast((r && r.error) || 'Could not update connection', 'err');
   }
@@ -24984,6 +25061,7 @@ async function _toolsRenameConnection(id, currentName) {
   if (r && r.ok) {
     toast('Connection renamed', 'ok');
     loadCapabilities();
+    if (typeof loadConnections === 'function') loadConnections();
   } else {
     toast((r && r.error) || 'Could not rename connection', 'err');
   }
@@ -24995,6 +25073,7 @@ function _toolsDeleteConnection(id, name) {
     if (r && r.ok) {
       toast('Connection deleted', 'ok');
       loadCapabilities();
+      if (typeof loadConnections === 'function') loadConnections();
     } else {
       toast((r && r.error) || 'Could not delete connection', 'err');
     }
@@ -28453,7 +28532,7 @@ function chatSend() {
     }
 
     if (cmd === '/tools') {
-      switchModule('capabilities');
+      switchModule('tools');
       _chatMessages.push({ role: 'assistant', content: 'Switched to **Tools**.', model: 'porter' });
       renderChatMessages();
       return;
@@ -39303,7 +39382,7 @@ function _popupChatUpdateCtx() {
   } else if (window._projCurrent && _currentModule === 'projects') {
     ctxEl.innerHTML = '<span style="background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent);padding:1px 6px;border-radius:4px;font-size:9px;font-weight:600">' + escHtml(window._projCurrent.name || 'Project') + '</span> ' + escHtml((_projTab || 'now'));
   } else if (_currentModule) {
-    var _mdn={allfiles:'Files',capabilities:'Tools',people:'People',agents:'AI Agents',models:'Models',memory:'Memory',logs:'Logs',settings:'Settings',admin:'Admin',audit:'Audit',templates:'Templates'};ctxEl.textContent=_mdn[_currentModule]||(_currentModule.charAt(0).toUpperCase()+_currentModule.slice(1));
+    var _mdn={allfiles:'Files',tools:'Tools',people:'People',agents:'AI Agents',models:'Models',memory:'Memory',logs:'Logs',settings:'Settings',admin:'Admin',audit:'Audit',templates:'Templates'};ctxEl.textContent=_mdn[_currentModule]||(_currentModule.charAt(0).toUpperCase()+_currentModule.slice(1));
   }
 }
 
@@ -46595,7 +46674,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.26"})
+            self.reply_json({"v": "0.33.27"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -46757,7 +46836,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.33.26"
+                health["porter_version"] = "0.33.27"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -48694,10 +48773,16 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json(result)
 
 
-        # ── S10: OpenClaw skills (GET) ──────────────────────────────────────────
+        # ── S10: OpenClaw skills (GET) — cached 60s ─────────────────────────────
         elif parsed.path == "/api/openclaw/skills":
             if not self.auth_check(redirect=False): return
-            skills = _load_openclaw_skills()
+            qs = parse_qs(parsed.query)
+            force = qs.get("force", [""])[0] == "1"
+            now = time.time()
+            if force or not _skills_cache.get("data") or (now - _skills_cache.get("ts", 0)) > 60:
+                _skills_cache["data"] = _load_openclaw_skills()
+                _skills_cache["ts"] = now
+            skills = _skills_cache["data"]
             self.reply_json({"ok": True, "skills": skills, "count": len(skills)})
 
         # ── GWS: status (GET) ────────────────────────────────────────────────
@@ -49154,7 +49239,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.26'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.27'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -53201,7 +53286,7 @@ metadata: {{ "openclaw": {{ "emoji": "{emoji}" }} }}
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.33.26"
+                _ws_health["porter_version"] = "0.33.27"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -56581,7 +56666,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.26 ready (localhost only)")
+    print(f"\n  Porter v0.33.27 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
