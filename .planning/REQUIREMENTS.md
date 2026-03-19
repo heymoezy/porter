@@ -10,7 +10,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Identity & Compliance
 
 - [ ] **AUTH-01**: Worker identity verification via SingPass MyInfo v5 (NRIC, name, address auto-filled)
-- [ ] **AUTH-02**: Food hygiene certificate (FHD2H) verification at signup for F&B workers
+- [ ] **AUTH-02**: Food hygiene certificate (FHD2H) verification at signup for F&B workers (conditional — retail workers exempt)
 - [ ] **AUTH-03**: Work permit verification for foreign workers via MOM records
 - [ ] **AUTH-04**: Work injury insurance coverage activated per shift, baked into markup
 - [ ] **AUTH-05**: Restaurant onboarding with UEN verification and business profile
@@ -18,7 +18,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Core Marketplace
 
-- [ ] **MRKT-01**: Restaurants post shifts with role, time, location, and pay ceiling
+- [ ] **MRKT-01**: Businesses (F&B or retail) post shifts with industry, role (waiter, cook, barista, cashier, merchandiser, stock room), time, location, and pay ceiling
 - [ ] **MRKT-02**: Workers browse and bid on shifts (reverse bidding — workers set their price within range)
 - [ ] **MRKT-03**: Price floors per role category anchored to MOM Progressive Wage Model rates
 - [ ] **MRKT-04**: Restaurants search available workers by skills, ratings, location, availability and book directly
@@ -128,13 +128,71 @@ Deferred to future release.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (To be populated during roadmap creation) | | |
+| AUTH-01 | Phase 1 — Legal & Identity | Pending |
+| AUTH-02 | Phase 1 — Legal & Identity | Pending |
+| AUTH-03 | Phase 1 — Legal & Identity | Pending |
+| AUTH-04 | Phase 1 — Legal & Identity | Pending |
+| AUTH-05 | Phase 1 — Legal & Identity | Pending |
+| AUTH-06 | Phase 1 — Legal & Identity | Pending |
+| MRKT-01 | Phase 2 — Core Marketplace | Pending |
+| MRKT-02 | Phase 2 — Core Marketplace | Pending |
+| MRKT-03 | Phase 2 — Core Marketplace | Pending |
+| MRKT-04 | Phase 2 — Core Marketplace | Pending |
+| MRKT-05 | Phase 2 — Core Marketplace | Pending |
+| MRKT-06 | Phase 2 — Core Marketplace | Pending |
+| MRKT-07 | Phase 3 — Shift Lifecycle & Protection | Pending |
+| MRKT-08 | Phase 3 — Shift Lifecycle & Protection | Pending |
+| MRKT-09 | Phase 3 — Shift Lifecycle & Protection | Pending |
+| MRKT-10 | Phase 3 — Shift Lifecycle & Protection | Pending |
+| MRKT-11 | Phase 3 — Shift Lifecycle & Protection | Pending |
+| TRST-01 | Phase 4 — Trust & Quality | Pending |
+| TRST-02 | Phase 4 — Trust & Quality | Pending |
+| TRST-03 | Phase 4 — Trust & Quality | Pending |
+| TRST-04 | Phase 4 — Trust & Quality | Pending |
+| TRST-05 | Phase 4 — Trust & Quality | Pending |
+| TRST-06 | Phase 4 — Trust & Quality | Pending |
+| GAME-01 | Phase 5 — Worker Gamification | Pending |
+| GAME-02 | Phase 5 — Worker Gamification | Pending |
+| GAME-03 | Phase 5 — Worker Gamification | Pending |
+| GAME-04 | Phase 5 — Worker Gamification | Pending |
+| GAME-05 | Phase 5 — Worker Gamification | Pending |
+| GAME-06 | Phase 5 — Worker Gamification | Pending |
+| GAME-07 | Phase 5 — Worker Gamification | Pending |
+| GAME-08 | Phase 6 — Restaurant Gamification & Revenue | Pending |
+| GAME-09 | Phase 6 — Restaurant Gamification & Revenue | Pending |
+| GAME-10 | Phase 6 — Restaurant Gamification & Revenue | Pending |
+| GAME-11 | Phase 6 — Restaurant Gamification & Revenue | Pending |
+| GAME-12 | Phase 6 — Restaurant Gamification & Revenue | Pending |
+| GAME-13 | Phase 6 — Restaurant Gamification & Revenue | Pending |
+| GROW-03 | Phase 7 — Acquisition & Launch Loops | Pending |
+| GROW-04 | Phase 7 — Acquisition & Launch Loops | Pending |
+| GROW-05 | Phase 7 — Acquisition & Launch Loops | Pending |
+| GROW-12 | Phase 7 — Acquisition & Launch Loops | Pending |
+| GROW-13 | Phase 7 — Acquisition & Launch Loops | Pending |
+| GROW-01 | Phase 8 — Viral Growth & Content | Pending |
+| GROW-02 | Phase 8 — Viral Growth & Content | Pending |
+| GROW-06 | Phase 8 — Viral Growth & Content | Pending |
+| GROW-07 | Phase 8 — Viral Growth & Content | Pending |
+| GROW-08 | Phase 8 — Viral Growth & Content | Pending |
+| GROW-09 | Phase 8 — Viral Growth & Content | Pending |
+| GROW-10 | Phase 8 — Viral Growth & Content | Pending |
+| GROW-11 | Phase 8 — Viral Growth & Content | Pending |
+| AI-01 | Phase 9 — AI Intelligence | Pending |
+| AI-02 | Phase 9 — AI Intelligence | Pending |
+| AI-03 | Phase 9 — AI Intelligence | Pending |
+| AI-04 | Phase 9 — AI Intelligence | Pending |
+| AI-05 | Phase 9 — AI Intelligence | Pending |
+| MRKT-12 | Phase 9 — AI Intelligence | Pending |
+| MRKT-13 | Phase 9 — AI Intelligence | Pending |
+| WL-01 | Phase 10 — White-Label Enterprise | Pending |
+| WL-02 | Phase 10 — White-Label Enterprise | Pending |
+| WL-03 | Phase 10 — White-Label Enterprise | Pending |
 
 **Coverage:**
-- v1 requirements: 50 total
-- Mapped to phases: 0
-- Unmapped: 50
+- v1 requirements: 59 total (note: REQUIREMENTS.md initially estimated 50; actual count is 59 after full enumeration)
+- Mapped to phases: 59
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-19*
-*Last updated: 2026-03-19 after initial definition*
+*Last updated: 2026-03-19 — traceability populated after roadmap creation*
