@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.18 — Dead code cleanup: legacy CSS"""
+"""Porter v0.33.19 — Drag-drop everywhere"""
 
 
 import email
@@ -13015,6 +13015,15 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   transition:.15s;
 }
 .chat-input-wrap.drag-over { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent); }
+/* v0.33.19 — Universal drop zone feedback */
+.drop-active { outline:2px dashed var(--accent) !important; outline-offset:-2px; background:color-mix(in srgb,var(--accent) 4%,transparent) !important; transition:outline .15s,background .15s; }
+.drop-active::after { content:'Drop files here'; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:13px; font-weight:600; color:var(--accent); pointer-events:none; z-index:10; background:var(--bg); padding:6px 16px; border-radius:8px; border:1px solid var(--accent); }
+.porter-popup-chat.drop-active::after { top:auto; bottom:60px; }
+#proj-detail-content { position:relative; }
+#people-detail-view { position:relative; }
+.popup-chat-attachments { display:flex; gap:4px; flex-wrap:wrap; padding:4px 8px 0; }
+.popup-chat-attachment { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; font-size:10px; border-radius:4px; background:color-mix(in srgb,var(--accent) 12%,transparent); color:var(--accent); }
+.popup-chat-attachment button { background:none; border:none; color:var(--text3); cursor:pointer; font-size:12px; padding:0 2px; }
 .chat-file-picker {
   position:absolute; bottom:100%; left:0; right:0; max-height:250px;
   overflow-y:auto; background:var(--bg); border:1px solid var(--border);
@@ -15303,7 +15312,7 @@ input[type="number"].settings-input { min-width: 60px; }
     <a href="#" onclick="openSettings('profile');return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.18</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.19</div>
   </div>
 </aside>
 
@@ -16422,6 +16431,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.33.19', date:'2026-03-19', notes:['Drag-drop everywhere: drop files onto projects, CRM contacts, popup chat'] },
   { ver:'v0.33.18', date:'2026-03-18', notes:['Dead code cleanup: legacy CSS from removed features'] },
   { ver:'v0.33.17', date:'2026-03-18', notes:['Dead code cleanup: 11 unused Python functions removed'] },
   { ver:'v0.33.16', date:'2026-03-18', notes:['Files: Finder-like UX with column headers, search filter, status bar, sortable columns'] },
@@ -20275,6 +20285,19 @@ async function _renderProjectPage() {
   }
   el.innerHTML = h;
   _projLoadTasks(pid);
+  // v0.33.19 — Drop zone: drag files into project
+  _setupDropZone(el, async function(files) {
+    var uploaded = 0;
+    for (var i = 0; i < files.length; i++) {
+      var r = await _uploadToPath(files[i], pid + '/_files');
+      if (r && r.ok) {
+        await api('/api/projects', {action:'add_content', project_id:pid, content_type:'document', category:'file', title:files[i].name, file_path:pid+'/_files/'+files[i].name, mime_type:files[i].type||'', file_size:files[i].size||0});
+        uploaded++;
+      }
+    }
+    if (uploaded) { toast(uploaded + ' file(s) added', 'ok'); _renderProjectPage(); }
+    else toast('Upload failed', 'err');
+  });
 }
 
 async function _renderProjTabContent() { return _renderProjectPage(); }
@@ -21354,6 +21377,22 @@ async function _crmOpenContact(id) {
       }, 1000);
     });
   }
+  // v0.33.19 — Drop zone: drag files into contact
+  _setupDropZone(dv, async function(files) {
+    var me = window.currentUser;
+    var basePath = '_files/' + (me ? me.username : 'default');
+    var uploaded = 0;
+    for (var i = 0; i < files.length; i++) {
+      var r = await _uploadToPath(files[i], basePath);
+      if (r && r.ok) {
+        var sz = files[i].size > 1048576 ? (files[i].size/1048576).toFixed(1)+'MB' : (files[i].size/1024).toFixed(0)+'KB';
+        await api('/api/workspace/crm', {action:'interactions.create', contact_id:c.id, interaction_type:'note', body:'\u{1F4CE} File attached: '+files[i].name+' ('+sz+')'});
+        uploaded++;
+      }
+    }
+    if (uploaded) { toast(uploaded + ' file(s) attached', 'ok'); _crmOpenContact(c.id); }
+    else toast('Upload failed', 'err');
+  });
 }
 
 async function _crmOpenCompany(id) {
@@ -27027,6 +27066,37 @@ function _fmRow(f) {
 // Prevent browser from opening dropped files
 document.addEventListener('dragover', function(e) { e.preventDefault(); });
 document.addEventListener('drop', function(e) { e.preventDefault(); });
+
+// v0.33.19 — Universal drag-drop helper
+function _setupDropZone(el, onDrop) {
+  if (!el || el._dropSetup) return;
+  el._dropSetup = true;
+  var counter = 0;
+  el.addEventListener('dragenter', function(e) {
+    e.preventDefault();
+    if (!e.dataTransfer || !e.dataTransfer.types || e.dataTransfer.types.indexOf('Files') === -1) return;
+    counter++;
+    el.classList.add('drop-active');
+  });
+  el.addEventListener('dragleave', function(e) {
+    counter--;
+    if (counter <= 0) { counter = 0; el.classList.remove('drop-active'); }
+  });
+  el.addEventListener('dragover', function(e) { e.preventDefault(); e.stopPropagation(); });
+  el.addEventListener('drop', function(e) {
+    e.preventDefault(); e.stopPropagation();
+    counter = 0; el.classList.remove('drop-active');
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length && onDrop) onDrop(files);
+  });
+}
+
+async function _uploadToPath(file, path) {
+  try {
+    var res = await fetch('/api/files/upload?path=' + encodeURIComponent(path) + '&filename=' + encodeURIComponent(file.name), {method:'POST', body:file, credentials:'same-origin'});
+    return await res.json();
+  } catch(e) { return {ok:false, error:e.message}; }
+}
 
 async function _fmRename(path, name) {
   var newName = await porterPrompt('Rename', 'New name:', name);
@@ -35051,6 +35121,7 @@ function toast(msg, type='') {
 // ── Popup Chat (/ shortcut) ─────────────────────────────────
 var _popupChatMessages = [];
 var _popupChatStreaming = false;
+var _popupChatAttachments = [];
 
 function _popupChatOpen() {
   var el = document.getElementById('porter-popup-chat');
@@ -35078,6 +35149,38 @@ function _popupChatOpen() {
   }
   el.classList.add('open');
   setTimeout(function() { var inp = document.getElementById('popup-chat-input'); if (inp) inp.focus(); }, 60);
+  // v0.33.19 — Drop zone: drag files into popup chat
+  _setupDropZone(el, async function(files) {
+    var me = window.currentUser;
+    var basePath = '_files/' + (me ? me.username : 'default');
+    for (var i = 0; i < files.length; i++) {
+      var r = await _uploadToPath(files[i], basePath);
+      if (r && r.ok) {
+        _popupChatAttachments.push({name:files[i].name, size:files[i].size, path:basePath+'/'+files[i].name});
+        toast('Attached: '+files[i].name, 'ok');
+      }
+    }
+    _popupChatRenderAttachments();
+  });
+}
+
+function _popupChatRenderAttachments() {
+  var composer = document.querySelector('.porter-popup-composer');
+  if (!composer) return;
+  var existing = composer.querySelector('.popup-chat-attachments');
+  if (existing) existing.remove();
+  if (!_popupChatAttachments.length) return;
+  var h = '<div class="popup-chat-attachments">';
+  _popupChatAttachments.forEach(function(a, i) {
+    h += '<span class="popup-chat-attachment">' + escHtml(a.name) + '<button onclick="_popupChatRemoveAttachment('+i+')">&times;</button></span>';
+  });
+  h += '</div>';
+  composer.insertAdjacentHTML('afterbegin', h);
+}
+
+function _popupChatRemoveAttachment(idx) {
+  _popupChatAttachments.splice(idx, 1);
+  _popupChatRenderAttachments();
 }
 
 // Update popup chat context when switching modules/tabs
@@ -35165,6 +35268,14 @@ async function _popupChatSend() {
       var peopleCards = document.querySelectorAll('.people-card');
       if (peopleCards.length) ctxParts.push(peopleCards.length + ' people/companies visible.');
     }
+  }
+  // v0.33.19 — Include file attachments in context
+  if (_popupChatAttachments.length) {
+    var attList = _popupChatAttachments.map(function(a) { return a.name + ' (' + (a.size > 1048576 ? (a.size/1048576).toFixed(1)+'MB' : (a.size/1024).toFixed(0)+'KB') + ')'; });
+    ctxParts.push('User attached files: ' + attList.join(', ') + '.');
+    text = '[Attached: ' + attList.join(', ') + '] ' + text;
+    _popupChatAttachments = [];
+    _popupChatRenderAttachments();
   }
   var fullPrompt = ctxParts.join(' ') + '\n\nUser: ' + text;
 
@@ -42344,7 +42455,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.18"})
+            self.reply_json({"v": "0.33.19"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -44840,7 +44951,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.18'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.19'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -51887,7 +51998,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.18 ready (localhost only)")
+    print(f"\n  Porter v0.33.19 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
