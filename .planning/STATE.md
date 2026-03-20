@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 02-memory-v2/02-00-PLAN.md
-last_updated: "2026-03-20T15:36:03.112Z"
+stopped_at: Completed 02-memory-v2/02-01-PLAN.md
+last_updated: "2026-03-20T15:57:35.429Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -56,6 +56,7 @@ Plan: 2 of 8
 | Phase 01-foundation P08 | 3min | 1 tasks | 1 files |
 | Phase 01-foundation P09 | 2min | 2 tasks | 1 files |
 | Phase 02-memory-v2 P00 | 3min | 2 tasks | 5 files |
+| Phase 02-memory-v2 P01 | 17min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,9 @@ Recent decisions affecting current work:
 - [Phase 01-foundation]: Chat action project_create _save_config() call was a latent bug (no-arg call) — replaced by _db_project_save(proj)
 - [Phase 02-memory-v2]: Wave 0 tests are /tmp/-only — not committed to git per VALIDATION.md
 - [Phase 02-memory-v2]: Tests use dual-mode verification: source-code assertions (grep porter.py source) and direct DB assertions
+- [Phase 02-memory-v2]: All functional cortex references removed — zero _cortex_ functions, zero cortex_memories SQL, zero /api/cortex/ endpoints
+- [Phase 02-memory-v2]: JS cortex UI module (~56KB) removed entirely — loadCortexTab, cortex graph canvas, renderCortexMemories all deleted
+- [Phase 02-memory-v2]: Bridge:dispatch SSE refresh handlers preserved inside reconstructed SSE subscription block (cortex:update handler stripped)
 
 ### Pending Todos
 
@@ -108,6 +112,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T15:36:03.110Z
-Stopped at: Completed 02-memory-v2/02-00-PLAN.md
+Last session: 2026-03-20T15:57:35.426Z
+Stopped at: Completed 02-memory-v2/02-01-PLAN.md
 Resume file: None
