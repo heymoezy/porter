@@ -3205,13 +3205,14 @@ def _boot_sequence():
     Checks required and optional capabilities, logs results via mlog,
     and populates _capabilities_cache for UI badging.
     """
+    import sys as _sys
     import subprocess as _subprocess
     import urllib.request as _urllib_req
 
     results = {}
 
     # 1. Required: Python stdlib (always available)
-    results["python"] = {"ok": True, "version": sys.version.split()[0]}
+    results["python"] = {"ok": True, "version": _sys.version.split()[0]}
 
     # 2. Required: SQLite DB writable
     try:
