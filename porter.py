@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.34.10 — Remove orange from agent + project chat composer borders"""
+"""Porter v0.34.11 — Kill all orange from chat system: shell, send button, dots, drop zone, project chat"""
 
 
 import email
@@ -14547,8 +14547,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   flex:1;
   min-height:0;
   padding:10px 12px 12px;
-  background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%, transparent),color-mix(in srgb,var(--warning) 4%, var(--bg)));
-  border:1px solid color-mix(in srgb,var(--warning) 32%, var(--border));
+  background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%, transparent),color-mix(in srgb,var(--accent) 3%, var(--bg)));
+  border:1px solid color-mix(in srgb,var(--accent) 24%, var(--border));
   border-radius:16px;
   box-sizing:border-box;
 }
@@ -14617,8 +14617,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   width:8px;
   height:8px;
   border-radius:999px;
-  background:color-mix(in srgb,var(--warning) 88%, var(--text) 12%);
-  box-shadow:0 0 0 1px rgba(245,158,11,.18);
+  background:color-mix(in srgb,var(--accent) 88%, var(--text) 12%);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 18%, transparent);
   animation:pd-chat-pulse 1.1s ease-in-out infinite;
 }
 .pd-chat-pulse-dot:nth-child(2) { animation-delay:.14s; }
@@ -14669,12 +14669,12 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   justify-content:center;
   gap:8px;
   min-width:118px;
-  border:1px solid color-mix(in srgb,var(--warning) 28%, transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 28%, transparent);
   border-radius:16px;
   padding:0 16px;
   background:
-    linear-gradient(180deg,color-mix(in srgb,var(--warning) 20%, var(--surface)),color-mix(in srgb,var(--warning) 20%, var(--bg)));
-  color:#fff5dd;
+    linear-gradient(180deg,color-mix(in srgb,var(--accent) 20%, var(--surface)),color-mix(in srgb,var(--accent) 20%, var(--bg)));
+  color:#e8e8ff;
   font-size:11px;
   font-weight:800;
   letter-spacing:.08em;
@@ -14686,7 +14686,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .pd-send-btn:hover {
   transform:translateY(-1px);
   box-shadow:0 14px 28px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.1);
-  border-color:color-mix(in srgb,var(--warning) 42%, transparent);
+  border-color:color-mix(in srgb,var(--accent) 42%, transparent);
 }
 .pd-send-btn:active { transform:translateY(0); }
 .pd-chat-composer.compact {
@@ -14742,7 +14742,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   transition:border-color .12s ease, transform .12s ease, color .12s ease;
 }
 .pd-chat-toolbtn:hover {
-  border-color:color-mix(in srgb,var(--warning) 34%, transparent);
+  border-color:color-mix(in srgb,var(--accent) 34%, transparent);
   color:var(--text);
   transform:translateY(-1px);
 }
@@ -14843,10 +14843,10 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   display:flex;
   flex-direction:column;
   gap:10px;
-  border:1px solid color-mix(in srgb,var(--warning) 42%, var(--border));
+  border:1px solid color-mix(in srgb,var(--accent) 32%, var(--border));
   border-radius:16px;
-  background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%, transparent),color-mix(in srgb,var(--warning) 5%, var(--surface)));
-  box-shadow:0 -12px 30px rgba(0,0,0,.14), 0 0 0 1px color-mix(in srgb,var(--warning) 8%, transparent) inset;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 96%, transparent),color-mix(in srgb,var(--accent) 4%, var(--surface)));
+  box-shadow:0 -12px 30px rgba(0,0,0,.14), 0 0 0 1px color-mix(in srgb,var(--accent) 8%, transparent) inset;
   padding:10px 12px 12px;
   margin:0;
   box-sizing:border-box;
@@ -14867,10 +14867,10 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   padding:20px 16px;
   text-align:center;
   font-size:12px;
-  color:var(--warning);
-  border:2px dashed color-mix(in srgb,var(--warning) 60%, transparent);
+  color:var(--accent);
+  border:2px dashed color-mix(in srgb,var(--accent) 60%, transparent);
   border-radius:18px;
-  background:color-mix(in srgb,var(--warning) 7%, transparent);
+  background:color-mix(in srgb,var(--accent) 7%, transparent);
 }
 .chat-stop-btn {
   display:none; padding:4px 14px; font-size:11px; border-radius:6px;
@@ -16566,13 +16566,13 @@ body.density-compact .file-name { padding: 6px 0; }
 .proj-chat-head { display:none; }
 .proj-chat-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; align-items:start; min-height:0; }
 .proj-chat-main { min-width:0; }
-.proj-chat-working { display:none; align-items:center; gap:8px; margin:0 0 10px; font-size:11px; color:var(--warning); }
+.proj-chat-working { display:none; align-items:center; gap:8px; margin:0 0 10px; font-size:11px; color:var(--accent); }
 .proj-chat-working.active { display:flex; }
-.proj-chat-working-dot { width:8px; height:8px; border-radius:50%; background:var(--warning); box-shadow:0 0 0 0 rgba(245,158,11,.5); animation:proj-working-pulse 1.2s ease-out infinite; }
+.proj-chat-working-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 50%, transparent); animation:proj-working-pulse 1.2s ease-out infinite; }
 @keyframes proj-working-pulse { 0% { box-shadow:0 0 0 0 rgba(245,158,11,.45); opacity:1; } 100% { box-shadow:0 0 0 10px rgba(245,158,11,0); opacity:.7; } }
 .proj-chat-hint { display:none; align-items:center; gap:8px; margin:0 0 10px; padding:8px 10px; border-radius:12px; background:color-mix(in srgb,var(--accent) 8%, transparent); border:1px solid color-mix(in srgb,var(--accent) 20%, var(--border)); color:var(--text2); font-size:11px; }
 .proj-chat-hint.active { display:flex; animation:proj-chat-hint-in .28s ease, proj-chat-hint-glow 1.4s ease-out 1; }
-.proj-chat-hint-dot { width:8px; height:8px; border-radius:50%; background:var(--warning); flex-shrink:0; box-shadow:0 0 0 0 rgba(245,158,11,.45); animation:proj-working-pulse 1.2s ease-out infinite; }
+.proj-chat-hint-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); flex-shrink:0; box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%, transparent); animation:proj-working-pulse 1.2s ease-out infinite; }
 @keyframes proj-chat-hint-in { 0% { opacity:0; transform:translateY(4px); } 100% { opacity:1; transform:translateY(0); } }
 @keyframes proj-chat-hint-glow { 0% { box-shadow:0 0 0 0 rgba(245,158,11,.22); } 100% { box-shadow:0 0 0 12px rgba(245,158,11,0); } }
 .proj-chat-composer { display:flex; align-items:flex-end; gap:10px; padding:10px 12px; border:1px solid color-mix(in srgb,var(--accent) 28%, var(--border)); border-radius:22px; background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%, transparent),color-mix(in srgb,var(--accent) 3%, var(--bg))); box-shadow:inset 0 1px 0 rgba(255,255,255,.04); }
@@ -16586,12 +16586,12 @@ body.density-compact .file-name { padding: 6px 0; }
 #proj-cmd-bar .pd-chat-input:focus { border-color:transparent; background:color-mix(in srgb,var(--bg) 94%, transparent); }
 #proj-cmd-bar .pd-chat-input::placeholder { color:color-mix(in srgb,var(--text2) 90%, var(--text3)); }
 .proj-chat-need { display:none !important; }
-.proj-chat-need-label { font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--warning); font-weight:700; }
+.proj-chat-need-label { font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:700; }
 .proj-chat-need-copy { font-size:11px; color:var(--text2); line-height:1.45; margin-top:3px; }
 .proj-chat-need .proj-next-btn { margin-top:0; flex-shrink:0; justify-content:center; }
-.proj-top-need { margin:-4px 0 14px; padding:10px 12px; border:1px solid color-mix(in srgb,var(--warning) 24%, var(--border)); border-radius:14px; background:color-mix(in srgb,var(--warning) 7%, transparent); display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.proj-top-need { margin:-4px 0 14px; padding:10px 12px; border:1px solid color-mix(in srgb,var(--accent) 20%, var(--border)); border-radius:14px; background:color-mix(in srgb,var(--accent) 6%, transparent); display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .proj-top-need-copy { min-width:0; flex:1; }
-.proj-top-need-label { font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--warning); font-weight:700; }
+.proj-top-need-label { font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:700; }
 .proj-top-need-text { font-size:12px; color:var(--text2); line-height:1.5; margin-top:4px; }
 .proj-top-need-meta { display:flex; align-items:center; gap:8px; font-size:10px; color:var(--text3); margin-top:6px; }
 .proj-top-need-controls { display:flex; align-items:center; gap:6px; flex-shrink:0; }
@@ -17530,7 +17530,7 @@ select::-ms-expand { display: none; }
     <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.10</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.11</div>
   </div>
 </aside>
 
@@ -18634,6 +18634,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.34.11', date:'2026-03-20', notes:['Complete orange purge from chat UI: send button, chat shell border, typing dots, drop zone, toolbtn hover, project chat container, working dots, need labels, Porter hero card — all --warning → --accent.'] },
   { ver:'v0.34.10', date:'2026-03-20', notes:['Agent detail + project chat composer borders changed from --warning (orange) to --accent (indigo). Drag-over and chat hints also updated.'] },
   { ver:'v0.34.9', date:'2026-03-20', notes:['Chat input focus borders changed from orange rgba(247,147,26) to var(--accent). Files accordion staggered animation removed — instant expand/collapse.'] },
   { ver:'v0.34.8', date:'2026-03-20', notes:['Favicon changed from orange to indigo. Nav counter badge orange→indigo. Sign-in button hover darkened. Model card warn chips recolored to accent blue.'] },
@@ -35820,7 +35821,7 @@ function switchPdTab(tab) {
             + '</div>';
           html += '<div style="padding:16px;border:1px solid var(--border);border-radius:18px;background:var(--surface)"><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:12px">Command Placement</div>'
             + '<div style="display:grid;grid-template-columns:minmax(220px,280px) 1fr;gap:14px;align-items:start">'
-            + '<div style="padding:16px;border:1px solid color-mix(in srgb,var(--warning) 30%, var(--border));border-radius:18px;background:color-mix(in srgb,var(--warning) 6%, var(--bg))"><div style="font-size:12px;font-weight:800;color:var(--text)">Porter</div><div style="font-size:12px;color:var(--text2);line-height:1.55;margin-top:6px">Master orchestrator. Creates workers, assigns projects, supervises handoffs, and closes the loop.</div></div>'
+            + '<div style="padding:16px;border:1px solid color-mix(in srgb,var(--accent) 24%, var(--border));border-radius:18px;background:color-mix(in srgb,var(--accent) 5%, var(--bg))"><div style="font-size:12px;font-weight:800;color:var(--text)">Porter</div><div style="font-size:12px;color:var(--text2);line-height:1.55;margin-top:6px">Master orchestrator. Creates workers, assigns projects, supervises handoffs, and closes the loop.</div></div>'
             + '<div style="display:flex;flex-direction:column;gap:10px">'
             + (projects.length ? projects.slice(0, 6).map(function(pr) {
                 var count = (pr.assigned_personas || []).length;
@@ -47847,7 +47848,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.34.10"})
+            self.reply_json({"v": "0.34.11"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -48009,7 +48010,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.34.10"
+                health["porter_version"] = "0.34.11"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -50427,7 +50428,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.10'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.11'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -54405,7 +54406,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.34.10"
+                _ws_health["porter_version"] = "0.34.11"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -57746,7 +57747,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.34.10 ready (localhost only)")
+    print(f"\n  Porter v0.34.11 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
