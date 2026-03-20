@@ -2869,6 +2869,29 @@ def _find_projects_file():
     return None
 
 
+def _project_is_private(project_id: str) -> bool:
+    """Check project privacy toggle — private projects block global memory injection."""
+    if not project_id:
+        return False
+    try:
+        conn = _db_conn()
+        row = conn.execute(
+            "SELECT metadata FROM projects WHERE id=?", (str(project_id),)
+        ).fetchone()
+        conn.close()
+        if row:
+            meta_raw = row['metadata'] if row['metadata'] else '{}'
+            if isinstance(meta_raw, str):
+                meta = json.loads(meta_raw)
+            else:
+                meta = meta_raw or {}
+            return bool(meta.get('private', False))
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed", str(_e),
+                  extra={"exc_type": type(_e).__name__, "fn": "_project_is_private"})
+    return False
+
+
 def _project_by_id(project_id: str | None) -> dict | None:
     """Load a project by ID from SQLite."""
     pid = str(project_id or "").strip()
@@ -3208,6 +3231,27 @@ def _mem_insert(memory_kind='signal', text='', scope='global', scope_id='', trus
         mlog.emit("info", "memory", "recall.learned",
                   f"Recall learned: {text[:60]}",
                   extra={"scope": scope, "kind": memory_kind})
+        # Cross-project promotion detection: if this is project-scoped,
+        # check if similar text exists in other project scopes
+        if scope_val == 'project' and sid:
+            try:
+                similar = _mem_search(text[:60], scope='project', kind=kind, limit=5)
+                other_projects = set()
+                for s in similar:
+                    if s.get('scope_id') and s['scope_id'] != sid:
+                        other_projects.add(s['scope_id'])
+                if len(other_projects) >= 1:  # Pattern in 2+ projects (this + at least 1 other)
+                    _emit_event("recall:cross_project_match", {
+                        "text": text[:120],
+                        "projects": list(other_projects)[:5],
+                        "suggestion": f"This pattern appears in {len(other_projects) + 1} projects — consider promoting to global"
+                    })
+                    mlog.emit("info", "memory", "recall.cross_project",
+                              f"Cross-project pattern detected: {text[:60]}",
+                              extra={"projects": len(other_projects) + 1})
+            except Exception as _e:
+                mlog.emit("warn", "memory", "exception.swallowed", str(_e),
+                          extra={"exc_type": type(_e).__name__, "fn": "_mem_insert.cross_project"})
         return new_id
     except Exception as e:
         log.warning("Memory insert failed: %s", e)
@@ -51788,6 +51832,39 @@ class Handler(BaseHTTPRequestHandler):
             _emit_event("memory:updated", {"kind": "project_note", "project_id": pid, "note_kind": note_kind})
             mlog.emit("info", "state", "project.note", f"Saved project note for {pid}", project_id=pid, note_kind=note_kind)
             self.reply_json({"ok": True, "project_id": pid, "note_kind": note_kind})
+
+        elif parsed.path.startswith("/api/projects/") and parsed.path.endswith("/privacy"):
+            # POST /api/projects/<id>/privacy  {"private": true|false}
+            if not self.auth_check(redirect=False): return
+            pid = parsed.path[len("/api/projects/"):-len("/privacy")]
+            if not pid:
+                self.reply_json({"ok": False, "error": "project_id required"}, 400); return
+            proj = _project_by_id(pid)
+            if not proj:
+                self.reply_json({"ok": False, "error": "project not found"}, 404); return
+            data = self.read_json_body() or {}
+            private_flag = bool(data.get("private", False))
+            try:
+                conn = _db_conn()
+                row = conn.execute("SELECT metadata FROM projects WHERE id=?", (pid,)).fetchone()
+                if row:
+                    meta_raw = row['metadata'] if row['metadata'] else '{}'
+                    meta = json.loads(meta_raw) if isinstance(meta_raw, str) else (meta_raw or {})
+                else:
+                    meta = {}
+                meta['private'] = private_flag
+                conn.execute("UPDATE projects SET metadata=? WHERE id=?", (json.dumps(meta), pid))
+                conn.commit()
+                conn.close()
+                mlog.emit("info", "memory", "scope.privacy_toggled",
+                          f"Project {pid} privacy set to {private_flag}",
+                          extra={"project_id": pid, "private": private_flag})
+                _emit_event("project:updated", {"project_id": pid, "private": private_flag})
+                self.reply_json({"ok": True, "private": private_flag})
+            except Exception as _e:
+                mlog.emit("warn", "system", "exception.swallowed", str(_e),
+                          extra={"exc_type": type(_e).__name__, "fn": "privacy_toggle"})
+                self.reply_json({"ok": False, "error": "Could not update privacy setting"}, 500)
 
         elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/state/notes"):
             if not self.auth_check(redirect=False): return
