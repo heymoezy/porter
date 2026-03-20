@@ -100,12 +100,13 @@ Plans:
   3. Every agent has a readable activity log — a user can see what each agent did, when it ran, and what it produced
   4. An ephemeral project-scoped agent auto-retires when the project is marked complete, leaving no orphaned jobs
   5. All autonomous features are controlled by config-level feature flags — disabling a flag stops execution within one polling cycle
-**Plans**: 5 plans
+**Plans**: 6 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Job table + scheduler: agent_jobs/agent_activity schema, services/scheduler.ts 2s poll, atomic pickup, job CRUD routes (Wave 1)
-- [ ] 04-02-PLAN.md — AI router: services/ai-router.ts, smart routing heuristic, openclaw dispatch, context compressor with tool-call boundary repair (Wave 1)
-- [ ] 04-03-PLAN.md — Event triggers: file-created, deadline-approaching, message-received with deduplication, wired to scheduler (Wave 2)
+- [ ] 04-00-PLAN.md — Wave 0 test scaffolding: 7 behavioral test scripts for AGNT-01 through AGNT-04 (Wave 0)
+- [ ] 04-01-PLAN.md — Job table + scheduler: agent_jobs/agent_activity schema, services/scheduler.ts 2s poll, atomic pickup, job CRUD routes — Task 2 split into 2a (scheduler.ts) and 2b (jobs.ts + wiring) (Wave 1)
+- [ ] 04-02-PLAN.md — AI router: config.ts gains ollamaUrl/openclawUrl/openclawToken, services/ai-router.ts smart routing, openclaw dispatch, context compressor (Wave 1)
+- [ ] 04-03-PLAN.md — Event triggers: file-created, deadline-approaching, message-received with deduplication, wired to scheduler tick and backend/src/routes/files.ts (Wave 2)
 - [ ] 04-04-PLAN.md — Activity log + AI router integration: per-agent activity feed API, scheduler dispatch via ai-router (Wave 2)
 - [ ] 04-05-PLAN.md — Ephemeral agents: project-scoped creation, depth=2 limit, auto-retire on project complete, feature flag verification (Wave 3)
 
@@ -184,7 +185,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation | 9/9 | Complete    | 2026-03-20 |
 | 2. Memory V2 | 8/8 | Complete   | 2026-03-20 |
 | 3. Route Migration | 5/5 | Complete   | 2026-03-20 |
-| 4. Agent Autonomy | 0/5 | Not started | - |
+| 4. Agent Autonomy | 0/6 | Not started | - |
 | 5. Guided Project Wizard | 0/7 | Not started | - |
 | 6. Real-Time and Transparency | 0/5 | Not started | - |
 | 7. External Connections | 0/8 | Not started | - |
