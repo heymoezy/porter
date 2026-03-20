@@ -40,7 +40,7 @@ Plans:
 - [ ] 01-01-PLAN.md — CSS variable architecture, dark/light theming, React sidebar cleanup (Wave 1)
 - [ ] 01-02-PLAN.md — Exception handling reform + SQLite connection pooling (Wave 1)
 - [ ] 01-03-PLAN.md — Admin system deletion + Cortex disable + dead code removal (Wave 2)
-- [ ] 01-04-PLAN.md — Fastify baseline: config, DB client, proxy plugin, projects schema (Wave 2)
+- [ ] 01-04-PLAN.md — Fastify baseline: config, DB client, proxy plugin, projects schema (Wave 1)
 - [ ] 01-05-PLAN.md — Projects migration from JSON to SQLite (Wave 3)
 - [ ] 01-06-PLAN.md — CSS audit sweep: 1,767 hardcoded colors to variables (Wave 3)
 - [ ] 01-07-PLAN.md — Boot sequence, hardcoding fixes, landing page, final verification (Wave 4)

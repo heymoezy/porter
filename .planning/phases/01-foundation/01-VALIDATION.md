@@ -38,17 +38,23 @@ created: 2026-03-20
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 01-01-01 | 01 | 1 | FOUND-01 | grep | `grep -c "except: pass" porter.py` (must return 0) | ✅ | ⬜ pending |
-| 01-01-02 | 01 | 1 | FOUND-01 | manual | Review mlog output during restart | manual-only | ⬜ pending |
-| 01-02-01 | 02 | 1 | FOUND-02 | integration | Run 10 concurrent curl requests, check for "database is locked" | ❌ W0 | ⬜ pending |
-| 01-03-01 | 03 | 2 | FOUND-03 | grep | `grep -c '"projects"' porter_config.json` (must return 0) | ✅ | ⬜ pending |
-| 01-03-02 | 03 | 2 | FOUND-03 | e2e | `npx playwright test --grep "Projects"` | ✅ | ⬜ pending |
-| 01-04-01 | 04 | 2 | FOUND-04 | grep | `grep -c "cortex_enabled\|_cortex_extract" porter.py` (must return 0) | ✅ | ⬜ pending |
-| 01-05-01 | 05 | 3 | FOUND-05 | manual | Fresh data dir, start porter.py, verify boot log | manual-only | ⬜ pending |
-| 01-06-01 | 06 | 3 | UI-01 | grep | `grep -cE '#[0-9a-fA-F]{6}' porter.py` (must return 0) | ✅ | ⬜ pending |
+| 01-01-01 | 01 | 1 | UI-02 | grep | `grep -c "neutral-" frontend/src/components/Sidebar.tsx` (must return 0) | ✅ | ⬜ pending |
+| 01-01-02 | 01 | 1 | UI-02 | grep | `grep -c "#f7931a" frontend/src/index.css` (must return 0) | ✅ | ⬜ pending |
+| 01-02-01 | 02 | 1 | FOUND-01 | grep | `grep -c "except: pass" porter.py` (must return 0) | ✅ | ⬜ pending |
+| 01-02-02 | 02 | 1 | FOUND-01 | manual | Review mlog output during restart | manual-only | ⬜ pending |
+| 01-02-03 | 02 | 1 | FOUND-02 | grep | `grep -q "threading.local" porter.py && grep -q "busy_timeout=30000" porter.py` | ✅ | ⬜ pending |
+| 01-02-04 | 02 | 1 | FOUND-02 | integration | `bash tests/concurrency.sh` (10 concurrent requests, zero lock errors) | ✅ | ⬜ pending |
+| 01-03-01 | 03 | 2 | FOUND-04 | grep | `grep -c "ROLE_CAPS\|auth_check_cap\|platform_admin" porter.py` (must return 0) | ✅ | ⬜ pending |
+| 01-03-02 | 03 | 2 | FOUND-04 | grep | `grep -c "cortex_enabled.*True" porter.py` (must return 0) | ✅ | ⬜ pending |
+| 01-04-01 | 04 | 1 | FOUND-03 | grep | `grep -q "export const projects" backend/src/db/schema.ts` | ✅ | ⬜ pending |
+| 01-04-02 | 04 | 1 | FOUND-03 | grep | `grep -q "config.porterPyUrl" backend/src/plugins/proxy.ts` | ✅ | ⬜ pending |
+| 01-05-01 | 05 | 3 | FOUND-03 | grep | `grep -c '_config\["projects"\]' porter.py` (must return 0) | ✅ | ⬜ pending |
+| 01-05-02 | 05 | 3 | FOUND-03 | e2e | `npx playwright test --grep "Projects"` | ✅ | ⬜ pending |
+| 01-06-01 | 06 | 3 | UI-01 | grep | `grep -cE '#[0-9a-fA-F]{6}' porter.py` (must be near 0) | ✅ | ⬜ pending |
 | 01-06-02 | 06 | 3 | UI-01 | e2e | `npx playwright test --grep "CSS"` | ✅ | ⬜ pending |
-| 01-07-01 | 07 | 3 | UI-02 | manual | Set `data-theme="light"`, visual inspection | ❌ W0 | ⬜ pending |
-| 01-07-02 | 07 | 3 | UI-02 | e2e | Full Playwright suite (dark mode) | ✅ | ⬜ pending |
+| 01-07-01 | 07 | 4 | FOUND-05 | grep | `grep -q "def _boot_sequence" porter.py` | ✅ | ⬜ pending |
+| 01-07-02 | 07 | 4 | UI-01 | manual | Set `data-theme="light"`, visual inspection | ❌ W0 | ⬜ pending |
+| 01-07-03 | 07 | 4 | UI-02 | e2e | Full Playwright suite (dark + light mode) | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -56,10 +62,11 @@ created: 2026-03-20
 
 ## Wave 0 Requirements
 
-- [ ] `tests/concurrency.sh` — bash script firing 10 concurrent curl requests, checks for "database is locked" in logs; covers FOUND-02
+- [x] `tests/concurrency.sh` — bash script firing 10 concurrent curl requests, checks for "database is locked" in logs; covers FOUND-02 (added to Plan 02 Task 3)
 - [ ] Light mode visual smoke — no automated test exists; manual inspection required post-implementation
 
 *Existing Playwright infrastructure covers FOUND-01, FOUND-03, FOUND-04, UI-01, UI-02 (dark mode).*
+*Plan 02 Task 3 now creates tests/concurrency.sh, closing the FOUND-02 Wave 0 gap.*
 
 ---
 
