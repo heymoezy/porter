@@ -34,16 +34,16 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. All Porter views pass a visual consistency check — no mismatched fonts, inconsistent spacing, or broken component styles
   6. Dark mode and light mode both render correctly across all views — no hard-coded colors, all values use CSS variables
   7. Boot sequence detects, installs, and configures all dependencies — a fresh machine can run Porter after completing the first-run wizard
-**Plans**: TBD
+**Plans**: 7 plans
 
 Plans:
-- [ ] 01-01: Exception handling — replace all broad catches and bare `except: pass` with specific types and mlog.exception()
-- [ ] 01-02: SQLite concurrency — threading.local() pooling, 30s timeout, exponential backoff on OperationalError
-- [ ] 01-03: Projects to DB — Drizzle schema, one-time migration from porter_config.json to SQLite projects table
-- [ ] 01-04: Fastify baseline — db/client.ts, plugins/auth.ts, plugins/proxy.ts, config.ts, feature flag skeleton
-- [ ] 01-05: CSS audit — consolidate styles across all views, remove regressions, document component tokens
-- [ ] 01-06: Dark/light mode — proper theming with consistent CSS variables, clean toggle, no broken views in either mode
-- [ ] 01-07: Boot sequence — startup provisioning (detect → install → prompt → verify → badge), first-run wizard, directory structure setup
+- [ ] 01-01-PLAN.md — CSS variable architecture, dark/light theming, React sidebar cleanup (Wave 1)
+- [ ] 01-02-PLAN.md — Exception handling reform + SQLite connection pooling (Wave 1)
+- [ ] 01-03-PLAN.md — Admin system deletion + Cortex disable + dead code removal (Wave 2)
+- [ ] 01-04-PLAN.md — Fastify baseline: config, DB client, proxy plugin, projects schema (Wave 2)
+- [ ] 01-05-PLAN.md — Projects migration from JSON to SQLite (Wave 3)
+- [ ] 01-06-PLAN.md — CSS audit sweep: 1,767 hardcoded colors to variables (Wave 3)
+- [ ] 01-07-PLAN.md — Boot sequence, hardcoding fixes, landing page, final verification (Wave 4)
 
 ### Phase 2: Memory V2
 **Goal**: Memory V2 is the only active memory system — Cortex is deleted, signals are clean, and the memory feed is visible in real time
@@ -174,7 +174,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/7 | Not started | - |
+| 1. Foundation | 0/7 | Planning complete | - |
 | 2. Memory V2 | 0/5 | Not started | - |
 | 3. Route Migration | 0/5 | Not started | - |
 | 4. Agent Autonomy | 0/6 | Not started | - |
