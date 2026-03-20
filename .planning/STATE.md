@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 01-foundation-01-01-PLAN.md
-last_updated: "2026-03-20T10:53:11.718Z"
+stopped_at: Completed 01-foundation-01-04-PLAN.md
+last_updated: "2026-03-20T10:55:34.019Z"
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 7
-  completed_plans: 1
+  completed_plans: 3
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 ## Current Position
 
 Phase: 01 (foundation) — EXECUTING
-Plan: 1 of 7
+Plan: 4 of 7
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Plan: 1 of 7
 
 *Updated after each plan completion*
 | Phase 01-foundation P01 | 3 | 2 tasks | 4 files |
+| Phase 01-foundation P04 | 5 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -62,6 +63,9 @@ Recent decisions affecting current work:
 - [Phase 01-foundation]: :root as single source of truth for CSS variables; @theme reads via var() to eliminate duplication
 - [Phase 01-foundation]: Three-state theme toggle (system/dark/light) with porter_theme localStorage key and data-theme on <html>
 - [Phase 01-foundation]: Admin tab removed from Sidebar (admin system deletion locked decision)
+- [Phase 01-foundation]: backend/ removed from .gitignore — TypeScript backend source now tracked; dist/ and node_modules/ excluded
+- [Phase 01-foundation]: db/client.ts exports both db (Drizzle) and sqlite (raw) — migration scripts need raw instance for one-shot migrations
+- [Phase 01-foundation]: Proxy plugin registered last in Fastify — all named routes take priority, proxy is fallback of last resort to porter.py
 
 ### Pending Todos
 
@@ -76,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T10:53:11.716Z
-Stopped at: Completed 01-foundation-01-01-PLAN.md
+Last session: 2026-03-20T10:55:34.016Z
+Stopped at: Completed 01-foundation-01-04-PLAN.md
 Resume file: None
