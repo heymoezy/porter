@@ -53,7 +53,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Performance
 
 - [ ] **PERF-01**: System prompt audit — cap interactive prompts at 2K tokens, eliminate bloat causing slowness
-- [ ] **PERF-02**: Core route migration to Fastify (auth, projects, agents) via strangler fig proxy
+- [x] **PERF-02**: Core route migration to Fastify (auth, projects, agents) via strangler fig proxy
 - [ ] **PERF-03**: SSE real-time hub replacing polling with server-sent events for live updates
 
 ### UI Quality
@@ -104,7 +104,7 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | MEM-03 | Phase 2 | Complete |
 | MEM-04 | Phase 2 | Complete |
 | PERF-01 | Phase 3 | Pending |
-| PERF-02 | Phase 3 | Pending |
+| PERF-02 | Phase 3 | Complete |
 | AGNT-01 | Phase 4 | Pending |
 | AGNT-02 | Phase 4 | Pending |
 | AGNT-03 | Phase 4 | Pending |
