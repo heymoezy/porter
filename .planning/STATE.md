@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 02-memory-v2/02-04-PLAN.md
-last_updated: "2026-03-20T16:32:24.038Z"
+stopped_at: Completed 02-memory-v2/02-05-PLAN.md
+last_updated: "2026-03-20T16:43:28.762Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 14
+  completed_plans: 15
 ---
 
 # Project State
@@ -60,6 +60,7 @@ Plan: 2 of 8
 | Phase 02-memory-v2 P02 | 22min | 2 tasks | 1 files |
 | Phase 02-memory-v2 P03 | 5min | 2 tasks | 1 files |
 | Phase 02-memory-v2 P04 | 6min | 2 tasks | 1 files |
+| Phase 02-memory-v2 P05 | 8min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,9 @@ Recent decisions affecting current work:
 - [Phase 02-memory-v2]: unread_count in /api/memory/stats uses recall_last_read float preference — no extra table needed for badge count
 - [Phase 02-memory-v2]: Scope filter and auto-manage listeners use _wired flag on DOM element to prevent duplicate addEventListener on re-renders
 - [Phase 02-memory-v2]: _recallFeedPrepend fires for all recall:event SSE types but badge only increments when _currentModule !== memory
+- [Phase 02-memory-v2]: _recall_chat_command intercepts before SSE headers — clean early-return before AI dispatch committed
+- [Phase 02-memory-v2]: remember/forget/recall chat commands bypass AI backend entirely — instant SSE response via Recall
+- [Phase 02-memory-v2]: _recall_prior_work appended to _build_context_suffix memory block — MEM-04 prior work injection in every dispatch
 
 ### Pending Todos
 
@@ -124,6 +128,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T16:32:24.035Z
-Stopped at: Completed 02-memory-v2/02-04-PLAN.md
+Last session: 2026-03-20T16:43:28.758Z
+Stopped at: Completed 02-memory-v2/02-05-PLAN.md
 Resume file: None
