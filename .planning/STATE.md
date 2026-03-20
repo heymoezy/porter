@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 01-foundation-01-04-PLAN.md
-last_updated: "2026-03-20T10:55:34.019Z"
+stopped_at: Completed 01-foundation-01-02-PLAN.md
+last_updated: "2026-03-20T10:56:21.182Z"
 progress:
   total_phases: 7
   completed_phases: 0
@@ -48,6 +48,7 @@ Plan: 4 of 7
 *Updated after each plan completion*
 | Phase 01-foundation P01 | 3 | 2 tasks | 4 files |
 | Phase 01-foundation P04 | 5 | 2 tasks | 9 files |
+| Phase 01-foundation P02 | 6min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,9 @@ Recent decisions affecting current work:
 - [Phase 01-foundation]: backend/ removed from .gitignore — TypeScript backend source now tracked; dist/ and node_modules/ excluded
 - [Phase 01-foundation]: db/client.ts exports both db (Drizzle) and sqlite (raw) — migration scripts need raw instance for one-shot migrations
 - [Phase 01-foundation]: Proxy plugin registered last in Fastify — all named routes take priority, proxy is fallback of last resort to porter.py
+- [Phase 01-foundation]: All except blocks must call mlog.emit() with severity, domain, event_type — no silent swallowers
+- [Phase 01-foundation]: Per-thread SQLite pool via threading.local() — 30s timeout, busy_timeout=30000, stale connection detection
+- [Phase 01-foundation]: _db_retry() available for call sites needing locked-DB retry — not wired in universally, adoption is incremental
 
 ### Pending Todos
 
@@ -80,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T10:55:34.016Z
-Stopped at: Completed 01-foundation-01-04-PLAN.md
+Last session: 2026-03-20T10:56:21.180Z
+Stopped at: Completed 01-foundation-01-02-PLAN.md
 Resume file: None

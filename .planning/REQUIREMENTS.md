@@ -9,8 +9,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Foundation
 
-- [ ] **FOUND-01**: Replace broad exception catches with specific types + structured logging across porter.py
-- [ ] **FOUND-02**: Implement SQLite connection pooling with busy_timeout and retry logic for concurrent agent access
+- [x] **FOUND-01**: Replace broad exception catches with specific types + structured logging across porter.py
+- [x] **FOUND-02**: Implement SQLite connection pooling with busy_timeout and retry logic for concurrent agent access
 - [x] **FOUND-03**: Migrate projects from config JSON to SQLite table with full query capability
 - [ ] **FOUND-04**: Remove all deprecated Cortex code and hard cutover to Memory V2
 - [ ] **FOUND-05**: Boot sequence — detects missing dependencies, installs/configures what it can, prompts for API keys and external credentials, organizes directory structure, verifies everything works before starting, badges unavailable features
@@ -91,8 +91,8 @@ Deferred to future milestone. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | Phase 1 | Pending |
-| FOUND-02 | Phase 1 | Pending |
+| FOUND-01 | Phase 1 | Complete |
+| FOUND-02 | Phase 1 | Complete |
 | FOUND-03 | Phase 1 | Complete |
 | FOUND-04 | Phase 1 | Pending |
 | FOUND-05 | Phase 1 | Pending |
