@@ -14038,6 +14038,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .chat-msg.assistant { white-space:normal; }
 .chat-msg p { margin:0 0 8px 0; }
+.recall-noted { font-size:11px; color:var(--text3); padding:4px 0 0 0; display:flex; align-items:center; gap:4px; opacity:0.7; transition:opacity 0.3s ease; }
+.recall-noted:hover { opacity:1 !important; }
 
 
 /* Rules */
@@ -17560,6 +17562,13 @@ var _fhomeInitDone = false;
 // ── helpers ──
 function enc(s) { return encodeURIComponent(s); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _appendRecallIndicator(msgEl, preview) {
+  if (!msgEl) return;
+  var ind = document.createElement('div');
+  ind.className = 'recall-noted';
+  ind.innerHTML = '<span style="opacity:.6">\u2728</span> Recall noted: ' + escHtml(String(preview || '').slice(0, 80));
+  msgEl.appendChild(ind);
+}
 function escJs(s) { return String(s == null ? '' : s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,''); }
 window._runtimeUpdateState = window._runtimeUpdateState || {};
 function _inferRuntimeFromCommand(cmd) {
@@ -37185,6 +37194,22 @@ function _sseUnsubscribe(id) {
     _sseBus = null;
   }
 }
+// Recall SSE: append inline indicator to last assistant message when Porter learns
+(function() {
+  _sseSubscribe(function(d) {
+    if (!d || d.type !== 'recall:event') return;
+    if (!d.data || d.data.action !== 'learned') return;
+    var chatEl = document.getElementById('chat-messages');
+    if (!chatEl) return;
+    // Find last assistant message element
+    var msgs = chatEl.querySelectorAll('.chat-msg.assistant');
+    if (!msgs.length) return;
+    var last = msgs[msgs.length - 1];
+    // Don't append if already has a recall indicator
+    if (last.querySelector('.recall-noted')) return;
+    _appendRecallIndicator(last, d.data.text || '');
+  });
+})();
 
 function _scheduleOverviewRefresh(delayMs) {
   if (_currentModule !== 'overview') return;
