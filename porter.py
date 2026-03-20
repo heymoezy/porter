@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.34.9 — Remove orange chat input borders, kill files accordion animation"""
+"""Porter v0.34.10 — Remove orange from agent + project chat composer borders"""
 
 
 import email
@@ -14632,9 +14632,9 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
   gap:10px;
   align-items:flex-end;
   padding:10px 12px;
-  border:1px solid color-mix(in srgb,var(--warning) 36%, var(--border));
+  border:1px solid color-mix(in srgb,var(--accent) 28%, var(--border));
   border-radius:22px;
-  background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%, transparent),color-mix(in srgb,var(--warning) 4%, var(--bg)));
+  background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%, transparent),color-mix(in srgb,var(--accent) 3%, var(--bg)));
   box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
 }
 .pd-chat-input {
@@ -14828,8 +14828,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .pd-chat-attachment-remove:hover { color:var(--danger); }
 .pd-chat-shell.drag-over .pd-chat-composer,
 .pd-chat-shell.drag-over #pd-chat-thread {
-  border-color:color-mix(in srgb,var(--warning) 34%, var(--border));
-  box-shadow:0 0 0 2px color-mix(in srgb,var(--warning) 15%, transparent);
+  border-color:color-mix(in srgb,var(--accent) 34%, var(--border));
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 15%, transparent);
 }
 .project-detail-active .slash-hint { display:none !important; }
 #projects-list-view { min-height:0; flex:1 1 auto; overflow:auto; }
@@ -16570,12 +16570,12 @@ body.density-compact .file-name { padding: 6px 0; }
 .proj-chat-working.active { display:flex; }
 .proj-chat-working-dot { width:8px; height:8px; border-radius:50%; background:var(--warning); box-shadow:0 0 0 0 rgba(245,158,11,.5); animation:proj-working-pulse 1.2s ease-out infinite; }
 @keyframes proj-working-pulse { 0% { box-shadow:0 0 0 0 rgba(245,158,11,.45); opacity:1; } 100% { box-shadow:0 0 0 10px rgba(245,158,11,0); opacity:.7; } }
-.proj-chat-hint { display:none; align-items:center; gap:8px; margin:0 0 10px; padding:8px 10px; border-radius:12px; background:color-mix(in srgb,var(--warning) 10%, transparent); border:1px solid color-mix(in srgb,var(--warning) 24%, var(--border)); color:var(--text2); font-size:11px; }
+.proj-chat-hint { display:none; align-items:center; gap:8px; margin:0 0 10px; padding:8px 10px; border-radius:12px; background:color-mix(in srgb,var(--accent) 8%, transparent); border:1px solid color-mix(in srgb,var(--accent) 20%, var(--border)); color:var(--text2); font-size:11px; }
 .proj-chat-hint.active { display:flex; animation:proj-chat-hint-in .28s ease, proj-chat-hint-glow 1.4s ease-out 1; }
 .proj-chat-hint-dot { width:8px; height:8px; border-radius:50%; background:var(--warning); flex-shrink:0; box-shadow:0 0 0 0 rgba(245,158,11,.45); animation:proj-working-pulse 1.2s ease-out infinite; }
 @keyframes proj-chat-hint-in { 0% { opacity:0; transform:translateY(4px); } 100% { opacity:1; transform:translateY(0); } }
 @keyframes proj-chat-hint-glow { 0% { box-shadow:0 0 0 0 rgba(245,158,11,.22); } 100% { box-shadow:0 0 0 12px rgba(245,158,11,0); } }
-.proj-chat-composer { display:flex; align-items:flex-end; gap:10px; padding:10px 12px; border:1px solid color-mix(in srgb,var(--warning) 36%, var(--border)); border-radius:22px; background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%, transparent),color-mix(in srgb,var(--warning) 4%, var(--bg))); box-shadow:inset 0 1px 0 rgba(255,255,255,.04); }
+.proj-chat-composer { display:flex; align-items:flex-end; gap:10px; padding:10px 12px; border:1px solid color-mix(in srgb,var(--accent) 28%, var(--border)); border-radius:22px; background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 98%, transparent),color-mix(in srgb,var(--accent) 3%, var(--bg))); box-shadow:inset 0 1px 0 rgba(255,255,255,.04); }
 .proj-chat-composer.pulse { animation:proj-chat-composer-pulse .7s ease; }
 @keyframes proj-chat-composer-pulse {
   0% { box-shadow:0 0 0 0 rgba(245,158,11,.18), inset 0 1px 0 rgba(255,255,255,.04); }
@@ -17530,7 +17530,7 @@ select::-ms-expand { display: none; }
     <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.9</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.10</div>
   </div>
 </aside>
 
@@ -18634,6 +18634,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.34.10', date:'2026-03-20', notes:['Agent detail + project chat composer borders changed from --warning (orange) to --accent (indigo). Drag-over and chat hints also updated.'] },
   { ver:'v0.34.9', date:'2026-03-20', notes:['Chat input focus borders changed from orange rgba(247,147,26) to var(--accent). Files accordion staggered animation removed — instant expand/collapse.'] },
   { ver:'v0.34.8', date:'2026-03-20', notes:['Favicon changed from orange to indigo. Nav counter badge orange→indigo. Sign-in button hover darkened. Model card warn chips recolored to accent blue.'] },
   { ver:'v0.33.28', date:'2026-03-20', notes:['Phase 1 Foundation complete: CSS variable architecture with dark/light theming, exception handling reform (155 silent swallowers fixed), SQLite project migration, admin system deletion, Cortex disabled, Fastify backend skeleton, boot sequence, clean landing page.'] },
@@ -47846,7 +47847,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.34.9"})
+            self.reply_json({"v": "0.34.10"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -48008,7 +48009,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.34.9"
+                health["porter_version"] = "0.34.10"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -50426,7 +50427,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.9'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.10'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -54404,7 +54405,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.34.9"
+                _ws_health["porter_version"] = "0.34.10"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -57745,7 +57746,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.34.9 ready (localhost only)")
+    print(f"\n  Porter v0.34.10 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
