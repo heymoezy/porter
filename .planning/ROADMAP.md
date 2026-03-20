@@ -66,6 +66,8 @@ Plans:
 - [ ] 02-04: Scoping enforcement — global/project/agent scope implementation with isolation tests
 - [ ] 02-05: Memory feed UI — real-time panel showing memory changes as they happen
 - [ ] 02-06: FTS5 session search — SQLite full-text search over past agent sessions, boolean queries, role/source filters (ref: hermes-agent)
+- [ ] 02-07: Agent writing styles — per-agent voice definition (anti-patterns, sentence preferences, signature moves), folded into identity system (ref: every.to/guides/ai-style-guide)
+- [ ] 02-08: Interaction feedback loop — track which prompts/approaches produced good outcomes, surface as context in future runs (concept borrowed from OpenClaw-RL async RL architecture — no model training, just outcome-aware context injection)
 
 ### Phase 3: Route Migration
 **Goal**: Auth, projects, and agents are fully owned by Fastify — porter.py no longer handles these routes, and all 35 Playwright tests pass without modification
@@ -126,6 +128,7 @@ Plans:
 - [ ] 05-04: Project dashboard — progress view, active agents panel, activity feed, next steps
 - [ ] 05-05: Token budget enforcement — interactive wizard calls hard-capped at 2,000 tokens system context
 - [ ] 05-06: GSD plan mode — chat toggle between free chat and structured planning (question → research → plan → execute), persistent mode state
+- [ ] 05-07: Voice output (KittenTTS) — ONNX-based TTS, CPU-only, 8 voices mapped to agents, audio playback for summaries/status updates (ref: github.com/KittenML/KittenTTS, 15-80MB models)
 
 ### Phase 6: Real-Time and Transparency
 **Goal**: All live updates flow through SSE push instead of polling, and users have full visibility into what agents are doing, why Porter made each decision, and the health of every connected service
@@ -178,9 +181,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 9/9 | Complete    | 2026-03-20 |
-| 2. Memory V2 | 0/6 | Not started | - |
+| 2. Memory V2 | 0/8 | Not started | - |
 | 3. Route Migration | 0/5 | Not started | - |
 | 4. Agent Autonomy | 0/6 | Not started | - |
-| 5. Guided Project Wizard | 0/6 | Not started | - |
+| 5. Guided Project Wizard | 0/7 | Not started | - |
 | 6. Real-Time and Transparency | 0/5 | Not started | - |
 | 7. External Connections | 0/8 | Not started | - |
