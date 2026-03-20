@@ -89,6 +89,37 @@ export const projects = sqliteTable('projects', {
   updatedAt: real('updated_at').default(sql`(strftime('%s','now'))`),
 });
 
+export const personas = sqliteTable('personas', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  role: text('role').default(''),
+  avatar: text('avatar').default(''),
+  preferredBackend: text('preferred_backend'),
+  fallbackBackends: text('fallback_backends').default('[]'),
+  status: text('status').default('idle'),
+  soulHash: text('soul_hash').default(''),
+  agentGroup: text('agent_group').default(''),
+  createdAt: text('created_at').notNull(),
+  lastActive: text('last_active'),
+  config: text('config').default('{}'),
+  sortOrder: integer('sort_order').default(50),
+  owner: text('owner').default(''),
+  isSystem: integer('is_system').default(0),
+  isPublic: integer('is_public').default(1),
+  isLocked: integer('is_locked').default(0),
+  isMaster: integer('is_master').default(0),
+  orchestratorOnly: integer('orchestrator_only').default(0),
+  isTemporary: integer('is_temporary').default(0),
+  managedByPorter: integer('managed_by_porter').default(0),
+  appearanceStyle: text('appearance_style').default(''),
+  appearanceSpec: text('appearance_spec').default('{}'),
+  skinAssetPath: text('skin_asset_path').default(''),
+  portraitAssetPath: text('portrait_asset_path').default(''),
+  heartbeatEnabled: integer('heartbeat_enabled').default(0),
+  heartbeatCron: text('heartbeat_cron').default(''),
+  lastHeartbeat: text('last_heartbeat'),
+});
+
 export const schemaMigrations = sqliteTable('schema_migrations', {
   id: text('id').primaryKey(),
   appliedAt: real('applied_at').default(sql`(strftime('%s','now'))`),
