@@ -97,11 +97,7 @@ DEFAULT_PREFERENCES: dict = {
     "density":             "normal",
     "editor_font_size":    12,
     "policy_preset":       "balanced",
-    "cortex_enabled":           False,   # v0.31.63 — Retired: State Engine (directives) replaces cortex
-    "cortex_min_response_len":  100,
-    "cortex_max_facts":         5,
-    "cortex_inject_limit":      5,
-    "cortex_consolidate_hours": 6,
+    "cortex_enabled":           False,   # DISABLED: Cortex removed in Phase 1, full deletion in Phase 2
     "memory_auto_extract":      False,
 
     # Context Hygiene
@@ -237,11 +233,12 @@ def _run_if_due(wf_id, fn):
     return True
 
 # Register 6 system workflows
-_wf_register("cortex_consolidation", "Cortex Consolidation",
-    "Merges similar memories and archives stale ones",
-    interval="6h", interval_s=6*3600,
-    exposed=False,
-    )
+# DISABLED: Cortex removed in Phase 1
+# _wf_register("cortex_consolidation", "Cortex Consolidation",
+#     "Merges similar memories and archives stale ones",
+#     interval="6h", interval_s=6*3600,
+#     exposed=False,
+#     )
 _wf_register("context_hygiene", "Context Hygiene",
     "Prunes old logs, caps soul files, archives stale memories",
     interval="12h", interval_s=12*3600,
@@ -255,11 +252,12 @@ _wf_register("heartbeat", "Heartbeat",
 _wf_register("telemetry_rollup", "Telemetry Rollup",
     "Aggregates agent telemetry hourly and daily",
     interval="1h", interval_s=3600)
-_wf_register("memory_extraction", "Memory Extraction",
-    "Internal legacy extractor retained only for compatibility while structured state replaces cortex-era memory",
-    interval="per-response", interval_s=0,
-    exposed=False,
-    )
+# DISABLED: Cortex removed in Phase 1
+# _wf_register("memory_extraction", "Memory Extraction",
+#     "Internal legacy extractor retained only for compatibility while structured state replaces cortex-era memory",
+#     interval="per-response", interval_s=0,
+#     exposed=False,
+#     )
 
 _wf_register("agent_watchdog", "Agent Watchdog",
     "Auto-detects stalled agents and orchestration steps, validates responses, reboots failures",
@@ -1037,9 +1035,10 @@ def _db_init():
             _soul = _pdir / "SOUL.md"
             if not _soul.exists():
                 _soul.write_text(f"# {_pname}\n\nRole: {_ag.get('role', 'general')}\nBackend: {_backend}\n")
-            _mem = _pdir / "MEMORY.md"
-            if not _mem.exists():
-                _mem.write_text(f"# {_pname} — Memory\n\nLong-term memories for {_pname}.\n")
+            # MEMORY.md creation disabled: Cortex removed in Phase 1
+            # _mem = _pdir / "MEMORY.md"
+            # if not _mem.exists():
+            #     _mem.write_text(f"# {_pname} — Memory\n\nLong-term memories for {_pname}.\n")
             _hb = _pdir / "heartbeat.md"
             if not _hb.exists():
                 _hb.write_text("")
@@ -1937,6 +1936,7 @@ def _cortex_distill_session(session_id, task_desc, model_info, msg_count, outcom
 
 def _cortex_extract_and_route(message, response_text, persona_id="", backend="", project_id="", task_id=""):
     """Extract facts from a dispatch response and route to memory. Runs in background thread."""
+    return  # DISABLED: Cortex removed in Phase 1, full deletion in Phase 2
     import time as _ext_t
     # Guard against circular extraction
     if getattr(_CORTEX_EXTRACT_GUARD, 'active', False):
@@ -1954,6 +1954,7 @@ def _cortex_extract_and_route(message, response_text, persona_id="", backend="",
 
 def _cortex_extract_and_route_inner(message, response_text, persona_id="", backend="", project_id="", task_id=""):
     """Inner extraction logic."""
+    return  # DISABLED: Cortex removed in Phase 1, full deletion in Phase 2
     prefs = _config.get("preferences", {})
     if not prefs.get("cortex_enabled", True):
         return
@@ -2222,6 +2223,7 @@ def _cortex_batch_extract(limit=20):
 
 def _cortex_consolidate_once():
     """Run one cortex consolidation pass. Returns summary string."""
+    return "DISABLED: Cortex removed in Phase 1"  # DISABLED: full deletion in Phase 2
     import time as _t
     prefs = _config.get("preferences", {})
     conn = _db_conn()
@@ -2910,6 +2912,7 @@ def _mem_inject_for_dispatch(message, persona_id='', project_id='', run_id=''):
 def _mem_extract_signals(message, response, persona_id='', project_id='', run_id=''):
     """Memory V2: extract signals from dispatch response.
     Lightweight keyword-based extraction — no LLM call needed."""
+    return 0  # DISABLED: Cortex removed in Phase 1, full deletion in Phase 2
     if not response or len(response) < 50:
         return 0
     import re as _re
