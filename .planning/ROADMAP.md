@@ -70,23 +70,25 @@ Plans:
 - [ ] 02-07-PLAN.md — Feedback tracking, agent evolution trigger, respawn animation (Wave 4)
 
 ### Phase 3: Route Migration
-**Goal**: Auth, projects, and agents are fully owned by Fastify — porter.py no longer handles these routes, and all 35 Playwright tests pass without modification
+**Goal**: Auth, projects, and agents are fully owned by Fastify — porter.py handlers are deprecated, system prompts are razor-thin, design system tokens established, React login/register pages built, and all 35 Playwright tests pass
 **Depends on**: Phase 1, Phase 2
 **Requirements**: PERF-01, PERF-02
 **Success Criteria** (what must be TRUE):
-  1. Logging in and out works end-to-end through Fastify — porter.py login/logout handlers are deleted
-  2. Creating, reading, updating, and deleting a project goes through Fastify routes backed by the SQLite projects table
-  3. Agent CRUD (create, list, update, retire) is served by Fastify — porter.py agent handlers are deleted
-  4. All 35 Playwright tests pass with Fastify as the primary backend
-  5. Interactive system prompts at login/project-load are measured and capped at 2,000 tokens — no route exceeds this
-**Plans**: TBD
+  1. System prompts are 200-300 tokens (identity + guardrails only) — _build_lean_identity() replaces _build_context_suffix()
+  2. Fastify owns /api/v1/auth/*, /api/v1/projects/*, /api/v1/agents/* with response envelope and request tracing
+  3. All v1 routes use shared db/client.ts with WAL and busy_timeout — no per-route Database instantiation
+  4. Design system tokens (TypeScript + CSS) established for all new React components
+  5. React login page feels alive with motion and energy — React Router handles /login, /register, /* routes
+  6. Frontend API client points to /api/v1/* paths
+  7. All 35 Playwright tests pass throughout
+**Plans**: 5 plans
 
 Plans:
-- [ ] 03-01: System prompt audit — measure all interactive prompts, cap at 2K tokens, eliminate bloat
-- [ ] 03-02: Auth routes — /login, /logout, /api/me migrated to Fastify with session middleware
-- [ ] 03-03: Projects routes — /api/projects/* migrated, dual-write flag active then disabled
-- [ ] 03-04: Agents routes — /api/agents/* migrated, CRUD endpoints operational in Fastify
-- [ ] 03-05: Playwright regression pass — all 35 tests green after each route handoff
+- [ ] 03-01-PLAN.md — System prompt overhaul: _build_lean_identity(), circuit breaker, awareness toggle (Wave 1)
+- [ ] 03-02-PLAN.md — API v1 infrastructure: response envelope, auth plugin, logger, auth routes (Wave 1)
+- [ ] 03-03-PLAN.md — Projects + agents route migration to /api/v1/* with Drizzle schemas (Wave 2)
+- [ ] 03-04-PLAN.md — Design system tokens + React Router + login/register pages with motion (Wave 2)
+- [ ] 03-05-PLAN.md — Frontend API cutover + Fastify SPA serving + legacy handler deprecation (Wave 3)
 
 ### Phase 4: Agent Autonomy
 **Goal**: Agents do scheduled and event-triggered work autonomously, report what they did, and can be scoped to a single project and auto-retired
