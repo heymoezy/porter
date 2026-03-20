@@ -18,7 +18,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ Chat with streaming responses (SSE) — existing
 - ✓ Project CRUD with milestones, tasks, artifacts — existing
 - ✓ Agent/Persona system with templates and identity — existing
-- ✓ Memory system (directives, concepts, signals — V2 migration started) — existing
+- ✓ Memory V2 system (4-layer: directives, concepts, episodes, signals — complete) — Validated in Phase 2: memory-v2
 - ✓ Background workflow system (7 registered workflows) — existing
 - ✓ File management with upload, serve, path traversal protection — existing
 - ✓ Connections infrastructure (3-table model) — existing
@@ -39,7 +39,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - [ ] Unified global chat (all conversations in one interface — agents, projects, external)
 - [ ] WhatsApp integration (bidirectional, agent-specific chat, group chats via WhatsApp)
 - [ ] Connections (GitHub, Mail, Calendar at account-level defaults + project-level overrides)
-- [ ] Memory V2 completion (structured, noise-free, real-time visibility, no signal noise from logins/uploads)
+- ✓ Memory V2 completion (structured, noise-free, real-time visibility, no signal noise from logins/uploads) — Validated in Phase 2: memory-v2
 - [ ] Transparency dashboard (agent activity, memory changes, system health, decision log — all visible)
 - [ ] Performance overhaul (fast page loads, responsive chat, eliminate heavy system prompts)
 - [ ] Codebase migration (gradual move from porter.py monolith to Fastify backend, new features in TypeScript)
@@ -59,7 +59,7 @@ Porter has been in development since Feb 18, 2026. Current version is v0.33.28. 
 
 - 683 broad exception catches masking real errors
 - Duplicate function definitions (3 functions defined twice)
-- Deprecated Cortex memory system still partially active alongside Memory V2
+- ~~Deprecated Cortex memory system~~ — fully removed in Phase 2 (194KB deleted)
 - No connection pooling, 5-second SQLite timeout under concurrent load
 - Global mutable state (_sessions, _login_attempts, _wf_registry, _config)
 - Projects stored in JSON config file instead of database
