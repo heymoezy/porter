@@ -110,6 +110,24 @@ DEFAULT_PREFERENCES: dict = {
     "hygiene_max_augmented_chars":  8000,
 }
 
+# ── Porter Recall — Noise Blacklist ──────────────────────────────────────────
+RECALL_NOISE_BLACKLIST = frozenset({
+    # Auth actions
+    "login", "logout", "password_change", "session_refresh", "registration",
+    # File operations
+    "file_upload", "file_download", "file_browse", "file_delete", "file_rename", "folder_create",
+    # Navigation
+    "tab_switch", "page_load", "accordion_toggle", "search_query",
+    # System/health
+    "health_check", "version_query", "boot_event", "capability_detect",
+})
+
+def _recall_should_extract(source_category: str) -> bool:
+    """Return True only if this action type should produce Recall signals."""
+    return source_category not in RECALL_NOISE_BLACKLIST
+
+
+
 # ── Context Hygiene ────────────────────────────────────────────────────────
 _hygiene_stats: dict = {
     "last_run": None,
@@ -2362,10 +2380,12 @@ def _mem_inject_for_dispatch(message, persona_id='', project_id='', run_id=''):
     return block, injected_ids
 
 
-def _mem_extract_signals(message, response, persona_id='', project_id='', run_id=''):
+def _mem_extract_signals(message, response, persona_id='', project_id='', run_id='', source_category=''):
     """Memory V2: extract signals from dispatch response.
     Lightweight keyword-based extraction — no LLM call needed."""
-    return 0  # DISABLED: Cortex removed in Phase 1, full deletion in Phase 2
+    # Noise filter — block signal extraction for non-learning actions
+    if not _recall_should_extract(source_category if source_category else 'chat'):
+        return 0
     if not response or len(response) < 50:
         return 0
     import re as _re
@@ -3114,6 +3134,20 @@ def _mem_insert(memory_kind='signal', text='', scope='global', scope_id='', trus
         new_id = cur.lastrowid
         conn.commit()
         conn.close()
+        try:
+            _emit_event("recall:event", {
+                "action": "learned",
+                "text": text[:120],
+                "memory_kind": memory_kind,
+                "scope": scope,
+                "scope_id": scope_id,
+                "ts": __import__("time").time()
+            })
+        except Exception:
+            pass  # SSE emit failure must never break memory insert
+        mlog.emit("info", "memory", "recall.learned",
+                  f"Recall learned: {text[:60]}",
+                  extra={"scope": scope, "kind": memory_kind})
         return new_id
     except Exception as e:
         log.warning("Memory insert failed: %s", e)
@@ -42487,7 +42521,7 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
         _mem_run = run_id
         def _mem_bg():
             try:
-                _mem_extract_signals(_mem_msg, _mem_resp, _mem_pid, _mem_project, _mem_run)
+                _mem_extract_signals(_mem_msg, _mem_resp, _mem_pid, _mem_project, _mem_run, source_category='chat')
             except Exception as _e:
                 mlog.emit("warn", "system", "exception.swallowed",
                           f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
@@ -48680,7 +48714,21 @@ class Handler(BaseHTTPRequestHandler):
                     _save_chat_message(chat_id, _runtime_label, _raw_text, full_response,
                                        project_id=_stream_project, persona_name=_stream_persona)
 
-                # Cortex removed — extraction handled by _mem_extract_signals() in Phase 2 plan 02-02
+                # Recall signal extraction (Phase 2 plan 02-02)
+                if full_response:
+                    _s_prompt = raw_text or prompt
+                    _s_pid = persona_name or ''
+                    _s_proj = _stream_project_id or ''
+                    _s_run = _stream_run_id or ''
+                    def _recall_extract_bg(_p=_s_prompt, _r=full_response, _pid=_s_pid, _proj=_s_proj, _run=_s_run):
+                        try:
+                            _n = _mem_extract_signals(_p, _r, persona_id=_pid, project_id=_proj, run_id=_run, source_category='chat')
+                            if _n > 0:
+                                mlog.emit("info", "memory", "recall.extracted", f"Extracted {_n} signal(s) from chat", extra={"count": _n, "persona_id": _pid})
+                        except Exception as _e:
+                            mlog.emit("warn", "memory", "recall.extract_error", str(_e), extra={"exc_type": type(_e).__name__})
+                    import threading as _thr
+                    _thr.Thread(target=_recall_extract_bg, name="recall-extract", daemon=True).start()
 
             except Exception as e:
                 if _stream_backend:
