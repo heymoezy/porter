@@ -321,11 +321,43 @@ CHAT_DIR            = _DATA_DIR / "chat"
 DB_PATH             = _DATA_DIR / "porter.db"
 
 # ── SQLite setup ──
+_thread_local = threading.local()
+
 def _db_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH), timeout=5)
+    """Get or create a per-thread SQLite connection with WAL mode and 30s timeout."""
+    conn = getattr(_thread_local, 'conn', None)
+    if conn is not None:
+        try:
+            conn.execute("SELECT 1")
+            return conn
+        except Exception:
+            # Connection is stale, create new one
+            try:
+                conn.close()
+            except Exception:
+                pass
+            _thread_local.conn = None
+    conn = sqlite3.connect(str(DB_PATH), timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     conn.row_factory = sqlite3.Row
+    _thread_local.conn = conn
     return conn
+
+def _db_retry(fn, max_attempts=5):
+    """Retry fn() on sqlite3.OperationalError with exponential backoff + jitter."""
+    import random as _random
+    import time as _time
+    for attempt in range(max_attempts):
+        try:
+            return fn()
+        except sqlite3.OperationalError as e:
+            if "locked" not in str(e).lower() or attempt == max_attempts - 1:
+                raise
+            wait = (2 ** attempt) * 0.1 + _random.uniform(0, 0.05)
+            mlog.emit("warn", "db", "db.retry",
+                      f"DB locked, retry {attempt+1}/{max_attempts} in {wait:.2f}s")
+            _time.sleep(wait)
 
 def _db_init():
     conn = _db_conn()
