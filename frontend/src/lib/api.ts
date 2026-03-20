@@ -3,9 +3,11 @@
  */
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  status: number;
+  constructor(status: number, message: string) {
     super(message);
     this.name = 'ApiError';
+    this.status = status;
   }
 }
 
@@ -28,7 +30,7 @@ export async function api<T = unknown>(
   }
   const res = await fetch(path, init);
   if (res.status === 401) {
-    window.location.href = '/login';
+    window.location.href = '/v2/login';
     throw new ApiError(401, 'Unauthorized');
   }
   if (!res.ok) {
@@ -39,13 +41,21 @@ export async function api<T = unknown>(
 }
 
 export async function login(username: string, password: string): Promise<boolean> {
-  const res = await fetch('/login', {
+  const res = await fetch('/api/v1/auth/login', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   });
   if (!res.ok) return false;
-  const data = await res.json();
-  return data.ok === true;
+  const json = await res.json();
+  return json.data?.username != null; // v1 envelope: {data: {username}, meta: {...}}
+}
+
+export async function logout(): Promise<void> {
+  await fetch('/api/v1/auth/logout', {
+    method: 'POST',
+    credentials: 'include',
+  });
+  window.location.href = '/v2/login';
 }
