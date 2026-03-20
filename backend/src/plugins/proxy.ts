@@ -8,7 +8,7 @@ async function proxyPlugin(fastify: FastifyInstance) {
   // Unknown routes fall through to porter.py.
   fastify.register(httpProxy, {
     upstream: config.porterPyUrl,
-    httpMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    httpMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   });
 }
 

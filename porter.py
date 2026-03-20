@@ -4903,8 +4903,7 @@ def _create_user_first_mission(username: str) -> dict:
         "created_at": time.time(),
         "assigned_personas": [],
     }
-    _config.setdefault("projects", []).append(project)
-    save_config(_config)
+    _db_project_save(project)
     try:
         scaffold_project_dir(pid, "First Mission")
         _seed_launchpad_workspace(pid)
@@ -8983,9 +8982,7 @@ def load_config() -> dict:
         changed = True
 
     # ── project registry ──
-    if "projects" not in cfg:
-        cfg["projects"] = []
-        changed = True
+    # projects key removed — projects live in SQLite (migrated in Plan 05)
     if "active_project_id" not in cfg:
         cfg["active_project_id"] = None
         changed = True
@@ -12583,8 +12580,7 @@ def _execute_module_action(action_name: str, data: dict) -> dict:
                 "assigned_personas": [],
                 "links": [],
             }
-            _config.setdefault("projects", []).append(proj)
-            _save_config()
+            _db_project_save(proj)
             return {"ok": True, "action": action_name, "message": f"Project '{name}' created"}
         return {"ok": False, "error": f"Unknown action: {action_name}"}
     except Exception as e:
