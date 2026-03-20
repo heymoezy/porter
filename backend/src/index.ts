@@ -5,6 +5,7 @@ import websocket from '@fastify/websocket';
 import staticFiles from '@fastify/static';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 import { config } from './config.js';
 import authRoutes from './routes/auth.js';
 import taskRoutes from './routes/tasks.js';
@@ -55,15 +56,20 @@ fastify.get('/health', async () => {
 });
 
 // Serve React SPA static files at /v2/
+// wildcard: false prevents @fastify/static from registering its own /v2/* catch-all
+// (we handle that ourselves below)
 fastify.register(staticFiles, {
   root: frontendDist,
   prefix: '/v2/',
-  decorateReply: false, // avoid conflict with multiple static registrations
+  wildcard: false, // disable auto-wildcard so we control the SPA fallback
 });
 
 // SPA catch-all for /v2/* routes (React Router handles client-side routing)
-fastify.get('/v2/*', async (request, reply) => {
-  return reply.sendFile('index.html', frontendDist);
+// Reads index.html directly — sendFile is scoped to plugin and not available here
+fastify.get('/v2/*', async (_request, reply) => {
+  const indexPath = path.join(frontendDist, 'index.html');
+  const html = fs.readFileSync(indexPath, 'utf8');
+  return reply.type('text/html').send(html);
 });
 
 // LAST: Proxy unknown routes to porter.py
