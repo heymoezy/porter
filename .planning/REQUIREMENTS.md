@@ -58,7 +58,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### UI Quality
 
 - [ ] **UI-01**: CSS audit and consolidation — consistent styling across all Porter views, no regressions to existing UI
-- [ ] **UI-02**: Proper dark/light mode implementation — complete, consistent theming across all views with clean toggle
+- [x] **UI-02**: Proper dark/light mode implementation — complete, consistent theming across all views with clean toggle
 
 ## v2 Requirements
 
@@ -97,7 +97,7 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | FOUND-04 | Phase 1 | Pending |
 | FOUND-05 | Phase 1 | Pending |
 | UI-01 | Phase 1 | Pending |
-| UI-02 | Phase 1 | Pending |
+| UI-02 | Phase 1 | Complete |
 | MEM-01 | Phase 2 | Pending |
 | MEM-02 | Phase 2 | Pending |
 | MEM-03 | Phase 2 | Pending |
