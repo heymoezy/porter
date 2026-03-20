@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.34.16 — Fix memory noise/deduplication, CRM salutation, agent detail, recall badge"""
+"""Porter v0.34.17 — Fix memory noise/deduplication, CRM salutation, agent detail, recall badge"""
 
 
 import email
@@ -15298,7 +15298,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .porter-popup-thread { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:10px 12px; }
 .porter-popup-thread:empty::before { content:'Ask Porter anything.'; display:block; text-align:center; color:var(--text3); font-size:11px; padding:30px 12px; }
 .porter-popup-composer { display:flex; gap:6px; padding:8px 12px; border-top:1px solid var(--border); align-items:flex-end; }
-.porter-popup-input { flex:1; resize:none; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12px; font-family:inherit; background:var(--bg); color:var(--text); outline:none; max-height:100px; min-height:36px; }
+.porter-popup-input { flex:1; resize:none; border:1px solid var(--border); border-radius:8px; padding:12px 16px; font-size:14px; font-family:inherit; background:var(--bg); color:var(--text); outline:none; max-height:120px; min-height:44px; }
 .porter-popup-input:focus { border-color:var(--accent); }
 .porter-popup-send { background:var(--accent); color:var(--bg); border:none; border-radius:8px; padding:8px 14px; font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap; flex-shrink:0; }
 .porter-popup-send:hover { filter:brightness(1.1); }
@@ -17207,7 +17207,7 @@ select option {
     <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.16</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.17</div>
   </div>
 </aside>
 
@@ -18034,7 +18034,7 @@ select option {
 <div id="porter-popup-chat" class="porter-popup-chat">
   <div class="porter-popup-hdr">
     <span id="popup-porter-avatar" class="porter-popup-avatar"></span>
-    <span class="porter-popup-hdr-title">Porter</span>
+    <span class="porter-popup-hdr-title">Ask Porter</span>
     <span class="porter-popup-hdr-ctx" id="popup-chat-ctx"></span>
     <button class="porter-popup-close" onclick="_popupChatClose()" title="Close (Esc)">&times;</button>
   </div>
@@ -18335,7 +18335,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.34.16', date:'2026-03-20', notes:['Fix memory deduplication: _mem_insert now skips exact duplicates (text+scope+scope_id)','Fix memory noise: project status_change and settings_update no longer stored as memories','Add project op categories to RECALL_NOISE_BLACKLIST','CRM: remove Status field from contact detail (UI noise)','CRM: rename Title to Salutation for honorific field','CRM: remove Mx from salutation options','recall-badge: now uses mnav-badge CSS class for consistent sidebar styling','Fix: file upload events no longer create memory signals (guard in _mem_insert)','Fix: cleaned existing file upload signal memories from DB','Fix: timezone selector replaced with searchable custom dropdown'] },
+  { ver:'v0.34.17', date:'2026-03-20', notes:['Popup chat input enlarged (padding 12px 16px, font-size 14px)','Popup chat header title changed to "Ask Porter"','Fix memory deduplication: _mem_insert now skips exact duplicates (text+scope+scope_id)','Fix memory noise: project status_change and settings_update no longer stored as memories','Add project op categories to RECALL_NOISE_BLACKLIST','CRM: remove Status field from contact detail (UI noise)','CRM: rename Title to Salutation for honorific field','CRM: remove Mx from salutation options','recall-badge: now uses mnav-badge CSS class for consistent sidebar styling','Fix: file upload events no longer create memory signals (guard in _mem_insert)','Fix: cleaned existing file upload signal memories from DB','Fix: timezone selector replaced with searchable custom dropdown'] },
   { ver:'v0.34.11', date:'2026-03-20', notes:['Complete orange purge from chat UI: send button, chat shell border, typing dots, drop zone, toolbtn hover, project chat container, working dots, need labels, Porter hero card — all --warning → --accent.'] },
   { ver:'v0.34.10', date:'2026-03-20', notes:['Agent detail + project chat composer borders changed from --warning (orange) to --accent (indigo). Drag-over and chat hints also updated.'] },
   { ver:'v0.34.9', date:'2026-03-20', notes:['Chat input focus borders changed from orange rgba(247,147,26) to var(--accent). Files accordion staggered animation removed — instant expand/collapse.'] },
@@ -46885,7 +46885,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.34.16"})
+            self.reply_json({"v": "0.34.17"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -47047,7 +47047,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.34.16"
+                health["porter_version"] = "0.34.17"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -49362,7 +49362,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.16'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.17'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -53374,7 +53374,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.34.16"
+                _ws_health["porter_version"] = "0.34.17"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -56689,7 +56689,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.34.16 ready (localhost only)")
+    print(f"\n  Porter v0.34.17 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
