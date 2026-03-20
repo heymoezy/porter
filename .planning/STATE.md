@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 01-foundation-01-08-PLAN.md
-last_updated: "2026-03-20T13:53:02.366Z"
+stopped_at: Completed 01-foundation-01-09-PLAN.md
+last_updated: "2026-03-20T13:53:13.404Z"
 progress:
   total_phases: 7
   completed_phases: 1
@@ -89,6 +89,8 @@ Recent decisions affecting current work:
 - [Phase 01-foundation]: sys imported locally inside _boot_sequence() — sys is not a module-level import in porter.py
 - [Phase 01-foundation]: Landing page is minimal placeholder: wordmark PORTER + tagline + Sign in CTA; dynamic product name is Phase 3 scope
 - [Phase 01-foundation]: OPTIONS excluded from proxy httpMethods — @fastify/cors already handles OPTIONS/* for CORS preflight; adding OPTIONS to proxy caused fatal duplicate route crash
+- [Phase 01-foundation]: load_config() projects key recreation removed — projects live exclusively in SQLite after Plan 05 migration
+- [Phase 01-foundation]: Chat action project_create _save_config() call was a latent bug (no-arg call) — replaced by _db_project_save(proj)
 
 ### Pending Todos
 
@@ -103,6 +105,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T13:52:42.537Z
-Stopped at: Completed 01-foundation-01-08-PLAN.md
+Last session: 2026-03-20T13:53:13.402Z
+Stopped at: Completed 01-foundation-01-09-PLAN.md
 Resume file: None
