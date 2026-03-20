@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 01-foundation-01-03-PLAN.md
-last_updated: "2026-03-20T11:13:06.461Z"
+stopped_at: Completed 01-foundation-01-06-PLAN.md
+last_updated: "2026-03-20T11:31:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 7
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 ## Current Position
 
 Phase: 01 (foundation) — EXECUTING
-Plan: 5 of 7 (completed plan 03)
+Plan: 6 of 7 (completed plan 06)
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Plan: 5 of 7 (completed plan 03)
 | Phase 01-foundation P04 | 5 | 2 tasks | 9 files |
 | Phase 01-foundation P02 | 6min | 3 tasks | 2 files |
 | Phase 01-foundation P03 | 14min | 2 tasks | 1 files |
+| Phase 01-foundation P06 | 35min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,9 @@ Recent decisions affecting current work:
 - [Phase 01-foundation]: auth_check_cap() replaced with auth_check(redirect=False) — all authenticated users allowed, no capability tiers
 - [Phase 01-foundation]: platform_admin role eliminated — admin is now top-level role in porter.py
 - [Phase 01-foundation]: Cortex functions disabled with early-return guards (not deleted) — Phase 2 handles full removal
+- [Phase 01-foundation]: Semantic/language colors (TypeScript, Python, skin tones) kept as hardcoded hex — not design system tokens
+- [Phase 01-foundation]: [data-theme="light"] selector replaces :root.light — consistent with three-state toggle data-theme attribute approach
+- [Phase 01-foundation]: Embedded :root blocks include legacy aliases (--bg1, --panel, etc.) for backward compat with existing JS
 
 ### Pending Todos
 
@@ -88,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T11:13:06.458Z
-Stopped at: Completed 01-foundation-01-03-PLAN.md
+Last session: 2026-03-20T11:31:00.000Z
+Stopped at: Completed 01-foundation-01-06-PLAN.md
 Resume file: None
