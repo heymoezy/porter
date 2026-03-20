@@ -57,15 +57,17 @@ Plans:
   3. Agent context injection at dispatch time includes directives, concepts, and relevant episodes — visible in debug output
   4. The memory feed UI shows what Porter learned, updated, or forgot in real time as it happens
   5. Memory items have clear scope labels (global, project, agent) and the scope boundary is enforced — project-scoped memory does not leak across projects
-**Plans**: 6 plans
+**Plans**: 8 plans
 
 Plans:
+- [ ] 02-00-PLAN.md — Wave 0 test scaffolding: create all behavioral test scripts (Wave 0)
 - [ ] 02-01-PLAN.md — Cortex deletion: remove all cortex functions, table, preferences, workflow entries (Wave 1)
 - [ ] 02-02-PLAN.md — Noise filter: blacklist, re-enable signal extraction, inline Recall noted indicator (Wave 2)
 - [ ] 02-03-PLAN.md — Memory injection: tiered priority, token cap, scope isolation, privacy toggle (Wave 2)
 - [ ] 02-04-PLAN.md — Memory feed UI: compact real-time feed, badge count, auto-manage toggle (Wave 3)
-- [ ] 02-05-PLAN.md — FTS5 session search + chat remember/forget commands (Wave 3)
-- [ ] 02-06-PLAN.md — Agent writing styles, anti-pattern list, feedback loop, evolution trigger (Wave 4)
+- [ ] 02-05-PLAN.md — FTS5 session search, dispatch wiring, chat remember/forget commands (Wave 3)
+- [ ] 02-06-PLAN.md — Agent writing styles, anti-pattern block list, agent init wiring (Wave 4)
+- [ ] 02-07-PLAN.md — Feedback tracking, agent evolution trigger, respawn animation (Wave 4)
 
 ### Phase 3: Route Migration
 **Goal**: Auth, projects, and agents are fully owned by Fastify — porter.py no longer handles these routes, and all 35 Playwright tests pass without modification
@@ -179,7 +181,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 9/9 | Complete    | 2026-03-20 |
-| 2. Memory V2 | 0/6 | Not started | - |
+| 2. Memory V2 | 0/8 | Not started | - |
 | 3. Route Migration | 0/5 | Not started | - |
 | 4. Agent Autonomy | 0/6 | Not started | - |
 | 5. Guided Project Wizard | 0/7 | Not started | - |
