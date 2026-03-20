@@ -1,5 +1,50 @@
 # Porter Release Notes
 
+## v0.34.17 (2026-03-20)
+
+- Popup chat input enlarged (14px font, 44px min-height, 12px padding). Header title changed to "Ask Porter".
+
+## v0.34.16 (2026-03-20)
+
+- File upload memory signals permanently blocked — belt-and-suspenders guard in _mem_insert plus DB cleanup.
+- Timezone selector rebuilt as searchable dropdown with common timezones pinned at top, keyboard navigation, and Porter dark theme styling.
+
+## v0.34.15 (2026-03-20)
+
+- Memory deduplication — _mem_insert now checks for exact text+scope+scope_id match before inserting, prevents duplicate memories.
+- Memory noise cleanup — removed _state_add_project_note calls that recorded project status changes as memories. Added status_change, project_create, project_update, project_delete to RECALL_NOISE_BLACKLIST.
+- CRM: removed Status text field, renamed Title to Salutation, removed Mx option.
+- Cleaned 23 noise memories and 11 duplicates from DB.
+
+## v0.34.14 (2026-03-20)
+
+- Settings profile divider now extends full width via negative margin breakout from .settings-shell max-width constraint.
+- All `<select>` dropdowns unified to Porter dark theme — global CSS rule with var(--surface), var(--border), var(--text), custom arrow. Inline styles stripped from tmpl-cat-filter, recall-scope-filter, treg-f-project.
+
+## v0.34.13 (2026-03-20)
+
+- Memory nav badge enlarged (11px font, 2px 6px padding) and right-aligned via margin-left:auto.
+- Settings toolbar divider full-width fix.
+- Logs header font-size matched to module-title (20px), added bottom border and min-height for consistency.
+
+## v0.34.12 (2026-03-20)
+
+- Fixed 7 Playwright test failures caused by Phase 2 cortex deletion accidentally removing 374 lines of model SSE + persona JS.
+- Restored _connectModelSSE, 6 bridge event handlers, _renderModelCards, persona variable declarations from pre-deletion commit.
+- Fixed /api/memory/feed SQL referencing nonexistent 'action' column.
+
+## v0.34.11 (2026-03-20)
+
+- **Phase 2: Memory V2 complete.** Cortex fully deleted (194KB removed). Porter Recall is sole memory system.
+- RECALL_NOISE_BLACKLIST blocks 16 action categories from creating signals.
+- _mem_extract_signals re-enabled with noise filter guard. "Recall noted" indicator in chat UI.
+- Tiered injection: directives → concepts → episodes with token cap. Scope isolation via _project_is_private.
+- Memory tab rebuilt as compact real-time feed with scope filter, nav badge, auto-manage toggle.
+- FTS5 session search endpoint. _recall_prior_work wired into agent dispatch.
+- Chat commands: "remember that...", "forget about...", "what do you remember about...".
+- Agent writing styles (5 role profiles) + RECALL_ANTI_PATTERNS (21 phrases). Auto-init on agent creation.
+- Implicit feedback tracking (correction/acceptance signals). Agent evolution at 5+ signals with respawn animation.
+
 ## v0.33.28 (2026-03-19)
 
 - Agent detail skills tab now scrolls instead of cutting off. Squad button removed from skill cards.
