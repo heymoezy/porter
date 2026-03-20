@@ -131,6 +131,63 @@ def _recall_should_extract(source_category: str) -> bool:
     return source_category not in RECALL_NOISE_BLACKLIST
 
 
+# ── Porter Recall — Anti-Pattern Block List ──────────────────────────────────
+# Generic AI filler phrases ALL agents must avoid.
+# Individual agents can override via agent-scoped directives.
+RECALL_ANTI_PATTERNS = [
+    "I'd be happy to",
+    "I'd be glad to",
+    "Let me help you with that",
+    "Great question!",
+    "That's a great question",
+    "Absolutely!",
+    "Of course!",
+    "Sure thing!",
+    "I understand your concern",
+    "Thank you for asking",
+    "Happy to assist",
+    "I'm here to help",
+    "Let me break this down",
+    "Let's dive in",
+    "Let's explore this together",
+    "That's an excellent point",
+    "I appreciate you sharing",
+    "Feel free to ask",
+    "Don't hesitate to",
+    "Please let me know if",
+    "I hope this helps",
+    "Is there anything else",
+]
+
+# ── Porter Recall — Agent Style Defaults ─────────────────────────────────────
+# Role-based writing profiles. Each has preferred patterns and voice characteristics.
+AGENT_STYLE_DEFAULTS = {
+    "writer": {
+        "voice": "Clear, concise prose. Active voice. Short sentences for impact. Long sentences for flow.",
+        "prefer": ["direct statements", "concrete examples", "varied sentence length"],
+        "avoid": ["passive voice", "filler words", "qualifying hedges"],
+    },
+    "developer": {
+        "voice": "Technical and precise. Code-first explanations. Minimal preamble.",
+        "prefer": ["code snippets", "specific file paths", "exact error messages"],
+        "avoid": ["vague descriptions", "unnecessary context", "explaining basics"],
+    },
+    "researcher": {
+        "voice": "Evidence-based and thorough. Sources cited. Balanced perspective.",
+        "prefer": ["data points", "comparisons", "structured analysis"],
+        "avoid": ["unsupported claims", "speculation without labeling", "oversimplification"],
+    },
+    "manager": {
+        "voice": "Action-oriented and brief. Status updates. Clear next steps.",
+        "prefer": ["bullet points", "deadlines", "owner assignments"],
+        "avoid": ["lengthy narratives", "ambiguity", "passive reporting"],
+    },
+    "default": {
+        "voice": "Helpful and direct. Get to the point. Match the user's energy.",
+        "prefer": ["brevity", "actionable answers", "relevant context only"],
+        "avoid": ["over-explaining", "unnecessary politeness", "padding"],
+    },
+}
 
 # ── Context Hygiene ────────────────────────────────────────────────────────
 _hygiene_stats: dict = {
@@ -3396,6 +3453,74 @@ def _mem_record_injection(memory_id, run_id=''):
         return True
     except Exception:
         return False
+
+
+
+def _recall_init_agent_style(persona_id, category='default'):
+    """Initialize writing style directives for a new agent from role-based defaults."""
+    if not persona_id:
+        return
+    # Map common agent_group / category values to style keys
+    _cat_map = {
+        "content": "writer",
+        "creative": "writer",
+        "developer": "developer",
+        "engineering": "developer",
+        "data_ai": "researcher",
+        "research": "researcher",
+        "domain": "researcher",
+        "business": "manager",
+        "manager": "manager",
+        "management": "manager",
+        "design": "default",
+        "operations": "manager",
+    }
+    style_key = _cat_map.get(str(category or "").lower(), "default")
+    style = AGENT_STYLE_DEFAULTS.get(style_key, AGENT_STYLE_DEFAULTS["default"])
+
+    # Check if style directives already exist for this agent
+    try:
+        conn = _db_conn()
+        existing = conn.execute(
+            "SELECT COUNT(*) as cnt FROM memories WHERE scope='agent' AND scope_id=? AND memory_kind='directive' AND source_category='writing_style'",
+            (persona_id,)
+        ).fetchone()
+        conn.close()
+        if existing and existing["cnt"] > 0:
+            return  # Already initialized
+    except Exception as _e:
+        mlog.emit("warn", "memory", "exception.swallowed", str(_e), extra={"exc_type": type(_e).__name__})
+
+    # Insert voice directive
+    _mem_insert(
+        memory_kind="directive",
+        text=f"Writing voice: {style['voice']}",
+        scope="agent",
+        scope_id=persona_id,
+        trust_tier="medium",
+        source_type="system",
+        source_category="writing_style",
+        importance=7,
+        review_state="active",
+    )
+
+    # Insert anti-patterns as a single high-importance directive
+    anti_patterns_text = "Never use these phrases: " + ", ".join(f'"{p}"' for p in RECALL_ANTI_PATTERNS[:10])
+    _mem_insert(
+        memory_kind="directive",
+        text=anti_patterns_text,
+        scope="agent",
+        scope_id=persona_id,
+        trust_tier="high",
+        source_type="system",
+        source_category="writing_style",
+        importance=9,
+        review_state="active",
+    )
+
+    mlog.emit("info", "memory", "recall.style_init",
+              f"Initialized writing style for agent {persona_id}: {style_key}",
+              extra={"category": category, "style_key": style_key, "persona_id": persona_id})
 
 
 
@@ -42077,6 +42202,12 @@ def _persona_create(data):
                 managed_by_porter = 1
         except Exception as e:
             log.warning("Could not auto-assign starter skills for %s: %s", pid, e)
+
+    # Initialize writing style directives for this agent
+    try:
+        _recall_init_agent_style(pid, category=data.get("agent_group", "default"))
+    except Exception as e:
+        log.warning("Could not initialize writing style for %s: %s", pid, e)
 
     return {"id": pid, "name": name, "role": role, "avatar": avatar,
             "preferred_backend": preferred_backend, "soul_hash": soul_hash,
