@@ -104,13 +104,14 @@ Plans:
 ### Phase 5: Guided Project Wizard
 **Goal**: A user describes a project goal in plain language and Porter responds with a proposed agent team and plan — approve once and work starts
 **Depends on**: Phase 4
-**Requirements**: PROJ-01, PROJ-02, PROJ-03
+**Requirements**: PROJ-01, PROJ-02, PROJ-03, PROJ-04
 **Success Criteria** (what must be TRUE):
   1. A user with no prior configuration can describe a project goal and receive an agent proposal and plan within 3 conversational turns
   2. Approving the proposal creates a real project in the DB with milestones, tasks, and assigned agents — not a placeholder record
   3. Work starts immediately after approval — at least one agent job is queued and visible in the activity log
   4. The project dashboard shows real-time progress, active agents, recent activity, and next steps — no empty states
   5. Auto-assigned agents are appropriate for the project type — a writing project gets a writer, a code project gets a developer
+  6. Chat has a toggleable GSD plan mode — switching it on enters structured planning flow, switching it off returns to free chat
 **Plans**: TBD
 
 Plans:
@@ -119,6 +120,7 @@ Plans:
 - [ ] 05-03: Approval-to-execution pipeline — proposal approval triggers project creation + job queue
 - [ ] 05-04: Project dashboard — progress view, active agents panel, activity feed, next steps
 - [ ] 05-05: Token budget enforcement — interactive wizard calls hard-capped at 2,000 tokens system context
+- [ ] 05-06: GSD plan mode — chat toggle between free chat and structured planning (question → research → plan → execute), persistent mode state
 
 ### Phase 6: Real-Time and Transparency
 **Goal**: All live updates flow through SSE push instead of polling, and users have full visibility into what agents are doing, why Porter made each decision, and the health of every connected service
@@ -174,6 +176,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Memory V2 | 0/5 | Not started | - |
 | 3. Route Migration | 0/5 | Not started | - |
 | 4. Agent Autonomy | 0/6 | Not started | - |
-| 5. Guided Project Wizard | 0/5 | Not started | - |
+| 5. Guided Project Wizard | 0/6 | Not started | - |
 | 6. Real-Time and Transparency | 0/5 | Not started | - |
 | 7. External Connections | 0/8 | Not started | - |
