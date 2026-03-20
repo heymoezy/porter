@@ -5,6 +5,7 @@ status: draft
 shadcn_initialized: false
 preset: none
 created: 2026-03-20
+revised: 2026-03-20
 ---
 
 # Phase 1 — UI Design Contract
@@ -35,7 +36,8 @@ Declared values (all multiples of 4):
 | Token | Value | Usage |
 |-------|-------|-------|
 | xs | 4px | Icon gaps, chip padding, badge padding |
-| sm | 8px | Compact element spacing, icon-label gap, nav item vertical padding |
+| sm | 8px | Compact element spacing, icon-label gap |
+| sm+ | 12px | Nav item vertical padding (py-3) |
 | md | 16px | Default element spacing, card padding, input padding |
 | lg | 24px | Section padding, modal header padding |
 | xl | 32px | Layout gaps, panel padding |
@@ -45,7 +47,7 @@ Declared values (all multiples of 4):
 Exceptions:
 - Sidebar width: 220px (--sidebar token, existing) when expanded; 56px when collapsed
 - Minimum touch target for icon-only nav items (collapsed sidebar): 44px height
-- Nav item height: 40px (py-2.5 = 10px top + 10px bottom + ~20px line height = 40px total — keep as-is, matches existing Sidebar.tsx)
+- Nav item vertical padding: py-3 (12px top + 12px bottom) — replaces previous py-2.5 (10px is not a multiple of 4)
 
 ---
 
@@ -56,11 +58,11 @@ System font stack. No web font loading — avoids dependency and matches product
 | Role | Size | Weight | Line Height | Usage |
 |------|------|--------|-------------|-------|
 | Body | 14px | 400 | 1.5 | Main content, nav labels, descriptions |
-| Label | 12px | 500 | 1.3 | Badges, chips, metadata, timestamps, version string |
+| Label | 12px | 600 | 1.3 | Badges, chips, metadata, timestamps, version string |
 | Heading | 16px | 600 | 1.3 | Section headers, modal titles, panel titles |
 | Display | 20px | 600 | 1.2 | Page titles, wizard headings, landing headline |
 
-**Weight vocabulary: 400 (regular) and 600 (semibold) only.** 500 used for labels only — an acceptable third weight for information density at small sizes.
+**Weight vocabulary: 400 (regular) and 600 (semibold) only.** No intermediate weights.
 
 **Letter spacing:**
 - Nav labels, version string, and logo wordmark: `tracking-widest` (0.1em) — matches existing Sidebar.tsx `.tracking-widest`
@@ -102,7 +104,7 @@ The existing orange (#f7931a) is confirmed placeholder. New palette: blue-tinted
 Accent (`--accent` / `#6366F1`) is reserved exclusively for:
 1. Active nav item left-border indicator (2px right border on sidebar active item)
 2. Active nav item background highlight
-3. Primary CTA buttons (e.g. "Start Porter", "Save Changes", "Confirm")
+3. Primary CTA buttons (e.g. "Start setup", "Save Profile", "Change Password")
 4. Form focus rings (outline on focused inputs/textareas)
 5. Selected tab underline indicator
 6. Toggle switch active state (theme toggle, feature flags)
@@ -230,6 +232,7 @@ These are the interaction patterns for Phase 1 views. No new components are intr
 - Active item: `background: var(--surface)`, 2px right border `var(--accent)`, text `var(--text)`
 - Inactive item: text `var(--text3)`, hover text `var(--text2)`, hover background `var(--surface)` at 40% opacity
 - Icon size: 16px (w-4 h-4) — do not change
+- Nav item vertical padding: py-3 (12px) — on all sidebar nav items
 - Collapsed width: 56px (matches 44px touch target + 6px padding each side)
 - No hardcoded `bg-neutral-*` or `border-neutral-*` classes — replace with CSS variable references or Tailwind color tokens mapped to variables
 
@@ -247,7 +250,7 @@ These are the interaction patterns for Phase 1 views. No new components are intr
 - Background: `var(--bg)`
 - Wordmark: configurable product name from config, 20px, weight 600, `var(--text)`
 - Tagline: "Your autonomous agent platform", 14px, `var(--text2)`
-- Login button: accent background, white text, 8px radius, 16px horizontal padding, 10px vertical padding
+- Login button: accent background, white text, 8px radius, 16px horizontal padding, 12px vertical padding
 - No illustrations, no hero images, no animations
 
 ### Login / Register Pages
@@ -273,7 +276,7 @@ These are the interaction patterns for Phase 1 views. No new components are intr
 | Element | Copy | Source |
 |---------|------|--------|
 | Primary CTA (landing page) | "Sign in" | Default — minimal, direct |
-| Primary CTA (login form) | "Continue" | Default — avoids "Login" imperative |
+| Primary CTA (login form) | "Continue" | Default — avoids "Login" imperative; noun implicit from page context |
 | Primary CTA (boot setup) | "Start setup" | Default — imperative, clear |
 | Boot step: checking | "Checking {dependency}..." | Default — present progressive |
 | Boot step: success | "{Dependency} ready" | Default — past tense, resolved |
@@ -285,7 +288,9 @@ These are the interaction patterns for Phase 1 views. No new components are intr
 | Error: DB locked | Logged only (not shown to user) | RESEARCH.md: structured logging |
 | Destructive: delete user | "Remove {username}? This cannot be undone." | Default — confirm with name |
 | Destructive: admin deletion (boot) | No confirmation — runs automatically at startup as cleanup | CONTEXT.md: delete system/admin/jacob on startup |
-| Settings: save | "Save" | Default — single word |
+| Settings CTA (Profile page) | "Save profile" | Fix: specific verb + noun; replaces generic "Save" |
+| Settings CTA (Password page) | "Change password" | Fix: specific verb + noun; replaces generic "Save" |
+| Settings CTA (Changelog page) | No CTA — read-only view | Default — changelog has no save action |
 | Theme toggle tooltip | "System preference" / "Dark mode" / "Light mode" | Default — describes current state |
 | Version badge (sidebar footer) | "v{version}" collapsed, "{AppName} v{version}" expanded | CONTEXT.md: name is configurable |
 
@@ -361,6 +366,14 @@ Every interactive element must handle these states:
 | CSS audit scope: ~50 views | CONTEXT.md: CSS Audit Scope |
 | No animations, no transition complexity | Phase 1 is cleanup — no new motion |
 | App.css Vite boilerplate: delete | Detected in App.css (dead code) |
+
+### Revision Notes (2026-03-20)
+
+| Issue | Fix Applied |
+|-------|------------|
+| Copywriting BLOCK: generic "Save" CTA | Replaced with "Save profile" (Profile page) and "Change password" (Password page) |
+| Typography BLOCK: 3 weights (400/500/600) | Collapsed to 2 weights (400/600); Label role now uses 12px/600 instead of 12px/500 |
+| Spacing BLOCK: py-2.5 (10px not a multiple of 4) | Changed to py-3 (12px); added sm+ (12px) as declared spacing token |
 
 ---
 
