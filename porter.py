@@ -332,8 +332,10 @@ def _db_conn() -> sqlite3.Connection:
             # Connection is stale, create new one
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as _e:
+                mlog.emit("debug", "db", "conn.stale_close_failed",
+                          f"Stale connection close failed: {_e}",
+                          extra={"exc_type": type(_e).__name__})
             _thread_local.conn = None
     conn = sqlite3.connect(str(DB_PATH), timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
@@ -9109,8 +9111,10 @@ def _refresh_claude_usage(agent_id: str) -> dict:
             if u is not None:
                 try:
                     return _build_snapshot(round(float(u) * 100), r)
-                except ValueError:
-                    pass
+                except ValueError as _e:
+                    mlog.emit("debug", "ai", "ratelimit.parse_failed",
+                              f"Unified rate-limit header parse failed: {_e}",
+                              extra={"exc_type": "ValueError"})
         # Fallback: compute from standard token headers
         lim = hdrs.get("anthropic-ratelimit-tokens-limit")
         rem = hdrs.get("anthropic-ratelimit-tokens-remaining")
@@ -9119,8 +9123,10 @@ def _refresh_claude_usage(agent_id: str) -> dict:
             try:
                 used_pct = round((1 - int(rem) / int(lim)) * 100)
                 return _build_snapshot(used_pct, rst)
-            except (ValueError, ZeroDivisionError):
-                pass
+            except (ValueError, ZeroDivisionError) as _e:
+                mlog.emit("debug", "ai", "ratelimit.parse_failed",
+                          f"Fallback rate-limit header parse failed: {_e}",
+                          extra={"exc_type": type(_e).__name__})
         return None
 
     try:
