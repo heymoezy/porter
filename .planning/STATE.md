@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 02-memory-v2/02-03-PLAN.md
-last_updated: "2026-03-20T16:21:30.937Z"
+stopped_at: Completed 02-memory-v2/02-04-PLAN.md
+last_updated: "2026-03-20T16:32:24.038Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -59,6 +59,7 @@ Plan: 2 of 8
 | Phase 02-memory-v2 P01 | 17min | 2 tasks | 1 files |
 | Phase 02-memory-v2 P02 | 22min | 2 tasks | 1 files |
 | Phase 02-memory-v2 P03 | 5min | 2 tasks | 1 files |
+| Phase 02-memory-v2 P04 | 6min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,9 @@ Recent decisions affecting current work:
 - [Phase 02-memory-v2]: token_cap defaults to 500 but _build_context_suffix overrides with memory_budget (20% of total) to prevent dual-budget conflict
 - [Phase 02-memory-v2]: _mem_inject_for_dispatch return type changed from (block, ids) tuple to plain string — cleaner API, IDs tracked inline per injection
 - [Phase 02-memory-v2]: Privacy isolation: global memories skipped for private projects at all three tiers; cross-project promotion fires SSE only (no auto-promote)
+- [Phase 02-memory-v2]: unread_count in /api/memory/stats uses recall_last_read float preference — no extra table needed for badge count
+- [Phase 02-memory-v2]: Scope filter and auto-manage listeners use _wired flag on DOM element to prevent duplicate addEventListener on re-renders
+- [Phase 02-memory-v2]: _recallFeedPrepend fires for all recall:event SSE types but badge only increments when _currentModule !== memory
 
 ### Pending Todos
 
@@ -120,6 +124,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T16:21:30.935Z
-Stopped at: Completed 02-memory-v2/02-03-PLAN.md
+Last session: 2026-03-20T16:32:24.035Z
+Stopped at: Completed 02-memory-v2/02-04-PLAN.md
 Resume file: None
