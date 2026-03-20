@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.34.17 — Fix memory noise/deduplication, CRM salutation, agent detail, recall badge"""
+"""Porter v0.34.18 — Skills spinner sm, memory feed promote/dismiss actions"""
 
 
 import email
@@ -14543,6 +14543,10 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .chat-msg p { margin:0 0 8px 0; }
 .recall-noted { font-size:11px; color:var(--text3); padding:4px 0 0 0; display:flex; align-items:center; gap:4px; opacity:0.7; transition:opacity 0.3s ease; }
 .recall-noted:hover { opacity:1 !important; }
+.recall-row-actions { display:flex; gap:4px; opacity:0.3; transition:opacity 0.2s; flex-shrink:0; }
+.recall-row:hover .recall-row-actions { opacity:1; }
+.recall-row-actions button { background:none; border:none; cursor:pointer; padding:2px 4px; font-size:12px; color:var(--text3); border-radius:3px; }
+.recall-row-actions button:hover { background:var(--raised); color:var(--text); }
 
 
 /* Rules */
@@ -14784,6 +14788,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 }
 .loading-indicator.lg { padding:48px 0; }
 .loading-indicator.lg::before { width:32px; height:32px; border-width:3px; }
+.loading-indicator.sm { padding:4px 0; font-size:11px; }
+.loading-indicator.sm::before { width:14px; height:14px; border-width:2px; }
 /* Skeleton card shimmer */
 @keyframes shimmer { to { background-position: -200% 0; } }
 .skeleton-card {
@@ -17207,7 +17213,7 @@ select option {
     <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.17</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.18</div>
   </div>
 </aside>
 
@@ -18335,6 +18341,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.34.18', date:'2026-03-20', notes:['Skills loading spinner uses .sm variant (14px, inline-friendly)','Memory feed rows get promote/dismiss action buttons with fade-out on click'] },
   { ver:'v0.34.17', date:'2026-03-20', notes:['Popup chat input enlarged (padding 12px 16px, font-size 14px, min-height 44px)','Popup chat header title changed to "Ask Porter"'] },
   { ver:'v0.34.16', date:'2026-03-20', notes:['File upload memory signals permanently blocked with guard in _mem_insert','Timezone selector rebuilt as searchable dropdown with common timezones pinned, keyboard nav, Porter dark theme'] },
   { ver:'v0.34.15', date:'2026-03-20', notes:['Memory deduplication — _mem_insert skips exact text+scope+scope_id duplicates','Memory noise cleanup — project status changes no longer stored as memories','CRM: remove Status field, rename Title to Salutation, remove Mx option','Cleaned 23 noise memories and 11 duplicates from DB'] },
@@ -20939,10 +20946,33 @@ function _recallFeedRow(data) {
   var kindLabel = data.memory_kind ? (' <span style="opacity:0.6;font-size:10px">' + escHtml(data.memory_kind) + '</span>') : '';
   var textHtml = typeof escHtml === 'function' ? escHtml(data.text || '') : (data.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+  var memId = data.id || '';
   row.innerHTML = '<span style="flex-shrink:0;width:18px;text-align:center;font-size:13px">' + icon + '</span>'
     + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="' + textHtml + '">' + textHtml + kindLabel + '</span>'
     + '<span style="flex-shrink:0;font-size:10px;padding:1px 5px;border-radius:3px;background:' + scopeColor + ';color:#fff;opacity:0.85;text-shadow:0 1px 1px rgba(0,0,0,.3)">' + escHtml(scope) + '</span>'
-    + '<span style="flex-shrink:0;font-size:10px;color:var(--text3);margin-left:2px;min-width:24px;text-align:right">' + _recallTimeAgo(data.ts) + '</span>';
+    + '<span style="flex-shrink:0;font-size:10px;color:var(--text3);margin-left:2px;min-width:24px;text-align:right">' + _recallTimeAgo(data.ts) + '</span>'
+    + '<span class="recall-row-actions">'
+    + '<button title="Promote" data-mem-id="' + memId + '" data-action="promote">&#10003;</button>'
+    + '<button title="Dismiss" data-mem-id="' + memId + '" data-action="dismiss">&#10007;</button>'
+    + '</span>';
+
+  // Wire promote/dismiss buttons
+  var btns = row.querySelectorAll('.recall-row-actions button');
+  btns.forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var id = btn.getAttribute('data-mem-id');
+      var act = btn.getAttribute('data-action');
+      if (!id) return;
+      var endpoint = act === 'promote' ? '/api/memory/promote' : '/api/memory/dismiss';
+      var body = act === 'promote' ? {id: parseInt(id), target_kind: 'concept', target_trust: 'medium'} : {id: parseInt(id)};
+      api(endpoint, body).catch(function(){});
+      row.style.transition = 'opacity 0.3s';
+      row.style.opacity = '0';
+      setTimeout(function() { if (row.parentNode) row.parentNode.removeChild(row); }, 300);
+    });
+  });
+
   return row;
 }
 
@@ -35034,7 +35064,7 @@ function switchPdTab(tab) {
     });
   } else if (tab === 'skills') {
     if (p.is_locked) {
-      content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div class="loading-indicator">Loading skills...</div></div>';
+      content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div class="loading-indicator sm">Loading skills...</div></div>';
       (async function() {
         try {
           var data = await api('/api/personas/' + p.id + '/skills');
@@ -35079,7 +35109,7 @@ function switchPdTab(tab) {
       })();
       return;
     }
-    content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div class="loading-indicator">Loading skills...</div></div>';
+    content.innerHTML = '<div id="pd-skills-list" style="padding:4px 0"><div class="loading-indicator sm">Loading skills...</div></div>';
     _loadPersonaSkills(p.id);
   } else if (tab === 'concepts') {
     content.innerHTML = '<div class="loading-indicator">Loading concepts...</div>';
@@ -46890,7 +46920,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.34.17"})
+            self.reply_json({"v": "0.34.18"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -47052,7 +47082,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.34.17"
+                health["porter_version"] = "0.34.18"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -49367,7 +49397,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.17'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.18'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -53379,7 +53409,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.34.17"
+                _ws_health["porter_version"] = "0.34.18"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -56694,7 +56724,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.34.17 ready (localhost only)")
+    print(f"\n  Porter v0.34.18 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
