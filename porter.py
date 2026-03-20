@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.34.11 — Kill all orange from chat system: shell, send button, dots, drop zone, project chat"""
+"""Porter v0.34.12 — Fix Phase 2 regressions: restore deleted model/persona JS, fix memory feed SQL"""
 
 
 import email
@@ -17183,7 +17183,7 @@ select::-ms-expand { display: none; }
     <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.11</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.12</div>
   </div>
 </aside>
 
@@ -18304,6 +18304,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.34.12', date:'2026-03-20', notes:['Fix Phase 2 regressions: restore 374 lines of model/persona JS accidentally deleted with cortex code','Fix memory feed SQL: remove nonexistent action column reference','All 7 Playwright failures resolved (35/35 pass)'] },
   { ver:'v0.34.11', date:'2026-03-20', notes:['Complete orange purge from chat UI: send button, chat shell border, typing dots, drop zone, toolbtn hover, project chat container, working dots, need labels, Porter hero card — all --warning → --accent.'] },
   { ver:'v0.34.10', date:'2026-03-20', notes:['Agent detail + project chat composer borders changed from --warning (orange) to --accent (indigo). Drag-over and chat hints also updated.'] },
   { ver:'v0.34.9', date:'2026-03-20', notes:['Chat input focus borders changed from orange rgba(247,147,26) to var(--accent). Files accordion staggered animation removed — instant expand/collapse.'] },
@@ -32705,6 +32706,391 @@ async function loadModels() {
 
 
 
+async function _selectModelFromList(el, backend, modelId) {
+  // Highlight selected row
+  var container = el.parentElement;
+  container.querySelectorAll('.model-list-row').forEach(function(r) { r.classList.remove('active'); });
+  el.classList.add('active');
+  // Use same API as dropdown
+  var fakeSel = { value: modelId, getAttribute: function() { return backend; } };
+  _selectModel(fakeSel);
+}
+
+async function _selectModel(sel) {
+  var backend = sel.getAttribute('data-backend');
+  var model = sel.value;
+  try {
+    var res = await api('/api/models/select', {backend:backend, model:model});
+    if (res && res.ok) {
+      toast('Model set: ' + (res.resolved || model));
+      loadModels();
+    } else {
+      toast('Failed: ' + ((res && res.error) || 'Unknown error'), 'err');
+    }
+  } catch(e) { toast('Error selecting model', 'err'); }
+}
+
+
+
+function _renderModelCards(data, act) {
+  var grid = document.getElementById('models-grid');
+  if (!grid || !data || !data.providers) return;
+  if (!data.providers.length) {
+    if (_modelsRenderedOnce && grid.children.length > 0) return;
+    grid.innerHTML = '<div style="color:var(--text3);font-size:13px;grid-column:1/-1">No model backends detected.</div>';
+    return;
+  }
+  // Clear old timers
+  Object.keys(_modelTimers).forEach(function(k) { clearInterval(_modelTimers[k]); });
+  _modelTimers = {};
+
+  grid.innerHTML = data.providers.map(function(p) {
+    var dotColor = 'var(--text3)';  // neutral gray until tested
+    var offClass = '';
+
+    // Activity data
+    var ba = (act || {})[p.id] || {};
+    var activeRuns = ba.active || [];
+
+    // Install hint for unavailable backends
+    var _healthChipHtml = '<div id="backend-health-chip-' + p.id + '" style="display:none;margin:4px 0"></div>';
+    var _installHtml = '';
+    if (!p.available && p.install_hint) {
+      _installHtml = '<div style="padding:12px;margin:8px 0;border:1px dashed var(--border);border-radius:6px;text-align:center">'
+        + '<div style="font-size:12px;color:var(--text3);margin-bottom:6px">Not installed</div>'
+        + '<code style="font-size:11px;background:var(--bg);padding:4px 10px;border-radius:4px;color:var(--accent);display:inline-block">' + escHtml(p.install_hint) + '</code>'
+        + '</div>';
+    }
+
+    // Model selector: active model shown in card subtitle
+    var _avBk = (_modelAvailableData || {})[p.id] || {};
+    var _avResolved = _avBk.resolved || '';
+    var _avModels = _avBk.models || [];
+    var _avActive = _avBk.active || 'auto';
+    var _rt = (window._modelRuntimes || {})[p.id] || {};
+    var _resolvedName = '';
+    _avModels.forEach(function(m) { if (m.id === _avResolved) _resolvedName = m.name; });
+    if (!_resolvedName) _resolvedName = _avResolved || (p.label || p.id);
+    var _runtimeHtml = _renderModelRuntimeBadges(p, _rt, _avBk);
+    var _discoveredCount = _avModels.filter(function(m) { return m && m.id && m.id !== 'auto'; }).length;
+    // Build model list (replaces dropdown)
+    var _selHtml = '';
+    if (_avModels.length > 0) {
+      _selHtml = '<div class="model-card-selector"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Models</div><div class="model-list-rows">';
+      _avModels.forEach(function(m) {
+        var isActive = m.id === _avActive;
+        var isResolved = m.id === _avResolved;
+        _selHtml += '<div class="model-list-row' + (isActive ? ' active' : '') + '" onclick="_selectModelFromList(this,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\')" title="' + escHtml(m.id) + '">';
+        _selHtml += '<span class="model-list-dot" style="background:' + (isResolved ? 'var(--accent)' : 'transparent') + '"></span>';
+        _selHtml += '<span class="model-list-name">' + escHtml(m.name) + (m.default ? ' <span style=\"font-size:10px;color:var(--text3)\">(default)</span>' : '') + '</span>';
+        if (m.id === 'auto') {
+          _selHtml += '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;margin-left:auto" onclick="event.stopPropagation();_testCardModels(this,\'' + escHtml(p.id) + '\')">Test All</button>';
+        } else {
+          var _mTid = (p.id + '_' + m.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+          _selHtml += '<span id="test-r-' + _mTid + '" style="font-size:10px;margin-left:auto;white-space:nowrap">' + _renderStoredTestResult(_mTid) + '</span>';
+          _selHtml += '<button class="btn btn-ghost" data-test-model="1" data-backend="' + escHtml(p.id) + '" data-model="' + escHtml(m.id) + '" data-testid="' + escHtml(_mTid) + '" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_testModel(event,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\',\'' + _mTid + '\')">Test</button>';
+        }
+        _selHtml += '</div>';
+      });
+      _selHtml += '</div></div>';
+    }
+
+    // Compact status badge for upper-right
+    var _statusBadge = activeRuns.length > 0
+      ? '<span style="font-size:10px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:3px"><span class="pulse-dot"></span>' + activeRuns.length + ' active</span>'
+      : '';
+    var _selectedSummary = _resolvedName ? ('Selected: ' + _resolvedName) : 'No active model selected yet.';
+    var _selectedMeta = '<div class="model-card-modelmeta">'
+      + '<span class="model-card-chip dim">' + escHtml(_selectedSummary) + '</span>'
+      + (_discoveredCount ? '<span class="model-card-chip dim">' + escHtml(_discoveredCount + ' discovered') + '</span>' : '')
+      + '</div>';
+    var _useHtml = '<div class="model-card-use">' + escHtml(_modelUseText(p.id)) + '</div>';
+
+    var updateFootHtml = '<div id="backend-update-foot-' + escHtml(p.id) + '" class="model-card-alert"></div>';
+    var statusFootHtml = '<div id="backend-status-foot-' + escHtml(p.id) + '" class="model-card-alert"></div>';
+
+    return '<div class="model-card' + offClass + '" data-model-id="' + escHtml(p.id) + '">'
+      + '<div class="model-card-head" style="justify-content:space-between">'
+      + '<div style="display:flex;align-items:center;gap:10px"><span class="model-card-dot" style="background:' + dotColor + '"></span>'
+      + '<span class="model-card-name">' + escHtml(p.label || p.id) + '</span></div>'
+      + '<div style="display:flex;align-items:center;gap:6px">' + _statusBadge
+      + '<button class="btn btn-ghost" style="font-size:12px;padding:1px 4px;line-height:1" onclick="event.stopPropagation();_openBackendConfig(\'' + escHtml(p.id) + '\')" title="Config">&#9881;</button>'
+      + '</div></div>'
+      + '<div class="model-card-meta">'
+      + '<div class="model-ver-badge" id="ver-badge-' + escHtml(p.id) + '" style="font-size:10px;color:var(--text3)">Detecting version…</div>'
+      + '<div id="backend-status-' + escHtml(p.id) + '" style="flex:1"></div>'
+      + '</div>'
+      + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
+      + '<div class="model-card-subline">' + _useHtml + _statusBadge + '</div>'
+      + _selectedMeta
+      + _runtimeHtml
+      + _healthChipHtml
+      + (p.available ? _selHtml : _installHtml)
+      + updateFootHtml
+      + statusFootHtml
+      + '</div>';
+  }).join('');
+
+  Array.prototype.forEach.call(grid.querySelectorAll('.model-card'), function(card, idx) {
+    card.classList.add('hydrating');
+    card.style.animationDelay = (idx * 32) + 'ms';
+    setTimeout(function() {
+      card.classList.remove('hydrating');
+      card.style.animationDelay = '';
+    }, 420 + (idx * 32));
+  });
+
+
+  // Start elapsed timers for working models
+  document.querySelectorAll('.model-elapsed').forEach(function(el) {
+    var started = parseFloat(el.getAttribute('data-started'));
+    if (started > 0) {
+      el.textContent = _elapsedStr(started);
+      var bk = el.closest('.model-card-activity').getAttribute('data-backend');
+      _modelTimers[bk] = setInterval(function() {
+        el.textContent = _elapsedStr(started);
+      }, 1000);
+    }
+  });
+}
+
+function _openModelActivity(backend) {
+  _modelActivityBackend = backend;
+  var overlay = document.getElementById('model-activity-overlay');
+  var panel = document.getElementById('model-activity-panel');
+  if (!overlay || !panel) return;
+
+  // Header
+  var titleEl = document.getElementById('ma-title');
+  var statusEl = document.getElementById('ma-status');
+  titleEl.textContent = backend;
+  // Check if working
+  var ba = (_modelActivityData || {})[backend] || {};
+  var isWorking = (ba.active || []).length > 0;
+  statusEl.textContent = isWorking ? 'WORKING' : 'Idle';
+  statusEl.className = 'ma-status ' + (isWorking ? 'working' : 'idle');
+
+  // Body
+  var body = document.getElementById('ma-body');
+  var stats = ba.stats || {};
+  var recent = ba.recent || [];
+  if (ba._partial && !_modelsActivityHydrate[backend]) {
+    _modelsActivityHydrate[backend] = true;
+    api('/api/models/activity?detail=1').then(function(act) {
+      if (act && act.activity) {
+        _modelActivityData = act.activity;
+        if (_modelActivityBackend === backend) _openModelActivity(backend);
+      }
+    }).finally(function() {
+      delete _modelsActivityHydrate[backend];
+    });
+  }
+
+  // Live Trace section
+  var traceContent = '<div class="ma-section">'
+    + '<div class="ma-section-title">Live Trace</div>'
+    + '<div class="ma-trace-box' + (isWorking ? '' : ' empty') + '" id="ma-trace">'
+    + (isWorking ? 'Streaming...' : 'No active dispatch') + '</div></div>';
+
+  // 24h Stats section
+  var total = stats.total || 0;
+  var pct = total > 0 ? Math.round(((stats.complete || 0) / total) * 100) : 0;
+  var avgDur = stats.avg_ms ? _formatDuration(stats.avg_ms) : '—';
+  var statsContent = '<div class="ma-section">'
+    + '<div class="ma-section-title">24h Stats</div>'
+    + '<div class="ma-stats-grid">'
+    + '<div class="ma-stat-card"><div class="ma-stat-value">' + total + '</div><div class="ma-stat-label">Runs</div></div>'
+    + '<div class="ma-stat-card"><div class="ma-stat-value">' + pct + '%</div><div class="ma-stat-label">Success</div></div>'
+    + '<div class="ma-stat-card"><div class="ma-stat-value">' + avgDur + '</div><div class="ma-stat-label">Avg Duration</div></div>'
+    + '</div></div>';
+
+  // Recent Runs section
+  var runsContent = '';
+  if (recent.length > 0) {
+    var runs = recent.slice(0, 5).map(function(r) {
+      var rdot = r.status === 'complete' ? 'var(--success)' : (r.status === 'failed' ? 'var(--danger)' : 'var(--accent)');
+      var dur = r.duration_ms ? _formatDuration(r.duration_ms) : '';
+      var ago = _relativeTime(r.created_at);
+      return '<div class="ma-run">'
+        + '<span class="ma-run-dot" style="background:' + rdot + '"></span>'
+        + '<span class="ma-run-preview">' + escHtml((r.preview || '').substring(0, 80)) + '</span>'
+        + '<span class="ma-run-meta">' + dur + (ago ? '  ' + ago : '') + '</span>'
+        + '</div>';
+    }).join('');
+    runsContent = '<div class="ma-section">'
+      + '<div class="ma-section-title">Recent Runs</div>' + runs + '</div>';
+  }
+
+  // Sessions now inline on cards — slide-out is Live Trace + Stats only
+  body.innerHTML = traceContent + statsContent + runsContent;
+
+  overlay.classList.add('open');
+  panel.classList.add('open');
+
+  // Start trace polling if working
+  if (isWorking) {
+    _pollActivityTrace(backend);
+    _modelActivityPoller = setInterval(function() { _pollActivityTrace(backend); }, 1500);
+  }
+}
+
+function _closeModelActivity() {
+  _modelActivityBackend = null;
+  if (_modelActivityPoller) { clearInterval(_modelActivityPoller); _modelActivityPoller = null; }
+  var overlay = document.getElementById('model-activity-overlay');
+  var panel = document.getElementById('model-activity-panel');
+  if (overlay) overlay.classList.remove('open');
+  if (panel) panel.classList.remove('open');
+}
+
+async function _pollActivityTrace(backend) {
+  try {
+    var data = await api('/api/models/' + backend + '/trace');
+    var traceBox = document.getElementById('ma-trace');
+    if (!traceBox || !data || !data.traces || !data.traces.length) return;
+    var text = data.traces[0].chunks.join('');
+    traceBox.className = 'ma-trace-box';
+    traceBox.textContent = text;
+    traceBox.scrollTop = traceBox.scrollHeight;
+  } catch(e) { /* ignore */ }
+}
+
+function _connectModelSSE() {
+  if (_modelSseId) { _sseUnsubscribe(_modelSseId); _modelSseId = null; }
+  _modelSseId = _sseSubscribe(function(d) {
+    if (!d || !d.type) return;
+    var evtData = d.data || {};
+    if (d.type === 'bridge:queued') _handleModelQueued(evtData);
+    else if (d.type === 'bridge:admit') _handleModelAdmit(evtData);
+    else if (d.type === 'bridge:dispatch') _handleModelDispatch(evtData);
+    else if (d.type === 'bridge:response') _handleModelResponse(evtData);
+    else if (d.type === 'bridge:error') _handleModelError(evtData);
+    else if (d.type === 'bridge:chunk') _handleModelChunk(evtData);
+  });
+}
+
+function _handleModelQueued(data) {
+  var bk = data.backend;
+  if (!bk) return;
+  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
+  _modelSchedulerData[bk].waiting = (_modelSchedulerData[bk].waiting || 0) + 1;
+  _refreshSchedulerSummary(bk);
+}
+
+function _handleModelAdmit(data) {
+  var bk = data.backend;
+  if (!bk) return;
+  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
+  _modelSchedulerData[bk].waiting = Math.max(0, (_modelSchedulerData[bk].waiting || 0) - 1);
+  _modelSchedulerData[bk].running = (_modelSchedulerData[bk].running || 0) + 1;
+  if (data.wait_ms) _modelSchedulerData[bk].avg_wait_ms = data.wait_ms;
+  _refreshSchedulerSummary(bk);
+}
+
+function _handleModelDispatch(data) {
+  var bk = data.backend;
+  var card = document.querySelector('[data-model-id="' + bk + '"]');
+  if (!card) return;
+  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
+  if (!_modelSchedulerData[bk].running) _modelSchedulerData[bk].running = 1;
+  _refreshSchedulerSummary(bk);
+  var actDiv = card.querySelector('.model-card-activity');
+  if (!actDiv) return;
+  var started = Date.now() / 1000;
+  actDiv.className = 'model-card-activity working';
+  actDiv.setAttribute('data-backend', bk);
+  actDiv.innerHTML = '<span class="pulse-dot"></span>'
+    + '<span>WORKING</span>'
+    + '<span style="opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">"' + escHtml((data.prompt || '').substring(0, 60)) + '"</span>'
+    + '<span class="model-elapsed" style="opacity:.6">0s</span>';
+  // Start timer
+  if (_modelTimers[bk]) clearInterval(_modelTimers[bk]);
+  _modelTimers[bk] = setInterval(function() {
+    var el = actDiv.querySelector('.model-elapsed');
+    if (el) el.textContent = _elapsedStr(started);
+  }, 1000);
+  // Update activity panel if open for this backend
+  if (_modelActivityBackend === bk) {
+    var traceBox = document.getElementById('ma-trace');
+    if (traceBox) { traceBox.className = 'ma-trace-box'; traceBox.textContent = 'Streaming...'; }
+    var statusEl = document.getElementById('ma-status');
+    if (statusEl) { statusEl.textContent = 'WORKING'; statusEl.className = 'ma-status working'; }
+    if (!_modelActivityPoller) {
+      _pollActivityTrace(bk);
+      _modelActivityPoller = setInterval(function() { _pollActivityTrace(bk); }, 1500);
+    }
+  }
+}
+
+function _handleModelResponse(data) {
+  var bk = data.backend;
+  var card = document.querySelector('[data-model-id="' + bk + '"]');
+  if (!card) return;
+  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
+  _modelSchedulerData[bk].running = Math.max(0, (_modelSchedulerData[bk].running || 0) - 1);
+  _refreshSchedulerSummary(bk);
+  var actDiv = card.querySelector('.model-card-activity');
+  if (actDiv) {
+    actDiv.className = 'model-card-activity idle';
+    actDiv.innerHTML = 'Idle';
+  }
+  if (_modelTimers[bk]) { clearInterval(_modelTimers[bk]); delete _modelTimers[bk]; }
+  // Update activity panel if open
+  if (_modelActivityBackend === bk) {
+    if (_modelActivityPoller) { clearInterval(_modelActivityPoller); _modelActivityPoller = null; }
+    var statusEl = document.getElementById('ma-status');
+    if (statusEl) { statusEl.textContent = 'Idle'; statusEl.className = 'ma-status idle'; }
+    var traceBox = document.getElementById('ma-trace');
+    if (traceBox && traceBox.textContent === 'Streaming...') { traceBox.className = 'ma-trace-box empty'; traceBox.textContent = 'Dispatch complete'; }
+  }
+}
+
+function _handleModelError(data) {
+  var bk = data.backend;
+  var card = document.querySelector('[data-model-id="' + bk + '"]');
+  if (!card) return;
+  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
+  _modelSchedulerData[bk].running = Math.max(0, (_modelSchedulerData[bk].running || 0) - 1);
+  _refreshSchedulerSummary(bk);
+  var actDiv = card.querySelector('.model-card-activity');
+  if (actDiv) {
+    actDiv.className = 'model-card-activity idle';
+    actDiv.innerHTML = '<span style="color:var(--danger)">Error: ' + escHtml((data.error || '').substring(0, 60)) + '</span>';
+    setTimeout(function() {
+      actDiv.className = 'model-card-activity idle';
+      actDiv.innerHTML = 'Idle';
+    }, 5000);
+  }
+  if (_modelTimers[bk]) { clearInterval(_modelTimers[bk]); delete _modelTimers[bk]; }
+}
+
+function _handleModelChunk(data) {
+  var bk = data.backend;
+  if (_modelActivityBackend !== bk) return;
+  var traceBox = document.getElementById('ma-trace');
+  if (!traceBox) return;
+  if (traceBox.classList.contains('empty')) {
+    traceBox.className = 'ma-trace-box';
+    traceBox.textContent = '';
+  }
+  traceBox.textContent += (data.text || '');
+  traceBox.scrollTop = traceBox.scrollHeight;
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── Persona Management (Phase B) ────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════
+// ── Persona Management ──────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+let _personas = [];
+let _selectedPersonaId = null;
+let _wizCurrentStep = 1;
+let _wizSelectedEmoji = '\u{1F916}';
+let _personasLoading = false;
+
 async function loadPersonas() {
   _personasLoading = true;
   try {
@@ -46376,7 +46762,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.34.11"})
+            self.reply_json({"v": "0.34.12"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -46538,7 +46924,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.34.11"
+                health["porter_version"] = "0.34.12"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -47151,7 +47537,7 @@ class Handler(BaseHTTPRequestHandler):
                     where.append("scope = ?")
                     params.append(scope_filter)
                 sql = ("SELECT id, memory_kind, trust_tier, scope, scope_id, "
-                       "substr(text, 1, 120) as text, action, "
+                       "substr(text, 1, 120) as text, "
                        "strftime('%s', created_at) as ts "
                        "FROM memories WHERE " + " AND ".join(where) +
                        " ORDER BY created_at DESC LIMIT ?")
@@ -48853,7 +49239,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.11'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.12'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -52865,7 +53251,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.34.11"
+                _ws_health["porter_version"] = "0.34.12"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -56180,7 +56566,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.34.11 ready (localhost only)")
+    print(f"\n  Porter v0.34.12 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
