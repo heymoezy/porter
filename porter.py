@@ -4712,10 +4712,19 @@ def _migrate_legacy_porter_app_project(cfg: dict) -> bool:
 
 
 def _ensure_launchpad_project(cfg: dict) -> bool:
-    """Seed the first-run First Mission project when no projects exist yet."""
-    projects = cfg.get("projects", []) or []
-    if projects:
+    """Seed the first-run First Mission project when no projects exist yet.
+    Checks SQLite DB first — only creates a new project if truly empty."""
+    # If config still has projects (pre-migration), skip
+    if cfg.get("projects", []):
         return False
+    # Check DB for existing projects (post-migration, projects live in SQLite)
+    try:
+        _econn = _db_conn()
+        _existing_count = _econn.execute("SELECT count(*) FROM projects").fetchone()[0]
+        if _existing_count > 0:
+            return False  # Projects exist in DB, no need to seed
+    except Exception:
+        pass  # DB not ready yet (e.g., first call before _db_init); will retry
     pid = str(uuid.uuid4())
     project = {
         "id": pid,
@@ -4732,8 +4741,24 @@ def _ensure_launchpad_project(cfg: dict) -> bool:
         "created_at": time.time(),
         "assigned_personas": [],
     }
-    cfg["projects"] = [project]
-    cfg["active_project_id"] = pid
+    # Write to DB if available, otherwise fall back to config for first-run bootstrap
+    try:
+        _seed_conn = _db_conn()
+        project["owner_id"] = project["owner"]
+        _project_dict_to_row_vals = _project_dict_to_row(project)
+        _seed_conn.execute("""
+            INSERT OR IGNORE INTO projects
+                (id, name, slug, type, status, description, owner_id,
+                 milestones, artifacts, links, metadata, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, _project_dict_to_row_vals)
+        _seed_conn.commit()
+        log.info("Seeded First Mission project in DB: %s", pid)
+    except Exception as _e:
+        # DB not ready (first boot before _db_init) — use config fallback
+        log.debug("First Mission DB seed failed, using config: %s", _e)
+        cfg["projects"] = [project]
+        cfg["active_project_id"] = pid
     try:
         _seed_launchpad_workspace(pid)
         _seed_launchpad_state(pid)
