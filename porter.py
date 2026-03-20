@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.34.0 — Phase 1 Foundation: CSS variables, error handling, SQLite projects, dead code removal, boot sequence"""
+"""Porter v0.34.1 — Phase 1 hotfix: favicon indigo, nav badge indigo, sign-in hover darkened, model chips recolored"""
 
 
 import email
@@ -13432,13 +13432,13 @@ LOGIN_PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="var(--bg)">
 <title>Porter — Sign in</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23F7931A'/><rect x='9' y='8' width='4' height='16' rx='1.5' fill='white'/><rect x='9' y='8' width='10' height='4' rx='1.5' fill='white'/><rect x='9' y='15' width='10' height='4' rx='1.5' fill='white'/><rect x='19' y='8' width='4' height='11' rx='1.5' fill='white'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%236366F1'/><rect x='9' y='8' width='4' height='16' rx='1.5' fill='white'/><rect x='9' y='8' width='10' height='4' rx='1.5' fill='white'/><rect x='9' y='15' width='10' height='4' rx='1.5' fill='white'/><rect x='19' y='8' width='4' height='11' rx='1.5' fill='white'/></svg>">
 <style>
 :root {
   --bg: #111827; --surface: #1E2736; --raised: #28344A;
   --border: #374259; --border2: #4A5770;
   --text: #F1F5F9; --text2: #94A3B8; --text3: #64748B;
-  --accent: #6366F1; --accent-h: #818CF8;
+  --accent: #6366F1; --accent-h: #4F46E5;
   --danger: #EF4444; --success: #22C55E; --warning: #F59E0B;
   --radius: 8px; --sidebar: 220px;
 }
@@ -13635,7 +13635,7 @@ REGISTER_PAGE = """<!DOCTYPE html>
   --bg: #111827; --surface: #1E2736; --raised: #28344A;
   --border: #374259; --border2: #4A5770;
   --text: #F1F5F9; --text2: #94A3B8; --text3: #64748B;
-  --accent: #6366F1; --accent-h: #818CF8;
+  --accent: #6366F1; --accent-h: #4F46E5;
   --danger: #EF4444; --success: #22C55E; --warning: #F59E0B;
   --radius: 8px; --sidebar: 220px;
 }
@@ -13729,7 +13729,7 @@ PAGE = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="var(--bg)">
 <title>Porter</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23F7931A'/><rect x='9' y='8' width='4' height='16' rx='1.5' fill='white'/><rect x='9' y='8' width='10' height='4' rx='1.5' fill='white'/><rect x='9' y='15' width='10' height='4' rx='1.5' fill='white'/><rect x='19' y='8' width='4' height='11' rx='1.5' fill='white'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%236366F1'/><rect x='9' y='8' width='4' height='16' rx='1.5' fill='white'/><rect x='9' y='8' width='10' height='4' rx='1.5' fill='white'/><rect x='9' y='15' width='10' height='4' rx='1.5' fill='white'/><rect x='19' y='8' width='4' height='11' rx='1.5' fill='white'/></svg>">
 <script type="module">
 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
 window.mermaid = mermaid;
@@ -13745,7 +13745,7 @@ window._mermaidReady = Promise.resolve(mermaid.initialize({
   --bg: #111827; --surface: #1E2736; --raised: #28344A;
   --border: #374259; --border2: #4A5770;
   --text: #F1F5F9; --text2: #94A3B8; --text3: #64748B;
-  --accent: #6366F1; --accent-h: #818CF8;
+  --accent: #6366F1; --accent-h: #4F46E5;
   --danger: #EF4444; --success: #22C55E; --warning: #F59E0B;
   --radius: 8px; --sidebar: 220px;
   /* Legacy aliases for backward compat */
@@ -13846,7 +13846,7 @@ body.sidebar-collapsed .mount-item { padding-left: 0; justify-content: center; }
   width:100%; text-align:left; font-family:inherit; }
 .mnav-item:hover { background:var(--raised); color:var(--text); }
 .mnav-item.active { background:rgba(247,147,26,.10); color:var(--accent); font-weight:500; }
-.mnav-badge { margin-left:auto; display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 6px; border-radius:999px; background:var(--warning); color:#140f07; font-size:10px; font-weight:800; line-height:1; }
+.mnav-badge { margin-left:auto; display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 6px; border-radius:999px; background:var(--accent); color:#FFFFFF; font-size:10px; font-weight:800; line-height:1; }
 .mnav-badge.dim { background:color-mix(in srgb,var(--border) 85%, transparent); color:var(--text3); }
 .mnav-sep { height:1px; background:var(--border); margin:6px 0; }
 body.sidebar-collapsed .mnav-label { display:none; }
@@ -16061,7 +16061,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .model-card-state { display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:24px; }
 .model-card-chip { display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid var(--border);font-size:10px;color:var(--text2);background:var(--bg);white-space:nowrap; }
 .model-card-chip.ok { border-color:color-mix(in srgb,var(--success) 35%,var(--border)); color:var(--success); }
-.model-card-chip.warn { border-color:color-mix(in srgb,var(--warning) 40%,var(--border)); color:var(--warning); }
+.model-card-chip.warn { border-color:color-mix(in srgb,var(--accent) 40%,var(--border)); color:var(--accent); }
 .model-card-chip.err { border-color:color-mix(in srgb,var(--danger) 40%,var(--border)); color:var(--danger); }
 .model-card-chip.dim { color:var(--text3); }
 .model-card-chip button { all:unset; cursor:pointer; }
@@ -17483,7 +17483,7 @@ select::-ms-expand { display: none; }
     <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.0</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.1</div>
   </div>
 </aside>
 
@@ -18587,7 +18587,8 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.34.0', date:'2026-03-20', notes:['Phase 1 Foundation complete: CSS variable architecture with dark/light theming, exception handling reform (155 silent swallowers fixed), SQLite project migration, admin system deletion, Cortex disabled, Fastify backend skeleton, boot sequence, clean landing page.'] },
+  { ver:'v0.34.1', date:'2026-03-20', notes:['Favicon changed from orange to indigo. Nav counter badge orange→indigo. Sign-in button hover darkened. Model card warn chips recolored to accent blue.'] },
+  { ver:'v0.33.28', date:'2026-03-20', notes:['Phase 1 Foundation complete: CSS variable architecture with dark/light theming, exception handling reform (155 silent swallowers fixed), SQLite project migration, admin system deletion, Cortex disabled, Fastify backend skeleton, boot sequence, clean landing page.'] },
   { ver:'v0.33.28', date:'2026-03-19', notes:['Agent detail skills tab now scrolls instead of cutting off content. Squad assign button removed from skill cards.','Tool cards left-aligned (260-320px grid) to match card patterns across Models, Agents, and Connections.','Skills card names use ellipsis instead of line-break overflow.'] },
   { ver:'v0.33.27', date:'2026-03-19', notes:['Nav restructured to Work / System / Inspect. Connections is now its own dedicated module under System alongside Models and Tools.','Tool and connection cards cleaned up: removed filter-tag buttons and meta chips from cards, version shown in header, description clamped to 2 lines, left-aligned grid.','Tools page shows all 40+ tools instead of a filtered 17. Connections catalog expanded to 30 services including Gmail, Calendar, Drive, Sheets, Slack, Stripe, and more.','Skills loading cached (60s TTL) to avoid slow CLI calls on every view. Skills card layout overflow fixed for long names.','Settings separator aligned with main nav username separator.'] },
   { ver:'v0.33.25', date:'2026-03-19', notes:['Models is now more product-like: a compact summary strip lands first, cards emphasize readiness, selected models, and best-use guidance instead of defaulting to benchmark/scheduler clutter','Runtime updates now open a Porter-style progress modal with plain-language status and useful retry/details actions instead of the old terminal slab that could leak nonsense like exit undefined','Models still hydrates progressively, but deep version refresh is deferred and the visible runtime surface carries less legacy operator-console residue'] },
@@ -47043,7 +47044,7 @@ LANDING_PAGE = """<!DOCTYPE html>
   --bg: #111827; --surface: #1E2736; --raised: #28344A;
   --border: #374259; --border2: #4A5770;
   --text: #F1F5F9; --text2: #94A3B8; --text3: #64748B;
-  --accent: #6366F1; --accent-h: #818CF8;
+  --accent: #6366F1; --accent-h: #4F46E5;
   --danger: #EF4444; --success: #22C55E; --warning: #F59E0B;
   --radius: 8px;
 }
@@ -47800,7 +47801,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.34.0"})
+            self.reply_json({"v": "0.34.1"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -47962,7 +47963,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.34.0"
+                health["porter_version"] = "0.34.1"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -50380,7 +50381,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.0'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.1'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -54358,7 +54359,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.34.0"
+                _ws_health["porter_version"] = "0.34.1"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -57699,7 +57700,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.34.0 ready (localhost only)")
+    print(f"\n  Porter v0.34.1 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
