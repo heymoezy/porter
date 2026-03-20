@@ -978,7 +978,7 @@ def _db_init():
     # v0.31.50 — Seed default accounts with proper role separation
     import secrets as _s
     _seed_accounts = [
-        ("system", "System", "platform_admin"),
+        # ("system", "System", "system_admin"),  # deleted on startup
         ("admin",  "Admin",  "admin"),
         ("moe",    "Moe",    "operator"),
         ("jacob",  "Jacob",  "operator"),
@@ -7419,12 +7419,7 @@ def _pep_idem_store(ikey: str, result: dict) -> None:
     (RUNTIME_DIR / "idempotency" / f"{safe}.json").write_text(json.dumps(rec))
 
 
-ROLE_CAPS: dict[str, set] = {
-    "viewer":   {"read", "chat_read", "task_read"},
-    "operator": {"read", "write", "chat_read", "chat_write", "task_read", "task_write", "file_read", "file_write", "orch_read", "orch_write", "checkpoint", "finalize"},
-    "admin":    {"read", "write", "chat_read", "chat_write", "task_read", "task_write", "file_read", "file_write", "orch_read", "orch_write", "checkpoint", "finalize", "admin", "user_manage"},
-    "platform_admin": {"read", "write", "chat_read", "chat_write", "task_read", "task_write", "file_read", "file_write", "orch_read", "orch_write", "checkpoint", "finalize", "admin", "user_manage", "platform"},
-}
+# role-caps deleted (admin system removed in Phase 1)
 
 # ── Agent Template Library (v0.31.58) ─────────────────────────────────
 # ~100 fully spec'd agent archetypes organized into 10 categories.
@@ -9126,7 +9121,7 @@ def _check_project_access(session, project_id, required_role="member"):
     username = session.get("username", "")
     user_role = session.get("role", "")
     # Admin users bypass all checks
-    if user_role in ("admin", "platform_admin"):
+    if user_role == "admin":
         return True
     # Check project ownership
     proj = None
@@ -17120,24 +17115,6 @@ select::-ms-expand { display: none; }
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <span class="mnav-label">Logs</span>
     </button>
-    <div class="mnav-group-label" style="display:none">Admin</div>
-    <button class="mnav-item" id="mnav-policies" style="display:none" onclick="switchModule('policies')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/><circle cx="18" cy="14" r="4"/></svg>
-      <span class="mnav-label">Policies</span>
-    </button>
-    <button class="mnav-item" id="mnav-tool-registry" style="display:none" onclick="switchModule('tool-registry')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
-      <span class="mnav-label">Tools</span>
-    </button>
-    <button class="mnav-item" id="mnav-audit" style="display:none" onclick="switchModule('audit')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-      <span class="mnav-label">Activity</span>
-    </button>
-    <div class="mnav-sep" style="display:none"></div>
-    <button class="mnav-item" id="mnav-platform" style="display:none" onclick="window.location.href='/admin/'">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-      <span class="mnav-label">Platform</span>
-    </button>
   </nav>
 
   <div class="mnav-sep" style="margin:6px 10px"></div>
@@ -17892,98 +17869,6 @@ select::-ms-expand { display: none; }
         <!-- moved to Password tab -->
       </div>
 
-      <!-- Agents page -->
-      <div class="settings-page" id="spage-agents">
-        <div class="settings-page-title">Agents</div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:18px">API clients that connect to Porter. Each agent gets a unique key.</div>
-        <div id="agent-list"></div>
-        
-        <!-- create form -->
-        <div id="agent-form" style="display:none;margin-top:20px;padding:16px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-          <div class="settings-page-title" style="font-size:14px;margin-bottom:14px">New agent</div>
-          <div class="settings-field">
-            <label>Name</label>
-            <input type="text" class="settings-input" id="af-name" placeholder="Claude Code">
-          </div>
-          <div class="settings-field">
-            <label>Type</label>
-            <select class="settings-input" id="af-type" style="cursor:pointer">
-              <option value="claude-code">Claude Code</option>
-              <option value="openclaw">OpenClaw</option>
-              <option value="generic">Generic API client</option>
-            </select>
-          </div>
-          <div class="settings-field">
-            <label>Role</label>
-            <select class="settings-input" id="af-role" style="cursor:pointer">
-              <option value="viewer">Observer — read only</option>
-              <option value="writer" selected>Standard — read + write + checkpoint</option>
-              <option value="operator">Trusted — write + finalize</option>
-              <option value="admin">Admin — full access</option>
-            </select>
-          </div>
-          <div class="settings-save-row" style="gap:8px">
-            <button class="btn btn-primary" onclick="createAgent()">Create &amp; copy key</button>
-            <button class="btn btn-ghost" onclick="cancelAgentForm()">Cancel</button>
-          </div>
-        </div>
-        <!-- new key display -->
-        <div id="agent-key-box" style="display:none;margin-top:20px;padding:14px;background:rgba(247,147,26,.08);border:1px solid rgba(247,147,26,.3);border-radius:8px">
-          <div style="font-size:12px;color:var(--accent);font-weight:600;margin-bottom:8px">⚠ Copy this key now — it won't be shown again</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <code style="flex:1;font-size:12px;word-break:break-all;color:var(--text)" id="agent-key-val"></code>
-            <button class="btn btn-ghost" style="flex-shrink:0;font-size:12px" onclick="copyAgentKey()">Copy</button>
-          </div>
-        </div>
-        <!-- agent usage section (merged from former Usage tab) -->
-        <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
-          <div class="settings-page-title" style="font-size:15px;margin-bottom:10px">Agent Usage</div>
-          <div style="font-size:13px;color:var(--text3);margin-bottom:12px">
-            Current availability and token usage windows for all registered agents.
-          </div>
-          <div id="usage-panel"><div class="loading-indicator">Loading usage</div></div>
-          <div style="margin-top:12px">
-            <button class="btn btn-ghost"  onclick="openUsageSnapshot()">+ Report usage</button>
-          </div>
-        </div>
-        <!-- manual snapshot form -->
-        <div id="usage-snap-form" style="display:none;margin-top:14px;padding:14px;background:var(--raised);border-radius:8px;border:1px solid var(--border)">
-          <div style="font-size:13px;font-weight:600;margin-bottom:12px">Report agent usage</div>
-          <div class="settings-field">
-            <label>Agent</label>
-            <select class="settings-input" id="us-agent" style="cursor:pointer"></select>
-          </div>
-          <div class="settings-field">
-            <label>Paste raw status output <span style="color:var(--text3);font-weight:400">(or fill fields manually)</span></label>
-            <textarea class="settings-input" id="us-raw" rows="3" placeholder="Paste CLI output here…" style="font-family:monospace;font-size:11px;resize:vertical" oninput="parseUsageRaw()"></textarea>
-          </div>
-          <div style="display:flex;gap:12px">
-            <div class="settings-field" style="flex:1">
-              <label>Status</label>
-              <select class="settings-input" id="us-status" style="cursor:pointer">
-                <option value="available">Available</option>
-                <option value="degraded">Degraded (&gt;75%)</option>
-                <option value="rate_limited">Rate limited (&gt;90%)</option>
-                <option value="exhausted">Exhausted (100%)</option>
-                <option value="unknown">Unknown</option>
-              </select>
-            </div>
-            <div class="settings-field" style="flex:1">
-              <label>Usage %</label>
-              <input type="number" class="settings-input" id="us-pct" min="0" max="100" placeholder="0–100">
-            </div>
-          </div>
-          <div class="settings-field">
-            <label>Resets at (UTC ISO, optional)</label>
-            <input type="text" class="settings-input" id="us-resets" placeholder="2026-02-25T02:00:00Z">
-          </div>
-          <div class="settings-save-row" style="gap:8px">
-            <button class="btn btn-ghost" onclick="cancelUsageSnapshot()">Cancel</button>
-            <button class="btn btn-primary" onclick="submitUsageSnapshot()">Save snapshot</button>
-          </div>
-        </div>
-      </div>
-
       <!-- Password page -->
       <div class="settings-page" id="spage-password">
         <div class="settings-toolbar"><div class="settings-page-title" style="margin:0">Password</div></div>
@@ -18008,50 +17893,6 @@ select::-ms-expand { display: none; }
 
 
 
-
-<div class="settings-page" id="spage-tasks">
-        <div class="sp-header">
-          <h2>Task Operations</h2>
-          <button class="btn btn-sm btn-ghost" onclick="clearCompletedTasks()"
-                  style="margin-left:auto">Clear completed</button>
-        </div>
-        <details class="task-legend" style="margin-bottom:14px;font-size:12px;color:var(--text2)">
-          <summary style="cursor:pointer;font-weight:600;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px;list-style:none">&#9658; Status reference</summary>
-          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-            <div style="display:flex;align-items:center;gap:10px">
-              <span class="task-badge badge-running">running</span>
-              <span>Heartbeat active — agent is processing normally</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px">
-              <span class="task-badge badge-paused">paused</span>
-              <span>Manually paused by an operator — awaiting resume</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px">
-              <span class="task-badge badge-stalled">stalled</span>
-              <span>Heartbeat expired — agent may have crashed or lost connection</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px">
-              <span class="task-badge badge-complete">complete</span>
-              <span>Task finished successfully and finalized</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px">
-              <span class="task-badge badge-cancelled">cancelled</span>
-              <span>Manually cancelled — no further work will be done</span>
-            </div>
-          </div>
-        </details>
-        <div id="tasks-list"><div class="loading-indicator" style="padding:20px 0">Loading tasks</div></div>
-      </div>
-
-      <!-- Policy Presets page -->
-      <div class="settings-page" id="spage-policy">
-        <div class="sp-header"><h2>Policy Presets</h2></div>
-        <p style="color:var(--text2);margin:0 0 4px">
-          Select a routing strategy. Agents use this preset for model selection and cost behaviour.
-          Preset-based control only — no autonomous optimizer.
-        </p>
-        <div class="policy-grid" id="policy-presets-grid"></div>
-      </div>
 
       <div class="settings-page" id="spage-changelog">
         <div class="settings-toolbar"><div class="settings-page-title" style="margin:0">What's new</div></div>
@@ -18469,18 +18310,18 @@ const CHANGELOG = [
   { ver:'v0.31.64', date:'2026-03-14', notes:["Operations V1: Governance enforcement is live","Autonomy mode enforced: manual blocks auto-actions, guided checks flags","Quality gates block project completion if not all passed","Phase auto-cascade: marking a phase done activates the next one","Audit trail: status changes logged as project notes"] },
   { ver:'v0.31.63', date:'2026-03-14', notes:["Memory V4: State Engine — directives injected into chat prompts","Chat actions: add_directive, dismiss_directive for project governance","Cortex auto-extraction retired (disabled by default)","Admin console: Directives browser with scope filtering","Global + project directives shape Porter's responses"] },
   { ver:'v0.31.62', date:'2026-03-14', notes:["Admin template browser: browse, filter, and inspect 100 worker archetypes","Category filter toolbar with counts","Template detail modal with soul traits, authority, inputs/outputs"] },
-  { ver:'v0.31.61', date:'2026-03-14', notes:["Fix: stop deleting other users' First Mission projects on startup","Fix: admin role sees own projects only (platform_admin sees all)","Fix: re-seed First Mission for users who lost theirs","Project isolation is now query-time, not startup-time"] },
+  { ver:'v0.31.61', date:'2026-03-14', notes:["Fix: stop deleting other users' First Mission projects on startup","Fix: admin role sees own projects only (system admin sees all)","Fix: re-seed First Mission for users who lost theirs","Project isolation is now query-time, not startup-time"] },
   { ver:'v0.31.60', date:'2026-03-14', notes:["Chat unification phase 1: popup chat auto-binds to current project for action execution","Context bleed fix: switchModule clears stale chat context","Popup chat sends project_id and persona_name when inside a project","Context chip shows bound project in popup chat header"] },
   { ver:'v0.31.59', date:'2026-03-14', notes:["Project Plan tab: 4-section governance (Workflow, Schedule, Autonomy, Success)","10 new chat actions: phases, cadence, checkpoints, autonomy, quality gates","Plan tab context injected into project chat for intelligent planning","DO THIS NEXT coaching for Plan tab"] },
   { ver:'v0.31.58', date:'2026-03-14', notes:["Agent template library: 100 fully spec'd worker archetypes across 10 categories","GET /api/templates endpoint with category filtering","Project type worker recommendations updated to use template names"] },
   { ver:'v0.31.57', date:'2026-03-14', notes:["Login: Porter pixel avatar, removed 'Orchestrator' subtitle","Login: forgot password and create account links","Sidebar: 'Orchestrator' renamed to 'AI Workspace'","Logs: system noise filtered for non-admin users"] },
   { ver:'v0.31.56', date:'2026-03-14', notes:["Fix: state page project count now matches user's actual projects","Logs tab restored for all users (was admin-only)","Startup cleanup removes all other users' First Mission projects"] },
-  { ver:'v0.31.55', date:'2026-03-14', notes:["SaaS control system: full admin console for platform_admin role","Admin console: Overview, Users, Sessions, Projects, Health, Config, Logs tabs","Platform admin auto-redirects to /admin/ on login","Session management: view and revoke active sessions","Porter-style modal dialogs in admin console (no browser prompts)"] },
+  { ver:'v0.31.55', date:'2026-03-14', notes:["SaaS control system: full admin console for system admin role","Admin console: Overview, Users, Sessions, Projects, Health, Config, Logs tabs","Platform admin auto-redirects to /admin/ on login","Session management: view and revoke active sessions","Porter-style modal dialogs in admin console (no browser prompts)"] },
   { ver:'v0.31.54', date:'2026-03-14', notes:["Fix: project list now uses role-based filtering (was using legacy config username)","Fix: First Mission only created for operator/viewer roles, not admin/system","Startup cleanup removes orphan First Mission projects from admin/system accounts"] },
   { ver:'v0.31.53', date:'2026-03-14', notes:["People tab: user list accessible to all authenticated users","Admin actions (add/edit/delete users) hidden for non-admin roles"] },
   { ver:'v0.31.52', date:'2026-03-14', notes:["API protection: all /api/admin/* endpoints now require admin role","Operators get 403 Forbidden on admin endpoints (was 200 OK)","Admin split complete: role system, nav visibility, admin shell, API protection"] },
-  { ver:'v0.31.51', date:'2026-03-14', notes:["Porter Admin: separate shell at /admin/ for platform_admin users","Admin shell: Overview, Users, Health, Logs tabs with dedicated UI","Platform admin nav link appears for system-level users only","Admin shell is fully isolated from normal Porter app"] },
-  { ver:'v0.31.50', date:'2026-03-14', notes:["Role system: platform_admin, admin (workspace), operator, viewer","4 default accounts: system (platform), admin (workspace), moe, jacob","Sign Out moved from Settings to main nav rail","Nav visibility: Logs tab now admin-only","Stopped legacy admin→slug username migration"] },
+  { ver:'v0.31.51', date:'2026-03-14', notes:["Porter Admin: separate shell at /admin/ for system admin users","Admin shell: Overview, Users, Health, Logs tabs with dedicated UI","Platform admin nav link appears for system-level users only","Admin shell is fully isolated from normal Porter app"] },
+  { ver:'v0.31.50', date:'2026-03-14', notes:["Role system: system_admin, admin (workspace), operator, viewer","4 default accounts: system (platform), admin (workspace), moe, jacob","Sign Out moved from Settings to main nav rail","Nav visibility: Logs tab now admin-only","Stopped legacy admin→slug username migration"] },
   { ver:'v0.31.49', date:'2026-03-14', notes:["Global / popup chat now persists to Porter chat history","Global chat textarea auto-grows with message","Porter State page now shows all projects (was 0 for orchestrators)","'Create Project With Porter' → 'Start A New Project'","Removed redundant Create Worker/Refine Project buttons from chat toolbar","Workers tab: add buttons hidden when empty state already shows CTAs"] },
   { ver:'v0.31.48', date:'2026-03-14', notes:["Smart routing: create_worker chat action uses project route hint instead of hardcoded backend","GPT-5.4 audit remediation complete: 10 findings across 4 releases (v0.31.45-48)"] },
   { ver:'v0.31.47', date:'2026-03-14', notes:["Fix: kickoff 'settings' tab navigation now correctly routes to overview","Chat actions now show toast notifications on success/failure","Worker USER.md now uses operator display name and timezone from config"] },
@@ -18842,7 +18683,7 @@ const CHANGELOG = [
   { ver:'v0.25.39', date:'2026-03-02', notes:['Server-side chain dispatch: _run_chain() with step-level probe + dispatch + output piping','POST /api/bridge/chain: fire multi-step chains in background thread','GET /api/bridge/chains: aggregate chain runs with status/tokens/duration','agent_messages gains chain_id + step_num columns (auto-migrated)','Chain Builder UI in Workflows tab: add steps, run chains, view run history','SSE events: chain:start, chain:step, chain:complete, chain:error','Mission Control logs chain lifecycle events'] },
   { ver:'v0.25.38', date:'2026-03-02', notes:['Provider Registry: 5 probe functions with 15s TTL cache','PROVIDER_REGISTRY replaces AGENT_DISPATCHERS (dispatch, probe, type, label per backend)','GET /api/providers: real-time health status for all 5 backends','Smart routing fallback chain: if preferred backend is down, auto-fallback to next available','Configurable fallback_chain in preferences','Mission Control logs route decisions + fallback events','Fixed stale version in /api/admin/health and /api/version'] },
   { ver:'v0.25.37', date:'2026-03-02', notes:['Mission Control: structured event pipeline (JSONL + SQLite index)','Real-time event timeline with severity, domain, and trace correlation','Alert engine: bridge failure spikes, auth anomalies, timeout bursts','5 summary cards: incidents, errors, timeouts, bridge fails, total','Debug Focus / Live Tail modes + query filter bar + presets','Trace waterfall view in detail panel','6 new API endpoints: /api/logs/query, /trace, /incidents, /metrics, /event, /incidents/:id/ack','24h retention + 1.5GB cap + automatic purge','Export events as JSON'] },
-  { ver:'v0.25.36', date:'2026-03-02', notes:['Bridge service auth: dispatch/runs/invoke accept Bearer tokens via auth_check_cap','New GET /api/bridge/run?id= for single-run polling','GET /api/bridge/runs now supports ?since=&status=&limit= filters','Regenerated OpenClaw API key (scrypt hash)'] },
+  { ver:'v0.25.36', date:'2026-03-02', notes:['Bridge service auth: dispatch/runs/invoke accept Bearer tokens via auth_cap','New GET /api/bridge/run?id= for single-run polling','GET /api/bridge/runs now supports ?since=&status=&limit= filters','Regenerated OpenClaw API key (scrypt hash)'] },
   { ver:'v0.25.35', date:'2026-03-02', notes:['Fixed chain parsing: text before first @model no longer lost','Smart connector stripping (ask/tell/to/and send it to)','@mention indicator shows targeted models below input (cursor-safe)','Fixed single @ extraction losing prefix text'] },
   { ver:'v0.25.34', date:'2026-03-02', notes:['Removed transparent text overlay (fixes cursor misalignment with @mentions)','Fixed input not clearing after @ dispatch','Fixed chain runner: fetch timeout was 15s, now 130s (Gemini needs 18s+)','Fixed @ path missing transition to bottom input','Removed bridge prompt injection (was contaminating model outputs)','Collapsed double spaces in @ text extraction'] },
   { ver:'v0.25.33', date:'2026-03-02', notes:['Gemini streaming fix: trim prompt to 4000 chars (matches non-streaming dispatcher)','Merged stderr→stdout on all CLI backends to prevent pipe deadlock','Added process cleanup with kill-on-timeout for hung CLI processes'] },
@@ -20828,7 +20669,7 @@ function switchModule(name) {
 async function loadMemory() {
   var el = document.getElementById('memory-dashboard');
   if (!el) return;
-  var _isPlatAdmin = currentUser && currentUser.role === 'platform_admin';
+  var _isPlatAdmin = false;  // system admin role removed
   el.innerHTML = _spinnerOnlyMarkup(140, '18px 0');
   try {
     var [statsRes, queueRes] = await Promise.all([
@@ -20935,7 +20776,7 @@ async function _memLoadKind(kind) {
   try {
     var res = await api('/api/memory/by-scope?kind=' + kind + '&limit=50');
     var items = (res && res.memories) || [];
-    if (!(currentUser && currentUser.role==='platform_admin')) { items = items.filter(function(m) { return m.source_type !== 'system'; }); }
+    // system_admin filter removed
     if (!items.length) {
       el.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:12px">No ' + label.toLowerCase() + ' found.</div>';
       return;
@@ -23786,7 +23627,7 @@ async function _crmLoadTeam() {
       html += '</div>';
       html += '<div class="people-card-stamp">' + _crmProfileAvatarMarkup({ name: u.display_name || u.username, internal: !isYou, photo_url: isYou ? ('/api/avatar?_=' + Date.now()) : '', size: 34 }) + '</div>';
       html += '<div class="people-card-actions">';
-      if (currentUser && (currentUser.role==='admin'||currentUser.role==='platform_admin')) {
+      if (currentUser) {  // was admin|system_admin check
         html += '<button onclick="event.stopPropagation();_peopleEditRole(\x27' + escHtml(u.username) + '\x27,\x27' + escHtml(u.role || 'operator') + '\x27)">Role</button>';
         if (!isYou) html += '<button class="danger" onclick="event.stopPropagation();_peopleDelete(\x27' + escHtml(u.username) + '\x27)">Remove</button>';
       }
@@ -24401,7 +24242,7 @@ async function _crmOpenContact(id) {
   document.getElementById('people-module').classList.add('detail-open');
   var dv = document.getElementById('people-detail-view');
   if (dv) dv.dataset.socialJson = JSON.stringify(social || {});
-  var canManage = currentUser && ['operator','admin','platform_admin'].indexOf(currentUser.role) >= 0;
+  var canManage = currentUser && ['operator','admin'].indexOf(currentUser.role);
   var h = '';
   var backBtn = document.getElementById('people-module-back'); if (backBtn) backBtn.style.display = 'inline-flex';
   // Header: name + actions
@@ -24476,7 +24317,7 @@ async function _crmOpenCompany(id) {
   var c = d.company;
   document.getElementById('people-module').classList.add('detail-open');
   var dv = document.getElementById('people-detail-view');
-  var canManage = currentUser && ['operator','admin','platform_admin'].indexOf(currentUser.role) >= 0;
+  var canManage = currentUser && ['operator','admin'].indexOf(currentUser.role);
   var h = '';
   var backBtn = document.getElementById('people-module-back'); if (backBtn) backBtn.style.display = 'inline-flex';
   // Header: name + actions
@@ -38457,13 +38298,13 @@ async function loadMe() {
   document.getElementById('sa-email').value = data.email || '';
   // v0.31.50 — Role-based nav visibility
   var role = data.role || 'operator';
-  var isAdmin = (role === 'admin' || role === 'platform_admin');
+  var isAdmin = (role === 'admin');  // system_admin removed
   // v0.31.56 — Logs visible to all users (admin-only noise filtered server-side)
   var addUserBtn = document.getElementById('people-add-btn');
   if (addUserBtn) addUserBtn.style.display = isAdmin ? '' : 'none';
   // v0.31.51 — Platform admin link
   var platformLink = document.getElementById('mnav-platform');
-  if (platformLink) platformLink.style.display = (role === 'platform_admin') ? '' : 'none';
+  // platformLink removed (system admin role deleted)
 }
 
 async function saveAccount() {
@@ -47030,7 +46871,7 @@ def _stream_chunk(run_id, backend, token):
     _emit_event("bridge:chunk", {"run_id": run_id, "backend": backend, "text": token})
 
 
-ADMIN_PAGE = '<!DOCTYPE html>\n<html lang="en"><head>\n<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n<title>Porter Admin Console</title>\n<style>\n*{margin:0;padding:0;box-sizing:border-box}\n:root{--bg:#0b0f14;--surface:#141a24;--raised:#1c2433;--border:#283040;--text:#e8ecf2;--text2:#a0aab8;--text3:#6b7688;--accent:#3b82f6;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--purple:#a855f7}\nbody{font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}\n.admin-nav{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}\n.admin-nav-brand{padding:16px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}\n.admin-nav-brand svg{color:var(--accent)}\n.admin-nav-brand-text{font-size:14px;font-weight:700;letter-spacing:.3px}\n.admin-nav-brand-sub{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px}\n.admin-nav-section{padding:12px 0 4px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding-left:18px}\n.admin-nav-item{display:flex;align-items:center;gap:10px;padding:9px 18px;font-size:13px;color:var(--text2);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .15s;border-left:2px solid transparent}\n.admin-nav-item:hover{background:var(--raised);color:var(--text)}\n.admin-nav-item.active{background:var(--raised);color:var(--text);font-weight:600;border-left-color:var(--accent)}\n.admin-nav-footer{margin-top:auto;padding:14px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}\n.admin-nav-footer a{color:var(--text3);font-size:11px;text-decoration:none;display:flex;align-items:center;gap:6px}\n.admin-nav-footer a:hover{color:var(--text)}\n.admin-main{flex:1;overflow-y:auto;padding:28px 36px}\n.admin-title{font-size:20px;font-weight:700;margin-bottom:4px}\n.admin-subtitle{font-size:12px;color:var(--text3);margin-bottom:24px}\n.admin-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:14px}\n.admin-card-title{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px}\n.admin-stat{font-size:32px;font-weight:800;line-height:1.1}\n.admin-stat-sub{font-size:11px;color:var(--text3);margin-top:4px}\n.admin-stat.green{color:var(--green)}.admin-stat.red{color:var(--red)}.admin-stat.blue{color:var(--accent)}.admin-stat.purple{color:var(--purple)}.admin-stat.yellow{color:var(--yellow)}\n.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:20px}\n.admin-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}\n.admin-table{width:100%;border-collapse:collapse;font-size:12px}\n.admin-table th{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.4px}\n.admin-table td{padding:8px 12px;border-bottom:1px solid var(--border)}\n.admin-table tr:hover td{background:var(--raised)}\n.admin-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}\n.admin-badge.green{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}\n.admin-badge.blue{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n.admin-badge.yellow{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}\n.admin-badge.red{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}\n.admin-badge.purple{background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)}\n.admin-btn{padding:7px 16px;border-radius:6px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-size:12px;cursor:pointer;transition:all .15s}\n.admin-btn:hover{background:var(--surface);border-color:var(--text3)}\n.admin-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}\n.admin-btn.primary:hover{opacity:.9}\n.admin-btn.danger{border-color:var(--red);color:var(--red)}\n.admin-btn.danger:hover{background:color-mix(in srgb,var(--red) 10%,transparent)}\n.admin-btn.sm{padding:4px 10px;font-size:11px}\n.admin-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:16px}\n.admin-toolbar .spacer{flex:1}\n.admin-log-line{font-family:\'SF Mono\',Menlo,Monaco,monospace;font-size:11px;padding:3px 0;color:var(--text2);white-space:pre-wrap;word-break:break-all;line-height:1.5}\n.admin-log-line:hover{background:var(--raised)}\n.admin-kv{display:grid;grid-template-columns:160px 1fr;gap:0;font-size:12px}\n.admin-kv dt{padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border)}\n.admin-kv dd{padding:6px 10px;border-bottom:1px solid var(--border);word-break:break-all}\n.admin-empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}\n.admin-modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center}\n.admin-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:360px;max-width:480px}\n.admin-modal h3{font-size:15px;margin-bottom:16px}\n.admin-modal label{display:block;font-size:11px;color:var(--text2);margin-bottom:4px;margin-top:12px}\n.admin-modal .admin-input,.admin-modal .admin-select{width:100%;margin-bottom:4px}\n.admin-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}\n.admin-input{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n.admin-input:focus{border-color:var(--accent)}\n.admin-select{background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--text);font-size:12px;outline:none}\n@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}\n.pulse{animation:pulse 2s ease-in-out infinite}\n</style>\n</head><body>\n<div class="admin-nav">\n  <div class="admin-nav-brand">\n    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>\n    <div>\n      <div class="admin-nav-brand-text">Porter Admin</div>\n      <div class="admin-nav-brand-sub">SaaS Control</div>\n    </div>\n  </div>\n  <div class="admin-nav-section">Monitor</div>\n  <button class="admin-nav-item active" onclick="_at(\'overview\',this)">Overview</button>\n  <button class="admin-nav-item" onclick="_at(\'health\',this)">Health</button>\n  <div class="admin-nav-section">Manage</div>\n  <button class="admin-nav-item" onclick="_at(\'users\',this)">Users</button>\n  <button class="admin-nav-item" onclick="_at(\'sessions\',this)">Sessions</button>\n  <button class="admin-nav-item" onclick="_at(\'projects\',this)">Projects</button>\n  <button class="admin-nav-item" onclick="_at(\'templates\',this)">Templates</button>\n  <button class="admin-nav-item" onclick="_at(\'directives\',this)">Directives</button>\n  <button class="admin-nav-item" onclick="_at(\'connections\',this)">Connections</button>\n  <div class="admin-nav-section">System</div>\n  <button class="admin-nav-item" onclick="_at(\'config\',this)">Config</button>\n  <button class="admin-nav-item" onclick="_at(\'logs\',this)">Logs</button>\n  <button class="admin-nav-item" onclick="_at(\'audit\',this)">Audit</button>\n  <div class="admin-nav-footer">\n    <a href="/">&#8592; Porter Workspace</a>\n    <span style="font-size:10px;color:var(--text3)">v0.33.25</span>\n  </div>\n</div>\n<div class="admin-main" id="admin-content"><div class="admin-title">Loading...</div></div>\n<div id="admin-modal-root"></div>\n<script>\nvar _adminCurrentTab=\'overview\';\nasync function _api(u,b){var o=b?{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},credentials:\'same-origin\',body:JSON.stringify(b)}:{credentials:\'same-origin\'};try{var r=await fetch(u,o);if(!r.ok&&r.status===403)return{error:\'forbidden\'};return r.json();}catch(e){return{error:e.message};}}\nfunction _at(t,el){_adminCurrentTab=t;document.querySelectorAll(\'.admin-nav-item\').forEach(function(b){b.classList.remove(\'active\')});if(el)el.classList.add(\'active\');var fn={overview:_loadOverview,users:_loadUsers,sessions:_loadSessions,health:_loadHealth,projects:_loadProjects,config:_loadConfig,logs:_loadLogs,audit:_loadAudit,templates:_loadTemplates,directives:_loadDirectives,connections:_loadConnections};if(fn[t])fn[t]();}\nfunction _escH(s){var d=document.createElement(\'div\');d.textContent=s;return d.innerHTML;}\nfunction _fmtUp(s){var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return(d?d+\'d \':\'\')+ h+\'h \'+m+\'m\';}\nfunction _fmtDate(ts){if(!ts)return\'-\';var d=new Date(typeof ts===\'number\'?ts*1000:ts);return d.toLocaleDateString(\'en-GB\',{day:\'2-digit\',month:\'short\',year:\'numeric\'})+\' \'+d.toLocaleTimeString(\'en-GB\',{hour:\'2-digit\',minute:\'2-digit\'});}\nfunction _fmtAgo(ts){if(!ts)return\'-\';var now=Date.now()/1000,diff=now-ts;if(diff<60)return\'just now\';if(diff<3600)return Math.floor(diff/60)+\'m ago\';if(diff<86400)return Math.floor(diff/3600)+\'h ago\';return Math.floor(diff/86400)+\'d ago\';}\nfunction _roleBadge(r){var c=r===\'platform_admin\'?\'purple\':r===\'admin\'?\'yellow\':r===\'operator\'?\'blue\':\'green\';return\'<span class="admin-badge \'+c+\'">\'+_escH(r)+\'</span>\';}\nfunction _modal(h){document.getElementById(\'admin-modal-root\').innerHTML=h;}\nfunction _closeModal(){document.getElementById(\'admin-modal-root\').innerHTML=\'\';}\n\nasync async function _appendUsageStats(){\n  try{\n    var res=await fetch(\'/api/admin/usage\',{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var users=(res&&res.users)||[];\n    if(users.length===0)return;\n    var el=document.getElementById(\'admin-content\');\n    var html=\'<div class="admin-title" style="margin-top:24px">User Activity</div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>Sessions</th><th>Active Now</th><th>Last Active</th></tr>\';\n    users.forEach(function(u){\n      var la=u.last_active_at?new Date(u.last_active_at*1000).toLocaleString(\'en-SG\',{hour12:false,timeZone:\'Asia/Singapore\'}):\'Never\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\'</td>\';\n      html+=\'<td>\'+_escH(u.role)+\'</td>\';\n      html+=\'<td>\'+u.session_count+\'</td>\';\n      html+=\'<td>\'+u.active_sessions+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px">\'+la+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML+=html;\n  }catch(e){}\n}\nfunction _loadOverview(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div><div class="pulse" style="color:var(--text3)">Loading dashboard...</div>\';\n  try{\n    var [health,users,projects]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/users\',{action:\'list\'}),_api(\'/api/projects\')]);\n    var h=health||{},userList=(users&&users.users)||[],projList=(projects&&projects.projects)||[];\n    var activeProjects=projList.filter(function(p){return p.status===\'active\'}).length;\n    var adminCount=userList.filter(function(u){return u.role===\'admin\'||u.role===\'platform_admin\'}).length;\n    var opCount=userList.filter(function(u){return u.role===\'operator\'}).length;\n    var html=\'<div class="admin-title">Overview</div><div class="admin-subtitle">Porter SaaS Control Panel</div>\';\n    html+=\'<div class="admin-grid">\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System Status</div><div class="admin-stat green">Online</div><div class="admin-stat-sub">PID \'+(h.porter_pid||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Version</div><div class="admin-stat blue" style="font-size:22px">v\'+(h.porter_version||\'?\')+\'</div><div class="admin-stat-sub">Python \'+(h.python_version||\'?\')+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Uptime</div><div class="admin-stat" style="font-size:20px;color:var(--text)">\'+_fmtUp(h.uptime_seconds||0)+\'</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div><div class="admin-stat blue">\'+userList.length+\'</div><div class="admin-stat-sub">\'+adminCount+\' admin, \'+opCount+\' operators</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Projects</div><div class="admin-stat purple">\'+projList.length+\'</div><div class="admin-stat-sub">\'+activeProjects+\' active</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-grid-3">\';\n    var cpuC=(h.cpu_percent||0)>80?\'red\':(h.cpu_percent||0)>50?\'yellow\':\'green\';\n    var memC=(h.memory_percent||0)>80?\'red\':(h.memory_percent||0)>50?\'yellow\':\'green\';\n    var diskC=(h.disk_percent||0)>90?\'red\':(h.disk_percent||0)>70?\'yellow\':\'green\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">CPU</div><div class="admin-stat \'+cpuC+\'">\'+(h.cpu_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Memory</div><div class="admin-stat \'+memC+\'">\'+(h.memory_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Disk</div><div class="admin-stat \'+diskC+\'">\'+(h.disk_percent||0).toFixed(0)+\'%</div></div>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Services</div>\';\n    var svcs=h.services||[];\n    if(svcs.length){\n      html+=\'<table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>URL</th></tr>\';\n      svcs.forEach(function(s){var b=s.status===\'ok\'?\'green\':\'red\';html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+b+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table>\';\n    }else{html+=\'<div class="admin-empty">No services detected</div>\';}\n    html+=\'</div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">Users</div>\';\n    html+=\'<table class="admin-table"><tr><th>User</th><th>Role</th><th>Created</th></tr>\';\n    userList.slice(0,10).forEach(function(u){html+=\'<tr><td style="font-weight:600">\'+_escH(u.display_name||u.username)+\' <span style="color:var(--text3);font-weight:400">@\'+_escH(u.username)+\'</span></td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td></tr>\';});\n    html+=\'</table></div>\';\n    el.innerHTML=html;_appendUsageStats();\n  }catch(e){el.innerHTML=\'<div class="admin-title">Overview</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadUsers(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">User Management</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/users\',{action:\'list\'});\n    var users=(data&&data.users)||[];\n    var html=\'<div class="admin-title">User Management</div><div class="admin-subtitle">\'+users.length+\' registered users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showCreateUser()">+ Create User</button><button class="admin-btn" onclick="_showCreateInvite()">Invite User</button><div class="spacer"></div><button class="admin-btn" onclick="_loadUsers()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Display Name</th><th>Role</th><th>Email</th><th>Created</th><th style="width:140px">Actions</th></tr>\';\n    users.forEach(function(u){\n      html+=\'<tr><td style="font-weight:600">\'+_escH(u.username)+\'</td><td>\'+_escH(u.display_name||\'\')+\'</td><td>\'+_roleBadge(u.role)+\'</td><td style="color:var(--text3)">\'+_escH(u.email||\'-\')+\'</td><td style="color:var(--text3)">\'+_fmtDate(u.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px"><button class="admin-btn sm" onclick="_showEditRole(\\\'\'+_escH(u.username)+\'\\\',\\\'\'+_escH(u.role)+\'\\\')">Role</button>\';\n      html+=\'<button class="admin-btn sm" onclick="_resetPassword(\\\'\'+_escH(u.username)+\'\\\')">Reset</button>\';\n      if(u.username!==\'system\')html+=\'<button class="admin-btn sm danger" onclick="_deleteUser(\\\'\'+_escH(u.username)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n    try{var _inv_res=await fetch(\'/api/admin/invites\',{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},body:JSON.stringify({action:\'list\'}),credentials:\'same-origin\'}).then(function(r){return r.json();});var _invs=(_inv_res&&_inv_res.invites)||[];if(_invs.length>0){var ih=\'<div class="admin-title" style="margin-top:24px">Invites</div>\';ih+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';ih+=\'<tr><th>Code</th><th>Role</th><th>By</th><th>Uses</th><th>Status</th><th>Actions</th></tr>\';_invs.forEach(function(inv){var st=inv.status===\'active\'?\'\u25cf Active\':\'\u25cf \'+inv.status;ih+=\'<tr><td style="font-family:monospace;font-size:12px">\'+_escH(inv.code.slice(0,8))+\'...</td><td>\'+_escH(inv.role)+\'</td><td>\'+_escH(inv.created_by)+\'</td><td>\'+inv.use_count+\'/\'+inv.max_uses+\'</td><td>\'+st+\'</td><td>\';if(inv.status===\'active\')ih+=\'<button class="admin-btn sm danger" onclick="_revokeInvite(\\\'\'+_escH(inv.code)+\'\\\')">Revoke</button>\';ih+=\'</td></tr>\';});ih+=\'</table></div>\';el.innerHTML+=ih;}}catch(_ie){}\n  }catch(e){el.innerHTML=\'<div class="admin-title">Users</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nfunction _showCreateUser(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create User</h3><label>Username</label><input class="admin-input" id="_cu_user" placeholder="lowercase, no spaces"><label>Display Name</label><input class="admin-input" id="_cu_name" placeholder="Full display name"><label>Role</label><select class="admin-select" id="_cu_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option><option value="platform_admin">Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateUser()">Create</button></div></div></div>\');\n  document.getElementById(\'_cu_user\').focus();\n}\nasync function _doCreateUser(){\n  var u=document.getElementById(\'_cu_user\').value.trim(),n=document.getElementById(\'_cu_name\').value.trim()||u,r=document.getElementById(\'_cu_role\').value;\n  if(!u)return;\n  var res=await _api(\'/api/admin/users\',{action:\'create\',username:u,display_name:n,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nfunction _showEditRole(username,currentRole){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Change Role &#8212; \'+_escH(username)+\'</h3><label>New Role</label><select class="admin-select" id="_er_role"><option value="operator"\'+(currentRole===\'operator\'?\' selected\':\'\')+\'>Operator</option><option value="admin"\'+(currentRole===\'admin\'?\' selected\':\'\')+\'>Admin</option><option value="viewer"\'+(currentRole===\'viewer\'?\' selected\':\'\')+\'>Viewer</option><option value="platform_admin"\'+(currentRole===\'platform_admin\'?\' selected\':\'\')+\'>Platform Admin</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doEditRole(\\\'\'+_escH(username)+\'\\\')">Save</button></div></div></div>\');\n}\nasync function _doEditRole(username){\n  var r=document.getElementById(\'_er_role\').value;\n  var res=await _api(\'/api/admin/users\',{action:\'update_role\',username:username,role:r});\n  _closeModal();\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _deleteUser(username){if(!confirm(\'Delete user \'+username+\'? This cannot be undone.\'))return;var res=await _api(\'/api/admin/users\',{action:\'delete\',username:username});if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n\n\nvar _auditPage=0;var _auditFilters={actor:\'\',action:\'\',from:\'\',to:\'\'};\nasync function _loadAudit(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Audit Log</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var qs=\'limit=50&offset=\'+(_auditPage*50);\n    if(_auditFilters.actor)qs+=\'&actor=\'+encodeURIComponent(_auditFilters.actor);\n    if(_auditFilters.action)qs+=\'&action=\'+encodeURIComponent(_auditFilters.action);\n    var data=await fetch(\'/api/admin/audit?\'+qs,{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var stats=await fetch(\'/api/admin/audit/stats\',{credentials:\'same-origin\'}).then(function(r){return r.json();});\n    var events=(data&&data.events)||[];var total=(data&&data.total)||0;\n    var s24=(stats&&stats.period_24h)||{};\n    var html=\'<div class="admin-title">Audit Log</div>\';\n    html+=\'<div class="admin-subtitle">\'+total+\' total events | 24h: \'+(s24.total||0)+\' events</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:8px">\';\n    html+=\'<input class="admin-input" id="_af_actor" placeholder="Actor" value="\'+_escH(_auditFilters.actor)+\'" style="width:120px">\';\n    html+=\'<input class="admin-input" id="_af_action" placeholder="Action" value="\'+_escH(_auditFilters.action)+\'" style="width:150px">\';\n    html+=\'<button class="admin-btn primary" onclick="_auditApplyFilter()">Filter</button>\';\n    html+=\'<button class="admin-btn" onclick="_auditClearFilter()">Clear</button>\';\n    html+=\'<div class="spacer"></div><button class="admin-btn" onclick="_loadAudit()">Refresh</button>\';\n    html+=\'</div>\';\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>IP</th></tr>\';\n    events.forEach(function(e){\n      var dt=new Date(e.ts*1000);var ts=dt.toLocaleString(\'en-SG\',{hour12:false,timeZone:\'Asia/Singapore\'});\n      var det=JSON.stringify(e.details||{});if(det===\'{}\')det=\'-\';if(det.length>60)det=det.slice(0,57)+\'...\';\n      html+=\'<tr><td style="white-space:nowrap;color:var(--text3);font-size:12px">\'+_escH(ts)+\'</td>\';\n      html+=\'<td style="font-weight:600">\'+_escH(e.actor)+\'</td>\';\n      html+=\'<td><span style="background:var(--surface);padding:2px 8px;border-radius:4px;font-size:12px">\'+_escH(e.action)+\'</span></td>\';\n      html+=\'<td>\'+_escH(e.target||\'-\')+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(det)+\'</td>\';\n      html+=\'<td style="color:var(--text3);font-size:12px">\'+_escH(e.ip_address||\'-\')+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    var pages=Math.ceil(total/50);\n    if(pages>1){\n      html+=\'<div style="display:flex;gap:8px;margin-top:12px;justify-content:center">\';\n      if(_auditPage>0)html+=\'<button class="admin-btn sm" onclick="_auditPage--;_loadAudit()">&laquo; Prev</button>\';\n      html+=\'<span style="color:var(--text3);padding:6px">Page \'+(_auditPage+1)+\' of \'+pages+\'</span>\';\n      if(_auditPage<pages-1)html+=\'<button class="admin-btn sm" onclick="_auditPage++;_loadAudit()">Next &raquo;</button>\';\n      html+=\'</div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Audit</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}}\nfunction _auditApplyFilter(){\n  _auditFilters.actor=document.getElementById(\'_af_actor\').value.trim();\n  _auditFilters.action=document.getElementById(\'_af_action\').value.trim();\n  _auditPage=0;_loadAudit();}\nfunction _auditClearFilter(){_auditFilters={actor:\'\',action:\'\',from:\'\',to:\'\'};_auditPage=0;_loadAudit();}\nasync function _showCreateInvite(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Create Invite</h3><label>Role</label><select class="admin-select" id="_inv_role"><option value="operator">Operator</option><option value="admin">Admin</option><option value="viewer">Viewer</option></select><label>Max Uses</label><input class="admin-input" id="_inv_max" type="number" value="1" min="1"><label>Expires (hours, 0=never)</label><input class="admin-input" id="_inv_hours" type="number" value="72" min="0"><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doCreateInvite()">Create</button></div></div></div>\');\n}\nasync function _doCreateInvite(){\n  var role=document.getElementById(\'_inv_role\').value;\n  var max=document.getElementById(\'_inv_max\').value;\n  var hours=document.getElementById(\'_inv_hours\').value;\n  var res=await _api(\'/api/admin/invites\',{action:\'create\',role:role,max_uses:parseInt(max),expires_hours:parseInt(hours)});\n  _closeModal();\n  if(res&&res.ok){\n    _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Invite Created</h3><p>Share this code:</p><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-family:monospace;font-size:14px;text-align:center;margin:12px 0;user-select:all;word-break:break-all">\'+_escH(res.code)+\'</div><p style="color:var(--text3);font-size:12px">Role: \'+_escH(res.role)+\' | Max uses: \'+res.max_uses+\'</p><div class="admin-modal-actions"><button class="admin-btn primary" onclick="_closeModal();_loadUsers()">Done</button></div></div></div>\');\n  }else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n}\nasync function _revokeInvite(code){\n  if(!confirm(\'Revoke this invite code?\'))return;\n  var res=await _api(\'/api/admin/invites\',{action:\'revoke\',code:code});\n  if(res&&res.ok)_loadUsers();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _resetPassword(username){if(!confirm(\'Reset password for \'+username+\'? A temporary password will be generated.\'))return;var res=await _api(\'/api/admin/users\',{action:\'reset_password\',username:username});if(res&&res.ok){_modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Password Reset</h3><p>Temporary password for <b>\'+_escH(username)+\'</b>:</p><div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-family:monospace;font-size:16px;text-align:center;margin:12px 0;user-select:all">\'+_escH(res.temp_password)+\'</div><p style="color:var(--text3);font-size:12px">User must change this on next login.</p><div class="admin-modal-actions"><button class="admin-btn primary" onclick="_closeModal()">Done</button></div></div></div>\');}else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}}\nasync function _loadSessions(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Active Sessions</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/sessions\');\n    var sessions=(data&&data.sessions)||[];\n    var html=\'<div class="admin-title">Active Sessions</div><div class="admin-subtitle">\'+sessions.length+\' active sessions</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadSessions()">Refresh</button></div>\';\n    if(!sessions.length){html+=\'<div class="admin-empty">No active sessions</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>User</th><th>Role</th><th>IP</th><th>User Agent</th><th>Created</th><th>Last Active</th><th>Actions</th></tr>\';\n    sessions.forEach(function(s){\n      var ua=(s.user_agent||\'\').substring(0,40);\n      html+=\'<tr><td style="font-weight:600">\'+_escH(s.username||\'?\')+\'</td><td>\'+_roleBadge(s.role||\'operator\')+\'</td><td style="font-family:monospace;font-size:11px">\'+_escH(s.ip||\'-\')+\'</td><td style="font-size:10px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis">\'+_escH(ua)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.created_at)+\'</td><td style="color:var(--text3)">\'+_fmtAgo(s.last_active)+\'</td><td><button class="admin-btn sm danger" onclick="_revokeSession(\\\'\'+_escH(s.token_prefix||\'\')+\'\\\')">Revoke</button></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Sessions</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _revokeSession(tp){if(!confirm(\'Revoke this session?\'))return;await _api(\'/api/admin/sessions\',{action:\'revoke\',token_prefix:tp});_loadSessions();}\n\nasync function _loadProjects(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">All Projects</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/projects\');\n    var projects=(data&&data.projects)||[];\n    var html=\'<div class="admin-title">All Projects</div><div class="admin-subtitle">\'+projects.length+\' total projects across all users</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadProjects()">Refresh</button></div>\';\n    if(!projects.length){html+=\'<div class="admin-empty">No projects</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>Project</th><th>Owner</th><th>Type</th><th>Status</th><th>Created</th></tr>\';\n    projects.forEach(function(p){\n      var sb=p.status===\'active\'?\'green\':p.status===\'completed\'?\'blue\':\'yellow\';\n      html+=\'<tr><td style="font-weight:600">\'+_escH(p.name||\'Untitled\')+\'</td><td>\'+_escH(p.owner||\'-\')+\'</td><td style="color:var(--text3)">\'+_escH(p.type||\'custom\')+\'</td><td><span class="admin-badge \'+sb+\'">\'+_escH(p.status||\'active\')+\'</span></td><td style="color:var(--text3)">\'+_fmtDate(p.created_at)+\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Projects</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadHealth(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Health</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var h=await _api(\'/api/admin/health\');\n    var html=\'<div class="admin-title">System Health</div><div class="admin-subtitle">Detailed system diagnostics</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadHealth()">Refresh</button></div>\';\n    html+=\'<div class="admin-grid">\';\n    var metrics=[\n      {k:\'cpu_percent\',l:\'CPU Usage\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'memory_percent\',l:\'Memory\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:50,crit:80},\n      {k:\'disk_percent\',l:\'Disk\',fmt:function(v){return v.toFixed(1)+\'%\'},warn:70,crit:90},\n      {k:\'uptime_seconds\',l:\'Uptime\',fmt:_fmtUp},\n      {k:\'porter_pid\',l:\'Process ID\',fmt:function(v){return v}},\n      {k:\'porter_size_kb\',l:\'Binary Size\',fmt:function(v){return(v/1024).toFixed(1)+\' MB\'}},\n      {k:\'porter_lines\',l:\'Lines of Code\',fmt:function(v){return v.toLocaleString()}},\n      {k:\'python_version\',l:\'Python\',fmt:function(v){return v}},\n      {k:\'porter_version\',l:\'Porter Version\',fmt:function(v){return\'v\'+v}}\n    ];\n    metrics.forEach(function(m){\n      if(h[m.k]===undefined)return;var v=h[m.k];\n      var color=\'var(--text)\';\n      if(m.crit&&v>=m.crit)color=\'var(--red)\';else if(m.warn&&v>=m.warn)color=\'var(--yellow)\';else if(m.crit)color=\'var(--green)\';\n      html+=\'<div class="admin-card"><div class="admin-card-title">\'+m.l+\'</div><div style="font-size:20px;font-weight:700;color:\'+color+\'">\'+m.fmt(v)+\'</div></div>\';\n    });\n    html+=\'</div>\';\n    if(h.services&&h.services.length){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Service Probes</div><table class="admin-table"><tr><th>Service</th><th>Status</th><th>Latency</th><th>Endpoint</th></tr>\';\n      h.services.forEach(function(s){html+=\'<tr><td style="font-weight:600">\'+_escH(s.name||\'\')+\'</td><td><span class="admin-badge \'+(s.status===\'ok\'?\'green\':\'red\')+\'">\'+_escH(s.status||\'?\')+\'</span></td><td>\'+(s.latency_ms?s.latency_ms.toFixed(0)+\'ms\':\'-\')+\'</td><td style="font-size:10px;color:var(--text3)">\'+_escH(s.url||\'\')+\'</td></tr>\';});\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Health</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync async function _loadWorkspaceConfig(){\n  var res=await _api(\'/api/admin/workspace\',{action:\'get\'});\n  var s=(res&&res.settings)||{};\n  var html=\'<div class="admin-title" style="margin-top:24px">Workspace Identity</div>\';\n  html+=\'<div class="admin-card">\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Workspace Name</label><input class="admin-input" id="_ws_name" value="\'+_escH(s.workspace_name||\'\')+\'" style="margin-top:4px"></div>\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Description</label><input class="admin-input" id="_ws_desc" value="\'+_escH(s.workspace_description||\'\')+\'" style="margin-top:4px"></div>\';\n  html+=\'<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text3)">Accent Color</label><input class="admin-input" id="_ws_accent" type="color" value="\'+_escH(s.workspace_accent||\'\')+\'" style="margin-top:4px;width:60px;height:32px;padding:2px"></div>\';\n  html+=\'<button class="admin-btn primary" onclick="_saveWorkspaceConfig()">Save</button>\';\n  html+=\'</div>\';\n  return html;\n}\nasync function _saveWorkspaceConfig(){\n  var name=document.getElementById(\'_ws_name\').value;\n  var desc=document.getElementById(\'_ws_desc\').value;\n  var accent=document.getElementById(\'_ws_accent\').value;\n  var res=await _api(\'/api/admin/workspace\',{action:\'update\',workspace_name:name,workspace_description:desc,workspace_accent:accent});\n  if(res&&res.ok){alert(\'Saved!\');_loadConfig();}else{alert(\'Error: \'+(res&&res.error||\'unknown\'));}\n}\nfunction _loadConfig(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Configuration</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var [health,hyg]=await Promise.all([_api(\'/api/admin/health\'),_api(\'/api/admin/hygiene\')]);\n    var html=\'<div class="admin-title">System Configuration</div><div class="admin-subtitle">Read-only view of current system settings</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadConfig()">Refresh</button></div>\';\n    html+=\'<div class="admin-card"><div class="admin-card-title">System</div><dl class="admin-kv">\';\n    var sk=[[\'Porter Version\',\'v\'+(health.porter_version||\'?\')],[\'Python\',health.python_version||\'?\'],[\'PID\',health.porter_pid||\'?\'],[\'Binary Size\',(health.porter_size_kb||0).toFixed(0)+\' KB\'],[\'Lines\',health.porter_lines||\'?\']];\n    sk.forEach(function(kv){html+=\'<dt>\'+kv[0]+\'</dt><dd>\'+_escH(String(kv[1]))+\'</dd>\';});\n    html+=\'</dl></div>\';\n    if(hyg&&!hyg.error){\n      html+=\'<div class="admin-card"><div class="admin-card-title">Hygiene System</div><dl class="admin-kv">\';\n      Object.keys(hyg).filter(function(k){return typeof hyg[k]!==\'object\'}).forEach(function(k){html+=\'<dt>\'+_escH(k)+\'</dt><dd>\'+_escH(String(hyg[k]))+\'</dd>\';});\n      html+=\'</dl></div>\';\n    }\n    var wsHtml=await _loadWorkspaceConfig();html+=wsHtml;el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Config</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nasync function _loadLogs(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">System Logs</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/logs\');\n    var lines=(data&&data.lines)||[];\n    var html=\'<div class="admin-title">System Logs</div><div class="admin-subtitle">\'+lines.length+\' log lines</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn" onclick="_loadLogs()">Refresh</button></div>\';\n    html+=\'<div class="admin-card" style="max-height:calc(100vh - 180px);overflow-y:auto;font-family:monospace;padding:12px">\';\n    lines.slice(-300).forEach(function(l){html+=\'<div class="admin-log-line">\'+_escH(l)+\'</div>\';});\n    html+=\'</div>\';\n    el.innerHTML=html;\n    var lb=el.querySelector(\'.admin-card\');if(lb)lb.scrollTop=lb.scrollHeight;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Logs</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\n\nvar _tmplFilter=\'\';\nasync function _loadTemplates(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Worker Templates</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var url=\'/api/templates\';\n    if(_tmplFilter)url+=\'?category=\'+encodeURIComponent(_tmplFilter);\n    var data=await _api(url);\n    var all=await _api(\'/api/templates\');\n    var templates=(data&&data.templates)||[];\n    var allTemplates=(all&&all.templates)||[];\n    var cats={};allTemplates.forEach(function(t){var c=t.category||\'other\';cats[c]=(cats[c]||0)+1;});\n    var catList=Object.keys(cats).sort();\n    var html=\'<div class="admin-title">Worker Templates</div><div class="admin-subtitle">\'+allTemplates.length+\' archetypes across \'+catList.length+\' categories</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:6px">\';\n    html+=\'<button class="admin-btn\'+(!_tmplFilter?\' primary\':\'\')+\'" onclick="_tmplFilter=\\\'\\\';_loadTemplates()">All (\'+allTemplates.length+\')</button>\';\n    catList.forEach(function(c){\n      var active=_tmplFilter===c;\n      html+=\'<button class="admin-btn\'+(active?\' primary\':\'\')+\'" onclick="_tmplFilter=\\\'\'+_escH(c)+\'\\\'\\\';_loadTemplates()">\'+_escH(c.charAt(0).toUpperCase()+c.slice(1))+\' (\'+cats[c]+\')</button>\';\n    });\n    html+=\'</div>\';\n    if(!templates.length){html+=\'<div class="admin-empty">No templates in this category</div>\';el.innerHTML=html;return;}\n    html+=\'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">\';\n    templates.forEach(function(t){\n      html+=\'<div class="admin-card" style="cursor:pointer;transition:border-color .15s" onclick="_tmplDetail(\\\'\'+_escH(t.id)+\'\\\')" onmouseenter="this.style.borderColor=\\\'var(--accent)\\\'" onmouseleave="this.style.borderColor=\\\'var(--border)\\\'">\';\n      html+=\'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">\';\n      html+=\'<div style="font-size:14px;font-weight:700;color:var(--text)">\'+_escH(t.name)+\'</div>\';\n      html+=\'</div>\';\n      html+=\'<div style="font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:8px">\'+_escH(t.description)+\'</div>\';\n      html+=\'<div style="display:flex;gap:4px;flex-wrap:wrap">\';\n      html+=\'<span class="admin-badge blue">\'+_escH(t.category)+\'</span>\';\n      (t.tags||[]).slice(0,4).forEach(function(tag){\n        html+=\'<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">\'+_escH(tag)+\'</span>\';\n      });\n      html+=\'</div></div>\';\n    });\n    html+=\'</div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Templates</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _tmplDetail(tid){\n  try{\n    var data=await _api(\'/api/templates/\'+tid);\n    if(!data||data.error){alert(\'Template not found\');return;}\n    var html=\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal" style="max-width:560px;max-height:80vh;overflow-y:auto">\';\n    html+=\'<h3 style="margin-bottom:4px">\'+_escH(data.name||tid)+\'</h3>\';\n    html+=\'<div style="font-size:11px;color:var(--text3);margin-bottom:12px"><span class="admin-badge blue">\'+_escH(data.cat||\'\')+\'</span> <span class="admin-badge green">\'+_escH(data.archetype||\'\')+\'</span></div>\';\n    html+=\'<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:14px">\'+_escH(data.desc||\'\')+\'</div>\';\n    if(data.mission){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Mission</div><div style="font-size:12px;color:var(--text)">\'+_escH(data.mission)+\'</div></div>\';}\n    if(data.soul&&data.soul.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Soul Traits</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.soul.forEach(function(s){html+=\'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--purple) 15%,transparent);color:var(--purple)">\'+_escH(s)+\'</span>\';});html+=\'</div></div>\';}\n    if(data.authority&&data.authority.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Authority</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.authority.forEach(function(a){html+=\'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">\'+_escH(a)+\'</span>\';});html+=\'</div></div>\';}\n    if(data.inputs&&data.inputs.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Inputs</div><div style="font-size:11px;color:var(--text2)">\'+data.inputs.map(function(i){return _escH(i)}).join(\' &middot; \')+\'</div></div>\';}\n    if(data.outputs&&data.outputs.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Outputs</div><div style="font-size:11px;color:var(--text2)">\'+data.outputs.map(function(o){return _escH(o)}).join(\' &middot; \')+\'</div></div>\';}\n    if(data.tags&&data.tags.length){html+=\'<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Tags</div><div style="display:flex;gap:4px;flex-wrap:wrap">\';data.tags.forEach(function(t){html+=\'<span style="font-size:9px;padding:2px 6px;border-radius:3px;background:var(--raised);color:var(--text3)">\'+_escH(t)+\'</span>\';});html+=\'</div></div>\';}\n    html+=\'<div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Close</button></div>\';\n    html+=\'</div></div>\';\n    _modal(html);\n  }catch(e){alert(\'Error: \'+e.message);}\n}\nvar _dirScope=\'\';\nasync function _loadDirectives(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Directives</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var url=\'/api/state/directives\';\n    var params=[];\n    if(_dirScope)params.push(\'scope_type=\'+encodeURIComponent(_dirScope));\n    params.push(\'include_dismissed=1\');\n    if(params.length)url+=\'?\'+params.join(\'&\');\n    var data=await _api(url);\n    var dirs=(data&&data.directives)||[];\n    var active=dirs.filter(function(d){return d.status===\'active\'});\n    var dismissed=dirs.filter(function(d){return d.status!==\'active\'});\n    var scopes={};dirs.forEach(function(d){var s=d.scope_type||\'global\';scopes[s]=(scopes[s]||0)+1;});\n    var scopeList=Object.keys(scopes).sort();\n    var html=\'<div class="admin-title">Directives</div><div class="admin-subtitle">\'+active.length+\' active, \'+dismissed.length+\' dismissed/superseded</div>\';\n    html+=\'<div class="admin-toolbar" style="flex-wrap:wrap;gap:6px">\';\n    html+=\'<button class="admin-btn\'+(!_dirScope?\' primary\':\'\')+\'" onclick="_dirScope=\\\'\\\';_loadDirectives()">All (\'+dirs.length+\')</button>\';\n    scopeList.forEach(function(s){\n      html+=\'<button class="admin-btn\'+(_dirScope===s?\' primary\':\'\')+\'" onclick="_dirScope=\\\'\'+_escH(s)+\'\\\'\\\';_loadDirectives()">\'+_escH(s.charAt(0).toUpperCase()+s.slice(1))+\' (\'+scopes[s]+\')</button>\';\n    });\n    html+=\'<div class="spacer"></div>\';\n    html+=\'<button class="admin-btn primary" onclick="_showAddDirective()">+ Add Directive</button>\';\n    html+=\'</div>\';\n    if(!dirs.length){html+=\'<div class="admin-empty">No directives yet</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>ID</th><th>Scope</th><th>Directive</th><th>Status</th><th>Source</th><th>Created</th><th>Actions</th></tr>\';\n    dirs.forEach(function(d){\n      var sb=d.status===\'active\'?\'green\':d.status===\'dismissed\'?\'red\':\'yellow\';\n      var scopeLabel=d.scope_type===\'project\'?d.scope_type+\' (\'+_escH((d.scope_id||\'\').substring(0,8))+\')\':d.scope_type;\n      html+=\'<tr><td style="font-family:monospace;font-size:11px">#\'+d.id+\'</td>\';\n      html+=\'<td><span class="admin-badge blue">\'+_escH(scopeLabel)+\'</span></td>\';\n      html+=\'<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\'+_escH(d.text||\'\')+\'</td>\';\n      html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(d.status||\'active\')+\'</span></td>\';\n      html+=\'<td style="color:var(--text3);font-size:11px">\'+_escH(d.source||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_fmtAgo(d.created_at)+\'</td>\';\n      html+=\'<td>\';\n      if(d.status===\'active\')html+=\'<button class="admin-btn sm danger" onclick="_dismissDir(\'+d.id+\')">Dismiss</button>\';\n      else html+=\'<button class="admin-btn sm" onclick="_activateDir(\'+d.id+\')">Reactivate</button>\';\n      html+=\'</td></tr>\';\n    });\n    html+=\'</table></div>\';\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Directives</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _dismissDir(id){\n  await _api(\'/api/state/directives/\'+id+\'/status\',{status:\'dismissed\'});\n  _loadDirectives();\n}\nasync function _activateDir(id){\n  await _api(\'/api/state/directives/\'+id+\'/status\',{status:\'active\'});\n  _loadDirectives();\n}\nfunction _showAddDirective(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Add Directive</h3><label>Scope</label><select class="admin-select" id="_ad_scope"><option value="global">Global</option><option value="project">Project</option><option value="agent">Agent</option></select><label>Scope ID (for project/agent)</label><input class="admin-input" id="_ad_sid" placeholder="Project or agent ID"><label>Directive Text</label><textarea class="admin-input" id="_ad_text" rows="3" placeholder="Always do X when Y happens..."></textarea><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doAddDirective()">Add</button></div></div></div>\');\n}\nasync function _doAddDirective(){\n  var scope=document.getElementById(\'_ad_scope\').value;\n  var sid=document.getElementById(\'_ad_sid\').value.trim();\n  var text=document.getElementById(\'_ad_text\').value.trim();\n  if(!text)return;\n  var res=await _api(\'/api/state/directives\',{action:\'create\',scope_type:scope,scope_id:sid,text:text});\n  _closeModal();\n  if(res&&res.ok)_loadDirectives();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\nasync function _loadConnections(){\n  var el=document.getElementById(\'admin-content\');\n  el.innerHTML=\'<div class="admin-title">Connections</div><div class="pulse" style="color:var(--text3)">Loading...</div>\';\n  try{\n    var data=await _api(\'/api/admin/connections\',{action:\'list\'});\n    var conns=(data&&data.connections)||[];\n    var active=conns.filter(function(c){return c.status===\'active\'}).length;\n    var html=\'<div class="admin-title">Workspace Connections</div><div class="admin-subtitle">\'+conns.length+\' connections (\'+active+\' active)</div>\';\n    html+=\'<div class="admin-toolbar"><button class="admin-btn primary" onclick="_showAddConnection()">+ Add Connection</button><div class="spacer"></div><button class="admin-btn" onclick="_loadConnections()">Refresh</button></div>\';\n    if(!conns.length){html+=\'<div class="admin-empty">No connections yet. Add one to connect external services.</div>\';el.innerHTML=html;return;}\n    html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n    html+=\'<tr><th>ID</th><th>Provider</th><th>Name</th><th>Kind</th><th>Status</th><th>Installed By</th><th>Created</th><th>Actions</th></tr>\';\n    conns.forEach(function(c){\n      var sb=c.status===\'active\'?\'green\':c.status===\'disconnected\'?\'yellow\':\'red\';\n      html+=\'<tr><td style="font-family:monospace;font-size:10px">\'+_escH((c.id||\'\').substring(0,12))+\'</td>\';\n      html+=\'<td style="font-weight:600">\'+_escH(c.provider||\'\')+\'</td>\';\n      html+=\'<td>\'+_escH(c.display_name||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_escH(c.kind||\'api_key\')+\'</td>\';\n      html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(c.status||\'disconnected\')+\'</span></td>\';\n      html+=\'<td style="color:var(--text3)">\'+_escH(c.installed_by||\'\')+\'</td>\';\n      html+=\'<td style="color:var(--text3)">\'+_fmtAgo(c.created_at)+\'</td>\';\n      html+=\'<td><div style="display:flex;gap:4px">\';\n      if(c.status!==\'active\')html+=\'<button class="admin-btn sm" onclick="_connSetStatus(\\\'\'+_escH(c.id)+\'\\\',\\\'active\\\')">Activate</button>\';\n      else html+=\'<button class="admin-btn sm" onclick="_connSetStatus(\\\'\'+_escH(c.id)+\'\\\',\\\'disconnected\\\')">Disconnect</button>\';\n      html+=\'<button class="admin-btn sm danger" onclick="_connDelete(\\\'\'+_escH(c.id)+\'\\\')">Delete</button>\';\n      html+=\'</div></td></tr>\';\n    });\n    html+=\'</table></div>\';\n    // Environment tools section\n    var envData=await _api(\'/api/admin/env-tools\');\n    var tools=(envData&&envData.tools)||[];\n    if(tools.length){\n      html+=\'<div class="admin-title" style="margin-top:28px">Environment Tools</div><div class="admin-subtitle">Auto-detected local tools</div>\';\n      html+=\'<div class="admin-card" style="padding:0;overflow:hidden"><table class="admin-table">\';\n      html+=\'<tr><th>Tool</th><th>Status</th><th>Version</th><th>Last Checked</th></tr>\';\n      tools.forEach(function(t){\n        var sb=t.health===\'ok\'?\'green\':t.health===\'missing\'?\'red\':\'yellow\';\n        html+=\'<tr><td style="font-weight:600">\'+_escH(t.tool_key||\'\')+\'</td>\';\n        html+=\'<td><span class="admin-badge \'+sb+\'">\'+_escH(t.detected?\'detected\':\'missing\')+\'</span></td>\';\n        html+=\'<td style="font-size:11px;color:var(--text2)">\'+_escH(t.version||\'-\')+\'</td>\';\n        html+=\'<td style="color:var(--text3)">\'+_fmtAgo(t.last_checked_at)+\'</td></tr>\';\n      });\n      html+=\'</table></div>\';\n    }\n    el.innerHTML=html;\n  }catch(e){el.innerHTML=\'<div class="admin-title">Connections</div><div style="color:var(--red)">Error: \'+_escH(e.message)+\'</div>\';}\n}\nasync function _connSetStatus(id,status){\n  await _api(\'/api/admin/connections\',{action:\'update\',id:id,status:status});\n  _loadConnections();\n}\nasync function _connDelete(id){\n  if(!confirm(\'Delete this connection? Projects using it will be disconnected.\'))return;\n  await _api(\'/api/admin/connections\',{action:\'delete\',id:id});\n  _loadConnections();\n}\nfunction _showAddConnection(){\n  _modal(\'<div class="admin-modal-bg" onclick="if(event.target===this)_closeModal()"><div class="admin-modal"><h3>Add Connection</h3><label>Provider</label><input class="admin-input" id="_ac_provider" placeholder="e.g. github, slack, google"><label>Display Name</label><input class="admin-input" id="_ac_name" placeholder="My GitHub"><label>Kind</label><select class="admin-select" id="_ac_kind"><option value="api_key">API Key</option><option value="oauth">OAuth</option><option value="webhook">Webhook</option><option value="local">Local</option></select><div class="admin-modal-actions"><button class="admin-btn" onclick="_closeModal()">Cancel</button><button class="admin-btn primary" onclick="_doAddConnection()">Add</button></div></div></div>\');\n}\nasync function _doAddConnection(){\n  var provider=document.getElementById(\'_ac_provider\').value.trim();\n  var name=document.getElementById(\'_ac_name\').value.trim()||provider;\n  var kind=document.getElementById(\'_ac_kind\').value;\n  if(!provider)return;\n  var res=await _api(\'/api/admin/connections\',{action:\'create\',provider:provider,display_name:name,kind:kind});\n  _closeModal();\n  if(res&&res.ok)_loadConnections();else alert(\'Error: \'+(res&&res.error||\'unknown\'));\n}\n_loadOverview();\n</script>\n</body></html>'
+# ADMIN_PAGE deleted (admin system removed in Phase 1)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -47156,50 +46997,6 @@ class Handler(BaseHTTPRequestHandler):
                 return agent
         return None
 
-    def auth_check_cap(self, capability: str) -> bool:
-        """Auth check that accepts a session cookie (browser) OR a Bearer token with
-        the required capability (agent).  Sends 401/403 JSON and returns False on denial."""
-        # Browser session → check role capabilities
-        token = self.get_session_token()
-        ip = self.client_address[0]
-        ua = self.headers.get("User-Agent", "")
-        if token:
-            session = get_session(token, ip=ip, ua=ua)
-            if session:
-                role = session.get("role", "operator")
-                if capability in ROLE_CAPS.get(role, set()):
-                    return True
-                self.reply_json({"error": "forbidden",
-                                 "reason": f"role '{role}' lacks '{capability}' capability"}, 403)
-                return False
-
-        # Agent Bearer token → check capability
-        agent = self.get_agent_from_bearer()
-        if agent:
-            if capability in ROLE_CAPS.get(agent.get("role", "viewer"), set()):
-                return True
-            self.reply_json({"error": "forbidden",
-                             "reason": f"role '{agent.get('role')}' lacks '{capability}' capability"}, 403)
-            return False
-        # No valid auth
-        self.reply_json({"error": "unauthorized"}, 401)
-        return False
-
-    def auth_has_cap(self, capability: str) -> bool:
-        """Capability check without emitting a response."""
-        token = self.get_session_token()
-        ip = self.client_address[0]
-        ua = self.headers.get("User-Agent", "")
-        if token:
-            session = get_session(token, ip=ip, ua=ua)
-            if session:
-                role = session.get("role", "operator")
-                return capability in ROLE_CAPS.get(role, set())
-        agent = self.get_agent_from_bearer()
-        if agent:
-            return capability in ROLE_CAPS.get(agent.get("role", "viewer"), set())
-        return False
-
     def do_GET(self):
         parsed = urlparse(self.path)
         qs = parse_qs(parsed.query)
@@ -47223,21 +47020,6 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self.reply_html(REGISTER_PAGE)
             return
-        elif parsed.path == "/admin" or parsed.path == "/admin/":
-            # v0.31.51 — Platform admin shell (separate app mode)
-            token = self.get_session_token()
-            session = get_session(token) if token else None
-            if not session:
-                self.send_response(302)
-                self.send_header("Location", "/login")
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                return
-            if session.get("role") != "platform_admin":
-                self.reply_json({"error": "forbidden", "reason": "platform_admin role required"}, 403)
-                return
-            self.reply_html(ADMIN_PAGE)
-            return
 
         elif parsed.path == "/":
             token = self.get_session_token()
@@ -47245,13 +47027,6 @@ class Handler(BaseHTTPRequestHandler):
             ua = self.headers.get("User-Agent", "")
             _root_sess = get_session(token, ip=ip, ua=ua) if token else None
             if _root_sess:
-                # Platform admin always goes to admin console
-                if _root_sess.get("role") == "platform_admin":
-                    self.send_response(302)
-                    self.send_header("Location", "/admin/")
-                    self.send_header("Cache-Control", "no-store")
-                    self.end_headers()
-                    return
                 self.reply_html(PAGE)
             else:
                 self.reply_html(LANDING_PAGE)
@@ -47517,7 +47292,7 @@ class Handler(BaseHTTPRequestHandler):
             _ps_sess = get_session(_ps_tok) if _ps_tok else None
             _ps_user = _ps_sess.get("username", "") if _ps_sess else ""
             _ps_role = _ps_sess.get("role", "operator") if _ps_sess else "operator"
-            if _ps_role == "platform_admin":
+            if _ps_role == "admin":  # system_admin → admin
                 personas = _persona_list(public_only=True)
             else:
                 personas = _persona_list(owner=_ps_user)
@@ -47676,7 +47451,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
         elif parsed.path == "/api/admin/delegations":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             with _delegation_lock:
                 self.reply_json({"ok": True, "delegations": list(_delegation_log)})
         elif parsed.path == "/api/self-check":
@@ -47842,7 +47617,7 @@ class Handler(BaseHTTPRequestHandler):
                 "changelog_current": changelog_current,
             })
         elif parsed.path == "/api/admin/health":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             import platform
             health = {}
 
@@ -48006,7 +47781,7 @@ class Handler(BaseHTTPRequestHandler):
         # ── Mission Control Log API ──────────────────────────────────────
 
         elif parsed.path == "/api/admin/hygiene":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             # Per-agent context sizes
             agent_sizes = {}
             try:
@@ -48036,7 +47811,7 @@ class Handler(BaseHTTPRequestHandler):
             })
 
         elif parsed.path == "/api/admin/dispatch-log":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             limit = min(int(qs.get("limit", ["20"])[0]), 100)
             backend_filter = qs.get("backend", [""])[0]
             try:
@@ -48226,7 +48001,7 @@ class Handler(BaseHTTPRequestHandler):
             _lq_token = self.get_session_token()
             _lq_session = get_session(_lq_token, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _lq_token else None
             _lq_role = (_lq_session or {}).get("role", "operator")
-            _lq_is_admin = _lq_role in ("platform_admin", "admin")
+            _lq_is_admin = _lq_role in ("admin")
             qs = parse_qs(parsed.query)
             params = {}
             for k in ("severity", "domain", "event_type", "trace_id", "run_id", "backend", "q"):
@@ -48844,7 +48619,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
         elif parsed.path == "/api/admin/sessions":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             try:
                 _sc = _db_conn()
                 _srows = _sc.execute(
@@ -48918,7 +48693,7 @@ class Handler(BaseHTTPRequestHandler):
                 items.append({"name": "My Files", "path": "_files/" + _fl_user, "type": "folder", "modified": _user_files.stat().st_mtime})
                 # Project folders
                 all_projects = _config.get("projects", [])
-                if _fl_role != "platform_admin":
+                if _fl_role != "admin":
                     all_projects = [p for p in all_projects if p.get("owner") == _fl_user]
                 for p in all_projects:
                     pid = p.get("id", "")
@@ -48981,7 +48756,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
         elif parsed.path == "/api/admin/usage":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             try:
                 _us_conn = _db_conn()
                 _us_rows = _us_conn.execute(
@@ -49003,7 +48778,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
         elif parsed.path == "/api/admin/audit":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             qs = parse_qs(parsed.query)
             _aq_actor = qs.get("actor", [None])[0]
             _aq_action = qs.get("action", [None])[0]
@@ -49047,7 +48822,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
         elif parsed.path == "/api/admin/audit/stats":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             try:
                 _as_conn = _db_conn()
                 _as_cutoff = time.time() - 86400
@@ -49078,7 +48853,7 @@ class Handler(BaseHTTPRequestHandler):
             _log_tok = self.get_session_token()
             _log_sess = get_session(_log_tok) if _log_tok else None
             _log_role = _log_sess.get("role", "operator") if _log_sess else "operator"
-            _log_is_admin = _log_role in ("admin", "platform_admin")
+            _log_is_admin = _log_role in ("admin")
             lines = []
 
             # Try to read from journalctl first (systemd)
@@ -49279,7 +49054,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P0: runtime recover ────────────────────────────────────────────
         elif parsed.path == "/runtime/recover":
-            if not self.auth_check_cap("read"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             task_id = qs.get("task_id", [""])[0]
             if not task_id or not re.match(r'^[\w\-\.]+$', task_id):
                 self.reply_json({"error": "invalid task_id"}, 400); return
@@ -49323,7 +49098,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P1: memory fetch ───────────────────────────────────────────────
         elif parsed.path == "/memory/fetch":
-            if not self.auth_check_cap("read"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             uri      = qs.get("uri",   [""])[0]
             from_ln  = int(qs.get("from",  ["1"])[0])
             n_lines  = int(qs.get("lines", ["0"])[0])
@@ -49722,8 +49497,8 @@ class Handler(BaseHTTPRequestHandler):
             _proj_user = _proj_session.get("username", "") if _proj_session else ""
             _proj_role = _proj_session.get("role", "operator") if _proj_session else "operator"
             all_projects = _config.get("projects", [])
-            # v0.31.61 — platform_admin sees ALL projects, everyone else sees own + collaborator
-            if _proj_role == "platform_admin":
+            # v0.31.61 — admin sees ALL projects, everyone else sees own + collaborator
+            if _proj_role == "admin":
                 projects = all_projects
             else:
                 # admin/operator/viewer: see only owned projects + projects they collaborate on
@@ -49812,7 +49587,7 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/task-registry" or parsed.path.startswith("/api/task-registry/"):
             token = self.get_session_token()
             session = get_session(token, ip=self.client_address[0], ua=self.headers.get("User-Agent", ""))
-            if not session or "task_read" not in ROLE_CAPS.get(session.get("role"), set()):
+            if not session:  # simplified from role cap check
                 self.reply_json({"error": "unauthorized"}, 401); return
             
             username = session["username"]
@@ -50249,7 +50024,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "messages": [], "count": 0})
 
         elif parsed.path == "/api/bridge/run":
-            if not self.auth_check_cap("orch_read"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             run_id = qs.get("id", [None])[0]
             if not run_id:
                 self.reply_json({"ok": False, "error": "id parameter required"}, 400); return
@@ -50279,7 +50054,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json(result)
 
         elif parsed.path == "/api/bridge/runs":
-            if not self.auth_check_cap("orch_read"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             try:
                 conn = _db_conn()
                 where_clauses = []
@@ -50324,7 +50099,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": True, "runs": []})
 
         elif parsed.path == "/api/bridge/scheduler":
-            if not self.auth_check_cap("orch_read"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             self.reply_json({"ok": True, "scheduler": _bridge_scheduler_summary(), "snapshot": _bridge_scheduler_snapshot()})
 
 
@@ -50930,7 +50705,7 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/chat/sessions":
             token = self.get_session_token()
             session = get_session(token, ip=self.client_address[0], ua=self.headers.get("User-Agent", ""))
-            if not session or "chat_read" not in ROLE_CAPS.get(session.get("role"), set()):
+            if not session:  # simplified from role cap check
                 self.reply_json({"error": "unauthorized"}, 401); return
             
             username = session["username"]
@@ -51081,7 +50856,7 @@ class Handler(BaseHTTPRequestHandler):
                             if _ob_row and not _ob_row[0]:
                                 _ob_role = _ob_row[1] if len(_ob_row) > 1 else "operator"
                                 # Only create First Mission for operator/viewer roles
-                                if _ob_role not in ("admin", "platform_admin"):
+                                if _ob_role not in ("admin"):
                                     _is_new_user = True
                                     _create_user_first_mission(username)
                                     log.info("New user onboarded: %s — created First Mission", username)
@@ -51670,7 +51445,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"ok": True, "backend": _cfg_bk, "config": _config["backend_config"][_cfg_bk]})
 
         elif parsed.path == "/api/bridge/dispatch":
-            if not self.auth_check_cap("orch_write"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data = self.read_json_body()
             prompt = str(data.get("prompt", "")).strip()
             _project_id = str(data.get("project_id", "") or "").strip()
@@ -52350,7 +52125,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P0: runtime checkpoint ─────────────────────────────────────────
         elif parsed.path == "/runtime/checkpoint":
-            if not self.auth_check_cap("checkpoint"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data = self.read_json_body()
             task_id   = data.get("task_id", "")
             step_id   = data.get("step_id", "")
@@ -52400,7 +52175,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P0: runtime heartbeat ──────────────────────────────────────────
         elif parsed.path == "/runtime/heartbeat":
-            if not self.auth_check_cap("checkpoint"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data    = self.read_json_body()
             task_id = data.get("task_id", "")
             if not task_id or not re.match(r'^[\w\-\.]+$', task_id):
@@ -52438,7 +52213,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P0: runtime finalize ───────────────────────────────────────────
         elif parsed.path == "/runtime/finalize":
-            if not self.auth_check_cap("finalize"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data      = self.read_json_body()
             task_id   = data.get("task_id", "")
             temp_uri  = data.get("temp_uri", "")
@@ -52480,7 +52255,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P1: memory search ──────────────────────────────────────────────
         elif parsed.path == "/memory/search":
-            if not self.auth_check_cap("read"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data        = self.read_json_body()
             query       = data.get("query", "")
             limit       = min(int(data.get("limit", 10)), 50)
@@ -52565,7 +52340,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P1: memory upsert ──────────────────────────────────────────────
         elif parsed.path == "/memory/upsert":
-            if not self.auth_check_cap("write"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data    = self.read_json_body()
             uri     = data.get("uri", "")
             content = data.get("content", "")
@@ -52586,7 +52361,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── P1: memory pointer ─────────────────────────────────────────────
         elif parsed.path == "/memory/pointer":
-            if not self.auth_check_cap("write"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data = self.read_json_body()
             ptr_id     = data.get("id", "")
             title      = data.get("title", "")
@@ -53819,7 +53594,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # v0.31.65 — Environment tools API
         elif parsed.path == "/api/admin/env-tools":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             _etconn = _db_conn()
             try:
                 rows = _etconn.execute("SELECT tool_key, detected, version, source, health, last_checked_at FROM environment_tools ORDER BY tool_key").fetchall()
@@ -53830,7 +53605,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # v0.31.65 — Workspace connections CRUD
         elif parsed.path == "/api/admin/connections":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data = self.read_json_body() or {}
             action = str(data.get("action", "list")).strip()
             if action == "list":
@@ -54078,7 +53853,7 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/chat":
             token = self.get_session_token()
             session = get_session(token, ip=self.client_address[0], ua=self.headers.get("User-Agent", ""))
-            if not session or "chat_read" not in ROLE_CAPS.get(session.get("role"), set()):
+            if not session:  # simplified from role cap check
                 self.reply_json({"error": "unauthorized"}, 401); return
             
             username = session["username"]
@@ -54357,7 +54132,7 @@ class Handler(BaseHTTPRequestHandler):
                 _wc_token = self.get_session_token()
                 _wc_session = get_session(_wc_token, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _wc_token else None
                 _wc_role = (_wc_session or {}).get("role", "operator")
-                if _wc_role not in ("platform_admin", "admin"):
+                if _wc_role not in ("admin"):
                     self.reply_json({"ok": False, "error": "Admin role required"}, 403); return
                 if action == "create":
                     _provider = str(data.get("provider", "")).strip()
@@ -54459,7 +54234,7 @@ class Handler(BaseHTTPRequestHandler):
                     _wp_role = (_wp_session or {}).get("role", "operator")
                     _wp_user = (_wp_session or {}).get("username", "")
                     conn = _db_conn()
-                    if _wp_role == "platform_admin":
+                    if _wp_role == "admin":
                         rows = conn.execute("""
                             SELECT u.username, u.display_name, u.full_name, u.email, u.role, u.created_at,
                                    up.summary, up.title, up.phone
@@ -54510,7 +54285,7 @@ class Handler(BaseHTTPRequestHandler):
                     if not row:
                         conn.close()
                         self.reply_json({"ok": False, "error": "Not found"}, 404); return
-                    if _wp_role != "platform_admin" and target_user != _wp_user:
+                    if _wp_role != "admin" and target_user != _wp_user:
                         _my_projects = [p.get("id", "") for p in _config.get("projects", []) if p.get("owner") == _wp_user]
                         _shared = False
                         if _my_projects:
@@ -54540,7 +54315,7 @@ class Handler(BaseHTTPRequestHandler):
                     _wp_session2 = get_session(_wp_token2, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _wp_token2 else None
                     _wp_role2 = (_wp_session2 or {}).get("role", "operator")
                     _wp_user2 = (_wp_session2 or {}).get("username", "")
-                    if target_user != _wp_user2 and _wp_role2 not in ("platform_admin", "admin"):
+                    if target_user != _wp_user2 and _wp_role2 not in ("admin"):
                         self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                     user_allowed = {"full_name", "display_name", "email"}
                     profile_allowed = {"prefix", "title", "phone", "summary"}
@@ -54583,7 +54358,7 @@ class Handler(BaseHTTPRequestHandler):
                     _wp_session2 = get_session(_wp_token2, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _wp_token2 else None
                     _wp_role2 = (_wp_session2 or {}).get("role", "operator")
                     _wp_user2 = (_wp_session2 or {}).get("username", "")
-                    if target_user != _wp_user2 and _wp_role2 not in ("platform_admin", "admin"):
+                    if target_user != _wp_user2 and _wp_role2 not in ("admin"):
                         self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                     conn = _db_conn()
                     cur = conn.execute(
@@ -54608,7 +54383,7 @@ class Handler(BaseHTTPRequestHandler):
                     row = conn.execute("SELECT username FROM workspace_user_activities WHERE id = ?", (aid,)).fetchone()
                     if not row:
                         conn.close(); self.reply_json({"ok": False, "error": "Not found"}, 404); return
-                    if row["username"] != _wp_user2 and _wp_role2 not in ("platform_admin", "admin"):
+                    if row["username"] != _wp_user2 and _wp_role2 not in ("admin"):
                         conn.close(); self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                     conn.execute("UPDATE workspace_user_activities SET body = ? WHERE id = ?", (body, aid))
                     conn.commit(); conn.close()
@@ -54628,7 +54403,7 @@ class Handler(BaseHTTPRequestHandler):
                     row = conn.execute("SELECT username FROM workspace_user_activities WHERE id = ?", (aid,)).fetchone()
                     if not row:
                         conn.close(); self.reply_json({"ok": False, "error": "Not found"}, 404); return
-                    if row["username"] != _wp_user2 and _wp_role2 not in ("platform_admin", "admin"):
+                    if row["username"] != _wp_user2 and _wp_role2 not in ("admin"):
                         conn.close(); self.reply_json({"ok": False, "error": "forbidden"}, 403); return
                     conn.execute("DELETE FROM workspace_user_activities WHERE id = ?", (aid,))
                     conn.commit(); conn.close()
@@ -54640,7 +54415,7 @@ class Handler(BaseHTTPRequestHandler):
                 _wp_token2 = self.get_session_token()
                 _wp_session2 = get_session(_wp_token2, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _wp_token2 else None
                 _wp_role2 = (_wp_session2 or {}).get("role", "operator")
-                if _wp_role2 not in ("platform_admin", "admin"):
+                if _wp_role2 not in ("admin"):
                     self.reply_json({"ok": False, "error": "Admin role required"}, 403); return
                 new_un = data.get("username", "").strip().lower()
                 new_dn = data.get("display_name", new_un)
@@ -54666,11 +54441,11 @@ class Handler(BaseHTTPRequestHandler):
                 _wp_token2 = self.get_session_token()
                 _wp_session2 = get_session(_wp_token2, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _wp_token2 else None
                 _wp_role2 = (_wp_session2 or {}).get("role", "operator")
-                if _wp_role2 not in ("platform_admin", "admin"):
+                if _wp_role2 not in ("admin"):
                     self.reply_json({"ok": False, "error": "Admin role required"}, 403); return
                 target_user = data.get("username", "")
                 new_role = data.get("role", "")
-                if not target_user or new_role not in ROLE_CAPS:
+                if not target_user or new_role not in ("viewer", "operator", "admin"):  # role validation
                     self.reply_json({"ok": False, "error": "Invalid user or role"}, 400); return
                 _current_user = (_wp_session2 or {}).get("username", "")
                 if target_user == _current_user:
@@ -54686,7 +54461,7 @@ class Handler(BaseHTTPRequestHandler):
                 _wp_token2 = self.get_session_token()
                 _wp_session2 = get_session(_wp_token2, ip=self.client_address[0], ua=self.headers.get("User-Agent", "")) if _wp_token2 else None
                 _wp_role2 = (_wp_session2 or {}).get("role", "operator")
-                if _wp_role2 not in ("platform_admin", "admin"):
+                if _wp_role2 not in ("admin"):
                     self.reply_json({"ok": False, "error": "Admin role required"}, 403); return
                 target_user = data.get("username", "")
                 _current_user = (_wp_session2 or {}).get("username", "")
@@ -55231,10 +55006,10 @@ class Handler(BaseHTTPRequestHandler):
             action = data.get("action", "")
             # list is open to all authenticated users; mutations need admin
             if action != "list":
-                if not self.auth_check_cap("admin"): return
+                if not self.auth_check(redirect=False): return  # was role-cap check
             # Mutations require user_manage capability; list is open to all authenticated users
             if action and action != "list":
-                if not self.auth_check_cap("user_manage"): return
+                if not self.auth_check(redirect=False): return  # was role-cap check
 
             if action == "create":
                 new_un = data.get("username", "").strip().lower()
@@ -55269,7 +55044,7 @@ class Handler(BaseHTTPRequestHandler):
                     _list_role = (_list_session or {}).get("role", "operator")
                     _list_user = (_list_session or {}).get("username", "")
                     conn = _db_conn()
-                    if _list_role == "platform_admin":
+                    if _list_role == "admin":
                         rows = conn.execute("SELECT username, display_name, full_name, email, role, created_at FROM users").fetchall()
                     else:
                         # Operator/viewer: see self + project collaborators
@@ -55294,7 +55069,7 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "update_role":
                 target_user = data.get("username", "")
                 new_role = data.get("role", "")
-                if not target_user or new_role not in ROLE_CAPS:
+                if not target_user or new_role not in ("viewer", "operator", "admin"):  # role validation
                     self.reply_json({"ok": False, "error": "Invalid user or role"}, 400); return
                 
                 # Prevent self-demotion
@@ -55440,7 +55215,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": "action required (add, remove, update)"}, 400)
 
         elif parsed.path == "/api/agent/invoke":
-            if not self.auth_check_cap("orch_write"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data = self.read_json_body()
             message = data.get("message", "").strip()
             backend = data.get("backend", "").strip()
@@ -55605,7 +55380,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"ok": True, "updated": updated})
 
         elif parsed.path == "/api/admin/sessions":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data = self.read_json_body()
             if not data: return
             action = data.get("action", "")
@@ -55627,7 +55402,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": "unknown action"})
 
         elif parsed.path == "/api/admin/workspace":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data = self.read_json_body()
             action = data.get("action", "get")
             if action == "get":
@@ -55755,7 +55530,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
         elif parsed.path == "/api/admin/invites":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data = self.read_json_body()
             action = data.get("action", "list")
             if action == "create":
@@ -55808,7 +55583,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": "Unknown action"}, 400)
 
         elif parsed.path == "/api/terminal/exec":
-            if not self.auth_check_cap("orch_write"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data = self.read_json_body()
             cmd = data.get("command", "").strip()
             if not cmd:
@@ -55851,7 +55626,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
         elif parsed.path == "/api/admin/hygiene/run":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             try:
                 results = _hygiene_run()
                 self.reply_json({"ok": True, "results": results})
@@ -55859,7 +55634,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": str(e)})
 
         elif parsed.path == "/api/admin/hygiene/config":
-            if not self.auth_check_cap("admin"): return
+            if not self.auth_check(redirect=False): return  # was role-cap check
             data = self.read_json_body()
             if "preferences" not in _config:
                 _config["preferences"] = {}
@@ -56681,7 +56456,7 @@ class Handler(BaseHTTPRequestHandler):
             
             username = session["username"]
             role = session["role"]
-            caps = ROLE_CAPS.get(role, set())
+            caps = set()  # role-caps deleted — capability checks disabled
             
             if "task_read" not in caps:
                 self.reply_json({"error": "forbidden", "reason": "lacks task_read capability"}, 403); return
@@ -57622,6 +57397,23 @@ def _handle_wf_config(wf_id, body):
 
 # ── main ──────────────────────────────────────────────────────────────────
 
+def _cleanup_legacy_users():
+    """Delete legacy admin users on startup, keep only real users."""
+    conn = _db_conn()
+    try:
+        deleted = 0
+        for username in ['system', 'admin', 'jacob']:
+            rows = conn.execute("DELETE FROM users WHERE username = ?", (username,)).rowcount
+            deleted += rows
+        conn.commit()
+        if deleted > 0:
+            mlog.emit("info", "system", "boot.user_cleanup", f"Deleted {deleted} legacy admin users")
+    except Exception as e:
+        mlog.emit("warn", "system", "boot.user_cleanup_failed", str(e))
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     _config.update(load_config())
     _load_serve_dirs(_config)
@@ -57630,6 +57422,7 @@ if __name__ == "__main__":
     ensure_memory_dirs()
     ensure_persona_dirs()
     _db_init()  # Initialize SQLite DB + purge expired sessions
+    _cleanup_legacy_users()  # Delete legacy admin users (system, admin, jacob)
     _state_seed_defaults()
     _purge_legacy_cortex_dev_memories()
     _ensure_porter_persona()
