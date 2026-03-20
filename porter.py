@@ -3420,6 +3420,85 @@ def _recall_prior_work(persona_id, query, limit=3):
     return "Prior work on this topic:\n" + '\n'.join(summaries)
 
 
+
+def _recall_chat_command(user_message, persona_id='', project_id=''):
+    """Process natural language memory commands from chat.
+
+    Patterns recognized:
+    - "remember that ..." / "remember: ..." -> creates directive
+    - "forget that ..." / "forget about ..." -> dismisses matching memories
+    - "what do you remember about ..." / "what do you know about ..." -> searches Recall
+    - "recall ..." -> searches Recall
+
+    Returns: (handled: bool, response_text: str)
+    """
+    msg = user_message.strip().lower()
+
+    # Remember commands -> create directive
+    for prefix in ['remember that ', 'remember: ', 'remember this: ']:
+        if msg.startswith(prefix):
+            content = user_message.strip()[len(prefix):]
+            if content:
+                scope = 'project' if project_id else 'global'
+                scope_id = project_id if project_id else ''
+                _mem_insert(
+                    memory_kind='directive',
+                    text=content,
+                    scope=scope,
+                    scope_id=scope_id,
+                    trust_tier='high',
+                    source_type='user',
+                    source_category='chat_command',
+                    confidence=1.0,
+                    importance=8,
+                    review_state='accepted',
+                )
+                mlog.emit("info", "memory", "recall.user_remember",
+                          f"User created directive: {content[:60]}",
+                          extra={"scope": scope})
+                return True, f"Got it. I\'ll remember: \"{content}\""
+            break
+
+    # Forget commands -> dismiss matching memories
+    for prefix in ['forget that ', 'forget about ', 'forget: ']:
+        if msg.startswith(prefix):
+            query = user_message.strip()[len(prefix):]
+            if query:
+                results = _mem_search(query, limit=5)
+                dismissed = 0
+                for r in results:
+                    if r.get('id'):
+                        _mem_dismiss(r['id'])
+                        dismissed += 1
+                if dismissed > 0:
+                    mlog.emit("info", "memory", "recall.user_forget",
+                              f"User dismissed {dismissed} memories matching: {query[:60]}")
+                    plural = 's' if dismissed != 1 else ''
+                    return True, f"Done. I\'ve forgotten {dismissed} memory item{plural} related to \"{query}\"."
+                else:
+                    return True, f"I couldn\'t find any memories matching \"{query}\". Nothing to forget."
+            break
+
+    # Query commands -> search Recall
+    for prefix in ['what do you remember about ', 'what do you know about ', 'recall ']:
+        if msg.startswith(prefix):
+            query = user_message.strip()[len(prefix):].rstrip('?')
+            if query:
+                results = _mem_search(query, limit=10)
+                if results:
+                    lines = [f"Here\'s what I remember about \"{query}\":"]
+                    for r in results[:5]:
+                        kind_label = r.get('memory_kind', 'memory')
+                        preview = r.get('preview') or r.get('text', '')
+                        lines.append(f"- [{kind_label}] {str(preview)[:200]}")
+                    return True, '\n'.join(lines)
+                else:
+                    return True, f"I don\'t have any memories matching \"{query}\"."
+            break
+
+    return False, ''
+
+
 def _mem_stats(scope=None, scope_id=None, exclude_system=False):
     """Aggregate counts by kind/status. Only active memories in by_kind/total."""
     try:
@@ -48602,6 +48681,40 @@ class Handler(BaseHTTPRequestHandler):
                 _mod_prompt = _module_chat_action_prompt('', '')
                 if _mod_prompt:
                     prompt = _mod_prompt + "\n\n" + prompt
+
+            # Recall chat commands: intercept remember/forget/recall before AI dispatch
+            _recall_raw = prompt_analyzed or (raw_text or qs.get("prompt", [""])[0])
+            _recall_pid = persona_name or ''
+            _recall_proj = qs.get("project_id", [""])[0].strip()
+            _recall_handled, _recall_response = _recall_chat_command(
+                _recall_raw, persona_id=_recall_pid, project_id=_recall_proj
+            )
+            if _recall_handled:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Connection", "keep-alive")
+                self.send_header("X-Accel-Buffering", "no")
+                self.end_headers()
+                _recall_run_id = __import__("uuid").uuid4().hex[:12]
+                # Stream response as token chunks (matches normal chat SSE format)
+                _words = _recall_response.split(' ')
+                for _w in _words:
+                    _tok_ev = json.dumps({'token': _w + ' '})
+                    self.wfile.write(f"data: {_tok_ev}\n\n".encode())
+                    self.wfile.flush()
+                _done_ev = json.dumps({'done': True, 'full_response': _recall_response, 'model_used': 'recall', 'backend_used': 'recall', 'runtime_label': 'Recall'})
+                self.wfile.write(f"data: {_done_ev}\n\n".encode())
+                self.wfile.flush()
+                # Save to chat history if chat_id present
+                _rc_chat_id = qs.get("chat_id", [""])[0]
+                if _rc_chat_id and _recall_response:
+                    _save_chat_message(_rc_chat_id, 'Recall', _recall_raw, _recall_response,
+                                       project_id=_recall_proj, persona_name=_recall_pid)
+                mlog.emit("info", "memory", "recall.chat_command.handled",
+                          f"Recall command handled: {_recall_raw[:50]}",
+                          extra={"persona_id": _recall_pid})
+                return
 
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
