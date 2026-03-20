@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 02-memory-v2/02-02-PLAN.md
-last_updated: "2026-03-20T16:12:27.501Z"
+stopped_at: Completed 02-memory-v2/02-03-PLAN.md
+last_updated: "2026-03-20T16:21:30.937Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # Project State
@@ -58,6 +58,7 @@ Plan: 2 of 8
 | Phase 02-memory-v2 P00 | 3min | 2 tasks | 5 files |
 | Phase 02-memory-v2 P01 | 17min | 2 tasks | 1 files |
 | Phase 02-memory-v2 P02 | 22min | 2 tasks | 1 files |
+| Phase 02-memory-v2 P03 | 5min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,9 @@ Recent decisions affecting current work:
 - [Phase 02-memory-v2]: source_category defaults to 'chat' inside _mem_extract_signals — any caller without explicit category is treated as chat (allowed through noise filter)
 - [Phase 02-memory-v2]: SSE emit failure in _mem_insert silently swallowed — DB insert must succeed even if SSE push fails
 - [Phase 02-memory-v2]: RECALL_NOISE_BLACKLIST as frozenset constant — O(1) membership test, blocks login/logout/file_upload/file_download/file_browse/file_delete/file_rename/folder_create/tab_switch/page_load/accordion_toggle/search_query/health_check/version_query/boot_event/capability_detect
+- [Phase 02-memory-v2]: token_cap defaults to 500 but _build_context_suffix overrides with memory_budget (20% of total) to prevent dual-budget conflict
+- [Phase 02-memory-v2]: _mem_inject_for_dispatch return type changed from (block, ids) tuple to plain string — cleaner API, IDs tracked inline per injection
+- [Phase 02-memory-v2]: Privacy isolation: global memories skipped for private projects at all three tiers; cross-project promotion fires SSE only (no auto-promote)
 
 ### Pending Todos
 
@@ -116,6 +120,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T16:12:27.499Z
-Stopped at: Completed 02-memory-v2/02-02-PLAN.md
+Last session: 2026-03-20T16:21:30.935Z
+Stopped at: Completed 02-memory-v2/02-03-PLAN.md
 Resume file: None
