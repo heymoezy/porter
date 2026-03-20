@@ -57,17 +57,15 @@ Plans:
   3. Agent context injection at dispatch time includes directives, concepts, and relevant episodes — visible in debug output
   4. The memory feed UI shows what Porter learned, updated, or forgot in real time as it happens
   5. Memory items have clear scope labels (global, project, agent) and the scope boundary is enforced — project-scoped memory does not leak across projects
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- [ ] 02-01: Cortex removal — delete all Cortex code paths, verify grep-zero, set Memory V2 as sole active system
-- [ ] 02-02: Noise filter — audit and block login/upload/file-browse from producing V2 signals
-- [ ] 02-03: Memory injection — wire directives/concepts/episodes into Fastify agent dispatch context (frozen snapshot pattern — capture once at session start, writes take effect next session)
-- [ ] 02-04: Scoping enforcement — global/project/agent scope implementation with isolation tests
-- [ ] 02-05: Memory feed UI — real-time panel showing memory changes as they happen
-- [ ] 02-06: FTS5 session search — SQLite full-text search over past agent sessions, boolean queries, role/source filters (ref: hermes-agent)
-- [ ] 02-07: Agent writing styles — per-agent voice definition (anti-patterns, sentence preferences, signature moves), folded into identity system (ref: every.to/guides/ai-style-guide)
-- [ ] 02-08: Interaction feedback loop — track which prompts/approaches produced good outcomes, surface as context in future runs (concept borrowed from OpenClaw-RL async RL architecture — no model training, just outcome-aware context injection)
+- [ ] 02-01-PLAN.md — Cortex deletion: remove all cortex functions, table, preferences, workflow entries (Wave 1)
+- [ ] 02-02-PLAN.md — Noise filter: blacklist, re-enable signal extraction, inline Recall noted indicator (Wave 2)
+- [ ] 02-03-PLAN.md — Memory injection: tiered priority, token cap, scope isolation, privacy toggle (Wave 2)
+- [ ] 02-04-PLAN.md — Memory feed UI: compact real-time feed, badge count, auto-manage toggle (Wave 3)
+- [ ] 02-05-PLAN.md — FTS5 session search + chat remember/forget commands (Wave 3)
+- [ ] 02-06-PLAN.md — Agent writing styles, anti-pattern list, feedback loop, evolution trigger (Wave 4)
 
 ### Phase 3: Route Migration
 **Goal**: Auth, projects, and agents are fully owned by Fastify — porter.py no longer handles these routes, and all 35 Playwright tests pass without modification
@@ -181,7 +179,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 9/9 | Complete    | 2026-03-20 |
-| 2. Memory V2 | 0/8 | Not started | - |
+| 2. Memory V2 | 0/6 | Not started | - |
 | 3. Route Migration | 0/5 | Not started | - |
 | 4. Agent Autonomy | 0/6 | Not started | - |
 | 5. Guided Project Wizard | 0/7 | Not started | - |
