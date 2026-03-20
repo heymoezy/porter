@@ -3197,6 +3197,123 @@ def _build_failure_context(persona_id: str, backend: str, message: str = "") -> 
         return ""
 
 
+
+def _boot_sequence():
+    """Detect -> notify -> install -> configure -> verify -> badge.
+
+    Runs once at startup before accepting HTTP requests.
+    Checks required and optional capabilities, logs results via mlog,
+    and populates _capabilities_cache for UI badging.
+    """
+    import subprocess as _subprocess
+    import urllib.request as _urllib_req
+
+    results = {}
+
+    # 1. Required: Python stdlib (always available)
+    results["python"] = {"ok": True, "version": sys.version.split()[0]}
+
+    # 2. Required: SQLite DB writable
+    try:
+        _bconn = _db_conn()
+        _bconn.execute("SELECT 1")
+        results["sqlite"] = {"ok": True, "path": str(DB_PATH)}
+    except Exception as _e:
+        results["sqlite"] = {"ok": False, "error": str(_e)}
+
+    # 3. Required: Data directory exists and is writable
+    try:
+        _DATA_DIR.mkdir(parents=True, exist_ok=True)
+        _dir_ok = _DATA_DIR.exists() and os.access(str(_DATA_DIR), os.W_OK)
+    except Exception:
+        _dir_ok = False
+    results["data_dir"] = {"ok": _dir_ok, "path": str(_DATA_DIR)}
+
+    # 4. Optional: Node.js (for Fastify backend)
+    try:
+        _node_r = _subprocess.run(
+            ["node", "--version"], capture_output=True, text=True, timeout=5
+        )
+        results["node"] = {
+            "ok": _node_r.returncode == 0,
+            "version": _node_r.stdout.strip(),
+        }
+    except Exception as _e:
+        results["node"] = {"ok": False, "error": "node not found"}
+
+    # 5. Optional: Ollama (local models)
+    try:
+        _ollama_resp = _urllib_req.urlopen(
+            "http://127.0.0.1:11434/api/tags", timeout=3
+        )
+        results["ollama"] = {"ok": True}
+    except Exception:
+        results["ollama"] = {"ok": False, "error": "Ollama not reachable"}
+
+    # 6. Optional: OpenClaw gateway (only if OPENCLAW_URL is set)
+    _openclaw_url = os.environ.get("OPENCLAW_URL", "").strip()
+    if _openclaw_url:
+        try:
+            _oc_resp = _urllib_req.urlopen(f"{_openclaw_url}/health", timeout=3)
+            results["openclaw"] = {"ok": True, "url": _openclaw_url}
+        except Exception as _e:
+            results["openclaw"] = {
+                "ok": False,
+                "error": f"OpenClaw not reachable at {_openclaw_url}",
+            }
+    else:
+        results["openclaw"] = {
+            "ok": False,
+            "error": "OPENCLAW_URL not configured (skipped)",
+        }
+
+    # Store for UI badging (merge into existing capabilities cache)
+    _capabilities_cache.update({
+        f"boot.{k}": {
+            "id": f"boot.{k}",
+            "label": k,
+            "ok": v.get("ok", False),
+            "version": v.get("version"),
+            "checked_at": __import__("time").time(),
+        }
+        for k, v in results.items()
+    })
+
+    # Log summary with structured mlog
+    _required_ok = all(
+        results.get(k, {}).get("ok", False) for k in ["python", "sqlite", "data_dir"]
+    )
+    _optional_missing = [
+        k for k in ["node", "ollama", "openclaw"]
+        if not results.get(k, {}).get("ok", False)
+    ]
+
+    if _required_ok and not _optional_missing:
+        mlog.emit(
+            "info", "system", "boot.ok",
+            "All capabilities verified",
+            extra={"capabilities": results},
+        )
+    elif _required_ok:
+        mlog.emit(
+            "warn", "system", "boot.degraded",
+            f"Optional capabilities missing: {_optional_missing}",
+            extra={"capabilities": results},
+        )
+    else:
+        _failed = [
+            k for k in ["python", "sqlite", "data_dir"]
+            if not results.get(k, {}).get("ok", False)
+        ]
+        mlog.emit(
+            "error", "system", "boot.critical",
+            f"Required capabilities failed: {_failed}",
+            extra={"capabilities": results},
+        )
+
+    return results
+
+
 def _run_cap_checks(force: bool = False):
     """Run all capability checks; cache with 30s TTL. Pass force=True to bypass TTL."""
     global _capabilities_cache_ts
@@ -57637,6 +57754,7 @@ if __name__ == "__main__":
     except Exception as e:
         log.debug("First Mission state bootstrap skipped: %s", e)
     mlog.start()  # Start Mission Control log system
+    _boot_sequence()  # Detect + notify + configure capabilities
     _db_migrate_chats()  # Migrate JSON chats to SQLite
     _treg_load()  # populate task registry from SQLite (needs _db_init first)
     _wf_restore_intervals()  # Restore saved workflow intervals
