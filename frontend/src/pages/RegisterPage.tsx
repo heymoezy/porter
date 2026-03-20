@@ -1,350 +1,217 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { colors, spacing, typography, animation, elevation, radius } from '../design-system/tokens';
+import { motion, useAnimationControls } from 'framer-motion';
 
-const styles = {
-  page: {
-    minHeight: '100vh',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: colors.bg,
-    padding: spacing.md,
-    position: 'relative' as const,
-    overflow: 'hidden',
-  },
-  grid: {
-    position: 'absolute' as const,
-    inset: 0,
-    backgroundImage: `
-      linear-gradient(rgba(99, 102, 241, 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(99, 102, 241, 0.04) 1px, transparent 1px)
-    `,
-    backgroundSize: '40px 40px',
-    pointerEvents: 'none' as const,
-  },
-  glow: {
-    position: 'absolute' as const,
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: '600px',
-    height: '600px',
-    background: 'radial-gradient(circle, rgba(99, 102, 241, 0.10) 0%, transparent 70%)',
-    pointerEvents: 'none' as const,
-  },
-  wordmark: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes['4xl'],
-    fontWeight: typography.weights.bold,
-    letterSpacing: '-0.04em',
-    color: colors.text,
-    textAlign: 'center' as const,
-    marginBottom: spacing.xs,
-    lineHeight: typography.lineHeights.tight,
-  },
-  tagline: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.sm,
-    color: colors.text3,
-    textAlign: 'center' as const,
-    marginBottom: spacing.xl,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase' as const,
-  },
-  card: {
-    background: 'rgba(30, 39, 54, 0.85)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
-    border: `1px solid rgba(99, 102, 241, 0.2)`,
-    borderRadius: radius.lg,
-    padding: `${spacing['2xl']} ${spacing['2xl']}`,
-    width: '100%',
-    maxWidth: '420px',
-    boxShadow: `${elevation.lg}, ${elevation.glow}`,
-    position: 'relative' as const,
-    zIndex: 1,
-  },
-  formTitle: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes['2xl'],
-    fontWeight: typography.weights.semibold,
-    color: colors.text,
-    marginBottom: spacing.xs,
-    marginTop: 0,
-  },
-  formSubtitle: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.sm,
-    color: colors.text3,
-    marginBottom: spacing.xl,
-    marginTop: 0,
-  },
-  fieldGroup: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    display: 'block',
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.medium,
-    color: colors.text2,
-    marginBottom: spacing.xs,
-  },
-  inputBase: {
-    width: '100%',
-    padding: `${spacing.sm} ${spacing.md}`,
-    background: 'rgba(17, 24, 39, 0.6)',
-    border: `1px solid ${colors.border}`,
-    borderRadius: radius.md,
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.base,
-    color: colors.text,
-    outline: 'none',
-    transition: `border-color ${animation.fast} ${animation.smooth}, box-shadow ${animation.fast} ${animation.smooth}`,
-    boxSizing: 'border-box' as const,
-  },
-  errorBox: {
-    background: 'rgba(239, 68, 68, 0.12)',
-    border: '1px solid rgba(239, 68, 68, 0.3)',
-    borderRadius: radius.md,
-    padding: `${spacing.sm} ${spacing.md}`,
-    marginBottom: spacing.md,
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.sm,
-    color: '#f87171',
-  },
-  successBox: {
-    background: 'rgba(34, 197, 94, 0.12)',
-    border: '1px solid rgba(34, 197, 94, 0.3)',
-    borderRadius: radius.md,
-    padding: `${spacing.sm} ${spacing.md}`,
-    marginBottom: spacing.md,
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.sm,
-    color: '#4ade80',
-  },
-  submitBtn: {
-    width: '100%',
-    padding: `${spacing.md} ${spacing.md}`,
-    background: `linear-gradient(135deg, ${colors.raw.accent} 0%, #818cf8 100%)`,
-    border: 'none',
-    borderRadius: radius.md,
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.base,
-    fontWeight: typography.weights.semibold,
-    color: '#ffffff',
-    cursor: 'pointer',
-    marginTop: spacing.lg,
-    transition: `opacity ${animation.fast} ${animation.smooth}`,
-    boxShadow: `0 4px 15px rgba(99, 102, 241, 0.4)`,
-  },
-  footerText: {
-    textAlign: 'center' as const,
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.sm,
-    color: colors.text3,
-    marginTop: spacing.lg,
-  },
-  link: {
-    color: colors.accent,
-    textDecoration: 'none',
-    fontWeight: typography.weights.medium,
-  },
+const PorterLogo = () => (
+  <svg width="40" height="40" viewBox="0 0 34 34" fill="none">
+    <rect width="34" height="34" rx="8" fill="var(--accent)" />
+    <rect x="10" y="9" width="4" height="16" rx="1.5" fill="white" />
+    <rect x="10" y="9" width="10" height="4" rx="1.5" fill="white" />
+    <rect x="10" y="16" width="10" height="4" rx="1.5" fill="white" />
+    <rect x="20" y="9" width="4" height="11" rx="1.5" fill="white" />
+  </svg>
+);
+
+const fieldStyle = {
+  width: '100%',
+  background: 'var(--raised)',
+  border: '1px solid var(--border2)',
+  borderRadius: 'var(--radius)',
+  padding: '10px 12px',
+  fontSize: '14px',
+  color: 'var(--text)',
+  fontFamily: 'inherit',
+  outline: 'none',
+  transition: 'border-color .15s, box-shadow .15s',
+  boxSizing: 'border-box' as const,
+};
+
+const labelStyle = {
+  display: 'block' as const,
+  fontSize: '12px',
+  fontWeight: 500,
+  color: 'var(--text2)',
+  marginBottom: '6px',
 };
 
 export function RegisterPage() {
-  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [shakeFields, setShakeFields] = useState(false);
+  const cardControls = useAnimationControls();
+
+  const triggerError = (msg: string) => {
+    setError(msg);
+    setShakeFields(true);
+    cardControls.start({
+      x: [0, -8, 8, -5, 5, -2, 2, 0],
+      transition: { duration: 0.4 },
+    });
+    setTimeout(() => setShakeFields(false), 600);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
-    if (password !== confirm) {
-      setError('Passwords do not match.');
-      return;
-    }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
+    if (!email.trim()) { triggerError('Email is required.'); return; }
+    if (!password.trim()) { triggerError('Password is required.'); return; }
+    if (password !== confirm) { triggerError('Passwords don\'t match.'); return; }
+    if (password.length < 6) { triggerError('Minimum 6 characters.'); return; }
 
     setLoading(true);
-
     try {
       const res = await fetch('/register', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password }),
+        body: JSON.stringify({ email, password }),
       });
-
       const data = await res.json().catch(() => ({}));
-
       if (res.ok && (data.ok || data.data)) {
-        setSuccess('Account created! Redirecting...');
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 1500);
+        setSuccess('Account created!');
+        setTimeout(() => { window.location.href = '/v2/login'; }, 1200);
       } else {
-        setError(data?.error?.message || data?.message || 'Registration failed. Please try again.');
+        triggerError(data?.error?.message || data?.message || 'Registration failed.');
       }
     } catch {
-      setError('Connection error. Please try again.');
+      triggerError('Can\'t reach Porter.');
     } finally {
       setLoading(false);
     }
   };
 
-  const inputStyle = (field: string) => ({
-    ...styles.inputBase,
-    borderColor: focusedField === field ? colors.raw.accent : 'var(--border)',
-    boxShadow: focusedField === field ? `0 0 0 3px rgba(99, 102, 241, 0.15)` : 'none',
-  });
+  const clearError = () => setError('');
+  const inputBorder = shakeFields ? 'var(--danger)' : 'var(--border2)';
+  const focusHandler = (e: React.FocusEvent<HTMLInputElement>) => { if (!shakeFields) e.target.style.borderColor = 'var(--accent)'; };
+  const blurHandler = (e: React.FocusEvent<HTMLInputElement>) => { if (!shakeFields) e.target.style.borderColor = 'var(--border2)'; };
 
   return (
-    <div style={styles.page}>
-      {/* Background grid */}
-      <div style={styles.grid} />
-      {/* Radial glow */}
-      <div style={styles.glow} />
-
-      {/* Wordmark */}
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'var(--bg)',
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    }}>
       <motion.div
-        initial={{ opacity: 0, y: -20, scale: 0.9 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ ...animation.gentle, delay: 0.1 }}
-        style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}
+        animate={cardControls}
+        initial={{ opacity: 0, y: 12 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: '14px',
+          padding: '40px',
+          width: '360px',
+          boxShadow: '0 20px 60px rgba(0,0,0,.24)',
+        }}
       >
-        <div style={styles.wordmark}>PORTER</div>
-        <div style={styles.tagline}>Create your account</div>
-      </motion.div>
+        {/* Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
+          <PorterLogo />
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.4px' }}>
+              Porter
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--text3)', fontWeight: 600, letterSpacing: '1.2px', textTransform: 'uppercase' as const, marginTop: '3px' }}>
+              Create your account
+            </div>
+          </div>
+        </div>
 
-      {/* Register card */}
-      <motion.div
-        initial={{ opacity: 0, y: 40, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ ...animation.spring, delay: 0.2 }}
-        style={styles.card}
-      >
-        <h2 style={styles.formTitle}>Get started</h2>
-        <p style={styles.formSubtitle}>Create your Porter workspace account</p>
-
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={animation.spring}
-            style={styles.errorBox}
-          >
-            {error}
-          </motion.div>
-        )}
-
+        {/* Success */}
         {success && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={animation.spring}
-            style={styles.successBox}
+            style={{
+              marginBottom: '16px', padding: '10px 14px',
+              borderRadius: 'var(--radius)',
+              background: 'rgba(34,197,94,.08)', border: '1px solid rgba(34,197,94,.25)',
+              color: '#4ade80', fontSize: '13px',
+            }}
           >
             {success}
           </motion.div>
         )}
 
-        <form onSubmit={handleSubmit}>
-          <div style={styles.fieldGroup}>
-            <label htmlFor="reg-username" style={styles.label}>Username</label>
-            <input
-              id="reg-username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onFocus={() => setFocusedField('reg-username')}
-              onBlur={() => setFocusedField(null)}
-              style={inputStyle('reg-username')}
-              placeholder="Choose a username"
-              autoComplete="username"
-              required
-            />
+        <form onSubmit={handleSubmit} noValidate>
+          <div style={{ marginBottom: '16px' }}>
+            <label htmlFor="reg-email" style={labelStyle}>Email</label>
+            <input id="reg-email" type="email" value={email}
+              onChange={(e) => { setEmail(e.target.value); clearError(); }}
+              autoComplete="email" autoFocus
+              style={{ ...fieldStyle, borderColor: inputBorder }}
+              onFocus={focusHandler} onBlur={blurHandler} />
           </div>
 
-          <div style={styles.fieldGroup}>
-            <label htmlFor="reg-email" style={styles.label}>Email</label>
-            <input
-              id="reg-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onFocus={() => setFocusedField('reg-email')}
-              onBlur={() => setFocusedField(null)}
-              style={inputStyle('reg-email')}
-              placeholder="your@email.com"
-              autoComplete="email"
-              required
-            />
-          </div>
-
-          <div style={styles.fieldGroup}>
-            <label htmlFor="reg-password" style={styles.label}>Password</label>
-            <input
-              id="reg-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onFocus={() => setFocusedField('reg-password')}
-              onBlur={() => setFocusedField(null)}
-              style={inputStyle('reg-password')}
-              placeholder="At least 6 characters"
+          <div style={{ marginBottom: '16px' }}>
+            <label htmlFor="reg-password" style={labelStyle}>Password</label>
+            <input id="reg-password" type="password" value={password}
+              onChange={(e) => { setPassword(e.target.value); clearError(); }}
               autoComplete="new-password"
-              required
-            />
+              style={{ ...fieldStyle, borderColor: inputBorder }}
+              onFocus={focusHandler} onBlur={blurHandler} />
           </div>
 
-          <div style={styles.fieldGroup}>
-            <label htmlFor="reg-confirm" style={styles.label}>Confirm password</label>
-            <input
-              id="reg-confirm"
-              type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              onFocus={() => setFocusedField('reg-confirm')}
-              onBlur={() => setFocusedField(null)}
-              style={inputStyle('reg-confirm')}
-              placeholder="Repeat your password"
+          <div style={{ marginBottom: '4px' }}>
+            <label htmlFor="reg-confirm" style={labelStyle}>Confirm password</label>
+            <input id="reg-confirm" type="password" value={confirm}
+              onChange={(e) => { setConfirm(e.target.value); clearError(); }}
               autoComplete="new-password"
-              required
-            />
+              style={{ ...fieldStyle, borderColor: inputBorder }}
+              onFocus={focusHandler} onBlur={blurHandler} />
+          </div>
+
+          {/* Inline error */}
+          <div style={{ minHeight: '24px', display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+            {error && (
+              <motion.span
+                initial={{ opacity: 0, y: -2 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={{ fontSize: '12px', color: '#f87171', fontWeight: 500 }}
+              >
+                {error}
+              </motion.span>
+            )}
           </div>
 
           <motion.button
             type="submit"
             disabled={loading}
-            style={{
-              ...styles.submitBtn,
-              opacity: loading ? 0.7 : 1,
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-            whileHover={{ scale: 1.02, boxShadow: '0 6px 25px rgba(99, 102, 241, 0.55)' }}
+            whileHover={{ y: -1, boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}
             whileTap={{ scale: 0.98 }}
+            style={{
+              width: '100%', padding: '11px',
+              borderRadius: 'var(--radius)',
+              background: 'var(--accent)', color: '#FFFFFF',
+              border: 'none', fontSize: '14px', fontWeight: 700,
+              fontFamily: 'inherit',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: '.12s',
+              opacity: loading ? 0.7 : 1,
+            }}
           >
             {loading ? 'Creating account...' : 'Create account'}
           </motion.button>
         </form>
 
-        <p style={styles.footerText}>
-          Already have an account?{' '}
-          <a href="/v2/login" style={styles.link}>Sign in</a>
-        </p>
+        <div style={{ textAlign: 'center', marginTop: '16px' }}>
+          <a href="/v2/login"
+            style={{ fontSize: '12px', color: 'var(--text3)', textDecoration: 'none', transition: '.15s' }}
+            onMouseEnter={(e) => { (e.target as HTMLElement).style.color = 'var(--accent)'; }}
+            onMouseLeave={(e) => { (e.target as HTMLElement).style.color = 'var(--text3)'; }}
+          >
+            Already have an account? Sign in
+          </a>
+        </div>
       </motion.div>
     </div>
   );

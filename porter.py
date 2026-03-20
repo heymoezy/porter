@@ -13235,6 +13235,9 @@ body {
 }
 .login-links a:hover { color: var(--accent); }
 </style>
+<script>
+(function(){var t=localStorage.getItem('porter_theme');if(t&&t!=='system')document.documentElement.setAttribute('data-theme',t)})();
+</script>
 </head>
 <body>
 <div class="login-card">
@@ -13255,8 +13258,8 @@ body {
   <button class="login-btn" onclick="doLogin()">Sign in</button>
   <div class="login-error" id="loginErr"></div>
   <div class="login-links">
-    <a href="#" onclick="event.preventDefault();document.getElementById('loginErr').textContent='Contact your admin to reset your password.';document.getElementById('loginErr').style.display='block'">Forgot password?</a>
-    <a href="#" onclick="event.preventDefault();document.getElementById('loginErr').textContent='Account registration is managed by your admin.';document.getElementById('loginErr').style.display='block'">Create account</a>
+    <a href="/forgot-password">Forgot password?</a>
+    <a href="/register">Create account</a>
   </div>
 </div>
 <script>
@@ -13364,92 +13367,176 @@ REGISTER_PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="var(--bg)">
 <title>Porter — Create Account</title>
 <style>
 :root {
   --bg: #111827; --surface: #1E2736; --raised: #28344A;
   --border: #374259; --border2: #4A5770;
   --text: #F1F5F9; --text2: #94A3B8; --text3: #64748B;
-  --accent: #6366F1; --accent-h: #4F46E5;
-  --danger: #EF4444; --success: #22C55E; --warning: #F59E0B;
-  --radius: 8px; --sidebar: 220px;
+  --accent: #6366F1; --accent-d: #4F46E5;
+  --danger: #EF4444; --success: #22C55E;
+  --radius: 8px;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
     --bg: #FFFFFF; --surface: #F3F4F8; --raised: #E8EBF2;
     --border: #D1D5DF; --border2: #B8BFD0;
     --text: #0F172A; --text2: #475569; --text3: #94A3B8;
-    --accent: #4F46E5; --accent-h: #4338CA;
-    --danger: #DC2626; --success: #16A34A; --warning: #D97706;
+    --accent: #4F46E5; --accent-d: #4338CA;
+    --danger: #DC2626; --success: #16A34A;
   }
 }
-
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh}
-.reg-box{width:360px;padding:32px;background:var(--surface);border-radius:12px;border:1px solid var(--border)}
-h2{margin-bottom:16px;font-size:20px}
-.reg-field{margin-bottom:14px}
-.reg-field label{display:block;font-size:13px;color:var(--text2);margin-bottom:4px}
-.reg-input{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;outline:none}
-.reg-input:focus{border-color:#3b82f6}
-.reg-btn{width:100%;padding:10px;background:#3b82f6;color:var(--text);border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:600}
-.reg-btn:hover{background:#2563eb}
-#regErr{color:var(--danger);font-size:13px;display:none;margin-bottom:8px}
-.link{color:#60a5fa;text-decoration:none;font-size:13px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;align-items:center;justify-content:center;height:100vh}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:40px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.24)}
+.logo{display:flex;align-items:center;gap:12px;margin-bottom:32px}
+.logo-name{font-size:20px;font-weight:700;letter-spacing:-.4px}
+.logo-sub{font-size:10px;color:var(--text3);font-weight:600;letter-spacing:1.2px;text-transform:uppercase;margin-top:3px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px}
+.input{width:100%;background:var(--raised);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;font-size:14px;color:var(--text);font-family:inherit;outline:none;transition:.15s}
+.input:focus{border-color:var(--accent)}
+.btn{width:100%;padding:11px;border-radius:var(--radius);background:var(--accent);color:#FFF;border:none;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;transition:.12s;margin-top:8px}
+.btn:hover{background:var(--accent-d);transform:translateY(-1px);box-shadow:0 4px 12px rgba(99,102,241,0.4)}
+.err{font-size:12px;color:#f87171;font-weight:500;min-height:20px;margin-bottom:4px}
+.links{display:flex;justify-content:center;margin-top:16px}
+.links a{font-size:12px;color:var(--text3);text-decoration:none;transition:.15s}
+.links a:hover{color:var(--accent)}
 </style>
+<script>
+(function(){var t=localStorage.getItem('porter_theme');if(t&&t!=='system')document.documentElement.setAttribute('data-theme',t)})();
+</script>
 </head>
 <body>
-<div class="reg-box">
-  <h2>Create Account</h2>
-  <div class="reg-field">
-    <label>Invite Code</label>
-    <input type="text" id="r_code" class="reg-input" placeholder="Enter your invite code" autofocus>
+<div class="card">
+  <div class="logo">
+    <svg width="40" height="40" viewBox="0 0 34 34" fill="none"><rect width="34" height="34" rx="8" fill="var(--accent)"/><rect x="10" y="9" width="4" height="16" rx="1.5" fill="white"/><rect x="10" y="9" width="10" height="4" rx="1.5" fill="white"/><rect x="10" y="16" width="10" height="4" rx="1.5" fill="white"/><rect x="20" y="9" width="4" height="11" rx="1.5" fill="white"/></svg>
+    <div><div class="logo-name">Porter</div><div class="logo-sub">Create your account</div></div>
   </div>
-  <div class="reg-field">
+  <div class="field">
     <label>Username</label>
-    <input type="text" id="r_user" class="reg-input" placeholder="lowercase, no spaces" autocomplete="username">
+    <input type="text" id="r_user" class="input" placeholder="lowercase, no spaces" autocomplete="username" autofocus>
   </div>
-  <div class="reg-field">
-    <label>Display Name</label>
-    <input type="text" id="r_name" class="reg-input" placeholder="Your display name">
+  <div class="field">
+    <label>Password</label>
+    <input type="password" id="r_pw" class="input" placeholder="At least 6 characters" autocomplete="new-password">
   </div>
-  <div class="reg-field">
-    <label>Password <span style="color:var(--text2);font-weight:400">(min 8 chars)</span></label>
-    <input type="password" id="r_pw" class="reg-input" autocomplete="new-password">
+  <div class="field">
+    <label>Confirm password</label>
+    <input type="password" id="r_pw2" class="input" autocomplete="new-password">
   </div>
-  <div class="reg-field">
-    <label>Confirm Password</label>
-    <input type="password" id="r_pw2" class="reg-input" autocomplete="new-password">
-  </div>
-  <div id="regErr"></div>
-  <button onclick="doRegister()" class="reg-btn">Create Account</button>
-  <div style="margin-top:16px;text-align:center">
-    <a href="/login" class="link">&larr; Back to Sign In</a>
-  </div>
+  <div class="err" id="regErr"></div>
+  <button onclick="doRegister()" class="btn">Create account</button>
+  <div class="links"><a href="/login">&larr; Back to sign in</a></div>
 </div>
 <script>
-async function doRegister() {
-  var code = document.getElementById('r_code').value.trim();
-  var user = document.getElementById('r_user').value.trim().toLowerCase();
-  var name = document.getElementById('r_name').value.trim() || user;
-  var pw = document.getElementById('r_pw').value;
-  var pw2 = document.getElementById('r_pw2').value;
-  var err = document.getElementById('regErr');
-  err.style.display = 'none';
-  if (!code) { err.textContent = 'Enter your invite code'; err.style.display = 'block'; return; }
-  if (!user) { err.textContent = 'Enter a username'; err.style.display = 'block'; return; }
-  if (pw.length < 8) { err.textContent = 'Password must be at least 8 characters'; err.style.display = 'block'; return; }
-  if (pw !== pw2) { err.textContent = 'Passwords do not match'; err.style.display = 'block'; return; }
-  try {
-    var res = await fetch('/register', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({invite_code: code, username: user, display_name: name, password: pw})
-    });
-    var data = await res.json();
-    if (data && data.ok) { window.location.href = '/login'; }
-    else { err.textContent = (data && data.error) || 'Registration failed'; err.style.display = 'block'; }
-  } catch(e) { err.textContent = 'Network error'; err.style.display = 'block'; }
+document.getElementById('r_pw2').addEventListener('keydown',e=>{if(e.key==='Enter')doRegister()});
+async function doRegister(){
+  var user=document.getElementById('r_user').value.trim().toLowerCase();
+  var pw=document.getElementById('r_pw').value;
+  var pw2=document.getElementById('r_pw2').value;
+  var err=document.getElementById('regErr');
+  err.textContent='';
+  if(!user){err.textContent='Enter a username';return}
+  if(pw.length<6){err.textContent='Password must be at least 6 characters';return}
+  if(pw!==pw2){err.textContent='Passwords don\u2019t match';return}
+  try{
+    var res=await fetch('/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pw})});
+    var data=await res.json();
+    if(data&&data.ok){window.location.href='/login'}
+    else{err.textContent=(data&&data.error)||'Registration failed'}
+  }catch(e){err.textContent='Can\u2019t reach Porter'}
+}
+</script>
+</body>
+</html>"""
+
+FORGOT_PASSWORD_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Porter — Reset Password</title>
+<style>
+:root {
+  --bg: #111827; --surface: #1E2736; --raised: #28344A;
+  --border: #374259; --border2: #4A5770;
+  --text: #F1F5F9; --text2: #94A3B8; --text3: #64748B;
+  --accent: #6366F1; --accent-d: #4F46E5;
+  --danger: #EF4444; --success: #22C55E;
+  --radius: 8px;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #FFFFFF; --surface: #F3F4F8; --raised: #E8EBF2;
+    --border: #D1D5DF; --border2: #B8BFD0;
+    --text: #0F172A; --text2: #475569; --text3: #94A3B8;
+    --accent: #4F46E5; --accent-d: #4338CA;
+    --danger: #DC2626; --success: #16A34A;
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;align-items:center;justify-content:center;height:100vh}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:40px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.24)}
+.logo{display:flex;align-items:center;gap:12px;margin-bottom:32px}
+.logo-name{font-size:20px;font-weight:700;letter-spacing:-.4px}
+.logo-sub{font-size:10px;color:var(--text3);font-weight:600;letter-spacing:1.2px;text-transform:uppercase;margin-top:3px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px}
+.input{width:100%;background:var(--raised);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;font-size:14px;color:var(--text);font-family:inherit;outline:none;transition:.15s}
+.input:focus{border-color:var(--accent)}
+.btn{width:100%;padding:11px;border-radius:var(--radius);background:var(--accent);color:#FFF;border:none;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;transition:.12s;margin-top:8px}
+.btn:hover{background:var(--accent-d);transform:translateY(-1px);box-shadow:0 4px 12px rgba(99,102,241,0.4)}
+.msg{font-size:12px;font-weight:500;min-height:20px;margin-bottom:4px}
+.msg.err{color:#f87171}
+.msg.ok{color:#4ade80}
+.links{display:flex;justify-content:center;margin-top:16px}
+.links a{font-size:12px;color:var(--text3);text-decoration:none;transition:.15s}
+.links a:hover{color:var(--accent)}
+</style>
+<script>
+(function(){var t=localStorage.getItem('porter_theme');if(t&&t!=='system')document.documentElement.setAttribute('data-theme',t)})();
+</script>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <svg width="40" height="40" viewBox="0 0 34 34" fill="none"><rect width="34" height="34" rx="8" fill="var(--accent)"/><rect x="10" y="9" width="4" height="16" rx="1.5" fill="white"/><rect x="10" y="9" width="10" height="4" rx="1.5" fill="white"/><rect x="10" y="16" width="10" height="4" rx="1.5" fill="white"/><rect x="20" y="9" width="4" height="11" rx="1.5" fill="white"/></svg>
+    <div><div class="logo-name">Porter</div><div class="logo-sub">Reset password</div></div>
+  </div>
+  <div class="field">
+    <label>Username</label>
+    <input type="text" id="fp_user" class="input" placeholder="Your username" autocomplete="username" autofocus>
+  </div>
+  <div class="field">
+    <label>New password</label>
+    <input type="password" id="fp_pw" class="input" placeholder="At least 6 characters" autocomplete="new-password">
+  </div>
+  <div class="field">
+    <label>Confirm new password</label>
+    <input type="password" id="fp_pw2" class="input" autocomplete="new-password">
+  </div>
+  <div class="msg" id="fpMsg"></div>
+  <button onclick="doReset()" class="btn">Reset password</button>
+  <div class="links"><a href="/login">&larr; Back to sign in</a></div>
+</div>
+<script>
+document.getElementById('fp_pw2').addEventListener('keydown',e=>{if(e.key==='Enter')doReset()});
+async function doReset(){
+  var user=document.getElementById('fp_user').value.trim().toLowerCase();
+  var pw=document.getElementById('fp_pw').value;
+  var pw2=document.getElementById('fp_pw2').value;
+  var msg=document.getElementById('fpMsg');
+  msg.textContent='';msg.className='msg';
+  if(!user){msg.textContent='Enter your username';msg.className='msg err';return}
+  if(pw.length<6){msg.textContent='Password must be at least 6 characters';msg.className='msg err';return}
+  if(pw!==pw2){msg.textContent='Passwords don\u2019t match';msg.className='msg err';return}
+  try{
+    var res=await fetch('/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,new_password:pw})});
+    var data=await res.json();
+    if(data&&data.ok){msg.textContent='Password reset! Redirecting...';msg.className='msg ok';setTimeout(()=>{window.location.href='/login'},1500)}
+    else{msg.textContent=(data&&data.error)||'Reset failed';msg.className='msg err'}
+  }catch(e){msg.textContent='Can\u2019t reach Porter';msg.className='msg err'}
 }
 </script>
 </body>
@@ -15367,7 +15454,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .porter-popup-close { background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; padding:2px 6px; border-radius:4px; }
 .porter-popup-close:hover { color:var(--text); background:var(--raised); }
 .porter-popup-thread { flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:10px 12px; }
-.porter-popup-thread:empty::before { content:'Ask Porter anything.'; display:block; text-align:center; color:var(--text3); font-size:11px; padding:30px 12px; }
+.porter-popup-thread:empty::before { content:'Message Porter.'; display:block; text-align:center; color:var(--text3); font-size:11px; padding:30px 12px; }
 .porter-popup-composer { display:flex; gap:6px; padding:8px 12px; border-top:1px solid var(--border); align-items:flex-end; }
 .porter-popup-input { flex:1; resize:none; border:1px solid var(--border); border-radius:8px; padding:12px 16px; font-size:14px; font-family:inherit; background:var(--bg); color:var(--text); outline:none; max-height:120px; min-height:44px; }
 .porter-popup-input:focus { border-color:var(--accent); }
@@ -17203,7 +17290,7 @@ select option {
       <rect x="20" y="9" width="4" height="11" rx="1.5" fill="white"/>
     </svg>
     <div class="logo-text">
-      <span class="logo-name">Ask Porter</span>
+      <span class="logo-name">Porter</span>
     </div>
     <!-- notifications removed: dead code, no callers -->
     <button class="hbg-btn" id="hbgBtn" onclick="toggleSidebar()" title="Toggle sidebar">
@@ -17366,7 +17453,7 @@ select option {
       <div id="chat-main">
         <div id="chat-messages" class="chat-messages welcome-state">
           <div class="chat-welcome">
-            <div class="chat-welcome-sub">Ask Porter</div>
+            <div class="chat-welcome-sub">Porter</div>
 
             <div class="chat-welcome-input-wrap">
               <div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>
@@ -18101,17 +18188,17 @@ select option {
 </div>
 
 <!-- toast container -->
-<div class="slash-hint" onclick="_popupChatOpen()" title="Quick chat with Porter"><kbd>/</kbd> Ask Porter</div>
+<div class="slash-hint" onclick="_popupChatOpen()" title="Quick chat with Porter"><kbd>/</kbd> Porter</div>
 <div id="porter-popup-chat" class="porter-popup-chat">
   <div class="porter-popup-hdr">
     <span id="popup-porter-avatar" class="porter-popup-avatar"></span>
-    <span class="porter-popup-hdr-title">Ask Porter</span>
+    <span class="porter-popup-hdr-title">Porter</span>
     <span class="porter-popup-hdr-ctx" id="popup-chat-ctx"></span>
     <button class="porter-popup-close" onclick="_popupChatClose()" title="Close (Esc)">&times;</button>
   </div>
   <div class="porter-popup-thread" id="popup-chat-thread"></div>
   <div class="porter-popup-composer">
-    <textarea class="porter-popup-input" id="popup-chat-input" rows="1" placeholder="Ask Porter..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_popupChatSend()}" oninput="_chatAutoGrow(this)"></textarea>
+    <textarea class="porter-popup-input" id="popup-chat-input" rows="1" placeholder="Message Porter..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_popupChatSend()}" oninput="_chatAutoGrow(this)"></textarea>
     <button id="popup-chat-send" class="porter-popup-send" onclick="_popupChatSend()">Send</button>
   </div>
 </div>
@@ -23522,7 +23609,7 @@ async function _projLoadApps(pid) {
       el.innerHTML = '<div class="proj-guide-empty"><div class="proj-guide-empty-title">No apps connected</div>'
         + '<div class="proj-guide-empty-hint">Connect external services like Google Drive, Slack, GitHub, or Notion to this project. Porter can guide you through setup from chat.</div>'
         + '<div class="proj-next-actions" style="justify-content:center"><button class="proj-next-btn" onclick="_projConnectApp(\x27' + pid + '\x27)">Connect an App</button>'
-        + '<button class="proj-next-btn" onclick="_projSwitchTab(\x27chat\x27)">Ask Porter</button></div></div>';
+        + '<button class="proj-next-btn" onclick="_projSwitchTab(\x27chat\x27)">Porter</button></div></div>';
       return;
     }
     var html = '<div class="file-browser">';
@@ -28355,7 +28442,7 @@ function renderChatMessages(streamUpdate) {
     // Centered welcome state
     el.classList.add('welcome-state');
     el.innerHTML = '<div class="chat-welcome">'
-      + '<div class="chat-welcome-sub">Ask Porter</div>'
+      + '<div class="chat-welcome-sub">Porter</div>'
 
       + '<div class="chat-welcome-input-wrap">'
       + '<div id="chat-autocomplete-welcome" class="chat-autocomplete"></div>'
@@ -34102,7 +34189,7 @@ function renderPersonaOrg() {
       row.innerHTML = '<div class="loading-indicator" style="padding:28px 0;min-height:120px" aria-label="Loading agents">Loading agents\u2026</div>';
       return;
     }
-    row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:18px 12px">No workers yet. Ask Porter to create the right worker when the work demands it.</div>';
+    row.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:18px 12px">No workers yet. Tell Porter to create the right worker when the work demands it.</div>';
     return;
   }
   // Sort by sort_order then name
@@ -34785,7 +34872,7 @@ async function _pdRenderTopNeed(pid) {
         key:'no-task',
         title:'No task is assigned',
         copy:'This worker has no tracked open task right now.',
-        btn:'Ask Porter',
+        btn:'Porter',
         action:"_pdAskPorterForWorkerTask('" + escJs(pid) + "')"
       });
     }
@@ -34853,7 +34940,7 @@ function switchPdTab(tab) {
       + '</div>'
       + '<div id="pd-chat-drop-zone" class="pd-chat-drop-zone" style="display:none">Drop files into Porter chat</div>'
       + '<div class="pd-chat-composer">'
-      + '<textarea id="pd-chat-input" class="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Ask Porter anything...' : 'Message ' + (p.name || 'this worker') + '...') + '" rows="1" onkeydown="_pdChatKey(event)" oninput="_chatAutoGrow(this)" onfocus="this.dataset.ph=this.placeholder;this.placeholder=\'\'" onblur="this.placeholder=this.dataset.ph||\'\'"></textarea>'
+      + '<textarea id="pd-chat-input" class="pd-chat-input" placeholder="' + escHtml(p.orchestrator_only ? 'Message Porter...' : 'Message ' + (p.name || 'this worker') + '...') + '" rows="1" onkeydown="_pdChatKey(event)" oninput="_chatAutoGrow(this)" onfocus="this.dataset.ph=this.placeholder;this.placeholder=\'\'" onblur="this.placeholder=this.dataset.ph||\'\'"></textarea>'
       + '<button class="pd-send-btn" onclick="_pdChatSend()"><span>Send</span></button>'
       + '</div><input id="pd-chat-file-input" type="file" multiple style="display:none" onchange="_pdChatHandleFileInput(event)"></div></section>';
     var chatState = _pdChatGetState(p.id);
@@ -34934,7 +35021,7 @@ function switchPdTab(tab) {
             + (projects.length ? projects.slice(0, 6).map(function(pr) {
                 var count = (pr.assigned_personas || []).length;
                 return '<div style="padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg)"><div style="display:flex;align-items:center;gap:8px"><div style="font-size:12px;font-weight:700;color:var(--text)">' + escHtml(pr.name || 'Project') + '</div><span class="model-card-chip dim" style="font-size:10px">' + escHtml(pr.type === 'autonomous' ? 'Autonomous' : 'Manual') + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">' + count + ' workers</span></div><div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:6px">' + escHtml(pr.description || pr.success_bar || 'No project brief yet.') + '</div></div>';
-              }).join('') : '<div style="padding:14px;border:1px dashed var(--border);border-radius:16px;background:var(--bg);font-size:12px;color:var(--text3)">No project lanes yet. Ask Porter to create the first project when the work needs structure.</div>')
+              }).join('') : '<div style="padding:14px;border:1px dashed var(--border);border-radius:16px;background:var(--bg);font-size:12px;color:var(--text3)">No project lanes yet. Tell Porter to create the first project when the work needs structure.</div>')
             + '</div></div></div>';
         } else {
           html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
@@ -35285,7 +35372,7 @@ function switchPdTab(tab) {
       var _laneRunAction = "event.stopPropagation();api('/api/personas/" + p.id + "/dispatch',{prompt:'Create today\\'s daily joke.'}).then(function(r){ if(r&&r.ok){ toast('Joke dispatch started','ok'); switchPdTab('activity'); } else { toast((r&&r.error)||'Dispatch failed','err'); } }).catch(function(){ toast('Dispatch failed','err'); })";
       var quickAction = flavor === 'creative-lite'
         ? '<button class="btn btn-primary btn-sm" onclick="' + _laneRunAction + '">Generate Now</button>'
-        : '<button class="btn btn-primary btn-sm" onclick="_pdAskPorterForWorkerTask(\'' + p.id + '\')">Ask Porter For Next Task</button>';
+        : '<button class="btn btn-primary btn-sm" onclick="_pdAskPorterForWorkerTask(\'' + p.id + '\')">Next Task</button>';
       content.innerHTML = '<div class="lane-shell">'
         + '<section class="lane-hero"><div class="lane-kicker">Lane</div><div class="lane-head"><div><div class="lane-title">' + escHtml(p.name || 'Worker') + '</div><div class="lane-subtitle">' + escHtml(routeCopy) + '</div></div></div><div class="lane-meta"><span class="skill-chip">Porter-managed by default</span><span class="skill-chip">' + escHtml(override ? ('Override: ' + override) : 'Bridge-selected') + '</span></div></section>'
         + '<div class="lane-card"><div class="lane-card-head"><div><div class="lane-card-title">How Routing Works</div></div></div><div class="lane-map"><div class="lane-map-step active"><strong>1. Porter reads the work</strong><span>Task fit, current worker role, project context, and live loadout drive the decision.</span></div><div class="lane-map-step active"><strong>2. Porter picks the lane</strong><span>Bridge-selected is the default path unless you set a worker-specific override below.</span></div><div class="lane-map-step active"><strong>3. Porter sends or re-routes</strong><span>If the task or worker state changes, Porter should adjust instead of forcing a stale lane.</span></div></div></div>'
@@ -46307,6 +46394,9 @@ body {
   background: var(--accent-h); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99,102,241,0.4);
 }
 </style>
+<script>
+(function(){var t=localStorage.getItem('porter_theme');if(t&&t!=='system')document.documentElement.setAttribute('data-theme',t)})();
+</script>
 </head>
 <body>
 <div class="landing">
@@ -46480,13 +46570,10 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_html(LOGIN_PAGE)
             return
         elif parsed.path == "/register":
-            _reg_mode = _config.get("preferences", {}).get("registration_mode", "closed")
-            if _reg_mode != "invite_only":
-                self.send_response(302)
-                self.send_header("Location", "/login")
-                self.end_headers()
-                return
             self.reply_html(REGISTER_PAGE)
+            return
+        elif parsed.path == "/forgot-password":
+            self.reply_html(FORGOT_PASSWORD_PAGE)
             return
 
         elif parsed.path == "/":
@@ -50367,53 +50454,59 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
 
         elif parsed.path == "/register":
-            _reg_mode = _config.get("preferences", {}).get("registration_mode", "closed")
-            if _reg_mode != "invite_only":
-                self.reply_json({"ok": False, "error": "Registration is closed"}, 403); return
             data = self.read_json_body()
-            invite_code = data.get("invite_code", "").strip()
+            if data is None: return
             new_user = data.get("username", "").strip().lower()
-            display_name = data.get("display_name", new_user)
             password = data.get("password", "")
-            if not invite_code:
-                self.reply_json({"ok": False, "error": "Invite code required"}, 400); return
             if not new_user or len(new_user) < 2:
                 self.reply_json({"ok": False, "error": "Username must be at least 2 characters"}, 400); return
-            if len(password) < 8:
-                self.reply_json({"ok": False, "error": "Password must be at least 8 characters"}, 400); return
+            if len(password) < 6:
+                self.reply_json({"ok": False, "error": "Password must be at least 6 characters"}, 400); return
             try:
                 conn = _db_conn()
-                invite = conn.execute("SELECT code, role, expires_at, max_uses, use_count, status FROM invites WHERE code=?", (invite_code,)).fetchone()
-                if not invite:
-                    conn.close()
-                    self.reply_json({"ok": False, "error": "Invalid invite code"}, 400); return
-                if invite[5] != "active":
-                    conn.close()
-                    self.reply_json({"ok": False, "error": "Invite code is no longer active"}, 400); return
-                if invite[2] and time.time() > invite[2]:
-                    conn.close()
-                    self.reply_json({"ok": False, "error": "Invite code has expired"}, 400); return
-                if invite[3] and invite[4] >= invite[3]:
-                    conn.close()
-                    self.reply_json({"ok": False, "error": "Invite code has reached maximum uses"}, 400); return
                 existing = conn.execute("SELECT username FROM users WHERE username=?", (new_user,)).fetchone()
                 if existing:
                     conn.close()
-                    self.reply_json({"ok": False, "error": "Username already exists"}, 400); return
+                    self.reply_json({"ok": False, "error": "Username already taken"}, 400); return
                 _reg_salt = secrets.token_hex(16)
                 _reg_hash = _hash_password(password, _reg_salt)
-                _reg_role = invite[1] or "operator"
                 conn.execute(
                     "INSERT INTO users (username, display_name, full_name, email, password_hash, salt, role, must_change_password) VALUES (?,?,?,?,?,?,?,0)",
-                    (new_user, display_name, "", "", _reg_hash, _reg_salt, _reg_role)
+                    (new_user, new_user, "", "", _reg_hash, _reg_salt, "operator")
                 )
-                conn.execute("UPDATE invites SET use_count = use_count + 1 WHERE code=?", (invite_code,))
-                conn.execute("INSERT INTO invite_uses (invite_code, username) VALUES (?,?)", (invite_code, new_user))
                 conn.commit()
                 conn.close()
-                _append_audit("user.register", new_user, new_user, details={"invite_code": invite_code[:4] + "...", "role": _reg_role})
-                log.info("User registered via invite: %s (role: %s)", new_user, _reg_role)
+                _append_audit("user.register", new_user, new_user, details={"method": "open"})
+                log.info("User registered: %s", new_user)
+                mlog.emit("info", "auth", "auth.register", f"New user registered: {new_user}", extra={"username": new_user})
                 self.reply_json({"ok": True, "username": new_user})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e)}, 500)
+
+        elif parsed.path == "/forgot-password":
+            data = self.read_json_body()
+            if data is None: return
+            username = data.get("username", "").strip().lower()
+            new_password = data.get("new_password", "")
+            if not username:
+                self.reply_json({"ok": False, "error": "Username is required"}, 400); return
+            if len(new_password) < 6:
+                self.reply_json({"ok": False, "error": "Password must be at least 6 characters"}, 400); return
+            try:
+                conn = _db_conn()
+                user_row = conn.execute("SELECT username FROM users WHERE username=?", (username,)).fetchone()
+                if not user_row:
+                    conn.close()
+                    self.reply_json({"ok": False, "error": "User not found"}, 400); return
+                _reset_salt = secrets.token_hex(16)
+                _reset_hash = _hash_password(new_password, _reset_salt)
+                conn.execute("UPDATE users SET password_hash=?, salt=? WHERE username=?", (_reset_hash, _reset_salt, username))
+                conn.commit()
+                conn.close()
+                _append_audit("password.self_reset", username, username)
+                log.info("Password reset: %s", username)
+                mlog.emit("info", "auth", "auth.password_reset", f"Password reset for: {username}", extra={"username": username})
+                self.reply_json({"ok": True})
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
