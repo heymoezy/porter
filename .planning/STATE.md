@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 02-memory-v2/02-05-PLAN.md
-last_updated: "2026-03-20T16:43:28.762Z"
+stopped_at: Completed 02-memory-v2/02-06-PLAN.md
+last_updated: "2026-03-20T16:49:09.266Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -61,6 +61,7 @@ Plan: 2 of 8
 | Phase 02-memory-v2 P03 | 5min | 2 tasks | 1 files |
 | Phase 02-memory-v2 P04 | 6min | 2 tasks | 1 files |
 | Phase 02-memory-v2 P05 | 8min | 2 tasks | 1 files |
+| Phase 02-memory-v2 P06 | 3min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,9 @@ Recent decisions affecting current work:
 - [Phase 02-memory-v2]: _recall_chat_command intercepts before SSE headers — clean early-return before AI dispatch committed
 - [Phase 02-memory-v2]: remember/forget/recall chat commands bypass AI backend entirely — instant SSE response via Recall
 - [Phase 02-memory-v2]: _recall_prior_work appended to _build_context_suffix memory block — MEM-04 prior work injection in every dispatch
+- [Phase 02-memory-v2]: RECALL_ANTI_PATTERNS as ordered list (not frozenset) — ordered, sliceable for partial injection into directives
+- [Phase 02-memory-v2]: _cat_map dict inside _recall_init_agent_style maps agent_group to style key — keeps AGENT_STYLE_DEFAULTS clean
+- [Phase 02-memory-v2]: Anti-patterns injected as single directive (first 10 phrases) — reduces DB rows and token cost vs one-per-phrase
 
 ### Pending Todos
 
@@ -128,6 +132,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T16:43:28.758Z
-Stopped at: Completed 02-memory-v2/02-05-PLAN.md
+Last session: 2026-03-20T16:49:09.264Z
+Stopped at: Completed 02-memory-v2/02-06-PLAN.md
 Resume file: None
