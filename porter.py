@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.34.3 — Fix project canvas NaN crash, sign-in hover, orange purge"""
+"""Porter v0.34.4 — Skeleton card preloader for projects, larger centered spinners"""
 
 
 import email
@@ -15101,14 +15101,42 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* Loading spinner — replaces bare "Loading…" text across all tabs */
 @keyframes spin-loader { to { transform:rotate(360deg); } }
 .loading-indicator {
-  display:flex; align-items:center; gap:8px; padding:12px 0;
+  display:flex; align-items:center; justify-content:center; gap:8px; padding:12px 0;
   color:var(--text3); font-size:13px;
 }
 .loading-indicator::before {
-  content:''; display:inline-block; width:14px; height:14px;
-  border:2px solid var(--border2); border-top-color:var(--accent);
+  content:''; display:inline-block; width:24px; height:24px;
+  border:2.5px solid var(--border2); border-top-color:var(--accent);
   border-radius:50%; animation:spin-loader .7s linear infinite; flex-shrink:0;
 }
+.loading-indicator.lg { padding:48px 0; }
+.loading-indicator.lg::before { width:32px; height:32px; border-width:3px; }
+/* Skeleton card shimmer */
+@keyframes shimmer { to { background-position: -200% 0; } }
+.skeleton-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.skeleton-card .sk-cover {
+  height: 56px;
+  background: linear-gradient(90deg, var(--surface) 25%, var(--raised) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+.skeleton-card .sk-body { padding: 12px; }
+.skeleton-card .sk-line {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--raised) 25%, var(--border) 50%, var(--raised) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  margin-bottom: 8px;
+}
+.skeleton-card .sk-line.w60 { width: 60%; }
+.skeleton-card .sk-line.w40 { width: 40%; }
+.skeleton-card .sk-line.w80 { width: 80%; }
 
 /* row menu */
 .row-menu-btn {
@@ -17485,7 +17513,7 @@ select::-ms-expand { display: none; }
     <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.3</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.4</div>
   </div>
 </aside>
 
@@ -18589,7 +18617,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.34.3', date:'2026-03-20', notes:['Favicon changed from orange to indigo. Nav counter badge orange→indigo. Sign-in button hover darkened. Model card warn chips recolored to accent blue.'] },
+  { ver:'v0.34.4', date:'2026-03-20', notes:['Favicon changed from orange to indigo. Nav counter badge orange→indigo. Sign-in button hover darkened. Model card warn chips recolored to accent blue.'] },
   { ver:'v0.33.28', date:'2026-03-20', notes:['Phase 1 Foundation complete: CSS variable architecture with dark/light theming, exception handling reform (155 silent swallowers fixed), SQLite project migration, admin system deletion, Cortex disabled, Fastify backend skeleton, boot sequence, clean landing page.'] },
   { ver:'v0.33.28', date:'2026-03-19', notes:['Agent detail skills tab now scrolls instead of cutting off content. Squad assign button removed from skill cards.','Tool cards left-aligned (260-320px grid) to match card patterns across Models, Agents, and Connections.','Skills card names use ellipsis instead of line-break overflow.'] },
   { ver:'v0.33.27', date:'2026-03-19', notes:['Nav restructured to Work / System / Inspect. Connections is now its own dedicated module under System alongside Models and Tools.','Tool and connection cards cleaned up: removed filter-tag buttons and meta chips from cards, version shown in header, description clamped to 2 lines, left-aligned grid.','Tools page shows all 40+ tools instead of a filtered 17. Connections catalog expanded to 30 services including Gmail, Calendar, Drive, Sheets, Slack, Stripe, and more.','Skills loading cached (60s TTL) to avoid slow CLI calls on every view. Skills card layout overflow fixed for long names.','Settings separator aligned with main nav username separator.'] },
@@ -20751,10 +20779,15 @@ function _focusProjectCommand() {
   return false;
 }
 function _spinnerOnlyMarkup(minHeight, padding) {
-  var style = ['justify-content:center'];
+  var style = [];
   if (padding) style.push('padding:' + padding);
   if (minHeight) style.push('min-height:' + minHeight + 'px');
-  return '<div class="loading-indicator" style="' + style.join(';') + '" aria-label="Loading"><span class="loading-spinner"></span></div>';
+  return '<div class="loading-indicator lg" style="' + style.join(';') + '" aria-label="Loading"></div>';
+}
+function _skeletonCardsMarkup(count) {
+  count = count || 3;
+  var card = '<div class="skeleton-card"><div class="sk-cover"></div><div class="sk-body"><div class="sk-line w80"></div><div class="sk-line w60"></div><div class="sk-line w40"></div></div></div>';
+  return '<div class="project-roster" style="opacity:0.7">' + card.repeat(count) + '</div>';
 }
 function _isCoordinationEventType(type) {
   return typeof type === 'string' && type.indexOf('coordination:') === 0;
@@ -21546,7 +21579,7 @@ function _projStatusBadge(proj) {
 
 async function loadProjects() {
   var grid = document.getElementById('proj-grid');
-  if (grid) grid.innerHTML = _spinnerOnlyMarkup(160, '18px 0');
+  if (grid) grid.innerHTML = _skeletonCardsMarkup(4);
   try {
     var data = await api('/api/projects');
     _projList = (data && data.projects) || [];
@@ -47804,7 +47837,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.34.3"})
+            self.reply_json({"v": "0.34.4"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -47966,7 +47999,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.34.3"
+                health["porter_version"] = "0.34.4"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -50384,7 +50417,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.3'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.4'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -54362,7 +54395,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.34.3"
+                _ws_health["porter_version"] = "0.34.4"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -57703,7 +57736,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.34.3 ready (localhost only)")
+    print(f"\n  Porter v0.34.4 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
