@@ -20,6 +20,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [ ] **MEM-01**: Complete Memory V2 with structured directives/concepts/signals and noise filtering (no login/upload/file-browse signals)
 - [ ] **MEM-02**: Real-time memory feed showing what Porter learned, forgot, or updated as it happens
 - [ ] **MEM-03**: Memory scoping with clear boundaries (global, project, agent, task-level)
+- [ ] **MEM-04**: FTS5 cross-session search — agents can search their own past sessions for prior work before asking users to repeat (ref: hermes-agent pattern)
 
 ### Project Flow
 
@@ -101,6 +102,7 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | MEM-01 | Phase 2 | Pending |
 | MEM-02 | Phase 2 | Pending |
 | MEM-03 | Phase 2 | Pending |
+| MEM-04 | Phase 2 | Pending |
 | PERF-01 | Phase 3 | Pending |
 | PERF-02 | Phase 3 | Pending |
 | AGNT-01 | Phase 4 | Pending |
@@ -122,8 +124,8 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | CONN-05 | Phase 7 | Pending |
 
 **Coverage:**
-- v1 requirements: 29 total
-- Mapped to phases: 29
+- v1 requirements: 30 total
+- Mapped to phases: 30
 - Unmapped: 0 ✓
 
 ---

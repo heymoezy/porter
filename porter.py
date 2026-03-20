@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.33.28 — Skills scroll fix, Squad button removed, tool cards left-aligned"""
+"""Porter v0.34.0 — Phase 1 Foundation: CSS variables, error handling, SQLite projects, dead code removal, boot sequence"""
 
 
 import email
@@ -13758,7 +13758,7 @@ window._mermaidReady = Promise.resolve(mermaid.initialize({
   :root:not([data-theme]) {
     --bg: #FFFFFF; --surface: #F3F4F8; --raised: #E8EBF2;
     --border: #D1D5DF; --border2: #B8BFD0;
-    --text: var(--bg); --text2: #475569; --text3: #94A3B8;
+    --text: #0F172A; --text2: #475569; --text3: #94A3B8;
     --accent: #4F46E5; --accent-h: #4338CA;
     --danger: #DC2626; --success: #16A34A; --warning: #D97706;
     --bg1: #F3F4F8; --bg2: #E8EBF2; --bg3: #D1D5DF;
@@ -15315,7 +15315,7 @@ kbd {
 [data-theme="light"] {
   --bg: #FFFFFF; --surface: #F3F4F8; --raised: #E8EBF2;
   --border: #D1D5DF; --border2: #B8BFD0;
-  --text: var(--bg); --text2: #475569; --text3: #94A3B8;
+  --text: #0F172A; --text2: #475569; --text3: #94A3B8;
   --accent: #4F46E5; --accent-h: #4338CA;
   --danger: #DC2626; --success: #16A34A; --warning: #D97706;
   --bg1: #F3F4F8; --bg2: #E8EBF2; --bg3: #D1D5DF;
@@ -17483,7 +17483,7 @@ select::-ms-expand { display: none; }
     <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.33.28</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.0</div>
   </div>
 </aside>
 
@@ -18587,6 +18587,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
+  { ver:'v0.34.0', date:'2026-03-20', notes:['Phase 1 Foundation complete: CSS variable architecture with dark/light theming, exception handling reform (155 silent swallowers fixed), SQLite project migration, admin system deletion, Cortex disabled, Fastify backend skeleton, boot sequence, clean landing page.'] },
   { ver:'v0.33.28', date:'2026-03-19', notes:['Agent detail skills tab now scrolls instead of cutting off content. Squad assign button removed from skill cards.','Tool cards left-aligned (260-320px grid) to match card patterns across Models, Agents, and Connections.','Skills card names use ellipsis instead of line-break overflow.'] },
   { ver:'v0.33.27', date:'2026-03-19', notes:['Nav restructured to Work / System / Inspect. Connections is now its own dedicated module under System alongside Models and Tools.','Tool and connection cards cleaned up: removed filter-tag buttons and meta chips from cards, version shown in header, description clamped to 2 lines, left-aligned grid.','Tools page shows all 40+ tools instead of a filtered 17. Connections catalog expanded to 30 services including Gmail, Calendar, Drive, Sheets, Slack, Stripe, and more.','Skills loading cached (60s TTL) to avoid slow CLI calls on every view. Skills card layout overflow fixed for long names.','Settings separator aligned with main nav username separator.'] },
   { ver:'v0.33.25', date:'2026-03-19', notes:['Models is now more product-like: a compact summary strip lands first, cards emphasize readiness, selected models, and best-use guidance instead of defaulting to benchmark/scheduler clutter','Runtime updates now open a Porter-style progress modal with plain-language status and useful retry/details actions instead of the old terminal slab that could leak nonsense like exit undefined','Models still hydrates progressively, but deep version refresh is deferred and the visible runtime surface carries less legacy operator-console residue'] },
@@ -20518,7 +20519,7 @@ function syncSettingsUI() {
 // ── theme ──
 function applyTheme(t) {
   const light = t === 'light';
-  document.documentElement.classList.toggle('light', light);
+  document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
   const icon = document.getElementById('themeIcon');
   const sIcon = document.getElementById('sidebarThemeIcon');
   const sun = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
@@ -20528,7 +20529,7 @@ function applyTheme(t) {
   try { localStorage.setItem('porter_theme', t); } catch(e) {}
 }
 function toggleTheme() {
-  applyTheme(document.documentElement.classList.contains('light') ? 'dark' : 'light');
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
 }
 function toggleSidebar() {
   const collapsed = document.body.classList.toggle('sidebar-collapsed');
@@ -47106,41 +47107,6 @@ body {
   <a href="/login" class="cta">Sign in</a>
 </div>
 </body>
-</html>""" + '0.27.20' + """</div><div class="label">Version</div></div>
-  <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
-  <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
-  <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
-</div>
-
-<footer class="landing-footer">
-  <p>Porter &mdash; self-hosted AI infrastructure hub</p>
-  <p style="margin-top:6px"><a href="https://github.com/lobsterhands/porter">GitHub</a> &middot; AGPL-3.0 &middot; Built with &#10084; and Python stdlib</p>
-</footer>
-
-
-<!-- Keyboard shortcuts overlay -->
-<div class="kb-overlay" id="kbOverlay" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="kb-dialog">
-    <div class="kb-title">Keyboard Shortcuts</div>
-    <div class="kb-row"><span class="kb-key">Ctrl+K</span><span class="kb-desc">Focus chat input</span></div>
-    <div class="kb-row"><span class="kb-key">1</span>-<span class="kb-key">9</span><span class="kb-desc">Switch tabs</span></div>
-    <div class="kb-row"><span class="kb-key">Esc</span><span class="kb-desc">Close panel / cancel</span></div>
-    <div class="kb-row"><span class="kb-key">?</span><span class="kb-desc">Show this help</span></div>
-    <div class="kb-row"><span class="kb-key">Enter</span><span class="kb-desc">Send message</span></div>
-    <div class="kb-row"><span class="kb-key">Shift+Enter</span><span class="kb-desc">New line in chat</span></div>
-    <div class="kb-row"><span class="kb-key">/</span><span class="kb-desc">Slash commands (in chat)</span></div>
-    <div class="kb-row"><span class="kb-key">@</span><span class="kb-desc">Target model (in chat)</span></div>
-    <div class="kb-action">
-      <button class="btn-tour" onclick="startTour()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        Start Guided Tour
-      </button>
-    </div>
-    <div style="margin-top:12px;text-align:center;font-size:11px;color:var(--text3)">Press Esc or click outside to close</div>
-  </div>
-</div>
-
-</body>
 </html>"""
 
 # ── Event Hub (Real-time updates) ───────────────────────────────────────────
@@ -47834,7 +47800,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.33.28"})
+            self.reply_json({"v": "0.34.0"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -47996,7 +47962,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.33.28"
+                health["porter_version"] = "0.34.0"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -50414,7 +50380,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.33.28'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.0'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -54392,7 +54358,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.33.28"
+                _ws_health["porter_version"] = "0.34.0"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -57733,7 +57699,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.33.28 ready (localhost only)")
+    print(f"\n  Porter v0.34.0 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")

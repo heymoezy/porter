@@ -48,7 +48,7 @@ Plans:
 ### Phase 2: Memory V2
 **Goal**: Memory V2 is the only active memory system — Cortex is deleted, signals are clean, and the memory feed is visible in real time
 **Depends on**: Phase 1
-**Requirements**: MEM-01, MEM-02, MEM-03
+**Requirements**: MEM-01, MEM-02, MEM-03, MEM-04
 **Success Criteria** (what must be TRUE):
   1. Logging in, uploading a file, or browsing project files produces zero signals in the Memory V2 queue
   2. Grepping the codebase for Cortex write paths returns zero results
@@ -60,9 +60,10 @@ Plans:
 Plans:
 - [ ] 02-01: Cortex removal — delete all Cortex code paths, verify grep-zero, set Memory V2 as sole active system
 - [ ] 02-02: Noise filter — audit and block login/upload/file-browse from producing V2 signals
-- [ ] 02-03: Memory injection — wire directives/concepts/episodes into Fastify agent dispatch context
+- [ ] 02-03: Memory injection — wire directives/concepts/episodes into Fastify agent dispatch context (frozen snapshot pattern — capture once at session start, writes take effect next session)
 - [ ] 02-04: Scoping enforcement — global/project/agent scope implementation with isolation tests
 - [ ] 02-05: Memory feed UI — real-time panel showing memory changes as they happen
+- [ ] 02-06: FTS5 session search — SQLite full-text search over past agent sessions, boolean queries, role/source filters (ref: hermes-agent)
 
 ### Phase 3: Route Migration
 **Goal**: Auth, projects, and agents are fully owned by Fastify — porter.py no longer handles these routes, and all 35 Playwright tests pass without modification
@@ -97,10 +98,10 @@ Plans:
 
 Plans:
 - [ ] 04-01: Job table + scheduler — agent_jobs table, services/scheduler.ts, 2s poll, atomic UPDATE pickup
-- [ ] 04-02: AI router service — services/ai-router.ts, model selection, openclaw dispatch, streaming response
+- [ ] 04-02: AI router service — services/ai-router.ts, model selection, openclaw dispatch, streaming response (includes: per-turn smart routing heuristic, dynamic tool schema rebuild for unavailable backends, context compressor with tool-call boundary repair — ref: hermes-agent)
 - [ ] 04-03: Event triggers — file-created, deadline-approaching, message-received triggers wired to job queue
 - [ ] 04-04: Activity log — per-agent readable feed of runs, results, and queue state
-- [ ] 04-05: Ephemeral agents — project-scoped creation, auto-retire on project complete or explicit dismissal
+- [ ] 04-05: Ephemeral agents — project-scoped creation, auto-retire on project complete or explicit dismissal (includes: depth=2 hard limit, max 3 concurrent children, blocked tool list on children — ref: hermes-agent)
 - [ ] 04-06: Feature flags — agent_scheduling, event_triggers, ephemeral_agents kill switches in config
 
 ### Phase 5: Guided Project Wizard
@@ -118,7 +119,7 @@ Plans:
 
 Plans:
 - [ ] 05-01: Wizard flow — conversational UI, 3-question max, Porter proposes agents + plan
-- [ ] 05-02: Agent proposal engine — project type detection, agent selection logic, plan generation
+- [ ] 05-02: Agent proposal engine — project type detection, agent selection logic, plan generation (includes: self-improving skills — agents create SKILL.md from successful completions, progressive 3-tier loading — ref: hermes-agent)
 - [ ] 05-03: Approval-to-execution pipeline — proposal approval triggers project creation + job queue
 - [ ] 05-04: Project dashboard — progress view, active agents panel, activity feed, next steps
 - [ ] 05-05: Token budget enforcement — interactive wizard calls hard-capped at 2,000 tokens system context
@@ -175,7 +176,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 5/7 | In Progress|  |
-| 2. Memory V2 | 0/5 | Not started | - |
+| 2. Memory V2 | 0/6 | Not started | - |
 | 3. Route Migration | 0/5 | Not started | - |
 | 4. Agent Autonomy | 0/6 | Not started | - |
 | 5. Guided Project Wizard | 0/6 | Not started | - |
