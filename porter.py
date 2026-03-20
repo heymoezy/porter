@@ -1956,7 +1956,7 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
     """Inner extraction logic."""
     return  # DISABLED: Cortex removed in Phase 1, full deletion in Phase 2
     prefs = _config.get("preferences", {})
-    if not prefs.get("cortex_enabled", True):
+    if not prefs.get("cortex_enabled", False):  # default: off
         return
     min_len = prefs.get("cortex_min_response_len", 100)
     max_facts = prefs.get("cortex_max_facts", 8)
@@ -48528,7 +48528,7 @@ class Handler(BaseHTTPRequestHandler):
                 "by_scope": by_scope,
                 "new_1h": new_1h,
                 "archived": archived,
-                "enabled": _config.get("preferences", {}).get("cortex_enabled", True),
+                "enabled": _config.get("preferences", {}).get("cortex_enabled", False),  # default False
                 "sessions_total": sessions_total,
                 "sessions_extracted": sessions_extracted
             })
