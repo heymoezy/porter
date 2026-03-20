@@ -3546,6 +3546,68 @@ def _recall_prior_work(persona_id, query, limit=3):
 
 
 
+
+def _recall_track_feedback(user_message, prior_response, persona_id='', project_id=''):
+    """Track implicit feedback signals from user behavior after an AI response.
+
+    Signals detected:
+    - User corrects: "no, actually..." / "that's wrong" / "I meant..." -> correction signal
+    - User accepts: thanks/great/perfect or follows up positively -> acceptance signal
+    - User moves on: changes topic entirely -> neutral (no signal)
+
+    No explicit thumbs up/down needed — all implicit.
+    Signals stored as memory_kind='signal' with source_type='feedback'|'acceptance'|'correction'.
+    """
+    if not user_message or not prior_response or not persona_id:
+        return
+
+    msg = user_message.strip().lower()
+
+    # Correction signals (negative feedback)
+    correction_markers = ['no, actually', "that's wrong", 'that is wrong', 'i meant', 'not what i',
+                          'incorrect', 'please fix', 'try again', 'wrong', 'no no', 'nope,']
+    is_correction = any(msg.startswith(m) or f' {m}' in msg for m in correction_markers)
+
+    if is_correction:
+        _mem_insert(
+            memory_kind='signal',
+            text=f"User corrected response. User said: {user_message[:200]}. Prior response approach may not match preference.",
+            scope='agent',
+            scope_id=persona_id,
+            trust_tier='low',
+            source_type='correction',
+            source_category='feedback',
+            confidence=0.7,
+            importance=6,
+            review_state='pending'
+        )
+        mlog.emit("info", "memory", "recall.feedback.correction",
+                  f"Correction detected for agent {persona_id}",
+                  extra={"persona_id": persona_id})
+        return
+
+    # Acceptance signals (positive) — user builds on the response
+    continuation_markers = ['thanks', 'great', 'perfect', 'good', 'ok now', 'next', 'also',
+                            'and then', 'what about', 'can you also', 'now do']
+    is_continuation = any(msg.startswith(m) or msg == m for m in continuation_markers)
+
+    if is_continuation and len(prior_response) > 50:
+        _mem_insert(
+            memory_kind='signal',
+            text=f"User accepted response approach. Response style and depth were appropriate.",
+            scope='agent',
+            scope_id=persona_id,
+            trust_tier='low',
+            source_type='acceptance',
+            source_category='feedback',
+            confidence=0.5,
+            importance=3,
+            review_state='pending'
+        )
+        # Don't log acceptance — too frequent and noisy
+        return
+
+
 def _recall_chat_command(user_message, persona_id='', project_id=''):
     """Process natural language memory commands from chat.
 
@@ -49284,6 +49346,28 @@ class Handler(BaseHTTPRequestHandler):
                             mlog.emit("warn", "memory", "recall.extract_error", str(_e), extra={"exc_type": type(_e).__name__})
                     import threading as _thr
                     _thr.Thread(target=_recall_extract_bg, name="recall-extract", daemon=True).start()
+
+                # Recall feedback tracking: detect if this message is feedback on the prior response
+                # Look up the last assistant message for this chat to compare against
+                if chat_id and _s_pid:
+                    try:
+                        _fb_conn = _db_conn()
+                        _prior_row = _fb_conn.execute(
+                            "SELECT content FROM chat_messages WHERE chat_id=? AND role='assistant' "
+                            "ORDER BY id DESC LIMIT 1",
+                            (chat_id,)
+                        ).fetchone()
+                        _fb_conn.close()
+                        if _prior_row and _prior_row['content']:
+                            _recall_track_feedback(
+                                raw_text or prompt,
+                                _prior_row['content'],
+                                persona_id=_s_pid,
+                                project_id=_s_proj
+                            )
+                    except Exception as _fbe:
+                        mlog.emit("warn", "memory", "exception.swallowed",
+                                  str(_fbe), extra={"exc_type": type(_fbe).__name__, "fn": "_recall_track_feedback.wire"})
 
             except Exception as e:
                 if _stream_backend:
