@@ -47035,17 +47035,15 @@ LANDING_PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Porter — Your AI Infrastructure Hub</title>
-<meta name="description" content="Project-first AI orchestration for agents, models, artifacts, and logs in one place.">
+<title>Porter</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
 :root {
   --bg: #111827; --surface: #1E2736; --raised: #28344A;
   --border: #374259; --border2: #4A5770;
   --text: #F1F5F9; --text2: #94A3B8; --text3: #64748B;
   --accent: #6366F1; --accent-h: #818CF8;
   --danger: #EF4444; --success: #22C55E; --warning: #F59E0B;
-  --radius: 8px; --sidebar: 220px;
+  --radius: 8px;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
@@ -47056,123 +47054,58 @@ LANDING_PAGE = """<!DOCTYPE html>
     --danger: #DC2626; --success: #16A34A; --warning: #D97706;
   }
 }
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;min-height:100vh}
-
-/* Nav */
-.landing-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;max-width:1100px;margin:0 auto}
-.landing-logo{display:flex;align-items:center;gap:10px}
-.landing-logo svg{width:28px;height:28px}
-.landing-logo-name{font-size:18px;font-weight:700;letter-spacing:-.4px}
-.landing-login{padding:8px 20px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid var(--border);background:none;color:var(--text);cursor:pointer;text-decoration:none;transition:.15s}
-.landing-login:hover{background:var(--accent);color:var(--text);border-color:var(--accent)}
-
-/* Hero */
-.landing-hero{text-align:center;padding:80px 40px 60px;max-width:720px;margin:0 auto}
-.landing-hero h1{font-size:42px;font-weight:800;letter-spacing:-1px;line-height:1.15;margin-bottom:16px}
-.landing-hero h1 .accent{color:var(--accent)}
-.landing-hero p{font-size:17px;color:var(--text2);max-width:540px;margin:0 auto 32px}
-.landing-cta{display:inline-block;padding:12px 32px;font-size:15px;font-weight:600;border-radius:10px;background:var(--accent);color:var(--text);text-decoration:none;transition:.15s;border:none;cursor:pointer}
-.landing-cta:hover{background:var(--accent-d);transform:translateY(-1px)}
-.landing-cta-sub{display:block;margin-top:10px;font-size:12px;color:var(--text3)}
-
-/* Feature grid */
-.landing-features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:900px;margin:40px auto 60px;padding:0 40px}
-@media(max-width:700px){.landing-features{grid-template-columns:1fr}}
-.landing-feat{padding:24px;background:var(--surface);border:1px solid var(--border);border-radius:12px;transition:.15s}
-.landing-feat:hover{border-color:var(--accent);transform:translateY(-2px)}
-.landing-feat-icon{font-size:24px;margin-bottom:10px}
-.landing-feat h3{font-size:14px;font-weight:600;margin-bottom:6px}
-.landing-feat p{font-size:12px;color:var(--text2);line-height:1.5}
-
-/* Architecture */
-.landing-arch{text-align:center;padding:40px;max-width:700px;margin:0 auto}
-.landing-arch h2{font-size:20px;font-weight:700;margin-bottom:8px}
-.landing-arch p{font-size:13px;color:var(--text2);margin-bottom:24px}
-.landing-arch-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px}
-.landing-arch-item{padding:16px 8px;background:var(--raised);border:1px solid var(--border);border-radius:10px;text-align:center}
-.landing-arch-item .icon{font-size:20px;margin-bottom:4px}
-.landing-arch-item .name{font-size:12px;font-weight:600}
-.landing-arch-item .sub{font-size:10px;color:var(--text3)}
-.landing-arch-hub{padding:14px 24px;background:var(--accent);border-radius:10px;display:inline-flex;align-items:center;gap:8px;color:var(--text);font-weight:700;font-size:14px;letter-spacing:1px;margin-bottom:24px}
-
-/* Stats */
-.landing-stats{display:flex;justify-content:center;gap:40px;padding:30px 40px;max-width:900px;margin:0 auto}
-.landing-stat{text-align:center}
-.landing-stat .val{font-size:28px;font-weight:800;color:var(--accent)}
-.landing-stat .label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
-
-/* Footer */
-.landing-footer{text-align:center;padding:40px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);margin-top:60px}
-.landing-footer a{color:var(--accent);text-decoration:none}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+.landing {
+  text-align: center;
+}
+.wordmark {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.tagline {
+  font-size: 14px;
+  color: var(--text2);
+  margin-bottom: 32px;
+}
+.cta {
+  display: inline-block;
+  background: var(--accent);
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cta:hover {
+  background: var(--accent-h);
+}
 </style>
 </head>
 <body>
-
-<nav class="landing-nav">
-  <div class="landing-logo">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-      <rect x="2" y="3" width="20" height="18" rx="3"/>
-      <path d="M12 8v8m-4-4h8"/>
-    </svg>
-    <span class="landing-logo-name">porter</span>
-  </div>
-  <a href="/login" class="landing-login">Sign in</a>
-</nav>
-
-<section class="landing-hero">
-  <h1>Your <span class="accent">AI infrastructure</span>, in one place</h1>
-  <p>One place for Claude, GPT, Gemini, and local models. Self-hosted, zero dependencies.</p>
-  <a href="/login" class="landing-cta">Get Started</a>
-  <span class="landing-cta-sub">Self-hosted &middot; AGPL-3.0 &middot; No vendor lock-in</span>
-</section>
-
-<div class="landing-features">
-  <div class="landing-feat">
-    <div class="landing-feat-icon">&#9889;</div>
-    <h3>Multi-Model Chat</h3>
-    <p>Talk to OpenClaw, Gemini, Ollama, and more. Markdown rendering, code blocks with copy, streaming responses. Feels like a CLI.</p>
-  </div>
-  <div class="landing-feat">
-    <div class="landing-feat-icon">&#128268;</div>
-    <h3>Agnostic Agent Bridge</h3>
-    <p>One endpoint, many backends. Route tasks to any model with @backend prefix. Porter decides or you override. Your call.</p>
-  </div>
-  <div class="landing-feat">
-    <div class="landing-feat-icon">&#128203;</div>
-    <h3>Projects And Artifacts</h3>
-    <p>Keep work inside clean project lanes with durable state, attached workers, and artifact-aware outputs instead of generic file clutter.</p>
-  </div>
-  <div class="landing-feat">
-    <div class="landing-feat-icon">&#129504;</div>
-    <h3>Durable State</h3>
-    <p>Use directives, notes, and artifacts as persistent project truth. Porter should remember the work, not just summarize old chats.</p>
-  </div>
-  <div class="landing-feat">
-    <div class="landing-feat-icon">&#128736;</div>
-    <h3>Agent Capabilities</h3>
-    <p>Porter can shape workers, route tasks, and switch runtimes inside the chat lane without forcing users through raw admin plumbing.</p>
-  </div>
-  <div class="landing-feat">
-    <div class="landing-feat-icon">&#128274;</div>
-    <h3>Self-Hosted First</h3>
-    <p>Single Python file, stdlib only, no Docker required. Your data stays on your machine. Run on any VPS, NAS, or laptop.</p>
-  </div>
+<div class="landing">
+  <div class="wordmark">PORTER</div>
+  <div class="tagline">Your autonomous agent platform</div>
+  <a href="/login" class="cta">Sign in</a>
 </div>
-
-<section class="landing-arch">
-  <h2>Architecture</h2>
-  <p>Porter is the router. All model calls flow through one agnostic bridge.</p>
-  <div class="landing-arch-grid">
-    <div class="landing-arch-item"><div class="icon">&#127760;</div><div class="name">OpenClaw</div><div class="sub">GPT / Codex</div></div>
-    <div class="landing-arch-item"><div class="icon">&#9734;</div><div class="name">Gemini</div><div class="sub">Google AI</div></div>
-    <div class="landing-arch-item"><div class="icon">&#128011;</div><div class="name">Ollama</div><div class="sub">Local models</div></div>
-    <div class="landing-arch-item"><div class="icon">&#128257;</div><div class="name">+ More</div><div class="sub">Any CLI</div></div>
-  </div>
-  <div class="landing-arch-hub">&#9651; PORTER</div>
-</section>
-
-<div class="landing-stats">
-  <div class="landing-stat"><div class="val" id="lp-version">""" + '0.27.20' + """</div><div class="label">Version</div></div>
+</body>
+</html>""" + '0.27.20' + """</div><div class="label">Version</div></div>
   <div class="landing-stat"><div class="val">3</div><div class="label">Model Backends</div></div>
   <div class="landing-stat"><div class="val">50+</div><div class="label">Skills</div></div>
   <div class="landing-stat"><div class="val">1</div><div class="label">File</div></div>
