@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.34.14 — Fix UI: recall-badge alignment, settings divider full width, logs header consistency"""
+"""Porter v0.34.15 — Fix memory noise/deduplication, CRM salutation, agent detail, recall badge"""
 
 
 import email
@@ -124,6 +124,9 @@ RECALL_NOISE_BLACKLIST = frozenset({
     "tab_switch", "page_load", "accordion_toggle", "search_query",
     # System/health
     "health_check", "version_query", "boot_event", "capability_detect",
+    # Project operations — state changes are not learnings
+    "project_status_change", "project_create", "project_update", "project_delete",
+    "status_change", "assignment", "success_bar",
 })
 
 def _recall_should_extract(source_category: str) -> bool:
@@ -3283,6 +3286,14 @@ def _mem_insert(memory_kind='signal', text='', scope='global', scope_id='', trus
         kw = ','.join(sorted(w.lower() for w in text.split() if len(w) > 2))
     try:
         conn = _db_conn()
+        # Deduplication: skip if identical text+scope+scope_id already active
+        existing = conn.execute(
+            "SELECT id FROM memories WHERE text = ? AND scope = ? AND scope_id = ? AND status = 'active' LIMIT 1",
+            (text, scope_val, sid)
+        ).fetchone()
+        if existing:
+            conn.close()
+            return existing[0]
         cur = conn.execute(
             "INSERT INTO memories (memory_kind, trust_tier, scope, scope_id, text, status, review_state, source_type, source_id, source_category, confidence, importance, keywords) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)",
             (kind, trust, scope_val, sid, text, review, str(source_type or 'system').strip(), str(source_id or '').strip(), str(source_category or '').strip(), conf, imp, kw))
@@ -12333,7 +12344,7 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
                         proj["completed_at"] = time.time()
                     proj["status"] = s
                     # v0.31.64 — Audit trail: log status changes as project notes
-                    _state_add_project_note(project_id, "status_change", f"Project status changed to {s}", source="porter", created_by="porter")
+                    # status_change notes removed — not useful learnings (v0.34.15)
                     save_config(_config)
                     results.append({"ok": True, "action": "set_status", "status": s})
                 else:
@@ -17164,7 +17175,7 @@ select option {
     <button class="mnav-item" id="mnav-memory" onclick="mainNavModule('memory')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
       <span class="mnav-label">Memory</span>
-      <span id="recall-badge" style="display:none;background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:auto;min-width:18px;text-align:center;line-height:1.4">0</span>
+      <span id="recall-badge" class="mnav-badge" style="display:none">0</span>
     </button>
     <button class="mnav-item" id="mnav-logs" onclick="mainNavModule('logs')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -17193,7 +17204,7 @@ select option {
     <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.14</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.15</div>
   </div>
 </aside>
 
@@ -18314,7 +18325,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.34.14', date:'2026-03-20', notes:['Fix recall-badge: bigger font, right-aligned with margin-left:auto','Fix settings divider: border-bottom on toolbar extends full width','Fix logs header: mc-header now matches module-hdr style (20px font, border-bottom)'] },
+  { ver:'v0.34.15', date:'2026-03-20', notes:['Fix memory deduplication: _mem_insert now skips exact duplicates (text+scope+scope_id)','Fix memory noise: project status_change and settings_update no longer stored as memories','Add project op categories to RECALL_NOISE_BLACKLIST','CRM: remove Status field from contact detail (UI noise)','CRM: rename Title to Salutation for honorific field','CRM: remove Mx from salutation options','recall-badge: now uses mnav-badge CSS class for consistent sidebar styling'] },
   { ver:'v0.34.11', date:'2026-03-20', notes:['Complete orange purge from chat UI: send button, chat shell border, typing dots, drop zone, toolbtn hover, project chat container, working dots, need labels, Porter hero card — all --warning → --accent.'] },
   { ver:'v0.34.10', date:'2026-03-20', notes:['Agent detail + project chat composer borders changed from --warning (orange) to --accent (indigo). Drag-over and chat hints also updated.'] },
   { ver:'v0.34.9', date:'2026-03-20', notes:['Chat input focus borders changed from orange rgba(247,147,26) to var(--accent). Files accordion staggered animation removed — instant expand/collapse.'] },
@@ -24127,7 +24138,7 @@ function _crmInlineEdit(el) {
       ? ['client','collaborator','partner','vendor','stakeholder','lead','other']
       : (field === 'company_type'
         ? ['client','partner','vendor','agency','other']
-        : ['', 'Mr', 'Ms', 'Mrs', 'Dr', 'Mx', 'Prof']);
+        : ['', 'Mr', 'Ms', 'Mrs', 'Dr', 'Prof']);
     var selected = current;
     var wrap = document.createElement('div');
     wrap.style.width = '100%';
@@ -24370,12 +24381,11 @@ async function _crmOpenContact(id) {
   h += _crmEditableSummaryBox((c.summary || '').trim(), c.id, 'summary', _crmAutoSummary('contact', c));
   h += '<div class="crm-detail-grid">';
   h += '<div class="crm-detail-col">';
-  h += _crmEditableField('Title', c.honorific || '', c.id, 'honorific');
+  h += _crmEditableField('Salutation', c.honorific || '', c.id, 'honorific');
   h += _crmEditableField('Job Title', c.title || '', c.id, 'title');
   h += _crmEditableField('Company', c.company_name || '', c.id, 'company_name');
   h += _crmEditableField('Type', c.contact_type || '', c.id, 'contact_type');
   h += _crmEditableField('Tags', tags.join(', '), c.id, 'tags_json');
-  h += _crmEditableField('Status', c.status || 'active', c.id, 'status');
   h += '</div>';
   h += '<div class="crm-detail-col">';
   h += _crmEditableField('Email', c.email || '', c.id, 'email');
@@ -46772,7 +46782,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.34.14"})
+            self.reply_json({"v": "0.34.15"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -46934,7 +46944,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.34.14"
+                health["porter_version"] = "0.34.15"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -49249,7 +49259,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.14'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.15'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -53261,7 +53271,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.34.14"
+                _ws_health["porter_version"] = "0.34.15"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -55239,7 +55249,7 @@ class Handler(BaseHTTPRequestHandler):
                         sj.write_text(json.dumps(sdata, indent=2))
                     except Exception as e:
                         log.debug("Ignored: %s", e)
-                _state_add_project_note(pid, "decision", f"Project settings updated for {proj.get('name', pid)}.", source="system", created_by="porter")
+                # settings update notes removed — not useful learnings (v0.34.15)
                 _emit_event("project:updated", {"id": pid})
                 mlog.emit("info", "project", "project.update", f"Updated project: {pid}", project_id=pid)
                 self.reply_json({"ok": True, "project": proj})
@@ -55262,7 +55272,7 @@ class Handler(BaseHTTPRequestHandler):
                 elif status == "active":
                     proj.pop("completed_at", None)
                 _db_project_save(proj)
-                _state_add_project_note(pid, "decision", f"Project status changed to {status}.", source="system", created_by="porter")
+                # status_change notes removed — not useful learnings (v0.34.15)
                 _emit_event("project:updated", {"id": pid, "status": status})
                 mlog.emit("info", "project", "project.set_status", f"Status → {status} for {pid}", project_id=pid)
                 self.reply_json({"ok": True, "status": status})
@@ -56576,7 +56586,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.34.14 ready (localhost only)")
+    print(f"\n  Porter v0.34.15 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
