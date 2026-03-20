@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 02-memory-v2/02-01-PLAN.md
-last_updated: "2026-03-20T15:57:35.429Z"
+stopped_at: Completed 02-memory-v2/02-02-PLAN.md
+last_updated: "2026-03-20T16:12:27.501Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 17
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # Project State
@@ -57,6 +57,7 @@ Plan: 2 of 8
 | Phase 01-foundation P09 | 2min | 2 tasks | 1 files |
 | Phase 02-memory-v2 P00 | 3min | 2 tasks | 5 files |
 | Phase 02-memory-v2 P01 | 17min | 2 tasks | 1 files |
+| Phase 02-memory-v2 P02 | 22min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,9 @@ Recent decisions affecting current work:
 - [Phase 02-memory-v2]: All functional cortex references removed — zero _cortex_ functions, zero cortex_memories SQL, zero /api/cortex/ endpoints
 - [Phase 02-memory-v2]: JS cortex UI module (~56KB) removed entirely — loadCortexTab, cortex graph canvas, renderCortexMemories all deleted
 - [Phase 02-memory-v2]: Bridge:dispatch SSE refresh handlers preserved inside reconstructed SSE subscription block (cortex:update handler stripped)
+- [Phase 02-memory-v2]: source_category defaults to 'chat' inside _mem_extract_signals — any caller without explicit category is treated as chat (allowed through noise filter)
+- [Phase 02-memory-v2]: SSE emit failure in _mem_insert silently swallowed — DB insert must succeed even if SSE push fails
+- [Phase 02-memory-v2]: RECALL_NOISE_BLACKLIST as frozenset constant — O(1) membership test, blocks login/logout/file_upload/file_download/file_browse/file_delete/file_rename/folder_create/tab_switch/page_load/accordion_toggle/search_query/health_check/version_query/boot_event/capability_detect
 
 ### Pending Todos
 
@@ -112,6 +116,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T15:57:35.426Z
-Stopped at: Completed 02-memory-v2/02-01-PLAN.md
+Last session: 2026-03-20T16:12:27.499Z
+Stopped at: Completed 02-memory-v2/02-02-PLAN.md
 Resume file: None
