@@ -194,9 +194,9 @@ def _wf_record_run(wf_id, success=True, result=None, error=None, duration_s=0):
                  wf["last_duration_s"], _j.dumps(wf["history"]))
             )
             conn.commit(); conn.close()
-        except Exception:
-            pass
-
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
 def _wf_is_enabled(wf_id):
     """Check if a workflow is active (not paused)."""
     with _wf_lock:
@@ -220,10 +220,9 @@ def _wf_load_stats():
                 try: wf["history"] = _j.loads(row[7]) if row[7] else []
                 except: wf["history"] = []
         conn.close()
-    except Exception:
-        pass
-
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
 def _run_if_due(wf_id, fn):
     """Run a workflow callback when its interval is due."""
     with _wf_lock:
@@ -284,8 +283,9 @@ def _wf_restore_intervals():
             if wf_id in _wf_registry:
                 _wf_registry[wf_id]["interval"] = vals.get("interval", _wf_registry[wf_id]["interval"])
                 _wf_registry[wf_id]["interval_s"] = vals.get("interval_s", _wf_registry[wf_id]["interval_s"])
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
 # Deferred — called after config is loaded (in _db_init or main)
 
 DEFAULT_AGENT_FLEET: dict = {
@@ -400,8 +400,9 @@ def _db_init():
         conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 1")
         conn.execute("UPDATE users SET must_change_password=0 WHERE username='system'")
         conn.commit()
-    except Exception:
-        pass  # column already exists
+    except Exception as _e:  # column already exists
+        mlog.emit("warn", "db", "exception.swallowed",
+                  f"Non-critical DB migration step failed: {_e}", extra={"exc_type": type(_e).__name__})
     # v0.31.73 — Audit log table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS audit_log (
@@ -423,8 +424,9 @@ def _db_init():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action)")
         conn.commit()
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # v0.31.74 — Invite system
     conn.execute("""
         CREATE TABLE IF NOT EXISTS invites (
@@ -448,8 +450,9 @@ def _db_init():
     for _col, _def in [("last_active_at", "REAL"), ("dispatch_count", "INTEGER DEFAULT 0"), ("session_count", "INTEGER DEFAULT 0")]:
         try:
             conn.execute(f"ALTER TABLE users ADD COLUMN {_col} {_def}")
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     conn.commit()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS invite_uses (
@@ -548,8 +551,9 @@ def _db_init():
     ]:
         try:
             conn.execute(_col_sql)
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     conn.execute("""
         CREATE TABLE IF NOT EXISTS bridge_benchmarks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -607,8 +611,9 @@ def _db_init():
         conn.execute("ALTER TABLE personas ADD COLUMN owner TEXT DEFAULT ''")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_personas_owner ON personas(owner)")
         conn.commit()
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     conn.execute("""
         CREATE TABLE IF NOT EXISTS directives (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -760,8 +765,9 @@ def _db_init():
     ]:
         try:
             conn.execute(_col_sql)
-        except Exception:
-            pass  # Column already exists
+        except Exception as _e:  # Column already exists
+            mlog.emit("warn", "db", "exception.swallowed",
+                      f"Non-critical DB migration step failed: {_e}", extra={"exc_type": type(_e).__name__})
     for _sql in [
         "ALTER TABLE personas ADD COLUMN is_system INTEGER DEFAULT 0",
         "ALTER TABLE personas ADD COLUMN is_public INTEGER DEFAULT 1",
@@ -785,9 +791,9 @@ def _db_init():
     ]:
         try:
             conn.execute(_sql)
-        except Exception:
-            pass
-
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Migrate: add chain_id + step_num if missing
     _am_cols = [r["name"] for r in conn.execute("PRAGMA table_info(agent_messages)").fetchall()]
     if "chain_id" not in _am_cols:
@@ -1052,7 +1058,7 @@ def _db_migrate_chats():
                 try:
                     if not s: return time.time()
                     return time.mktime(time.strptime(s, "%Y-%m-%dT%H:%M:%S"))
-                except:
+                except Exception:
                     return time.time()
 
             created_at = _parse_ts(data.get("created"))
@@ -1216,8 +1222,9 @@ def _check_brave_search() -> dict:
         try:
             cfg = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
             key = cfg.get("api_keys", {}).get("brave_search", "")
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     if key:
         return {"ok": True, "version": "API key configured"}
     return {"ok": False, "version": None}
@@ -1429,8 +1436,9 @@ def _gws_status() -> dict:
     try:
         r = subprocess.run([gws_bin, "--version"], capture_output=True, text=True, timeout=5)
         result["version"] = (r.stdout or r.stderr or "").strip().split("\n")[0][:80]
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Auth: check token file
     config_dir = Path.home() / ".config" / "gws"
     token_path = config_dir / "token.json"
@@ -1444,8 +1452,9 @@ def _gws_status() -> dict:
                 result["accounts"] = accts
             elif isinstance(accts, dict):
                 result["accounts"] = [accts]
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Granted services
     grants_path = config_dir / "granted_services.json"
     if grants_path.exists():
@@ -1453,8 +1462,9 @@ def _gws_status() -> dict:
             grants = json.loads(grants_path.read_text(encoding="utf-8"))
             if isinstance(grants, list):
                 result["granted_services"] = grants
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return result
 
 
@@ -1760,9 +1770,9 @@ def _load_md_knowledge_lines(persona_id=""):
             try:
                 if _ef.exists() and _ef.is_file() and _ef not in md_files:
                     md_files.append(_ef)
-            except Exception:
-                pass
-
+            except Exception as _e:
+                mlog.emit("warn", "system", "exception.swallowed",
+                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     for fpath in md_files:
         try:
             text = fpath.read_text(errors="replace")
@@ -1772,9 +1782,9 @@ def _load_md_knowledge_lines(persona_id=""):
                     kw = _cortex_tokenize(line)
                     if len(kw) >= 3:  # need at least 3 meaningful keywords
                         kw_sets.append(kw)
-        except Exception:
-            pass
-
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     _MD_KNOWLEDGE_CACHE[persona_id] = kw_sets
     _MD_KNOWLEDGE_CACHE_TS = now
     return kw_sets
@@ -1928,8 +1938,9 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
     _user_name = ""
     try:
         _user_name = _config.get("display_name", "") or _config.get("preferences", {}).get("display_name", "")
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     _name_rule = f"\n- Always refer to the user as \"{_user_name}\" (never \"the user\" or \"user\")\n" if _user_name else ""
     _default_scope = "project" if str(project_id or "").strip() else ("agent" if str(persona_id or "").strip() else "global")
     extract_prompt = (
@@ -2052,9 +2063,9 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
                     conn_ss.commit()
                     break  # Only supersede one per new fact
             conn_ss.close()
-        except Exception:
-            pass
-
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         # v0.28.0 — auto-accept: store directly, no file routing
         confidence = 0.5  # v0.28.52 — new facts start at 0.5, reinforced on re-extraction
 
@@ -2100,9 +2111,9 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
                     _reinforced = True
                     break
             _rc.close()
-        except Exception:
-            pass
-
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         if _reinforced:
             continue  # Skip insert — existing fact was strengthened
 
@@ -2134,8 +2145,9 @@ def _cortex_extract_and_route_inner(message, response_text, persona_id="", backe
             new_1h = conn2.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='active' AND created_at > ?", (_t_sse.time() - 3600,)).fetchone()[0]
             conn2.close()
             _emit_event("cortex:update", {"new_facts": inserted, "new_1h": new_1h, "persona_id": persona_id, "backend": backend})
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return inserted
 
 def _cortex_batch_extract(limit=20):
@@ -2514,8 +2526,9 @@ def _hygiene_run():
     # Mission log
     try:
         mlog.emit("info", "system", "hygiene.run", f"Hygiene complete: {results['logs_pruned']} logs pruned, {results['souls_capped']} souls capped, {results['memories_archived']} memories archived", elapsed_s=elapsed)
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return results
 
 
@@ -2565,9 +2578,9 @@ def _session_update_activity(chat_id):
             "UPDATE chats SET session_state='active', last_activity=?, paused_at=NULL WHERE id=?",
             (_sa.time(), chat_id))
         conn.commit(); conn.close()
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
 def _session_lifecycle_sweep():
     """Background sweep: pause inactive, archive old sessions."""
     import time as _sl
@@ -2583,12 +2596,9 @@ def _session_lifecycle_sweep():
             "WHERE session_state='paused' AND paused_at IS NOT NULL AND paused_at < ?",
             (now, now - _SESSION_ARCHIVE_SECS))
         conn.commit(); conn.close()
-    except Exception:
-        pass
-
-
-
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
 def _project_knowledge_brief(project_id: str) -> dict:
     """Summarize all knowledge Porter has about a project: memories, agents, tasks, decisions."""
     pid = str(project_id or "").strip()
@@ -2706,9 +2716,9 @@ def _build_project_dispatch_context(project_id, persona_id="", task_id="", messa
             decision_rows = [ln for ln in decisions if ln.startswith("|") and "------" not in ln]
             if len(decision_rows) > 1:
                 parts.append("Recent decisions:\n" + "\n".join(decision_rows[-4:]))
-        except Exception:
-            pass
-
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     task = _task_by_id(task_id)
     if task:
         ttitle = str(task.get("title") or "Untitled").strip()
@@ -2737,9 +2747,9 @@ def _build_project_dispatch_context(project_id, persona_id="", task_id="", messa
         if backlog:
             lines = [f"- [{str(t.get('status') or 'pending')}] {str(t.get('title') or 'Untitled')[:120]}" for t in backlog[:4]]
             parts.append("Other project tasks in flight:\n" + "\n".join(lines))
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     try:
         conn = _db_conn()
         rows = conn.execute(
@@ -2762,16 +2772,16 @@ def _build_project_dispatch_context(project_id, persona_id="", task_id="", messa
                     line += f" — {summary[:140]}"
                 lines.append(line)
             parts.append("Recent project activity:\n" + "\n".join(lines))
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     try:
         state_ctx = _project_state_context(pid, persona_id=persona_id, limit=5)
         if state_ctx:
             parts.append(state_ctx[:1200])
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     if not parts:
         return ""
     return "\n\n".join(parts)[:3200]
@@ -2813,8 +2823,9 @@ def _mem_inject_for_dispatch(message, persona_id='', project_id='', run_id=''):
                     seen_ids.add(rid)
                     sections['directive'].append(dict(r))
         conn.close()
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # FTS5 search for message-relevant memories
     try:
         results = _mem_search(message, limit=15)
@@ -2826,8 +2837,9 @@ def _mem_inject_for_dispatch(message, persona_id='', project_id='', run_id=''):
             seen_ids.add(rid)
             if kind in sections:
                 sections[kind].append(r)
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Scope-specific concepts (always inject)
     try:
         conn = _db_conn()
@@ -2844,8 +2856,9 @@ def _mem_inject_for_dispatch(message, persona_id='', project_id='', run_id=''):
                     seen_ids.add(rid)
                     sections['concept'].append(dict(r))
         conn.close()
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Format: directives first, then concepts, then episodes
     parts = []
     for kind in ('directive', 'concept', 'episode'):
@@ -2889,8 +2902,9 @@ def _mem_extract_signals(message, response, persona_id='', project_id='', run_id
             existing = _mem_search(sig_text, limit=3)
             if any(e.get('preview', '')[:60].lower() in sig_text.lower() for e in existing if e.get('preview')):
                 continue
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         # Categorize
         lower = sig_text.lower()
         if any(k in lower for k in ('bug', 'fix', 'error', 'issue')):
@@ -2944,8 +2958,9 @@ def _build_context_suffix(persona_id, message="", project_id="", task_id=""):
         _mem_ctx, _mem_ids = _mem_inject_for_dispatch(message, persona_id=persona_id, project_id=project_id)
         if _mem_ctx:
             parts.append(_mem_ctx[:memory_budget])
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Squad roster — compact one-liner per teammate
     try:
         teammates = _persona_list()
@@ -2956,21 +2971,24 @@ def _build_context_suffix(persona_id, message="", project_id="", task_id=""):
             )
             if roster:
                 parts.append(f"Squad: {roster}\nIf outside scope: [HANDOFF: AgentName] reason")
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     try:
         proj_ctx = _build_project_dispatch_context(project_id, persona_id=persona_id, task_id=task_id, message=message)
         if proj_ctx:
             parts.append(proj_ctx)
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # v0.30.39 — Inject failure lessons from recent failed dispatches
     try:
         _fail_ctx = _build_failure_context(persona_id, backend="", message=message)
         if _fail_ctx:
             parts.append(_fail_ctx)
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return "\n\n".join(parts)
 
 
@@ -3303,8 +3321,9 @@ def _resolve_persona_project(persona_id: str, explicit_project_id: str | None = 
         conn.close()
         if squad_proj and squad_proj[0]:
             return squad_proj[0]
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return ""
 
 
@@ -3392,8 +3411,9 @@ def _migrate_to_memory_v2(conn):
                     "INSERT INTO memories (memory_kind, trust_tier, scope, scope_id, text, status, review_state, source_type, confidence, created_at, updated_at) VALUES ('directive', 'high', ?, ?, ?, ?, 'accepted', ?, ?, ?, ?)",
                     (r['scope_type'] or 'global', r['scope_id'] or '', r['text'], r['status'], r['source'] or 'operator', r['confidence'] or 1.0, r['created_at'], r['updated_at']))
                 migrated += 1
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         # agent_notes -> memories (kind=concept, trust=medium, scope=agent)
         try:
             for r in conn.execute("SELECT agent_id, note_kind, body, status, source, created_at, updated_at FROM agent_notes WHERE status='active'").fetchall():
@@ -3401,8 +3421,9 @@ def _migrate_to_memory_v2(conn):
                     "INSERT INTO memories (memory_kind, trust_tier, scope, scope_id, text, status, review_state, source_type, source_category, created_at, updated_at) VALUES ('concept', 'medium', 'agent', ?, ?, 'active', 'accepted', ?, ?, ?, ?)",
                     (r['agent_id'], r['body'], r['source'] or 'system', r['note_kind'] or 'scope', r['created_at'], r['updated_at']))
                 migrated += 1
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         # project_notes -> memories (kind=concept, trust=medium, scope=project)
         try:
             for r in conn.execute("SELECT project_id, note_kind, body, status, source, created_at, updated_at FROM project_notes WHERE status='active'").fetchall():
@@ -3410,8 +3431,9 @@ def _migrate_to_memory_v2(conn):
                     "INSERT INTO memories (memory_kind, trust_tier, scope, scope_id, text, status, review_state, source_type, source_category, created_at, updated_at) VALUES ('concept', 'medium', 'project', ?, ?, 'active', 'accepted', ?, ?, ?, ?)",
                     (r['project_id'], r['body'], r['source'] or 'system', r['note_kind'] or 'summary', r['created_at'], r['updated_at']))
                 migrated += 1
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         # cortex_memories -> memories (semantic->signal, episodic->episode)
         try:
             for r in conn.execute("SELECT fact, scope, scope_id, source_type, source_id, importance, keywords, memory_type, status, confidence, last_used_at, use_count, evidence_count, created_at, updated_at FROM cortex_memories WHERE consolidated_into IS NULL").fetchall():
@@ -3422,15 +3444,17 @@ def _migrate_to_memory_v2(conn):
                     "INSERT INTO memories (memory_kind, trust_tier, scope, scope_id, text, status, review_state, source_type, source_id, confidence, importance, keywords, last_used_at, use_count, evidence_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (kind, trust, r['scope'] or 'global', r['scope_id'] or '', r['fact'], r['status'] or 'active', r['source_type'] or 'dispatch', r['source_id'] or '', r['confidence'] or 0.5, r['importance'] or 5, r['keywords'] or '', r['last_used_at'], r['use_count'] or 0, r['evidence_count'] or 1, r['created_at'], r['updated_at']))
                 migrated += 1
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         conn.commit()
         # Rebuild FTS index
         try:
             conn.execute("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')")
             conn.commit()
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         if migrated:
             log.info("Memory V2 migration: %d records migrated", migrated)
     finally:
@@ -3758,8 +3782,9 @@ def _project_state_payload(project_id: str) -> dict:
             "SELECT COUNT(*) FROM memories WHERE review_state='pending' AND status='active' AND scope='project' AND scope_id=?",
             (str(project_id or "").strip(),)).fetchone()[0]
         conn.close()
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return {
         "project": dict(proj),
         "directives": directives,
@@ -3851,8 +3876,9 @@ def _detect_environment_tools():
             try:
                 result = subprocess.run(version_cmd.split(), capture_output=True, text=True, timeout=5)
                 version = result.stdout.strip().split("\n")[0][:80] if result.returncode == 0 else ""
-            except Exception:
-                pass
+            except Exception as _e:
+                mlog.emit("warn", "system", "exception.swallowed",
+                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         try:
             conn.execute(
                 "INSERT OR REPLACE INTO environment_tools (tool_key, detected, version, source, health, last_checked_at) VALUES (?,?,?,?,?,strftime('%s','now'))",
@@ -3860,8 +3886,9 @@ def _detect_environment_tools():
             )
             if found:
                 _detected += 1
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     conn.commit()
     conn.close()
     log.info("Environment tool scan: %d/%d tools detected", _detected, len(_tool_checks))
@@ -4659,9 +4686,9 @@ def _analyze_file(filepath: "Path", mime_type: str = "") -> dict:
                             tag = h.strip().lower().replace(" ", "-")[:30]
                             if tag and tag not in tags:
                                 tags.append(tag)
-                except Exception:
-                    pass
-
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         result["tags"] = tags
     except Exception as e:
         log.debug("File analysis failed for %s: %s", filepath, e)
@@ -6120,9 +6147,9 @@ def _delete_session_file(session_id: str, source: str) -> dict:
         new_1h = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='active' AND created_at > ?", (_t_cas.time() - 3600,)).fetchone()[0]
         conn.close()
         _emit_event("cortex:update", {"new_facts": 0, "new_1h": new_1h, "action": "cascade_delete"})
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return {"ok": True, "session_id": session_id, "file_deleted": deleted_file}
 
 def _get_archived_session_ids() -> set:
@@ -6151,8 +6178,9 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
                         (session_id,)
                     ).fetchall()
                     _cached_facts = [{"id": r[0], "fact": r[1], "scope": r[2], "importance": r[3]} for r in _cf_rows]
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 conn.close()
                 return {
                     "ok": True, "learnings": row[0], "facts": _cached_facts,
@@ -6160,9 +6188,9 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
                     "session_id": session_id, "source": source,
                 }
             conn.close()
-        except Exception:
-            pass
-
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Try to get basic preview data (may fail for some sources — that's OK)
     preview = _flush_preview(session_id, source)
     if not preview.get("ok"):
@@ -6251,8 +6279,9 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
         _user_name2 = ""
         try:
             _user_name2 = _config.get("display_name", "") or _config.get("preferences", {}).get("display_name", "")
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         _name_instr = f"\nIMPORTANT: Always refer to the user by their name \"{_user_name2}\", never as \"the user\" or \"user\"." if _user_name2 else ""
         prompt = (
             "Extract ONLY durable knowledge from this session worth remembering months from now." + _name_instr + "\n"
@@ -6418,9 +6447,9 @@ def _list_learning_destinations() -> list:
         for row in conn.execute("SELECT id, name, avatar FROM personas ORDER BY sort_order, name").fetchall():
             persona_names[row[0]] = {"name": row[1], "avatar": row[2] or ""}
         conn.close()
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     try:
         if PERSONAS_DIR.exists():
             for pid, info in persona_names.items():
@@ -8531,9 +8560,9 @@ def _save_config(cfg: dict) -> None:
     try:
         _invalidate_models_payload_cache()
         _invalidate_backend_version_cache()
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
 def load_config() -> dict:
     cfg: dict = {}
     if CONFIG_PATH.exists():
@@ -8647,9 +8676,9 @@ def save_config(cfg: dict) -> None:
     try:
         _invalidate_models_payload_cache()
         _invalidate_backend_version_cache()
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
 def _load_serve_dirs(cfg: dict) -> None:
     """Repopulate global SERVE_DIRS from nodes[*].mounts (local nodes only)."""
     SERVE_DIRS.clear()
@@ -9087,8 +9116,9 @@ def _check_project_access(session, project_id, required_role="member"):
         if row:
             collab_level = _ROLE_LEVELS.get(row[0] or "member", 2)
             return collab_level >= required_level
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return False
 
 
@@ -9100,8 +9130,9 @@ def _get_session_active_project(token):
         conn.close()
         if row and row[0]:
             return str(row[0]).strip()
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Fallback to global config for agent/API requests
     return str(_config.get("active_project_id") or "").strip()
 
@@ -9113,8 +9144,9 @@ def _set_session_active_project(token, project_id):
         conn.execute("UPDATE sessions SET active_project_id=? WHERE token=?", (project_id or "", token))
         conn.commit()
         conn.close()
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Also update global config as fallback
     _config["active_project_id"] = project_id or None
     save_config(_config)
@@ -9324,9 +9356,9 @@ def _auto_remediate(incident_id, rule_id, severity, title, summary):
             for r in rows:
                 context_events.append({"event_id": r[0], "severity": r[1],
                                        "event_type": r[2], "message": r[3], "ts": r[4]})
-        except Exception:
-            pass
-
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         # Build concise prompt (keep under 2000 chars for CLI backends)
         prompt = (
             f"INCIDENT: {title}\n"
@@ -9348,8 +9380,9 @@ def _auto_remediate(incident_id, rule_id, severity, title, summary):
                         if probe():
                             backend = candidate
                             break
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         if not backend:
             backend = next(iter(PROVIDER_REGISTRY), None)
         if not backend:
@@ -9374,15 +9407,17 @@ def _auto_remediate(incident_id, rule_id, severity, title, summary):
                 if existing and existing[0]:
                     try:
                         refs = __import__("json").loads(existing[0])
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 refs.append(run_id)
                 conn.execute("UPDATE log_incidents SET run_refs=?, updated_at=? WHERE incident_id=?",
                              (__import__("json").dumps(refs), _t.time(), incident_id))
                 conn.commit()
                 conn.close()
-            except Exception:
-                pass
+            except Exception as _e:
+                mlog.emit("warn", "system", "exception.swallowed",
+                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             # Notify chat with remediation result
             _mc_notify_chat(
                 f"**Mission Control:** {title} — auto-remediated by {backend}.\n> {response_text[:200]}",
@@ -9531,9 +9566,9 @@ class MissionLog:
                 "duration_ms": event.get("duration_ms"),
                 "status": event.get("status"),
             })
-        except Exception:
-            pass
-
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         # Alert engine
         self._alert.check(event)
 
@@ -10044,23 +10079,31 @@ def _init_trace_tables():
     # v0.29.25 — Hook Profiles: dispatch strictness per agent
     try:
         conn.execute("ALTER TABLE personas ADD COLUMN hook_profile TEXT DEFAULT 'balanced'")
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     try:
         conn.execute("ALTER TABLE personas ADD COLUMN dispatch_mode TEXT DEFAULT 'contributor'")
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # v0.29.27 — Session Lifecycle: chat session state machine
     try: conn.execute("ALTER TABLE chats ADD COLUMN session_state TEXT DEFAULT 'active'")
-    except: pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Non-critical operation failed: {_e}", extra={"exc_type": type(_e).__name__})
     try: conn.execute("ALTER TABLE chats ADD COLUMN last_activity REAL")
-    except: pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Non-critical operation failed: {_e}", extra={"exc_type": type(_e).__name__})
     try: conn.execute("ALTER TABLE chats ADD COLUMN paused_at REAL")
-    except: pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Non-critical operation failed: {_e}", extra={"exc_type": type(_e).__name__})
     try: conn.execute("ALTER TABLE chats ADD COLUMN archived_at REAL")
-    except: pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Non-critical operation failed: {_e}", extra={"exc_type": type(_e).__name__})
     # v0.29.41 — removed auto-seed (squads are user-managed, not derived from agent_group)
     # v0.28.0 — Cortex memory refactor: add lifecycle columns
     for _col_def in [
@@ -10074,8 +10117,9 @@ def _init_trace_tables():
     ]:
         try:
             conn.execute(f"ALTER TABLE cortex_memories ADD COLUMN {_col_def[0]} {_col_def[1]}")
-        except Exception:
-            pass  # column already exists
+        except Exception as _e:  # column already exists
+            mlog.emit("warn", "db", "exception.swallowed",
+                      f"Non-critical DB migration step failed: {_e}", extra={"exc_type": type(_e).__name__})
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_status ON cortex_memories(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_type ON cortex_memories(memory_type)")
 
@@ -10164,9 +10208,9 @@ def _init_trace_tables():
         if "last_heartbeat" not in cols:
             conn.execute("ALTER TABLE personas ADD COLUMN last_heartbeat TEXT")
         conn.commit()
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     conn.close()
 
 _init_trace_tables()
@@ -10463,8 +10507,9 @@ def _detect_anomalies():
             # v0.30.40 — Self-dispatch: react to anomalies
             try:
                 _self_dispatch_on_anomaly(anomalies)
-            except Exception:
-                pass
+            except Exception as _e:
+                mlog.emit("warn", "system", "exception.swallowed",
+                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         else:
             log.debug("Anomaly detection: no anomalies (checked %d agents)", len(baselines))
     except Exception as e:
@@ -10536,9 +10581,9 @@ def _append_audit(action: str, target: str, actor: str,
         )
         _ac.commit()
         _ac.close()
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
 def _get_workspace_setting(key: str, default: str = "") -> str:
     try:
         conn = _db_conn()
@@ -10554,9 +10599,9 @@ def _set_workspace_setting(key: str, value: str) -> None:
         conn.execute("INSERT OR REPLACE INTO workspace_settings (key, value) VALUES (?,?)", (key, value))
         conn.commit()
         conn.close()
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
 def _safe_lease_running(lease_file, agent_id: str, now: float) -> bool:
     try:
         l = json.loads(Path(lease_file).read_text())
@@ -11936,8 +11981,9 @@ def _project_chat_action_prompt(project_id: str) -> str:
         if _task_counts:
             _td = {r[0]: r[1] for r in _task_counts}
             _task_str = f"{_td.get('todo',0)} todo, {_td.get('in_progress',0)} in progress, {_td.get('done',0)} done ({sum(_td.values())} total)"
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Collaborators
     collab_str = "none"
     try:
@@ -11946,8 +11992,9 @@ def _project_chat_action_prompt(project_id: str) -> str:
         _cc.close()
         if _cr:
             collab_str = ", ".join(f"{r[0]} ({r[1]})" for r in _cr)
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # V2: Inputs/Outputs from project_content
     _inputs_str = "none"
     _outputs_str = "none"
@@ -11960,8 +12007,9 @@ def _project_chat_action_prompt(project_id: str) -> str:
             _inputs_str = ", ".join(f"{r[0]} ({r[1]})" for r in _inputs)
         if _outputs:
             _outputs_str = ", ".join(f"{r[0]} ({r[1]})" for r in _outputs)
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     ctx = (
         f"\n--- Project Context ---\n"
         f"Project: {proj.get('name', 'Untitled')} (id: {project_id})\n"
@@ -12048,7 +12096,9 @@ def _module_chat_action_prompt(module: str, context_id: str) -> str:
                     import json as _j
                     _tags = _j.loads(r.get('tags_json') or '[]')
                     _social = _j.loads(r.get('social_json') or '{}')
-                except Exception: pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 ctx = f"Currently viewing contact: {r['first_name']} {r.get('last_name','')} (ID: {context_id})"
                 if r.get('title'): ctx += f" | Title: {r['title']}"
                 if r.get('company_name'): ctx += f" | Company: {r['company_name']}"
@@ -12063,8 +12113,9 @@ def _module_chat_action_prompt(module: str, context_id: str) -> str:
                 parts.append(ctx)
                 parts.append(f"You can modify ANY field on this contact: title, email, phone, contact_type, notes, tags, social")
             conn.close()
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return "\n".join(parts)
 
 
@@ -12388,8 +12439,9 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
                     _wconn.close()
                     if _wr:
                         _wid = _wr[0]
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 if _wid:
                     proj.setdefault("assigned_personas", [])
                     if _wid not in proj["assigned_personas"]:
@@ -12412,8 +12464,9 @@ def _execute_chat_actions(project_id: str, response_text: str) -> list:
                     if _wr:
                         _wid = _wr[0]
                         _wname_found = _wr[1]
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 if _wid and _wid in (proj.get("assigned_personas") or []):
                     proj["assigned_personas"].remove(_wid)
                     save_config(_config)
@@ -40627,8 +40680,9 @@ def _probe_openclaw():
             headers={"Authorization": f"Bearer {settings.get('token', '')}"},
         )
         urllib.request.urlopen(req, timeout=3)
-    except Exception:
-        pass  # CLI exists, gateway optional
+    except Exception as _e:  # CLI exists, gateway optional
+        mlog.emit("warn", "db", "exception.swallowed",
+                  f"Non-critical DB migration step failed: {_e}", extra={"exc_type": type(_e).__name__})
     return True
 
 def _probe_ollama():
@@ -41601,9 +41655,9 @@ def _probe_backend_versions(force: bool = False):
             if api_ver:
                 versions["ollama"]["version"] = api_ver
                 versions["ollama"]["detected"] = True
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Claude CLI — prefer cached capability result to avoid redundant process spawn on tab load
     versions["claude"] = _cached_capability_version("claude")
     if not versions["claude"].get("detected"):
@@ -41624,8 +41678,9 @@ def _probe_backend_versions(force: bool = False):
         if _cdx_latest:
             _cdx_ver["latest"] = _extract_semverish(_cdx_latest) or str(_cdx_latest)
             _cdx_ver["update_cmd"] = "npm i -g @openai/codex"
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     versions["codex"] = _cdx_ver
 
     # Google Workspace CLI
@@ -41640,8 +41695,9 @@ def _probe_backend_versions(force: bool = False):
             oc_latest = _extract_semverish(oc_update.get("lastNotifiedVersion", ""))
             if oc_latest:
                 refreshed["openclaw"] = {"latest": oc_latest, "update_cmd": "npm uninstall -g openclaw && npm i -g openclaw"}
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         if not refreshed.get("openclaw"):
             _oc_latest = _npm_latest("openclaw")
             if _oc_latest:
@@ -41964,8 +42020,9 @@ def _get_available_models(backend):
                     _backend_model_cache["data"][backend] = models
                     _backend_model_cache["ts"][backend] = now
                     return models
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         models = _unique_model_catalog(_legacy_config_models("codex"), active_choice)
         _backend_model_cache["data"][backend] = models
         _backend_model_cache["ts"][backend] = now
@@ -42613,8 +42670,9 @@ def _models_activity_payload(include_recent: bool = True) -> dict:
                 "_partial": not include_recent,
             }
         _act_conn.close()
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return activity
 
 
@@ -42757,8 +42815,9 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                     _whole = json.loads(out)
                     if isinstance(_whole, dict):
                         latest_obj = _whole
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 # Fall back to line-by-line JSONL parsing
                 if latest_obj is None:
                     for line in out.split("\n"):
@@ -42936,8 +42995,9 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                     payload = json.loads(_gem_text)
                     if isinstance(payload, dict):
                         _gem_text = str(payload.get("text") or payload.get("response") or payload.get("output") or payload.get("result") or "OK")
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             return {"ok": True, "backend": backend, "model": model, "response": _gem_text.strip()[:200] or "OK", "latency_ms": latency_ms, "runtime": {"auth_mode": runtime.get("auth_mode", ""), "resolved_model": _gem_model}, "bridge": bridge_meta}
 
         if backend == "claude":
@@ -42973,8 +43033,9 @@ def _test_model_connectivity(backend_id: str, model: str = "") -> dict:
                     payload = json.loads(_cl_text)
                     if isinstance(payload, dict):
                         _cl_text = str(payload.get("result") or payload.get("text") or payload.get("output") or "OK")
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             return {"ok": True, "backend": backend, "model": model, "response": _cl_text[:200], "latency_ms": latency_ms, "bridge": bridge_meta}
 
         result = {"ok": False, "backend": backend, "model": model, "error": f"Unknown backend: {backend}", "bridge": bridge_meta}
@@ -43723,8 +43784,9 @@ def _persona_update_soul(persona_id, instruction):
         conn.execute("UPDATE personas SET soul_hash=? WHERE id=?", (h, persona_id))
         conn.commit()
         conn.close()
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     log.info("SOUL.md updated for persona %s: %s", persona_id, instruction[:80])
 
 
@@ -43765,8 +43827,9 @@ def _rules_stale_agents():
             synced_epoch = _rules_agent_sync.get(a[0], 0)
             if synced_epoch < _rules_epoch:
                 stale.append({"id": a[0], "name": a[1], "synced_epoch": synced_epoch, "current_epoch": _rules_epoch})
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return stale
 
 def _persona_set_rules(text):
@@ -43851,9 +43914,9 @@ def _verify_dispatch_response(original_message, response_text, agent_name="", ba
             stage="verify", input_summary=f"score={score}, passed={passed}",
             status="done" if passed else "error",
             trace_id=run_id)
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return {"passed": passed, "score": score, "reason": reason, "duration_s": _v_dur}
 
 
@@ -43945,8 +44008,9 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
             if path.exists():
                 content = path.read_text().strip()
                 return content[:_CTX_FILE_CAP] if content else ''
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         return ''
 
     pdir = PERSONAS_DIR / persona_id
@@ -44004,16 +44068,18 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
                             _sk_rows = _sk_conn.execute("SELECT skill_name FROM persona_skills WHERE persona_id=? AND enabled=1", (_sm["id"],)).fetchall()
                             _sk_conn.close()
                             _sk_data = [r[0] for r in _sk_rows]
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            mlog.emit("warn", "system", "exception.swallowed",
+                                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                         _sk_str = ", ".join(_sk_data) if _sk_data else "none"
                         _roster_lines.append(f"- {_sm.get('avatar','')} {_sm['name']} ({_sm.get('role','agent')}): skills=[{_sk_str}]")
                     if _roster_lines:
                         _squad_ctx += f"\nYou are the LEADER of {_sq['name']}.\nYour squad members:\n" + "\n".join(_roster_lines)
                         if _sq.get("description"):
                             _squad_ctx += f"\nSquad mission: {_sq['description']}"
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         _system_block = (
             f"=== SYSTEM PROMPT ===\n"
             f"You are {pname}.\n"
@@ -44070,9 +44136,9 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
         conn.execute("UPDATE personas SET status='active', last_active=strftime('%s','now') WHERE id=?", (persona_id,))
         conn.commit()
         conn.close()
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     if task:
         _task_to_save = None
         with _treg_lock:
@@ -44148,9 +44214,9 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
         )
         conn.commit()
         conn.close()
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Append to daily log
     response_text = result.get("text", "")[:500] if result.get("ok") else result.get("error", "")[:200]
     _persona_append_daily_log(persona_id, f"**Dispatch** ({backend})\n> {message[:200]}\n\nResponse: {response_text}")
@@ -44218,18 +44284,18 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
                          (_dtp_score, backend, run_id))
         _sc_conn.commit()
         _sc_conn.close()
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Reset status to idle
     try:
         conn = _db_conn()
         conn.execute("UPDATE personas SET status='idle' WHERE id=?", (persona_id,))
         conn.commit()
         conn.close()
-    except Exception:
-        pass
-
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # v0.28.4 — Detect job proposals in agent response
     if result.get("ok") and result.get("text"):
         _resp_text = result.get("text", "")
@@ -44262,8 +44328,9 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
         def _mem_bg():
             try:
                 _mem_extract_signals(_mem_msg, _mem_resp, _mem_pid, _mem_project, _mem_run)
-            except Exception:
-                pass
+            except Exception as _e:
+                mlog.emit("warn", "system", "exception.swallowed",
+                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         threading.Thread(target=_mem_bg, name="mem-extract", daemon=True).start()
 
     # Legacy extractive memory is disabled by default in Memory V3.
@@ -44635,8 +44702,9 @@ def _self_dispatch_on_anomaly(anomalies: list):
             if "bugbanisher" in (p.get("name", "") or "").lower().replace(" ", ""):
                 bugbanisher_id = p["id"]
                 break
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     for anomaly in anomalies[:2]:
         agent_name = anomaly.get("agent_name", "unknown")
         metric = anomaly.get("metric", "unknown")
@@ -44667,8 +44735,9 @@ def _self_dispatch_on_health_failure(failed_checks: list):
             if name in ("vision", "logiclord", "logic lord"):
                 target_id = p["id"]
                 break
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     if not target_id:
         return
     checks_str = ", ".join(c[:50] for c in failed_checks[:3])
@@ -44853,20 +44922,26 @@ def _error_self_heal_loop():
     while True:
         # v0.29.27 — Session lifecycle sweep (lightweight, runs every cycle)
         try: _session_lifecycle_sweep()
-        except Exception: pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         if _wf_is_enabled("error_self_heal"):
             cfg = _config.get("preferences", {})
             if cfg.get("self_heal_enabled", False):
                 _error_self_heal_once()
         # v0.30.36 — Config drift detection
         try: _config_drift_check()
-        except Exception: pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         # v0.30.41 — Pattern mining (every 6 hours)
         try:
             if not hasattr(_pattern_mining_run, '_last_run') or (_shlt.time() - _pattern_mining_run._last_run) > 21600:
                 _pattern_mining_run()
                 _pattern_mining_run._last_run = _shlt.time()
-        except Exception: pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         _shlt.sleep(3600)  # check hourly
 
 
@@ -45426,8 +45501,9 @@ def _ledger_conflicts() -> list:
         for row in sc:
             conflicts.append({"type": "scope_collision", "scope": row["scope"], "models": row["models"]})
         conn.close()
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return conflicts
 
 
@@ -45478,8 +45554,9 @@ def _process_list() -> list:
                                     uptime = float(uf.read().split()[0])
                                 clk_tck = 100  # SC_CLK_TCK
                                 runtime_s = int(uptime - (starttime / clk_tck))
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            mlog.emit("warn", "system", "exception.swallowed",
+                                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                         results.append({
                             "service": svc,
                             "pid": pid,
@@ -45641,8 +45718,9 @@ def _reboot_stalled_step(step: dict, run_id: str) -> dict:
                 run_ctx = json.loads(run_row["context"] or "{}")
                 project_id = str(run_ctx.get("project_id") or "").strip()
                 task_id = task_id or str(run_ctx.get("task_id") or "").strip()
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     new_backend, new_persona_id = _orch_select_executor(step, project_id=project_id, task_id=task_id, exclude_backends=[old_backend])
     if not new_backend:
         return {"ok": False, "reason": "no alternative executors available"}
@@ -45698,27 +45776,27 @@ def _openclaw_health_check() -> dict:
                 capture_output=True, text=True, timeout=10, env=_agent_env())
             if r.returncode == 0 and r.stdout.strip():
                 result["channels"] = json.loads(r.stdout)
-        except Exception:
-            pass
-
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         # 3. Security audit
         try:
             r = subprocess.run([oc_bin, "security", "--json"],
                 capture_output=True, text=True, timeout=10, env=_agent_env())
             if r.returncode == 0 and r.stdout.strip():
                 result["security"] = json.loads(r.stdout)
-        except Exception:
-            pass
-
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         # 4. Doctor (comprehensive diagnostics)
         try:
             r = subprocess.run([oc_bin, "doctor", "--json"],
                 capture_output=True, text=True, timeout=15, env=_agent_env())
             if r.returncode == 0 and r.stdout.strip():
                 result["doctor"] = json.loads(r.stdout)
-        except Exception:
-            pass
-
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return result
 
 
@@ -45927,8 +46005,9 @@ def _attempt_auto_rollback(critical_failed: list, fail_detail: str):
                     f"Rollback already attempted {int(flag_age)}s ago — manual intervention needed. Failures: {fail_detail}")
                 log.error("Auto-rollback SKIPPED (already attempted %ds ago): %s", int(flag_age), fail_detail)
                 return
-        except Exception:
-            pass
+        except Exception as _e:
+            mlog.emit("warn", "system", "exception.swallowed",
+                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Guard: check we have git history to revert to
     try:
         result = subprocess.run(
@@ -45948,8 +46027,9 @@ def _attempt_auto_rollback(critical_failed: list, fail_detail: str):
     # Write rollback flag BEFORE attempting (prevents loops)
     try:
         _ROLLBACK_FLAG.write_text(f"rollback at {_rbt.time()}\ncritical: {critical_failed}\nfrom: {current_commit}\nto: {previous_commit}")
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     mlog.emit("warning", "system", "rollback.starting",
         f"Auto-rollback triggered: {critical_failed} failed. Reverting {current_commit} → {previous_commit}")
     log.warning("AUTO-ROLLBACK: reverting %s → %s (critical failures: %s)",
@@ -46038,8 +46118,9 @@ def _startup_self_check():
         if non_critical_failed and not critical_failed:
             try:
                 _self_dispatch_on_health_failure(non_critical_failed)
-            except Exception:
-                pass
+            except Exception as _e:
+                mlog.emit("warn", "system", "exception.swallowed",
+                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     global _last_self_check
     _last_self_check = {"checks": checks, "all_ok": all_ok, "summary": summary, "ts": _sct.time()}
     _emit_event("system:self_check", {"checks": checks, "all_ok": all_ok, "summary": summary})
@@ -46118,8 +46199,9 @@ def _orch_score_backend(backend: str, step_kind: str, required_caps: list) -> fl
     try:
         if _backend_is_circuit_open(backend):
             return 0.0
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     speed = caps.get("speed", "medium")
     speed_bonus = {"fast": 0.05, "medium": 0.0, "slow": -0.1}.get(speed, 0.0)
     return min(1.0, max(0.0, base_score + speed_bonus))
@@ -46170,8 +46252,9 @@ def _project_squad_policy_context(project_assigned: list[str]) -> dict:
                 persona_policies.setdefault(mid, []).append(policy)
                 if str(member.get("squad_role") or "").strip().lower() == "leader":
                     leader_ids.add(mid)
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     return {"leader_ids": leader_ids, "persona_policies": persona_policies}
 
 
@@ -46205,8 +46288,9 @@ def _orch_select_executor(step: dict, project_id: str = "", task_id: str = "", e
                 continue
             seen_personas.add(pid)
             persona_order.append(pid)
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     for pid in persona_order:
         if not pid:
             continue
@@ -46434,8 +46518,9 @@ def _orch_execute_step(run_id: str, step: dict) -> dict:
                     run_ctx = json.loads(run_row["context"] or "{}")
                     project_id = str(run_ctx.get("project_id") or "").strip()
                     task_id = task_id or str(run_ctx.get("task_id") or "").strip()
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         _raw_deps = step.get("depends_on", [])
         deps = json.loads(_raw_deps) if isinstance(_raw_deps, str) else (_raw_deps if isinstance(_raw_deps, list) else [])
         for dep_id in deps:
@@ -47033,7 +47118,9 @@ class Handler(BaseHTTPRequestHandler):
                 # Auto-upgrade to scrypt
                 agent["key_hash"] = key_hash
                 try: save_config(_config)
-                except Exception: pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 return agent
         return None
 
@@ -47704,9 +47791,9 @@ class Handler(BaseHTTPRequestHandler):
                 dirty_lines = [l for l in r.stdout.strip().split("\n") if l.strip()]
                 git_dirty_count = len(dirty_lines)
                 git_clean = git_dirty_count == 0
-            except Exception:
-                pass
-
+            except Exception as _e:
+                mlog.emit("warn", "system", "exception.swallowed",
+                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             # 4. Changelog check
             changelog_current = f"ver:\'v{canonical}\'" in porter_src or f'ver:"v{canonical}"' in porter_src
 
@@ -47904,8 +47991,9 @@ class Handler(BaseHTTPRequestHandler):
                                 files_info[fname] = sz
                                 total_sz += sz
                         agent_sizes[pdir.name] = {"total_chars": total_sz, "files": files_info}
-            except Exception:
-                pass
+            except Exception as _e:
+                mlog.emit("warn", "system", "exception.swallowed",
+                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             prefs = _config.get("preferences", {})
             hygiene_config = {k: prefs.get(k, v) for k, v in DEFAULT_PREFERENCES.items() if k.startswith("hygiene_")}
             self.reply_json({
@@ -48615,9 +48703,12 @@ class Handler(BaseHTTPRequestHandler):
                         _sess = _ldr()
                         _sess = [s for s in _sess if s.get("id", "") not in _archived]
                         sessions_total += len(_sess)
-                    except Exception: pass
-            except Exception:
-                pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
+            except Exception as _e:
+                mlog.emit("warn", "system", "exception.swallowed",
+                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             conn.close()
             self.reply_json({
                 "ok": True,
@@ -48786,8 +48877,9 @@ class Handler(BaseHTTPRequestHandler):
                             if _lf.is_file() and not (_user_files / _lf.name).exists():
                                 import shutil
                                 shutil.copy2(str(_lf), str(_user_files / _lf.name))
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             if not rel_path or rel_path == "/":
                 items = []
                 # User's personal files folder
@@ -49609,8 +49701,9 @@ class Handler(BaseHTTPRequestHandler):
                     _pc_rows = _pc.execute("SELECT project_id FROM project_collaborators WHERE username=?", (_proj_user,)).fetchall()
                     _pc.close()
                     _collab_pids = {r[0] for r in _pc_rows}
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 projects = [p for p in all_projects if p.get("owner") == _proj_user or p.get("id") in _collab_pids]
             result = []
             for p in projects:
@@ -49795,8 +49888,9 @@ class Handler(BaseHTTPRequestHandler):
                                                 line = line.strip()
                                                 if line.startswith("name:"): meta["name"] = line[5:].strip().strip('"').strip("'")
                                                 elif line.startswith("description:"): meta["description"] = line[12:].strip().strip('"').strip("'")
-                                except Exception:
-                                    pass
+                                except Exception as _e:
+                                    mlog.emit("warn", "system", "exception.swallowed",
+                                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                             gws_skills.append(meta)
             self.reply_json({"ok": True, "skills": gws_skills, "count": len(gws_skills)})
 
@@ -49938,8 +50032,9 @@ class Handler(BaseHTTPRequestHandler):
                     try:
                         content = Path(f["path"]).read_text(encoding="utf-8")
                         files.append({"path": f["path"], "name": f["name"], "size": f["size"], "content": content})
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             self.reply_json({"ok": True, "files": files, "count": len(files)})
 
         # ── Memory tab: Flush history (GET) ──────────────────────────────────
@@ -50713,9 +50808,9 @@ class Handler(BaseHTTPRequestHandler):
                             for _img_path in _codex_temp_images:
                                 try:
                                     os.unlink(_img_path)
-                                except Exception:
-                                    pass
-
+                                except Exception as _e:
+                                    mlog.emit("warn", "system", "exception.swallowed",
+                                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 else:
                     self.wfile.write(f"data: {json.dumps({'error': 'Unknown model: ' + model_id})}\n\n".encode())
                     self.wfile.flush()
@@ -50753,9 +50848,9 @@ class Handler(BaseHTTPRequestHandler):
                             self.wfile.write(f"data: {json.dumps({'actions_executed': _action_results})}\n\n".encode())
                             self.wfile.flush()
                             log.info("Chat actions executed: %s", _action_results)
-                        except Exception:
-                            pass
-
+                        except Exception as _e:
+                            mlog.emit("warn", "system", "exception.swallowed",
+                                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 # Auto-save to chat history if chat_id provided
                 if chat_id and full_response:
                     _stream_project = qs.get("project_id", [""])[0]
@@ -50834,8 +50929,9 @@ class Handler(BaseHTTPRequestHandler):
                     _meta = {}
                     try:
                         _meta = json.loads(r["metadata"] or "{}")
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                     sessions.append({
                         "id": r["id"],
                         "title": r["title"] or "Untitled",
@@ -50982,8 +51078,9 @@ class Handler(BaseHTTPRequestHandler):
                             if _mcp_row and _mcp_row[0]:
                                 _must_change_pw = True
                             _mcp_conn.close()
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            mlog.emit("warn", "system", "exception.swallowed",
+                                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                     body = json.dumps({"ok": True, "first_login": _is_new_user, "must_change_password": _must_change_pw}).encode()
                     self.send_header("Content-Length", str(len(body)))
                     self.end_headers()
@@ -50996,8 +51093,9 @@ class Handler(BaseHTTPRequestHandler):
                         _la_conn.execute("UPDATE users SET last_active_at=?, session_count=COALESCE(session_count,0)+1 WHERE username=?", (time.time(), username))
                         _la_conn.commit()
                         _la_conn.close()
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 else:
                     attempts["count"] = attempts.get("count", 0) + 1
                     if attempts["count"] >= _LOGIN_MAX_ATTEMPTS:
@@ -51119,8 +51217,9 @@ class Handler(BaseHTTPRequestHandler):
                 conn.close()
                 for r in rows:
                     recent.append({"severity": r[1], "event_type": r[2], "message": r[3], "domain": r[4]})
-            except Exception:
-                pass
+            except Exception as _e:
+                mlog.emit("warn", "system", "exception.swallowed",
+                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             mlog.emit("info", "bugreport", "bugreport.submitted",
                       f"Bug report: {description[:80]}", report_id=report_id, severity=severity)
             _emit_event("log:bugreport", {"report_id": report_id, "status": "submitted",
@@ -51448,7 +51547,8 @@ class Handler(BaseHTTPRequestHandler):
                         bk, result = f.result()
                         results[bk] = result
                     except Exception as e:
-                        pass
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {e}", extra={"exc_type": type(e).__name__})
             _failed = sorted([bk for bk, result in results.items() if not result.get("ok")])
             mlog.emit("info" if not _failed else "warning", "models", "models.test_all",
                       "Model test-all completed" if not _failed else f"Model test-all completed with failures: {', '.join(_failed)}",
@@ -51906,8 +52006,9 @@ class Handler(BaseHTTPRequestHandler):
                                  (display_name, full_name, email, _pu_username))
                 _pu_conn.commit()
                 _pu_conn.close()
-            except Exception:
-                pass
+            except Exception as _e:
+                mlog.emit("warn", "system", "exception.swallowed",
+                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             self.reply_json({"ok": True, "full_name": full_name, "display_name": display_name, "email": email})
 
         elif parsed.path == "/api/auth/change-password":
@@ -51940,8 +52041,9 @@ class Handler(BaseHTTPRequestHandler):
                     _cp_conn.close()
                     if _cp_row and _hash_password(current_pw, _cp_row["salt"]) == _cp_row["password_hash"]:
                         _cp_auth_ok = True
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             if not _cp_auth_ok:
                 self.reply_json({"ok": False, "error": "Current password is incorrect"}, 401); return
             _cp_new_salt = secrets.token_hex(16)
@@ -51989,8 +52091,9 @@ class Handler(BaseHTTPRequestHandler):
                                      (new_hash, new_salt, _pc_session["username"]))
                     _pc_conn.commit()
                     _pc_conn.close()
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             self.reply_json({"ok": True})
 
         elif parsed.path == "/api/avatar/upload":
@@ -52991,7 +53094,9 @@ class Handler(BaseHTTPRequestHandler):
                     conn.execute("UPDATE personas SET soul_hash=? WHERE id=?", (soul_hash, pid))
                     conn.commit()
                     conn.close()
-                except Exception: pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
             self.reply_json({"ok": True, "filename": filename, "size": len(content)})
 
         elif parsed.path.startswith("/api/personas/") and parsed.path.endswith("/dispatch"):
@@ -53983,7 +54088,9 @@ class Handler(BaseHTTPRequestHandler):
                     # Parse metadata for dispatch context
                     _meta = {}
                     try: _meta = json.loads(c["metadata"] or "{}")
-                    except Exception: pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                     chat_data = {
                         "id": c["id"],
                         "title": c["title"],
@@ -54156,13 +54263,15 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     with open("/proc/loadavg") as _la:
                         _ws_health["load_avg"] = _la.read().split()[0]
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 try:
                     _du = shutil.disk_usage("/")
                     _ws_health["disk_used_pct"] = round(_du.used / _du.total * 100, 1)
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 # Service checks (same as admin/health but just status)
                 _ws_services = []
                 _ws_services.append({"name": "Porter", "status": "up"})
@@ -54333,8 +54442,9 @@ class Handler(BaseHTTPRequestHandler):
                                 _ph = ",".join("?" * len(_my_projects))
                                 _cr = conn.execute(f"SELECT DISTINCT username FROM project_collaborators WHERE project_id IN ({_ph})", _my_projects).fetchall()
                                 _collab_users = {r[0] for r in _cr}
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            mlog.emit("warn", "system", "exception.swallowed",
+                                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                         _visible = {_wp_user} | _collab_users
                         _ph = ",".join("?" * len(_visible))
                         rows = conn.execute(f"""
@@ -54666,8 +54776,9 @@ class Handler(BaseHTTPRequestHandler):
                         VALUES (?, ?, ?, ?)
                     """, ("update", "Contact created", new_id, current_user))
                     conn.commit()
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 conn.close()
                 _append_audit("crm.contact.create", str(new_id), current_user, details={"name": fn})
                 self.reply_json({"ok": True, "id": new_id})
@@ -54724,8 +54835,9 @@ class Handler(BaseHTTPRequestHandler):
                                 INSERT INTO crm_interactions (interaction_type, body, contact_id, created_by)
                                 VALUES (?, ?, ?, ?)
                             """, ("update", "Contact updated", cid, current_user))
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 conn.commit(); conn.close()
                 _append_audit("crm.contact.update", str(cid), current_user)
                 self.reply_json({"ok": True})
@@ -54829,8 +54941,9 @@ class Handler(BaseHTTPRequestHandler):
                         VALUES (?, ?, ?, ?)
                     """, ("update", "Company created", new_id, current_user))
                     conn.commit()
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 conn.close()
                 _append_audit("crm.company.create", str(new_id), current_user, details={"name": name})
                 self.reply_json({"ok": True, "id": new_id})
@@ -54870,8 +54983,9 @@ class Handler(BaseHTTPRequestHandler):
                                 INSERT INTO crm_interactions (interaction_type, body, company_id, created_by)
                                 VALUES (?, ?, ?, ?)
                             """, ("update", "Company updated", cid, current_user))
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 conn.commit(); conn.close()
                 _append_audit("crm.company.update", str(cid), current_user)
                 self.reply_json({"ok": True})
@@ -54994,8 +55108,9 @@ class Handler(BaseHTTPRequestHandler):
                         proj_name = str((proj_cfg or {}).get("name") or "").strip().lower()
                         if proj_name == "first mission" and "first-mission" not in project_aliases:
                             project_aliases.append("first-mission")
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                     placeholders = ",".join(["?"] * len(project_aliases))
                     rows = conn.execute("""
                         SELECT
@@ -55133,8 +55248,9 @@ class Handler(BaseHTTPRequestHandler):
                                 _placeholders = ",".join("?" * len(_my_projects))
                                 _collab_rows = conn.execute(f"SELECT DISTINCT username FROM project_collaborators WHERE project_id IN ({_placeholders})", _my_projects).fetchall()
                                 _collab_users = {r[0] for r in _collab_rows}
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            mlog.emit("warn", "system", "exception.swallowed",
+                                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                         _visible_users = {_list_user} | _collab_users
                         _placeholders = ",".join("?" * len(_visible_users))
                         rows = conn.execute(f"SELECT username, display_name, full_name, email, role, created_at FROM users WHERE username IN ({_placeholders})", list(_visible_users)).fetchall()
@@ -55939,10 +56055,14 @@ class Handler(BaseHTTPRequestHandler):
                 # v0.31.39 — AI-rewrite descriptions for professional copy
                 if _raw_desc:
                     try: _raw_desc = _ai_rewrite_field(_raw_desc, "description", name)
-                    except Exception: pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 if _raw_sbar:
                     try: _raw_sbar = _ai_rewrite_field(_raw_sbar, "success criteria", name)
-                    except Exception: pass
+                    except Exception as _e:
+                        mlog.emit("warn", "system", "exception.swallowed",
+                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 # v0.31.44 — Track project owner
                 _create_session = get_session(self.get_session_token())
                 _create_owner = _create_session.get("username", "") if _create_session else _config.get("username", "admin")
@@ -56051,8 +56171,9 @@ class Handler(BaseHTTPRequestHandler):
                             _filtered.append(_aid)
                         assigned = _filtered
                     _aconn.close()
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 if persona_id not in assigned:
                     assigned.append(persona_id)
                     proj["assigned_personas"] = assigned
@@ -56065,7 +56186,9 @@ class Handler(BaseHTTPRequestHandler):
                             sd = json.loads(sj.read_text())
                             sd["agents"] = assigned
                             sj.write_text(json.dumps(sd, indent=2))
-                        except Exception: pass
+                        except Exception as _e:
+                            mlog.emit("warn", "system", "exception.swallowed",
+                                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                     _state_add_project_note(pid, "assignment", f"Assigned worker {persona_id} to project {pid}.", source="system", created_by="porter")
                 try:
                     _assigned_persona = _persona_by_id(persona_id) or {}
@@ -56073,8 +56196,9 @@ class Handler(BaseHTTPRequestHandler):
                         _recommended = _recommended_skill_names_for_persona(_assigned_persona)
                         if _recommended:
                             _persona_set_skill_names(persona_id, _recommended, managed_by_porter=True)
-                except Exception:
-                    pass
+                except Exception as _e:
+                    mlog.emit("warn", "system", "exception.swallowed",
+                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 mlog.emit("info", "project", "project.assign_agent", f"Assigned persona {persona_id} to project {pid}", project_id=pid, persona_id=persona_id)
                 self.reply_json({"ok": True, "assigned_personas": proj.get("assigned_personas", [])})
 
@@ -56101,7 +56225,9 @@ class Handler(BaseHTTPRequestHandler):
                             sd = json.loads(sj.read_text())
                             sd["agents"] = assigned
                             sj.write_text(json.dumps(sd, indent=2))
-                        except Exception: pass
+                        except Exception as _e:
+                            mlog.emit("warn", "system", "exception.swallowed",
+                                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                     _state_add_project_note(pid, "assignment", f"Unassigned worker {persona_id} from project {pid}.", source="system", created_by="porter")
                 mlog.emit("info", "project", "project.unassign_agent", f"Unassigned persona {persona_id} from project {pid}", project_id=pid, persona_id=persona_id)
                 self.reply_json({"ok": True, "assigned_personas": proj.get("assigned_personas", [])})
@@ -56120,7 +56246,9 @@ class Handler(BaseHTTPRequestHandler):
                     _ud = str(data.get("description", "")).strip()
                     if _ud and _ud != proj.get("description", ""):
                         try: _ud = _ai_rewrite_field(_ud, "description", proj.get("name", ""))
-                        except Exception: pass
+                        except Exception as _e:
+                            mlog.emit("warn", "system", "exception.swallowed",
+                                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                     proj["description"] = _ud
                     if proj["description"]:
                         _state_add_project_note(pid, "summary", proj["description"], source="human", created_by="operator")
@@ -56131,7 +56259,9 @@ class Handler(BaseHTTPRequestHandler):
                     _us = str(data.get("success_bar", "")).strip()
                     if _us and _us != proj.get("success_bar", ""):
                         try: _us = _ai_rewrite_field(_us, "success criteria", proj.get("name", ""))
-                        except Exception: pass
+                        except Exception as _e:
+                            mlog.emit("warn", "system", "exception.swallowed",
+                                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                     proj["success_bar"] = _us
                     if proj["success_bar"]:
                         _state_add_project_note(pid, "success_bar", proj["success_bar"], source="human", created_by="operator")
@@ -57492,8 +57622,9 @@ if __name__ == "__main__":
                 "VALUES (?, 0, 0, NULL, NULL, NULL, 0, '[]')", (_bwf_id,)
             )
         _bconn.commit(); _bconn.close()
-    except Exception:
-        pass
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     _migrate_checkpoint_to_registry()  # Gap31: one-time migration
     # v0.29.11 — Scheduler starts immediately (cron); rest deferred 3s for fast boot
     _sched_thread = threading.Thread(target=_scheduler_loop, name="porter-scheduler", daemon=True)
