@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-Make the codebase safe to build on: eliminate silent failures (623 broad exception catches), fix SQLite concurrency, migrate projects from JSON to SQLite, set up Fastify proxy baseline, audit CSS for consistency, implement proper dark/light theming, and create a boot sequence for fresh installs. This phase also includes major cleanup: deleting the admin/system_admin infrastructure, simplifying the user model, and removing deprecated code.
+Make the codebase safe to build on: eliminate silent failures (623 broad exception catches), fix SQLite concurrency, migrate projects from JSON to SQLite, set up Fastify proxy baseline, audit CSS for consistency across ALL ~50 views/tabs, implement proper dark/light theming, and create a boot sequence for fresh installs. This phase includes major cleanup: deleting the admin/system_admin infrastructure, simplifying the user model, removing deprecated code, and auditing every tab (main nav, agent detail, project detail, settings, CRM, modals) for consistency and correctness.
 
 </domain>
 
@@ -69,6 +69,55 @@ Make the codebase safe to build on: eliminate silent failures (623 broad excepti
 - Project files: Claude decides DB vs filesystem based on agent access needs + privacy
 - Env-level config (port, data dir) moves to .env or environment variables, not JSON
 
+### Full UI Tab Audit (Comprehensive Sweep)
+
+**Main Nav (8 visible tabs):** Projects, AI Agents, Files, People, Models, Tools, Connections, Memory, Logs
+- **Delete:** Hidden admin tabs (Policies, Tool Registry duplicate, Audit, Platform link)
+- **Delete:** Entire ADMIN_PAGE and /admin/ console (8 tabs: Overview, Users, Sessions, Projects, Health, Config, Logs, Templates) — SaaS admin rebuilt later
+- **Keep Models visible** — exciting for users who configure their systems
+- **Keep Tools as global** — system-wide tool registry
+- **Memory** gets both global nav tab AND per-agent view (already has both)
+- **Files** must be project-linked — no orphan files. Files are knowledge, not storage. PDFs/docs get indexed for agent context. Files can also be linked to people (contracts, resumes).
+- **People/CRM** stays as full CRM — contacts, companies, interaction history, all feeding into agent intelligence
+- **Connections** — system-level defaults + project-level overrides (per requirements)
+- **Logs** — Claude's discretion on whether to keep as user-facing tab or merge into transparency dashboard
+
+**Agent Detail (7 tabs):** Chat, Identity, Org, Work, Skills, Memory, Lane
+- Claude's discretion on consolidating (e.g., Identity+Org, Skills+Lane) — goal is simplify
+- Skills stay per-agent as designed
+
+**Project Detail (5 tabs):** Plan, Workflow, Files, People, Timeline
+- Claude's discretion on structure — goal is simplify, make every tab useful
+
+**Settings (6 pages):** Profile, Agents, Password, Tasks, Policy, Changelog
+- User only sees Profile + Password currently — hidden pages are dead code
+- Claude's discretion: strip to essentials (Profile + Password + Changelog), remove dead pages
+
+**CRM (3 filters):** People, Companies, Internal
+- Keep as full CRM — contacts, companies, team members all useful
+
+**Modals (6):** Persona Wizard, Porter Popup Chat, Main Modal, Model Update, FP Modal, Shortcuts
+- All must get dark/light theming and CSS variable audit
+- Porter Popup Chat (/) is a key interaction — must work flawlessly
+
+### CSS Audit Scope (All ~50 Views)
+Every single view, tab, sub-tab, modal, and detail page must be audited for:
+1. Hardcoded colors → CSS variables
+2. Dark/light mode correctness
+3. Consistent spacing, fonts, borders
+4. No regressions to existing working UI
+5. Responsive behavior
+
+This includes:
+- 8 main nav panels + their content views
+- 7 agent detail tabs + agent grid/office views
+- 5 project detail tabs + project list
+- 3 CRM filters + detail slide-out
+- 6 settings pages
+- 6 modals/overlays
+- Login, Register, Landing pages
+- All embedded HTML pages in porter.py (1,767 hardcoded colors)
+
 ### Claude's Discretion
 - CSS variable system architecture (`:root` vs `@theme` vs both)
 - Exception handling replacement patterns and logging severity model
@@ -78,6 +127,10 @@ Make the codebase safe to build on: eliminate silent failures (623 broad excepti
 - Boot sequence surface (web, CLI, or hybrid)
 - New color palette design
 - Log tab visibility for end users
+- Agent detail tab consolidation
+- Project detail tab structure
+- Settings page cleanup
+- Workflows tab fate (keep, merge into transparency, or remove)
 
 </decisions>
 
@@ -132,12 +185,24 @@ Make the codebase safe to build on: eliminate silent failures (623 broad excepti
 - `frontend/src/main.tsx` — React entry point
 - Embedded HTML pages: LOGIN_PAGE (line 13028), REGISTER_PAGE (13216), PAGE (13297), ADMIN_PAGE (46916), LANDING_PAGE (46731)
 
+### Full UI Component Inventory
+**Main nav** (porter.py lines 17000-17063): 8 visible + 4 hidden tabs
+**Agent detail** (lines 17264-17297): 7 tabs (Chat, Identity, Org, Work, Skills, Memory, Lane)
+**Project detail** (lines 17539-17548, 21858-21864): 5 tabs (Plan, Workflow, Files, People, Timeline)
+**CRM** (lines 15309+, 23615+): 3 filter chips (People, Companies, Internal) + detail slide-out (520px)
+**Settings** (lines 17771-17972): 6 pages (Profile, Agents, Password, Tasks, Policy, Changelog)
+**Modals**: Persona Wizard (13729), Porter Popup Chat (15161-15180), Main Modal (14769-14784), Model Update (15723), FP Modal (14835-14860), Shortcuts (14866-14871)
+**Admin console** (ADMIN_PAGE, line 46916+): 8 tabs — TO BE DELETED
+**Embedded pages**: LOGIN_PAGE (13028), REGISTER_PAGE (13216), PAGE (13297), LANDING_PAGE (46731), ADMIN_PAGE (46916)
+
 ### Key Metrics
 - 623 `except:` or `except Exception` patterns in porter.py
 - 1,767 hardcoded color values across embedded HTML pages
-- 5 embedded HTML pages in porter.py
+- 5 embedded HTML pages in porter.py (~50 distinct views/tabs total)
 - 4 users to delete (system, admin, jacob — keep moe only)
-- Current CSS: 45 lines (frontend/src/index.css)
+- 4 hidden admin tabs + 8-tab admin console to delete
+- 4 dead settings pages to remove
+- Current CSS: 45 lines (frontend/src/index.css) — needs to grow for dark/light theming
 
 </code_context>
 
