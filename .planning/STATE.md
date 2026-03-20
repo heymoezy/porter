@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 01-foundation-01-06-PLAN.md
-last_updated: "2026-03-20T11:31:00.000Z"
+stopped_at: Completed 01-foundation-01-05-PLAN.md
+last_updated: "2026-03-20T11:42:24.816Z"
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -51,6 +51,7 @@ Plan: 6 of 7 (completed plan 06)
 | Phase 01-foundation P02 | 6min | 3 tasks | 2 files |
 | Phase 01-foundation P03 | 14min | 2 tasks | 1 files |
 | Phase 01-foundation P06 | 35min | 2 tasks | 1 files |
+| Phase 01-foundation P05 | 22 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,9 @@ Recent decisions affecting current work:
 - [Phase 01-foundation]: Semantic/language colors (TypeScript, Python, skin tones) kept as hardcoded hex — not design system tokens
 - [Phase 01-foundation]: [data-theme="light"] selector replaces :root.light — consistent with three-state toggle data-theme attribute approach
 - [Phase 01-foundation]: Embedded :root blocks include legacy aliases (--bg1, --panel, etc.) for backward compat with existing JS
+- [Phase Phase 01-foundation]: INSERT OR REPLACE used for all project saves — simpler and idempotent vs separate INSERT/UPDATE
+- [Phase Phase 01-foundation]: metadata JSON column captures extra project fields for forward compatibility — _project_row_to_dict unpacks them
+- [Phase Phase 01-foundation]: Projects fully in SQLite after one-shot migration; porter_config.json projects key is now always empty list
 
 ### Pending Todos
 
@@ -92,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T11:31:00.000Z
-Stopped at: Completed 01-foundation-01-06-PLAN.md
+Last session: 2026-03-20T11:42:24.813Z
+Stopped at: Completed 01-foundation-01-05-PLAN.md
 Resume file: None
