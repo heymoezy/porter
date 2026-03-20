@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.34.12 — Fix Phase 2 regressions: restore deleted model/persona JS, fix memory feed SQL"""
+"""Porter v0.34.13 — Fix UI: recall-badge alignment, settings divider full width, logs header consistency"""
 
 
 import email
@@ -13879,8 +13879,8 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 
 /* ── Mission Control v3 ────────────────────────────────────────── */
 #logs-module.module-panel.active { overflow:hidden; display:flex; flex-direction:column; }
-.mc-header { display:flex; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap; flex-shrink:0; }
-.mc-title { font-size:16px; font-weight:700; color:var(--text); }
+.mc-header { display:flex; align-items:center; gap:12px; margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid var(--border); flex-wrap:wrap; flex-shrink:0; min-height:46px; }
+.mc-title { font-size:20px; font-weight:700; color:var(--text); flex:1; }
 .mc-live-badge { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; padding:2px 8px; border-radius:10px; }
 .mc-live-badge.live { background:#10b98120; color:#10b981; }
 .mc-live-badge.paused { background:var(--bg2); color:var(--text3); }
@@ -15102,7 +15102,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .settings-compact { display:flex; flex-direction:column; gap:18px; max-width:520px; }
 .settings-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 18px 16px; }
 .settings-card-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:12px; }
-.settings-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:18px; }
+.settings-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:18px; padding-bottom:14px; border-bottom:1px solid var(--border); width:100%; }
 .settings-shell.compact-nav .settings-content { padding-left:24px; }
 .settings-page { display: none; }
 .settings-page.active { display: block; }
@@ -16583,7 +16583,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .badge-system { background:#e0f2fe; color:#0369a1; font-size:10px; padding:2px 7px;
   border-radius:20px; font-weight:600; }
 .settings-page-title { font-size: 18px; font-weight: 700; color: var(--text);
-  margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  margin-bottom: 0; padding-bottom: 0; }
 .sp-header { display:flex; align-items:center; margin-bottom:14px; padding-bottom:10px;
   border-bottom:1px solid var(--border); }
 .sp-header h2 { font-size:18px; font-weight:700; color:var(--text); margin:0; }
@@ -17154,7 +17154,7 @@ select::-ms-expand { display: none; }
     <button class="mnav-item" id="mnav-memory" onclick="mainNavModule('memory')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
       <span class="mnav-label">Memory</span>
-      <span id="recall-badge" style="display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px;min-width:16px;text-align:center">0</span>
+      <span id="recall-badge" style="display:none;background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:auto;min-width:18px;text-align:center;line-height:1.4">0</span>
     </button>
     <button class="mnav-item" id="mnav-logs" onclick="mainNavModule('logs')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -17183,7 +17183,7 @@ select::-ms-expand { display: none; }
     <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.12</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.13</div>
   </div>
 </aside>
 
@@ -18304,7 +18304,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.34.12', date:'2026-03-20', notes:['Fix Phase 2 regressions: restore 374 lines of model/persona JS accidentally deleted with cortex code','Fix memory feed SQL: remove nonexistent action column reference','All 7 Playwright failures resolved (35/35 pass)'] },
+  { ver:'v0.34.13', date:'2026-03-20', notes:['Fix recall-badge: bigger font, right-aligned with margin-left:auto','Fix settings divider: border-bottom on toolbar extends full width','Fix logs header: mc-header now matches module-hdr style (20px font, border-bottom)'] },
   { ver:'v0.34.11', date:'2026-03-20', notes:['Complete orange purge from chat UI: send button, chat shell border, typing dots, drop zone, toolbtn hover, project chat container, working dots, need labels, Porter hero card — all --warning → --accent.'] },
   { ver:'v0.34.10', date:'2026-03-20', notes:['Agent detail + project chat composer borders changed from --warning (orange) to --accent (indigo). Drag-over and chat hints also updated.'] },
   { ver:'v0.34.9', date:'2026-03-20', notes:['Chat input focus borders changed from orange rgba(247,147,26) to var(--accent). Files accordion staggered animation removed — instant expand/collapse.'] },
@@ -46762,7 +46762,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.34.12"})
+            self.reply_json({"v": "0.34.13"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -46924,7 +46924,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.34.12"
+                health["porter_version"] = "0.34.13"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -49239,7 +49239,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.12'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.13'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -53251,7 +53251,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.34.12"
+                _ws_health["porter_version"] = "0.34.13"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -56566,7 +56566,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.34.12 ready (localhost only)")
+    print(f"\n  Porter v0.34.13 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
