@@ -100,15 +100,14 @@ Plans:
   3. Every agent has a readable activity log — a user can see what each agent did, when it ran, and what it produced
   4. An ephemeral project-scoped agent auto-retires when the project is marked complete, leaving no orphaned jobs
   5. All autonomous features are controlled by config-level feature flags — disabling a flag stops execution within one polling cycle
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 04-01: Job table + scheduler — agent_jobs table, services/scheduler.ts, 2s poll, atomic UPDATE pickup
-- [ ] 04-02: AI router service — services/ai-router.ts, model selection, openclaw dispatch, streaming response (includes: per-turn smart routing heuristic, dynamic tool schema rebuild for unavailable backends, context compressor with tool-call boundary repair — ref: hermes-agent)
-- [ ] 04-03: Event triggers — file-created, deadline-approaching, message-received triggers wired to job queue
-- [ ] 04-04: Activity log — per-agent readable feed of runs, results, and queue state
-- [ ] 04-05: Ephemeral agents — project-scoped creation, auto-retire on project complete or explicit dismissal (includes: depth=2 hard limit, max 3 concurrent children, blocked tool list on children — ref: hermes-agent)
-- [ ] 04-06: Feature flags — agent_scheduling, event_triggers, ephemeral_agents kill switches in config
+- [ ] 04-01-PLAN.md — Job table + scheduler: agent_jobs/agent_activity schema, services/scheduler.ts 2s poll, atomic pickup, job CRUD routes (Wave 1)
+- [ ] 04-02-PLAN.md — AI router: services/ai-router.ts, smart routing heuristic, openclaw dispatch, context compressor with tool-call boundary repair (Wave 1)
+- [ ] 04-03-PLAN.md — Event triggers: file-created, deadline-approaching, message-received with deduplication, wired to scheduler (Wave 2)
+- [ ] 04-04-PLAN.md — Activity log + AI router integration: per-agent activity feed API, scheduler dispatch via ai-router (Wave 2)
+- [ ] 04-05-PLAN.md — Ephemeral agents: project-scoped creation, depth=2 limit, auto-retire on project complete, feature flag verification (Wave 3)
 
 ### Phase 5: Guided Project Wizard
 **Goal**: A user describes a project goal in plain language and Porter responds with a proposed agent team and plan — approve once and work starts
@@ -185,7 +184,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation | 9/9 | Complete    | 2026-03-20 |
 | 2. Memory V2 | 8/8 | Complete   | 2026-03-20 |
 | 3. Route Migration | 5/5 | Complete   | 2026-03-20 |
-| 4. Agent Autonomy | 0/6 | Not started | - |
+| 4. Agent Autonomy | 0/5 | Not started | - |
 | 5. Guided Project Wizard | 0/7 | Not started | - |
 | 6. Real-Time and Transparency | 0/5 | Not started | - |
 | 7. External Connections | 0/8 | Not started | - |
