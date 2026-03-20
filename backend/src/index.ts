@@ -10,6 +10,8 @@ import fileRoutes from './routes/files.js';
 import adminRoutes from './routes/admin.js';
 import aiRoutes from './routes/ai.js';
 import eventRoutes from './routes/events.js';
+import authPlugin from './plugins/auth.js';
+import v1Routes from './routes/v1/index.js';
 import proxyPlugin from './plugins/proxy.js';
 
 const fastify = Fastify({
@@ -25,8 +27,12 @@ fastify.register(cors, {
 });
 fastify.register(cookie);
 fastify.register(websocket);
+fastify.register(authPlugin);
 
-// Routes
+// V1 routes (Fastify-native, with response envelope)
+fastify.register(v1Routes, { prefix: '/api/v1' });
+
+// Legacy routes (proxied to porter.py as fallback)
 fastify.register(authRoutes);
 fastify.register(taskRoutes);
 fastify.register(chatRoutes);
