@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 03-route-migration-03-PLAN.md
-last_updated: "2026-03-20T19:51:48.846Z"
+stopped_at: Completed 03-route-migration-05-PLAN.md
+last_updated: "2026-03-20T20:38:57.362Z"
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 22
-  completed_plans: 20
+  completed_plans: 22
 ---
 
 # Project State
@@ -66,6 +66,7 @@ Plan: 1 of 5
 | Phase 03-route-migration P02 | 4min | 2 tasks | 7 files |
 | Phase 03-route-migration P01 | 7min | 2 tasks | 1 files |
 | Phase 03-route-migration P03 | 5min | 2 tasks | 4 files |
+| Phase 03-route-migration P05 | 23min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -130,6 +131,8 @@ Recent decisions affecting current work:
 - [Phase 03-route-migration]: _build_lean_identity() is the sole system prompt builder — DB-only, no file I/O; awareness_mode defaults to 'aware' from config JSON; memory injection moves to message body via on-demand context; _build_context_suffix() deprecated not deleted
 - [Phase 03-route-migration]: Personas Drizzle schema maps real porter.db columns verified from CREATE TABLE + ALTER TABLE statements — not plan's best-guess
 - [Phase 03-route-migration]: DELETE /api/v1/agents/:id soft-deletes by setting status='retired' — matches porter.py behavior
+- [Phase 03-route-migration]: wildcard:false on @fastify/static prevents HEAD route conflict with proxy; SPA catch-all uses fs.readFileSync for index.html outside plugin scope
+- [Phase 03-route-migration]: porter.py auth/projects/agents handlers marked deprecated but kept alive for Playwright tests; full deletion deferred to Fastify port-swap phase
 
 ### Pending Todos
 
@@ -144,6 +147,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T19:51:48.843Z
-Stopped at: Completed 03-route-migration-03-PLAN.md
+Last session: 2026-03-20T20:38:57.360Z
+Stopped at: Completed 03-route-migration-05-PLAN.md
 Resume file: None

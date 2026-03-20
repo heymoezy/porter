@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Eliminate silent failures, fix SQLite concurrency, migrate projects to DB, Fastify baseline, CSS audit, dark/light mode, boot sequence (completed 2026-03-20)
 - [x] **Phase 2: Memory V2** - Complete structured memory, cut over from Cortex, wire noise filtering and real-time feed (completed 2026-03-20)
-- [ ] **Phase 3: Route Migration** - Move auth/projects/agents to Fastify via strangler fig, all 35 tests green
+- [x] **Phase 3: Route Migration** - Move auth/projects/agents to Fastify via strangler fig, all 35 tests green (completed 2026-03-20)
 - [ ] **Phase 4: Agent Autonomy** - Scheduled + event-driven agents, activity log, ephemeral agents
 - [ ] **Phase 5: Guided Project Wizard** - Conversational project creation, auto agent assignment, project dashboard
 - [ ] **Phase 6: Real-Time and Transparency** - SSE hub replaces polling, agent feed, system health, decision log
@@ -184,7 +184,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation | 9/9 | Complete    | 2026-03-20 |
 | 2. Memory V2 | 8/8 | Complete   | 2026-03-20 |
-| 3. Route Migration | 3/5 | In Progress|  |
+| 3. Route Migration | 5/5 | Complete   | 2026-03-20 |
 | 4. Agent Autonomy | 0/6 | Not started | - |
 | 5. Guided Project Wizard | 0/7 | Not started | - |
 | 6. Real-Time and Transparency | 0/5 | Not started | - |
