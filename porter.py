@@ -2533,6 +2533,17 @@ def _build_context_suffix(persona_id, message="", project_id="", task_id=""):
     except Exception as _e:
         mlog.emit("warn", "system", "exception.swallowed",
                   f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
+    # MEM-04 — Recall prior work: search agent's past sessions before dispatch
+    try:
+        _prior_work = _recall_prior_work(persona_id, message, limit=3)
+        if _prior_work:
+            parts.append(_prior_work)
+            mlog.emit("debug", "memory", "recall.prior_work",
+                      f"Injected prior work context for agent {persona_id}",
+                      extra={"persona_id": persona_id})
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
     # Squad roster — compact one-liner per teammate
     try:
         teammates = _persona_list()
@@ -3385,6 +3396,28 @@ def _mem_record_injection(memory_id, run_id=''):
         return True
     except Exception:
         return False
+
+
+
+def _recall_prior_work(persona_id, query, limit=3):
+    """Search agent's past sessions for prior work on a topic.
+
+    Returns a compact summary string for context injection.
+    Called during agent dispatch to satisfy MEM-04: agents search prior sessions
+    before asking users to repeat work.
+    """
+    if not persona_id or not query:
+        return ''
+    results = _mem_search(str(query)[:100], scope='agent', scope_id=persona_id, kind='episode', limit=limit)
+    if not results:
+        return ''
+    summaries = []
+    for r in results[:limit]:
+        preview = r.get('preview') or r.get('text', '')
+        summaries.append(f"- {str(preview)[:200]}")
+    if not summaries:
+        return ''
+    return "Prior work on this topic:\n" + '\n'.join(summaries)
 
 
 def _mem_stats(scope=None, scope_id=None, exclude_system=False):
@@ -46706,6 +46739,26 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"ok": True, "results": results})
 
         # ── Memory V2 API (GET) ──────────────────────────────────────────
+
+        elif parsed.path == "/api/memory/session-search":
+            if not self.auth_check(redirect=False): return
+            q = qs.get("q", [""])[0].strip()
+            agent_id = qs.get("agent_id", [""])[0].strip() or None
+            limit = min(100, max(1, int(qs.get("limit", ["20"])[0])))
+            if not q or len(q) < 2:
+                self.reply_json({"error": "Query must be at least 2 characters", "results": []}, 400)
+                return
+            try:
+                if agent_id:
+                    results = _mem_search(q, scope='agent', scope_id=agent_id, kind='episode', limit=limit)
+                else:
+                    results = _mem_search(q, kind='episode', limit=limit)
+                self.reply_json({"results": results, "count": len(results)})
+            except Exception as _e:
+                mlog.emit("warn", "memory", "session_search.error", str(_e),
+                          extra={"exc_type": type(_e).__name__, "query": q[:50]})
+                self.reply_json({"error": str(_e), "results": []}, 500)
+
         elif parsed.path == "/api/memory/feed":
             if not self.auth_check(redirect=False): return
             agent_id = qs.get("agent_id", [""])[0].strip() or None
