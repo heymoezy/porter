@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 4: Agent Autonomy** - Scheduled + event-driven agents, activity log, ephemeral agents
 - [ ] **Phase 5: Guided Project Wizard** - Conversational project creation, auto agent assignment, project dashboard
 - [ ] **Phase 6: Real-Time and Transparency** - SSE hub replaces polling, agent feed, system health, decision log
-- [ ] **Phase 7: External Connections** - GitHub, email, and calendar integrations with project-level overrides
+- [ ] **Phase 7: External Connections** - GitHub, email, calendar, WhatsApp integrations — all credentials configurable via UI, nothing hardcoded
 
 ## Phase Details
 
@@ -140,23 +140,28 @@ Plans:
 - [ ] 06-05: Decision log — model selection reasoning, agent routing rationale, skipped task explanations
 
 ### Phase 7: External Connections
-**Goal**: Porter agents can read and write GitHub code, send and receive email, and are aware of calendar deadlines — each connection works at workspace level with project-level overrides
+**Goal**: Porter agents can read and write GitHub code, send and receive email, are aware of calendar deadlines, and chat via WhatsApp — all external credentials are configurable via UI with zero hardcoded values in the codebase
 **Depends on**: Phase 6
-**Requirements**: CONN-01, CONN-02, CONN-03
+**Requirements**: CONN-01, CONN-02, CONN-03, CONN-04, CONN-05
 **Success Criteria** (what must be TRUE):
   1. A connected GitHub account allows an agent to read the repo, create a branch, and open a PR — all from a Porter task
   2. Porter sends an email notification when an agent completes a task and can receive an email that triggers an agent response
   3. Project deadlines from Google Calendar appear on the project dashboard and agents factor them into scheduling
   4. A project can override the workspace-level connection credentials — using a different GitHub repo or email account per project
   5. All external API calls are queued to background workers — no HTTP handler blocks waiting for an external response
+  6. WhatsApp bridge sends and receives messages — agents can be chatted with via WhatsApp
+  7. Zero hardcoded API keys, tokens, service URLs, or file paths in codebase — all configurable via UI settings
 **Plans**: TBD
 
 Plans:
-- [ ] 07-01: GitHub integration — @fastify/oauth2 flow, token in workspace_connections, octokit for API calls
-- [ ] 07-02: Email integration — nodemailer outbound, imapflow IMAP IDLE inbound, OAuth2 (no raw passwords)
-- [ ] 07-03: Calendar integration — googleapis, Google Calendar read/write, deadline sync to project dashboard
-- [ ] 07-04: Project-level overrides — per-project connection credentials override workspace defaults
-- [ ] 07-05: External call queuing — all external API calls routed through background worker, never blocking HTTP path
+- [ ] 07-01: Connection settings UI — admin page for all external service credentials (API keys, tokens, URLs), stored encrypted in DB
+- [ ] 07-02: Hardcoding purge — remove all hardcoded paths, tokens, IPs, ports from codebase, replace with config lookups
+- [ ] 07-03: GitHub integration — @fastify/oauth2 flow, token in workspace_connections, octokit for API calls
+- [ ] 07-04: Email integration — nodemailer outbound, imapflow IMAP IDLE inbound, OAuth2 (no raw passwords)
+- [ ] 07-05: Calendar integration — googleapis, Google Calendar read/write, deadline sync to project dashboard
+- [ ] 07-06: WhatsApp bridge — Meta Cloud API webhook for inbound, REST for outbound, agent-number mapping, group chat support
+- [ ] 07-07: Project-level overrides — per-project connection credentials override workspace defaults
+- [ ] 07-08: External call queuing — all external API calls routed through background worker, never blocking HTTP path
 
 ## Progress
 
@@ -171,4 +176,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Agent Autonomy | 0/6 | Not started | - |
 | 5. Guided Project Wizard | 0/5 | Not started | - |
 | 6. Real-Time and Transparency | 0/5 | Not started | - |
-| 7. External Connections | 0/5 | Not started | - |
+| 7. External Connections | 0/8 | Not started | - |

@@ -38,6 +38,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [ ] **CONN-01**: GitHub integration (connect repos via OAuth, agents can read/write code, create PRs)
 - [ ] **CONN-02**: Email integration (Porter sends notifications via SendGrid, agents can send/receive email)
 - [ ] **CONN-03**: Calendar integration (sync deadlines via Google Calendar API, agents aware of schedules)
+- [ ] **CONN-04**: WhatsApp bidirectional bridge (send/receive messages via Meta Cloud API, agent-specific chat, group chats)
+- [ ] **CONN-05**: All external connections configurable via UI — no hardcoded API keys, tokens, paths, or service URLs anywhere in codebase
 
 ### Transparency
 
@@ -65,12 +67,6 @@ Deferred to future milestone. Tracked but not in current roadmap.
 - **COLLAB-01**: Invite people to projects by email with assigned role
 - **COLLAB-02**: Custom per-person roles (view, chat, edit, admin)
 - **COLLAB-03**: Collaborators can chat with and direct project agents
-
-### Messaging
-
-- **MSG-01**: WhatsApp bidirectional bridge (send/receive via Meta Cloud API)
-- **MSG-02**: Agent-specific WhatsApp chat (message a specific agent)
-- **MSG-03**: WhatsApp group chats with multiple agents
 
 ### Business
 
@@ -118,10 +114,12 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | CONN-01 | Phase 7 | Pending |
 | CONN-02 | Phase 7 | Pending |
 | CONN-03 | Phase 7 | Pending |
+| CONN-04 | Phase 7 | Pending |
+| CONN-05 | Phase 7 | Pending |
 
 **Coverage:**
-- v1 requirements: 25 total
-- Mapped to phases: 25
+- v1 requirements: 27 total
+- Mapped to phases: 27
 - Unmapped: 0 ✓
 
 ---
