@@ -2558,6 +2558,71 @@ def _mem_extract_signals(message, response, persona_id='', project_id='', run_id
     return inserted
 
 
+
+def _build_lean_identity(persona_id: str) -> str:
+    """Phase 3 — PERF-01: Build a lean identity block for persona dispatch.
+
+    Replaces _build_context_suffix() for the system prompt.
+    Output: ~200-300 tokens of agent identity + awareness + guardrails.
+    Memory injection is handled separately by _mem_inject_for_dispatch().
+
+    Circuit breaker: if prompt exceeds 2K tokens, logs a warning and
+    returns a minimal fallback to prevent bloated prompts.
+    """
+    conn = _db_conn()
+    try:
+        row = conn.execute(
+            "SELECT name, role, config FROM personas WHERE id=?",
+            (persona_id,)
+        ).fetchone()
+        if not row:
+            return "You are an AI assistant. Never fabricate data. Never claim tasks done without verification. Say when you don't know."
+        name = row[0] or 'Agent'
+        role = row[1] or ''
+        try:
+            import json as _json
+            cfg = _json.loads(row[2] or '{}')
+        except Exception:
+            cfg = {}
+        description = cfg.get('description', '') or role
+        awareness_mode = cfg.get('awareness_mode', 'aware')
+
+        # Identity line
+        identity_line = f"You are {name}, {description}." if description else f"You are {name}."
+
+        # Awareness block
+        if awareness_mode == 'sandboxed':
+            awareness_block = "You are a focused assistant. Handle tasks within your assigned domain."
+        else:  # default: aware
+            awareness_block = (
+                "You work within Porter, an AI orchestration platform. "
+                "Use Porter's resources (memory, project context, tools) for tasks outside your direct scope. "
+                "Other agents exist and Porter coordinates delegation."
+            )
+
+        # Guardrails — always present
+        guardrails = "Rules: (1) Never fabricate data or sources. (2) Never claim a task is done without verification. (3) Say when you don't know."
+
+        prompt = f"{identity_line}\n{awareness_block}\n{guardrails}"
+
+        # Circuit breaker: if somehow > 2000 tokens, log and return minimal fallback
+        est_tokens = _estimate_tokens(prompt)
+        if est_tokens > 2000:
+            mlog.emit("warn", "system", "prompt.circuit_breaker",
+                      f"Lean identity for {persona_id} exceeded 2K tokens ({est_tokens}), using minimal fallback",
+                      extra={"persona_id": persona_id, "tokens": est_tokens})
+            return f"You are {name}. Never fabricate data. Never claim tasks done without verification. Say when you don't know."
+
+        return prompt
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__, "fn": "_build_lean_identity"})
+        return "You are an AI assistant. Never fabricate data. Never claim tasks done without verification. Say when you don't know."
+    finally:
+        conn.close()
+
+
+# DEPRECATED Phase 3: replaced by _build_lean_identity()
 def _build_context_suffix(persona_id, message="", project_id="", task_id=""):
     """Build a lean context suffix for persona dispatch.
     v0.29.18: Trimmed from ~4.5KB to ~2KB by dropping redundant files."""
@@ -43373,8 +43438,33 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
     resolved_project_id = _resolve_persona_project(persona_id, explicit_project_id=project_id, task_id=task_id)
     task = _task_by_id(task_id)
 
-    # v0.28.9 — Budgeted context suffix (replaces uncapped assembly)
-    _ctx_suffix = _build_context_suffix(persona_id, message=message, project_id=resolved_project_id, task_id=task_id)
+    # Phase 3 PERF-01 — Lean identity replaces _build_context_suffix in system prompt
+    _lean_identity = _build_lean_identity(persona_id)
+    # Memory injection runs separately — not stuffed into system prompt
+    try:
+        _memory_budget = 500
+        _mem_ctx = _mem_inject_for_dispatch(message, persona_id=persona_id, project_id=resolved_project_id, token_cap=_memory_budget)
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
+        _mem_ctx = ""
+    # Prior work injection (MEM-04)
+    try:
+        _prior_work = _recall_prior_work(persona_id, message, limit=3)
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
+        _prior_work = ""
+    # Project context injection
+    try:
+        _proj_ctx = _build_project_dispatch_context(resolved_project_id, persona_id=persona_id, task_id=task_id, message=message)
+    except Exception as _e:
+        mlog.emit("warn", "system", "exception.swallowed",
+                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
+        _proj_ctx = ""
+    # Assemble on-demand context block (injected into message, NOT system prompt)
+    _ctx_parts = [p for p in [_mem_ctx, _prior_work, _proj_ctx] if p]
+    _ctx_suffix = "\n\n".join(_ctx_parts)
 
     # v0.28.9 — History trimmer: keep last 3 turns, cap at 3000 chars
     _MAX_HISTORY_CHARS = 3000
@@ -43430,27 +43520,24 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
         except Exception as _e:
             mlog.emit("warn", "system", "exception.swallowed",
                       f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
+        # Phase 3: _lean_identity is the system prompt; _ctx_suffix is on-demand context
         _system_block = (
             f"=== SYSTEM PROMPT ===\n"
-            f"You are {pname}.\n"
-            f"{_role_line}"
+            f"{_lean_identity}\n"
             + (_squad_ctx + "\n" if _squad_ctx else "")
-            + f"Voice: first person, conversational, direct.\n"
-            f"Format: short paragraphs, markdown when useful, front-load the answer.\n"
-            f"Rule: Never mention which AI model or backend you run on.\n"
-            f"Rule: If the user changes a preference that contradicts your persona files, flag it and ask whether to update your memory.\n"
+            + f"Rule: Never mention which AI model or backend you run on.\n"
             f"=== END SYSTEM PROMPT ==="
         )
-        augmented_message = f"{message}\n\n{_system_block}\n\n{_ctx_suffix}"
-    elif _ctx_suffix:
+        augmented_message = f"{message}\n\n{_system_block}\n\n{_ctx_suffix}" if _ctx_suffix else f"{message}\n\n{_system_block}"
+    elif _ctx_suffix or _lean_identity:
+        # Phase 3: always emit lean identity; append on-demand context if present
         _system_block = (
             f"=== SYSTEM PROMPT ===\n"
-            f"You are {pname}.\n"
-            f"Format: front-load the answer, short paragraphs, markdown for structure.\n"
+            f"{_lean_identity}\n"
             f"Rule: Never mention which AI model you run on.\n"
             f"=== END SYSTEM PROMPT ==="
         )
-        augmented_message = f"{message}\n\n{_system_block}\n\n{_ctx_suffix}"
+        augmented_message = f"{message}\n\n{_system_block}\n\n{_ctx_suffix}" if _ctx_suffix else f"{message}\n\n{_system_block}"
     else:
         augmented_message = message
 
@@ -46700,7 +46787,7 @@ class Handler(BaseHTTPRequestHandler):
                     f"Rule: Never mention which AI model or backend you run on.\n"
                     f"=== END SYSTEM PROMPT ==="
                 )
-                ctx_suffix = _build_context_suffix(pid, message="(system prompt preview)")
+                ctx_suffix = _build_lean_identity(pid)  # Phase 3: use lean identity for preview
                 full_prompt = f"{system_block}\n\n{ctx_suffix}"
                 self.reply_json({"ok": True, "persona": p.get("name", ""), "prompt": full_prompt, "length": len(full_prompt)})
             except Exception as e:
