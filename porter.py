@@ -2295,89 +2295,149 @@ def _build_project_dispatch_context(project_id, persona_id="", task_id="", messa
 # ─── Memory V2: Dispatch Integration (v0.31.88) ──────────────────────────────
 
 
-def _mem_inject_for_dispatch(message, persona_id='', project_id='', run_id=''):
-    """Memory V2: inject relevant memories before dispatch via FTS5.
-    Returns (formatted_context_block, list_of_injected_memory_ids)."""
-    if not message or len(message) < 10:
-        return '', []
-    injected_ids = []
-    sections = {'directive': [], 'concept': [], 'episode': []}
-    seen_ids = set()
-    # Always inject directives for active scopes
+def _estimate_tokens(text: str) -> int:
+    """Fast approximation: 1 token ~= 4 chars (stdlib-safe, no tiktoken needed)."""
+    return max(1, len(text) // 4)
+
+
+def _get_directives(persona_id='', project_id=''):
+    """Get directives for injection — always included first."""
+    conn = _db_conn()
     try:
-        conn = _db_conn()
-        scopes = [('global', '')]
-        if persona_id:
-            scopes.append(('agent', persona_id))
-        if project_id:
-            scopes.append(('project', project_id))
-        for scope, sid in scopes:
-            if scope == 'global':
-                rows = conn.execute(
-                    "SELECT id, text, memory_kind FROM memories "
-                    "WHERE memory_kind='directive' AND scope='global' AND status='active' "
-                    "ORDER BY importance DESC, confidence DESC LIMIT 10").fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT id, text, memory_kind FROM memories "
-                    "WHERE memory_kind='directive' AND scope=? AND scope_id=? AND status='active' "
-                    "ORDER BY importance DESC, confidence DESC LIMIT 5", (scope, sid)).fetchall()
-            for r in rows:
-                rid = r['id']
-                if rid not in seen_ids:
-                    seen_ids.add(rid)
-                    sections['directive'].append(dict(r))
+        rows = conn.execute(
+            "SELECT id, text, scope, scope_id FROM memories "
+            "WHERE memory_kind='directive' AND status='active' "
+            "AND (scope='global' OR (scope='agent' AND scope_id=?) OR (scope='project' AND scope_id=?)) "
+            "ORDER BY importance DESC, created_at DESC",
+            (persona_id, project_id)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception as _e:
+        mlog.emit("warn", "memory", "exception.swallowed", str(_e),
+                  extra={"exc_type": type(_e).__name__, "fn": "_get_directives"})
+        return []
+    finally:
         conn.close()
-    except Exception as _e:
-        mlog.emit("warn", "system", "exception.swallowed",
-                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-    # FTS5 search for message-relevant memories
+
+
+def _get_concepts(persona_id='', project_id='', query=''):
+    """Get concepts for injection — included after directives, ranked by relevance."""
+    conn = _db_conn()
     try:
-        results = _mem_search(message, limit=15)
-        for r in results:
-            rid = r.get('id')
-            kind = r.get('memory_kind', 'signal')
-            if rid in seen_ids or kind == 'signal':
-                continue
-            seen_ids.add(rid)
-            if kind in sections:
-                sections[kind].append(r)
+        if query and len(query) > 3:
+            # FTS5 relevance search
+            import re as _re
+            fts_q = _re.sub(r'[^\w\s]', ' ', query[:100]).strip()
+            terms = fts_q.split()
+            fts_q = ' OR '.join('"' + t + '"*' for t in terms if t) if terms else ''
+            if fts_q:
+                rows = conn.execute(
+                    "SELECT m.id, m.text, m.scope, m.scope_id FROM memories m "
+                    "JOIN memories_fts f ON m.id = f.rowid "
+                    "WHERE memories_fts MATCH ? AND m.memory_kind='concept' AND m.status='active' "
+                    "AND (m.scope='global' OR (m.scope='agent' AND m.scope_id=?) "
+                    "     OR (m.scope='project' AND m.scope_id=?)) "
+                    "ORDER BY rank LIMIT 20",
+                    (fts_q, persona_id, project_id)
+                ).fetchall()
+                return [dict(r) for r in rows]
+        rows = conn.execute(
+            "SELECT id, text, scope, scope_id FROM memories "
+            "WHERE memory_kind='concept' AND status='active' "
+            "AND (scope='global' OR (scope='agent' AND scope_id=?) OR (scope='project' AND scope_id=?)) "
+            "ORDER BY importance DESC, last_used_at DESC, created_at DESC LIMIT 20",
+            (persona_id, project_id)
+        ).fetchall()
+        return [dict(r) for r in rows]
     except Exception as _e:
-        mlog.emit("warn", "system", "exception.swallowed",
-                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-    # Scope-specific concepts (always inject)
-    try:
-        conn = _db_conn()
-        for scope, sid in [('agent', persona_id), ('project', project_id)]:
-            if not sid:
-                continue
-            rows = conn.execute(
-                "SELECT id, text, memory_kind FROM memories "
-                "WHERE memory_kind='concept' AND scope=? AND scope_id=? AND status='active' "
-                "ORDER BY importance DESC, confidence DESC LIMIT 5", (scope, sid)).fetchall()
-            for r in rows:
-                rid = r['id']
-                if rid not in seen_ids:
-                    seen_ids.add(rid)
-                    sections['concept'].append(dict(r))
+        mlog.emit("warn", "memory", "exception.swallowed", str(_e),
+                  extra={"exc_type": type(_e).__name__, "fn": "_get_concepts"})
+        return []
+    finally:
         conn.close()
+
+
+def _get_recent_episodes(persona_id='', project_id='', limit=5):
+    """Get recent episodes — included last if token budget allows."""
+    conn = _db_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id, text, scope, scope_id FROM memories "
+            "WHERE memory_kind='episode' AND status='active' "
+            "AND (scope='global' OR (scope='agent' AND scope_id=?) OR (scope='project' AND scope_id=?)) "
+            "ORDER BY created_at DESC LIMIT ?",
+            (persona_id, project_id, limit)
+        ).fetchall()
+        return [dict(r) for r in rows]
     except Exception as _e:
-        mlog.emit("warn", "system", "exception.swallowed",
-                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-    # Format: directives first, then concepts, then episodes
+        mlog.emit("warn", "memory", "exception.swallowed", str(_e),
+                  extra={"exc_type": type(_e).__name__, "fn": "_get_recent_episodes"})
+        return []
+    finally:
+        conn.close()
+
+
+
+
+def _mem_inject_for_dispatch(message, persona_id='', project_id='', run_id='', token_cap=500):
+    """Frozen snapshot injection with tiered priority and token cap.
+
+    Tier 1: Directives (always, highest priority)
+    Tier 2: Concepts (relevant to scope + message)
+    Tier 3: Episodes (recent, only if budget remains)
+
+    Returns a string block ready for context injection, or '' if no memories.
+    token_cap can be overridden by _build_context_suffix memory_budget.
+    """
+    used_tokens = 0
     parts = []
-    for kind in ('directive', 'concept', 'episode'):
-        for mem in sections[kind]:
-            text = (mem.get('text') or mem.get('preview') or '')[:200]
-            parts.append(f"[{kind.upper()}] {text}")
-            injected_ids.append(mem.get('id', 0))
-    if not parts:
-        return '', []
-    # Record injection
-    for mid in injected_ids:
-        _mem_record_injection(mid, run_id)
-    block = "--- Operational Memory ---\n" + "\n".join(parts) + "\n---"
-    return block, injected_ids
+
+    # Check project privacy — private projects block global injection
+    is_private = _project_is_private(project_id) if project_id else False
+
+    # Tier 1: Directives (always first)
+    for mem in _get_directives(persona_id, project_id):
+        if is_private and mem.get('scope') == 'global':
+            continue  # Private project: skip global directives
+        est = _estimate_tokens(mem['text'])
+        if used_tokens + est > token_cap:
+            break
+        parts.append(f"[DIRECTIVE] {mem['text']}")
+        used_tokens += est
+        _mem_record_injection(mem['id'])
+
+    # Tier 2: Concepts (relevant to scope + message content)
+    query_text = message if isinstance(message, str) else str(message)
+    for mem in _get_concepts(persona_id, project_id, query_text):
+        if is_private and mem.get('scope') == 'global':
+            continue
+        est = _estimate_tokens(mem['text'])
+        if used_tokens + est > token_cap:
+            break
+        parts.append(f"[CONCEPT] {mem['text']}")
+        used_tokens += est
+        _mem_record_injection(mem['id'])
+
+    # Tier 3: Episodes (only if under 80% budget)
+    if used_tokens < token_cap * 0.8:
+        for mem in _get_recent_episodes(persona_id, project_id):
+            if is_private and mem.get('scope') == 'global':
+                continue
+            est = _estimate_tokens(mem['text'])
+            if used_tokens + est > token_cap:
+                break
+            parts.append(f"[EPISODE] {mem['text']}")
+            used_tokens += est
+            _mem_record_injection(mem['id'])
+
+    if parts:
+        mlog.emit("debug", "memory", "recall.injected",
+                  f"Injected {len(parts)} memories ({used_tokens} est tokens)",
+                  extra={"count": len(parts), "tokens": used_tokens,
+                         "persona_id": persona_id, "project_id": project_id})
+
+    return '\n'.join(parts) if parts else ''
+
 
 
 def _mem_extract_signals(message, response, persona_id='', project_id='', run_id='', source_category=''):
@@ -2463,7 +2523,7 @@ def _build_context_suffix(persona_id, message="", project_id="", task_id=""):
             parts.append(f"--- Rules ---\n{rules[:rules_budget]}\n---")
     # v0.31.88 — Memory V2: inject operational memories via FTS5
     try:
-        _mem_ctx, _mem_ids = _mem_inject_for_dispatch(message, persona_id=persona_id, project_id=project_id)
+        _mem_ctx = _mem_inject_for_dispatch(message, persona_id=persona_id, project_id=project_id, token_cap=memory_budget)
         if _mem_ctx:
             parts.append(_mem_ctx[:memory_budget])
     except Exception as _e:
