@@ -29,7 +29,6 @@ tests/screenshots/
 .trash/
 
 # Legacy (removed v0.31.81)
-frontend/
 archive/
 chat/
 diagrams/
@@ -38,3 +37,7 @@ docs/
 # Backend build artifacts and dependencies (source is tracked)
 backend/dist/
 backend/node_modules/
+
+# Frontend build artifacts and dependencies (source is tracked)
+frontend/dist/
+frontend/node_modules/

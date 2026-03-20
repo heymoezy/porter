@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 03-route-migration-01-PLAN.md
-last_updated: "2026-03-20T19:42:25.977Z"
+stopped_at: Completed 03-route-migration-03-PLAN.md
+last_updated: "2026-03-20T19:51:48.846Z"
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 22
-  completed_plans: 19
+  completed_plans: 20
 ---
 
 # Project State
@@ -65,6 +65,7 @@ Plan: 1 of 5
 | Phase 02-memory-v2 P07 | 10min | 2 tasks | 1 files |
 | Phase 03-route-migration P02 | 4min | 2 tasks | 7 files |
 | Phase 03-route-migration P01 | 7min | 2 tasks | 1 files |
+| Phase 03-route-migration P03 | 5min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,8 @@ Recent decisions affecting current work:
 - [Phase 03-route-migration]: v1Routes registered before legacy routes in index.ts — v1 takes priority over proxy fallback to porter.py
 - [Phase 03-route-migration]: Legacy auth.ts kept alongside v1/auth.ts — backward compat with porter.py session handling
 - [Phase 03-route-migration]: _build_lean_identity() is the sole system prompt builder — DB-only, no file I/O; awareness_mode defaults to 'aware' from config JSON; memory injection moves to message body via on-demand context; _build_context_suffix() deprecated not deleted
+- [Phase 03-route-migration]: Personas Drizzle schema maps real porter.db columns verified from CREATE TABLE + ALTER TABLE statements — not plan's best-guess
+- [Phase 03-route-migration]: DELETE /api/v1/agents/:id soft-deletes by setting status='retired' — matches porter.py behavior
 
 ### Pending Todos
 
@@ -141,6 +144,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T19:42:25.974Z
-Stopped at: Completed 03-route-migration-01-PLAN.md
+Last session: 2026-03-20T19:51:48.843Z
+Stopped at: Completed 03-route-migration-03-PLAN.md
 Resume file: None
