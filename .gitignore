@@ -30,9 +30,9 @@ tests/screenshots/
 
 # Legacy (removed v0.31.81)
 archive/
-chat/
+/chat/
 diagrams/
-docs/
+/docs/
 
 # Backend build artifacts and dependencies (source is tracked)
 backend/dist/
