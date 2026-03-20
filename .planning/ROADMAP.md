@@ -13,7 +13,7 @@ Porter evolves from a ~900KB Python monolith prototype into a reliable autonomou
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Eliminate silent failures, fix SQLite concurrency, migrate projects to DB, Fastify baseline, CSS audit, dark/light mode, boot sequence (completed 2026-03-20)
-- [ ] **Phase 2: Memory V2** - Complete structured memory, cut over from Cortex, wire noise filtering and real-time feed
+- [x] **Phase 2: Memory V2** - Complete structured memory, cut over from Cortex, wire noise filtering and real-time feed (completed 2026-03-20)
 - [ ] **Phase 3: Route Migration** - Move auth/projects/agents to Fastify via strangler fig, all 35 tests green
 - [ ] **Phase 4: Agent Autonomy** - Scheduled + event-driven agents, activity log, ephemeral agents
 - [ ] **Phase 5: Guided Project Wizard** - Conversational project creation, auto agent assignment, project dashboard
@@ -181,7 +181,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 9/9 | Complete    | 2026-03-20 |
-| 2. Memory V2 | 7/8 | In Progress|  |
+| 2. Memory V2 | 8/8 | Complete   | 2026-03-20 |
 | 3. Route Migration | 0/5 | Not started | - |
 | 4. Agent Autonomy | 0/6 | Not started | - |
 | 5. Guided Project Wizard | 0/7 | Not started | - |
