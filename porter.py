@@ -97,7 +97,6 @@ DEFAULT_PREFERENCES: dict = {
     "density":             "normal",
     "editor_font_size":    12,
     "policy_preset":       "balanced",
-    "cortex_enabled":           False,   # DISABLED: Cortex removed in Phase 1, full deletion in Phase 2
     "memory_auto_extract":      False,
 
     # Context Hygiene
@@ -232,13 +231,6 @@ def _run_if_due(wf_id, fn):
     fn()
     return True
 
-# Register 6 system workflows
-# DISABLED: Cortex removed in Phase 1
-# _wf_register("cortex_consolidation", "Cortex Consolidation",
-#     "Merges similar memories and archives stale ones",
-#     interval="6h", interval_s=6*3600,
-#     exposed=False,
-#     )
 _wf_register("context_hygiene", "Context Hygiene",
     "Prunes old logs, caps soul files, archives stale memories",
     interval="12h", interval_s=12*3600,
@@ -771,6 +763,13 @@ def _db_init():
     except Exception as _fts_err:
         log.warning("FTS5 setup failed: %s", _fts_err)
     _migrate_to_memory_v2(conn)
+    # FTS5 safety: rebuild index after any stale rows from cortex migration
+    try:
+        conn.execute("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')")
+        conn.commit()
+    except Exception as _e:
+        mlog.emit("warn", "db", "exception.swallowed",
+                  f"FTS5 rebuild skipped: {_e}", extra={"exc_type": type(_e).__name__})
     conn.execute("""
         CREATE TABLE IF NOT EXISTS project_artifacts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1727,18 +1726,6 @@ def _gws_list_services() -> dict:
     return result
 
 
-# ── Porter Cortex — Auto-Memory System ────────────────────────────────────
-
-_CORTEX_STOP_WORDS = frozenset(
-    "a an the is are was were be been being have has had do does did will would "
-    "shall should may might can could must need ought i me my we our you your he "
-    "she it they them his her its their this that these those am in on at to for "
-    "of with from by as into through during before after above below between out "
-    "up down off over under again further then once here there when where why how "
-    "all each every both few more most other some such no nor not only own same so "
-    "than too very just about also back even still well much now much also".split()
-)
-_CORTEX_EXTRACT_GUARD = threading.local()
 
 # v0.28.4 — Loop guard: prevent runaway agent-to-agent dispatch loops
 _loop_guard = {}  # chat_id -> {"hop_count": int, "paused": bool, "last_human_at": float}
@@ -1818,674 +1805,6 @@ def _cursor_get_new_messages(agent_id, chat_id, limit=20):
     else:
         warning = "STOP. Repeated empty reads waste tokens. Only read when triggered."
     return [], warning
-
-def _cortex_stem(word):
-    """Lightweight suffix stemming — normalize word forms for Jaccard matching."""
-    if len(word) <= 4:
-        return word
-    # Multi-char suffixes first (longer before shorter)
-    for suffix in ('ation', 'ments', 'ness', 'ting', 'ised', 'ized', 'edly',
-                    'ally', 'ment', 'able', 'ible', 'less', 'ful', 'ous', 'ive',
-                    'ing', 'ied', 'ies', 'ers', 'est', 'ely',
-                    'ed', 'er', 'ly'):
-        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
-            return word[:-len(suffix)]
-    # Plural 's' — only strip if root is 4+ chars
-    if word.endswith('s') and not word.endswith('ss') and len(word) >= 6:
-        return word[:-1]
-    return word
-
-def _cortex_tokenize(text):
-    """Extract meaningful keywords from text, removing stop words, with stemming."""
-    words = re.findall(r'[a-z0-9_]+', text.lower())
-    return set(_cortex_stem(w) for w in words if len(w) > 2 and w not in _CORTEX_STOP_WORDS)
-
-def _jaccard_similarity(kw_a, kw_b):
-    """Set overlap ratio between two keyword sets."""
-    if not kw_a or not kw_b:
-        return 0.0
-    intersection = kw_a & kw_b
-    union = kw_a | kw_b
-    return len(intersection) / len(union) if union else 0.0
-
-
-def _parse_cortex_json(text):
-    """Extract JSON from LLM response — handles code fences."""
-    if not text:
-        return None
-    # Try code fence first
-    m = re.search(r'```(?:json)?\s*([\s\S]*?)```', text)
-    if m:
-        text = m.group(1).strip()
-    # Try bare JSON
-    start = text.find('{')
-    if start == -1:
-        return None
-    depth = 0
-    end = start
-    for i, c in enumerate(text[start:], start):
-        if c == '{': depth += 1
-        elif c == '}': depth -= 1
-        if depth == 0:
-            end = i + 1
-            break
-    try:
-        return json.loads(text[start:end])
-    except Exception:
-        return None
-
-def _is_duplicate(new_fact, existing_facts):
-    """Check if a fact is a duplicate (keyword overlap > 0.6)."""
-    new_kw = _cortex_tokenize(new_fact)
-    for ef in existing_facts:
-        if _jaccard_similarity(new_kw, _cortex_tokenize(ef)) > 0.45:
-            return True
-    return False
-
-# ── .md-aware deduplication (v0.28.45) ──────────────────────────────────────
-
-_MD_KNOWLEDGE_CACHE = {}  # persona_id -> list of keyword sets
-_MD_KNOWLEDGE_CACHE_TS = 0  # last load time
-
-def _load_md_knowledge_lines(persona_id=""):
-    """Load all .md file lines for a persona (or global) as keyword sets.
-    Cached for 5 minutes to avoid re-reading files on every fact."""
-    import time as _t
-    global _MD_KNOWLEDGE_CACHE, _MD_KNOWLEDGE_CACHE_TS
-    now = _t.time()
-    if now - _MD_KNOWLEDGE_CACHE_TS < 300 and persona_id in _MD_KNOWLEDGE_CACHE:
-        return _MD_KNOWLEDGE_CACHE[persona_id]
-
-    kw_sets = []
-    md_files = []
-
-    # Global rules
-    global_rules = PERSONAS_DIR / "RULES.md"
-    if global_rules.exists():
-        md_files.append(global_rules)
-
-    # Persona-specific .md files
-    if persona_id:
-        pdir = PERSONAS_DIR / persona_id
-        if pdir.is_dir():
-            for f in pdir.iterdir():
-                if f.suffix == ".md" and f.name not in ("heartbeat.md",):
-                    md_files.append(f)
-
-    # Also load all other persona .md files for global scope
-    if not persona_id:
-        for pdir in PERSONAS_DIR.iterdir():
-            if pdir.is_dir() and len(pdir.name) > 10:  # UUID dirs
-                for f in pdir.iterdir():
-                    if f.suffix == ".md" and f.name not in ("heartbeat.md",):
-                        md_files.append(f)
-
-    # v0.28.49 — External knowledge sources: CLAUDE.md files + auto-memory
-    # These are the canonical "universal truth" sources that all agents share.
-    # Auto-detected from home dir and project dir — no hardcoded paths.
-    if not persona_id:
-        _home = Path.home()
-        _ext_candidates = [
-            _home / "CLAUDE.md",                         # global instructions
-            _DATA_DIR / "CLAUDE.md",                     # project-level instructions
-            _DATA_DIR.parent / "CLAUDE.md",              # parent project dir
-        ]
-        # Claude Code auto-memory dirs (any MEMORY.md under ~/.claude/projects/)
-        _claude_proj = _home / ".claude" / "projects"
-        if _claude_proj.is_dir():
-            for _mp in _claude_proj.rglob("MEMORY.md"):
-                _ext_candidates.append(_mp)
-        for _ef in _ext_candidates:
-            try:
-                if _ef.exists() and _ef.is_file() and _ef not in md_files:
-                    md_files.append(_ef)
-            except Exception as _e:
-                mlog.emit("warn", "system", "exception.swallowed",
-                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-    for fpath in md_files:
-        try:
-            text = fpath.read_text(errors="replace")
-            for line in text.splitlines():
-                line = line.strip()
-                if len(line) > 15:  # skip short lines like headers
-                    kw = _cortex_tokenize(line)
-                    if len(kw) >= 3:  # need at least 3 meaningful keywords
-                        kw_sets.append(kw)
-        except Exception as _e:
-            mlog.emit("warn", "system", "exception.swallowed",
-                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-    _MD_KNOWLEDGE_CACHE[persona_id] = kw_sets
-    _MD_KNOWLEDGE_CACHE_TS = now
-    return kw_sets
-
-def _fact_covered_by_md(fact_text, scope="global", scope_id=""):
-    """Check if a fact is already covered by persona .md files (Jaccard >= 0.25)."""
-    fact_kw = _cortex_tokenize(fact_text)
-    if len(fact_kw) < 3:
-        return False
-    # Check persona-specific .md files
-    if scope == "agent" and scope_id:
-        for md_kw in _load_md_knowledge_lines(scope_id):
-            if _jaccard_similarity(fact_kw, md_kw) >= 0.25:
-                return True
-    # Always check global .md files
-    for md_kw in _load_md_knowledge_lines(""):
-        if _jaccard_similarity(fact_kw, md_kw) >= 0.25:
-            return True
-    return False
-
-# Low-value fact patterns — meta-commentary, apologies, generic knowledge, stale details
-_LOW_VALUE_PATTERNS = [
-    re.compile(r"^(i apologize|thank you|sorry for)", re.I),
-    re.compile(r"^(the agent|this agent|the assistant) (needed|adapted|identified|used|is framed|cannot)", re.I),
-    re.compile(r"^(a prior tool|the acting agent|when blocked by|a prior assistant)", re.I),
-    re.compile(r"(is available|is installed|already had|already existed)", re.I),
-    re.compile(r"^(the environment|this environment|the workspace|the host environment) (has|had|includes|for)", re.I),
-    re.compile(r"(patch.*applied|patch script|patch.*created)", re.I),
-    re.compile(r"^(playwright|test results|verification|post-patch)", re.I),
-    # Stale version/release details
-    re.compile(r"^(project release|release completion|version.related|the v0\.\d)", re.I),
-    re.compile(r"v0\.\d+\.\d+ (was|focused|patch|release|work|touched|produced|created)", re.I),
-    re.compile(r"(phase \d+ of|phase \d+ planning)", re.I),
-    # Session-specific meta-commentary
-    re.compile(r"^(this session|in this session|the session|a concrete|in the referenced)", re.I),
-    re.compile(r"(prior session|referenced session|during the .* review)", re.I),
-    re.compile(r"(working style|agent.*adapted|agent.*identified itself)", re.I),
-    # Generic/obvious statements
-    re.compile(r"^(porter is a|porter is an|porter is designed|porter is the project)", re.I),
-    re.compile(r"^(file management|agent personas|project workflows)", re.I),
-    # Self-referential agent identity (covered by .md files)
-    re.compile(r"^(this assistant identifies|this agent is|the assistant persona)", re.I),
-    re.compile(r"(presents? (itself|herself|himself)|identifies as)", re.I),
-    re.compile(r"^(sage is|vision is|lobster is|codex is|pixel is)", re.I),
-    re.compile(r"persona directory UUID", re.I),
-    # Environment details (covered by CLAUDE.md)
-    re.compile(r"(python\s*`?3\.12|node.*v22|vite with scripts)", re.I),
-    re.compile(r"^(the active project appears|the frontend package)", re.I),
-    re.compile(r"^(there (was|were|appear)|there was an additional)", re.I),
-    # Stale one-off requests
-    re.compile(r"^the user (asked|wants to create|wants to review|asked for a formal)", re.I),
-    re.compile(r"^(the user expects backend|the exact backend)", re.I),
-    # Stale implementation observations
-    re.compile(r"(was diagnosed|was discovered|was identified|was described)", re.I),
-    re.compile(r"^(the implementation|the fix in|the repository state|the updated)", re.I),
-    re.compile(r"^(debugging this|an already-sent|existing persona)", re.I),
-    re.compile(r"(touched.*api endpoint|touched.*javascript|touched.*sse)", re.I),
-    re.compile(r"^(no other persona|the service under test)", re.I),
-    re.compile(r"(may not be directly verifiable|may have multiple subpaths)", re.I),
-    re.compile(r"(indentation bug|erasableSyntax|frontispiece|nested project)", re.I),
-    # v0.28.50 — User naming preference (already in RULES.md)
-    re.compile(r"(?i)moe.*(prefer|address|refer|call).*name", re.I),
-    re.compile(r"(?i)(prefer|address|refer|call).*moe.*name", re.I),
-    # v0.28.49 — Tasks / feature requests (not durable memories)
-    re.compile(r"^(project requirement|feature request|the requested feature)", re.I),
-    re.compile(r"(should support|needs to support|must support|wants? .* (feature|support|capability))", re.I),
-    re.compile(r"(requested a .*(workflow|feature|tool|system|endpoint|UI))", re.I),
-    re.compile(r"^(the user (wants|needs|asked for|requested) (a|an|the))", re.I),
-    re.compile(r"(should be (built|added|implemented|created|developed))", re.I),
-    re.compile(r"(needs (backend|frontend|API|UI) (plumbing|work|changes|implementation))", re.I),
-]
-
-def _fact_is_low_value(fact_text):
-    """Filter out meta-commentary, apologies, and session-specific noise."""
-    if len(fact_text) < 15:
-        return True
-    for pat in _LOW_VALUE_PATTERNS:
-        if pat.search(fact_text):
-            return True
-    return False
-
-def _cortex_distill_session(session_id, task_desc, model_info, msg_count, outcome="completed", project_id="", scope="global"):
-    """Distill a session into an episodic memory in Cortex DB.
-
-    v0.28.2 — sessions become episodic memories instead of MEMORY.md writes.
-    """
-    import datetime
-    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-    fact = f"Session {date_str}: {task_desc[:200]} | {model_info} | {msg_count} msgs | {outcome}"
-    scope_val = "project" if project_id else scope
-    scope_id = project_id if project_id else ""
-    keywords = ",".join(_cortex_tokenize(task_desc))
-
-    try:
-        conn = _db_conn()
-        # Check for duplicate session
-        existing = conn.execute(
-            "SELECT id FROM cortex_memories WHERE source_id=? AND memory_type='episodic'",
-            (session_id,)
-        ).fetchone()
-        if existing:
-            conn.close()
-            return {"ok": True, "action": "already_distilled", "id": existing[0]}
-        conn.execute(
-            """INSERT INTO cortex_memories (fact, scope, scope_id, source_type, source_id,
-               importance, keywords, routed_to, memory_type, status, confidence)
-               VALUES (?, ?, ?, 'session', ?, 6, ?, '', 'episodic', 'active', 0.6)""",
-            (fact, scope_val, scope_id, session_id, keywords)
-        )
-        conn.commit()
-        mem_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-        conn.close()
-        log.info("Cortex distilled session %s into episodic memory #%d", session_id[:12], mem_id)
-        return {"ok": True, "action": "distilled", "id": mem_id, "fact": fact}
-    except Exception as e:
-        log.debug("Cortex distill failed: %s", e)
-        return {"ok": False, "error": str(e)}
-
-def _cortex_extract_and_route(message, response_text, persona_id="", backend="", project_id="", task_id=""):
-    """Extract facts from a dispatch response and route to memory. Runs in background thread."""
-    return  # DISABLED: Cortex removed in Phase 1, full deletion in Phase 2
-    import time as _ext_t
-    # Guard against circular extraction
-    if getattr(_CORTEX_EXTRACT_GUARD, 'active', False):
-        return
-    _CORTEX_EXTRACT_GUARD.active = True
-    _t0 = _ext_t.time()
-    try:
-        _n_inserted = _cortex_extract_and_route_inner(message, response_text, persona_id, backend, project_id=project_id, task_id=task_id)
-        _wf_record_run("memory_extraction", success=True, result=f"{_n_inserted or 0} facts extracted", duration_s=_ext_t.time()-_t0)
-    except Exception as _ext_e:
-        _wf_record_run("memory_extraction", success=False, error=_ext_e, duration_s=_ext_t.time()-_t0)
-        raise
-    finally:
-        _CORTEX_EXTRACT_GUARD.active = False
-
-def _cortex_extract_and_route_inner(message, response_text, persona_id="", backend="", project_id="", task_id=""):
-    """Inner extraction logic."""
-    return  # DISABLED: Cortex removed in Phase 1, full deletion in Phase 2
-    prefs = _config.get("preferences", {})
-    if not prefs.get("cortex_enabled", False):  # default: off
-        return
-    min_len = prefs.get("cortex_min_response_len", 100)
-    max_facts = prefs.get("cortex_max_facts", 8)
-    if len(response_text) < min_len:
-        return
-
-    # Emit SSE event so UI can show progress banner
-    _emit_event("cortex:extracting", {"persona_id": persona_id, "backend": backend})
-
-    # Build extraction prompt
-    # Get user's preferred name for personalized extraction
-    _user_name = ""
-    try:
-        _user_name = _config.get("display_name", "") or _config.get("preferences", {}).get("display_name", "")
-    except Exception as _e:
-        mlog.emit("warn", "system", "exception.swallowed",
-                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-    _name_rule = f"\n- Always refer to the user as \"{_user_name}\" (never \"the user\" or \"user\")\n" if _user_name else ""
-    _default_scope = "project" if str(project_id or "").strip() else ("agent" if str(persona_id or "").strip() else "global")
-    extract_prompt = (
-        "You are a memory extraction system. Extract ONLY durable knowledge worth "
-        "remembering months from now. Be extremely selective.\n\n"
-        f"USER MESSAGE:\n{message[:1000]}\n\n"
-        f"RESPONSE:\n{response_text[:2000]}\n\n"
-        "Return a JSON object with this structure:\n"
-        '{"facts": [{"text": "concise fact", "scope": "global|agent|project", '
-        '"importance": 1-10, "keywords": "comma,separated,keywords"}]}\n\n'
-        f"Rules:\n- Max {max_facts} facts. Fewer is better. 0 is fine.\n"
-        "- scope=agent for agent-specific behavior\n"
-        "- scope=project for project-specific info\n"
-        "- scope=global for universally useful knowledge\n"
-        f"- default to scope={_default_scope} for this dispatch unless the fact clearly belongs elsewhere\n"
-        "- importance: 1=trivial, 5=moderate, 10=critical\n"
-        + _name_rule +
-        "\nDO NOT extract:\n"
-        "- Implementation details (specific code changes, version numbers, patch steps)\n"
-        "- Session-specific observations (what happened this session, what was diagnosed)\n"
-        "- Agent self-description (name, role, persona — these live in .md files)\n"
-        "- Environment facts (what tools are installed, file paths)\n"
-        "- Task status (what was completed, what is pending)\n"
-        "- Generic knowledge (what a tool does, what a format looks like)\n"
-        "- Response style preferences (already in persona SOUL.md files)\n"
-        "- Feature requests or tasks to build (these belong in task trackers, not memory)\n"
-        "- Project requirements or specs (e.g. \'should support X\', \'needs Y\')\n\n"
-        "ONLY extract:\n"
-        "- Durable user preferences that affect future interactions\n"
-        "- Architectural decisions that won't change session-to-session\n"
-        "- Hard-won debugging insights (not the specific bug, but the reusable lesson)\n"
-        "- User-stated rules or constraints for future behavior\n\n"
-        "Return ONLY valid JSON, no explanation."
-    )
-
-    # Try extraction via dispatch — prefer local Ollama (no rate limits) for extraction
-    _extract_backends = ["ollama"]  # Local first, no rate limit risk
-    # Add non-rate-limited cloud backends as fallback
-    for _eb in ["gemini", "openclaw", "claude", "codex"]:
-        if _eb != backend and _backend_is_available(_eb):
-            _extract_backends.append(_eb)
-    # If original backend is available and not in list, add it
-    if backend and backend not in _extract_backends and _backend_is_available(backend):
-        _extract_backends.insert(1, backend)
-
-    result = None
-    try:
-        for _ext_bk in _extract_backends:
-            if _ext_bk not in PROVIDER_REGISTRY:
-                continue
-            result = dispatch_agent(extract_prompt, _ext_bk, timeout=60)
-            if result.get("ok"):
-                break
-            log.debug("Cortex extraction failed on %s: %s", _ext_bk, result.get("error", "?")[:80])
-        if not result or not result.get("ok"):
-            return
-    except Exception as e:
-        log.debug("Cortex extraction dispatch failed: %s", e)
-        return
-
-    parsed = _parse_cortex_json(result.get("text", ""))
-    if not parsed or "facts" not in parsed:
-        return
-
-    # Load existing facts to check for duplicates
-    try:
-        conn = _db_conn()
-        existing_rows = conn.execute(
-            "SELECT fact FROM cortex_memories WHERE consolidated_into IS NULL"
-        ).fetchall()
-        existing_facts = [r[0] for r in existing_rows]
-        conn.close()
-    except Exception:
-        existing_facts = []
-
-    inserted = 0
-    for fact_obj in parsed["facts"][:max_facts]:
-        fact_text = str(fact_obj.get("text", "")).strip()
-        if not fact_text or len(fact_text) < 10:
-            continue
-        scope = fact_obj.get("scope", _default_scope)
-        if scope not in ("global", "agent", "project"):
-            scope = _default_scope
-        importance = max(1, min(10, int(fact_obj.get("importance", 5))))
-        keywords = str(fact_obj.get("keywords", ""))
-        # v0.29.19 — compute scope_id early (was NameError before)
-        if scope == "agent" and not persona_id:
-            scope = "global"
-        if scope == "project" and str(project_id or "").strip():
-            scope_id = str(project_id or "").strip()
-        elif scope == "agent":
-            scope_id = str(persona_id or "").strip()
-        else:
-            scope_id = ""
-
-        # Duplicate check + supersession (v0.28.3)
-        if _is_duplicate(fact_text, existing_facts):
-            continue
-        # v0.28.45 — skip facts covered by persona .md files or low-value
-        if _fact_is_low_value(fact_text) or _fact_covered_by_md(fact_text, scope, scope_id):
-            continue
-
-        # Supersession: Jaccard 0.6-0.8 → supersede older if new is higher importance
-        new_kw = _cortex_tokenize(fact_text)
-        try:
-            conn_ss = _db_conn()
-            candidates = conn_ss.execute(
-                "SELECT id, fact, importance, keywords FROM cortex_memories "
-                "WHERE status='active' AND consolidated_into IS NULL AND memory_type='semantic' "
-                "ORDER BY created_at DESC LIMIT 100"
-            ).fetchall()
-            for cand in candidates:
-                cand_kw = set(k.strip() for k in cand[3].split(",") if k.strip()) if cand[3] else _cortex_tokenize(cand[1])
-                sim = _jaccard_similarity(new_kw, cand_kw)
-                if 0.6 <= sim < 0.8 and importance >= cand[2]:
-                    # Supersede the older fact
-                    conn_ss.execute(
-                        "UPDATE cortex_memories SET status='archived', superseded_by_id=NULL, "
-                        "updated_at=strftime('%s','now') WHERE id=?", (cand[0],))
-                    conn_ss.commit()
-                    break  # Only supersede one per new fact
-            conn_ss.close()
-        except Exception as _e:
-            mlog.emit("warn", "system", "exception.swallowed",
-                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-        # v0.28.0 — auto-accept: store directly, no file routing
-        confidence = 0.5  # v0.28.52 — new facts start at 0.5, reinforced on re-extraction
-
-        # v0.28.52 — Check for near-duplicate to reinforce instead of insert
-        _reinforced = False
-        try:
-            _rc = _db_conn()
-            _existing = _rc.execute(
-                "SELECT id, fact, confidence, evidence_count, keywords FROM cortex_memories "
-                "WHERE status='active' AND consolidated_into IS NULL LIMIT 200"
-            ).fetchall()
-            for _ex in _existing:
-                _ex_kw = set(k.strip() for k in _ex[4].split(",") if k.strip()) if _ex[4] else _cortex_tokenize(_ex[1])
-                if _jaccard_similarity(new_kw, _ex_kw) > 0.35:
-                    # Reinforce: bump confidence and evidence count
-                    _new_conf = min(0.95, (_ex[2] or 0.5) + 0.15)
-                    _new_ev = (_ex[3] or 1) + 1
-                    _update_sql = ("UPDATE cortex_memories SET confidence=?, evidence_count=?, "
-                        "updated_at=strftime('%s','now')")
-                    _update_params = [_new_conf, _new_ev]
-                    # v0.30.31 — Cross-agent promotion: if different agent reinforces
-                    # an agent-scoped fact, and both agents share a project, promote to project scope
-                    _orig_source = _rc.execute("SELECT source_id, scope, scope_id FROM cortex_memories WHERE id=?", (_ex[0],)).fetchone()
-                    if _orig_source and _orig_source[1] == "agent" and persona_id and str(_orig_source[0] or "") != str(persona_id):
-                        # Different agent reinforcing — check if they share a project
-                        _shared_projects = set(_persona_project_ids(str(_orig_source[0] or ""))) & set(_persona_project_ids(str(persona_id)))
-                        if not _shared_projects and str(project_id or "").strip():
-                            _shared_projects = {str(project_id)}
-                        if _shared_projects:
-                            _promo_pid = _shared_projects.pop()
-                            _update_sql += ", scope='project', scope_id=?"
-                            _update_params.append(_promo_pid)
-                            log.info("Cortex: cross-agent promotion — fact #%s promoted to project %s (agents: %s + %s)",
-                                _ex[0], _promo_pid[:8], str(_orig_source[0] or "")[:8], str(persona_id)[:8])
-                            _emit_event("cortex:cross_agent_promotion", {
-                                "fact_id": _ex[0], "project_id": _promo_pid,
-                                "agents": [str(_orig_source[0] or ""), str(persona_id)]
-                            })
-                    _update_sql += " WHERE id=?"
-                    _update_params.append(_ex[0])
-                    _rc.execute(_update_sql, _update_params)
-                    _rc.commit()
-                    _reinforced = True
-                    break
-            _rc.close()
-        except Exception as _e:
-            mlog.emit("warn", "system", "exception.swallowed",
-                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-        if _reinforced:
-            continue  # Skip insert — existing fact was strengthened
-
-        # Insert into DB with new columns
-        try:
-            conn = _db_conn()
-            conn.execute(
-                """INSERT INTO cortex_memories (fact, scope, scope_id, source_type, source_id,
-                   importance, keywords, routed_to, memory_type, status, confidence, evidence_count)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, '', 'semantic', 'active', ?, 1)""",
-                (fact_text, scope, scope_id, "dispatch", persona_id or backend,
-                 importance, keywords, confidence)
-            )
-            conn.commit()
-            conn.close()
-            existing_facts.append(fact_text)
-            inserted += 1
-        except Exception as e:
-            log.debug("Cortex DB insert failed: %s", e)
-
-    if inserted:
-        log.info("Cortex extracted %d facts from dispatch (%s)", inserted, persona_id or backend)
-        mlog.emit("info", "cortex", "cortex.extract", f"Extracted {inserted} facts",
-                   persona_id=persona_id, backend=backend)
-        # Broadcast cortex update to all SSE clients
-        try:
-            import time as _t_sse
-            conn2 = _db_conn()
-            new_1h = conn2.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='active' AND created_at > ?", (_t_sse.time() - 3600,)).fetchone()[0]
-            conn2.close()
-            _emit_event("cortex:update", {"new_facts": inserted, "new_1h": new_1h, "persona_id": persona_id, "backend": backend})
-        except Exception as _e:
-            mlog.emit("warn", "system", "exception.swallowed",
-                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-    return inserted
-
-def _cortex_batch_extract(limit=20):
-    """Extract facts from recent dispatches that haven't been processed yet."""
-    try:
-        conn = _db_conn()
-        # Get recent complete dispatches with response text
-        # Get recent dispatches that haven't been extracted
-        # Exclude extraction dispatches themselves (message contains 'memory extraction')
-        # Only extract from dispatches with persona_id (real agent work, not system ops)
-        rows = conn.execute("""
-            SELECT run_id, to_agent, message, response, persona_id, model, created_at
-            FROM agent_messages 
-            WHERE status='complete' AND response IS NOT NULL AND length(response) > 100
-            AND message NOT LIKE '%memory extraction%'
-            AND message NOT LIKE '%Extract ONLY durable%'
-            AND persona_id IS NOT NULL AND persona_id != ''
-            ORDER BY created_at DESC LIMIT ?
-        """, (limit,)).fetchall()
-        conn.close()
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-    extracted = 0
-    for row in rows:
-        try:
-            _cortex_extract_and_route(
-                row["message"] or "", row["response"] or "",
-                persona_id=row["persona_id"] or "",
-                backend=row["to_agent"] or ""
-            )
-            extracted += 1
-        except Exception as e:
-            log.debug("Batch extraction failed for %s: %s", row["run_id"], e)
-        time.sleep(2)  # Don't spam backends
-
-    return {"ok": True, "processed": len(rows), "extracted": extracted}
-
-
-
-def _cortex_consolidate_once():
-    """Run one cortex consolidation pass. Returns summary string."""
-    return "DISABLED: Cortex removed in Phase 1"  # DISABLED: full deletion in Phase 2
-    import time as _t
-    prefs = _config.get("preferences", {})
-    conn = _db_conn()
-    try:
-        rows = conn.execute(
-            "SELECT id, fact, scope, scope_id, importance, keywords, memory_type FROM cortex_memories "
-            "WHERE consolidated_into IS NULL AND status='active'"
-        ).fetchall()
-
-        # Group by scope + memory_type (only merge within same type)
-        groups = {}
-        for row in rows:
-            key = (row[2], row[3], row[6] or "semantic")  # scope, scope_id, memory_type
-            groups.setdefault(key, []).append(row)
-
-        merged_count = 0
-        merged_ids = set()
-        for key, members in groups.items():
-            if len(members) < 2:
-                continue
-            # Compare all pairs, skip already-merged
-            for i in range(len(members)):
-                if members[i][0] in merged_ids:
-                    continue
-                for j in range(i + 1, len(members)):
-                    if members[j][0] in merged_ids:
-                        continue
-                    kw_i = _cortex_tokenize(members[i][1])
-                    kw_j = _cortex_tokenize(members[j][1])
-                    if _jaccard_similarity(kw_i, kw_j) >= 0.4:
-                        # Keep the one with higher importance
-                        keep = members[i] if members[i][4] >= members[j][4] else members[j]
-                        discard = members[j] if keep == members[i] else members[i]
-                        conn.execute("DELETE FROM cortex_memories WHERE id=?", (discard[0],))
-                        merged_ids.add(discard[0])
-                        merged_count += 1
-
-        # v0.28.3 — Staleness: auto-archive old unused memories
-        archive_days = prefs.get("cortex_archive_days", 60)
-        min_use = prefs.get("cortex_min_use_count", 3)
-        now = _t.time()
-        archive_threshold = now - (archive_days * 86400)
-        quick_archive_threshold = now - (7 * 86400)
-        archived_count = 0
-
-        # Rule 1: last_used_at > N days AND use_count < M → archived
-        stale = conn.execute(
-            "SELECT id FROM cortex_memories WHERE status='active' AND consolidated_into IS NULL "
-            "AND last_used_at IS NOT NULL AND last_used_at < ? AND use_count < ?",
-            (archive_threshold, min_use)
-        ).fetchall()
-        for row in stale:
-            conn.execute("UPDATE cortex_memories SET status='archived', updated_at=strftime('%s','now') WHERE id=?", (row[0],))
-            archived_count += 1
-
-        # Rule 2: importance <= 2 AND use_count == 0 AND age > 7 days → archived
-        low_imp = conn.execute(
-            "SELECT id FROM cortex_memories WHERE status='active' AND consolidated_into IS NULL "
-            "AND importance <= 2 AND use_count = 0 AND created_at < ?",
-            (quick_archive_threshold,)
-        ).fetchall()
-        for row in low_imp:
-            conn.execute("UPDATE cortex_memories SET status='archived', updated_at=strftime('%s','now') WHERE id=?", (row[0],))
-            archived_count += 1
-
-        # v0.28.45 — .md dedup: delete facts already covered by persona .md files
-        md_deleted = 0
-        all_active = conn.execute(
-            "SELECT id, fact, scope, scope_id FROM cortex_memories "
-            "WHERE consolidated_into IS NULL AND status='active'"
-        ).fetchall()
-        for mem in all_active:
-            if _fact_is_low_value(mem[1]) or _fact_covered_by_md(mem[1], mem[2], mem[3] or ""):
-                conn.execute("DELETE FROM cortex_memories WHERE id=?", (mem[0],))
-                md_deleted += 1
-
-        if merged_count or archived_count or md_deleted:
-            conn.commit()
-            if merged_count:
-                log.info("Cortex consolidated %d memories", merged_count)
-                mlog.emit("info", "cortex", "cortex.consolidate", f"Merged {merged_count} memories")
-            if archived_count:
-                log.info("Cortex auto-archived %d stale memories", archived_count)
-                mlog.emit("info", "cortex", "cortex.staleness", f"Auto-archived {archived_count} stale memories")
-            if md_deleted:
-                log.info("Cortex deleted %d facts covered by .md files", md_deleted)
-                mlog.emit("info", "cortex", "cortex.md_dedup", f"Deleted {md_deleted} facts already in .md files")
-        # v0.28.52 — Confidence decay: unused facts >7 days old lose 0.05 per cycle
-        decay_threshold = now - (7 * 86400)
-        decayed_count = 0
-        decay_rows = conn.execute(
-            "SELECT id, confidence FROM cortex_memories WHERE status='active' "
-            "AND consolidated_into IS NULL AND use_count = 0 AND created_at < ?",
-            (decay_threshold,)
-        ).fetchall()
-        for dr in decay_rows:
-            new_conf = max(0.1, (dr[1] or 0.5) - 0.05)
-            if new_conf < dr[1]:
-                conn.execute("UPDATE cortex_memories SET confidence=?, updated_at=strftime('%s','now') WHERE id=?",
-                             (round(new_conf, 2), dr[0]))
-                decayed_count += 1
-        # Auto-archive facts with confidence <= 0.15
-        low_conf = conn.execute(
-            "SELECT id FROM cortex_memories WHERE status='active' AND consolidated_into IS NULL AND confidence <= 0.15"
-        ).fetchall()
-        for lc in low_conf:
-            conn.execute("UPDATE cortex_memories SET status='archived', updated_at=strftime('%s','now') WHERE id=?", (lc[0],))
-            archived_count += 1
-
-        if decayed_count or merged_count or archived_count or md_deleted:
-            conn.commit()
-
-        _parts = []
-        if merged_count: _parts.append(f"merged {merged_count}")
-        if archived_count: _parts.append(f"archived {archived_count}")
-        if md_deleted: _parts.append(f"cleaned {md_deleted}")
-        if decayed_count: _parts.append(f"decayed {decayed_count}")
-        return " | ".join(_parts) if _parts else "clean — nothing to do"
-    except Exception as e:
-        log.debug("Cortex consolidation error: %s", e)
-        raise
-    finally:
-        conn.close()
-
 
 def _mem_consolidation_loop():
     """Memory V2: background consolidation loop (every 4 hours).
@@ -2790,19 +2109,19 @@ def _project_knowledge_brief(project_id: str) -> dict:
     }
     try:
         conn = _db_conn()
-        # Project-scoped Cortex memories
+        # Project-scoped memories (V2)
         rows = conn.execute(
-            "SELECT fact, source_id, importance, confidence, evidence_count, keywords, use_count, created_at "
-            "FROM cortex_memories WHERE scope='project' AND scope_id=? AND status='active' "
+            "SELECT text, source_id, importance, confidence, evidence_count, keywords, use_count, created_at "
+            "FROM memories WHERE scope='project' AND scope_id=? AND status='active' "
             "ORDER BY confidence DESC, importance DESC LIMIT 50", (pid,)
         ).fetchall()
         total = conn.execute(
-            "SELECT COUNT(*) FROM cortex_memories WHERE scope='project' AND scope_id=? AND status='active'", (pid,)
+            "SELECT COUNT(*) FROM memories WHERE scope='project' AND scope_id=? AND status='active'", (pid,)
         ).fetchone()[0]
         brief["knowledge"]["total"] = total
         kw_counts = {}
         for r in rows:
-            fact = {"fact": r["fact"], "confidence": r["confidence"], "importance": r["importance"],
+            fact = {"fact": r["text"], "confidence": r["confidence"], "importance": r["importance"],
                     "evidence_count": r["evidence_count"], "use_count": r["use_count"]}
             # Agent attribution
             if r["source_id"]:
@@ -3698,36 +3017,6 @@ def _state_seed_defaults():
         log.warning("State seed failed: %s", e)
 
 
-def _purge_legacy_cortex_dev_memories():
-    """Remove stale app-development memories from the legacy Cortex ledger."""
-    patterns = [
-        "%porter was created by%",
-        "%porter helps improve inter-agent communication%",
-        "%porter automatically identifies vague user prompts%",
-        "%porter ensures that all interactions with the platform are handled%",
-        "%porter can be configured to optimize worker performance%",
-        "%porter handles the runtime and outcome of tasks%",
-        "%porter ensures that workers follow the guidelines%",
-        "%porter maintains consistency and quality across the platform%",
-        "%market opportunity for porter%",
-        "%porter's unique advantage%",
-        "%porter's strategic direction%",
-        "%moe is interested in analyzing external product ideas%",
-    ]
-    try:
-        conn = _db_conn()
-        removed = 0
-        for pat in patterns:
-            before = conn.total_changes
-            conn.execute("DELETE FROM cortex_memories WHERE lower(fact) LIKE ?", (pat,))
-            removed += conn.total_changes - before
-        conn.commit()
-        conn.close()
-        if removed:
-            log.info("Purged %d legacy cortex dev memories", removed)
-    except Exception as e:
-        log.warning("Legacy cortex purge failed: %s", e)
-
 
 # ─── Memory V2: Core Functions (v0.31.86) ────────────────────────────────────
 
@@ -3775,19 +3064,6 @@ def _migrate_to_memory_v2(conn):
         except Exception as _e:
             mlog.emit("warn", "system", "exception.swallowed",
                       f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-        # cortex_memories -> memories (semantic->signal, episodic->episode)
-        try:
-            for r in conn.execute("SELECT fact, scope, scope_id, source_type, source_id, importance, keywords, memory_type, status, confidence, last_used_at, use_count, evidence_count, created_at, updated_at FROM cortex_memories WHERE consolidated_into IS NULL").fetchall():
-                mt = r['memory_type'] or 'semantic'
-                kind = 'episode' if mt == 'episodic' else 'signal'
-                trust = 'medium' if mt == 'episodic' else 'low'
-                conn.execute(
-                    "INSERT INTO memories (memory_kind, trust_tier, scope, scope_id, text, status, review_state, source_type, source_id, confidence, importance, keywords, last_used_at, use_count, evidence_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (kind, trust, r['scope'] or 'global', r['scope_id'] or '', r['fact'], r['status'] or 'active', r['source_type'] or 'dispatch', r['source_id'] or '', r['confidence'] or 0.5, r['importance'] or 5, r['keywords'] or '', r['last_used_at'], r['use_count'] or 0, r['evidence_count'] or 1, r['created_at'], r['updated_at']))
-                migrated += 1
-        except Exception as _e:
-            mlog.emit("warn", "system", "exception.swallowed",
-                      f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         conn.commit()
         # Rebuild FTS index
         try:
@@ -3829,7 +3105,7 @@ def _mem_insert(memory_kind='signal', text='', scope='global', scope_id='', trus
     imp = max(1, min(10, int(importance or 5)))
     kw = str(keywords or '').strip()
     if not kw:
-        kw = ','.join(sorted(_cortex_tokenize(text)))
+        kw = ','.join(sorted(w.lower() for w in text.split() if len(w) > 2))
     try:
         conn = _db_conn()
         cur = conn.execute(
@@ -6499,19 +5775,13 @@ def _delete_session_file(session_id: str, source: str) -> dict:
     # Also archive it (in case file delete didn't work, still hide it)
     _archive_session(session_id, source)
 
-    # Remove learnings + cascade cortex memories
+    # Remove learnings
     try:
         conn = _db_conn()
         conn.execute("DELETE FROM session_learnings WHERE session_id=?", (session_id,))
         conn.execute("DELETE FROM session_custom_names WHERE session_id=?", (session_id,))
-        # Cascade: delete cortex memories linked to this session (any source_type)
-        conn.execute("DELETE FROM cortex_memories WHERE source_id=?", (session_id,))
         conn.commit()
-        # Broadcast badge update
-        import time as _t_cas
-        new_1h = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='active' AND created_at > ?", (_t_cas.time() - 3600,)).fetchone()[0]
         conn.close()
-        _emit_event("cortex:update", {"new_facts": 0, "new_1h": new_1h, "action": "cascade_delete"})
     except Exception as _e:
         mlog.emit("warn", "system", "exception.swallowed",
                   f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
@@ -6535,20 +5805,9 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
             conn = _db_conn()
             row = conn.execute("SELECT learnings, backend_used, extracted_at FROM session_learnings WHERE session_id=?", (session_id,)).fetchone()
             if row and row[0]:
-                # Also fetch structured facts from cortex_memories
-                _cached_facts = []
-                try:
-                    _cf_rows = conn.execute(
-                        "SELECT id, fact, scope, importance FROM cortex_memories WHERE source_type='session' AND source_id=? AND consolidated_into IS NULL ORDER BY id",
-                        (session_id,)
-                    ).fetchall()
-                    _cached_facts = [{"id": r[0], "fact": r[1], "scope": r[2], "importance": r[3]} for r in _cf_rows]
-                except Exception as _e:
-                    mlog.emit("warn", "system", "exception.swallowed",
-                              f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
                 conn.close()
                 return {
-                    "ok": True, "learnings": row[0], "facts": _cached_facts,
+                    "ok": True, "learnings": row[0], "facts": [],
                     "llm_used": True, "cached": True,
                     "session_id": session_id, "source": source,
                 }
@@ -6691,7 +5950,11 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
                     raw = result["text"].strip()
                     llm_used = True
                     # Try to parse as JSON for structured facts
-                    parsed_json = _parse_cortex_json(raw)
+                    # Inline JSON parse (cortex parser removed)
+                    try:
+                        import json as _pj; parsed_json = _pj.loads(raw)
+                    except Exception:
+                        parsed_json = None
                     if parsed_json and "facts" in parsed_json:
                         structured_facts = parsed_json["facts"][:10]
                         # Build human-readable learnings text as fallback
@@ -6707,9 +5970,9 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
                 log.debug("LLM extract [%s] error: %s", backend, e)
                 continue
 
-    # Persist to DB — both session_learnings (legacy) and cortex_memories (structured)
+    # Persist to DB — session_learnings
     backend_used = ""
-    cortex_ids = []
+    _legacy_ids = []
     # Always persist extraction result (even empty) to prevent infinite retry loops
     try:
         conn = _db_conn()
@@ -6721,54 +5984,10 @@ def _extract_learnings_preview(session_id: str, source: str, force: bool = False
         conn.close()
     except Exception as e:
         log.debug("Failed to persist learnings: %s", e)
-
-    # Store structured facts in cortex_memories
-    if structured_facts:
-        try:
-            conn = _db_conn()
-            # Clear old session-linked facts before re-inserting
-            conn.execute("DELETE FROM cortex_memories WHERE source_type='session' AND source_id=?", (session_id,))
-            # v0.28.49 — load existing facts once for cross-session dedup
-            _existing_facts = [r[0] for r in conn.execute(
-                "SELECT fact FROM cortex_memories WHERE consolidated_into IS NULL AND status='active'"
-            ).fetchall()]
-            for fact_obj in structured_facts:
-                fact_text = str(fact_obj.get("text", "")).strip()
-                if not fact_text or len(fact_text) < 5:
-                    continue
-                scope = fact_obj.get("scope", "global")
-                if scope not in ("global", "agent"):
-                    scope = "global"  # v0.28.48 — no generic "project" scope, must have real ID
-                importance = max(1, min(10, int(fact_obj.get("importance", 5))))
-                # v0.28.45 — skip facts covered by .md files or low-value
-                if _fact_is_low_value(fact_text) or _fact_covered_by_md(fact_text, scope, ""):
-                    continue
-                # v0.28.49 — cross-session dedup: skip if Jaccard match with any existing fact
-                if _is_duplicate(fact_text, _existing_facts):
-                    continue
-                keywords = ",".join(_cortex_tokenize(fact_text))
-                conn.execute(
-                    """INSERT INTO cortex_memories (fact, scope, scope_id, source_type, source_id,
-                       importance, keywords, routed_to)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (fact_text, scope, "", "session", session_id,
-                     importance, keywords, "")
-                )
-            conn.commit()
-            # Get the IDs we just inserted
-            rows = conn.execute(
-                "SELECT id, fact, scope, importance FROM cortex_memories WHERE source_type='session' AND source_id=? ORDER BY id",
-                (session_id,)
-            ).fetchall()
-            cortex_ids = [{"id": r[0], "fact": r[1], "scope": r[2], "importance": r[3]} for r in rows]
-            conn.close()
-        except Exception as e:
-            log.debug("Failed to store cortex facts: %s", e)
-
     return {
         "ok": True,
         "learnings": learnings,
-        "facts": cortex_ids,
+        "facts": _legacy_ids,
         "llm_used": llm_used,
         "cached": False,
         "session_id": session_id,
@@ -6938,12 +6157,7 @@ def _flush_session_to_memory(session_id: str, project_id: str = None) -> dict:
         # Fall back to Porter's own memory dir
         target_path = MEMORY_DIR / "session_flushes.md"
 
-    # v0.28.2 — distill session into Cortex DB as episodic memory
-    model_info = f"{provider}/{model}" if model else "unknown"
-    task_desc = first_user_msg if first_user_msg else "(no task description)"
-    distill_result = _cortex_distill_session(session_id, task_desc, model_info, msg_count, project_id=project_id or "")
-
-    return {"ok": True, "message": "Session distilled to Cortex memory", "distilled": distill_result}
+    return {"ok": True, "message": "Session flushed", "distilled": {}}
 
 
 def _flush_claude_session(session_id: str) -> dict:
@@ -7020,11 +6234,7 @@ def _flush_claude_session(session_id: str) -> dict:
 - **Task:** {first_user_msg if first_user_msg else '(no user message found)'}
 """
 
-    # v0.28.2 — distill session into Cortex DB as episodic memory
-    task_desc = first_user_msg if first_user_msg else "(no task description)"
-    distill_result = _cortex_distill_session(session_id, task_desc, "Claude Code", msg_count)
-
-    return {"ok": True, "message": "Session distilled to Cortex memory", "distilled": distill_result}
+    return {"ok": True, "message": "Session flushed", "distilled": {}}
 
 
 def _flush_gemini_session(session_id: str) -> dict:
@@ -7066,10 +6276,7 @@ def _flush_gemini_session(session_id: str) -> dict:
         summary += f"- **Session:** `{session_id[:12]}...`\n"
         if first_msg:
             summary += f"- **Topic:** {first_msg}\n"
-        # v0.28.2 — distill session into Cortex DB as episodic memory
-        task_desc = first_msg if first_msg else "(no task description)"
-        distill_result = _cortex_distill_session(session_id, task_desc, "Gemini CLI", msg_count)
-        return {"ok": True, "distilled": distill_result}
+        return {"ok": True, "distilled": {}}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -10391,96 +9598,6 @@ def _init_trace_tables():
     CREATE INDEX IF NOT EXISTS idx_td_agent ON telemetry_daily(agent_id);
     """)
 
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS cortex_memories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fact TEXT NOT NULL,
-        scope TEXT NOT NULL DEFAULT 'global',
-        scope_id TEXT DEFAULT '',
-        source_type TEXT DEFAULT 'dispatch',
-        source_id TEXT DEFAULT '',
-        importance INTEGER DEFAULT 5,
-        keywords TEXT DEFAULT '',
-        routed_to TEXT DEFAULT '',
-        consolidated_into INTEGER DEFAULT NULL,
-        created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
-        updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
-    );
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_scope ON cortex_memories(scope, scope_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_active ON cortex_memories(consolidated_into)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_list ON cortex_memories(status, consolidated_into, scope, scope_id, created_at DESC)")
-
-    # v0.29.8 — Squads tables
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS squads (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        description TEXT DEFAULT '',
-        dispatch_policy TEXT DEFAULT 'best_fit',
-        color TEXT DEFAULT '#6366f1',
-        active INTEGER DEFAULT 1,
-        project_id TEXT DEFAULT '',
-        created_at REAL DEFAULT (strftime('%s','now'))
-    )""")
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS squad_members (
-        squad_id TEXT NOT NULL,
-        persona_id TEXT NOT NULL,
-        role TEXT DEFAULT 'member',
-        position INTEGER DEFAULT 50,
-        PRIMARY KEY (squad_id, persona_id)
-    )""")
-    # v0.30.43 — Squad-Project binding
-    _sq_cols = [r["name"] for r in conn.execute("PRAGMA table_info(squads)").fetchall()]
-    if "project_id" not in _sq_cols:
-        conn.execute("ALTER TABLE squads ADD COLUMN project_id TEXT DEFAULT ''")
-    # v0.29.25 — Hook Profiles: dispatch strictness per agent
-    try:
-        conn.execute("ALTER TABLE personas ADD COLUMN hook_profile TEXT DEFAULT 'balanced'")
-    except Exception as _e:
-        mlog.emit("warn", "system", "exception.swallowed",
-                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-    try:
-        conn.execute("ALTER TABLE personas ADD COLUMN dispatch_mode TEXT DEFAULT 'contributor'")
-    except Exception as _e:
-        mlog.emit("warn", "system", "exception.swallowed",
-                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-    # v0.29.27 — Session Lifecycle: chat session state machine
-    try: conn.execute("ALTER TABLE chats ADD COLUMN session_state TEXT DEFAULT 'active'")
-    except Exception as _e:
-        mlog.emit("warn", "system", "exception.swallowed",
-                  f"Non-critical operation failed: {_e}", extra={"exc_type": type(_e).__name__})
-    try: conn.execute("ALTER TABLE chats ADD COLUMN last_activity REAL")
-    except Exception as _e:
-        mlog.emit("warn", "system", "exception.swallowed",
-                  f"Non-critical operation failed: {_e}", extra={"exc_type": type(_e).__name__})
-    try: conn.execute("ALTER TABLE chats ADD COLUMN paused_at REAL")
-    except Exception as _e:
-        mlog.emit("warn", "system", "exception.swallowed",
-                  f"Non-critical operation failed: {_e}", extra={"exc_type": type(_e).__name__})
-    try: conn.execute("ALTER TABLE chats ADD COLUMN archived_at REAL")
-    except Exception as _e:
-        mlog.emit("warn", "system", "exception.swallowed",
-                  f"Non-critical operation failed: {_e}", extra={"exc_type": type(_e).__name__})
-    # v0.29.41 — removed auto-seed (squads are user-managed, not derived from agent_group)
-    # v0.28.0 — Cortex memory refactor: add lifecycle columns
-    for _col_def in [
-        ("memory_type", "TEXT DEFAULT 'semantic'"),
-        ("status", "TEXT DEFAULT 'active'"),
-        ("confidence", "REAL DEFAULT 1.0"),
-        ("superseded_by_id", "INTEGER DEFAULT NULL"),
-        ("last_used_at", "REAL DEFAULT NULL"),
-        ("use_count", "INTEGER DEFAULT 0"),
-        ("evidence_count", "INTEGER DEFAULT 1"),
-    ]:
-        try:
-            conn.execute(f"ALTER TABLE cortex_memories ADD COLUMN {_col_def[0]} {_col_def[1]}")
-        except Exception as _e:  # column already exists
-            mlog.emit("warn", "db", "exception.swallowed",
-                      f"Non-critical DB migration step failed: {_e}", extra={"exc_type": type(_e).__name__})
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_status ON cortex_memories(status)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_cm_type ON cortex_memories(memory_type)")
 
     conn.execute("""
     CREATE TABLE IF NOT EXISTS skill_proposals (
@@ -20944,7 +20061,6 @@ function switchModule(name) {
     if (pc) pc.value = '';
   }
   if (name === 'files') name = 'projects';
-  if (name === 'cortex') name = 'projects';
   if (name === 'extensions') name = 'tools';
   // connections is now its own module
   if (name === 'skills') name = 'agents';
@@ -20979,40 +20095,10 @@ function switchModule(name) {
   const loaders = {
     overview: function() {
       renderChatMessages(); populateChatModels(); populateChatRoutes(); loadPersonas();
-      // Cortex badge removed in v0.28.12
-      // Connect SSE for real-time cortex badge updates
-      if (!window._cortexSseId) {
-        window._cortexSseId = _sseSubscribe(function(d) {
+      // SSE subscription for real-time overview refresh
+      if (!window._overviewSseId) {
+        window._overviewSseId = _sseSubscribe(function(d) {
           try {
-            if (d.type === 'cortex:extracting') {
-              // Show extracting indicator in chat
-              var chatMod = document.getElementById('overview-module');
-              if (chatMod && chatMod.classList.contains('active')) {
-                var chatMsgs = document.getElementById('chat-messages');
-                if (chatMsgs) {
-                  var existing = document.getElementById('cx-chat-extract');
-                  if (existing) existing.remove();
-                  chatMsgs.insertAdjacentHTML('beforeend', '<div id="cx-chat-extract" style="text-align:center;padding:6px;font-size:11px;color:var(--text3);animation:fadeIn 0.2s"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber,#fbbf24);margin-right:6px;animation:cx-shimmer 1s infinite"></span>Extracting memories\u2026</div>');
-                  chatMsgs.scrollTop = chatMsgs.scrollHeight;
-                }
-              }
-            }
-            if (d.type === 'cortex:update' && d.data) {
-              _updateCortexBadge(d.data.new_1h || 0);
-              _scheduleOverviewRefresh(180);
-              // Update chat extraction indicator
-              var cxChatEx = document.getElementById('cx-chat-extract');
-              if (cxChatEx) {
-                var nf = d.data.new_facts || 0;
-                if (nf > 0) {
-                  cxChatEx.innerHTML = '<span style="color:var(--green,#4ade80)">\u2713</span> ' + nf + ' memor' + (nf === 1 ? 'y' : 'ies') + ' extracted';
-                  cxChatEx.style.color = 'var(--green,#4ade80)';
-                } else {
-                  cxChatEx.innerHTML = '<span style="color:var(--text3)">No new memories</span>';
-                }
-                setTimeout(function() { if (cxChatEx.parentNode) { cxChatEx.style.transition='opacity 0.5s'; cxChatEx.style.opacity='0'; setTimeout(function(){ if(cxChatEx.parentNode) cxChatEx.remove(); },600); } }, 4000);
-              }
-            }
             if (d.type === 'bridge:dispatch') _scheduleOverviewRefresh(120);
             if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleOverviewRefresh(220);
             if (_isCoordinationEventType(d.type)) _scheduleOverviewRefresh(200);
@@ -21230,7 +20316,7 @@ async function loadWorkflowRegistry() {
   try {
     var data = await api('/api/workflows');
     if (!data || !data.workflows) { grid.innerHTML = '<div class="empty-state" style="padding:40px 20px"><div style="font-size:28px;opacity:.4">\u2699\ufe0f</div><p>No workflows registered</p><p style="font-size:12px;color:var(--text3);margin-top:-4px">Internal automation workflows appear here when configured</p></div>'; return; }
-    var hiddenWorkflowIds = { cortex_consolidation: true, memory_extraction: true };
+    var hiddenWorkflowIds = { memory_extraction: true };
     var wfs = (data.workflows || []).filter(function(wf) { return !hiddenWorkflowIds[wf.id]; });
     if (countEl) countEl.textContent = wfs.length + ' workflow' + (wfs.length !== 1 ? 's' : '');
     grid.innerHTML = wfs.map(function(wf) {
@@ -27572,7 +26658,7 @@ async function _deleteMemoryFact(factId, btn) {
   if (!ok) return;
   btn.disabled = true;
   try {
-    var resp = await api('/api/cortex/memories/' + factId + '/delete', {});
+    var resp = await api('/api/memory/' + factId + '/delete', {});
     if (resp && resp.ok) {
       var row = btn.closest('.mem-fact-row');
       if (row) { row.style.opacity = '0'; setTimeout(function() { row.remove(); }, 200); }
@@ -27613,7 +26699,7 @@ async function _editMemoryFact(factId, btn) {
       return;
     }
     try {
-      var resp = await api('/api/cortex/memories/' + factId + '/update', { fact: newText });
+      var resp = await api('/api/memory/' + factId + '/update', { fact: newText });
       var sp = document.createElement('span');
       sp.style.cssText = 'flex:1;color:var(--text)';
       sp.textContent = (resp && resp.ok) ? newText : oldText;
@@ -27822,7 +26908,6 @@ function toggleSettingsNav() {
 }
 function switchSettingsTab(tab) {
   if (tab === 'usage') tab = 'agents';
-  if (tab === 'cortex') tab = 'changelog';
   const modules = ['tasks','agents','policy','policies'];
   if (modules.includes(tab)) { switchModule(tab === 'policy' ? 'policies' : tab); return; }
   stopTsPolling();
@@ -33013,1198 +32098,6 @@ async function loadModels() {
 
 
 
-var _cortexMemories = [];
-var _cortexAgents = [];
-async function _loadCortexTab() {
-  // v0.28.49 — Show loading indicator immediately on canvas
-  var _lcCanvas = document.getElementById('cx-graph-canvas');
-  if (_lcCanvas) {
-    var _lcDpr = window.devicePixelRatio || 1;
-    var _lcP = _lcCanvas.parentElement;
-    var _lcW = _lcP ? _lcP.clientWidth : 700;
-    var _lcH = _lcP ? _lcP.clientHeight : 400;
-    if (_lcW < 100) _lcW = 700;
-    if (_lcH < 100) _lcH = 400;
-    _lcCanvas.width = _lcW * _lcDpr; _lcCanvas.height = _lcH * _lcDpr;
-    _lcCanvas.style.width = _lcW + 'px'; _lcCanvas.style.height = _lcH + 'px';
-    var _lcCtx = _lcCanvas.getContext('2d');
-    if (_lcCtx) {
-      _lcCtx.setTransform(_lcDpr, 0, 0, _lcDpr, 0, 0);
-      var _lcBg = getComputedStyle(document.documentElement).getPropertyValue('--bg2').trim() || 'var(--bg)';
-      var _lcFg = getComputedStyle(document.documentElement).getPropertyValue('--text3').trim() || 'var(--text3)';
-      _lcCtx.fillStyle = _lcBg; _lcCtx.fillRect(0, 0, _lcW, _lcH);
-      _lcCtx.fillStyle = _lcFg; _lcCtx.font = '14px system-ui'; _lcCtx.textAlign = 'center';
-      _lcCtx.fillText('Loading memory map\u2026', _lcW/2, _lcH/2);
-    }
-  }
-  // Load squads for filtering
-  _loadCortexSquads();
-  // Load agents list for routing dropdowns
-  try {
-    var aData = await api('/api/personas');
-    _cortexAgents = (aData && aData.personas) || [];
-  } catch(e) { _cortexAgents = []; }
-  // Load stats
-  try {
-    var stats = await api('/api/cortex/stats');
-    if (stats) {
-      var new1h = stats.new_1h || 0;
-      _updateCortexBadge(new1h);
-    }
-  } catch(e) {}
-  // Load memories
-  try {
-    var mems = await api('/api/cortex/memories?limit=500');
-    _cortexMemories = (mems && mems.memories) || [];
-    // Ensure persona map is available for scope name resolution
-    if (!window._personaMap || Object.keys(window._personaMap).length === 0) {
-      try {
-        var pdata = await api('/api/personas');
-        if (pdata && pdata.personas) {
-          window._personaMap = {};
-          pdata.personas.forEach(function(p) { window._personaMap[p.id] = p.name; });
-        }
-      } catch(e) {}
-    }
-    _renderCortexMemories(_cortexMemories);
-
-  } catch(e) {
-    var el = document.getElementById('cx-memory-list');
-    if (el) el.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--err)">Failed to load memories</div>';
-  }
-  // Always init the graph (defer to let layout settle)
-  requestAnimationFrame(function() { setTimeout(function() {
-    _initMemoryGraph();
-    // Init graph as locked (nodes frozen, canvas still resizes)
-    window._cxGraphLocked = true;
-    var lockBtn = document.getElementById('cx-lock-btn');
-    if (lockBtn) { lockBtn.innerHTML = '\u{1f512}'; lockBtn.style.color = 'var(--accent)'; lockBtn.title = 'Unlock layout (nodes frozen, canvas still resizes)'; }
-  }, 50); });
-}
-
-function _updateCortexBadge(count) {
-  // Badge removed in v0.28.12 — no-op kept to avoid SSE handler errors
-}
-
-// _toggleShowRouted removed in v0.28.1 — routing concept eliminated
-
-function _renderCortexMemories(memories, isFiltered) {
-  var el = document.getElementById('cx-memory-list');
-  if (!el) return;
-  if (!memories.length) {
-    if (isFiltered) {
-      el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3)"><div style="font-size:13px">No matches</div></div>';
-    } else {
-      el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3)"><div style="font-size:28px;margin-bottom:8px">\u2728</div><div style="font-size:13px">No memories yet</div><div style="font-size:12px;margin-top:4px">Dispatch to an agent to start building memory</div></div>';
-    }
-    return;
-  }
-  var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
-  var html = '';
-  memories.forEach(function(m) {
-    var sc = m.scope || 'global';
-    var scColor = scopeColors[sc] || 'var(--text3)';
-    var imp = m.importance || 5;
-    var memType = m.memory_type || 'semantic';
-    var memStatus = m.status || 'active';
-    var impBar = '<span style="display:inline-flex;gap:1px;margin-left:4px" title="Importance ' + imp + '/10">';
-    for (var i = 0; i < 5; i++) { impBar += '<span style="width:4px;height:10px;border-radius:1px;background:' + (i < Math.ceil(imp/2) ? 'var(--accent)' : 'var(--border)') + '"></span>'; }
-    impBar += '</span>';
-    // Status dot (green=active, gray=archived)
-    var statusDot = '<span style="width:6px;height:6px;border-radius:50%;background:' + (memStatus === 'active' ? 'var(--green,#4ade80)' : 'var(--text3)') + ';display:inline-block" title="' + memStatus + '"></span>';
-    // Type pill removed — redundant with scope tag
-    html += '<div class="cx-mem-card cx-mem-row" data-scope="' + sc + '" data-scope-id="' + (m.scope_id || '') + '" data-id="' + m.id + '" data-type="' + memType + '" data-status="' + memStatus + '" style="padding:8px 10px">'
-      + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
-      + statusDot
-      + (function() {
-        var label = sc;
-        if (sc === 'agent') { if (m.scope_id) { var pMap = window._personaMap || {}; label = pMap[m.scope_id] || m.scope_id.substring(0, 8); } else { label = 'Unassigned'; } }
-        return '<span style="font-size:10px;font-weight:600;color:' + scColor + ';text-transform:uppercase;background:color-mix(in srgb,' + scColor + ' 12%,transparent);padding:2px 8px;border-radius:4px;letter-spacing:0.5px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle">' + escHtml(label) + '</span>';
-      })()
-      + '<div style="flex:1"></div>'
-      + '<span style="font-size:10px;color:var(--text3);white-space:nowrap">' + (m.created_at ? new Date(m.created_at * 1000).toLocaleDateString(undefined, {month:'short',day:'numeric'}) : '') + '</span>'
-      + (memStatus === 'active'
-        ? '<button class="btn btn-ghost" style="font-size:11px;padding:2px 5px;color:var(--text3)" onclick="event.stopPropagation();_archiveCortexMem(' + m.id + ',this)" title="Archive">\u2193</button>'
-        : '<button class="btn btn-ghost" style="font-size:11px;padding:2px 5px;color:var(--green,#4ade80)" onclick="event.stopPropagation();_restoreCortexMem(' + m.id + ',this)" title="Restore">\u2191</button>')
-      + '<button class="btn btn-ghost" style="font-size:11px;padding:2px 5px" onclick="event.stopPropagation();_editCortexMem(' + m.id + ',this)" title="Edit">\u270f\ufe0e</button>'
-      + '<button class="btn btn-ghost" style="font-size:11px;padding:2px 5px;color:var(--red,var(--danger));flex-shrink:0" onclick="event.stopPropagation();_deleteCortexMem(' + m.id + ',this)" title="Delete">\u00d7</button>'
-      + '</div>'
-      + '<div class="cx-fact-text" style="font-size:13px;color:var(--text);line-height:1.5;cursor:pointer;word-break:break-word;overflow-wrap:break-word" onclick="_editCortexMem(' + m.id + ',this)" title="Click to edit">' + escHtml(m.fact || '') + '</div>'
-      + '</div>';
-  });
-  el.innerHTML = html;
-}
-
-function _showCortexFilterBar(label) {
-  var bar = document.getElementById('cx-filter-bar');
-  var lbl = document.getElementById('cx-filter-label');
-  if (bar) { bar.style.display = ''; }
-  if (lbl) { lbl.textContent = label; }
-}
-var _cortexSquads = [];
-async function _loadCortexSquads() {
-  try {
-    var data = await api('/api/squads');
-    _cortexSquads = data && data.squads ? data.squads : (Array.isArray(data) ? data : []);
-    var row = document.getElementById('cx-squad-filter-row');
-    if (!row || !_cortexSquads.length) return;
-    var html = '<span style="font-size:10px;color:var(--text3);margin-right:2px">Squad:</span>';
-    html += '<button class="btn btn-ghost cx-squad-btn" onclick="_filterCortexSquad(null,this)" style="font-size:10px;padding:2px 7px">All</button>';
-    _cortexSquads.forEach(function(sq) {
-      var c = sq.color || 'var(--accent)';
-      var memberIds = (sq.members || []).map(function(m) { return m.id || m.persona_id; }).join(',');
-      html += '<button class="btn btn-ghost cx-squad-btn" data-squad-ids="' + memberIds + '" onclick="_filterCortexSquad(\x27' + (sq.id||'') + '\x27,this)" style="font-size:10px;padding:2px 7px;color:' + c + '">' + escHtml(sq.name) + '</button>';
-    });
-    row.innerHTML = html;
-  } catch(e) { console.debug('squad load:', e); }
-}
-function _filterCortexSquad(squadId, btn) {
-  document.querySelectorAll('.cx-squad-btn').forEach(function(b) { b.classList.remove('active'); });
-  if (btn) btn.classList.add('active');
-  if (!squadId) { _clearCortexFilter(); return; }
-  // Find squad members
-  var squad = _cortexSquads.find(function(s) { return s.id === squadId; });
-  if (!squad) return;
-  var memberIds = (squad.members || []).map(function(m) { return m.id || m.persona_id; });
-  // Filter memories: agent-scoped where scope_id is in this squad
-  var filtered = (_cortexMemories || []).filter(function(m) {
-    return m.scope === 'agent' && memberIds.indexOf(m.scope_id) !== -1;
-  });
-  _renderCortexMemories(filtered, true);
-  var label = (squad.name || 'Squad') + ' — ' + filtered.length + ' memories';
-  _showCortexFilterBar(label);
-}
-function _clearCortexFilter() {
-  var bar = document.getElementById('cx-filter-bar');
-  if (bar) bar.style.display = 'none';
-  document.querySelectorAll('.cx-scope-filter').forEach(function(b,i) { b.classList.toggle('active', i === 0); });
-  _renderCortexMemories(_cortexMemories || []);
-  var search = document.getElementById('cx-search');
-  if (search) search.value = '';
-}
-
-async function _archiveCortexMem(id, btn) {
-  btn.disabled = true;
-  try {
-    var r = await api('/api/cortex/memories/' + id + '/status', { status: 'archived' });
-    if (r && r.ok) {
-      var card = btn.closest('.cx-mem-card');
-      if (card) {
-        card.setAttribute('data-status', 'archived');
-        // Update status dot
-        var dot = card.querySelector('span[title]');
-        if (dot && dot.style.borderRadius === '50%') { dot.style.background = 'var(--text3)'; dot.title = 'archived'; }
-        // Swap button to Restore
-        btn.textContent = 'Restore';
-        btn.style.color = 'var(--green,#4ade80)';
-        btn.onclick = function() { _restoreCortexMem(id, btn); };
-      }
-      toast('Archived');
-    } else { toast('Failed', 'err'); }
-  } catch(e) { toast('Failed', 'err'); }
-  btn.disabled = false;
-}
-
-async function _restoreCortexMem(id, btn) {
-  btn.disabled = true;
-  try {
-    var r = await api('/api/cortex/memories/' + id + '/status', { status: 'active' });
-    if (r && r.ok) {
-      var card = btn.closest('.cx-mem-card');
-      if (card) {
-        card.setAttribute('data-status', 'active');
-        var dot = card.querySelector('span[title]');
-        if (dot && dot.style.borderRadius === '50%') { dot.style.background = 'var(--green,#4ade80)'; dot.title = 'active'; }
-        btn.textContent = 'Archive';
-        btn.style.color = 'var(--text3)';
-        btn.onclick = function() { _archiveCortexMem(id, btn); };
-      }
-      toast('Restored');
-    } else { toast('Failed', 'err'); }
-  } catch(e) { toast('Failed', 'err'); }
-  btn.disabled = false;
-}
-
-async function _deleteCortexMem(id, btn) {
-  var ok = await porterConfirm('Delete Memory', 'Permanently remove this fact?', {confirmLabel: 'Delete', danger: true});
-  if (!ok) return;
-  btn.disabled = true;
-  try {
-    var r = await api('/api/cortex/memories/' + id + '/delete', {});
-    if (r && r.ok) {
-      var card = btn.closest('.cx-mem-card');
-      if (card) { card.style.transition = 'opacity 0.2s'; card.style.opacity = '0'; setTimeout(function() { card.remove(); }, 250); }
-      toast('Deleted');
-    } else { toast('Failed', 'err'); btn.disabled = false; }
-  } catch(e) { toast('Failed', 'err'); btn.disabled = false; }
-}
-
-async function _editCortexMem(id, btn) {
-  var card = btn.closest('.cx-mem-card');
-  if (!card) return;
-  var textEl = card.querySelector('.cx-fact-text');
-  if (!textEl) return;
-  var oldText = textEl.textContent;
-  var scopeEl = card.querySelector('[data-scope]') || card;
-  var currentScope = card.getAttribute('data-scope') || 'global';
-  var currentScopeId = card.getAttribute('data-scope-id') || '';
-
-  // Build modal
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.15s';
-  var modal = document.createElement('div');
-  modal.style.cssText = 'background:var(--raised);border:1px solid var(--border2);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:24px;width:520px;max-width:90vw;max-height:80vh;overflow-y:auto';
-  modal.innerHTML = '<div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:16px">Edit Memory</div>'
-    + '<label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Fact</label>'
-    + '<textarea id="cx-edit-fact" style="width:100%;min-height:80px;font-size:13px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);resize:vertical;font-family:inherit;line-height:1.5;outline:none;box-sizing:border-box" onfocus="this.style.borderColor=\'var(--accent)\'" onblur="this.style.borderColor=\'var(--border)\'">' + escHtml(oldText) + '</textarea>'
-    + '<div style="display:flex;gap:12px;margin-top:12px">'
-    + '<label style="font-size:12px;color:var(--text3);flex:1">'
-    + 'Scope'
-    + '<select id="cx-edit-scope" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)">'
-    + '<option value="global"' + (currentScope === 'global' ? ' selected' : '') + '>Global</option>'
-    + '<option value="agent"' + (currentScope === 'agent' ? ' selected' : '') + '>Agent</option>'
-    + '<option value="project"' + (currentScope === 'project' ? ' selected' : '') + '>Project</option>'
-    + '</select></label>'
-    + '<label id="cx-edit-sid-wrap" style="font-size:12px;color:var(--text3);flex:1;display:' + (currentScope === 'agent' ? 'block' : 'none') + '">Agent'
-    + '<select id="cx-edit-scope-id" style="display:block;width:100%;margin-top:4px;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)">'
-    + '<option value="">\u2014 select \u2014</option>'
-    + (_cortexAgents || []).map(function(a) { return '<option value="' + a.id + '"' + (currentScopeId === a.id ? ' selected' : '') + '>' + escHtml(a.name) + '</option>'; }).join('')
-    + '</select></label>'
-    + '</div>'
-    + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">'
-    + '<button class="btn btn-ghost" id="cx-edit-cancel" style="padding:8px 20px;font-size:13px;border-radius:8px">Cancel</button>'
-    + '<button class="btn" id="cx-edit-save" style="padding:8px 24px;font-size:13px;border-radius:8px;background:var(--accent);color:var(--text);border:none;cursor:pointer">Save</button>'
-    + '</div>';
-  overlay.appendChild(modal);
-  document.body.appendChild(overlay);
-
-  var _scopeSel = document.getElementById('cx-edit-scope');
-  if (_scopeSel) { _scopeSel.onchange = function() { var _l = document.getElementById('cx-edit-sid-wrap'); if (_l) _l.style.display = this.value === 'agent' ? 'block' : 'none'; }; }
-
-  var textarea = document.getElementById('cx-edit-fact');
-  if (textarea) { textarea.focus(); textarea.setSelectionRange(textarea.value.length, textarea.value.length); }
-
-  // Close handlers
-  function _close() { overlay.style.opacity = '0'; setTimeout(function() { overlay.remove(); }, 150); }
-  overlay.onclick = function(e) { if (e.target === overlay) _close(); };
-  document.getElementById('cx-edit-cancel').onclick = _close;
-  document.addEventListener('keydown', function _esc(e) { if (e.key === 'Escape') { _close(); document.removeEventListener('keydown', _esc); } });
-
-  // Save handler
-  document.getElementById('cx-edit-save').onclick = async function() {
-    var newText = textarea.value.trim();
-    var newScope = document.getElementById('cx-edit-scope').value;
-    var newScopeId = '';
-    if (newScope === 'agent') { var _sel = document.getElementById('cx-edit-scope-id'); newScopeId = _sel ? _sel.value : ''; }
-    if (!newText) { toast('Fact cannot be empty', 'warn'); return; }
-    this.disabled = true;
-    this.textContent = 'Saving...';
-    try {
-      var r = await api('/api/cortex/memories/' + id + '/update', { fact: newText, scope: newScope, scope_id: newScopeId });
-      if (r && r.ok) {
-        if (textEl) textEl.textContent = newText;
-        if (card) {
-          card.setAttribute('data-scope', newScope);
-          var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
-          var badge = card.querySelector('span[style*="text-transform:uppercase"]');
-          if (badge) { var _bl = newScope; if (newScope === 'agent' && newScopeId) { var _pm = window._personaMap || {}; _bl = _pm[newScopeId] || newScopeId.substring(0,8); } badge.textContent = _bl; badge.style.color = scopeColors[newScope] || 'var(--text3)'; badge.style.background = 'color-mix(in srgb,' + (scopeColors[newScope] || 'var(--text3)') + ' 12%,transparent)'; }
-        }
-        toast('Memory updated');
-        _close();
-        // Refresh memories + graph after scope change
-        api('/api/cortex/memories?limit=500').then(function(mems) {
-          if (mems && mems.memories) { _cortexMemories = mems.memories; _renderCortexMemories(_cortexMemories); }
-        }).catch(function(){});
-        requestAnimationFrame(function() { _initMemoryGraph(); });
-      } else { toast('Save failed', 'err'); this.disabled = false; this.textContent = 'Save'; }
-    } catch(e) { toast('Save failed', 'err'); this.disabled = false; this.textContent = 'Save'; }
-  };
-}
-
-
-
-// ── Memory Graph — Force-directed visualization ──
-var _graphNodes = [];
-var _graphEdges = [];
-var _graphAnim = null;
-var _graphDrag = null;
-var _graphZoom = {x: 0, y: 0, scale: 1};
-var _graphFilter = 'all';
-
-function _saveGraphPositions() {
-  var pos = {};
-  _graphNodes.forEach(function(n) { pos[n.id] = {x: Math.round(n.x), y: Math.round(n.y)}; });
-  try { localStorage.setItem('porter_graph_positions', JSON.stringify(pos)); } catch(e) {}
-}
-function _saveGraphZoom() {
-  try { localStorage.setItem('porter_graph_zoom', JSON.stringify({x:_graphZoom.x, y:_graphZoom.y, scale:_graphZoom.scale})); } catch(e) {}
-}
-function _loadGraphPositions() {
-  try { return JSON.parse(localStorage.getItem('porter_graph_positions') || '{}'); } catch(e) { return {}; }
-}
-function _loadGraphZoom() {
-  try { var z = JSON.parse(localStorage.getItem('porter_graph_zoom') || 'null'); return z && z.scale ? z : null; } catch(e) { return null; }
-}
-
-function _fitGraphToView() {
-  var canvas = document.getElementById('cx-graph-canvas');
-  if (!canvas || !_graphNodes.length) { _graphZoom = {x: 0, y: 0, scale: 1}; _drawGraph(); return; }
-  var dpr = window._cxDpr || 1;
-  var cw = canvas.width / dpr, ch = canvas.height / dpr;
-  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  _graphNodes.forEach(function(n) {
-    var r = n.radius || 20;
-    if (n.x - r < minX) minX = n.x - r;
-    if (n.y - r < minY) minY = n.y - r;
-    if (n.x + r > maxX) maxX = n.x + r;
-    if (n.y + r > maxY) maxY = n.y + r;
-  });
-  var gw = maxX - minX || 1, gh = maxY - minY || 1;
-  var padding = 0.08;
-  var scaleX = cw * (1 - padding * 2) / gw;
-  var scaleY = ch * (1 - padding * 2) / gh;
-  var scale = Math.min(scaleX, scaleY, 2);
-  if (scale < 0.5) scale = 0.5;
-  var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-  _graphZoom.scale = scale;
-  _graphZoom.x = cw / 2 - cx * scale;
-  _graphZoom.y = ch / 2 - cy * scale;
-  _drawGraph();
-  _saveGraphZoom();
-}
-async function _initMemoryGraph() {
-  var canvas = document.getElementById('cx-graph-canvas');
-  if (!canvas) return;
-  var dpr = window.devicePixelRatio || 1;
-  var container = canvas.parentElement;
-  var w = container ? container.clientWidth : 700;
-  var h = container ? container.clientHeight : 400;
-  if (w < 100) w = 700;
-  if (h < 100) h = 400;
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
-  canvas.style.width = w + 'px';
-  canvas.style.height = h + 'px';
-  window._cxDpr = dpr;
-  // v0.28.47 — Show centered "Loading..." on canvas before fetch
-  var _lCtx = canvas.getContext('2d');
-  if (_lCtx) {
-    _lCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    var _lBg = getComputedStyle(document.documentElement).getPropertyValue('--bg2').trim() || 'var(--bg)';
-    var _lFg = getComputedStyle(document.documentElement).getPropertyValue('--text3').trim() || 'var(--text3)';
-    _lCtx.fillStyle = _lBg; _lCtx.fillRect(0, 0, w, h);
-    _lCtx.fillStyle = _lFg; _lCtx.font = '14px system-ui'; _lCtx.textAlign = 'center';
-    _lCtx.fillText('Loading memory map...', w/2, h/2);
-  }
-  // v0.28.12 — Resize canvas when window resizes (fixed: redraw + style update)
-  window._cxResizeTimer = null;
-  window.addEventListener('resize', function() {
-    clearTimeout(window._cxResizeTimer);
-    window._cxResizeTimer = setTimeout(function() {
-      var c2 = document.getElementById('cx-graph-canvas');
-      if (!c2 || !c2.parentElement) return;
-      var nw = c2.parentElement.clientWidth || 700;
-      var nh = c2.parentElement.clientHeight || 400;
-      if (nw > 100 && nh > 100) {
-        var dpr2 = window.devicePixelRatio || 1;
-        c2.width = nw * dpr2; c2.height = nh * dpr2;
-        c2.style.width = nw + 'px'; c2.style.height = nh + 'px';
-        window._cxDpr = dpr2;
-        // v0.28.47 — always resize canvas, only reflow nodes if unlocked
-        if (window._cxGraphLocked) { _drawGraph(); } else { _fitGraphToView(); }
-      }
-    }, 200);
-  });
-  // Fetch graph data (with retry)
-  try {
-    var data = await api('/api/cortex/graph');
-    if (!data || !data.nodes || !data.nodes.length) {
-      // Retry once after 500ms — data may still be loading
-      if (!window._graphRetried) {
-        window._graphRetried = true;
-        setTimeout(function() { _initMemoryGraph(); }, 500);
-        return;
-      }
-      window._graphRetried = false;
-      var ctx = canvas.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text3').trim() || 'var(--text3)';
-      ctx.font = '14px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('No graph data — dispatch to an agent first', w/2, h/2);
-      return;
-    }
-    window._graphRetried = false;
-    _graphNodes = data.nodes;
-    _graphEdges = data.edges;
-    // Restore saved positions or initialize in a circle
-    var saved = _loadGraphPositions();
-    var cx = w / 2, cy = h / 2;
-    var allRestored = true;
-    _graphNodes.forEach(function(n, i) {
-      n.vx = 0; n.vy = 0;
-      if (saved[n.id]) {
-        n.x = saved[n.id].x; n.y = saved[n.id].y; n.fixed = true;
-      } else {
-        allRestored = false;
-        var angle = (2 * Math.PI * i) / _graphNodes.length - Math.PI/2;
-        var radius = Math.min(w, h) * 0.3 + Math.random() * 30;
-        n.x = cx + Math.cos(angle) * radius;
-        n.y = cy + Math.sin(angle) * radius;
-      }
-    });
-    // Center the cortex hub only if no saved positions
-    if (!allRestored && _graphNodes[0] && !_graphNodes[0].fixed) { _graphNodes[0].x = cx; _graphNodes[0].y = cy; }
-    _setupGraphInteraction(canvas);
-    if (allRestored) {
-      // All positions restored — restore saved zoom or fit to view
-      var savedZoom = _loadGraphZoom();
-      if (savedZoom) {
-        _graphZoom.x = savedZoom.x; _graphZoom.y = savedZoom.y; _graphZoom.scale = savedZoom.scale;
-      }
-      _drawGraph();
-    } else {
-      _runGraphSimulation(canvas);
-      _saveGraphPositions();
-    }
-    // Start ambient animation loop (pulsing ring + particles)
-    _startGraphAnimLoop();
-  } catch(e) {
-    /* graph init error — rendered on canvas */
-    var ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = 'var(--text3)';
-    ctx.font = '13px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText('Could not load memory graph: ' + e.message, w/2, h/2);
-  }
-}
-
-function _startGraphAnimLoop() {
-  if (window._cxAnimFrame) cancelAnimationFrame(window._cxAnimFrame);
-  var lastDraw = 0;
-  function tick(ts) {
-    // Redraw at ~15fps for ambient animations (pulsing, particles)
-    if (ts - lastDraw > 66) { _drawGraph(); lastDraw = ts; }
-    // Only keep looping while cortex tab is visible
-    var panel = document.getElementById('cortex-module');
-    if (panel && panel.style.display !== 'none') {
-      window._cxAnimFrame = requestAnimationFrame(tick);
-    } else { window._cxAnimFrame = null; }
-  }
-  window._cxAnimFrame = requestAnimationFrame(tick);
-}
-
-function _setupGraphInteraction(canvas) {
-  var dragging = null;
-  var panning = false;
-  var panStart = {x:0, y:0};
-  var _clickedNode = null;  // track click target for filter (even when locked)
-  canvas.onmousedown = function(e) {
-    var rect = canvas.getBoundingClientRect();
-    var mx = (e.clientX - rect.left) / _graphZoom.scale - _graphZoom.x / _graphZoom.scale;
-    var my = (e.clientY - rect.top) / _graphZoom.scale - _graphZoom.y / _graphZoom.scale;
-    // Check if clicking a node
-    var hit = null;
-    _graphNodes.forEach(function(n) {
-      var dx = mx - n.x, dy = my - n.y;
-      if (Math.sqrt(dx*dx + dy*dy) < (n.radius || 20)) hit = n;
-    });
-    _clickedNode = hit;
-    if (window._cxGraphLocked) return;  // locked: no drag/pan, but click filter in mouseup
-    if (hit) { dragging = hit; hit.fixed = true; canvas.style.cursor = 'grabbing'; }
-    else { panning = true; panStart = {x: e.clientX - _graphZoom.x, y: e.clientY - _graphZoom.y}; }
-  };
-  canvas.onmousemove = function(e) {
-    var rect = canvas.getBoundingClientRect();
-    if (dragging) {
-      dragging.x = (e.clientX - rect.left - _graphZoom.x) / _graphZoom.scale;
-      dragging.y = (e.clientY - rect.top - _graphZoom.y) / _graphZoom.scale;
-      _drawGraph();
-    } else if (panning && !window._cxGraphLocked) {
-      _graphZoom.x = e.clientX - panStart.x;
-      _graphZoom.y = e.clientY - panStart.y;
-      _drawGraph();
-    } else {
-      // Hover tooltip
-      var mx = (e.clientX - rect.left - _graphZoom.x) / _graphZoom.scale;
-      var my = (e.clientY - rect.top - _graphZoom.y) / _graphZoom.scale;
-      var tip = document.getElementById('cx-graph-tooltip');
-      var hovered = null;
-      _graphNodes.forEach(function(n) {
-        var dx = mx - n.x, dy = my - n.y;
-        if (Math.sqrt(dx*dx + dy*dy) < (n.radius || 20)) hovered = n;
-      });
-      if (hovered && tip) {
-        var typeLabels = {cortex:'Inbox Hub', agent:'Agent', project:'Project', global:'Global'};
-        var typeColors = {cortex:'#8b5cf6', agent:'#22d3ee', project:'#fbbf24', global:'#4ade80'};
-        var html = '<div style="font-weight:600;margin-bottom:4px">' + escHtml(hovered.emoji || '') + ' ' + escHtml(hovered.label || '') + '</div>';
-        if (hovered.role) html += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-style:italic">' + escHtml(hovered.role) + '</div>';
-        html += '<span style="display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;background:' + (typeColors[hovered.type]||'var(--text2)') + '20;color:' + (typeColors[hovered.type]||'var(--border2)') + ';border:1px solid ' + (typeColors[hovered.type]||'var(--text3)') + '40">' + (typeLabels[hovered.type]||hovered.type) + '</span>';
-        html += '<div style="margin-top:4px;font-size:11px;color:var(--text3)">' + (hovered.count || 0) + ' memories</div>';
-        tip.innerHTML = html;
-        tip.style.display = 'block';
-        var tipX = e.clientX - rect.left + 12;
-        var tipY = e.clientY - rect.top - 10;
-        // Clamp to canvas bounds
-        if (tipX + 220 > rect.width) tipX = e.clientX - rect.left - 230;
-        if (tipY + 100 > rect.height) tipY = rect.height - 110;
-        if (tipX < 0) tipX = 4;
-        if (tipY < 0) tipY = 4;
-        tip.style.left = tipX + 'px';
-        tip.style.top = tipY + 'px';
-        canvas.style.cursor = 'pointer';
-      } else if (tip) {
-        tip.style.display = 'none';
-        if (!dragging) canvas.style.cursor = 'grab';
-      }
-    }
-  };
-  canvas.onmouseup = function() {
-    if (panning) { _saveGraphZoom(); }
-    var n = dragging || _clickedNode;
-    _clickedNode = null;
-    if (n) {
-      if (dragging) { dragging.fixed = true; _saveGraphPositions(); dragging = null; canvas.style.cursor = 'grab'; }
-      // v0.28.14 — Click node to filter memory list (works when locked too)
-      var _nid = (n.id || '').replace(/^(agent|project):/, '');
-      if (n.type === 'agent' && _nid) {
-        var f1 = (_cortexMemories || []).filter(function(m) { return m.scope === 'agent' && m.scope_id === _nid; });
-        if (f1.length) { _renderCortexMemories(f1); _showCortexFilterBar(n.label + ' — ' + f1.length + ' memories'); }
-        else { toast(n.label + ': no memories yet'); }
-      } else if (n.type === 'global') {
-        var f2 = (_cortexMemories || []).filter(function(m) { return m.scope === 'global'; });
-        if (f2.length) { _renderCortexMemories(f2); _showCortexFilterBar('Global — ' + f2.length + ' memories'); }
-      } else if (n.type === 'project' && n.id) {
-        var f3 = (_cortexMemories || []).filter(function(m) { return m.scope === 'project' && m.scope_id === _nid; });
-        if (f3.length) { _renderCortexMemories(f3); _showCortexFilterBar(n.label + ' — ' + f3.length + ' memories'); }
-      } else if (n.type === 'cortex') {
-        _clearCortexFilter();
-      }
-    }
-    panning = false;
-  };
-  canvas.onmouseleave = function() { if (dragging) { dragging.fixed = true; dragging = null; } panning = false; var tip = document.getElementById('cx-graph-tooltip'); if (tip) tip.style.display = 'none'; };
-  canvas.onwheel = function(e) {
-    e.preventDefault();
-    if (window._cxGraphLocked) return;
-    var delta = e.deltaY > 0 ? 0.92 : 1.08;
-    _graphZoom.scale = Math.max(0.3, Math.min(3, _graphZoom.scale * delta));
-    _drawGraph();
-    _saveGraphZoom();
-  };
-  canvas.ondblclick = function(e) {
-    var rect = canvas.getBoundingClientRect();
-    var mx = (e.clientX - rect.left) / _graphZoom.scale - _graphZoom.x / _graphZoom.scale;
-    var my = (e.clientY - rect.top) / _graphZoom.scale - _graphZoom.y / _graphZoom.scale;
-    _graphNodes.forEach(function(n) {
-      var dx = mx - n.x, dy = my - n.y;
-      if (Math.sqrt(dx*dx + dy*dy) < (n.radius || 20)) { n.fixed = false; toast('Node unpinned'); }
-    });
-  };
-}
-
-function _runGraphSimulation(canvas) {
-  if (_graphAnim) cancelAnimationFrame(_graphAnim);
-  // Run force layout synchronously (no animation bounce)
-  for (var iter = 0; iter < 200; iter++) {
-    var alpha = Math.max(0.01, 1 - iter / 200);
-    // Repulsion between nodes
-    for (var i = 0; i < _graphNodes.length; i++) {
-      for (var j = i + 1; j < _graphNodes.length; j++) {
-        var a = _graphNodes[i], b = _graphNodes[j];
-        var dx = b.x - a.x, dy = b.y - a.y;
-        var dist = Math.sqrt(dx*dx + dy*dy) || 1;
-        var force = 3000 / (dist * dist);
-        var fx = dx / dist * force * alpha;
-        var fy = dy / dist * force * alpha;
-        if (!a.fixed) { a.vx -= fx; a.vy -= fy; }
-        if (!b.fixed) { b.vx += fx; b.vy += fy; }
-      }
-    }
-    // Attraction along edges
-    _graphEdges.forEach(function(e) {
-      var a = _graphNodes[e.source], b = _graphNodes[e.target];
-      if (!a || !b) return;
-      var dx = b.x - a.x, dy = b.y - a.y;
-      var dist = Math.sqrt(dx*dx + dy*dy) || 1;
-      var force = (dist - 120) * 0.02 * alpha;
-      var fx = dx / dist * force;
-      var fy = dy / dist * force;
-      if (!a.fixed) { a.vx += fx; a.vy += fy; }
-      if (!b.fixed) { b.vx -= fx; b.vy -= fy; }
-    });
-    // Center gravity
-    var dpr3 = window._cxDpr || 1;
-    var cx = (canvas.width / dpr3) / 2, cy = (canvas.height / dpr3) / 2;
-    _graphNodes.forEach(function(n) {
-      if (n.fixed) return;
-      n.vx += (cx - n.x) * 0.001 * alpha;
-      n.vy += (cy - n.y) * 0.001 * alpha;
-      n.vx *= 0.85;
-      n.vy *= 0.85;
-      n.x += n.vx;
-      n.y += n.vy;
-    });
-  }
-  // Zero out velocities — nodes are now static
-  _graphNodes.forEach(function(n) { n.vx = 0; n.vy = 0; });
-  _fitGraphToView();
-  _drawGraph();
-}
-
-function _drawGraph() {
-  var canvas = document.getElementById('cx-graph-canvas');
-  if (!canvas) return;
-  var ctx = canvas.getContext('2d');
-  var dpr = window._cxDpr || 1;
-  var w = canvas.width / dpr, h = canvas.height / dpr;
-  var cs = getComputedStyle(document.documentElement);
-  var bgColor = cs.getPropertyValue('--bg2').trim() || 'var(--bg)';
-  var textColor = cs.getPropertyValue('--text').trim() || 'var(--raised)';
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = bgColor;
-  ctx.fillRect(0, 0, w, h);
-  ctx.save();
-  ctx.translate(_graphZoom.x, _graphZoom.y);
-  ctx.scale(_graphZoom.scale, _graphZoom.scale);
-  var scopeColors = {agent:'#22d3ee', project:'#fbbf24', global:'#4ade80', cortex:'#8b5cf6'};
-  var time = Date.now() / 1000;
-
-  // Draw edges (border-to-border)
-  _graphEdges.forEach(function(e) {
-    var a = _graphNodes[e.source], b = _graphNodes[e.target];
-    if (!a || !b) return;
-    var weight = Math.min(5, Math.max(1, (e.weight || 1) * 1.2)); // v0.28.49 — thicker min weight
-    var isCollab = e.type === 'collab';
-    // Filter opacity
-    var edgeOpacity = 1;
-    if (_graphFilter && _graphFilter !== 'all') {
-      var aMatch = a.type === _graphFilter || a.type === 'cortex';
-      var bMatch = b.type === _graphFilter || b.type === 'cortex';
-      if (!aMatch && !bMatch) edgeOpacity = 0.08;
-      else if (!aMatch || !bMatch) edgeOpacity = 0.25;
-    }
-    var pulse = (0.5 + 0.25 * Math.sin(time * 1.5 + (e.source || 0))) * edgeOpacity; // v0.28.49 — brighter flow lines
-    // Calculate border intersection points
-    var dx = b.x - a.x, dy = b.y - a.y;
-    var dist = Math.sqrt(dx*dx + dy*dy) || 1;
-    var rA = a.radius || 20, rB = b.radius || 20;
-    var ax = a.x + (dx / dist) * rA, ay = a.y + (dy / dist) * rA;
-    var bx = b.x - (dx / dist) * rB, by = b.y - (dy / dist) * rB;
-    var midX = (ax + bx) / 2 + (ay - by) * 0.08;
-    var midY = (ay + by) / 2 + (bx - ax) * 0.08;
-    ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.quadraticCurveTo(midX, midY, bx, by);
-    var edgeColor = isCollab ? 'rgba(34,211,238,' + pulse + ')' : 'rgba(139,92,246,' + pulse + ')';
-    ctx.strokeStyle = edgeColor;
-    ctx.lineWidth = weight;
-    if (isCollab) { ctx.setLineDash([4, 4]); }
-    ctx.stroke();
-    if (isCollab) { ctx.setLineDash([]); }
-    // Animated particle — only on active edges (lastActivity within 60s)
-    if (e.lastActivity && (Date.now() - e.lastActivity) < 60000) {
-      var elapsed = (Date.now() - e.lastActivity) / 1000;
-      var fadeOut = Math.max(0, 1 - elapsed / 60) * edgeOpacity;
-      var t = (time * 0.5 + (e.source || 0) * 0.3) % 1;
-      var px = (1-t)*(1-t)*ax + 2*(1-t)*t*midX + t*t*bx;
-      var py = (1-t)*(1-t)*ay + 2*(1-t)*t*midY + t*t*by;
-      ctx.beginPath();
-      ctx.arc(px, py, 3, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(139,92,246,' + (0.9 * fadeOut) + ')';
-      ctx.fill();
-    }
-  });
-
-  // Draw nodes (distinct shapes per type)
-  _graphNodes.forEach(function(n) {
-    var color = scopeColors[n.type] || '#8b5cf6';
-    var r = parseInt(color.slice(1,3),16)||139, g = parseInt(color.slice(3,5),16)||92, bl = parseInt(color.slice(5,7),16)||246;
-    var radius = n.radius || 20;
-    // Filter opacity
-    var nodeOpacity = 1;
-    if (_graphFilter && _graphFilter !== 'all') {
-      nodeOpacity = (n.type === _graphFilter || n.type === 'cortex') ? 1 : 0.15;
-    }
-    ctx.globalAlpha = nodeOpacity;
-    // Outer glow
-    var grad = ctx.createRadialGradient(n.x, n.y, radius*0.5, n.x, n.y, radius*2.5);
-    grad.addColorStop(0, 'rgba('+r+','+g+','+bl+',0.15)');
-    grad.addColorStop(1, 'rgba('+r+','+g+','+bl+',0)');
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, radius * 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    // Shape depends on type
-    if (n.type === 'project') {
-      // Rounded rectangle
-      var rw = radius * 1.8, rh = radius * 1.4, rx = n.x - rw/2, ry = n.y - rh/2, cr = 6;
-      ctx.beginPath();
-      ctx.moveTo(rx + cr, ry);
-      ctx.lineTo(rx + rw - cr, ry);
-      ctx.arcTo(rx + rw, ry, rx + rw, ry + cr, cr);
-      ctx.lineTo(rx + rw, ry + rh - cr);
-      ctx.arcTo(rx + rw, ry + rh, rx + rw - cr, ry + rh, cr);
-      ctx.lineTo(rx + cr, ry + rh);
-      ctx.arcTo(rx, ry + rh, rx, ry + rh - cr, cr);
-      ctx.lineTo(rx, ry + cr);
-      ctx.arcTo(rx, ry, rx + cr, ry, cr);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba('+r+','+g+','+bl+',0.12)';
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    } else if (n.type === 'global') {
-      // Hexagon
-      ctx.beginPath();
-      for (var hi = 0; hi < 6; hi++) {
-        var ha = Math.PI / 3 * hi - Math.PI / 6;
-        var hx = n.x + radius * Math.cos(ha), hy = n.y + radius * Math.sin(ha);
-        if (hi === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
-      }
-      ctx.closePath();
-      ctx.fillStyle = 'rgba('+r+','+g+','+bl+',0.12)';
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    } else {
-      // Circle (agent + cortex/inbox hub)
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba('+r+','+g+','+bl+',0.12)';
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      // Cortex/inbox hub: pulsing ring
-      if (n.type === 'cortex') {
-        var pulseR = radius + 4 + 3 * Math.sin(time * 2);
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, pulseR, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba('+r+','+g+','+bl+',0.3)';
-        ctx.lineWidth = 0.8;
-        ctx.stroke();
-      }
-    }
-    // Emoji
-    if (n.emoji) {
-      ctx.font = Math.round(radius * 0.8) + 'px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = textColor;
-      ctx.fillText(n.emoji, n.x, n.y);
-    }
-    // Label below
-    ctx.font = '11px system-ui';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = textColor;
-    ctx.fillText(n.label || '', n.x, n.y + radius + 6);
-    // Count badge (top-right)
-    if (n.count > 0) {
-      var bx = n.x + radius * 0.65, by = n.y - radius * 0.65;
-      ctx.beginPath();
-      ctx.arc(bx, by, 9, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.font = 'bold 9px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'var(--text)';
-      ctx.fillText(n.count, bx, by);
-    }
-    ctx.globalAlpha = 1;
-  });
-  ctx.restore();
-}
-
-async function _selectModelFromList(el, backend, modelId) {
-  // Highlight selected row
-  var container = el.parentElement;
-  container.querySelectorAll('.model-list-row').forEach(function(r) { r.classList.remove('active'); });
-  el.classList.add('active');
-  // Use same API as dropdown
-  var fakeSel = { value: modelId, getAttribute: function() { return backend; } };
-  _selectModel(fakeSel);
-}
-
-async function _selectModel(sel) {
-  var backend = sel.getAttribute('data-backend');
-  var model = sel.value;
-  try {
-    var res = await api('/api/models/select', {backend:backend, model:model});
-    if (res && res.ok) {
-      toast('Model set: ' + (res.resolved || model));
-      loadModels();
-    } else {
-      toast('Failed: ' + ((res && res.error) || 'Unknown error'), 'err');
-    }
-  } catch(e) { toast('Error selecting model', 'err'); }
-}
-
-
-
-function _renderModelCards(data, act) {
-  var grid = document.getElementById('models-grid');
-  if (!grid || !data || !data.providers) return;
-  if (!data.providers.length) {
-    if (_modelsRenderedOnce && grid.children.length > 0) return;
-    grid.innerHTML = '<div style="color:var(--text3);font-size:13px;grid-column:1/-1">No model backends detected.</div>';
-    return;
-  }
-  // Clear old timers
-  Object.keys(_modelTimers).forEach(function(k) { clearInterval(_modelTimers[k]); });
-  _modelTimers = {};
-
-  grid.innerHTML = data.providers.map(function(p) {
-    var dotColor = 'var(--text3)';  // neutral gray until tested
-    var offClass = '';
-
-    // Activity data
-    var ba = (act || {})[p.id] || {};
-    var activeRuns = ba.active || [];
-
-    // Install hint for unavailable backends
-    var _healthChipHtml = '<div id="backend-health-chip-' + p.id + '" style="display:none;margin:4px 0"></div>';
-    var _installHtml = '';
-    if (!p.available && p.install_hint) {
-      _installHtml = '<div style="padding:12px;margin:8px 0;border:1px dashed var(--border);border-radius:6px;text-align:center">'
-        + '<div style="font-size:12px;color:var(--text3);margin-bottom:6px">Not installed</div>'
-        + '<code style="font-size:11px;background:var(--bg);padding:4px 10px;border-radius:4px;color:var(--accent);display:inline-block">' + escHtml(p.install_hint) + '</code>'
-        + '</div>';
-    }
-
-    // Model selector: active model shown in card subtitle
-    var _avBk = (_modelAvailableData || {})[p.id] || {};
-    var _avResolved = _avBk.resolved || '';
-    var _avModels = _avBk.models || [];
-    var _avActive = _avBk.active || 'auto';
-    var _rt = (window._modelRuntimes || {})[p.id] || {};
-    var _resolvedName = '';
-    _avModels.forEach(function(m) { if (m.id === _avResolved) _resolvedName = m.name; });
-    if (!_resolvedName) _resolvedName = _avResolved || (p.label || p.id);
-    var _runtimeHtml = _renderModelRuntimeBadges(p, _rt, _avBk);
-    var _discoveredCount = _avModels.filter(function(m) { return m && m.id && m.id !== 'auto'; }).length;
-    // Build model list (replaces dropdown)
-    var _selHtml = '';
-    if (_avModels.length > 0) {
-      _selHtml = '<div class="model-card-selector"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Models</div><div class="model-list-rows">';
-      _avModels.forEach(function(m) {
-        var isActive = m.id === _avActive;
-        var isResolved = m.id === _avResolved;
-        _selHtml += '<div class="model-list-row' + (isActive ? ' active' : '') + '" onclick="_selectModelFromList(this,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\')" title="' + escHtml(m.id) + '">';
-        _selHtml += '<span class="model-list-dot" style="background:' + (isResolved ? 'var(--accent)' : 'transparent') + '"></span>';
-        _selHtml += '<span class="model-list-name">' + escHtml(m.name) + (m.default ? ' <span style=\"font-size:10px;color:var(--text3)\">(default)</span>' : '') + '</span>';
-        if (m.id === 'auto') {
-          _selHtml += '<button class="btn btn-ghost" style="font-size:10px;padding:1px 6px;margin-left:auto" onclick="event.stopPropagation();_testCardModels(this,\'' + escHtml(p.id) + '\')">Test All</button>';
-        } else {
-          var _mTid = (p.id + '_' + m.id).replace(/[^a-zA-Z0-9_-]/g, '_');
-          _selHtml += '<span id="test-r-' + _mTid + '" style="font-size:10px;margin-left:auto;white-space:nowrap">' + _renderStoredTestResult(_mTid) + '</span>';
-          _selHtml += '<button class="btn btn-ghost" data-test-model="1" data-backend="' + escHtml(p.id) + '" data-model="' + escHtml(m.id) + '" data-testid="' + escHtml(_mTid) + '" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();_testModel(event,\'' + escHtml(p.id) + '\',\'' + escHtml(m.id) + '\',\'' + _mTid + '\')">Test</button>';
-        }
-        _selHtml += '</div>';
-      });
-      _selHtml += '</div></div>';
-    }
-
-    // Compact status badge for upper-right
-    var _statusBadge = activeRuns.length > 0
-      ? '<span style="font-size:10px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:3px"><span class="pulse-dot"></span>' + activeRuns.length + ' active</span>'
-      : '';
-    var _selectedSummary = _resolvedName ? ('Selected: ' + _resolvedName) : 'No active model selected yet.';
-    var _selectedMeta = '<div class="model-card-modelmeta">'
-      + '<span class="model-card-chip dim">' + escHtml(_selectedSummary) + '</span>'
-      + (_discoveredCount ? '<span class="model-card-chip dim">' + escHtml(_discoveredCount + ' discovered') + '</span>' : '')
-      + '</div>';
-    var _useHtml = '<div class="model-card-use">' + escHtml(_modelUseText(p.id)) + '</div>';
-
-    var updateFootHtml = '<div id="backend-update-foot-' + escHtml(p.id) + '" class="model-card-alert"></div>';
-    var statusFootHtml = '<div id="backend-status-foot-' + escHtml(p.id) + '" class="model-card-alert"></div>';
-
-    return '<div class="model-card' + offClass + '" data-model-id="' + escHtml(p.id) + '">'
-      + '<div class="model-card-head" style="justify-content:space-between">'
-      + '<div style="display:flex;align-items:center;gap:10px"><span class="model-card-dot" style="background:' + dotColor + '"></span>'
-      + '<span class="model-card-name">' + escHtml(p.label || p.id) + '</span></div>'
-      + '<div style="display:flex;align-items:center;gap:6px">' + _statusBadge
-      + '<button class="btn btn-ghost" style="font-size:12px;padding:1px 4px;line-height:1" onclick="event.stopPropagation();_openBackendConfig(\'' + escHtml(p.id) + '\')" title="Config">&#9881;</button>'
-      + '</div></div>'
-      + '<div class="model-card-meta">'
-      + '<div class="model-ver-badge" id="ver-badge-' + escHtml(p.id) + '" style="font-size:10px;color:var(--text3)">Detecting version…</div>'
-      + '<div id="backend-status-' + escHtml(p.id) + '" style="flex:1"></div>'
-      + '</div>'
-      + '<div class="model-card-desc">' + escHtml(p.description || '') + '</div>'
-      + '<div class="model-card-subline">' + _useHtml + _statusBadge + '</div>'
-      + _selectedMeta
-      + _runtimeHtml
-      + _healthChipHtml
-      + (p.available ? _selHtml : _installHtml)
-      + updateFootHtml
-      + statusFootHtml
-      + '</div>';
-  }).join('');
-
-  Array.prototype.forEach.call(grid.querySelectorAll('.model-card'), function(card, idx) {
-    card.classList.add('hydrating');
-    card.style.animationDelay = (idx * 32) + 'ms';
-    setTimeout(function() {
-      card.classList.remove('hydrating');
-      card.style.animationDelay = '';
-    }, 420 + (idx * 32));
-  });
-
-
-  // Start elapsed timers for working models
-  document.querySelectorAll('.model-elapsed').forEach(function(el) {
-    var started = parseFloat(el.getAttribute('data-started'));
-    if (started > 0) {
-      el.textContent = _elapsedStr(started);
-      var bk = el.closest('.model-card-activity').getAttribute('data-backend');
-      _modelTimers[bk] = setInterval(function() {
-        el.textContent = _elapsedStr(started);
-      }, 1000);
-    }
-  });
-}
-
-function _openModelActivity(backend) {
-  _modelActivityBackend = backend;
-  var overlay = document.getElementById('model-activity-overlay');
-  var panel = document.getElementById('model-activity-panel');
-  if (!overlay || !panel) return;
-
-  // Header
-  var titleEl = document.getElementById('ma-title');
-  var statusEl = document.getElementById('ma-status');
-  titleEl.textContent = backend;
-  // Check if working
-  var ba = (_modelActivityData || {})[backend] || {};
-  var isWorking = (ba.active || []).length > 0;
-  statusEl.textContent = isWorking ? 'WORKING' : 'Idle';
-  statusEl.className = 'ma-status ' + (isWorking ? 'working' : 'idle');
-
-  // Body
-  var body = document.getElementById('ma-body');
-  var stats = ba.stats || {};
-  var recent = ba.recent || [];
-  if (ba._partial && !_modelsActivityHydrate[backend]) {
-    _modelsActivityHydrate[backend] = true;
-    api('/api/models/activity?detail=1').then(function(act) {
-      if (act && act.activity) {
-        _modelActivityData = act.activity;
-        if (_modelActivityBackend === backend) _openModelActivity(backend);
-      }
-    }).finally(function() {
-      delete _modelsActivityHydrate[backend];
-    });
-  }
-
-  // Live Trace section
-  var traceContent = '<div class="ma-section">'
-    + '<div class="ma-section-title">Live Trace</div>'
-    + '<div class="ma-trace-box' + (isWorking ? '' : ' empty') + '" id="ma-trace">'
-    + (isWorking ? 'Streaming...' : 'No active dispatch') + '</div></div>';
-
-  // 24h Stats section
-  var total = stats.total || 0;
-  var pct = total > 0 ? Math.round(((stats.complete || 0) / total) * 100) : 0;
-  var avgDur = stats.avg_ms ? _formatDuration(stats.avg_ms) : '—';
-  var statsContent = '<div class="ma-section">'
-    + '<div class="ma-section-title">24h Stats</div>'
-    + '<div class="ma-stats-grid">'
-    + '<div class="ma-stat-card"><div class="ma-stat-value">' + total + '</div><div class="ma-stat-label">Runs</div></div>'
-    + '<div class="ma-stat-card"><div class="ma-stat-value">' + pct + '%</div><div class="ma-stat-label">Success</div></div>'
-    + '<div class="ma-stat-card"><div class="ma-stat-value">' + avgDur + '</div><div class="ma-stat-label">Avg Duration</div></div>'
-    + '</div></div>';
-
-  // Recent Runs section
-  var runsContent = '';
-  if (recent.length > 0) {
-    var runs = recent.slice(0, 5).map(function(r) {
-      var rdot = r.status === 'complete' ? 'var(--success)' : (r.status === 'failed' ? 'var(--danger)' : 'var(--accent)');
-      var dur = r.duration_ms ? _formatDuration(r.duration_ms) : '';
-      var ago = _relativeTime(r.created_at);
-      return '<div class="ma-run">'
-        + '<span class="ma-run-dot" style="background:' + rdot + '"></span>'
-        + '<span class="ma-run-preview">' + escHtml((r.preview || '').substring(0, 80)) + '</span>'
-        + '<span class="ma-run-meta">' + dur + (ago ? '  ' + ago : '') + '</span>'
-        + '</div>';
-    }).join('');
-    runsContent = '<div class="ma-section">'
-      + '<div class="ma-section-title">Recent Runs</div>' + runs + '</div>';
-  }
-
-  // Sessions now inline on cards — slide-out is Live Trace + Stats only
-  body.innerHTML = traceContent + statsContent + runsContent;
-
-  overlay.classList.add('open');
-  panel.classList.add('open');
-
-  // Start trace polling if working
-  if (isWorking) {
-    _pollActivityTrace(backend);
-    _modelActivityPoller = setInterval(function() { _pollActivityTrace(backend); }, 1500);
-  }
-}
-
-function _closeModelActivity() {
-  _modelActivityBackend = null;
-  if (_modelActivityPoller) { clearInterval(_modelActivityPoller); _modelActivityPoller = null; }
-  var overlay = document.getElementById('model-activity-overlay');
-  var panel = document.getElementById('model-activity-panel');
-  if (overlay) overlay.classList.remove('open');
-  if (panel) panel.classList.remove('open');
-}
-
-async function _pollActivityTrace(backend) {
-  try {
-    var data = await api('/api/models/' + backend + '/trace');
-    var traceBox = document.getElementById('ma-trace');
-    if (!traceBox || !data || !data.traces || !data.traces.length) return;
-    var text = data.traces[0].chunks.join('');
-    traceBox.className = 'ma-trace-box';
-    traceBox.textContent = text;
-    traceBox.scrollTop = traceBox.scrollHeight;
-  } catch(e) { /* ignore */ }
-}
-
-function _connectModelSSE() {
-  if (_modelSseId) { _sseUnsubscribe(_modelSseId); _modelSseId = null; }
-  _modelSseId = _sseSubscribe(function(d) {
-    if (!d || !d.type) return;
-    var evtData = d.data || {};
-    if (d.type === 'bridge:queued') _handleModelQueued(evtData);
-    else if (d.type === 'bridge:admit') _handleModelAdmit(evtData);
-    else if (d.type === 'bridge:dispatch') _handleModelDispatch(evtData);
-    else if (d.type === 'bridge:response') _handleModelResponse(evtData);
-    else if (d.type === 'bridge:error') _handleModelError(evtData);
-    else if (d.type === 'bridge:chunk') _handleModelChunk(evtData);
-  });
-}
-
-function _handleModelQueued(data) {
-  var bk = data.backend;
-  if (!bk) return;
-  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
-  _modelSchedulerData[bk].waiting = (_modelSchedulerData[bk].waiting || 0) + 1;
-  _refreshSchedulerSummary(bk);
-}
-
-function _handleModelAdmit(data) {
-  var bk = data.backend;
-  if (!bk) return;
-  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
-  _modelSchedulerData[bk].waiting = Math.max(0, (_modelSchedulerData[bk].waiting || 0) - 1);
-  _modelSchedulerData[bk].running = (_modelSchedulerData[bk].running || 0) + 1;
-  if (data.wait_ms) _modelSchedulerData[bk].avg_wait_ms = data.wait_ms;
-  _refreshSchedulerSummary(bk);
-}
-
-function _handleModelDispatch(data) {
-  var bk = data.backend;
-  var card = document.querySelector('[data-model-id="' + bk + '"]');
-  if (!card) return;
-  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
-  if (!_modelSchedulerData[bk].running) _modelSchedulerData[bk].running = 1;
-  _refreshSchedulerSummary(bk);
-  var actDiv = card.querySelector('.model-card-activity');
-  if (!actDiv) return;
-  var started = Date.now() / 1000;
-  actDiv.className = 'model-card-activity working';
-  actDiv.setAttribute('data-backend', bk);
-  actDiv.innerHTML = '<span class="pulse-dot"></span>'
-    + '<span>WORKING</span>'
-    + '<span style="opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">"' + escHtml((data.prompt || '').substring(0, 60)) + '"</span>'
-    + '<span class="model-elapsed" style="opacity:.6">0s</span>';
-  // Start timer
-  if (_modelTimers[bk]) clearInterval(_modelTimers[bk]);
-  _modelTimers[bk] = setInterval(function() {
-    var el = actDiv.querySelector('.model-elapsed');
-    if (el) el.textContent = _elapsedStr(started);
-  }, 1000);
-  // Update activity panel if open for this backend
-  if (_modelActivityBackend === bk) {
-    var traceBox = document.getElementById('ma-trace');
-    if (traceBox) { traceBox.className = 'ma-trace-box'; traceBox.textContent = 'Streaming...'; }
-    var statusEl = document.getElementById('ma-status');
-    if (statusEl) { statusEl.textContent = 'WORKING'; statusEl.className = 'ma-status working'; }
-    if (!_modelActivityPoller) {
-      _pollActivityTrace(bk);
-      _modelActivityPoller = setInterval(function() { _pollActivityTrace(bk); }, 1500);
-    }
-  }
-}
-
-function _handleModelResponse(data) {
-  var bk = data.backend;
-  var card = document.querySelector('[data-model-id="' + bk + '"]');
-  if (!card) return;
-  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
-  _modelSchedulerData[bk].running = Math.max(0, (_modelSchedulerData[bk].running || 0) - 1);
-  _refreshSchedulerSummary(bk);
-  var actDiv = card.querySelector('.model-card-activity');
-  if (actDiv) {
-    actDiv.className = 'model-card-activity idle';
-    actDiv.innerHTML = 'Idle';
-  }
-  if (_modelTimers[bk]) { clearInterval(_modelTimers[bk]); delete _modelTimers[bk]; }
-  // Update activity panel if open
-  if (_modelActivityBackend === bk) {
-    if (_modelActivityPoller) { clearInterval(_modelActivityPoller); _modelActivityPoller = null; }
-    var statusEl = document.getElementById('ma-status');
-    if (statusEl) { statusEl.textContent = 'Idle'; statusEl.className = 'ma-status idle'; }
-    var traceBox = document.getElementById('ma-trace');
-    if (traceBox && traceBox.textContent === 'Streaming...') { traceBox.className = 'ma-trace-box empty'; traceBox.textContent = 'Dispatch complete'; }
-  }
-}
-
-function _handleModelError(data) {
-  var bk = data.backend;
-  var card = document.querySelector('[data-model-id="' + bk + '"]');
-  if (!card) return;
-  _modelSchedulerData[bk] = _modelSchedulerData[bk] || {};
-  _modelSchedulerData[bk].running = Math.max(0, (_modelSchedulerData[bk].running || 0) - 1);
-  _refreshSchedulerSummary(bk);
-  var actDiv = card.querySelector('.model-card-activity');
-  if (actDiv) {
-    actDiv.className = 'model-card-activity idle';
-    actDiv.innerHTML = '<span style="color:var(--danger)">Error: ' + escHtml((data.error || '').substring(0, 60)) + '</span>';
-    setTimeout(function() {
-      actDiv.className = 'model-card-activity idle';
-      actDiv.innerHTML = 'Idle';
-    }, 5000);
-  }
-  if (_modelTimers[bk]) { clearInterval(_modelTimers[bk]); delete _modelTimers[bk]; }
-}
-
-function _handleModelChunk(data) {
-  var bk = data.backend;
-  if (_modelActivityBackend !== bk) return;
-  var traceBox = document.getElementById('ma-trace');
-  if (!traceBox) return;
-  if (traceBox.classList.contains('empty')) {
-    traceBox.className = 'ma-trace-box';
-    traceBox.textContent = '';
-  }
-  traceBox.textContent += (data.text || '');
-  traceBox.scrollTop = traceBox.scrollHeight;
-}
-
-// ══════════════════════════════════════════════════════════════
-// ── Persona Management (Phase B) ────────────────────────────
-// ══════════════════════════════════════════════════════════════
-
-let _personas = [];
-let _selectedPersonaId = null;
-let _wizCurrentStep = 1;
-let _wizSelectedEmoji = '🤖';
-let _personasLoading = false;
-
-const PERSONA_EMOJIS = ['🤖','🐙','💎','🔧','🔍','📊','🎯','🧪','📝','🛡️','⚡','🌐','🧠','💡','🎨','🦊','🐺','🦉','🐱','🐻'];
 
 async function loadPersonas() {
   _personasLoading = true;
@@ -44600,17 +42493,7 @@ def dispatch_to_persona(message, persona_id, timeout=120, run_id=None, chain_id=
                           f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
         threading.Thread(target=_mem_bg, name="mem-extract", daemon=True).start()
 
-    # Legacy extractive memory is disabled by default in Memory V3.
-    if _memory_auto_extract_enabled() and result.get("ok") and result.get("text"):
-        _cortex_msg = message
-        _cortex_resp = result.get("text", "")
-        _cortex_pid = persona_id
-        _cortex_be = backend
-        _cortex_project = resolved_project_id
-        _cortex_task = str(task_id or "").strip()
-        def _cortex_bg():
-            _cortex_extract_and_route(_cortex_msg, _cortex_resp, _cortex_pid, _cortex_be, project_id=_cortex_project, task_id=_cortex_task)
-        threading.Thread(target=_cortex_bg, name="cortex-extract", daemon=True).start()
+    # Cortex removed — extraction handled by _mem_extract_signals() in Phase 2 plan 02-02
 
     if task:
         _task_to_save = None
@@ -45094,7 +42977,7 @@ def _error_self_heal_once():
                 actions_taken.append(f"Backend probe failing ({cnt}x): {msg[:80]}")
 
             # 7. Memory/extraction errors → pause extraction temporarily
-            elif ("extraction" in msg_lower or "cortex" in msg_lower) and cnt >= 5:
+            elif "extraction" in msg_lower and cnt >= 5:
                 actions_taken.append(f"Cortex extraction errors ({cnt}x): {msg[:80]}")
 
             # 8. Frontend JS errors → log pattern (client-side, can't auto-fix)
@@ -47640,19 +45523,18 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"ok": True, "squads": _squad_list(public_only=True)})
 
         elif parsed.path == "/api/personas/stats":
-            # v0.28.54 — Per-agent cortex confidence + evidence stats
+            # Memory V2 — per-agent memory stats
             if not self.auth_check(redirect=False): return
             try:
                 conn = _db_conn()
                 rows = conn.execute(
                     "SELECT scope_id, AVG(confidence), SUM(evidence_count), COUNT(*) "
-                    "FROM cortex_memories WHERE status='active' AND scope='agent' AND consolidated_into IS NULL "
+                    "FROM memories WHERE status='active' AND scope='agent' "
                     "GROUP BY scope_id"
                 ).fetchall()
-                # Also get global stats
                 glob = conn.execute(
                     "SELECT AVG(confidence), SUM(evidence_count), COUNT(*) "
-                    "FROM cortex_memories WHERE status='active' AND scope='global' AND consolidated_into IS NULL"
+                    "FROM memories WHERE status='active' AND scope='global'"
                 ).fetchone()
                 conn.close()
                 stats = {}
@@ -48680,60 +46562,6 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.reply_json({"ok": False, "error": "Not found"}, 404)
 
-        elif parsed.path == "/api/cortex/consolidate":
-            if not self.auth_check(redirect=False): return
-            try:
-                _cortex_consolidate_once()
-                self.reply_json({"ok": True, "message": "Consolidation complete"})
-            except Exception as e:
-                log.warning("Manual consolidation error: %s", e)
-                self.reply_json({"ok": False, "error": str(e)}, 500)
-
-        elif parsed.path == "/api/cortex/memories":
-            if not self.auth_check(redirect=False): return
-            scope = qs.get("scope", [""])[0].strip()
-            scope_id = qs.get("scope_id", [""])[0].strip()
-            memory_type_filter = qs.get("memory_type", [""])[0].strip().lower()
-            status_filter = qs.get("status", [""])[0].strip().lower()
-            limit_n = min(1000, max(10, int(qs.get("limit", ["50"])[0])))
-            offset_n = max(0, int(qs.get("offset", ["0"])[0]))
-            conn = _db_conn()
-            where_parts = ["consolidated_into IS NULL"]
-            params = []
-            if memory_type_filter and memory_type_filter in ("semantic", "episodic"):
-                where_parts.append("memory_type=?")
-                params.append(memory_type_filter)
-            if status_filter and status_filter in ("active", "archived"):
-                where_parts.append("status=?")
-                params.append(status_filter)
-            if scope:
-                where_parts.append("scope=?")
-                params.append(scope)
-            if scope_id:
-                where_parts.append("scope_id=?")
-                params.append(scope_id)
-            where = " AND ".join(where_parts)
-            rows = conn.execute(
-                f"SELECT id, fact, scope, scope_id, source_type, source_id, importance, keywords, "
-                f"routed_to, created_at, updated_at, memory_type, status, confidence, use_count FROM cortex_memories WHERE {where} "
-                f"ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                params + [limit_n, offset_n]
-            ).fetchall()
-            total = conn.execute(f"SELECT COUNT(*) FROM cortex_memories WHERE {where}", params).fetchone()[0]
-            conn.close()
-            memories = []
-            for r in rows:
-                memories.append({
-                    "id": r[0], "fact": r[1], "scope": r[2], "scope_id": r[3],
-                    "source_type": r[4], "source_id": r[5], "importance": r[6],
-                    "keywords": r[7], "routed_to": r[8],
-                    "created_at": r[9], "updated_at": r[10],
-                    "memory_type": r[11] or "semantic", "status": r[12] or "active",
-                    "confidence": r[13], "use_count": r[14] or 0,
-                    "evidence_count": 1
-                })
-            self.reply_json({"ok": True, "memories": memories, "total": total,
-                             "limit": limit_n, "offset": offset_n})
 
         elif parsed.path == "/api/state/directives":
             if not self.auth_check(redirect=False): return
@@ -48779,122 +46607,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             self.reply_json({"ok": True, "epoch": _rules_get_epoch(), "stale_agents": _rules_stale_agents()})
 
-        elif parsed.path == "/api/cortex/stats":
-            if not self.auth_check(redirect=False): return
-            import time as _t
-            conn = _db_conn()
-            total_active = conn.execute(
-                "SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL"
-            ).fetchone()[0]
-            total_merged = conn.execute(
-                "SELECT COUNT(*) FROM cortex_memories WHERE consolidated_into IS NOT NULL"
-            ).fetchone()[0]
-            last_24h = conn.execute(
-                "SELECT COUNT(*) FROM cortex_memories WHERE created_at > ?",
-                (_t.time() - 86400,)
-            ).fetchone()[0]
-            by_scope = {}
-            for row in conn.execute(
-                "SELECT scope, COUNT(*) FROM cortex_memories WHERE consolidated_into IS NULL GROUP BY scope"
-            ).fetchall():
-                by_scope[row[0]] = row[1]
-            new_1h = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='active' AND created_at > ?", (_t.time() - 3600,)).fetchone()[0]
-            archived = conn.execute("SELECT COUNT(*) FROM cortex_memories WHERE status='archived'").fetchone()[0]
-            # Session extraction stats — must match /api/sessions per-source counting
-            sessions_total = 0
-            sessions_extracted = 0
-            try:
-                sessions_extracted = conn.execute("SELECT COUNT(*) FROM session_learnings").fetchone()[0]
-                _archived = _get_archived_session_ids()
-                _src_loaders = {
-                    "openclaw": _load_session_summaries,
-                    "claude": _load_claude_session_summaries,
-                    "gemini": _load_gemini_session_summaries,
-                    "codex": lambda: [s for s in _load_porter_chat_sessions() if s.get("source") == "codex"],
-                    "ollama": lambda: [s for s in _load_porter_chat_sessions() if s.get("source") == "ollama"],
-                }
-                for _ldr in _src_loaders.values():
-                    try:
-                        _sess = _ldr()
-                        _sess = [s for s in _sess if s.get("id", "") not in _archived]
-                        sessions_total += len(_sess)
-                    except Exception as _e:
-                        mlog.emit("warn", "system", "exception.swallowed",
-                                  f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-            except Exception as _e:
-                mlog.emit("warn", "system", "exception.swallowed",
-                          f"Caught and continued: {_e}", extra={"exc_type": type(_e).__name__})
-            conn.close()
-            self.reply_json({
-                "ok": True,
-                "total_active": total_active,
-                "total_merged": total_merged,
-                "last_24h": last_24h,
-                "by_scope": by_scope,
-                "new_1h": new_1h,
-                "archived": archived,
-                "enabled": _config.get("preferences", {}).get("cortex_enabled", False),  # default False
-                "sessions_total": sessions_total,
-                "sessions_extracted": sessions_extracted
-            })
 
-        elif parsed.path == "/api/cortex/graph":
-            if not self.auth_check(redirect=False): return
-            try:
-                conn = _db_conn()
-                nodes = []
-                edges = []
-                # v0.28.47 — batch query: get all scope counts in one pass
-                scope_counts = {}
-                for row in conn.execute(
-                    "SELECT scope, scope_id, COUNT(*) FROM cortex_memories "
-                    "WHERE consolidated_into IS NULL AND status='active' GROUP BY scope, scope_id"
-                ).fetchall():
-                    scope_counts[(row[0], row[1] or "")] = row[2]
-                total_active = sum(scope_counts.values())
-                # Cortex hub node (always present)
-                nodes.append({"id": "cortex", "label": "Cortex", "type": "cortex", "emoji": "\U0001f9e0", "radius": 32, "count": total_active})
-                # Global node
-                gc = scope_counts.get(("global", ""), 0)
-                global_node_idx = -1
-                if gc > 0:
-                    global_node_idx = len(nodes)
-                    nodes.append({"id": "global", "label": "Global", "type": "global", "emoji": "\U0001f310", "radius": 18 + min(8, gc), "count": gc})
-                    edges.append({"source": 0, "target": global_node_idx, "weight": max(1, min(6, gc))})
-                # Agent nodes (always show all agents)
-                personas = conn.execute("SELECT id, name, avatar, role FROM personas").fetchall()
-                agent_indices = {}
-                for p in personas:
-                    pid, pname, pemoji, prole = p[0], p[1], p[2] or "\u2699", p[3] or ""
-                    ac = scope_counts.get(("agent", pid), 0)
-                    node_idx = len(nodes)
-                    agent_indices[pid] = node_idx
-                    nodes.append({"id": "agent:" + pid, "label": pname, "type": "agent", "emoji": pemoji, "radius": 18 + min(8, ac), "count": ac, "role": prole})
-                    edges.append({"source": 0, "target": node_idx, "weight": max(1, min(6, ac))})
-                    if global_node_idx >= 0:
-                        edges.append({"source": global_node_idx, "target": node_idx, "weight": 1})
-                # Project nodes (from scope_counts, no extra queries)
-                project_indices = {}
-                for (scope, sid), cnt in scope_counts.items():
-                    if scope == "project" and sid:
-                        node_idx = len(nodes)
-                        project_indices[sid] = node_idx
-                        nodes.append({"id": "project:" + sid, "label": sid[:20], "type": "project", "emoji": "\U0001f4c1", "radius": 18 + min(8, cnt), "count": cnt})
-                        edges.append({"source": 0, "target": node_idx, "weight": max(1, min(6, cnt))})
-                # Agent→project edges (every agent connects to every project)
-                for aidx in agent_indices.values():
-                    for pidx in project_indices.values():
-                        edges.append({"source": aidx, "target": pidx, "weight": 1})
-                # Agent-to-agent collab edges (if 2+ agents exist)
-                agent_ids = list(agent_indices.keys())
-                if len(agent_ids) >= 2 and project_indices:
-                    for i in range(len(agent_ids)):
-                        for j in range(i + 1, len(agent_ids)):
-                            edges.append({"source": agent_indices[agent_ids[i]], "target": agent_indices[agent_ids[j]], "weight": 1, "type": "collab"})
-                conn.close()
-                self.reply_json({"nodes": nodes, "edges": edges})
-            except Exception as e:
-                self.reply_json({"nodes": [], "edges": [], "error": str(e)})
 
         elif parsed.path == "/api/trace/task-board":
             if not self.auth_check(redirect=False): return
@@ -49193,7 +46906,7 @@ class Handler(BaseHTTPRequestHandler):
 
             # Filter system noise for non-admin users
             if not _log_is_admin:
-                _noise = ("auto-remediat", "retry fix", "hygiene", "cortex_consolidat", "memory_extract", "cap_check", "heartbeat", "self_heal", "workflow_run", "agent_backend_eval", "staleness")
+                _noise = ("auto-remediat", "retry fix", "hygiene", "memory_extract", "cap_check", "heartbeat", "self_heal", "workflow_run", "agent_backend_eval", "staleness")
                 lines = [l for l in lines if not any(_nw in l.lower() for _nw in _noise)]
             self.reply_json({"ok": True, "lines": lines})
 
@@ -50273,15 +47986,6 @@ class Handler(BaseHTTPRequestHandler):
             if not self.auth_check(redirect=False): return
             self.reply_json({"ok": True, "processes": _process_list()})
 
-        elif parsed.path == "/api/cortex/batch-extract":
-            if not self.auth_check(redirect=False): return
-            # Run in background thread
-            def _do_batch():
-                result = _cortex_batch_extract(limit=10)
-                mlog.emit("info", "cortex", "cortex.batch_extract",
-                    f"Batch extraction: {result.get('processed', 0)} dispatches, {result.get('extracted', 0)} extracted")
-            threading.Thread(target=_do_batch, daemon=True, name="cortex-batch").start()
-            self.reply_json({"ok": True, "message": "Batch extraction started in background"})
 
         elif parsed.path == "/api/backend-health":
             if not self.auth_check(redirect=False): return
@@ -50976,14 +48680,7 @@ class Handler(BaseHTTPRequestHandler):
                     _save_chat_message(chat_id, _runtime_label, _raw_text, full_response,
                                        project_id=_stream_project, persona_name=_stream_persona)
 
-                # Legacy extractive memory is disabled by default in Memory V3.
-                if _memory_auto_extract_enabled() and full_response and len(full_response) >= _config.get("preferences", {}).get("cortex_min_response_len", 100):
-                    _cx_prompt = prompt
-                    _cx_resp = full_response
-                    _cx_be = _stream_backend
-                    def _cx_bg():
-                        _cortex_extract_and_route(_cx_prompt, _cx_resp, backend=_cx_be)
-                    threading.Thread(target=_cx_bg, name="cortex-chat-extract", daemon=True).start()
+                # Cortex removed — extraction handled by _mem_extract_signals() in Phase 2 plan 02-02
 
             except Exception as e:
                 if _stream_backend:
@@ -53727,7 +51424,7 @@ class Handler(BaseHTTPRequestHandler):
                 sets.append("updated_at=strftime('%s','now')")
                 if "text" in data and "keywords" not in data:
                     sets.append("keywords=?")
-                    params.append(",".join(sorted(_cortex_tokenize(str(data["text"]).strip()))))
+                    params.append(",".join(sorted(str(data["text"]).strip().lower().split())))
                 params.append(int(mem_id))
                 conn.execute("UPDATE memories SET " + ",".join(sets) + " WHERE id=?", params)
                 conn.commit()
@@ -53751,78 +51448,8 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.reply_json({"ok": False, "error": str(e)}, 500)
 
-        # ── Update individual cortex memory (POST) ─────────────────────────
-        elif parsed.path.startswith("/api/cortex/memories/") and parsed.path.endswith("/update"):
-            if not self.auth_check(redirect=False): return
-            parts = parsed.path.split("/")
-            mem_id = parts[4] if len(parts) >= 6 else ""
-            if not mem_id:
-                self.reply_json({"ok": False, "error": "Missing memory ID"}, 400); return
-            data = self.read_json_body()
-            new_fact = str(data.get("fact", "")).strip()
-            if not new_fact:
-                self.reply_json({"ok": False, "error": "Empty fact"}, 400); return
-            try:
-                conn = _db_conn()
-                new_scope = str(data.get("scope", "")).strip()
-                new_scope_id = str(data.get("scope_id", "")).strip()
-                if new_scope and new_scope in ("global", "agent", "project"):
-                    conn.execute("UPDATE cortex_memories SET fact=?, scope=?, scope_id=?, keywords=?, updated_at=strftime('%s','now') WHERE id=?",
-                                 (new_fact, new_scope, new_scope_id, ",".join(_cortex_tokenize(new_fact)), mem_id))
-                else:
-                    conn.execute("UPDATE cortex_memories SET fact=?, keywords=?, updated_at=strftime('%s','now') WHERE id=?",
-                                 (new_fact, ",".join(_cortex_tokenize(new_fact)), mem_id))
-                conn.commit()
-                conn.close()
-                _emit_event("memory:updated", {"id": mem_id, "scope": new_scope or "", "scope_id": new_scope_id or ""})
-                mlog.emit("info", "memory", "memory.update", f"Updated memory {mem_id}", memory_id=mem_id, scope=new_scope or "", scope_id=new_scope_id or "")
-                self.reply_json({"ok": True, "id": mem_id, "fact": new_fact})
-            except Exception as e:
-                mlog.emit("error", "memory", "memory.update", str(e), memory_id=mem_id)
-                self.reply_json({"ok": False, "error": str(e)}, 500)
 
-        # ── Update cortex memory status (POST) ─────────────────────────────
-        elif parsed.path.startswith("/api/cortex/memories/") and parsed.path.endswith("/status"):
-            if not self.auth_check(redirect=False): return
-            parts = parsed.path.split("/")
-            mem_id = parts[4] if len(parts) >= 6 else ""
-            if not mem_id:
-                self.reply_json({"ok": False, "error": "Missing memory ID"}, 400); return
-            data = self.read_json_body()
-            new_status = str(data.get("status", "")).strip()
-            if new_status not in ("active", "archived"):
-                self.reply_json({"ok": False, "error": "Status must be 'active' or 'archived'"}, 400); return
-            try:
-                conn = _db_conn()
-                conn.execute("UPDATE cortex_memories SET status=?, updated_at=strftime('%s','now') WHERE id=?",
-                             (new_status, mem_id))
-                conn.commit()
-                conn.close()
-                _emit_event("memory:status", {"id": mem_id, "status": new_status})
-                mlog.emit("info", "memory", "memory.status", f"Set memory {mem_id} -> {new_status}", memory_id=mem_id, status=new_status)
-                self.reply_json({"ok": True, "id": mem_id, "status": new_status})
-            except Exception as e:
-                mlog.emit("error", "memory", "memory.status", str(e), memory_id=mem_id, status=new_status)
-                self.reply_json({"ok": False, "error": str(e)}, 500)
 
-        # ── Delete individual cortex memory (POST) ─────────────────────────
-        elif parsed.path.startswith("/api/cortex/memories/") and parsed.path.endswith("/delete"):
-            if not self.auth_check(redirect=False): return
-            parts = parsed.path.split("/")
-            mem_id = parts[4] if len(parts) >= 6 else ""
-            if not mem_id:
-                self.reply_json({"ok": False, "error": "Missing memory ID"}, 400); return
-            try:
-                conn = _db_conn()
-                conn.execute("DELETE FROM cortex_memories WHERE id=?", (mem_id,))
-                conn.commit()
-                conn.close()
-                _emit_event("memory:deleted", {"id": mem_id})
-                mlog.emit("info", "memory", "memory.delete", f"Deleted memory {mem_id}", memory_id=mem_id)
-                self.reply_json({"ok": True, "deleted": mem_id})
-            except Exception as e:
-                mlog.emit("error", "memory", "memory.delete", str(e), memory_id=mem_id)
-                self.reply_json({"ok": False, "error": str(e)}, 500)
 
         elif parsed.path.startswith("/api/state/directives/") and parsed.path.endswith("/status"):
             if not self.auth_check(redirect=False): return
@@ -55664,27 +53291,6 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"ok": True, "preferences": prefs})
 
 
-        # ── API keys management ───────────────────────────────────────────
-        elif parsed.path == "/api/cortex/config":
-            if not self.auth_check(redirect=False): return
-            data = self.read_json_body()
-            if "preferences" not in _config:
-                _config["preferences"] = {}
-            cortex_keys = ["cortex_enabled", "cortex_min_response_len", "cortex_max_facts",
-                           "cortex_inject_limit", "cortex_consolidate_hours",
-                           "cortex_archive_days", "cortex_min_use_count"]
-            updated = {}
-            for k in cortex_keys:
-                if k in data:
-                    val = data[k]
-                    if k == "cortex_enabled":
-                        val = bool(val)
-                    else:
-                        val = max(1, int(val))
-                    _config["preferences"][k] = val
-                    updated[k] = val
-            save_config(_config)
-            self.reply_json({"ok": True, "updated": updated})
 
         elif parsed.path == "/api/admin/sessions":
             if not self.auth_check(redirect=False): return  # was role-cap check
@@ -57414,7 +55020,6 @@ def _handle_wf_list(include_internal: bool = False):
     prefs = _config.get("preferences", {})
     # v0.28.34 — Trigger descriptions for each workflow
     _wf_triggers = {
-        "cortex_consolidation": "Internal compatibility timer. Retains old cortex-era cleanup while structured state replaces it.",
         "context_hygiene": "Timer: runs every configured interval. Prunes old log entries, caps oversized SOUL files, archives stale agent memories.",
         "capability_checks": "Timer: polls all AI backends and system tools to detect availability changes.",
         "heartbeat": "Timer: pings each agent with heartbeat_enabled=1 on their configured cron schedule.",
@@ -57597,7 +55202,6 @@ def _handle_wf_trigger(wf_id):
     if not wf:
         return {"ok": False, "error": "Unknown workflow"}, 404
     runners = {
-        "cortex_consolidation": lambda: _cortex_consolidate_once(),
         "context_hygiene": lambda: _hygiene_run(),
         "capability_checks": lambda: _run_cap_checks(force=True),
         "heartbeat": lambda: _heartbeat_tick(),
@@ -57654,10 +55258,7 @@ def _handle_wf_config(wf_id, body):
         # Update interval_s if applicable
         with _wf_lock:
             wf = _wf_registry.get(wf_id)
-            if wf_id == "cortex_consolidation" and "cortex_consolidate_hours" in updated:
-                wf["interval_s"] = max(1, updated["cortex_consolidate_hours"]) * 3600
-                wf["interval"] = f"{max(1, updated['cortex_consolidate_hours'])}h"
-            elif wf_id == "context_hygiene" and "hygiene_interval_hours" in updated:
+            if wf_id == "context_hygiene" and "hygiene_interval_hours" in updated:
                 wf["interval_s"] = max(1, updated["hygiene_interval_hours"]) * 3600
                 wf["interval"] = f"{max(1, updated['hygiene_interval_hours'])}h"
     return {"ok": True, "updated": updated}
@@ -57693,7 +55294,6 @@ if __name__ == "__main__":
     _migrate_projects_from_json()  # One-shot: JSON projects → SQLite
     _cleanup_legacy_users()  # Delete legacy admin users (system, admin, jacob)
     _state_seed_defaults()
-    _purge_legacy_cortex_dev_memories()
     _ensure_porter_persona()
     try:
         for _proj in _project_list(include_all=True):
