@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. All Porter views pass a visual consistency check — no mismatched fonts, inconsistent spacing, or broken component styles
   6. Dark mode and light mode both render correctly across all views — no hard-coded colors, all values use CSS variables
   7. Boot sequence detects, installs, and configures all dependencies — a fresh machine can run Porter after completing the first-run wizard
-**Plans**: 7 plans
+**Plans**: 9 plans
 
 Plans:
 - [ ] 01-01-PLAN.md — CSS variable architecture, dark/light theming, React sidebar cleanup (Wave 1)
@@ -44,6 +44,8 @@ Plans:
 - [ ] 01-05-PLAN.md — Projects migration from JSON to SQLite (Wave 3)
 - [ ] 01-06-PLAN.md — CSS audit sweep: 1,767 hardcoded colors to variables (Wave 3)
 - [ ] 01-07-PLAN.md — Boot sequence, hardcoding fixes, landing page, final verification (Wave 4)
+- [ ] 01-08-PLAN.md — [GAP] Fix Fastify OPTIONS crash, build backend (Wave 5)
+- [ ] 01-09-PLAN.md — [GAP] Fix project migration bypass paths, add exception logging (Wave 5)
 
 ### Phase 2: Memory V2
 **Goal**: Memory V2 is the only active memory system — Cortex is deleted, signals are clean, and the memory feed is visible in real time
@@ -175,7 +177,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 5/7 | In Progress|  |
+| 1. Foundation | 7/9 | In Progress (gap closure) |  |
 | 2. Memory V2 | 0/6 | Not started | - |
 | 3. Route Migration | 0/5 | Not started | - |
 | 4. Agent Autonomy | 0/6 | Not started | - |
