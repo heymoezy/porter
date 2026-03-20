@@ -17307,13 +17307,23 @@ select::-ms-expand { display: none; }
     <div class="module-hdr">
       <span class="module-title">Memory</span>
       <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
-        <input type="text" id="mem-search-input" placeholder="Search memories…" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;width:180px;outline:none">
-        <button class="btn btn-ghost" style="font-size:11px" onclick="loadMemory()">&#8635;</button>
+        <button class="btn btn-ghost" style="font-size:11px" onclick="loadMemory()" title="Refresh">&#8635;</button>
       </div>
     </div>
-    <div id="memory-dashboard" style="display:flex;flex-direction:column;gap:14px"></div>
+    <div class="recall-feed-controls" style="display:flex;gap:8px;padding:8px 16px;align-items:center;border-bottom:1px solid var(--border)">
+      <select id="recall-scope-filter" style="font-size:12px;padding:4px 8px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+        <option value="all">All Scopes</option>
+        <option value="global">Global</option>
+        <option value="project">Project</option>
+        <option value="agent">Agent</option>
+      </select>
+      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;margin-left:auto;cursor:pointer" title="When enabled, Porter manages memory autonomously">
+        <input type="checkbox" id="recall-auto-manage" checked style="cursor:pointer"> Auto-manage
+      </label>
+    </div>
+    <div id="recall-feed" style="overflow-y:auto;max-height:calc(100vh - 200px);padding:0 16px"></div>
+    <div id="recall-feed-empty" style="padding:32px 16px;text-align:center;color:var(--text3);font-size:13px;display:none">No memories yet. Porter will learn as you interact.</div>
   </div>
-
     <div id="tools-module" class="module-panel">
     <div class="module-hdr">
       <span class="module-title">Tools</span>
@@ -20299,71 +20309,124 @@ function switchModule(name) {
 }
 
 
-// ── Memory V2 Dashboard ──────────────────────────────────────────────────
+// ── Memory V2 — Compact Real-Time Feed ──────────────────────────────────────
 
-async function loadMemory() {
-  var el = document.getElementById('memory-dashboard');
-  if (!el) return;
-  var _isPlatAdmin = false;  // system admin role removed
-  el.innerHTML = _spinnerOnlyMarkup(140, '18px 0');
-  try {
-    var [statsRes, queueRes] = await Promise.all([
-      api('/api/memory/stats' + (_isPlatAdmin ? '' : '?exclude_system=1')),
-      _isPlatAdmin ? api('/api/memory/review-queue?limit=10') : Promise.resolve({queue:[]})
-    ]);
-    var stats = statsRes || {};
-    var byKind = stats.by_kind || {};
-    var queue = (queueRes && queueRes.queue) || [];
-    if (!_isPlatAdmin) { queue = []; }
-    var html = '';
-    // Stat cards
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">';
-    var cards = [];
-    if (_isPlatAdmin) cards.push({l:'Directives',c:byKind.directive||0,clr:'#3b82f6',tip:'Stable rules Porter always follows (high trust)'});
-    cards = cards.concat([
-      {l:'Concepts',c:byKind.concept||0,clr:'#a855f7',tip:'Durable facts about your product, users, or strategy'},
-      {l:'Episodes',c:byKind.episode||0,clr:'var(--text3)',tip:'Time-bound session summaries and run logs'},
-      {l:'Signals',c:byKind.signal||0,clr:'var(--warning)',tip:'Observations awaiting your review (promote or dismiss)'},
-      {l:'Total',c:_isPlatAdmin ? (stats.total||0) : ((byKind.concept||0)+(byKind.episode||0)+(byKind.signal||0)),clr:'var(--text)',tip:'All memories across all categories'}
-    ]);
-    cards.forEach(function(s) {
-      var kindKey = s.l.toLowerCase().replace(/s$/,'');
-      var clickable = s.l !== 'Total' ? ' onclick="_memLoadKind(\x27' + kindKey + '\x27)" style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);cursor:pointer" title="' + s.tip + ' — Click to view"' : ' style="padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg);cursor:help" title="' + s.tip + '"';
-      html += '<div' + clickable + '><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:' + s.clr + '">' + s.l + '</div><div style="font-size:24px;font-weight:800;color:var(--text);margin-top:4px">' + s.c + '</div></div>';
-    });
-    html += '</div>';
-    // Category viewer + Search results
-    html += '<div id="mem-kind-viewer"></div>';
-    html += '<div id="mem-search-results"></div>';
-    // Review queue
-    if (queue.length) {
-      html += '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer" onclick="var l=this.nextElementSibling;l.style.display=l.style.display===\'none\'?\'\':\'none\';this.querySelector(\'span:last-child\').textContent=l.style.display===\'none\'?\'\u25b8\':\'\u25be\'"><span style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--warning)">Needs Review</span><span style="display:inline-block;padding:2px 8px;border-radius:99px;background:var(--warning);color:var(--bg);font-size:10px;font-weight:700">' + queue.length + '</span><span style="font-size:10px;color:var(--text3);margin-left:auto">\u25be</span></div>';
-      html += '<div style="display:flex;flex-direction:column;gap:4px">';
-      queue.forEach(function(s) {
-        html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:color-mix(in srgb,var(--warning) 3%, var(--bg));border:1px solid var(--border)">'
-          + '<div style="flex:1;min-width:0;font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(s.preview || '') + '">' + escHtml(s.preview || '') + '</div>'
-          + '<div style="display:flex;gap:4px;flex-shrink:0">'
-          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--success);padding:2px 6px" onclick="_memDashPromote(' + s.id + ')" title="This is true — promote to concept">\u2713 True</button>'
-          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--danger);padding:2px 6px" onclick="_memDashDismiss(' + s.id + ')" title="This is false — dismiss">\u2717 False</button>'
-          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--text3);padding:2px 6px" onclick="_memDashDismiss(' + s.id + ')" title="Not useful — ignore">\u2014</button>'
-          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--accent);padding:2px 6px" onclick="_memDashChat(\x27' + escHtml((s.preview || '').replace(/'/g, '')) + '\x27)" title="Discuss with Porter">\u{1f4ac}</button>'
-          + '</div></div>';
+function loadMemory(agentId) {
+  var feed = document.getElementById('recall-feed');
+  var empty = document.getElementById('recall-feed-empty');
+  if (!feed) return;
+  feed.innerHTML = '<div style="padding:16px;color:var(--text3);font-size:12px">Loading...</div>';
+  if (empty) empty.style.display = 'none';
+
+  var scopeFilter = document.getElementById('recall-scope-filter');
+  var scope = scopeFilter ? scopeFilter.value : 'all';
+  var url = '/api/memory/feed';
+  var params = [];
+  if (agentId) params.push('agent_id=' + encodeURIComponent(agentId));
+  if (scope && scope !== 'all') params.push('scope=' + encodeURIComponent(scope));
+  if (params.length) url += '?' + params.join('&');
+
+  fetch(url, {credentials:'include'}).then(function(r){return r.json();}).then(function(data){
+    feed.innerHTML = '';
+    if (!data.items || data.items.length === 0) {
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    data.items.forEach(function(item) { _recallFeedAppend(feed, item); });
+
+    // Clear badge count when Memory tab is opened
+    var badge = document.getElementById('recall-badge');
+    if (badge) { badge.textContent = '0'; badge.style.display = 'none'; }
+
+    // Mark as read
+    fetch('/api/memory/mark-read', {method:'POST', credentials:'include'});
+
+    // Wire scope filter (once)
+    var rf = document.getElementById('recall-scope-filter');
+    if (rf && !rf._wired) {
+      rf._wired = true;
+      rf.addEventListener('change', function() { loadMemory(agentId); });
+    }
+
+    // Wire auto-manage toggle (once)
+    var ram = document.getElementById('recall-auto-manage');
+    if (ram && !ram._wired) {
+      ram._wired = true;
+      ram.addEventListener('change', function() {
+        fetch('/api/preferences', {method:'POST', credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({auto_manage_memory: ram.checked})});
       });
-      html += '</div></div>';
-    } else {
-      html += '<div style="font-size:12px;color:var(--text3)">No signals pending review.</div>';
     }
-    el.innerHTML = html;
-    // Wire search
-    var searchInput = document.getElementById('mem-search-input');
-    if (searchInput) {
-      searchInput.onkeydown = function(e) {
-        if (e.key === 'Enter') _memDashSearch(searchInput.value);
-      };
+  }).catch(function(e){
+    feed.innerHTML = '<div style="padding:16px;color:var(--danger,#f87171);font-size:12px">Failed to load: ' + (e.message || 'unknown error') + '</div>';
+  });
+}
+
+function _recallFeedPrepend(data) {
+  var feed = document.getElementById('recall-feed');
+  var empty = document.getElementById('recall-feed-empty');
+  if (!feed) return;
+  if (empty) empty.style.display = 'none';
+
+  // Apply scope filter
+  var filter = document.getElementById('recall-scope-filter');
+  if (filter && filter.value !== 'all' && data.scope !== filter.value) return;
+
+  var row = _recallFeedRow(data);
+  feed.insertBefore(row, feed.firstChild);
+
+  // Animate in
+  row.style.opacity = '0';
+  row.style.transition = 'opacity 0.3s';
+  requestAnimationFrame(function() { row.style.opacity = '1'; });
+
+  // Increment badge if memory module is not active
+  if (typeof _currentModule !== 'undefined' && _currentModule !== 'memory') {
+    var badge = document.getElementById('recall-badge');
+    if (badge) {
+      var count = parseInt(badge.textContent || '0') + 1;
+      badge.textContent = count;
+      badge.style.display = '';
     }
-  } catch(e) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--text3)">Failed to load memory dashboard</div>';
   }
+}
+
+function _recallFeedAppend(container, data) {
+  container.appendChild(_recallFeedRow(data));
+}
+
+function _recallFeedRow(data) {
+  var row = document.createElement('div');
+  row.className = 'recall-row';
+  row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;cursor:default';
+
+  var action = data.action || 'learned';
+  var iconMap = {learned: '&#128161;', promoted: '&#11088;', dismissed: '&#128683;', updated: '&#128260;'};
+  var icon = iconMap[action] || iconMap.learned;
+
+  var scope = data.scope || 'global';
+  var scopeColorMap = {global: 'var(--accent,#6366f1)', project: 'var(--success,#4ade80)', agent: 'var(--warning,#fbbf24)'};
+  var scopeColor = scopeColorMap[scope] || scopeColorMap.global;
+
+  var kindLabel = data.memory_kind ? (' <span style="opacity:0.6;font-size:10px">' + escHtml(data.memory_kind) + '</span>') : '';
+  var textHtml = typeof escHtml === 'function' ? escHtml(data.text || '') : (data.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  row.innerHTML = '<span style="flex-shrink:0;width:18px;text-align:center;font-size:13px">' + icon + '</span>'
+    + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="' + textHtml + '">' + textHtml + kindLabel + '</span>'
+    + '<span style="flex-shrink:0;font-size:10px;padding:1px 5px;border-radius:3px;background:' + scopeColor + ';color:#fff;opacity:0.85;text-shadow:0 1px 1px rgba(0,0,0,.3)">' + escHtml(scope) + '</span>'
+    + '<span style="flex-shrink:0;font-size:10px;color:var(--text3);margin-left:2px;min-width:24px;text-align:right">' + _recallTimeAgo(data.ts) + '</span>';
+  return row;
+}
+
+function _recallTimeAgo(ts) {
+  if (!ts) return '';
+  var diff = (Date.now() / 1000) - ts;
+  if (diff < 60) return 'now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h';
+  return Math.floor(diff / 86400) + 'd';
 }
 
 async function _memDashSearch(q) {
@@ -37298,20 +37361,21 @@ function _sseUnsubscribe(id) {
     _sseBus = null;
   }
 }
-// Recall SSE: append inline indicator to last assistant message when Porter learns
+// Recall SSE: prepend to memory feed AND append inline indicator to last assistant message
 (function() {
   _sseSubscribe(function(d) {
     if (!d || d.type !== 'recall:event') return;
+    // Always try to prepend to the memory feed
+    if (typeof _recallFeedPrepend === 'function') _recallFeedPrepend(d.data || {});
+    // Also append inline indicator to chat for 'learned' events
     if (!d.data || d.data.action !== 'learned') return;
     var chatEl = document.getElementById('chat-messages');
     if (!chatEl) return;
-    // Find last assistant message element
     var msgs = chatEl.querySelectorAll('.chat-msg.assistant');
     if (!msgs.length) return;
     var last = msgs[msgs.length - 1];
-    // Don't append if already has a recall indicator
     if (last.querySelector('.recall-noted')) return;
-    _appendRecallIndicator(last, d.data.text || '');
+    if (typeof _appendRecallIndicator === 'function') _appendRecallIndicator(last, d.data.text || '');
   });
 })();
 
