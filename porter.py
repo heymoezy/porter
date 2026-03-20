@@ -3425,7 +3425,11 @@ def _mem_promote(memory_id, new_kind, new_trust):
         conn = _db_conn()
         conn.execute("UPDATE memories SET memory_kind=?, trust_tier=?, review_state='accepted', updated_at=strftime('%s','now') WHERE id=?", (kind, trust, int(memory_id)))
         conn.commit()
+        # Check if promotion triggers agent evolution (must read scope/scope_id before closing)
+        _ev_row = conn.execute("SELECT scope, scope_id FROM memories WHERE id=?", (int(memory_id),)).fetchone()
         conn.close()
+        if _ev_row and _ev_row['scope'] == 'agent' and _ev_row['scope_id']:
+            _recall_check_evolution(_ev_row['scope_id'])
         return True
     except Exception:
         return False
@@ -3545,6 +3549,84 @@ def _recall_prior_work(persona_id, query, limit=3):
     return "Prior work on this topic:\n" + '\n'.join(summaries)
 
 
+
+
+
+def _recall_check_evolution(persona_id):
+    """Check if an agent has accumulated enough feedback signals to trigger identity evolution.
+
+    Threshold: 5+ active feedback-derived signals.
+
+    CRITICAL: Count memory_kind='signal' with source_type IN ('feedback', 'acceptance', 'correction')
+    and status='active'. Do NOT count memory_kind='directive' — _recall_track_feedback inserts
+    signals (memory_kind='signal'), and _mem_insert sets status='active' on all inserts.
+
+    When triggered: rebuild the agent's 'Who Is' identity section from accumulated knowledge.
+    """
+    if not persona_id:
+        return False
+    try:
+        conn = _db_conn()
+        count = conn.execute(
+            "SELECT COUNT(*) as cnt FROM memories WHERE scope='agent' AND scope_id=? "
+            "AND memory_kind='signal' AND status='active' "
+            "AND source_type IN ('feedback', 'acceptance', 'correction')",
+            (persona_id,)
+        ).fetchone()
+        conn.close()
+
+        if count and count['cnt'] >= 5:
+            # Trigger evolution — rebuild identity
+            _recall_rebuild_identity(persona_id)
+            _emit_event("recall:agent_evolved", {
+                "persona_id": persona_id,
+                "signal_count": count['cnt'],
+                "ts": __import__("time").time()
+            })
+            mlog.emit("info", "memory", "recall.evolution",
+                      f"Agent {persona_id} evolved with {count['cnt']} feedback signals",
+                      extra={"persona_id": persona_id, "count": count['cnt']})
+            return True
+    except Exception as _e:
+        mlog.emit("warn", "memory", "exception.swallowed", str(_e),
+                  extra={"exc_type": type(_e).__name__, "fn": "_recall_check_evolution"})
+    return False
+
+
+def _recall_rebuild_identity(persona_id):
+    """Rebuild an agent's identity description from accumulated Recall knowledge."""
+    try:
+        conn = _db_conn()
+        # Get all active feedback signals for this agent
+        signals = conn.execute(
+            "SELECT text, source_type FROM memories WHERE scope='agent' AND scope_id=? "
+            "AND memory_kind='signal' AND status='active' "
+            "AND source_type IN ('feedback', 'acceptance', 'correction') "
+            "ORDER BY importance DESC LIMIT 20",
+            (persona_id,)
+        ).fetchall()
+        # Get the persona record
+        persona = conn.execute("SELECT * FROM personas WHERE id=?", (persona_id,)).fetchone()
+        conn.close()
+
+        if persona and signals:
+            # Build a summary of learned behaviors
+            learned = [s['text'][:100] for s in signals]
+            if learned:
+                identity_addition = "Evolved traits: " + "; ".join(learned[:5])
+                # Update persona description with evolved traits
+                conn = _db_conn()
+                current_desc = persona['description'] or ''
+                # Remove any previous "Evolved traits:" section
+                import re as _re
+                current_desc = _re.sub(r'\nEvolved traits:.*$', '', current_desc, flags=_re.MULTILINE)
+                new_desc = current_desc.rstrip() + '\n' + identity_addition
+                conn.execute("UPDATE personas SET description=? WHERE id=?", (new_desc, persona_id))
+                conn.commit()
+                conn.close()
+    except Exception as _e:
+        mlog.emit("warn", "memory", "exception.swallowed", str(_e),
+                  extra={"exc_type": type(_e).__name__, "fn": "_recall_rebuild_identity"})
 
 
 def _recall_track_feedback(user_message, prior_response, persona_id='', project_id=''):
@@ -15954,6 +16036,16 @@ body.density-compact .file-name { padding: 6px 0; }
 .persona-card.orchestrator .persona-figure { animation:none; }
 .persona-card.orchestrator.is-busy .persona-figure { animation:pixel-hero 1.8s ease-in-out infinite; }
 .persona-card.selected .persona-figure { filter:drop-shadow(0 20px 30px rgba(0,0,0,.24)); }
+.persona-card.evolving {
+  animation: recall-evolve 1.5s ease-in-out;
+}
+@keyframes recall-evolve {
+  0% { transform: scale(1); filter: brightness(1); }
+  25% { transform: scale(1.05); filter: brightness(1.3) hue-rotate(20deg); }
+  50% { transform: scale(0.95); filter: brightness(1.5) hue-rotate(40deg); box-shadow: 0 0 20px var(--accent); }
+  75% { transform: scale(1.02); filter: brightness(1.2) hue-rotate(10deg); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
 /* Persona XP bar removed (v0.33.18) */
 
 /* v0.29.1 — Full-page Agent Detail View */
@@ -37665,6 +37757,18 @@ function _sseUnsubscribe(id) {
     _sseBus = null;
   }
 }
+// Recall agent evolution SSE: trigger respawn animation on persona card
+(function() {
+  _sseSubscribe(function(d) {
+    if (!d || d.type !== 'recall:agent_evolved') return;
+    if (!d.data || !d.data.persona_id) return;
+    var card = document.querySelector('[data-persona-id="' + d.data.persona_id + '"]');
+    if (card) {
+      card.classList.add('evolving');
+      setTimeout(function() { card.classList.remove('evolving'); }, 1600);
+    }
+  });
+})();
 // Recall SSE: prepend to memory feed AND append inline indicator to last assistant message
 (function() {
   _sseSubscribe(function(d) {
