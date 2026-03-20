@@ -46566,6 +46566,7 @@ class Handler(BaseHTTPRequestHandler):
             _set_session_id(_stok[:8])
 
         # ── Root routes (legacy embedded UI) ──
+        # DEPRECATED Phase 3: Fastify /api/v1/auth/login owns this
         if parsed.path == "/login":
             self.reply_html(LOGIN_PAGE)
             return
@@ -46841,6 +46842,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── agents ────────────────────────────────────────────────────────
         # ── Persona CRUD (GET) ──────────────────────────────────────
+        # DEPRECATED Phase 3: Fastify /api/v1/agents/* owns this
         elif parsed.path == "/api/personas":
             if not self.auth_check(redirect=False): return
             _ps_tok = self.get_session_token()
@@ -48950,6 +48952,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"runs": runs, "schedule_id": sid})
 
         # ── D1: project registry ─────────────────────────────────────────────
+        # DEPRECATED Phase 3: Fastify /api/v1/projects/* owns this
         elif parsed.path == "/api/projects":
             if not self.auth_check(redirect=False): return
             # v0.31.54 — Role-based project isolation (replaces config username check)
@@ -50434,6 +50437,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"ok": False, "error": f"Login failed: {type(e).__name__}"}, 500)
             return
 
+        # DEPRECATED Phase 3: Fastify /api/v1/auth/logout owns this
         elif parsed.path == "/logout":
             token = self.get_session_token()
             if token:
@@ -52339,6 +52343,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── agents CRUD ────────────────────────────────────────────────────
         # ── Persona CRUD (POST) ─────────────────────────────────────
+        # DEPRECATED Phase 3: Fastify /api/v1/agents/* owns this
         elif parsed.path == "/api/personas":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
@@ -55300,6 +55305,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json({"error": "unknown action"}, 400)
 
         # ── D1: project registry mutations ───────────────────────────────────────
+        # DEPRECATED Phase 3: Fastify /api/v1/projects/* owns this
         elif parsed.path == "/api/projects":
             if not self.auth_check(redirect=False): return
             data   = self.read_json_body()
