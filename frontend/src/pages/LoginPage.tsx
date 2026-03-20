@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion, useAnimationControls } from 'framer-motion';
+import { colors, radius } from '../design-system/tokens';
 
 const PorterLogo = () => (
   <svg width="40" height="40" viewBox="0 0 34 34" fill="none">
@@ -38,16 +39,15 @@ export function LoginPage() {
     }
     setLoading(true);
     try {
-      const res = await fetch('/login', {
+      const res = await fetch('/api/v1/auth/login', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && (data.ok || data.data)) {
-        const porterUrl = window.location.port === '8877' ? '/' : `//${window.location.hostname}:8877/`;
-        window.location.href = porterUrl;
+      if (res.ok && (data.ok || data.data?.username)) {
+        window.location.href = '/';
       } else {
         triggerError(data?.error?.message || data?.message || 'Wrong username or password.');
       }
