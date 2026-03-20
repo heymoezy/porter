@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Porter v0.34.15 — Fix memory noise/deduplication, CRM salutation, agent detail, recall badge"""
+"""Porter v0.34.16 — Fix memory noise/deduplication, CRM salutation, agent detail, recall badge"""
 
 
 import email
@@ -3262,6 +3262,9 @@ def _mem_insert(memory_kind='signal', text='', scope='global', scope_id='', trus
     """Insert a memory into the unified memories table."""
     text = str(text or '').strip()
     if not text:
+        return None
+    # Noise guard: file upload events are not learnings — never store as memory
+    if text.startswith('File uploaded:') or text.startswith('Upload: '):
         return None
     kind = str(memory_kind or 'signal').strip().lower()
     if kind not in ('directive', 'concept', 'episode', 'signal'):
@@ -17204,7 +17207,7 @@ select option {
     <a href="#" onclick="toggleSettingsNav();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
     <a href="#" onclick="doLogout();return false" style="color:var(--text3);flex-shrink:0;padding:4px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'" title="Sign out"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
-  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.15</div>
+  <div style="font-size:10px;color:var(--text3);padding:6px 0;letter-spacing:0.5px;border-top:1px solid var(--border)">PORTER v0.34.16</div>
   </div>
 </aside>
 
@@ -17932,7 +17935,14 @@ select option {
         </div>
         <div class="settings-field">
           <label>Timezone</label>
-          <select class="settings-input" id="sa-timezone" style="max-width:340px"></select>
+          <div id="sa-tz-wrapper" style="position:relative;max-width:340px">
+            <input type="text" class="settings-input" id="sa-timezone-input" placeholder="Search timezone..." autocomplete="off"
+              style="width:100%;box-sizing:border-box;padding-right:28px"
+              oninput="_tzFilter()" onfocus="_tzOpen()" onblur="_tzBlurClose()" onkeydown="_tzKeyNav(event)">
+            <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text3);font-size:11px">&#9660;</span>
+            <div id="sa-tz-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;max-height:240px;overflow-y:auto;background:var(--raised);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.35);z-index:5000;font-size:12px"></div>
+            <input type="hidden" id="sa-timezone" value="">
+          </div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">Controls how Porter displays dates and times.</div>
         </div>
         <div class="settings-save-row">
@@ -18325,7 +18335,7 @@ function withLoadTimeout(containerId, loadFn, ms) {
 }
 
 const CHANGELOG = [
-  { ver:'v0.34.15', date:'2026-03-20', notes:['Fix memory deduplication: _mem_insert now skips exact duplicates (text+scope+scope_id)','Fix memory noise: project status_change and settings_update no longer stored as memories','Add project op categories to RECALL_NOISE_BLACKLIST','CRM: remove Status field from contact detail (UI noise)','CRM: rename Title to Salutation for honorific field','CRM: remove Mx from salutation options','recall-badge: now uses mnav-badge CSS class for consistent sidebar styling'] },
+  { ver:'v0.34.16', date:'2026-03-20', notes:['Fix memory deduplication: _mem_insert now skips exact duplicates (text+scope+scope_id)','Fix memory noise: project status_change and settings_update no longer stored as memories','Add project op categories to RECALL_NOISE_BLACKLIST','CRM: remove Status field from contact detail (UI noise)','CRM: rename Title to Salutation for honorific field','CRM: remove Mx from salutation options','recall-badge: now uses mnav-badge CSS class for consistent sidebar styling','Fix: file upload events no longer create memory signals (guard in _mem_insert)','Fix: cleaned existing file upload signal memories from DB','Fix: timezone selector replaced with searchable custom dropdown'] },
   { ver:'v0.34.11', date:'2026-03-20', notes:['Complete orange purge from chat UI: send button, chat shell border, typing dots, drop zone, toolbtn hover, project chat container, working dots, need labels, Porter hero card — all --warning → --accent.'] },
   { ver:'v0.34.10', date:'2026-03-20', notes:['Agent detail + project chat composer borders changed from --warning (orange) to --accent (indigo). Drag-over and chat hints also updated.'] },
   { ver:'v0.34.9', date:'2026-03-20', notes:['Chat input focus borders changed from orange rgba(247,147,26) to var(--accent). Files accordion staggered animation removed — instant expand/collapse.'] },
@@ -20191,58 +20201,151 @@ function _porterTz() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+// Searchable timezone dropdown state
+var _tzEntries = [];
+var _tzSelected = '';
+var _tzBlurTimer = null;
+
+function _tzGetOffset(z) {
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', { timeZone: z, timeZoneName: 'shortOffset' });
+    const parts = fmt.formatToParts(new Date());
+    const op = parts.find(p => p.type === 'timeZoneName');
+    return op ? op.value : '';
+  } catch(e) { return ''; }
+}
+
+function _tzBuildEntries() {
+  if (_tzEntries.length) return;
+  const COMMON = ['UTC','America/New_York','America/Los_Angeles','Europe/London','Asia/Singapore','Asia/Tokyo','Australia/Sydney','America/Chicago','Europe/Paris','Asia/Dubai','Asia/Kolkata','America/Sao_Paulo','Pacific/Auckland'];
+  let zones = [];
+  try { zones = Intl.supportedValuesOf('timeZone'); } catch(e) {
+    zones = ['America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Sao_Paulo','Europe/London','Europe/Paris','Europe/Berlin','Europe/Moscow','Asia/Dubai','Asia/Kolkata','Asia/Bangkok','Asia/Singapore','Asia/Shanghai','Asia/Tokyo','Asia/Seoul','Australia/Sydney','Pacific/Auckland','UTC'];
+  }
+  const entries = zones.map(function(z) {
+    const offset = _tzGetOffset(z);
+    const display = z.replace(/_/g, ' ');
+    const label = offset ? '(' + offset + ') ' + display : display;
+    let sortVal = 0;
+    const m = (offset || '').match(/GMT([+-]?)(\d+)?:?(\d+)?/);
+    if (m) sortVal = (m[1]==='-'?-1:1) * ((parseInt(m[2]||'0',10)*60) + parseInt(m[3]||'0',10));
+    const isCommon = COMMON.indexOf(z) >= 0;
+    return { value: z, label, sortVal, isCommon, search: (z + ' ' + display + ' ' + offset).toLowerCase() };
+  });
+  // Sort: common first (in their order), then rest by offset
+  const commonEntries = COMMON.map(function(z) { return entries.find(function(e) { return e.value === z; }); }).filter(Boolean);
+  const otherEntries = entries.filter(function(e) { return !e.isCommon; });
+  otherEntries.sort(function(a, b) { return a.sortVal - b.sortVal || a.label.localeCompare(b.label); });
+  _tzEntries = commonEntries.concat(otherEntries);
+}
+
+function _tzSetValue(value, label) {
+  _tzSelected = value;
+  var hidden = document.getElementById('sa-timezone');
+  var input = document.getElementById('sa-timezone-input');
+  if (hidden) hidden.value = value;
+  if (input) input.value = label || value.replace(/_/g,' ');
+  _tzClose();
+}
+
+function _tzOpen() {
+  if (_tzBlurTimer) { clearTimeout(_tzBlurTimer); _tzBlurTimer = null; }
+  _tzBuildEntries();
+  var input = document.getElementById('sa-timezone-input');
+  var query = input ? input.value.trim().toLowerCase() : '';
+  _tzRenderDropdown(query);
+  var dd = document.getElementById('sa-tz-dropdown');
+  if (dd) dd.style.display = '';
+}
+
+function _tzClose() {
+  var dd = document.getElementById('sa-tz-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+
+function _tzBlurClose() {
+  _tzBlurTimer = setTimeout(function() { _tzClose(); }, 150);
+}
+
+function _tzFilter() {
+  var input = document.getElementById('sa-timezone-input');
+  var query = input ? input.value.trim().toLowerCase() : '';
+  _tzBuildEntries();
+  _tzRenderDropdown(query);
+  var dd = document.getElementById('sa-tz-dropdown');
+  if (dd) dd.style.display = '';
+}
+
+function _tzRenderDropdown(query) {
+  var dd = document.getElementById('sa-tz-dropdown');
+  if (!dd) return;
+  var filtered = query
+    ? _tzEntries.filter(function(e) { return e.search.indexOf(query) >= 0 || e.label.toLowerCase().indexOf(query) >= 0; })
+    : _tzEntries;
+  if (!filtered.length) {
+    dd.innerHTML = '<div style="padding:10px 14px;color:var(--text3);font-size:12px">No match</div>';
+    return;
+  }
+  var html = '';
+  var hasCommonSep = false;
+  filtered.forEach(function(e, i) {
+    var isSelected = e.value === _tzSelected;
+    if (!query && !hasCommonSep && !e.isCommon) {
+      hasCommonSep = true;
+      html += '<div style="height:1px;background:var(--border);margin:4px 0"></div>';
+    }
+    html += '<div class="tz-opt" data-value="' + e.value.replace(/"/g,'&quot;') + '" data-label="' + e.label.replace(/"/g,'&quot;') + '"'
+      + ' style="padding:8px 14px;cursor:pointer;color:var(--text);border-radius:6px;margin:1px 4px;'
+      + (isSelected ? 'background:color-mix(in srgb,var(--accent) 15%,var(--raised));font-weight:700' : '') + '"'
+      + ' onmousedown="_tzPickItem(this)" onmouseover="this.style.background=\'var(--surface)\'" onmouseout="this.style.background=\'' + (isSelected?'color-mix(in srgb,var(--accent) 15%,var(--raised))':'') + '\'">'
+      + escHtml(e.label) + '</div>';
+  });
+  dd.innerHTML = html;
+  // Scroll selected into view
+  var sel = dd.querySelector('[data-value="' + _tzSelected.replace(/"/g,'&quot;') + '"]');
+  if (sel) sel.scrollIntoView({ block: 'nearest' });
+}
+
+function _tzPickItem(el) {
+  if (_tzBlurTimer) { clearTimeout(_tzBlurTimer); _tzBlurTimer = null; }
+  _tzSetValue(el.getAttribute('data-value'), el.getAttribute('data-label'));
+}
+
+function _tzKeyNav(e) {
+  var dd = document.getElementById('sa-tz-dropdown');
+  if (!dd || dd.style.display === 'none') { if (e.key === 'ArrowDown' || e.key === 'Enter') _tzOpen(); return; }
+  var opts = Array.from(dd.querySelectorAll('.tz-opt'));
+  if (!opts.length) return;
+  var focused = dd.querySelector('.tz-focused');
+  var idx = focused ? opts.indexOf(focused) : -1;
+  if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx + 1, opts.length - 1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(idx - 1, 0); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (focused) focused.dispatchEvent(new MouseEvent('mousedown')); return; }
+  else if (e.key === 'Escape') { _tzClose(); return; }
+  else return;
+  if (focused) { focused.classList.remove('tz-focused'); focused.style.background = ''; }
+  if (opts[idx]) { opts[idx].classList.add('tz-focused'); opts[idx].style.background = 'var(--surface)'; opts[idx].scrollIntoView({ block: 'nearest' }); }
+}
+
 async function populateTimezones() {
-  const sel = document.getElementById('sa-timezone');
-  if (!sel || sel.options.length > 1) return;
+  var input = document.getElementById('sa-timezone-input');
+  var hidden = document.getElementById('sa-timezone');
+  if (!input) return;
   // Ensure prefs are loaded
   if (!window._currentPrefs) {
     try {
-      const data = await api('/api/preferences', {});
+      var data = await api('/api/preferences', {});
       if (data && data.preferences) window._currentPrefs = data.preferences;
     } catch(e) {}
   }
-  let zones = [];
-  try { zones = Intl.supportedValuesOf('timeZone'); } catch(e) {
-    zones = ['America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
-      'America/Sao_Paulo','Europe/London','Europe/Paris','Europe/Berlin','Europe/Moscow',
-      'Asia/Dubai','Asia/Kolkata','Asia/Bangkok','Asia/Singapore','Asia/Shanghai',
-      'Asia/Tokyo','Asia/Seoul','Australia/Sydney','Pacific/Auckland','UTC'];
+  _tzBuildEntries();
+  var tz = (window._currentPrefs || {}).timezone;
+  if (tz) {
+    var entry = _tzEntries.find(function(e) { return e.value === tz; });
+    _tzSelected = tz;
+    if (hidden) hidden.value = tz;
+    if (input) input.value = entry ? entry.label : tz.replace(/_/g,' ');
   }
-  const now = new Date();
-  const entries = zones.map(z => {
-    try {
-      const fmt = new Intl.DateTimeFormat('en-US', { timeZone: z, timeZoneName: 'shortOffset' });
-      const parts = fmt.formatToParts(now);
-      const offsetPart = parts.find(p => p.type === 'timeZoneName');
-      const offset = offsetPart ? offsetPart.value : '';
-      const fmtShort = new Intl.DateTimeFormat('en-US', { timeZone: z, timeZoneName: 'short' });
-      const shortParts = fmtShort.formatToParts(now);
-      const shortPart = shortParts.find(p => p.type === 'timeZoneName');
-      const abbr = shortPart ? shortPart.value : '';
-      const display = z.replace(/_/g, ' ');
-      const label = offset ? '(' + offset + ') ' + display + (abbr && abbr !== offset ? ' \u2014 ' + abbr : '') : display;
-      let sortVal = 0;
-      const m = (offset || '').match(/GMT([+-]?)(\d+)?:?(\d+)?/);
-      if (m) { sortVal = (m[1]==='-'?-1:1) * ((parseInt(m[2]||'0',10)*60) + parseInt(m[3]||'0',10)); }
-      return { value: z, label, sortVal };
-    } catch(e) {
-      return { value: z, label: z.replace(/_/g, ' '), sortVal: 0 };
-    }
-  });
-  entries.sort((a, b) => a.sortVal - b.sortVal || a.label.localeCompare(b.label));
-  // Add empty option
-  const blank = document.createElement('option');
-  blank.value = ''; blank.textContent = 'Select timezone...';
-  sel.appendChild(blank);
-  entries.forEach(e => {
-    const opt = document.createElement('option');
-    opt.value = e.value;
-    opt.textContent = e.label;
-    sel.appendChild(opt);
-  });
-  // Set current value from prefs
-  const tz = (window._currentPrefs || {}).timezone;
-  if (tz) sel.value = tz;
 }
 
 function syncSettingsUI() {
@@ -46782,7 +46885,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif parsed.path == "/api/version":
             # No auth — lightweight version check for auto-reload
-            self.reply_json({"v": "0.34.15"})
+            self.reply_json({"v": "0.34.16"})
         elif parsed.path == "/api/ship/validate":
             if not self.auth_check(redirect=False): return
             import subprocess as _sp
@@ -46944,7 +47047,7 @@ class Handler(BaseHTTPRequestHandler):
             health["python_version"] = platform.python_version()
             try:
                 porter_path = Path(__file__).resolve()
-                health["porter_version"] = "0.34.15"
+                health["porter_version"] = "0.34.16"
                 health["porter_size_kb"] = porter_path.stat().st_size / 1024
                 health["porter_lines"] = sum(1 for _ in open(porter_path))
             except Exception as e:
@@ -49259,7 +49362,7 @@ class Handler(BaseHTTPRequestHandler):
             log.info("Client connected to event hub")
             try:
                 # Initial welcome event
-                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.15'})}\n\n".encode())
+                self.wfile.write(f"data: {json.dumps({'type': 'welcome', 'version': 'v0.34.16'})}\n\n".encode())
                 self.wfile.flush()
 
                 while True:
@@ -53271,7 +53374,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     _ws_services.append({"name": "OpenClaw", "status": "down"})
                 _ws_health["services"] = _ws_services
-                _ws_health["porter_version"] = "0.34.15"
+                _ws_health["porter_version"] = "0.34.16"
                 # Lightweight session summary (username + last_active only, no tokens/IPs)
                 try:
                     _sc = _db_conn()
@@ -56586,7 +56689,7 @@ if __name__ == "__main__":
                    if host_hint else f"ssh -L {PORT}:localhost:{PORT} <your-server>")
     _ensure_backend_config()
     _detect_environment_tools()
-    print(f"\n  Porter v0.34.15 ready (localhost only)")
+    print(f"\n  Porter v0.34.16 ready (localhost only)")
     print(f"  Data dir:    {_DATA_DIR}")
     print(f"  SSH tunnel:  {tunnel_hint}")
     print(f"  Then open:   http://localhost:{PORT}\n")
