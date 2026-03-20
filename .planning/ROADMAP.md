@@ -12,7 +12,7 @@ Porter evolves from a ~900KB Python monolith prototype into a reliable autonomou
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Eliminate silent failures, fix SQLite concurrency, migrate projects to DB, wire Fastify baseline, CSS audit, proper dark/light mode
+- [ ] **Phase 1: Foundation** - Eliminate silent failures, fix SQLite concurrency, migrate projects to DB, Fastify baseline, CSS audit, dark/light mode, boot sequence
 - [ ] **Phase 2: Memory V2** - Complete structured memory, cut over from Cortex, wire noise filtering and real-time feed
 - [ ] **Phase 3: Route Migration** - Move auth/projects/agents to Fastify via strangler fig, all 35 tests green
 - [ ] **Phase 4: Agent Autonomy** - Scheduled + event-driven agents, activity log, ephemeral agents
@@ -25,7 +25,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 ### Phase 1: Foundation
 **Goal**: The codebase is safe to build on — no silent failures, no lock errors, no config-file data, Fastify can serve its first request, and the UI is visually consistent
 **Depends on**: Nothing (first phase)
-**Requirements**: FOUND-01, FOUND-02, FOUND-03, FOUND-04, UI-01, UI-02
+**Requirements**: FOUND-01, FOUND-02, FOUND-03, FOUND-04, FOUND-05, UI-01, UI-02
 **Success Criteria** (what must be TRUE):
   1. Any exception raised in porter.py is logged via structured mlog — grepping for bare `except: pass` returns zero results
   2. Concurrent agent database writes no longer produce "database is locked" errors under test load
@@ -33,6 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Fastify starts on its configured port and proxies unknown routes to porter.py without dropping requests
   5. All Porter views pass a visual consistency check — no mismatched fonts, inconsistent spacing, or broken component styles
   6. Dark mode and light mode both render correctly across all views — no hard-coded colors, all values use CSS variables
+  7. Boot sequence detects, installs, and configures all dependencies — a fresh machine can run Porter after completing the first-run wizard
 **Plans**: TBD
 
 Plans:
@@ -42,6 +43,7 @@ Plans:
 - [ ] 01-04: Fastify baseline — db/client.ts, plugins/auth.ts, plugins/proxy.ts, config.ts, feature flag skeleton
 - [ ] 01-05: CSS audit — consolidate styles across all views, remove regressions, document component tokens
 - [ ] 01-06: Dark/light mode — proper theming with consistent CSS variables, clean toggle, no broken views in either mode
+- [ ] 01-07: Boot sequence — startup provisioning (detect → install → prompt → verify → badge), first-run wizard, directory structure setup
 
 ### Phase 2: Memory V2
 **Goal**: Memory V2 is the only active memory system — Cortex is deleted, signals are clean, and the memory feed is visible in real time
@@ -172,7 +174,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/6 | Not started | - |
+| 1. Foundation | 0/7 | Not started | - |
 | 2. Memory V2 | 0/5 | Not started | - |
 | 3. Route Migration | 0/5 | Not started | - |
 | 4. Agent Autonomy | 0/6 | Not started | - |
