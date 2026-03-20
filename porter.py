@@ -99,6 +99,10 @@ DEFAULT_PREFERENCES: dict = {
     "policy_preset":       "balanced",
     "memory_auto_extract":      False,
 
+    # Memory V2
+    "auto_manage_memory":           True,
+    "recall_last_read":             0.0,
+
     # Context Hygiene
     "hygiene_enabled":              True,
     "hygiene_interval_hours":       12,
@@ -16759,6 +16763,7 @@ select::-ms-expand { display: none; }
     <button class="mnav-item" id="mnav-memory" onclick="mainNavModule('memory')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
       <span class="mnav-label">Memory</span>
+      <span id="recall-badge" style="display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px;min-width:16px;text-align:center">0</span>
     </button>
     <button class="mnav-item" id="mnav-logs" onclick="mainNavModule('logs')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -37400,6 +37405,11 @@ async function init() {
   if (nodes[0] && !window._serverHostname) window._serverHostname = nodes[0].hostname || nodes[0].id;
   _renderSidebarNodes(nodes, null);
   setTimeout(maybeShowWizard, 100);
+  // Load Memory badge count
+  fetch('/api/memory/stats', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    var badge = document.getElementById('recall-badge');
+    if (badge && d.unread_count > 0) { badge.textContent = d.unread_count; badge.style.display = ''; }
+  }).catch(function(){});
 }
 
 // ── navigation ──
@@ -46696,6 +46706,43 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json({"ok": True, "results": results})
 
         # ── Memory V2 API (GET) ──────────────────────────────────────────
+        elif parsed.path == "/api/memory/feed":
+            if not self.auth_check(redirect=False): return
+            agent_id = qs.get("agent_id", [""])[0].strip() or None
+            scope_filter = qs.get("scope", [""])[0].strip() or None
+            limit = min(100, max(1, int(qs.get("limit", ["100"])[0])))
+            try:
+                conn = _db_conn()
+                where = ["status='active'"]
+                params = []
+                if agent_id:
+                    where.append("scope = 'agent' AND scope_id = ?")
+                    params.append(agent_id)
+                elif scope_filter:
+                    where.append("scope = ?")
+                    params.append(scope_filter)
+                sql = ("SELECT id, memory_kind, trust_tier, scope, scope_id, "
+                       "substr(text, 1, 120) as text, action, "
+                       "strftime('%s', created_at) as ts "
+                       "FROM memories WHERE " + " AND ".join(where) +
+                       " ORDER BY created_at DESC LIMIT ?")
+                params.append(limit)
+                rows = conn.execute(sql, params).fetchall()
+                conn.close()
+                items = []
+                for r in rows:
+                    d = dict(r)
+                    # action column may not exist — default to 'learned'
+                    d.setdefault('action', 'learned')
+                    try:
+                        d['ts'] = float(d['ts']) if d['ts'] else 0.0
+                    except (TypeError, ValueError):
+                        d['ts'] = 0.0
+                    items.append(d)
+                self.reply_json({"ok": True, "items": items, "count": len(items)})
+            except Exception as e:
+                self.reply_json({"ok": False, "error": str(e), "items": []}, 500)
+
         elif parsed.path == "/api/memory/search":
             if not self.auth_check(redirect=False): return
             q = qs.get("q", [""])[0].strip()
@@ -46744,6 +46791,24 @@ class Handler(BaseHTTPRequestHandler):
             scope_id = qs.get("scope_id", [""])[0].strip() or None
             _excl_sys = qs.get("exclude_system", [""])[0].strip() == '1'
             stats = _mem_stats(scope=scope, scope_id=scope_id, exclude_system=_excl_sys)
+            # Calculate unread_count from recall_last_read preference
+            try:
+                import time as _time_mod
+                _prefs = _config.get("preferences", {})
+                _last_read = float(_prefs.get("recall_last_read", 0.0))
+                if _last_read > 0:
+                    _conn2 = _db_conn()
+                    _unread_ts = __import__('datetime').datetime.utcfromtimestamp(_last_read).strftime('%Y-%m-%d %H:%M:%S')
+                    _unread = _conn2.execute(
+                        "SELECT COUNT(*) FROM memories WHERE status='active' AND created_at > ?",
+                        (_unread_ts,)
+                    ).fetchone()[0]
+                    _conn2.close()
+                else:
+                    _unread = stats.get("total", 0)
+                stats["unread_count"] = _unread
+            except Exception:
+                stats["unread_count"] = 0
             self.reply_json({"ok": True, **stats})
 
         elif parsed.path == "/api/memory/by-scope":
@@ -51591,6 +51656,14 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json(result)
 
         # ── Memory V2 API (POST) ─────────────────────────────────────────
+        elif parsed.path == "/api/memory/mark-read":
+            if not self.auth_check(redirect=False): return
+            import time as _time_mr
+            _prefs = _config.setdefault("preferences", {})
+            _prefs["recall_last_read"] = _time_mr.time()
+            save_config(_config)
+            self.reply_json({"ok": True})
+
         elif parsed.path == "/api/memory/create":
             if not self.auth_check(redirect=False): return
             data = self.read_json_body()
@@ -53557,7 +53630,8 @@ class Handler(BaseHTTPRequestHandler):
                        "behavior_preset", "memory_visibility", "usage_warn_threshold",
                        "skills_safe_mode", "external_send_approval", "preferred_model",
                        "context_compression", "fallback_chain", "timezone",
-                       "model_rankings", "routing_mode"}
+                       "model_rankings", "routing_mode",
+                       "auto_manage_memory", "recall_last_read"}
             for k, v in data.items():
                 if k in allowed:
                     prefs[k] = v
