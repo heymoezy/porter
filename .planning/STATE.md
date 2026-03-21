@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Checkpoint: 07-09 Task 3 human-verify"
-last_updated: "2026-03-21T17:08:23.542Z"
+stopped_at: Completed 07-09-PLAN.md
+last_updated: "2026-03-21T17:09:56.206Z"
 progress:
   total_phases: 7
   completed_phases: 7
@@ -97,6 +97,7 @@ Plan: 1 of 11
 | Phase 07-external-connections PP06 | 8min | 3 tasks | 5 files |
 | Phase 07-external-connections P10 | 2min | 2 tasks | 4 files |
 | Phase 07-external-connections P09 | 3min | 2 tasks | 3 files |
+| Phase 07-external-connections P09 | 3min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -252,6 +253,9 @@ Recent decisions affecting current work:
 - [Phase 07-09]: dispatchExternalCall routes external_call jobs by service key — bypasses AI router entirely
 - [Phase 07-09]: Blocked jobs auto-unblock on 30s tick when checkConnectionHealth returns ok
 - [Phase 07-09]: OAuth connect uses window.location.href redirect not popup — simpler and more reliable
+- [Phase 07-09]: dispatchExternalCall routes external_call jobs by service key — bypasses AI router entirely
+- [Phase 07-09]: OAuth connect uses window.location.href redirect not popup — simpler and more reliable
+- [Phase 07-09]: Blocked jobs auto-unblock on 30s tick when checkConnectionHealth returns ok
 
 ### Pending Todos
 
@@ -274,6 +278,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T17:08:23.539Z
-Stopped at: Checkpoint: 07-09 Task 3 human-verify
+Last session: 2026-03-21T17:09:47.771Z
+Stopped at: Completed 07-09-PLAN.md
 Resume file: None

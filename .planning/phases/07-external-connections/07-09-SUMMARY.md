@@ -27,7 +27,7 @@ decisions:
 metrics:
   duration: "3min"
   completed_date: "2026-03-21"
-  tasks_completed: 2
+  tasks_completed: 3
   tasks_total: 3
   files_modified: 3
 ---
@@ -62,9 +62,9 @@ Updated `frontend/src/modules/connections/ConnectionsPage.tsx`:
 - **Post-OAuth feedback**: On mount, reads `?connected=` and `?error=` query params, shows success/error banners, cleans params via `history.replaceState`
 - **SSE real-time**: `useSSEHub('connection:status', ...)` updates service card status without page refresh
 
-### Task 3: checkpoint:human-verify (PENDING)
+### Task 3: checkpoint:human-verify (APPROVED)
 
-Awaiting human verification of the complete Connections page.
+Human reviewer approved the complete Connections page. Visual verification confirmed all 4 service cards render correctly with proper OAuth connect flows.
 
 ## Deviations from Plan
 
