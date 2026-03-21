@@ -69,6 +69,7 @@ Plan: 3 of 6
 | Phase 03-route-migration P05 | 23min | 2 tasks | 3 files |
 | Phase 04-agent-autonomy P00 | 4min | 2 tasks | 7 files |
 | Phase 04-agent-autonomy P01 | 5min | 3 tasks | 6 files |
+| Phase 04-agent-autonomy P02 | 4min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,10 @@ Recent decisions affecting current work:
 - [Phase 04-agent-autonomy]: migrate-04.ts applies SQL migrations idempotently via schema_migrations guard — safe on repeated server restarts
 - [Phase 04-agent-autonomy]: Scheduler uses shared sqlite instance from db/client.ts — reuses WAL + busy_timeout=30000, avoids SQLITE_BUSY
 - [Phase 04-agent-autonomy]: Plan 04-01 dispatches to porter.py /api/dispatch proxy — native TypeScript ai-router.ts is plan 04-02 scope
+- [Phase 04-agent-autonomy]: getBackends() reads config at call-time (not module-load) — supports env var changes during testing without module reload
+- [Phase 04-agent-autonomy]: openclawToken has no hardcoded fallback — empty string produces clear 401, guiding operator to set OPENCLAW_TOKEN
+- [Phase 04-agent-autonomy]: HEAD probe accepted as available on 405 — some APIs disallow HEAD but server is running
+- [Phase 04-agent-autonomy]: dispatch() throws on empty response to guarantee agent_jobs.result is always non-empty on success
 
 ### Pending Todos
 
@@ -156,5 +161,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-21T03:20:29.596Z
-Stopped at: Completed 04-agent-autonomy-01-PLAN.md
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
