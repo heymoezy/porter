@@ -11,6 +11,7 @@ import {
   Monitor,
   Moon,
   Sun,
+  Plug,
 } from 'lucide-react';
 import { useAppStore, type TabId } from '../store/app';
 
@@ -25,6 +26,7 @@ const tabs: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'workflows', label: 'Workflows', icon: Workflow },
   { id: 'locations', label: 'Locations', icon: MapPin },
   { id: 'files', label: 'Files', icon: Files },
+  { id: 'connections', label: 'Connections', icon: Plug },
 ];
 
 const THEME_ICON = {

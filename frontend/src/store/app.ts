@@ -9,7 +9,8 @@ export type TabId =
   | 'workflows'
   | 'locations'
   | 'files'
-  | 'health';
+  | 'health'
+  | 'connections';
 
 type ThemePreference = 'system' | 'dark' | 'light';
 

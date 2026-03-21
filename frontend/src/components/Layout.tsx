@@ -3,6 +3,7 @@ import { useAppStore } from '../store/app';
 import { ChatView } from '../modules/chat/ChatView';
 import { ProjectDashboard } from '../modules/projects/ProjectDashboard';
 import { SystemHealthPanel } from '../modules/health/SystemHealthPanel';
+import { ConnectionsPage } from '../modules/connections/ConnectionsPage';
 
 function ProjectListPlaceholder() {
   return (
@@ -19,6 +20,7 @@ function ProjectListPlaceholder() {
 function TabPlaceholder({ name }: { name: string }) {
   if (name === 'chat') return <ChatView />;
   if (name === 'health') return <SystemHealthPanel />;
+  if (name === 'connections') return <ConnectionsPage />;
   if (name === 'projects') {
     const projectId = useAppStore.getState().activeProjectId;
     if (projectId) {
