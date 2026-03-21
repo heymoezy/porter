@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-03-21T16:47:10.868Z"
+stopped_at: Completed 07-04-PLAN.md
+last_updated: "2026-03-21T16:48:59.145Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 51
-  completed_plans: 43
+  completed_plans: 44
 ---
 
 # Project State
@@ -89,6 +89,7 @@ Plan: 1 of 11
 | Phase 07-external-connections P00 | 2min | 1 tasks | 3 files |
 | Phase 07-external-connections PP01 | 6min | 2 tasks | 5 files |
 | Phase 07-external-connections P02 | 2min | 2 tasks | 2 files |
+| Phase 07-external-connections P04 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -219,6 +220,9 @@ Recent decisions affecting current work:
 - [Phase 07-external-connections]: meta_json masked as '[encrypted]' in list/detail responses when meta_encrypted=1 — credentials never reach frontend
 - [Phase 07-external-connections]: DELETE /:id checks connection existence before delete — returns 404 for missing connections, prevents silent no-op cascades
 - [Phase 07-external-connections]: POST /project/:projectId validates workspace connection exists before INSERT — returns 404 rather than silent FK violation
+- [Phase 07-04]: billing.ts redirect_url fallback changed from localhost:8877 (porter.py port) to localhost:3001 (Fastify backend port) — aligns with Fastify-first architecture
+- [Phase 07-04]: _projArtifactUrl JS function uses /home/<user>/ regex stripping — works on any Linux deployment, not just hardcoded machine
+- [Phase 07-04]: config.publicUrl as the single source for public-facing URL in backend — never process.env.PORTER_PUBLIC_URL directly
 
 ### Pending Todos
 
@@ -241,6 +245,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T16:47:10.865Z
-Stopped at: Completed 07-02-PLAN.md
+Last session: 2026-03-21T16:48:59.142Z
+Stopped at: Completed 07-04-PLAN.md
 Resume file: None
