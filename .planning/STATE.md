@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-03-21T07:18:49.025Z"
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-03-21T07:23:32.525Z"
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 40
-  completed_plans: 37
+  completed_plans: 39
 ---
 
 # Project State
@@ -83,6 +83,7 @@ Plan: 1 of 6
 | Phase 06-real-time-and-transparency P02 | 3min | 2 tasks | 4 files |
 | Phase 06-real-time-and-transparency P00 | 3min | 2 tasks | 4 files |
 | Phase 06-real-time-and-transparency P01 | 8min | 3 tasks | 5 files |
+| Phase 06-real-time-and-transparency PP04 | 2min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -196,6 +197,9 @@ Recent decisions affecting current work:
 - [Phase 06-real-time-and-transparency]: /api/events/emit added to porter.py do_POST() (not do_GET) -- POST requests in HTTPServer route to do_POST, not do_GET
 - [Phase 06-real-time-and-transparency]: Token usage UNIQUE INDEX on (model, date) enables ON CONFLICT REPLACE upsert in Plan 06-04
 - [Phase 06-real-time-and-transparency]: 6 setInterval pollers replaced with recursive setTimeout at 60s -- reduces idle HTTP traffic by ~80% (PERF-03)
+- [Phase 06-04]: emitSSE exported from scheduler.ts for shared use by ai-router.ts — no duplication
+- [Phase 06-04]: logDecision only fires when 2+ backends available (altAvailable probe) — no noise when fallback forced by outage
+- [Phase 06-04]: trackTokenUsage uses ON CONFLICT upsert on (model, date) — requires UNIQUE INDEX from migrate-06.ts (already present)
 
 ### Pending Todos
 
@@ -210,6 +214,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T07:18:49.022Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-03-21T07:23:32.522Z
+Stopped at: Completed 06-04-PLAN.md
 Resume file: None
