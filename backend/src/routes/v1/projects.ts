@@ -1,8 +1,9 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { db } from '../../db/client.js';
+import { db, sqlite } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { ok, err } from '../../lib/envelope.js';
+import { featureFlags } from '../../config.js';
 import { z } from 'zod';
 import crypto from 'crypto';
 
@@ -138,6 +139,41 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
 
     db.update(schema.projects).set(updates)
       .where(eq(schema.projects.id, id)).run();
+
+    // Auto-retire ephemeral agents when project is completed/archived
+    if (featureFlags.ephemeralAgents &&
+        (parsed.data.status === 'complete' || parsed.data.status === 'archived')) {
+      // Find ephemeral agents for this project
+      const ephemeralAgents = sqlite.prepare(`
+        SELECT id FROM personas
+        WHERE is_temporary = 1 AND status != 'retired'
+          AND json_extract(config, '$.project_id') = @projectId
+      `).all({ projectId: id }) as { id: string }[];
+
+      for (const agent of ephemeralAgents) {
+        // Retire the agent
+        sqlite.prepare(`
+          UPDATE personas SET status = 'retired' WHERE id = @agentId
+        `).run({ agentId: agent.id });
+
+        // Cancel their pending jobs
+        sqlite.prepare(`
+          UPDATE agent_jobs SET status = 'cancelled', completed_at = unixepoch('now')
+          WHERE agent_id = @agentId AND status = 'pending'
+        `).run({ agentId: agent.id });
+
+        // Log activity — 'agent_retired' event with 'Auto-retired' summary
+        const retireStatus = parsed.data.status as string;
+        sqlite.prepare(
+          `INSERT INTO agent_activity (agent_id, project_id, event_type, summary) VALUES (@agentId, @projectId, 'agent_retired', 'Auto-retired: project marked ' || @retireStatus)`
+        ).run({ agentId: agent.id, projectId: id, retireStatus });
+      }
+
+      if (ephemeralAgents.length > 0) {
+        console.log('[projects] Auto-retired %d ephemeral agent(s) for project %s',
+          ephemeralAgents.length, id);
+      }
+    }
 
     const project = db.select().from(schema.projects)
       .where(eq(schema.projects.id, id)).get();

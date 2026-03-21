@@ -30,9 +30,15 @@ interface JobRow {
   created_at: number;
 }
 
+function logFeatureFlagState() {
+  console.log('[scheduler] Feature flags: scheduling=%s, triggers=%s, ephemeral=%s',
+    featureFlags.agentScheduling, featureFlags.eventTriggers, featureFlags.ephemeralAgents);
+}
+
 export function start() {
   if (intervalId) return;
   console.log('[scheduler] started — polling every %dms, worker=%s', POLL_INTERVAL_MS, WORKER_ID.slice(0, 8));
+  logFeatureFlagState();
   intervalId = setInterval(tick, POLL_INTERVAL_MS);
 }
 
@@ -69,9 +75,11 @@ function claimNextJob(): JobRow | undefined {
     WHERE id = (
       SELECT aj.id FROM agent_jobs aj
       JOIN personas p ON p.id = aj.agent_id
+      LEFT JOIN projects pr ON pr.id = aj.project_id
       WHERE aj.status = 'pending'
         AND aj.scheduled_for <= unixepoch('now')
         AND p.status != 'retired'
+        AND (p.is_temporary = 0 OR pr.status IS NULL OR pr.status NOT IN ('complete', 'archived'))
       ORDER BY aj.scheduled_for ASC LIMIT 1
     )
     RETURNING *
