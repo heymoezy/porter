@@ -98,44 +98,44 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| API-01 | — | Pending |
-| API-02 | — | Pending |
-| API-03 | — | Pending |
-| STRM-01 | — | Pending |
-| STRM-02 | — | Pending |
-| STRM-03 | — | Pending |
-| COLLAB-01 | — | Pending |
-| COLLAB-02 | — | Pending |
-| COLLAB-03 | — | Pending |
-| COLLAB-04 | — | Pending |
-| CHAT-01 | — | Pending |
-| CHAT-02 | — | Pending |
-| CHAT-03 | — | Pending |
-| CHAT-04 | — | Pending |
-| CRM-01 | — | Pending |
-| CRM-02 | — | Pending |
-| CRM-03 | — | Pending |
-| CRM-04 | — | Pending |
-| FILE-01 | — | Pending |
-| FILE-02 | — | Pending |
-| FILE-03 | — | Pending |
-| TMPL-01 | — | Pending |
-| TMPL-02 | — | Pending |
-| TMPL-03 | — | Pending |
-| LEARN-01 | — | Pending |
-| LEARN-02 | — | Pending |
-| LEARN-03 | — | Pending |
-| BILL-01 | — | Pending |
-| BILL-02 | — | Pending |
-| BILL-03 | — | Pending |
-| OBS-01 | — | Pending |
-| OBS-02 | — | Pending |
+| API-01 | Phase 8 | Pending |
+| API-02 | Phase 8 | Pending |
+| API-03 | Phase 8 | Pending |
+| OBS-01 | Phase 8 | Pending |
+| OBS-02 | Phase 8 | Pending |
+| STRM-01 | Phase 9 | Pending |
+| STRM-02 | Phase 9 | Pending |
+| STRM-03 | Phase 9 | Pending |
+| COLLAB-01 | Phase 10 | Pending |
+| COLLAB-02 | Phase 10 | Pending |
+| COLLAB-03 | Phase 10 | Pending |
+| COLLAB-04 | Phase 10 | Pending |
+| CHAT-01 | Phase 11 | Pending |
+| CHAT-02 | Phase 11 | Pending |
+| CHAT-03 | Phase 11 | Pending |
+| CHAT-04 | Phase 11 | Pending |
+| CRM-01 | Phase 11 | Pending |
+| CRM-02 | Phase 11 | Pending |
+| FILE-01 | Phase 11 | Pending |
+| FILE-02 | Phase 11 | Pending |
+| FILE-03 | Phase 11 | Pending |
+| CRM-03 | Phase 12 | Pending |
+| CRM-04 | Phase 12 | Pending |
+| TMPL-01 | Phase 12 | Pending |
+| TMPL-02 | Phase 12 | Pending |
+| TMPL-03 | Phase 12 | Pending |
+| LEARN-01 | Phase 13 | Pending |
+| LEARN-02 | Phase 13 | Pending |
+| LEARN-03 | Phase 13 | Pending |
+| BILL-01 | Phase 14 | Pending |
+| BILL-02 | Phase 14 | Pending |
+| BILL-03 | Phase 14 | Pending |
 
 **Coverage:**
 - v2 requirements: 32 total
-- Mapped to phases: 0
-- Unmapped: 32 (awaiting roadmap)
+- Mapped to phases: 32
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-21*
-*Last updated: 2026-03-21 — v2.0 milestone requirements defined*
+*Last updated: 2026-03-21 — traceability complete, all 32 requirements mapped to Phases 8-14*
