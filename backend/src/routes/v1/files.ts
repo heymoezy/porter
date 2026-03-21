@@ -1,6 +1,6 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { ok, err } from '../../lib/envelope.js';
-import { config } from '../../config.js';
+import { config, LOCAL_HOSTS } from '../../config.js';
 import { z } from 'zod';
 import fs from 'fs/promises';
 import fsSync from 'fs';
@@ -47,7 +47,7 @@ function getServeDirs(): Record<string, string> {
     // nodes[*].mounts
     const nodes = cfg.nodes || cfg.fleet?.devices || {};
     for (const node of Object.values(nodes) as any[]) {
-      if (node.type !== 'local' && node.host !== '127.0.0.1') continue;
+      if (node.type !== 'local' && !LOCAL_HOSTS.has(node.host)) continue;
       const mounts = node.mounts || [];
       for (const m of mounts) {
         if (m.id && m.path) dirs[m.id] = m.path;
