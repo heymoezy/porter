@@ -34,6 +34,11 @@ type Pages = {
   "/agents": {
     params: {};
   };
+  "/agents/:id": {
+    params: {
+      "id": string;
+    };
+  };
   "/diagnostics": {
     params: {};
   };
@@ -63,7 +68,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/login" | "/users" | "/users/:username" | "/email" | "/billing" | "/agents" | "/diagnostics" | "/templates" | "/models" | "/porter" | "/tools" | "/skills" | "/system" | "/activity";
+    page: "/" | "/login" | "/users" | "/users/:username" | "/email" | "/billing" | "/agents" | "/agents/:id" | "/diagnostics" | "/templates" | "/models" | "/porter" | "/tools" | "/skills" | "/system" | "/activity";
   };
   "routes/home.tsx": {
     id: "routes/home";
@@ -92,6 +97,10 @@ type RouteFiles = {
   "routes/agents.tsx": {
     id: "routes/agents";
     page: "/agents";
+  };
+  "routes/agent-detail.tsx": {
+    id: "routes/agent-detail";
+    page: "/agents/:id";
   };
   "routes/diagnostics.tsx": {
     id: "routes/diagnostics";
@@ -136,6 +145,7 @@ type RouteModules = {
   "routes/email": typeof import("./app/routes/email.tsx");
   "routes/billing": typeof import("./app/routes/billing.tsx");
   "routes/agents": typeof import("./app/routes/agents.tsx");
+  "routes/agent-detail": typeof import("./app/routes/agent-detail.tsx");
   "routes/diagnostics": typeof import("./app/routes/diagnostics.tsx");
   "routes/templates": typeof import("./app/routes/templates.tsx");
   "routes/models": typeof import("./app/routes/models.tsx");

@@ -1,64 +1,35 @@
+import { useState } from "react"
+import { Link } from "react-router"
 import { AdminShell } from "~/components/layout/admin-shell"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
-import { Button } from "~/components/ui/button"
-import { Link } from "react-router"
-import {
-  TrendingUp, Shield, Share2, Bot,
-  Play, SkipForward, Clock,
-} from "lucide-react"
+import { Input } from "~/components/ui/input"
+import { PixelPortrait } from "~/components/pixel-portrait"
+import { Bot, Search, ChevronRight, Shield, Sparkles, FolderKanban } from "lucide-react"
 
-interface AgentData {
+interface Agent {
   id: string
   name: string
   role: string
+  agent_group: string
+  is_system: number
+  is_locked: number
+  is_master: number
+  owner: string
   status: string
-  queued: number
-  running: number
-  completed: number
-}
-
-interface TaskData {
-  id: number
-  agent_type: string
-  action_type: string
-  target_username: string | null
-  status: string
-  priority: number
-  payload: string
-  created_at: number
-}
-
-const agentIcons: Record<string, React.ElementType> = {
-  growth: TrendingUp,
-  retention: Clock,
-  security: Shield,
-  social: Share2,
-}
-
-const agentColors: Record<string, string> = {
-  growth: "text-success bg-success/15",
-  retention: "text-warning bg-warning/15",
-  security: "text-danger bg-danger/15",
-  social: "text-accent-porter bg-accent-porter/15",
+  dispatch_mode: string
+  appearance_spec: string
+  skillCount: number
+  deployments: number
+  fileCount: number
 }
 
 function AgentsContent() {
-  const qc = useQueryClient()
+  const [search, setSearch] = useState("")
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "agents"],
-    queryFn: () => api<{ agents: AgentData[]; stats: { queued: number; running: number; completed: number }; recentTasks: TaskData[] }>("/api/admin/agents"),
-  })
-
-  const execute = useMutation({
-    mutationFn: (taskId: number) => api(`/api/admin/agents/execute/${taskId}`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "agents"] }),
-  })
-
-  const skip = useMutation({
-    mutationFn: (taskId: number) => api(`/api/admin/agents/skip/${taskId}`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "agents"] }),
+    queryFn: () => api<{ agents: Agent[]; total: number; system: number; user: number }>("/api/admin/agents"),
   })
 
   if (isLoading) {
@@ -69,52 +40,96 @@ function AgentsContent() {
     )
   }
 
-  const agents = data?.agents ?? []
-  const stats = data?.stats ?? { queued: 0, running: 0, completed: 0 }
-  const tasks = data?.recentTasks ?? []
-  const queuedTasks = tasks.filter(t => t.status === "queued")
+  const allAgents = data?.agents ?? []
+  const agents = search
+    ? allAgents.filter(a =>
+        a.name.toLowerCase().includes(search.toLowerCase()) ||
+        a.role.toLowerCase().includes(search.toLowerCase()) ||
+        a.agent_group.toLowerCase().includes(search.toLowerCase())
+      )
+    : allAgents
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <Bot className="size-3 text-accent-porter" />
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">
+          {data?.total ?? 0} agents · {data?.system ?? 0} system · {data?.user ?? 0} user
+        </span>
+        <div className="relative ml-auto">
+          <Search className="absolute left-2 top-1/2 size-3 -translate-y-1/2 text-text3" />
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Filter agents..."
+            className="h-7 w-[180px] bg-raised border-border pl-7 text-xs"
+          />
+        </div>
+      </div>
+
       {/* Agent table */}
       <div className="rounded-xl border border-border overflow-hidden">
-        <div className="flex items-center gap-2 px-3 py-2 bg-surface border-b border-border">
-          <Bot className="size-3 text-accent-porter" />
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Admin Agents ({agents.length})</span>
-        </div>
         <table className="w-full">
           <thead>
-            <tr className="border-b border-border/50 text-left">
+            <tr className="border-b border-border/50 bg-surface text-left">
               <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3">Agent</th>
               <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3">Role</th>
-              <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3 text-right">Queued</th>
-              <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3 text-right">Done</th>
-              <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3 text-right">Status</th>
+              <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3">Group</th>
+              <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3 text-right">Skills</th>
+              <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3 text-right">Projects</th>
+              <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3 text-right">Files</th>
+              <th className="w-7" />
             </tr>
           </thead>
           <tbody>
             {agents.map(a => {
-              const Icon = agentIcons[a.id] ?? Bot
-              const colors = agentColors[a.id] ?? "text-accent-porter bg-accent-porter/15"
-              const [textColor, bgColor] = colors.split(" ")
+              let spec: Record<string, string> = {}
+              try { spec = typeof a.appearance_spec === 'string' ? JSON.parse(a.appearance_spec) : a.appearance_spec || {} } catch {}
+              const palette = spec.palette ?? spec
               return (
-                <tr key={a.id} className="border-b border-border/30 last:border-0">
+                <tr key={a.id} className="border-b border-border/20 last:border-0 hover:bg-surface/60 transition-colors">
                   <td className="px-3 py-1.5">
-                    <div className="flex items-center gap-2">
-                      <div className={`flex size-5 items-center justify-center rounded ${bgColor}`}>
-                        <Icon className={`size-3 ${textColor}`} />
+                    <Link to={`/agents/${a.id}`} className="flex items-center gap-2">
+                      <PixelPortrait
+                        hair={palette.hair || "#2c1b18"}
+                        skin={palette.skin || "#f1c27d"}
+                        eyes={palette.eyes || "#1a1a2e"}
+                        shirt={palette.shirt || "#64748b"}
+                        hairStyle="short"
+                        size="xs"
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-text">{a.name}</span>
+                          {a.is_system ? <Shield className="size-2.5 text-accent-porter" /> : null}
+                          {a.is_locked ? <span className="text-[9px] text-text3">locked</span> : null}
+                        </div>
+                        <span className="text-[10px] text-text3">{a.dispatch_mode}</span>
                       </div>
-                      <span className="text-xs font-bold text-text">{a.name}</span>
-                    </div>
+                    </Link>
                   </td>
                   <td className="px-3 py-1.5 text-xs text-text3 max-w-[250px] truncate">{a.role}</td>
-                  <td className="px-3 py-1.5 text-xs font-medium text-text text-right">{a.queued}</td>
-                  <td className="px-3 py-1.5 text-xs font-medium text-text text-right">{a.completed}</td>
+                  <td className="px-3 py-1.5">
+                    {a.agent_group && (
+                      <Badge className="text-[10px] bg-accent-porter/15 text-accent-porter border-0">{a.agent_group}</Badge>
+                    )}
+                  </td>
                   <td className="px-3 py-1.5 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <div className="size-1.5 rounded-full bg-success animate-pulse-badge" />
-                      <span className="text-[10px] text-text3">Active</span>
-                    </div>
+                    <span className="flex items-center justify-end gap-1 text-xs text-text2">
+                      <Sparkles className="size-2.5 text-text3" />{a.skillCount}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 text-right">
+                    <span className="flex items-center justify-end gap-1 text-xs text-text2">
+                      <FolderKanban className="size-2.5 text-text3" />{a.deployments}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 text-xs text-text2 text-right">{a.fileCount}</td>
+                  <td className="px-1 py-1.5">
+                    <Link to={`/agents/${a.id}`}>
+                      <ChevronRight className="size-3 text-text3" />
+                    </Link>
                   </td>
                 </tr>
               )
@@ -123,66 +138,11 @@ function AgentsContent() {
         </table>
       </div>
 
-      {/* Task queue */}
-      <div className="rounded-xl border border-border overflow-hidden">
-        <div className="flex items-center justify-between px-3 py-2 bg-surface border-b border-border">
-          <div className="flex items-center gap-2">
-            <Bot className="size-3 text-accent-porter" />
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Task Queue</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge className="text-[10px] bg-warning/15 text-warning border-0">{stats.queued} queued</Badge>
-            <Badge className="text-[10px] bg-success/15 text-success border-0">{stats.completed} done</Badge>
-          </div>
+      {agents.length === 0 && (
+        <div className="py-6 text-center text-xs text-text3">
+          {search ? "No agents match" : "No agents found"}
         </div>
-
-        {queuedTasks.length === 0 ? (
-          <div className="px-3 py-4 text-center text-xs text-text3">No tasks in queue</div>
-        ) : (
-          <table className="w-full">
-            <tbody>
-              {queuedTasks.map(t => {
-                const Icon = agentIcons[t.agent_type] ?? Bot
-                const colors = agentColors[t.agent_type] ?? "text-accent-porter bg-accent-porter/15"
-                const [textColor] = colors.split(" ")
-                let reason = ""
-                try { reason = JSON.parse(t.payload).reason ?? "" } catch {}
-                return (
-                  <tr key={t.id} className="border-b border-border/20 last:border-0">
-                    <td className="px-3 py-1.5 w-5">
-                      <Icon className={`size-3 ${textColor}`} />
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <span className="text-xs font-medium text-text">{t.action_type.replace(/_/g, " ")}</span>
-                      {reason && <p className="text-[10px] text-text3 truncate max-w-[300px]">{reason}</p>}
-                    </td>
-                    <td className="px-3 py-1.5">
-                      {t.target_username && (
-                        <Link to={`/users/${t.target_username}`} className="text-xs text-accent-porter hover:underline">
-                          @{t.target_username}
-                        </Link>
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <Badge variant="outline" className="text-[10px]">P{t.priority}</Badge>
-                    </td>
-                    <td className="px-3 py-1.5 text-right">
-                      <div className="flex items-center gap-1 justify-end">
-                        <Button variant="default" size="sm" className="h-5 px-1.5 text-[10px]" onClick={() => execute.mutate(t.id)}>
-                          <Play className="size-2.5 mr-0.5" /> Run
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px]" onClick={() => skip.mutate(t.id)}>
-                          <SkipForward className="size-2.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      )}
     </div>
   )
 }
