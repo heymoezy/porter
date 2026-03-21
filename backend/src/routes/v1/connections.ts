@@ -3,6 +3,7 @@ import { sqlite } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
 import { encryptCredential } from '../../lib/credential-crypto.js';
 import { emitSSE } from '../../services/scheduler.js';
+import { getProjectCalendarEvents } from '../../services/calendar.js';
 import { z } from 'zod';
 import crypto from 'crypto';
 
@@ -321,5 +322,14 @@ export default async function connectionsV1Routes(
     `).run({ projectId, connectionId });
 
     return reply.send(ok({ detached: true }));
+  });
+
+  // ── GET /project/:projectId/calendar-events — Calendar events for project dashboard ──
+  fastify.get('/project/:projectId/calendar-events', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const { projectId } = request.params as { projectId: string };
+    const events = getProjectCalendarEvents(projectId);
+    return reply.send(ok(events));
   });
 }
