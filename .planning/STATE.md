@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 03-route-migration-05-PLAN.md
-last_updated: "2026-03-20T20:49:32.158Z"
+stopped_at: Completed 04-00-PLAN.md
+last_updated: "2026-03-21T03:19:37.259Z"
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 22
-  completed_plans: 22
+  total_plans: 28
+  completed_plans: 23
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input
-**Current focus:** Phase 03 — route-migration
+**Current focus:** Phase 04 — agent-autonomy
 
 ## Current Position
 
-Phase: 03 (route-migration) — EXECUTING
-Plan: 1 of 5
+Phase: 04 (agent-autonomy) — EXECUTING
+Plan: 1 of 6
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Plan: 1 of 5
 | Phase 03-route-migration P01 | 7min | 2 tasks | 1 files |
 | Phase 03-route-migration P03 | 5min | 2 tasks | 4 files |
 | Phase 03-route-migration P05 | 23min | 2 tasks | 3 files |
+| Phase 04-agent-autonomy P00 | 4min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -133,6 +134,9 @@ Recent decisions affecting current work:
 - [Phase 03-route-migration]: DELETE /api/v1/agents/:id soft-deletes by setting status='retired' — matches porter.py behavior
 - [Phase 03-route-migration]: wildcard:false on @fastify/static prevents HEAD route conflict with proxy; SPA catch-all uses fs.readFileSync for index.html outside plugin scope
 - [Phase 03-route-migration]: porter.py auth/projects/agents handlers marked deprecated but kept alive for Playwright tests; full deletion deferred to Fastify port-swap phase
+- [Phase 04-agent-autonomy]: Wave 0 tests are /tmp/-only — not committed to git per Phase 2 convention
+- [Phase 04-agent-autonomy]: test_agnt04_depth.py uses is_temporary field inspection to detect pre-implementation state — SKIP when fields ignored, FAIL only when feature is active but limit not enforced
+- [Phase 04-agent-autonomy]: test_agnt02_deadline.py validates deadline SQL directly (not scheduler wait) — verifies trigger SQL correctness without 65s sleep
 
 ### Pending Todos
 
@@ -147,6 +151,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T20:38:57.360Z
-Stopped at: Completed 03-route-migration-05-PLAN.md
+Last session: 2026-03-21T03:19:37.256Z
+Stopped at: Completed 04-00-PLAN.md
 Resume file: None

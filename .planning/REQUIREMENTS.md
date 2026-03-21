@@ -31,10 +31,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Agents
 
-- [ ] **AGNT-01**: Scheduled agent work (wake on configurable intervals, execute assigned tasks, report back)
-- [ ] **AGNT-02**: Event-driven triggers (new file, message, deadline approaching → agent responds)
-- [ ] **AGNT-03**: Agent activity log (user-readable feed: what each agent did, when, why, what's queued)
-- [ ] **AGNT-04**: Ephemeral project-scoped agents that auto-retire when project completes or on explicit dismissal
+- [x] **AGNT-01**: Scheduled agent work (wake on configurable intervals, execute assigned tasks, report back)
+- [x] **AGNT-02**: Event-driven triggers (new file, message, deadline approaching → agent responds)
+- [x] **AGNT-03**: Agent activity log (user-readable feed: what each agent did, when, why, what's queued)
+- [x] **AGNT-04**: Ephemeral project-scoped agents that auto-retire when project completes or on explicit dismissal
 
 ### Connections
 
@@ -105,10 +105,10 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | MEM-04 | Phase 2 | Complete |
 | PERF-01 | Phase 3 | Complete |
 | PERF-02 | Phase 3 | Complete |
-| AGNT-01 | Phase 4 | Pending |
-| AGNT-02 | Phase 4 | Pending |
-| AGNT-03 | Phase 4 | Pending |
-| AGNT-04 | Phase 4 | Pending |
+| AGNT-01 | Phase 4 | Complete |
+| AGNT-02 | Phase 4 | Complete |
+| AGNT-03 | Phase 4 | Complete |
+| AGNT-04 | Phase 4 | Complete |
 | PROJ-01 | Phase 5 | Pending |
 | PROJ-02 | Phase 5 | Pending |
 | PROJ-03 | Phase 5 | Pending |
