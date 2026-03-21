@@ -3,8 +3,13 @@ import { db, sqlite } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 import { eq, ne } from 'drizzle-orm';
 import { ok, err } from '../../lib/envelope.js';
+import { featureFlags } from '../../config.js';
 import { z } from 'zod';
 import crypto from 'crypto';
+
+const CHILD_BLOCKED_TOOLS = ['delegate_task', 'send_message', 'memory', 'execute_code'];
+const MAX_DEPTH = 2;
+const MAX_CONCURRENT_CHILDREN = 3;
 
 function parseJsonField<T>(value: string | null | undefined, fallback: T): T {
   if (!value) return fallback;
@@ -21,6 +26,10 @@ type ConfigBlob = {
   skills?: string[];
   tools?: string[];
   awareness_mode?: string;
+  project_id?: string;
+  parent_agent_id?: string | null;
+  depth?: number;
+  blocked_tools?: string[];
   [key: string]: unknown;
 };
 
@@ -98,6 +107,11 @@ const createAgentSchema = z.object({
   role: z.string().optional(),
   agent_group: z.string().optional(),
   description: z.string().optional(),
+  // Ephemeral agent fields
+  is_temporary: z.boolean().optional(),
+  project_id: z.string().optional(),
+  parent_agent_id: z.string().optional(),
+  depth: z.number().int().min(0).max(MAX_DEPTH).optional(),
 });
 
 const updateAgentSchema = z.object({
@@ -136,10 +150,47 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
     }
 
     const { name, role, agent_group, description } = parsed.data;
+
+    // Ephemeral agent validation
+    if (parsed.data.is_temporary) {
+      if (!featureFlags.ephemeralAgents) {
+        return reply.code(403).send(err('FEATURE_DISABLED', 'Ephemeral agents are disabled'));
+      }
+
+      if (!parsed.data.project_id) {
+        return reply.code(400).send(err('INVALID_INPUT', 'Ephemeral agents require a project_id'));
+      }
+
+      const depth = parsed.data.depth ?? 0;
+      if (depth >= MAX_DEPTH) {
+        return reply.code(400).send(err('DEPTH_LIMIT', `Cannot create agent at depth ${depth + 1}. Max depth is ${MAX_DEPTH}.`));
+      }
+
+      // Check concurrent children limit for parent
+      if (parsed.data.parent_agent_id) {
+        const runningChildren = sqlite.prepare(`
+          SELECT COUNT(*) as n FROM agent_jobs
+          WHERE parent_agent_id = @parentId AND status = 'running'
+        `).get({ parentId: parsed.data.parent_agent_id }) as { n: number };
+
+        if (runningChildren.n >= MAX_CONCURRENT_CHILDREN) {
+          return reply.code(429).send(err('CHILDREN_LIMIT',
+            `Parent agent has ${MAX_CONCURRENT_CHILDREN} concurrent children. Wait for one to complete.`));
+        }
+      }
+    }
+
     const id = 'agent_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
     const now = new Date().toISOString();
     const config: ConfigBlob = {};
     if (description) config.description = description;
+
+    if (parsed.data.is_temporary) {
+      config.project_id = parsed.data.project_id;
+      config.parent_agent_id = parsed.data.parent_agent_id ?? null;
+      config.depth = (parsed.data.depth ?? 0) + 1; // Child is one level deeper
+      config.blocked_tools = CHILD_BLOCKED_TOOLS;
+    }
 
     db.insert(schema.personas).values({
       id,
@@ -150,6 +201,7 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
       createdAt: now,
       status: 'idle',
       owner: request.sessionUser!.username,
+      isTemporary: parsed.data.is_temporary ? 1 : 0,
     }).run();
 
     const agent = db.select().from(schema.personas)
@@ -230,6 +282,18 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
 
     db.update(schema.personas).set({ status: 'retired' })
       .where(eq(schema.personas.id, id)).run();
+
+    // Cancel pending jobs for retired agent (prevent orphaned jobs)
+    sqlite.prepare(`
+      UPDATE agent_jobs SET status = 'cancelled', completed_at = unixepoch('now')
+      WHERE agent_id = @id AND status = 'pending'
+    `).run({ id });
+
+    // Log the retirement
+    sqlite.prepare(`
+      INSERT INTO agent_activity (agent_id, event_type, summary)
+      VALUES (@id, 'agent_retired', 'Agent retired — pending jobs cancelled')
+    `).run({ id });
 
     return reply.send(ok({ retired: true }));
   });
