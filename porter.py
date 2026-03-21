@@ -13187,6 +13187,14 @@ LOGIN_PAGE = """<!DOCTYPE html>
     --danger: #DC2626; --success: #16A34A; --warning: #D97706;
   }
 }
+[data-theme="light"] {
+    --bg: #FFFFFF; --surface: #F3F4F8; --raised: #E8EBF2;
+    --border: #D1D5DF; --border2: #B8BFD0;
+    --text: #0F172A; --text2: #475569; --text3: #94A3B8;
+    --accent: #4F46E5; --accent-h: #4338CA; --accent-d: #3730A3;
+    --danger: #DC2626; --success: #16A34A; --warning: #D97706;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -13386,6 +13394,14 @@ REGISTER_PAGE = """<!DOCTYPE html>
     --danger: #DC2626; --success: #16A34A;
   }
 }
+[data-theme="light"] {
+    --bg: #FFFFFF; --surface: #F3F4F8; --raised: #E8EBF2;
+    --border: #D1D5DF; --border2: #B8BFD0;
+    --text: #0F172A; --text2: #475569; --text3: #94A3B8;
+    --accent: #4F46E5; --accent-d: #4338CA;
+    --danger: #DC2626; --success: #16A34A;
+}
+
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;align-items:center;justify-content:center;height:100vh}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:40px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.24)}
@@ -13475,6 +13491,14 @@ FORGOT_PASSWORD_PAGE = """<!DOCTYPE html>
     --danger: #DC2626; --success: #16A34A;
   }
 }
+[data-theme="light"] {
+    --bg: #FFFFFF; --surface: #F3F4F8; --raised: #E8EBF2;
+    --border: #D1D5DF; --border2: #B8BFD0;
+    --text: #0F172A; --text2: #475569; --text3: #94A3B8;
+    --accent: #4F46E5; --accent-d: #4338CA;
+    --danger: #DC2626; --success: #16A34A;
+}
+
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;align-items:center;justify-content:center;height:100vh}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:40px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.24)}
@@ -13591,6 +13615,7 @@ try {
     --accent-d: #4338CA;
   }
 }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -46351,6 +46376,14 @@ LANDING_PAGE = """<!DOCTYPE html>
     --danger: #DC2626; --success: #16A34A; --warning: #D97706;
   }
 }
+[data-theme="light"] {
+    --bg: #FFFFFF; --surface: #F3F4F8; --raised: #E8EBF2;
+    --border: #D1D5DF; --border2: #B8BFD0;
+    --text: #0F172A; --text2: #475569; --text3: #94A3B8;
+    --accent: #4F46E5; --accent-h: #4338CA;
+    --danger: #DC2626; --success: #16A34A; --warning: #D97706;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
