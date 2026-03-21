@@ -141,10 +141,11 @@ Plans:
   3. The system health panel shows live status for every connected service (AI backends, database, external APIs) and current token usage
   4. The decision log shows why Porter chose a specific model or routed to a specific agent — readable by a non-technical user
   5. Removing all polling-interval calls from the frontend reduces outbound HTTP requests to the server by at least 80% during idle periods
-**Plans**: 5 plans
+**Plans**: 6 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — SSE backend infrastructure: Fastify events.ts WebSocket-to-SSE rewrite, DB migration for decision_log + token_usage_daily (Wave 1)
+- [ ] 06-00-PLAN.md — Wave 0 test scaffolding: behavioral test stubs for TRNS-01, TRNS-02, TRNS-03, PERF-03 (Wave 0)
+- [ ] 06-01-PLAN.md — SSE backend infrastructure: Fastify events.ts WebSocket-to-SSE rewrite, DB migration, porter.py /api/events/emit + poller kill (Wave 1)
 - [ ] 06-02-PLAN.md — Frontend SSE singleton: SSEProvider context, useSSEHub hook, refactor useProjectActivity to shared bus (Wave 1)
 - [ ] 06-03-PLAN.md — Agent activity feed: three-section layout (Active/Completed/Queued), expandable detail, agent grouping (Wave 2)
 - [ ] 06-04-PLAN.md — Health + decisions backend: GET /api/v1/health, GET /api/v1/decisions, decision logging in AI router (Wave 2)
@@ -186,5 +187,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 3. Route Migration | 5/5 | Complete   | 2026-03-20 |
 | 4. Agent Autonomy | 6/6 | Complete   | 2026-03-21 |
 | 5. Guided Project Wizard | 6/6 | Complete   | 2026-03-21 |
-| 6. Real-Time and Transparency | 0/5 | Not started | - |
+| 6. Real-Time and Transparency | 0/6 | Not started | - |
 | 7. External Connections | 0/8 | Not started | - |
