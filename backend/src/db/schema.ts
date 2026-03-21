@@ -177,3 +177,74 @@ export const tokenUsageDaily = sqliteTable('token_usage_daily', {
   requestCount: integer('request_count').default(0),
   createdAt: real('created_at').default(sql`(unixepoch('now'))`),
 });
+
+// ── External Connections ─────────────────────────────────────────────────────
+
+export const workspaceConnections = sqliteTable('workspace_connections', {
+  id: text('id').primaryKey(),
+  provider: text('provider').notNull(),
+  kind: text('kind').notNull().default('api_key'),
+  status: text('status').notNull().default('disconnected'),
+  displayName: text('display_name').default(''),
+  scopesJson: text('scopes_json').default('[]'),
+  toolsJson: text('tools_json').default('[]'),
+  lastSyncAt: real('last_sync_at').default(0),
+  lastError: text('last_error').default(''),
+  installedBy: text('installed_by').default(''),
+  metaJson: text('meta_json').default('{}'),
+  metaEncrypted: integer('meta_encrypted').default(0),
+  createdAt: real('created_at').default(sql`(strftime('%s','now'))`),
+  updatedAt: real('updated_at').default(sql`(strftime('%s','now'))`),
+});
+
+export const projectConnections = sqliteTable('project_connections', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  projectId: text('project_id').notNull(),
+  connectionId: text('connection_id').notNull(),
+  accessMode: text('access_mode').notNull().default('read'),
+  enabledToolsJson: text('enabled_tools_json').default('[]'),
+  status: text('status').notNull().default('active'),
+  attachedBy: text('attached_by').default(''),
+  attachedAt: real('attached_at').default(sql`(strftime('%s','now'))`),
+});
+
+export const calendarEvents = sqliteTable('calendar_events', {
+  id: text('id').primaryKey(),
+  connectionId: text('connection_id').notNull(),
+  projectId: text('project_id'),
+  googleEventId: text('google_event_id').notNull(),
+  title: text('title').notNull(),
+  startAt: text('start_at').notNull(),
+  endAt: text('end_at'),
+  allDay: integer('all_day').default(0),
+  syncedAt: real('synced_at').default(sql`(unixepoch('now'))`),
+});
+
+// ── Billing ──────────────────────────────────────────────────────────────────
+
+export const subscriptions = sqliteTable('subscriptions', {
+  id: text('id').primaryKey(),
+  username: text('username').notNull(),
+  plan: text('plan').notNull().default('free'),                     // free | cloud | cloud_team | enterprise
+  status: text('status').notNull().default('trialing'),             // trialing | active | past_due | paused | cancelled | expired
+  lsCustomerId: text('ls_customer_id'),                             // Lemon Squeezy customer ID
+  lsSubscriptionId: text('ls_subscription_id'),                     // Lemon Squeezy subscription ID
+  lsVariantId: text('ls_variant_id'),                               // Lemon Squeezy variant ID
+  trialEndsAt: real('trial_ends_at'),                               // unix epoch
+  currentPeriodStart: real('current_period_start'),
+  currentPeriodEnd: real('current_period_end'),
+  cancelAt: real('cancel_at'),                                      // scheduled cancellation
+  cancelledAt: real('cancelled_at'),                                // actual cancellation
+  pausedAt: real('paused_at'),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+});
+
+export const billingEvents = sqliteTable('billing_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  username: text('username'),
+  eventType: text('event_type').notNull(),                          // subscription_created | subscription_updated | payment_success | payment_failed | trial_started | trial_expired
+  lsEventId: text('ls_event_id'),                                  // Lemon Squeezy webhook event ID (dedup)
+  payload: text('payload').default('{}'),                           // raw webhook JSON
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+});

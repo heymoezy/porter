@@ -20,6 +20,8 @@ import proxyPlugin from './plugins/proxy.js';
 import { migrate04AgentAutonomy } from './db/migrate-04.js';
 import { migrate05GuidedWizard } from './db/migrate-05.js';
 import { migrate06RealTimeTransparency } from './db/migrate-06.js';
+import { migrate07Billing } from './db/migrate-07.js';
+import { migrate07ExternalConnections } from './db/migrate-07-ext-connections.js';
 import * as scheduler from './services/scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -84,6 +86,8 @@ const start = async () => {
     migrate04AgentAutonomy();
     migrate05GuidedWizard();
     migrate06RealTimeTransparency();
+    migrate07Billing();
+    migrate07ExternalConnections();
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
     scheduler.start();
