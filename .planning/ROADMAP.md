@@ -49,7 +49,7 @@
   2. `curl /api/v1/nonexistent` returns `{"ok": false, "error": {"code": "NOT_FOUND", "message": "...", "trace_id": "uuid"}}` with the same trace ID echoed in the X-Request-ID response header
   3. `curl /api/v1/openapi.json` returns a valid OpenAPI 3.x document with all routes, request schemas, and response envelopes documented
   4. `curl -X POST /api/v1/errors -d '{"message":"TypeError","component":"ChatPanel","stack":"...","user_id":1}'` returns 201; `curl /api/v1/errors?severity=error&component=ChatPanel` returns the stored report
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 08-01-PLAN.md — Envelope upgrade + trace ID + route conformance (API-01, API-02)
@@ -128,7 +128,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1-7. Foundation through Connections | v1.0 | 51/51 | Complete | 2026-03-21 |
-| 8. API Foundation | v2.0 | 0/2 | Planned | - |
+| 8. API Foundation | 1/2 | In Progress|  | - |
 | 9. Streaming Chat | v2.0 | 0/TBD | Not started | - |
 | 10. Collaborative Sessions | v2.0 | 0/TBD | Not started | - |
 | 11. Unified Chat and CRM Schema | v2.0 | 0/TBD | Not started | - |

@@ -22,8 +22,8 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 ### API Surface
 
-- [ ] **API-01**: All endpoints follow /api/v1/* with consistent JSON response envelopes ({ok, data, error})
-- [ ] **API-02**: All error responses include error code, message, and request trace ID
+- [x] **API-01**: All endpoints follow /api/v1/* with consistent JSON response envelopes ({ok, data, error})
+- [x] **API-02**: All error responses include error code, message, and request trace ID
 - [ ] **API-03**: OpenAPI spec auto-generated from route definitions
 
 ### Streaming
@@ -98,8 +98,8 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| API-01 | Phase 8 | Pending |
-| API-02 | Phase 8 | Pending |
+| API-01 | Phase 8 | Complete |
+| API-02 | Phase 8 | Complete |
 | API-03 | Phase 8 | Pending |
 | OBS-01 | Phase 8 | Pending |
 | OBS-02 | Phase 8 | Pending |
