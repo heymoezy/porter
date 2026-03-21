@@ -30,7 +30,7 @@
 
 **Milestone Goal:** A complete, consistent, API-first backend — all v2 features accessible via curl before any frontend connects.
 
-- [ ] **Phase 8: API Foundation** - Standardize all endpoints to /api/v1/*, add error codes with trace IDs, auto-generate OpenAPI spec, capture frontend errors
+- [x] **Phase 8: API Foundation** - Standardize all endpoints to /api/v1/*, add error codes with trace IDs, auto-generate OpenAPI spec, capture frontend errors (completed 2026-03-21)
 - [ ] **Phase 9: Streaming Chat** - Native token-by-token SSE streaming from all AI backends with clean mid-stream cancellation
 - [ ] **Phase 10: Collaborative Sessions** - Invite by email, per-project roles (view/chat/edit/admin), RBAC enforcement on every project-scoped route
 - [ ] **Phase 11: Unified Chat and CRM Schema** - Single conversation model for all message sources, multi-value CRM contacts, file associations via single upload endpoint
@@ -49,7 +49,7 @@
   2. `curl /api/v1/nonexistent` returns `{"ok": false, "error": {"code": "NOT_FOUND", "message": "...", "trace_id": "uuid"}}` with the same trace ID echoed in the X-Request-ID response header
   3. `curl /api/v1/openapi.json` returns a valid OpenAPI 3.x document with all routes, request schemas, and response envelopes documented
   4. `curl -X POST /api/v1/errors -d '{"message":"TypeError","component":"ChatPanel","stack":"...","user_id":1}'` returns 201; `curl /api/v1/errors?severity=error&component=ChatPanel` returns the stored report
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 08-01-PLAN.md — Envelope upgrade + trace ID + route conformance (API-01, API-02)
@@ -128,7 +128,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1-7. Foundation through Connections | v1.0 | 51/51 | Complete | 2026-03-21 |
-| 8. API Foundation | 1/2 | In Progress|  | - |
+| 8. API Foundation | 2/2 | Complete   | 2026-03-21 | - |
 | 9. Streaming Chat | v2.0 | 0/TBD | Not started | - |
 | 10. Collaborative Sessions | v2.0 | 0/TBD | Not started | - |
 | 11. Unified Chat and CRM Schema | v2.0 | 0/TBD | Not started | - |

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 08-api-foundation-01-PLAN.md
-last_updated: "2026-03-21T19:12:03.329Z"
+stopped_at: Completed 08-api-foundation-02-PLAN.md
+last_updated: "2026-03-21T19:19:56.145Z"
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -51,6 +51,8 @@ Recent decisions affecting current work:
 - [Phase 08-api-foundation]: onSend hook syncs trace_id globally — zero changes to 162 existing call sites
 - [Phase 08-api-foundation]: trace_id placed in both meta and error objects per API-02 spec
 - [Phase 08-api-foundation]: meta() function removed — callers always use ok() or err() directly
+- [Phase 08-api-foundation]: fastifyZodOpenApiPlugin is the correct export name from fastify-zod-openapi@5.5.0 — not fastifyZodOpenApi as shown in documentation examples
+- [Phase 08-api-foundation]: openapiPlugin must register at root Fastify instance (not inside v1Routes) to collect paths from all child plugins for the OpenAPI spec
 
 ### Pending Todos
 
@@ -65,6 +67,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T19:12:03.326Z
-Stopped at: Completed 08-api-foundation-01-PLAN.md
+Last session: 2026-03-21T19:19:56.142Z
+Stopped at: Completed 08-api-foundation-02-PLAN.md
 Resume file: None

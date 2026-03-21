@@ -24,7 +24,7 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 - [x] **API-01**: All endpoints follow /api/v1/* with consistent JSON response envelopes ({ok, data, error})
 - [x] **API-02**: All error responses include error code, message, and request trace ID
-- [ ] **API-03**: OpenAPI spec auto-generated from route definitions
+- [x] **API-03**: OpenAPI spec auto-generated from route definitions
 
 ### Streaming
 
@@ -79,8 +79,8 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 ### Observability
 
-- [ ] **OBS-01**: Frontend errors POST to /api/v1/errors with stack trace, component, user context
-- [ ] **OBS-02**: Error reports queryable by severity, component, and time range
+- [x] **OBS-01**: Frontend errors POST to /api/v1/errors with stack trace, component, user context
+- [x] **OBS-02**: Error reports queryable by severity, component, and time range
 
 ## Out of Scope
 
@@ -100,9 +100,9 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 |-------------|-------|--------|
 | API-01 | Phase 8 | Complete |
 | API-02 | Phase 8 | Complete |
-| API-03 | Phase 8 | Pending |
-| OBS-01 | Phase 8 | Pending |
-| OBS-02 | Phase 8 | Pending |
+| API-03 | Phase 8 | Complete |
+| OBS-01 | Phase 8 | Complete |
+| OBS-02 | Phase 8 | Complete |
 | STRM-01 | Phase 9 | Pending |
 | STRM-02 | Phase 9 | Pending |
 | STRM-03 | Phase 9 | Pending |
