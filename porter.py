@@ -20972,11 +20972,13 @@ function switchModule(name) {
           } catch(ex) {}
         });
       }
-      if (window._personaRefreshTimer) clearInterval(window._personaRefreshTimer);
-      window._personaRefreshTimer = setInterval(function() {
+      // Phase 6: replaced setInterval with 60s fallback (SSE-first)
+      if (window._personaRefreshTimer) clearTimeout(window._personaRefreshTimer);
+      function _resetPersonaRefreshTimer() {
         if (document.getElementById('overview-module') && document.getElementById('overview-module').classList.contains('active')) { loadPersonas(); if (typeof _loadQuestLog === 'function') _loadQuestLog(); }
-        else clearInterval(window._personaRefreshTimer);
-      }, 60000);
+        window._personaRefreshTimer = setTimeout(_resetPersonaRefreshTimer, 60000);
+      }
+      window._personaRefreshTimer = setTimeout(_resetPersonaRefreshTimer, 60000);
     }, tasks: function() { /* tasks merged into projects */ }, agents: function() {
       // v0.31.76 — Always reset to grid view when clicking Agents nav
       var _adv = document.getElementById('agent-detail-view');
@@ -23575,13 +23577,16 @@ function _connectProjActivityLive() {
     else if (d.type === 'bridge:response' || d.type === 'bridge:error') _scheduleProjActivityRefresh(220);
     else if (_isCoordinationEventType(d.type)) _scheduleProjActivityRefresh(200);
   });
+  // Phase 6: replaced setInterval with 60s fallback (SSE-first)
   if (!_projActivityPoller) {
-    _projActivityPoller = setInterval(function() {
+    function _resetProjActivityPoller() {
       var detail = document.getElementById('project-detail-view');
       if (_currentModule === 'projects' && detail && detail.style.display !== 'none' && window._projCurrent) {
         _projReload(window._projCurrent.id);
       }
-    }, 30000);
+      _projActivityPoller = setTimeout(_resetProjActivityPoller, 60000);
+    }
+    _projActivityPoller = setTimeout(_resetProjActivityPoller, 60000);
   }
 }
 
@@ -25852,10 +25857,13 @@ async function _loadPulseOps(force) {
   } catch (e) {
     strip.innerHTML = '<span class="ps-item" style="color:var(--text3)">Status unavailable</span>';
   }
+  // Phase 6: replaced setInterval with 60s fallback (SSE-first)
   if (!_pulseOpsPoller) {
-    _pulseOpsPoller = setInterval(function() {
+    function _resetPulseOpsPoller() {
       if (_currentModule === 'admin') _loadPulseOps(true);
-    }, 30000);
+      _pulseOpsPoller = setTimeout(_resetPulseOpsPoller, 60000);
+    }
+    _pulseOpsPoller = setTimeout(_resetPulseOpsPoller, 60000);
   }
 }
 
@@ -25938,10 +25946,13 @@ function _connectGatewayActivitySse() {
       _loadPulseOps(true);
     }
   });
+  // Phase 6: replaced setInterval with 60s fallback (SSE-first)
   if (!_gatewayActivityPoller) {
-    _gatewayActivityPoller = setInterval(function() {
+    function _resetGatewayActivityPoller() {
       if (_currentModule === 'admin') _loadGatewayActivity(true);
-    }, 30000);
+      _gatewayActivityPoller = setTimeout(_resetGatewayActivityPoller, 60000);
+    }
+    _gatewayActivityPoller = setTimeout(_resetGatewayActivityPoller, 60000);
   }
 }
 
@@ -26144,10 +26155,13 @@ function _connectSystemRuntimeSse() {
       _scheduleCoordinationPanelRefresh(120);
     }
   });
+  // Phase 6: replaced setInterval with 60s fallback (SSE-first)
   if (!_coordinationPanelPoller) {
-    _coordinationPanelPoller = setInterval(function() {
+    function _resetCoordinationPanelPoller() {
       if (_currentModule === 'admin') _loadCoordinationPanel(true);
-    }, 30000);
+      _coordinationPanelPoller = setTimeout(_resetCoordinationPanelPoller, 60000);
+    }
+    _coordinationPanelPoller = setTimeout(_resetCoordinationPanelPoller, 60000);
   }
 }
 
@@ -29947,8 +29961,13 @@ var loadAdmin = loadLogs;  // backward compat alias
 async function mcInit() {
   await mcLoadEvents();
   mcUpdateCards();
-  if (_mcMetricsTimer) clearInterval(_mcMetricsTimer);
-  _mcMetricsTimer = setInterval(mcUpdateCards, 15000);
+  // Phase 6: replaced setInterval with 60s fallback (SSE-first)
+  if (_mcMetricsTimer) clearTimeout(_mcMetricsTimer);
+  function _resetMcMetricsTimer() {
+    mcUpdateCards();
+    _mcMetricsTimer = setTimeout(_resetMcMetricsTimer, 60000);
+  }
+  _mcMetricsTimer = setTimeout(_resetMcMetricsTimer, 60000);
   // Subscribe to SSE for live events
   if (_mcSseId) { _sseUnsubscribe(_mcSseId); _mcSseId = null; }
   _mcSseId = _sseSubscribe(function(d) {
@@ -49635,6 +49654,17 @@ class Handler(BaseHTTPRequestHandler):
                 log.info("Client disconnected from event hub")
             return
 
+        elif parsed.path == "/api/events/emit" and self.command == "POST":
+            if not self.auth_check(redirect=False): return
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            event_type = str(body.get("event", ""))
+            data = body.get("data", {})
+            if event_type:
+                _emit_event(event_type, data)
+            self.reply_json({"ok": True})
+
+
         # v0.28.4 — Cursor-based read endpoint for agents
         elif parsed.path == "/api/chat/read":
             if not self.auth_check(redirect=False): return
@@ -56611,6 +56641,16 @@ class Handler(BaseHTTPRequestHandler):
                     self.reply_json({"ok": True})
                 else:
                     self.reply_json({"ok": False, "error": "Workflow not found"}, 404)
+
+        elif parsed.path == "/api/events/emit":
+            if not self.auth_check(redirect=False): return
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            event_type = str(body.get("event", ""))
+            data = body.get("data", {})
+            if event_type:
+                _emit_event(event_type, data)
+            self.reply_json({"ok": True})
 
         else:
             self.reply_html("<h1>Not found</h1>", 404)
