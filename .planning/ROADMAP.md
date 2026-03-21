@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Route Migration** - Move auth/projects/agents to Fastify via strangler fig, all 35 tests green (completed 2026-03-20)
 - [x] **Phase 4: Agent Autonomy** - Scheduled + event-driven agents, activity log, ephemeral agents (completed 2026-03-21)
 - [x] **Phase 5: Guided Project Wizard** - Conversational project creation, auto agent assignment, project dashboard (completed 2026-03-21)
-- [ ] **Phase 6: Real-Time and Transparency** - SSE hub replaces polling, agent feed, system health, decision log
+- [x] **Phase 6: Real-Time and Transparency** - SSE hub replaces polling, agent feed, system health, decision log (completed 2026-03-21)
 - [ ] **Phase 7: External Connections** - GitHub, email, calendar, WhatsApp integrations — all credentials configurable via UI, nothing hardcoded
 
 ## Phase Details
@@ -187,5 +187,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 3. Route Migration | 5/5 | Complete   | 2026-03-20 |
 | 4. Agent Autonomy | 6/6 | Complete   | 2026-03-21 |
 | 5. Guided Project Wizard | 6/6 | Complete   | 2026-03-21 |
-| 6. Real-Time and Transparency | 5/6 | In Progress|  |
+| 6. Real-Time and Transparency | 6/6 | Complete   | 2026-03-21 |
 | 7. External Connections | 0/8 | Not started | - |

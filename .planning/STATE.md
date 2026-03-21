@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: "Checkpoint at 06-05 Task 3: human-verify before completing plan"
-last_updated: "2026-03-21T07:29:59.651Z"
+stopped_at: Completed 06-05-PLAN.md (Phase 06 Plan 05)
+last_updated: "2026-03-21T07:32:06.828Z"
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 40
-  completed_plans: 39
+  completed_plans: 40
 ---
 
 # Project State
@@ -85,6 +85,7 @@ Plan: 4 of 6
 | Phase 06-real-time-and-transparency P01 | 8min | 3 tasks | 5 files |
 | Phase 06-real-time-and-transparency PP04 | 2min | 2 tasks | 5 files |
 | Phase 06-real-time-and-transparency P03 | 2min | 2 tasks | 4 files |
+| Phase 06-real-time-and-transparency PP05 | 10min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -204,6 +205,9 @@ Recent decisions affecting current work:
 - [Phase 06-03]: ActivityFeed categorized prop replaces flat events prop -- hook returns both for backward compat with future consumers
 - [Phase 06-03]: Active section: only job_started/wizard_start; Completed: today-only job_complete/job_failed/agent_retired; Queued: /api/v1/jobs?status=pending
 - [Phase 06-03]: onStatusChange on AgentStatusStrip is optional -- guards with early return so strips without parent callback are unaffected
+- [Phase 06-05]: useSystemHealth uses both SSE (system:health event) and 30s polling for reliability — either mechanism refreshes data
+- [Phase 06-05]: SystemHealthPanel embeds DecisionLog as a section rather than a separate page — single health tab shows TRNS-02 and TRNS-03 together
+- [Phase 06-05]: Database rendered as ServiceCard using the same component as AI backends — consistent visual treatment for health status
 
 ### Pending Todos
 
@@ -218,6 +222,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T07:29:59.647Z
-Stopped at: Checkpoint at 06-05 Task 3: human-verify before completing plan
+Last session: 2026-03-21T07:32:06.824Z
+Stopped at: Completed 06-05-PLAN.md (Phase 06 Plan 05)
 Resume file: None
