@@ -1,5 +1,5 @@
 import { sqlite } from '../db/client.js';
-import { featureFlags } from '../config.js';
+import { config, featureFlags } from '../config.js';
 import { dispatch as aiRouterDispatch } from './ai-router.js';
 import { checkDeadlineTriggers } from './event-triggers.js';
 import crypto from 'crypto';
@@ -102,6 +102,12 @@ async function executeJob(job: JobRow): Promise<void> {
     logActivity(job.agent_id, job.id, job.project_id, 'job_complete',
       `Job ${job.id.slice(0, 8)} completed via ${result.model}`,
       JSON.stringify({ model: result.model, routingReason: result.routingReason }));
+    emitSSE('agent:activity', {
+      agent_id: job.agent_id,
+      project_id: job.project_id,
+      event_type: 'job_complete',
+      summary: `Job completed via ${result.model}`,
+    }).catch(() => {});
   } catch (e: unknown) {
     const errMsg = e instanceof Error ? e.message : String(e);
     if (job.attempt_count < MAX_ATTEMPTS) {
@@ -135,6 +141,24 @@ function markJobFailed(jobId: string, error: string) {
   `).run({ id: jobId, error });
 }
 
+async function emitSSE(eventType: string, data: Record<string, unknown>): Promise<void> {
+  try {
+    const url = `${config.porterPyUrl}/api/events/emit`;
+    const body = JSON.stringify({ event: eventType, data });
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      signal: AbortSignal.timeout(2000), // 2s timeout — never block scheduler
+    });
+    if (!resp.ok) {
+      console.debug('[scheduler] SSE emit %s: HTTP %d', eventType, resp.status);
+    }
+  } catch {
+    // SSE emission is best-effort — never block the scheduler
+  }
+}
+
 function logActivity(
   agentId: string,
   jobId: string | null,
@@ -147,4 +171,15 @@ function logActivity(
     INSERT INTO agent_activity (agent_id, job_id, project_id, event_type, summary, detail)
     VALUES (@agentId, @jobId, @projectId, @eventType, @summary, @detail)
   `).run({ agentId, jobId, projectId, eventType, summary, detail });
+
+  // Best-effort SSE push for real-time dashboard updates
+  emitSSE('project:activity', {
+    agent_id: agentId,
+    job_id: jobId,
+    project_id: projectId,
+    event_type: eventType,
+    summary,
+    detail,
+    created_at: Date.now() / 1000,
+  }).catch(() => { /* swallow — SSE is non-critical */ });
 }
