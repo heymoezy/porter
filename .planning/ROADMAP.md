@@ -141,14 +141,14 @@ Plans:
   3. The system health panel shows live status for every connected service (AI backends, database, external APIs) and current token usage
   4. The decision log shows why Porter chose a specific model or routed to a specific agent — readable by a non-technical user
   5. Removing all polling-interval calls from the frontend reduces outbound HTTP requests to the server by at least 80% during idle periods
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 06-01: SSE hub — plugins/realtime.ts, Map<projectId, Set<sender>>, /api/events endpoint
-- [ ] 06-02: Frontend SSE integration — React Query invalidation on events, remove polling intervals
-- [ ] 06-03: Agent activity feed — real-time: what agents are doing now, did today, what's queued
-- [ ] 06-04: System health panel — service status, token usage, response times, DB health
-- [ ] 06-05: Decision log — model selection reasoning, agent routing rationale, skipped task explanations
+- [ ] 06-01-PLAN.md — SSE backend infrastructure: Fastify events.ts WebSocket-to-SSE rewrite, DB migration for decision_log + token_usage_daily (Wave 1)
+- [ ] 06-02-PLAN.md — Frontend SSE singleton: SSEProvider context, useSSEHub hook, refactor useProjectActivity to shared bus (Wave 1)
+- [ ] 06-03-PLAN.md — Agent activity feed: three-section layout (Active/Completed/Queued), expandable detail, agent grouping (Wave 2)
+- [ ] 06-04-PLAN.md — Health + decisions backend: GET /api/v1/health, GET /api/v1/decisions, decision logging in AI router (Wave 2)
+- [ ] 06-05-PLAN.md — Health panel + decision log UI: SystemHealthPanel, DecisionLog, health tab routing, visual verification (Wave 3)
 
 ### Phase 7: External Connections
 **Goal**: Porter agents can read and write GitHub code, send and receive email, are aware of calendar deadlines, and chat via WhatsApp — all external credentials are configurable via UI with zero hardcoded values in the codebase
