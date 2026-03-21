@@ -121,16 +121,15 @@ Plans:
   4. The project dashboard shows real-time progress, active agents, recent activity, and next steps — no empty states
   5. Auto-assigned agents are appropriate for the project type — a writing project gets a writer, a code project gets a developer
   6. Chat has a toggleable GSD plan mode — switching it on enters structured planning flow, switching it off returns to free chat
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- [ ] 05-01: Wizard flow — conversational UI, 3-question max, Porter proposes agents + plan
-- [ ] 05-02: Agent proposal engine — project type detection, agent selection logic, plan generation (includes: self-improving skills — agents create SKILL.md from successful completions, progressive 3-tier loading — ref: hermes-agent)
-- [ ] 05-03: Approval-to-execution pipeline — proposal approval triggers project creation + job queue
-- [ ] 05-04: Project dashboard — progress view, active agents panel, activity feed, next steps
-- [ ] 05-05: Token budget enforcement — interactive wizard calls hard-capped at 2,000 tokens system context
-- [ ] 05-06: GSD plan mode — chat toggle between free chat and structured planning (question → research → plan → execute), persistent mode state
-- [ ] 05-07: Voice output (KittenTTS) — ONNX-based TTS, CPU-only, 8 voices mapped to agents, audio playback for summaries/status updates (ref: github.com/KittenML/KittenTTS, 15-80MB models)
+- [ ] 05-00-PLAN.md — Wave 0 test scaffolding: 6 behavioral test scripts for PROJ-01 through PROJ-04 (Wave 0)
+- [ ] 05-01-PLAN.md — Wizard backend: types, endpoint, migration, intent detection, proposal generation, approval transaction (Wave 1)
+- [ ] 05-02-PLAN.md — Frontend wizard UI: Zustand state, WizardCard, WizardQuestion, GSDModeToggle, ChatView integration, design system pass (Wave 1)
+- [ ] 05-03-PLAN.md — Dashboard backend: activity feed endpoint, SSE emission from scheduler (Wave 2)
+- [ ] 05-04-PLAN.md — Project dashboard frontend: ActivityFeed, AgentStatusStrip, SSE subscription, Sidebar design system pass (Wave 2)
+- [ ] 05-05-PLAN.md — End-to-end wiring: wizard flow hooks, GSD mode hooks, ChatView message flow, human verification (Wave 3)
 
 ### Phase 6: Real-Time and Transparency
 **Goal**: All live updates flow through SSE push instead of polling, and users have full visibility into what agents are doing, why Porter made each decision, and the health of every connected service
@@ -178,7 +177,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -186,6 +185,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Memory V2 | 8/8 | Complete   | 2026-03-20 |
 | 3. Route Migration | 5/5 | Complete   | 2026-03-20 |
 | 4. Agent Autonomy | 6/6 | Complete   | 2026-03-21 |
-| 5. Guided Project Wizard | 0/7 | Not started | - |
+| 5. Guided Project Wizard | 0/6 | Planning complete | - |
 | 6. Real-Time and Transparency | 0/5 | Not started | - |
 | 7. External Connections | 0/8 | Not started | - |
