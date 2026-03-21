@@ -23,6 +23,8 @@ import { migrate06RealTimeTransparency } from './db/migrate-06.js';
 import { migrate07Billing } from './db/migrate-07.js';
 import { migrate07ExternalConnections } from './db/migrate-07-ext-connections.js';
 import * as scheduler from './services/scheduler.js';
+import { startImapIdle, stopImapIdle } from './services/email.js';
+import { sqlite } from './db/client.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDist = path.resolve(__dirname, '../../frontend/dist');
@@ -81,6 +83,11 @@ fastify.get('/v2/*', async (_request, reply) => {
 // LAST: Proxy unknown routes to porter.py
 fastify.register(proxyPlugin);
 
+// Clean shutdown: stop IMAP IDLE when Fastify closes
+fastify.addHook('onClose', async () => {
+  stopImapIdle();
+});
+
 const start = async () => {
   try {
     migrate04AgentAutonomy();
@@ -91,6 +98,21 @@ const start = async () => {
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
     scheduler.start();
+
+    // Auto-start IMAP IDLE if a connected email connection exists
+    try {
+      const emailConn = sqlite.prepare(
+        "SELECT id FROM workspace_connections WHERE provider = 'email' AND status = 'connected' LIMIT 1"
+      ).get() as { id: string } | undefined;
+      if (emailConn) {
+        startImapIdle(emailConn.id).catch((err) => {
+          console.error('[email] IMAP IDLE auto-start failed:', err instanceof Error ? err.message : err);
+        });
+        console.log('[email] IMAP IDLE auto-started for existing connection');
+      }
+    } catch (err) {
+      console.error('[email] Failed to check email connection on startup:', err);
+    }
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
