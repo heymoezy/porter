@@ -128,8 +128,8 @@ Plans:
 - [ ] 05-01-PLAN.md — Wizard backend: types, endpoint, migration, intent detection, proposal generation, approval transaction (Wave 1)
 - [ ] 05-02-PLAN.md — Frontend wizard UI: Zustand state, WizardCard, WizardQuestion, GSDModeToggle, ChatView integration, design system pass (Wave 1)
 - [ ] 05-03-PLAN.md — Dashboard backend: activity feed endpoint, SSE emission from scheduler (Wave 2)
-- [ ] 05-04-PLAN.md — Project dashboard frontend: ActivityFeed, AgentStatusStrip, SSE subscription, Sidebar design system pass (Wave 2)
-- [ ] 05-05-PLAN.md — End-to-end wiring: wizard flow hooks, GSD mode hooks, ChatView message flow, human verification (Wave 3)
+- [ ] 05-04-PLAN.md — Project dashboard frontend: ActivityFeed, AgentStatusStrip, SSE subscription, Sidebar design system pass (Wave 3)
+- [ ] 05-05-PLAN.md — End-to-end wiring: wizard flow hooks, GSD mode hooks, GSD dispatch action, ChatView message flow, human verification (Wave 4)
 
 ### Phase 6: Real-Time and Transparency
 **Goal**: All live updates flow through SSE push instead of polling, and users have full visibility into what agents are doing, why Porter made each decision, and the health of every connected service
