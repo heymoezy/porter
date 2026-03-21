@@ -2,11 +2,13 @@ import { sqlite } from '../db/client.js';
 import { config, featureFlags } from '../config.js';
 import { dispatch as aiRouterDispatch } from './ai-router.js';
 import { checkDeadlineTriggers } from './event-triggers.js';
+import { syncCalendarEvents, checkCalendarDeadlines } from './calendar.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_ATTEMPTS = 3;
 const DEADLINE_CHECK_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
+const CALENDAR_SYNC_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const WORKER_ID = crypto.randomUUID();
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let tickCount = 0;
@@ -61,6 +63,22 @@ async function tick() {
     tickCount++;
     if (tickCount % DEADLINE_CHECK_INTERVAL === 0) {
       checkDeadlineTriggers();
+    }
+
+    // Calendar sync -- every 60 seconds
+    if (featureFlags.externalConnections && tickCount % CALENDAR_SYNC_INTERVAL === 0) {
+      try {
+        // Only sync if a calendar connection exists
+        const hasCalendar = sqlite.prepare(
+          `SELECT 1 FROM workspace_connections WHERE provider = 'google_calendar' AND status = 'connected' LIMIT 1`
+        ).get();
+        if (hasCalendar) {
+          await syncCalendarEvents();
+          checkCalendarDeadlines();
+        }
+      } catch (e) {
+        console.error('[scheduler] calendar sync error', e);
+      }
     }
   } catch (e) {
     console.error('[scheduler] tick error', e);
