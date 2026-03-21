@@ -55,12 +55,15 @@ type Pages = {
   "/system": {
     params: {};
   };
+  "/activity": {
+    params: {};
+  };
 };
 
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/login" | "/users" | "/users/:username" | "/email" | "/billing" | "/agents" | "/diagnostics" | "/templates" | "/models" | "/porter" | "/tools" | "/skills" | "/system";
+    page: "/" | "/login" | "/users" | "/users/:username" | "/email" | "/billing" | "/agents" | "/diagnostics" | "/templates" | "/models" | "/porter" | "/tools" | "/skills" | "/system" | "/activity";
   };
   "routes/home.tsx": {
     id: "routes/home";
@@ -118,6 +121,10 @@ type RouteFiles = {
     id: "routes/system";
     page: "/system";
   };
+  "routes/activity.tsx": {
+    id: "routes/activity";
+    page: "/activity";
+  };
 };
 
 type RouteModules = {
@@ -136,4 +143,5 @@ type RouteModules = {
   "routes/tools": typeof import("./app/routes/tools.tsx");
   "routes/skills": typeof import("./app/routes/skills.tsx");
   "routes/system": typeof import("./app/routes/system.tsx");
+  "routes/activity": typeof import("./app/routes/activity.tsx");
 };
