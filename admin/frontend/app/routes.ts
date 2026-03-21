@@ -14,4 +14,5 @@ export default [
   route("porter", "routes/porter.tsx"),
   route("tools", "routes/tools.tsx"),
   route("skills", "routes/skills.tsx"),
+  route("system", "routes/system.tsx"),
 ] satisfies RouteConfig

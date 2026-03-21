@@ -6,7 +6,7 @@ import { Separator } from "~/components/ui/separator"
 import {
   Users, Mail, CreditCard, LayoutDashboard, Bot, Bug,
   ChevronLeft, ChevronRight, Settings, LogOut,
-  Blocks, Server, Shield, Wrench, Sparkles,
+  Blocks, Server, Shield, Wrench, Sparkles, Monitor,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -24,6 +24,7 @@ const groups = [
     { icon: Blocks, label: "Templates", path: "/templates" },
     { icon: Server, label: "Models", path: "/models" },
     { icon: Wrench, label: "Tools", path: "/tools" },
+    { icon: Monitor, label: "System", path: "/system" },
   ]},
   { label: "Ops", items: [
     { icon: Bot, label: "Agents", path: "/agents" },

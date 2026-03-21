@@ -10,6 +10,7 @@ import modelsRoutes from './models.js';
 import porterProfileRoutes from './porter-profile.js';
 import toolsRoutes from './tools.js';
 import skillsRoutes from './skills.js';
+import systemRoutes from './system.js';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(healthRoutes, { prefix: '/health' });
@@ -23,4 +24,5 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(porterProfileRoutes, { prefix: '/porter' });
   fastify.register(toolsRoutes, { prefix: '/tools' });
   fastify.register(skillsRoutes, { prefix: '/skills' });
+  fastify.register(systemRoutes, { prefix: '/system' });
 }

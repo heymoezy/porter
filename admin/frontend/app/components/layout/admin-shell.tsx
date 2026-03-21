@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import { useState, useEffect, type ReactNode } from "react"
 import { Sidebar } from "~/components/layout/sidebar"
 import { TopBar } from "~/components/layout/top-bar"
 import { AuthGuard } from "~/components/auth-guard"
@@ -18,15 +18,25 @@ export function AdminShell({ children }: AdminShellProps) {
   )
 }
 
+function getInitialTheme(): "dark" | "light" {
+  if (typeof window === "undefined") return "dark"
+  const saved = localStorage.getItem("porter_theme")
+  return saved === "light" ? "light" : "dark"
+}
+
 function AdminShellInner({ children }: { children: ReactNode }) {
   const { data: session } = useSession()
   const [collapsed, setCollapsed] = useState(false)
-  const [theme, setTheme] = useState<"dark" | "light">("dark")
+  const [theme, setTheme] = useState<"dark" | "light">(getInitialTheme)
+
+  // Sync DOM class on mount and theme change
+  useEffect(() => {
+    document.documentElement.classList.toggle("light", theme === "light")
+  }, [theme])
 
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark"
     setTheme(next)
-    document.documentElement.classList.toggle("light", next === "light")
     localStorage.setItem("porter_theme", next)
   }
 
