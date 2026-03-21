@@ -18,6 +18,7 @@ import authPlugin from './plugins/auth.js';
 import v1Routes from './routes/v1/index.js';
 import proxyPlugin from './plugins/proxy.js';
 import { migrate04AgentAutonomy } from './db/migrate-04.js';
+import { migrate05GuidedWizard } from './db/migrate-05.js';
 import * as scheduler from './services/scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -80,6 +81,7 @@ fastify.register(proxyPlugin);
 const start = async () => {
   try {
     migrate04AgentAutonomy();
+    migrate05GuidedWizard();
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
     scheduler.start();
