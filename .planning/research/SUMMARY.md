@@ -1,276 +1,214 @@
 # Project Research Summary
 
-**Project:** Porter — AI Orchestration SaaS Platform
-**Domain:** Multi-agent orchestration platform, collaborative, non-technical users
-**Researched:** 2026-03-20
-**Confidence:** HIGH (stack + architecture grounded in existing codebase; features cross-referenced against 6 competitors; pitfalls directly from codebase analysis)
+**Project:** Porter v2.0 Backend Ready
+**Domain:** AI Orchestration SaaS Platform — Fastify/Drizzle/SQLite backend extension
+**Researched:** 2026-03-21
+**Confidence:** HIGH
 
 ## Executive Summary
 
-Porter is a mature prototype (v0.33.28) that needs to evolve from a single-user AI chat tool into an autonomous multi-agent platform for non-technical users. The recommended approach is a phased migration using the Strangler Fig pattern: a Fastify backend runs alongside the Python monolith, intercepts routes feature-by-feature, and eventually replaces porter.py entirely. No big-bang rewrite. The frontend never knows which backend is serving it. 35 Playwright tests stay green throughout.
+Porter v2.0 is a backend-only expansion of an existing, functioning AI orchestration platform. The foundation (Fastify 5.7.4, Drizzle ORM, SQLite WAL, cookie-based auth, SSE hub, AI router, billing service skeleton) is already in production. This research covers 10 feature groups added on top: native streaming, collaborative sessions, unified chat, CRM, file associations, agent templates, autonomous learning, billing enforcement, error capture, and OpenAPI documentation. The consensus recommendation is a strangler-fig extension — add new tables, new routes, and new services without disturbing the existing 17 v1 route groups or the porter.py Python monolith that still owns memory and SSE broadcast.
 
-The highest-priority product bet is the guided project creation wizard — a conversational flow where Porter proposes agents, builds a plan, and starts work from a plain-language description. No competitor has nailed this for non-technical users. Lindy is the closest but more constrained; Relevance AI requires technical knowledge. If Porter ships one thing in the next milestone, it is this. Everything else — agent autonomy, collaborative sessions, WhatsApp — layers on top of it. Critically, Memory V2 must be completed and Cortex fully removed before the wizard can deliver coherent agent context.
+The recommended approach sequences around three hard dependency rules: schema migrations precede routes that use them, auth extensions precede routes that use them, and billing enforcement must come last because it touches every request. API standardization (envelopes, error codes, OpenAPI spec) and error capture come first — they are zero-dependency and make all subsequent work more debugable and consistent. Streaming chat follows immediately because it unblocks the frontend-v2 experience. Collaborative sessions, unified chat, and CRM form the social core, each building on the previous. Agent templates, autonomous learning, and finally billing enforcement close out the v2.0 scope.
 
-The key risks are structural, not technical. The codebase has 683 broad exception catches that make silent agent failures the default outcome. Two memory systems (Cortex + Memory V2) are coexisting and polluting each other. Global mutable state (`_config`, `_sessions`, `_wf_registry`) makes it impossible to safely run concurrent agent workers. SQLite connection pooling is absent. These are not optional cleanups — they are prerequisites for agent autonomy. Building scheduling on top of the current codebase will produce agents that silently do nothing and are impossible to debug.
+The dominant risks are architectural rather than implementational. Block-dump streaming (proxying through porter.py instead of calling AI backends directly), cross-project IDOR vulnerabilities from missing project-scope RBAC checks, webhook idempotency failures in billing, race conditions in plan limit enforcement, and GDPR exposure from autonomous learning are all critical. Every one of them is a "looks done but isn't" failure — the code appears to work in testing and breaks silently in production. Each has a clear mitigation pattern documented in PITFALLS.md.
 
 ## Key Findings
 
 ### Recommended Stack
 
-Porter's existing stack (Fastify 5, Drizzle ORM, better-sqlite3, React 19, React Query, Zustand, Tailwind 4) is sound and should not be replaced. The gap is in libraries for new capabilities. Three additions are needed immediately: `@fastify/schedule` + `toad-scheduler` for agent scheduling (no Redis dependency), `octokit` + `@fastify/oauth2` for GitHub integration, and `nodemailer` + `imapflow` for mail. Google Calendar uses `googleapis`. WhatsApp uses the Meta Cloud API directly via fetch — the official SDK is Alpha (0.0.5) and not suitable for production.
+The existing stack requires only 4-5 new npm packages. Everything else is schema additions and new route files using existing infrastructure. The Fastify 5.7.4 + Drizzle 0.45.1 + better-sqlite3 12.6.2 + Zod 4.3.6 core is stable and should not be changed.
 
-Do NOT use BullMQ (requires Redis, unacceptable overhead on 2 vCPU VPS), whatsapp-web.js (ToS violation, number ban risk), or Socket.IO (unnecessary abstraction, @fastify/websocket is already installed).
+**New libraries needed:**
+- `ollama` (0.6.3): Official Ollama JS SDK — enables native AsyncIterable token streaming; replaces the porter.py proxy for Ollama calls
+- `@fastify/swagger` (9.7.0) + `@fastify/swagger-ui` (5.2.5) + `fastify-type-provider-zod` (6.1.0): Auto-generated OpenAPI spec from existing Zod schemas; low effort, high value signal for enterprise buyers
+- `@fastify/rate-limit` (10.3.0): Per-plan API rate limiting with async max function; plugs into existing `resolvePlan()` in billing service
+- `cheerio` (1.2.0): Lightweight HTML parsing for autonomous learning; no headless browser needed on the 2 vCPU VPS
 
-**Core technologies:**
-- Fastify 5 + TypeScript: HTTP routing layer — replaces Python route by route via proxy fallback
-- Drizzle ORM + better-sqlite3: Type-safe SQLite — synchronous API, WAL mode, single connection instance
-- @fastify/schedule + toad-scheduler: In-process agent job scheduling — no Redis, fits 2 vCPU constraint
-- @fastify/websocket (already installed): Collaborative session presence only — not for AI streaming
-- SSE (existing pattern): AI response streaming — kept separate from WebSocket by design
-- octokit + @fastify/oauth2: GitHub integration — official SDK, handles token refresh automatically
-- nodemailer + imapflow: Outbound + inbound mail — from same ecosystem, both support OAuth2
-- googleapis: Google Calendar integration — handles token refresh and pagination automatically
+**Optional quality upgrade:** `@lemonsqueezy/lemonsqueezy.js` (4.0.0) — the existing raw-fetch billing implementation works; adopt the official SDK when refactoring billing.ts in the billing phase.
+
+**What NOT to add:** Playwright/Puppeteer (headless browser kills the VPS), BullMQ/Redis (toad-scheduler is sufficient), LangChain (40MB+ for routing Porter already handles), Socket.IO (@fastify/websocket is installed and sufficient), any external error monitoring service (self-hosted is the architecture decision).
 
 ### Expected Features
 
-Research cross-referenced Porter against Relevance AI, Lindy, n8n, CrewAI, AutoGen, and Langflow. The competitive gap Porter can own is non-technical user guidance: conversational project setup, readable transparency, role-based collaboration. The anti-features to avoid are visual workflow canvases (overwhelming for non-technical users), per-message billing (creates anxiety), and agent-to-agent debate loops (noise that users cannot interpret).
+**Must have (table stakes):**
+- Token-by-token streaming chat — every major AI product streams; spinners feel broken in 2026
+- Stream cancellation — users click stop; not cancelling burns tokens and degrades trust
+- Consistent API response envelopes — `{ok, data, error}` across all 17 route groups (not just new ones)
+- Meaningful error codes — SCREAMING_SNAKE_CASE registry, request IDs in every response header
+- Project collaboration via email invite — SaaS growth vector; baseline for every project tool
+- Full-text chat history search — no search means no productivity for returning users
+- Contact multi-email and multi-phone — single-value CRM fields are an anti-pattern
+- File upload with entity association — files must be findable from the context they were uploaded in
+- Frontend error capture endpoint — production frontend bugs are invisible without it
+- Subscription management self-serve — required to operate as SaaS
 
-**Must have (table stakes) — users expect these before trusting the product:**
-- Guided project creation wizard — conversational flow; competitors use blank-canvas builders that fail non-technical users
-- Agent activity log (user-readable) — "here is what your agent did today"; trust requires visibility
-- Memory V2 completion — eliminates signal noise; gates persistent agents and transparency dashboard
-- Email notifications for agent completions — closes the async loop; SendGrid key exists, not wired
-- Agent autonomy basics — scheduled check-in that runs work on interval; moves Porter from chatbot to worker
-
-**Should have (differentiators after validation):**
-- WhatsApp bidirectional bridge — no major no-code AI platform does this natively; enormous non-US reach
-- Collaborative sessions — shared workspace with real-time context; rare among competitors
-- Transparency dashboard — reasoning traces visible to non-technical users; builds trust at scale
-- Ephemeral project-scoped agents — create a specialist agent, auto-retire when done; no cleanup burden
-- Porter as true orchestrator — assigns tasks, recovers from failure; currently Porter is a model router
+**Should have (competitive differentiators):**
+- Per-project RBAC (view/chat/edit/admin) — more granular than any major competitor
+- External channels (WhatsApp, email) surfaced in unified chat — genuinely novel, no competitor does this
+- AI-powered contact analysis from interaction history — agent-native CRM, not a lookup service
+- Agent-authored concepts from web/GitHub/Reddit learning — rare in production, drives retention
+- Metered billing with hard/soft enforcement — transparent, sustainable, revenue-aligned
+- OpenAPI spec auto-generated from routes — enables SDK generation, signals maturity
+- 100 agent templates with category search — quality matters more than count; ship 30 excellent ones first
 
 **Defer to v2+:**
-- SaaS billing — explicitly deferred until core product-market fit
-- Mobile native app — responsive web serves mobile needs now
-- Integration marketplace (400+ connectors) — depth over breadth wins for the target user
-- LLM fine-tuning — 95% of users never use it; per-agent directives provide equivalent customization
-- Visual workflow canvas — signals developer tool positioning, incompatible with non-technical user target
+- Real-time presence indicators (WebSocket burden on 2 vCPU VPS)
+- Agent-to-agent debate loops (non-technical users cannot interpret; AutoGen admits this)
+- 1000+ connector marketplace (maintenance burden; depth over breadth)
+- External contact enrichment via ZoomInfo/Clearbit (cost, GDPR, vendor lock)
+- Per-message billing to end users (usage anxiety kills engagement)
 
 ### Architecture Approach
 
-The target architecture is a Fastify TypeScript backend (`backend/src/`) structured as plugins (auth, realtime, proxy), routes (one file per domain boundary), and services (pure business logic). porter.py runs on :8877 as a shrinking proxy target. Both share porter.db via WAL mode with a single Drizzle connection instance. The proxy plugin is registered last in Fastify — any unimplemented route falls through to porter.py transparently.
+Porter's Fastify backend extends via new route files and services attached to the existing infrastructure. The `routes/v1/` directory gets 6 new files (errors, collaborators, conversations, contacts, templates, learning) and 3 modified files (chat for streaming, files for associations, billing for enforcement). Services get 2 new files (stream.ts, learning.ts). The DB gets 4 sequential migrations (08-11) with content-addressed IDs. One new plugin (rate-limit.ts) handles billing enforcement as a Fastify decorator.
 
-The most critical data migration is projects out of porter_config.json into a proper SQLite table. This is the root cause of slow startup, no query capability, and the dual-state fragility. It unblocks everything else.
+The critical boundary to maintain: Fastify never writes directly to porter.py's SQLite memory tables. Memory V2 writes from learning sessions go via `POST /api/memory/concepts` HTTP call to porter.py. porter.py owns SSE broadcast for coarse-grained events; Fastify writes streaming chat tokens directly to `reply.raw` (never through the SSE hub — that would add an HTTP round-trip per token, making streaming latency-sensitive throughput collapse).
 
 **Major components:**
-1. Fastify backend (:3001) — Auth, routes, scheduler, SSE hub, WebSocket hub; grows to own all routes
-2. `agent_jobs` table + `services/scheduler.ts` — In-process polling loop (2s interval), atomic status transitions, prevents double-pickup
-3. SSE hub (`Map<roomId, Set<sender>>`) — Unidirectional push to browsers; zero polling; agent progress, chat events, memory changes
-4. `@fastify/http-proxy` (last plugin) — Transparent fallback to porter.py for unimplemented routes
-5. `services/ai-router.ts` — Single owner of openclaw dispatch; never called directly from routes
-6. `services/memory.ts` — Memory V2 operations; directives/concepts/episodes/signals injection at dispatch time
+1. `services/stream.ts` — `dispatchStream()` extending ai-router.ts; owns the full AI call without proxying; writes tokens directly to reply.raw
+2. `plugins/auth.ts` (extended) — adds `requireProjectAccess(minRole)` decorator; all project-scoped route protection goes here, never inline in handlers
+3. DB migrations 08-11 — sequential, idempotent, content-addressed IDs (not numbers) to avoid multi-session conflicts
+4. `services/learning.ts` — search-summarize-store loop; scheduled asynchronously via agent_jobs, never inline in HTTP handlers; max 20 external requests per session, separate scheduler to avoid blocking main job queue
+5. `plugins/rate-limit.ts` — `enforceLimit(dimension)` decorator applied as preHandler on all resource-creating routes; uses `BEGIN EXCLUSIVE` transactions to prevent concurrent plan limit bypass
+
+**Key patterns to follow:**
+- Migration discipline: one migration file per feature group; content-addressed IDs (`v2_collab_project_collaborators`), not sequence numbers; schema.ts is backend-session-only
+- Service isolation: services import from db/client.ts and other services only; routes never share logic with services
+- Envelope consistency: `ok(data)` and `err(code, message)` from lib/envelope.ts on every new route without exception
+- SSE emission: `emitSSE()` for coarse-grained events (job complete, collab events, learning complete); direct `reply.raw.write()` for streaming tokens only
 
 ### Critical Pitfalls
 
-1. **Distributed monolith during migration** — Fastify and porter.py writing to the same tables without a data ownership contract creates split-brain. Migrate by vertical slice: one complete feature end-to-end before the next. A table is owned by exactly one backend at all times. Use a `DUAL_WRITE_PROJECTS = true` feature flag during handoff periods.
+1. **Block-dump streaming (Pitfall 1)** — the existing GET /api/v1/chat/stream proxies through porter.py and accumulates the full response before forwarding. True streaming requires Fastify calling Ollama/OpenClaw directly via native streaming APIs, forwarding each chunk immediately, checking `reply.raw.write()` backpressure return value, and sending 15-second SSE heartbeats. Test by measuring `time_to_first_token` — it should be under 2 seconds, not equal to total generation time.
 
-2. **683 broad exception catches making agent failures invisible** — When scheduled agents throw exceptions, they get swallowed and agents appear to "succeed" with no output. Fix is not to remove try/except but to add `log.exception()` inside every catch. The 4 bare `except: pass` statements (lines 197-198, 221, 224) must be eliminated immediately — they catch SystemExit and KeyboardInterrupt too.
+2. **Per-project RBAC leaking (Pitfall 3)** — IDOR vulnerability where a collaborator on project A can access project B's endpoints because global role checks pass. Prevention: create `requireProjectAccess(minRole)` middleware in auth.ts that checks `project_collaborators` table for every project-scoped request. Apply via a `registerProjectRoute()` wrapper that makes the minimum role parameter mandatory — impossible to add a route without specifying it.
 
-3. **Two memory systems running simultaneously** — Cortex still writes signals while Memory V2 tries to promote/dismiss them, polluting the signal queue from day one. On a 2 vCPU VPS, both consolidation loops doing full table scans simultaneously causes lock contention. Set a hard cutover event: Memory V2 is the only active system from its completion phase onward. Cortex removal must be a verifiable deliverable (grep returns zero results).
+3. **Webhook idempotency failure (Pitfall 5)** — Lemon Squeezy retries webhooks up to 3 times. The dedup check and event record insert must be in the same SQLite transaction. Respond 200 immediately after the transaction commits; do not make external API calls before responding. Failure produces double subscriptions and double billing.
 
-4. **SQLite concurrency under concurrent agent workers** — WAL mode + 5-second timeout is acceptable for human-paced chat. It is not acceptable for 3+ concurrent agent workers writing simultaneously. Connection pooling via `threading.local()`, 30-second timeout, and exponential backoff on `OperationalError: database is locked` must be in place before agent scheduling is added.
+4. **Plan limit race conditions (Pitfall 6)** — concurrent `POST /api/v1/projects` requests both pass a `COUNT(*)` check, both insert, user ends up with more resources than their plan allows. Mitigation: `enforceLimit()` must use `BEGIN EXCLUSIVE` transaction wrapping the count check and insert atomically. Test with 10 concurrent creation requests; exactly N should succeed where N is the plan limit.
 
-5. **No feature flags for autonomous features** — Agent scheduling can cause irreversible side effects (files written, messages sent externally). Without a feature flag, the only rollback is git revert + restart, which drops in-flight sessions and leaves agent runs in partial state. Every autonomous feature needs a config-level kill switch before it ships.
+5. **Autonomous learning GDPR exposure (Pitfall 7)** — learning agents that scrape and store author names, @usernames, or email addresses from public pages create a personal data store without legal basis. Strip all personal identifiers before storing as Memory V2 concepts; use official APIs only (not HTML scraping); hard cap of 20 external requests per session, 3 sessions per agent per day; implement robots.txt checking per domain.
+
+6. **Two-session schema drift (Pitfall 8)** — concurrent Claude sessions (backend + frontend-v2) adding migrations with the same sequence number or modifying schema.ts simultaneously. Use content-addressed migration IDs, designate schema.ts as backend-session-only, maintain `.planning/STATE.md` as a coordination document updated before any session starts schema work.
 
 ## Implications for Roadmap
 
-Based on combined research, the dependency graph dictates a specific phase order. Phase 1 is not optional prep — it unblocks every subsequent phase.
+Based on combined research, the suggested 7-phase structure:
 
-### Phase 1: Tech Debt and Infrastructure Foundation
+### Phase 1: Foundation Hardening
+**Rationale:** Zero-dependency work that makes every subsequent phase more debugable and consistent. API standardization is identified as the "true Phase 1" in FEATURES.md — inconsistent envelopes create rework debt in every other phase.
+**Delivers:** Consistent `{ok, data, error}` envelopes across all 17 route groups; OpenAPI spec auto-generated from Zod schemas; frontend error capture endpoint; migration naming convention documented; `PRAGMA foreign_keys = ON` added to db/client.ts
+**Addresses:** API-01, API-02, API-03, OBS-01, OBS-02
+**Avoids:** Multi-session schema drift (Pitfall 8 — migration naming established here); invisible frontend bugs during all subsequent phases
+**Research flag:** Standard patterns, skip research-phase.
 
-**Rationale:** The codebase has structural issues that make agent autonomy impossible to build safely. The 683 broad exception catches make failures invisible. SQLite connection pooling is absent. Global mutable state prevents agent isolation. Projects in JSON config blocks collaborative sessions. These must be fixed before any autonomous feature is built, not alongside them.
+### Phase 2: Streaming Chat
+**Rationale:** High value, low dependency. Unblocks frontend-v2's most important UX improvement. The existing SSE hub and AI router are ready — this is an extension, not new infrastructure.
+**Delivers:** Native token-by-token streaming from Ollama and OpenClaw via services/stream.ts; client disconnect detection and AbortController propagation to upstream AI backends; 15-second SSE heartbeats; `time_to_first_token < 2s` verified via automated test
+**Addresses:** STRM-01, STRM-02, STRM-03
+**Avoids:** Block-dump streaming (Pitfall 1); incomplete cancellation that doesn't stop Ollama CPU (Pitfall 2)
+**Research flag:** Skip research-phase. Patterns are confirmed in STACK.md and ARCHITECTURE.md. Verify OpenClaw streaming response format via curl before implementation.
 
-**Delivers:**
-- Bare `except: pass` statements eliminated; all exception paths emit structured mlog
-- SQLite connection pooling with threading.local() and 30s timeout
-- Projects migrated from porter_config.json to SQLite table (Drizzle schema + one-time migration script)
-- Fastify backend infrastructure layer: db/client.ts, plugins/auth.ts, plugins/proxy.ts, config.ts
-- Cortex disabled; Memory V2 set as the only active memory system
-- Feature flag config skeleton for all upcoming autonomous features
+### Phase 3: Collaborative Sessions
+**Rationale:** Required before unified chat (multi-user conversations need project-scoped roles first). Collaboration is the primary SaaS growth vector — invites drive new user acquisition. auth.ts extension here enables every subsequent social feature.
+**Delivers:** `project_collaborators` table; `requireProjectAccess(minRole)` decorator in auth.ts; invitation email flow via existing nodemailer; role management API (4 roles: view/chat/edit/admin); IDOR integration test suite
+**Addresses:** COLLAB-01, COLLAB-02, COLLAB-03, COLLAB-04
+**Avoids:** Cross-project RBAC leakage (Pitfall 3)
+**Research flag:** Skip research-phase. ARCHITECTURE.md has complete implementation detail; middleware pattern is established Fastify.
 
-**Addresses:** Pitfalls 2, 4, 5 (silent failures, SQLite concurrency, global mutable state); Architecture Phase prerequisite + Phase 1
+### Phase 4: Unified Chat and CRM Schema
+**Rationale:** Unified chat needs collaborator roles (Phase 3) to enable multi-user history. CRM schema upgrade is low complexity and unblocks AI analysis in Phase 5. Group these because they share the same design principle: build new tables, do not extend old ones.
+**Delivers:** New `conversations` + `messages` tables (do not extend existing chats/chat_messages); FTS5 full-text search via raw SQL migration; external channel fan-in from WhatsApp/email inbound handlers; CRM schema with multi-email, multi-phone, social links tables; file_associations pivot table
+**Addresses:** CHAT-01, CHAT-02, CHAT-03, CHAT-04, CRM-01, CRM-02, FILE-01, FILE-02, FILE-03
+**Avoids:** Unified chat schema that cannot evolve (Pitfall 4); CRM schema sprawl (anti-pattern 3 from ARCHITECTURE.md); orphaned files from non-atomic upload (Pitfall 9)
+**Research flag:** Research-phase recommended for unified chat schema design. The polymorphic messages approach is recommended but schema decisions here are hard to reverse without data migration.
 
-**Avoids:** Building agent scheduling on a foundation where failures are invisible and concurrent writes cause lock errors
+### Phase 5: CRM Intelligence and Agent Templates
+**Rationale:** CRM AI analysis (CRM-03) requires the interaction history built in Phase 4. Agent templates are a self-contained catalog linking only to the stable agents system. Group them as the "intelligence" phase since both involve LLM-assisted content.
+**Delivers:** AI-powered contact analysis dispatched asynchronously via agent_jobs (202 Accepted pattern); async-buffered contact activity timeline with covering index on (contact_id, created_at DESC); 30+ high-quality agent templates with category search; template instantiation with workspace validation (rejects with 422 if required backends/tools unavailable)
+**Addresses:** CRM-03, CRM-04, TMPL-01, TMPL-02, TMPL-03
+**Avoids:** CRM activity timeline write bottleneck (Pitfall 12); template instantiation producing broken agents (Pitfall 10)
+**Research flag:** Skip research-phase. ARCHITECTURE.md has complete detail. Note: writing 30 complete system prompts is the real constraint — plan content creation separately from engineering work.
 
----
+### Phase 6: Autonomous Learning
+**Rationale:** Requires stable agent + job infrastructure (all previous phases), Memory V2 (complete), and the scheduler pattern established in earlier phases. Highest risk phase due to external API dependencies and GDPR constraints — isolated to its own phase.
+**Delivers:** `services/learning.ts` with per-domain rate limiting (1 req/sec max); official APIs only (Brave Search API, GitHub API via octokit, Reddit OAuth); 20-request-per-session hard cap; GDPR personal identifier stripping before concept storage; learning session log with sources and confidence scores; separate learningScheduler (does not share main scheduler tick); SSE progress events per learning step
+**Addresses:** LEARN-01, LEARN-02, LEARN-03
+**Avoids:** Autonomous learning getting Porter banned or triggering GDPR violation (Pitfall 7)
+**Research flag:** Research-phase recommended. Verify Brave Search API current pricing and rate limits, Reddit OAuth 2.0 current requirements (post-2023 API changes), and DuckDuckGo JSON API reliability as free fallback.
 
-### Phase 2: Memory V2 Completion
-
-**Rationale:** Memory V2 is explicitly identified as a dependency blocker for the guided project wizard, persistent agents, and the transparency dashboard. Building these features on a partially-migrated memory system means signal noise degrades agent quality from launch. Completing Memory V2 here — as a discrete phase with a verifiable done state — makes every subsequent phase more effective.
-
-**Delivers:**
-- Memory V2 fully functional: directives/concepts/episodes/signals operational
-- Cortex code fully deleted (lines 1551-2156, 1860-1908, 2041-2060 etc.) — grep for cortex write paths returns zero results
-- Memory injection into Fastify agent dispatch context
-- Noise filtering verified: no "user logged in" or "file uploaded" signals in V2 queue
-- Batched consolidation (not full table scan) — avoids memory consolidation blocking DB writes
-
-**Addresses:** Pitfall 3 (two memory systems coexisting), FEATURES.md P1 dependency
-
-**Avoids:** Guided project wizard shipping with polluted agent context that degrades response quality from day one
-
----
-
-### Phase 3: Core Route Migration (Auth + Projects + Agents)
-
-**Rationale:** The guided project wizard requires projects in the DB (not config JSON), agents queryable via Fastify routes, and a functional auth layer in Fastify. This phase migrates the three most critical route domains — auth, projects, agents — from porter.py to Fastify using vertical slices with dual-write during handoff. All 35 Playwright tests must pass throughout.
-
-**Delivers:**
-- Fastify owns: /login, /logout, /api/me, /api/projects/*, /api/agents/*
-- Projects fully in SQLite with proper foreign keys to tasks, members, milestones, artifacts
-- Dual-write period with DUAL_WRITE_PROJECTS flag; disable after porter.py project routes removed
-- Agent jobs table in schema; agent CRUD endpoints in Fastify
-- porter.py proxy surface measurably reduced; no route handled by both backends simultaneously
-
-**Uses:** Drizzle ORM, @fastify/http-proxy (proxy plugin), Fastify session middleware from Phase 1
-
-**Implements:** Architecture Phase 1 (core domain routes) — see ARCHITECTURE.md Build Order
-
----
-
-### Phase 4: Agent Autonomy and Scheduling
-
-**Rationale:** With the foundation clean (Phase 1), memory coherent (Phase 2), and routes in Fastify (Phase 3), agent scheduling can be built correctly. The in-process scheduler using @fastify/schedule + toad-scheduler matches the VPS constraint. The agent_jobs table pattern (atomic UPDATE...RETURNING prevents double-pickup) is the correct pattern. Feature flags must gate all autonomous behavior from day one of this phase.
-
-**Delivers:**
-- `agent_jobs` table + `services/scheduler.ts` polling loop (2s interval, LIMIT 5 concurrency)
-- Atomic job pickup: UPDATE status='running' WHERE status='pending' AND id=? (prevents double-pickup)
-- `services/ai-router.ts`: model selection, openclaw dispatch, streaming response
-- `services/chat-actions.ts`: side effect processor (create tasks, update memory, emit SSE events)
-- User-readable agent activity log: per-agent feed of what ran, when, and what resulted
-- Email notifications for agent completions (SendGrid key wired into notifications service)
-- Feature flags active: agent_scheduling, guided_project_wizard gated off until stable
-
-**Uses:** @fastify/schedule, toad-scheduler, nodemailer (outbound notifications)
-
-**Avoids:** Pitfall 4 (SQLite concurrency — fixed in Phase 1), Pitfall 5 (global state — fixed in Phase 1), Pitfall 7 (no feature flags — introduced here)
-
----
-
-### Phase 5: Guided Project Creation Wizard
-
-**Rationale:** This is Porter's North Star feature and the primary competitive differentiator. It requires everything from Phases 1-4: clean memory context (Phase 2), projects in DB (Phase 3), agent scheduling that can kick off work immediately (Phase 4). The wizard is a conversational flow — 3 questions maximum for initial setup, Porter proposes the rest. Token budget cap (2,000 tokens system context for interactive calls) must be enforced before building this — embedding token bloat permanently is Pitfall 6.
-
-**Delivers:**
-- Conversational wizard: describe goal → Porter proposes agents and plan → user approves → work starts
-- Maximum 3 questions before Porter proposes; remaining detail filled by agent
-- Token budget cap enforced: interactive calls hard-capped at 2,000 tokens system context
-- Transparency layer: wizard shows plan being built in real-time (SSE events from Phase 6 prep)
-- Ephemeral project-scoped agents: create specialist, auto-retire when project completes
-- Verified done: wizard produces real project with milestones, tasks, and agent assignment (not just a record with empty fields)
-
-**Uses:** Memory V2 (Phase 2), agent_jobs scheduler (Phase 4), SSE events (anticipates Phase 6)
-
-**Avoids:** Pitfall 6 (token bloat — token budget enforced before wizard is built, not after)
-
----
-
-### Phase 6: Real-Time Layer and Collaborative Sessions
-
-**Rationale:** With autonomous agents running (Phase 4) and the wizard shipping (Phase 5), collaborative sessions become the next value layer. Real-time push via SSE hub eliminates polling overhead (critical on 2 vCPU VPS). WebSocket is reserved for collaborative cursor presence only — not AI streaming.
-
-**Delivers:**
-- SSE hub: `Map<projectId, Set<sender>>` in plugins/realtime.ts; zero polling
-- /api/events SSE endpoint; React Query invalidates on events (replaces all 2s polling)
-- Collaborative session membership: project_members table, invite flow, role display
-- Per-session role badge and permission summary visible to invited users (avoids collaborative UX pitfall)
-- Tenant isolation verified: invited user's session cannot access other workspaces
-
-**Uses:** @fastify/websocket (already installed), @fastify/sse-v2
-
-**Avoids:** Anti-Pattern 3 (polling instead of SSE), Pitfall re: collaborative session lacking permission clarity
-
----
-
-### Phase 7: External Connections (GitHub, Mail, Calendar, WhatsApp)
-
-**Rationale:** External integrations are independent of the core product and have no blockers after Phase 6 is stable. GitHub and calendar deepen project value. WhatsApp is the highest-reach differentiator for non-US markets and has no competitor parity. Build each connection as a vertical slice; none depend on the others.
-
-**Delivers:**
-- GitHub: @fastify/oauth2 flow, token stored in workspace_connections, octokit for API calls
-- Mail: nodemailer (outbound), imapflow (inbound IMAP IDLE), OAuth2 — no raw password storage
-- Calendar: googleapis, Google Calendar read/write, token refresh automatic
-- WhatsApp: Meta Cloud API via fetch (no SDK — official SDK is Alpha 0.0.5), webhook receiver route, message deduplication, per-agent phone number mapping
-- Per-project connection overrides: project-level credentials override workspace defaults
-- All external calls queued to background workers — never blocking HTTP handler path
-
-**Uses:** octokit, @fastify/oauth2, nodemailer, imapflow, googleapis
-
-**Avoids:** Integration gotchas: synchronous external API calls in HTTP handler, WhatsApp message deduplication failure, OAuth tokens stored in config instead of DB
-
----
+### Phase 7: Billing Enforcement
+**Rationale:** Must be last. Plan enforcement middleware touches every resource-creating request. Building it before other features are stable risks blocking active development with quota errors. BILL-01 webhooks and BILL-02 metering need to run silently before BILL-03 enforcement goes live.
+**Delivers:** Complete BILL-02 with storage and contact dimensions added to usage rollup; atomic metering writes via `INSERT ... ON CONFLICT DO UPDATE SET col = col + ?`; `enforceLimit()` plugin using `BEGIN EXCLUSIVE` transactions as preHandlers on all resource-creating routes; 402 responses with upgrade_url on limit breach; graceful degradation when billing service is down
+**Addresses:** BILL-01 (complete existing wiring), BILL-02, BILL-03
+**Avoids:** Webhook idempotency failure (Pitfall 5); plan limit race conditions (Pitfall 6); token metering undercounting (Pitfall 11)
+**Research flag:** Skip research-phase. Lemon Squeezy webhook patterns and SQLite atomic update patterns are fully documented.
 
 ### Phase Ordering Rationale
 
-The order is dictated by dependency, not desirability:
-
-- **Tech debt before features:** Silent failures and SQLite lock errors make autonomous agents impossible to trust. These are prerequisites, not optional improvements.
-- **Memory V2 before wizard:** Memory V2 quality gates agent context quality. Shipping the wizard on Cortex-polluted signals means the product's flagship feature underperforms from launch.
-- **Route migration before scheduling:** The scheduler needs to write to tables that Fastify owns. Building scheduling in Fastify before projects are in the DB creates the distributed monolith anti-pattern.
-- **Scheduling before wizard:** The wizard needs to hand off work to agents immediately. That requires a functioning scheduler.
-- **Real-time before collaboration:** Collaborative sessions depend on SSE push — polling under collaborative load would saturate the 2 vCPU VPS.
-- **External integrations last:** These are independent, high-value additions. They should not block the core autonomous workflow.
+- Foundation first: API inconsistency creates rework in every other phase; error capture surfaces bugs immediately
+- Streaming second: zero dependencies on other v2 features; highest-impact user-facing change; unblocks frontend-v2
+- Collaboration before unified chat: multi-user conversation context requires project-scoped roles to be enforced first
+- Unified chat before CRM intelligence: AI contact analysis needs interaction history to be meaningful
+- Autonomous learning isolated late: requires full agent/job/scheduler infrastructure; highest complexity and external risk
+- Billing enforcement last: touches every other feature's routes; premature enforcement blocks development with quota errors
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **Phase 5 (Guided Wizard):** Conversational wizard UX patterns, prompt design for 3-question max flows, agent proposal formatting — needs research into conversational AI onboarding patterns
-- **Phase 7 (WhatsApp):** Meta Cloud API WABA setup, phone number provisioning via Twilio vs. direct WABA, webhook signature validation — operational complexity warrants dedicated research
+**Phases needing research-phase during planning:**
+- **Phase 4** (Unified Chat schema): Polymorphic conversations/messages design is recommended but the schema decisions are difficult to reverse. Verify the single-table approach against specific query patterns before writing the migration.
+- **Phase 6** (Autonomous Learning): Verify Brave Search API pricing, Reddit OAuth 2.0 current behavior (post-2023 API changes), and DuckDuckGo JSON API reliability as free fallback.
 
-Phases with standard patterns (skip research-phase):
-- **Phase 1 (Tech Debt):** Python exception handling, SQLite threading.local() pooling, Drizzle schema migrations — all well-documented; no novel patterns
-- **Phase 3 (Route Migration):** Strangler Fig via @fastify/http-proxy is a documented pattern with official references; vertical slice migration is standard
-- **Phase 6 (SSE Hub):** SSE implementation in Fastify is well-documented; Map-based room pattern is standard
+**Phases with standard patterns (skip research-phase):**
+- **Phase 1:** @fastify/swagger registration is standard; envelope pattern already implemented
+- **Phase 2:** Ollama streaming via AsyncIterable confirmed in official docs; AbortController pattern established
+- **Phase 3:** RBAC middleware is standard Fastify; invitation flow reuses existing nodemailer
+- **Phase 5:** AI analysis via agent_jobs dispatch is established; template catalog is editorial work
+- **Phase 7:** Lemon Squeezy patterns fully documented; SQLite atomic updates are standard SQL
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All versions verified via npm registry; alternatives considered with documented trade-offs; existing stack confirmed working |
-| Features | MEDIUM-HIGH | Cross-referenced 6 competitors; competitive positioning is inferential but consistent across sources |
-| Architecture | HIGH | Based on existing codebase analysis + established Strangler Fig pattern; Fastify 5 + Drizzle documented thoroughly |
-| Pitfalls | HIGH | Grounded in direct codebase inspection (CONCERNS.md, line numbers cited); external sources confirm patterns |
+| Stack | HIGH | All new library versions verified against live npm registry; compatibility constraints (Fastify ^5.5.0, Zod >=4.1.5) confirmed against existing installed versions |
+| Features | HIGH | Cross-referenced Lemon Squeezy docs, SSE production guides, CRM market analysis, competitor feature analysis; Deloitte 2026 agentic AI production baseline for learning feature positioning |
+| Architecture | HIGH | Based entirely on direct codebase inspection of backend/src/ — zero training-data inference; existing patterns confirmed working in production |
+| Pitfalls | HIGH | All critical pitfalls grounded in actual code paths identified by line number (streaming proxy in chat.ts; schema constraints missing in schema.ts; billing race confirmed by implementation inspection) |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Guided wizard UX design:** Research identified the pattern (conversational, 3 questions max) but the specific prompt engineering for Porter's wizard turns needs implementation-time work. Flag for Phase 5 planning.
-- **WhatsApp WABA provisioning:** The Meta Cloud API is confirmed as the correct path but the operational steps for provisioning a WABA and mapping agent-specific phone numbers via Twilio are not fully resolved. Flag for Phase 7 planning.
-- **Token budget enforcement mechanism:** Research confirms the 2,000-token cap for interactive calls and the value of Anthropic prefix caching, but the specific implementation (how prompts are truncated, cache key structure) needs design during Phase 5.
-- **YMC Capital hardcoded references:** PITFALLS.md flags YMC Capital hardcoded in prompts as a tech debt item. This undermines the product-not-internal-tool direction. Should be addressed in Phase 1 alongside other hardcoding violations.
-- **PostgreSQL migration threshold:** Research sets the trigger as >50 concurrent write requests/second or multi-instance deployment. No firm timeline yet — depends on growth. Revisit when WAL checkpoint appears in logs.
+- **Brave Search API cost:** Primary web search source for autonomous learning. Pricing should be confirmed before committing to it in the roadmap. DuckDuckGo JSON API is the free fallback but its stability is less certain.
+- **Reddit OAuth 2.0 current requirements:** Reddit changed their API terms in 2023. The exact current requirements (OAuth app type, rate limits, content restrictions) need verification before implementing the learning service.
+- **Drizzle FTS5 support status:** Issue #2046 confirms no native FTS5 as of v0.45.1. Re-check at implementation time — if it ships before the unified chat phase, the raw SQL workaround in STACK.md can be replaced.
+- **OpenClaw streaming format:** Verify that OpenClaw's streaming response matches `data: {"choices":[{"delta":{"content":"..."}}]}` via curl before wiring to Phase 2 route. One-time check, not ongoing uncertainty.
+- **Template system prompt content:** Template instantiation engineering is low complexity. The blocking constraint is writing 30 complete, high-quality system prompts that instantiate working agents. This is editorial work requiring a content plan before Phase 5.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- `/home/lobster/documents/porter/.planning/codebase/CONCERNS.md` — direct codebase analysis, pitfall line numbers
-- `/home/lobster/documents/porter/.planning/codebase/ARCHITECTURE.md` — existing architecture documentation
-- npmjs.com registry — all package versions verified: @fastify/schedule@6.0.0, toad-scheduler@3.1.0, octokit@5.0.5, nodemailer@8.0.3, imapflow@1.2.16, googleapis@171.4.0, @fastify/oauth2@8.2.0
-- Strangler Fig Pattern — AWS Prescriptive Guidance: https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/strangler-fig.html
-- Drizzle ORM SQLite documentation: https://orm.drizzle.team/docs/get-started-sqlite
-- PEP 760 – No More Bare Excepts: https://peps.python.org/pep-0760/
+- npm registry (live) — ollama@0.6.3, @fastify/swagger@9.7.0, fastify-type-provider-zod@6.1.0, @fastify/rate-limit@10.3.0, cheerio@1.2.0 — versions and peer deps verified
+- `/home/lobster/documents/porter/backend/src/` — direct codebase inspection of all files, 2026-03-21
+- `/home/lobster/documents/porter/backend/src/db/schema.ts` — existing schema inventory confirming missing tables and constraints
+- `/home/lobster/documents/porter/backend/src/services/billing.ts` — billing implementation state: webhook handler complete, enforcement absent
+- `/home/lobster/documents/porter/backend/src/routes/v1/chat.ts` — streaming proxy implementation (block-dump pattern identified)
+- fastify-type-provider-zod GitHub — Fastify ^5.5.0 + Zod >=4.1.5 peer deps confirmed
+- Drizzle FTS5 issue #2046 — confirms raw SQL workaround required for FTS5 virtual tables
 
 ### Secondary (MEDIUM confidence)
-- Relevance AI, Lindy, n8n, CrewAI, AutoGen, Langflow competitor feature analysis — cross-referenced 2026
-- WhatsApp Business API 2026 guide (wati.io) — confirms Meta Cloud API as correct path, on-premise deprecated July 2025
-- LLM Token Optimization: Cut Costs & Latency in 2026 (Redis blog) — prefix caching guidance
-- SSE vs WebSocket for AI streaming (dev.to) — confirms SSE preference for unidirectional
-- better-sqlite3 vs libSQL benchmark (sqg.dev) — single benchmark, consistent with documentation claims
+- Lemon Squeezy docs — usage-based subscriptions, webhook retry behavior (3 retries with exponential backoff), metered billing
+- SSE production patterns 2026 — X-Accel-Buffering, backpressure handling, heartbeat interval requirements
+- Deloitte 2026 agentic AI report — 11% production adoption baseline for autonomous learning competitive positioning
+- Multi-tenant SaaS RBAC patterns (enterpriseready.io) — per-project role enforcement patterns
+- @fastify/rate-limit async max function — community documentation for per-plan limit pattern
 
-### Tertiary (LOW confidence)
-- Individual medium/community posts on Fastify + Drizzle patterns — consistent with official docs but not independently authoritative
+### Tertiary (LOW confidence — validate before implementation)
+- DuckDuckGo JSON API stability as free search fallback (community-documented, not officially supported)
+- Reddit OAuth 2.0 current rate limits post-2023 API changes (requires verification against current docs)
+- Brave Search API pricing tier details (requires account verification)
 
 ---
-*Research completed: 2026-03-20*
+*Research completed: 2026-03-21*
 *Ready for roadmap: yes*

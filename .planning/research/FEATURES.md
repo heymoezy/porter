@@ -1,8 +1,14 @@
 # Feature Research
 
-**Domain:** AI orchestration platform (SaaS, multi-agent, non-technical users)
-**Researched:** 2026-03-20
-**Confidence:** MEDIUM-HIGH (cross-referenced Relevance AI, Lindy, n8n, CrewAI, AutoGen, Langflow)
+**Domain:** AI orchestration platform — v2.0 Backend Ready (streaming, collaboration, CRM, billing, observability)
+**Researched:** 2026-03-21
+**Confidence:** HIGH (cross-referenced Lemon Squeezy docs, Sentry patterns, SSE production guides, CRM market analysis, agent platform comparisons)
+
+---
+
+## Scope
+
+This document covers only the v2.0 new features. Existing v1.0 features (RBAC, project CRUD, agent system, Memory V2, connections, SSE hub) are treated as **already built dependencies** — noted where they enable or constrain new features.
 
 ---
 
@@ -10,193 +16,331 @@
 
 ### Table Stakes (Users Expect These)
 
-Features users assume exist. Missing = product feels incomplete or untrustworthy.
+Features users assume exist in a production SaaS platform. Missing any of these makes the product feel broken or pre-release.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Natural language agent creation | Competitors (Lindy, Relevance AI) all use NL-first setup — users expect to describe, not configure | MEDIUM | Porter already has agent templates; needs conversational creation flow on top |
-| Pre-built agent templates | Reduces friction for first-time users; every major platform has a template library | LOW | Porter has AGENT_TEMPLATES but they're developer-facing; needs user-facing gallery |
-| Chat interface per agent | Primary interaction mode users expect — not a dashboard of settings | LOW | Exists in Porter; needs to remain the primary entry point |
-| Agent activity log (what did it do?) | Users need to see what agents did when they weren't watching; trust requires visibility | MEDIUM | Porter has mlog but it's system-level; needs per-agent readable activity feed |
-| Project workspace (group work under a heading) | Users think in projects, not workflows; every PM/productivity tool reinforces this mental model | LOW | Exists in Porter; core abstraction is correct |
-| File attachments and context | Users expect to give agents documents, images, spreadsheets to work from | LOW | Exists in Porter (upload endpoint + chat_attachments) |
-| Email notifications for agent actions | Users are not always in the app; they need push-pull awareness | MEDIUM | SendGrid key exists in Porter but outbound notifications not implemented |
-| Invite collaborators to workspace | SaaS is inherently social; solo use is not the growth vector | MEDIUM | Invite system exists; collaborative project sessions are in active development |
-| Usage history and search | Users need to find past conversations, outputs, and decisions | MEDIUM | chat_messages table exists; search/history UI needs work |
-| Model selection per agent | Power users want to pick which model an agent uses; it affects cost and quality | LOW | Porter already supports this via per-agent backend assignment |
-| Mobile-responsive UI | Users access from phones; non-responsive UI signals immaturity | LOW | Currently React but responsiveness should be verified |
-| Session security and RBAC | Enterprise users demand this before any procurement discussion; audit trail required | LOW | Fully implemented in Porter (4 roles, session management, audit via mlog) |
+| Feature | Why Expected | Complexity | v1 Dependency | Notes |
+|---------|--------------|------------|---------------|-------|
+| Token-by-token chat streaming | Every major AI product (ChatGPT, Claude, Gemini) streams. Users stare at spinners without it — perceived as broken | MEDIUM | SSE hub exists | Must propagate from LLM provider through proxy to client; Ollama and OpenClaw both support streaming; 10-20x perceived speed improvement |
+| Stream cancellation | Users click "stop" when responses go wrong. Not stopping burns tokens and wastes their time | LOW | AbortController pattern | Backend must detect client disconnect and halt LLM generation; not just closing the SSE connection |
+| Consistent API response envelopes | Frontend devs expect `{ok, data, error}` — inconsistent shapes cause integration bugs and signal immaturity | LOW | Fastify v1 route groups | Must cover all 17 existing route groups, not just new ones |
+| Meaningful error codes | "Something went wrong" is useless. Error codes + trace IDs let users report issues and let the team debug | LOW | Existing error handling | Request ID in every response header; error codes in a registry, not ad-hoc strings |
+| Invitation-based collaboration | SaaS products grow through invite loops. Invite by email is baseline — every project tool has it | MEDIUM | Invite system exists | Existing invite flow sends registration link; needs project-scoped roles on top |
+| Chat history search | Users need to find past conversations and outputs. No search = no productivity | MEDIUM | chat_messages table exists | Full-text search on message content; filter by agent, project, date range |
+| Contact multi-email and multi-phone | Real people have multiple emails and phone numbers. Single-value fields are a CRM anti-pattern | LOW | People module exists | Currently single email/phone; requires schema migration |
+| Social links on contacts | LinkedIn, GitHub, X are standard CRM fields in 2026. Missing them forces workarounds | LOW | People module exists | Simple stored fields; no verification required at this stage |
+| File upload with context association | Files uploaded to a project should belong to that project. Files uploaded in a conversation should be findable from that conversation | MEDIUM | File management exists | Upload endpoint exists but associations are loose; needs explicit project_id, contact_id, conversation_id on file records |
+| Frontend error visibility | Production bugs that only appear in frontend are invisible without a reporting endpoint. Teams expect errors to surface somewhere | LOW | None required | Simple POST endpoint; capture stack trace, component name, user context, severity |
+| Subscription management | SaaS users expect to self-serve their plan, upgrade, and cancel without contacting support | HIGH | None required | Lemon Squeezy handles the payment UI; Porter needs webhook handler and plan state in DB |
 
 ### Differentiators (Competitive Advantage)
 
-Features where Porter can compete and win. These align with the stated core value.
+Features that make Porter stand out. Not universally expected, but they drive retention and word-of-mouth.
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Guided project creation wizard | Competitors have blank-canvas builders that overwhelm non-technical users. Porter's GSD-like flow (describe goal → agents propose → plan generated → work starts) is genuinely differentiated | HIGH | Core active requirement; the single highest-priority feature to build |
-| Autonomous agent scheduling (event-driven + cron) | Agents that check in, take actions, and report back without user prompting — moving from "chat assistant" to "worker" | HIGH | Workflow registry exists; needs to extend to user-defined schedules and triggers |
-| Persistent agents with memory across projects | Agents that remember context from past work and bring it to new projects — competitors typically start fresh each session | HIGH | Memory V2 migration is the enabler; must complete before this is useful |
-| WhatsApp bidirectional bridge | No major no-code AI platform offers WhatsApp as a first-class channel with two-way agent interaction. Enormous reach for non-technical users in non-US markets | HIGH | Meta Cloud API is the correct infrastructure (on-premise deprecated July 2025); agent-specific phone numbers are achievable via Twilio or WABA |
-| Collaborative agent sessions (shared workspace) | Invite teammates to work alongside your agents — not just view results. This is rare; most platforms are single-user agent management | HIGH | Collaborative sessions in active development; real-time shared context is the hard part |
-| Unified global chat (agents + projects + external) | Single conversation interface across all contexts — users don't context-switch between "project view" and "chat view" | MEDIUM | Porter popup chat exists; needs unification with per-project and per-agent threads |
-| Transparency dashboard (agent reasoning visible) | Non-technical users fear black-box agents. Showing what the agent is doing and why builds trust and reduces abandonment | MEDIUM | Currently only system-level logs; needs a user-readable "what happened" view with reasoning traces |
-| Ephemeral project-scoped agents | Create a temporary specialist agent for this project, auto-retire when done. No cleanup burden for the user | MEDIUM | Architecture supports it; needs UI affordance and lifecycle management |
-| Per-project external tool connections (override workspace defaults) | Connect GitHub once at workspace level, override per project. Competitors typically require per-workflow setup every time | MEDIUM | Connections infrastructure (3-table model) already built for exactly this pattern |
-| Porter as orchestrator (not just router) | Porter decides which agent gets which task, re-routes on failure, ensures completion. Competitors require users to manually assign tasks | HIGH | Currently Porter is a model router; true orchestration (task assignment, failure recovery) needs to be built |
+| Feature | Value Proposition | Complexity | v1 Dependency | Notes |
+|---------|-------------------|------------|---------------|-------|
+| Per-project collaboration with granular roles | Most platforms offer workspace-level roles. Per-project roles (view/chat/edit/admin) with enforcement on every API call is rare and enables fine-grained access for agencies and teams | HIGH | RBAC exists (4 workspace roles); invite system exists | Requires a new project_collaborators table; role check middleware must apply per project, not just per workspace |
+| External channels surfaced in unified chat | WhatsApp messages and emails appearing in the same conversation thread as agent responses is genuinely novel. Users do not have to switch contexts | HIGH | Connections infrastructure exists (WhatsApp, email) | Requires a unified conversation model with message origin tracking; CHAT-01 through CHAT-04 |
+| AI-powered contact analysis from interaction history | CRMs store contact data. Porter can synthesize what an agent has learned from all interactions with a contact — a brief, current, AI-generated profile — automatically | HIGH | Memory V2 exists; People module exists | LLM call on demand, stored as a concept in Memory V2 scoped to contact; refreshed on interaction |
+| Agent-authored concepts from web learning | Agents that autonomously search web/Reddit/GitHub and store structured knowledge as Memory V2 concepts with source attribution — building expertise over time | HIGH | Memory V2 exists; workflow registry exists | Must rate-limit learning sessions to avoid runaway resource use; learning logs required for trust |
+| Metered billing with hard/soft limit enforcement | Usage-based billing where heavy users pay more creates a sustainable revenue model and aligns incentives. Few small AI platforms implement proper plan enforcement — they just cut users off unexpectedly | HIGH | None required | Lemon Squeezy metered billing API; usage tracked per workspace in DB; enforcement as middleware |
+| OpenAPI spec auto-generated from route definitions | Self-documenting API enables frontend-v2 to generate TypeScript types, enables future SDK generation, and signals maturity to enterprise buyers | LOW | Fastify routes exist | @fastify/swagger plugin; low effort relative to value |
+| Agent templates searchable by category | 100 templates that users can actually discover by role (marketer, developer, analyst) rather than scrolling a flat list reduces time-to-first-agent | MEDIUM | Agent template system exists | Needs category metadata + search endpoint; template quality matters more than count |
+| Threaded messages with parent/child | Conversations that branch into sub-threads allow focused discussions without losing context. Slack proved this pattern; chat interfaces that lack it feel flat | MEDIUM | chat_messages table exists | Parent message ID on every message; client renders as threads |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
-Features that seem valuable but create more problems than they solve for Porter's target user.
-
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Visual workflow canvas (drag-and-drop nodes) | Looks powerful; competitors like n8n and Langflow have it | Non-technical users find node canvases overwhelming. Langflow itself lacks RBAC and has poor observability because it optimizes for visual complexity over usability. Canvas is a developer tool masquerading as a user tool | Guided conversational setup (describe it, Porter configures it) |
-| Pre-built integration marketplace (500+ connectors) | n8n has 400+, Zapier has 8000+ — users want coverage | Maintaining a large integration surface is a significant ops burden. Most users use 3-5 integrations. A large marketplace signals breadth but ships broken connectors | Depth over breadth: GitHub, Gmail, Calendar, WhatsApp done excellently rather than 400 things done poorly |
-| Per-message billing / task-count billing (Zapier model) | Seems granular and fair | Creates anxiety and unpredictable bills for non-technical users. Zapier's model is widely criticized for becoming expensive at scale and discouraging automation | Seat-based or workspace-based billing; hide infrastructure costs inside the subscription |
-| Agent-to-agent chat (autonomous multi-agent debate) | AutoGen popularized this; seems intelligent | Most useful for research/code tasks, not business workflows. Generates noise that non-technical users can't interpret. CrewAI found role-based execution (not open debate) is better for business outcomes | Role-based crew execution where Porter assigns tasks sequentially or in parallel — no debate loop visible to user |
-| Real-time everything (live-updating dashboards, websocket everywhere) | Looks impressive in demos | Adds complexity, consumes server resources (8GB RAM, 2 vCPU), and creates state-sync bugs. Current SSE implementation is the right level | SSE for chat streams; polling for dashboards; reserve websockets for genuinely interactive features only |
-| LLM fine-tuning or model training | Power users ask for this | Out of scope per PROJECT.md and adds significant infrastructure cost. Competitors who added fine-tuning found 95% of users never used it | Model routing and per-agent persona/directive system provides equivalent customization for the target user |
-| Self-hosting / open-source mode | Developers want to run it themselves | Porter is a SaaS product. Self-hosting fragments support, dilutes the product roadmap, and creates a free-rider problem. n8n offers self-hosting and it cannibalizes their cloud revenue | SaaS-only; offer data export so privacy-conscious users can audit what is stored |
+| Real-time presence indicators ("User X is typing") | Chat apps have it; collaboration feels more alive | Requires WebSockets or long-poll per active user. On 2 vCPU, 8GB RAM this will saturate the server under concurrent sessions. Adds stateful connection management complexity | Focus SSE on AI responses (the actual bottleneck). Presence is noise in an agent-focused tool |
+| Chat reactions and emoji | Feels social and expressive | In an agent-centric platform this is decoration, not functionality. Engineering cost is non-trivial (polymorphic associations) with near-zero user value for the target use case | Invest the same time in message threading which provides real value |
+| Full audit event streaming to client | Enterprises sometimes want to watch every system event in real-time | Turns the client into a log viewer. Audit data should be queryable, not streamed. Streaming every event would overwhelm SSE connections and create noise | Queryable audit log endpoint with filters; SSE only for chat events and task status changes |
+| Per-message billing to end users | Seems granular and "fair" | Creates usage anxiety and unpredictable bills. Zapier's per-task billing is widely criticized. Non-technical users will under-use the product to avoid surprise charges | Workspace-level seat billing with metered overages above plan limit — predictable for users, revenue-aligned for Porter |
+| External contact enrichment (calling ZoomInfo, Clearbit) | CRM users expect automated data enrichment | Third-party data costs money, adds compliance surface area (GDPR), creates dependency on external APIs that change pricing unpredictably | AI-powered analysis of interaction history is the differentiator — internal knowledge Porter already has, not external lookups |
+| WebSocket-first architecture | WebSockets are "more modern" than SSE | Porter's SSE hub already handles the real-time use case. WebSockets add bidirectional complexity and connection state management. SSE is the correct protocol for server-push LLM streams | Keep SSE for AI streams, use standard HTTP for client-initiated actions |
+| Agent-to-agent debate loops (visible to user) | AutoGen-style multi-agent coordination looks powerful in demos | Non-technical users cannot interpret agent debate logs. They generate noise, increase latency, and reduce trust. Even AutoGen's own team acknowledges this is not production-ready for business workflows | Role-based sequential/parallel task assignment through Porter as orchestrator — clean output, no visible debate |
+| 1000+ connector marketplace | Users want coverage | Maintenance burden is prohibitive. Broken connectors generate support tickets. Most users use 3-5 integrations | Depth over breadth: GitHub, email, calendar, WhatsApp done excellently |
 
 ---
 
 ## Feature Dependencies
 
 ```
-Guided Project Creation Wizard
-    └──requires──> Agent Template Gallery (user-facing)
-    └──requires──> Porter as Orchestrator (task assignment)
-                       └──requires──> Memory V2 Complete (noise-free context)
+API Standardization (API-01, API-02, API-03)
+    └──enables──> All other API work (consistent envelopes required first)
+    └──requires──> @fastify/swagger installed
 
-Agent Autonomy (scheduled/event-driven)
-    └──requires──> Workflow Registry (exists)
-    └──requires──> Per-Agent Cron/Trigger Config (new)
-    └──requires──> Agent Activity Log (user-readable, new)
+Streaming Chat (STRM-01, STRM-02, STRM-03)
+    └──requires──> Existing SSE hub
+    └──requires──> AI router (Ollama, OpenClaw already connected)
+    └──enables──> Unified Chat (better UX foundation)
+    STRM-03 (cancellation)
+        └──requires──> AbortController on backend + client disconnect detection
 
-WhatsApp Bridge
-    └──requires──> Meta Cloud API WABA setup (external dependency)
-    └──requires──> Bidirectional message routing (new)
-    └──requires──> Agent-specific phone number mapping (new)
-    └──enhances──> Unified Global Chat
+Collaborative Sessions (COLLAB-01 through COLLAB-04)
+    └──requires──> Existing invite system (registration link flow)
+    └──requires──> Existing RBAC (4 workspace roles)
+    └──requires──> New: project_collaborators table (project-scoped roles)
+    └──requires──> New: per-project permission middleware on every route
+    └──enables──> Unified Chat (collaborators need shared conversation access)
 
-Collaborative Sessions
-    └──requires──> Invite System (exists)
-    └──requires──> Per-project role overrides (partially exists)
-    └──requires──> Real-time shared context (new)
+Unified Chat (CHAT-01 through CHAT-04)
+    └──requires──> Existing chat_messages table
+    └──requires──> Existing connections (WhatsApp, email) for CHAT-04
+    └──requires──> Collaborative Sessions (CHAT-03 multi-user history)
+    CHAT-02 (threading)
+        └──requires──> parent_message_id column on messages
 
-Transparency Dashboard
-    └──requires──> Per-agent activity log (new)
-    └──requires──> Memory V2 Complete (so signals are meaningful)
-    └──enhances──> Guided Project Creation (users see plan being built)
+CRM (CRM-01 through CRM-04)
+    └──requires──> Existing People module (contact records)
+    └──requires──> Schema migration (multi-email, multi-phone, social links)
+    CRM-03 (AI analysis)
+        └──requires──> Unified Chat (interaction history to analyze)
+        └──requires──> Memory V2 (store analysis as concept)
+    CRM-04 (activity timeline)
+        └──requires──> Unified Chat (all touchpoints surfaced)
 
-Persistent Agents with Cross-Project Memory
-    └──requires──> Memory V2 Complete (blocks everything else)
-    └──requires──> Concepts + Episodes layers functional
+File Handling (FILE-01 through FILE-03)
+    └──requires──> Existing file upload endpoint
+    └──requires──> Schema migration (file_associations table)
+    └──enhances──> Unified Chat (files linked to conversations)
+    └──enhances──> CRM (files linked to contacts)
 
-Unified Global Chat
-    └──requires──> Chat interface (exists)
-    └──requires──> Project/Agent context switching (partially exists)
+Agent Templates (TMPL-01 through TMPL-03)
+    └──requires──> Existing agent system
+    └──requires──> Template quality pass (100 templates with complete specs)
+    └──enhances──> Guided project creation (wizard pulls from template library)
 
-Ephemeral Project-Scoped Agents
-    └──requires──> Agent lifecycle management (new)
-    └──enhances──> Guided Project Creation
+Autonomous Learning (LEARN-01 through LEARN-03)
+    └──requires──> Memory V2 (store learned concepts)
+    └──requires──> Web search capability (external HTTP calls)
+    └──requires──> Workflow registry (schedule learning sessions)
+    └──enhances──> CRM-03 (agents can research contacts)
 
-Email Notifications
-    └──requires──> SendGrid configured (key exists, not wired)
-    └──enhances──> Agent Autonomy (user gets alerted when agent completes work)
+Billing (BILL-01 through BILL-03)
+    └──requires──> Lemon Squeezy account + webhook endpoint
+    └──requires──> Usage metering table (per workspace)
+    BILL-03 (plan enforcement)
+        └──requires──> BILL-02 (metering data to enforce against)
+        └──requires──> Middleware layer (check plan before serving request)
+
+Observability (OBS-01, OBS-02)
+    └──requires──> New /api/v1/errors endpoint
+    └──no other dependencies
+    └──enhances──> All features (errors surface silently without it)
 ```
 
 ### Dependency Notes
 
-- **Memory V2 is a blocker for several differentiators.** Persistent agents, transparency dashboard, and project-aware context all require the new memory system to be clean and functional. Completing Memory V2 is a force-multiplier.
-- **Agent autonomy requires the activity log.** Users will not trust scheduled agents they cannot inspect. Build the log before or in parallel with scheduling.
-- **WhatsApp is an independent feature.** It has no dependencies on the core product beyond message routing. Can be built in a separate phase without blocking anything else.
-- **Guided project creation is the North Star.** Every other differentiator builds on it or supports it. If Porter ships nothing else, ship this.
-- **Visual canvas conflicts with conversational creation.** Building a node canvas signals to the market that Porter is a developer tool, not a non-technical user tool. These positionings are incompatible.
+- **API standardization is the true Phase 1.** All other features build on consistent envelopes and error codes. Building COLLAB before API is consistent creates rework debt.
+- **Streaming is high-value, low-dependency.** It requires existing SSE hub and AI router (both exist). Can be shipped as its own phase immediately after API standardization.
+- **Collaborative sessions are the v2 centerpiece.** They depend on invite system (exists) and RBAC (exists) but require new project-scoped permission tables and middleware. Every subsequent social feature (unified chat multi-user, CRM contact sharing) depends on this.
+- **CRM-03 (AI analysis) requires Unified Chat to be meaningful.** Without interaction history, there is nothing to analyze. Build Unified Chat first, AI analysis second.
+- **Autonomous learning requires Memory V2 (already complete).** The V2 4-layer system with concepts layer is exactly where learned knowledge belongs. This is a force-multiplier unlock from v1.0 work.
+- **Billing must be last.** Plan enforcement middleware touches every request. Building billing before the core features are stable risks blocking active development with quota checks. BILL-03 (enforcement) should be the final piece, after BILL-01 (subscriptions) and BILL-02 (metering) are running silently.
+- **Error capture (OBS) is independent and low-cost.** No dependencies. Should be included early — errors from streaming and collaboration phases will be invisible without it.
 
 ---
 
-## MVP Definition
+## v2.0 Feature Prioritization Matrix
 
-Porter already has a functional product at v0.33.28. This MVP definition is for the **next milestone layer** — what's needed to validate the autonomous-agent-for-non-technical-users proposition.
-
-### Launch With (this milestone)
-
-- [ ] Guided project creation wizard — conversational flow that proposes agents, builds plan, starts work
-- [ ] Agent activity log (user-readable) — "Here is what your agent did today"
-- [ ] Memory V2 completion — eliminate signal noise, promote useful concepts, deprecate Cortex
-- [ ] Email notifications for agent completions — closes the async work loop
-- [ ] Agent autonomy basics — at minimum a scheduled "check-in" that runs work on interval
-
-### Add After Validation (v1.x)
-
-- [ ] WhatsApp bridge — adds a new channel after core workflows are proven
-- [ ] Collaborative sessions with real-time shared context — invite teammates once the solo experience works well
-- [ ] Transparency dashboard — surfaces reasoning traces once agents are running autonomously and users need visibility
-- [ ] Ephemeral project-scoped agents — once persistent agents work, ephemeral ones are a refinement
-
-### Future Consideration (v2+)
-
-- [ ] Outbound webhook system (Porter notifies external services) — useful for enterprise integrations but not core to non-technical user value
-- [ ] SaaS billing (subscription management) — explicitly deferred until core works per PROJECT.md
-- [ ] Mobile native app — web-first is correct priority now; responsive web serves mobile use
-
----
-
-## Feature Prioritization Matrix
-
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| Guided project creation wizard | HIGH | HIGH | P1 |
-| Memory V2 completion | HIGH (enabler) | MEDIUM | P1 |
-| Agent activity log | HIGH | MEDIUM | P1 |
-| Email notifications | MEDIUM | LOW | P1 |
-| Agent autonomy (scheduling) | HIGH | HIGH | P1 |
-| WhatsApp bridge | HIGH | HIGH | P2 |
-| Collaborative sessions | HIGH | HIGH | P2 |
-| Transparency dashboard | MEDIUM | MEDIUM | P2 |
-| Ephemeral agents | MEDIUM | MEDIUM | P2 |
-| Unified global chat | MEDIUM | MEDIUM | P2 |
-| Integration marketplace (depth) | LOW | HIGH | P3 |
-| SaaS billing | LOW (for now) | HIGH | P3 |
+| Feature | User Value | Implementation Cost | Phase Fit | Priority |
+|---------|------------|---------------------|-----------|----------|
+| API standardization | HIGH (enabler) | LOW | Phase 1 | P1 |
+| OpenAPI spec | MEDIUM | LOW | Phase 1 | P1 |
+| Error capture (OBS) | HIGH (ops safety) | LOW | Phase 1 | P1 |
+| Streaming chat (STRM-01, -02) | HIGH | MEDIUM | Phase 2 | P1 |
+| Stream cancellation (STRM-03) | MEDIUM | LOW | Phase 2 | P1 |
+| Collaborative sessions (COLLAB) | HIGH | HIGH | Phase 3 | P1 |
+| Unified chat model (CHAT-01, -02, -03) | HIGH | MEDIUM | Phase 4 | P1 |
+| External channels in chat (CHAT-04) | HIGH (differentiator) | MEDIUM | Phase 4 | P2 |
+| CRM schema upgrade (CRM-01, -02) | MEDIUM | LOW | Phase 5 | P1 |
+| CRM activity timeline (CRM-04) | MEDIUM | MEDIUM | Phase 5 | P2 |
+| CRM AI analysis (CRM-03) | HIGH (differentiator) | HIGH | Phase 5 | P2 |
+| File associations (FILE-01, -02, -03) | MEDIUM | MEDIUM | Phase 5 | P2 |
+| Agent templates 100x (TMPL) | MEDIUM | MEDIUM | Phase 6 | P2 |
+| Autonomous learning (LEARN) | HIGH (differentiator) | HIGH | Phase 6 | P2 |
+| Billing subscriptions (BILL-01) | HIGH (revenue) | HIGH | Phase 7 | P1 |
+| Usage metering (BILL-02) | HIGH (revenue) | MEDIUM | Phase 7 | P1 |
+| Plan enforcement (BILL-03) | HIGH (revenue) | MEDIUM | Phase 7 | P2 |
 
 **Priority key:**
-- P1: Must have for this milestone — validates the autonomous-agent proposition
-- P2: Should have — adds depth once core is working
-- P3: Future — do not build until product-market fit on P1+P2
+- P1: Required for v2.0 backend to be viable
+- P2: Required for v2.0 backend to be competitive
+- P3: Future — do not build in v2.0
+
+---
+
+## Per-Feature Analysis
+
+### Streaming Chat
+
+**Table stakes.** Every AI product streams. Not streaming makes Porter feel like a 2022 product.
+
+**What production looks like:** LLM provider sends `data: {"token": "..."}` chunks. Backend proxies each chunk immediately to client SSE. Client appends tokens to the message buffer. No full-response buffering at any layer.
+
+**Complexity notes:** Ollama's `/api/chat` with `stream: true` returns NDJSON. OpenClaw returns OpenAI-compatible SSE. The AI router already knows which backend to use — it just needs to pipe the stream through rather than buffering. Cancellation via AbortController: client sends DELETE request or closes SSE connection; backend detects disconnect via `req.raw.on('close')` and aborts the upstream fetch.
+
+**Risk:** Backpressure — if the client is slow and the LLM is fast, the SSE buffer can grow. Implement a simple drain-or-drop policy.
+
+**Existing v1 dependency:** SSE hub already handles multiplexed SSE connections. Streaming chat is a new event type on the same infrastructure.
+
+---
+
+### Collaborative Sessions
+
+**Differentiator, but expected by teams.** Solo use is not the growth vector. Collaboration is where viral loops start.
+
+**What production looks like:** User A creates project, invites User B by email with role "editor". User B gets email with registration link (or login link if existing). Both can now interact with project agents, see shared conversation history, and see each other's messages. Owner can revoke at any time.
+
+**Role model for projects (4 roles):**
+- `view` — read project, read chat history, no chat capability
+- `chat` — can chat with agents, cannot edit project
+- `edit` — full project edit + chat
+- `admin` — edit + revoke others' access (cannot revoke owner)
+
+**Data model:** `project_collaborators (project_id, user_id, role, invited_by, invited_at, accepted_at)`. Middleware checks this table for every project-scoped endpoint.
+
+**Complexity notes:** The hard part is not the invite — it's permission enforcement on every API route. Each of the 17 Fastify route groups that touches project data needs to call the collaborator check middleware. Missing one endpoint = a security hole.
+
+**Existing v1 dependency:** Workspace invite system sends registration links. Collaborative sessions reuse this but scope to a project rather than a workspace. Workspace roles (4 roles) are the baseline; project roles override them.
+
+---
+
+### Unified Chat
+
+**Differentiator.** Most platforms have separate agent chat, project chat, and channel notifications. Unifying them is the product vision.
+
+**What production looks like:** One conversation record links a context (project, agent, or global). Messages have `origin` field: `agent`, `user`, `whatsapp`, `email`. Client renders them in a single thread with appropriate attribution. History persists. Full-text search across all origins.
+
+**Threading:** Parent message ID on every message. Top-level messages have `parent_id = NULL`. Replies carry `parent_id`. Client collapses replies under parent. This is the pattern Slack, Linear, and Notion all use.
+
+**External channel integration (CHAT-04):** Requires Connections infrastructure (already built). WhatsApp inbound message arrives at webhook → creates a message record in the unified conversation with `origin: 'whatsapp'` → SSE event fires → collaborators see it in real-time. No new infrastructure needed — just the routing logic.
+
+**Complexity notes:** The schema design is the hard decision. Options: (a) one polymorphic messages table with context_type/context_id, or (b) separate tables with a view. Option (a) is simpler for search and simpler for SSE. Use option (a).
+
+---
+
+### CRM Backend
+
+**Table stakes at schema level; differentiator at AI analysis level.**
+
+**Schema upgrade (table stakes):** `contact_emails (contact_id, email, label, is_primary)`, `contact_phones (contact_id, phone, country_code, label, is_primary)`, `contact_social_links (contact_id, platform, handle, url)`. Migration from single-value columns to junction tables. Country code as ISO 3166-1 alpha-2 (two-letter), stored alongside phone number.
+
+**AI analysis (differentiator):** On demand (not automatic — too expensive to run continuously), an LLM call synthesizes all interaction history with a contact into a structured analysis: communication style, key topics, relationship health, last touchpoint. Store the analysis as a Memory V2 concept scoped to the contact. Refresh triggered by user or on new interaction (debounced, not immediate).
+
+**Activity timeline:** All touchpoints across projects — messages, file uploads, meetings, emails — ordered chronologically. This is a JOIN across unified chat messages, file_associations, and connection events filtered by contact. Read-only aggregated view; no new write paths.
+
+**Complexity notes:** The schema migration is LOW complexity. The AI analysis is HIGH complexity because of cost management (don't call LLM on every page load), caching (store result with TTL), and quality (system prompt engineering for useful output). Tackle schema and timeline first; AI analysis last.
+
+---
+
+### File Associations
+
+**Table stakes.** Users upload files in context. They expect those files to be findable from that context.
+
+**What production looks like:** Upload request includes `context_type` (project/contact/conversation) and `context_id`. Server stores file + creates a `file_associations` record. Search/filter endpoint accepts context filters. Files not associated with anything are "unattached" — visible in a global files view.
+
+**Schema:** `file_associations (file_id, context_type, context_id, created_by, created_at)`. Polymorphic — one file can have multiple associations (a file associated with both a project and a conversation).
+
+**Complexity notes:** LOW. The file upload endpoint exists. This is schema migration + association lookup. The only non-trivial part is the drag-drop upload API specification (multipart form data with context fields) — frontend-v2 will need this documented clearly.
+
+---
+
+### Agent Templates (100x)
+
+**Table stakes for discovery; differentiator for quality.**
+
+**What production looks like:** 100 templates across 8-10 categories (marketing, development, operations, research, sales, support, design, finance). Each template has: name, description, category, system prompt (complete, not placeholder), skills list, tools list, appearance spec (pixel portrait). Templates are searchable and filterable by category via API.
+
+**Key insight from research:** Relevance AI, Beam AI, and MindStudio all compete on template count (200+, 1000+). Count is marketing; quality is the product. A Porter template must instantiate a fully working agent — not a skeleton with "TODO: customize this prompt."
+
+**Complexity notes:** Template instantiation (TMPL-03) is LOW complexity — it's essentially a copy of the template record into the agents table with workspace binding. The real cost is content creation: writing 100 complete system prompts that actually work. This is editorial work, not engineering work.
+
+**Phasing recommendation:** Do not block on 100. Ship 30 high-quality templates, search/filter endpoint, and instantiation API. Label it "30+ templates" in the API. Add remaining templates incrementally.
+
+---
+
+### Autonomous Learning
+
+**Differentiator. Rare in production.** Only 11% of organizations have agentic AI in production (Deloitte 2026). Learning agents that build expertise over time are genuinely novel.
+
+**What production looks like:** An agent's learning workflow runs on a schedule (e.g., weekly). It searches web/Reddit/GitHub for topics relevant to its role. For each search result, it extracts key facts and creates Memory V2 concepts with source attribution, confidence score, and retrieval timestamp. A learning log records what was searched, what was found, what was stored, and what was discarded.
+
+**Constraints for the VPS environment:** Web scraping must be rate-limited. Each learning session should be bounded: max N sources, max M concepts per session, timeout after T minutes. The 2 vCPU / 8GB RAM constraint means learning sessions must not run concurrently with active chat sessions.
+
+**Source strategy:** Web search (Brave API or similar), GitHub repository READMEs and issues, Reddit via Pushshift or direct API. Do not attempt PDF parsing or video transcription in v2.
+
+**Complexity notes:** HIGH. The engineering challenges are: (1) reliable web content extraction without a headless browser, (2) quality filtering (not every search result is worth storing), (3) resource management (concurrent learning vs active use), (4) Memory V2 deduplication (don't store the same concept twice). Each of these is solvable but each takes time.
+
+**Risk:** Agents learning incorrect information and injecting it as high-trust concepts. Mitigation: all autonomously learned knowledge gets `trust_level: LOW` in Memory V2 and must be promoted by a human action before becoming `MEDIUM` or higher.
+
+---
+
+### SaaS Billing
+
+**Revenue-critical. Not a differentiator — it's required to operate.**
+
+**Lemon Squeezy fit:** Acquired by Stripe in 2024, which removes viability risk. Supports: subscriptions at any frequency, metered/usage-based billing, webhook events for subscription lifecycle, license key delivery (not needed for SaaS). Built-in tax compliance (VAT, GST) — critical for Singapore-based operation selling globally.
+
+**Usage metering implementation:** Track per workspace: `usage_events (workspace_id, metric, value, recorded_at)`. Aggregate on billing cycle. Report to Lemon Squeezy via their usage report API. Metrics to meter: AI tokens consumed, API calls made, storage bytes used, active agent count.
+
+**Plan enforcement:** A middleware layer that runs before any metered resource is consumed. Checks `workspace_billing_state` for plan limits. Hard limits block the request and return `402 Payment Required` with upgrade prompt. Soft limits allow the request and flag the overage for billing.
+
+**Critical ordering:** BILL-01 (webhook handler + subscription state) → BILL-02 (metering collection, silent) → BILL-03 (enforcement middleware). Never enable enforcement (BILL-03) before metering is validated (BILL-02). Premature enforcement locks out paying users.
+
+**Complexity notes:** HIGH for architecture, MEDIUM for implementation. The Lemon Squeezy API is well-documented. The hard parts are: (1) webhook idempotency (events can be delivered multiple times), (2) enforcement middleware that is fast enough to not add perceptible latency, (3) graceful degradation (billing system down should not take down the product).
+
+---
+
+### Error Capture
+
+**Table stakes for production operations. LOW complexity.**
+
+**What production looks like:** Frontend catches unhandled errors (`window.onerror`, React error boundaries) and POSTs to `/api/v1/errors` with: stack trace, component name, user ID, session ID, severity (info/warning/error/critical), browser/OS context. Backend stores in SQLite. Admin query endpoint with filters by severity, component, and time range.
+
+**Why not just use Sentry:** Sentry is the obvious choice for standalone error monitoring. But Porter is building a self-contained SaaS. Having errors POST to Porter's own API means: (a) zero external dependency, (b) errors are visible in the admin panel users already have, (c) no Sentry subscription cost. The implementation is a POST endpoint and a SQLite table — 2 hours of engineering work.
+
+**Source map limitation:** Without source maps uploaded to a service, stack traces in production show minified code. The error capture endpoint should accept both raw stack traces and a `component` field filled by the React error boundary — `component` is more useful than a minified stack trace for triage.
 
 ---
 
 ## Competitor Feature Analysis
 
-| Feature | Relevance AI | Lindy | n8n | Porter Approach |
-|---------|--------------|-------|-----|-----------------|
-| Agent creation UX | Low-code visual builder | NL description → agent | Node canvas (technical) | Conversational wizard (GSD-like flow) — more guided than Lindy, simpler than Relevance AI |
-| Multi-agent coordination | Role-based crews, parallel execution | Sequential workflows, limited multi-agent | Agent patterns via LangChain nodes | Porter as orchestrator: assigns, monitors, re-routes — no visible debate loop |
-| Memory / context | Per-agent context, limited persistence | Session memory, limited cross-agent | No native memory (stateless flows) | Memory V2 with directives + concepts + episodes — persistent and scoped |
-| External integrations | API connectors, no-code | 400+ integrations, API connectors | 400+ native nodes + custom HTTP | Depth over breadth: GitHub, Gmail, Calendar, WhatsApp — done well |
-| Transparency / observability | Workflow run logs (technical) | Basic run history | Execution history (technical) | User-readable activity feed + reasoning trace — non-technical first |
-| Pricing model | Per-agent-minute usage | Seat-based | Workflow execution count | Seat/workspace-based — no per-message anxiety |
-| Collaboration | Shared workspace (limited) | Not a core feature | Shared workflows (technical) | First-class collaborative sessions with per-person roles |
-| WhatsApp | No | Via Twilio integration | Via HTTP/API node | Native bridge, agent-specific channels — first-class, not bolted on |
-| Target user | Business teams, some technical | Non-technical, small teams | Technical / developer teams | Non-technical users — lower floor, higher trust, more guidance |
+| Feature | ChatGPT Team | Notion AI | Lindy | Porter v2 Approach |
+|---------|--------------|-----------|-------|-------------------|
+| Streaming | Yes, token-by-token | Yes, for AI writes | Yes | SSE proxy from all backends; same UX bar |
+| Collaboration | Workspace sharing, no project-scoped roles | Workspace sharing, page permissions | Not core | Per-project roles with granular enforcement — more fine-grained than any competitor |
+| Unified chat | No (separate chat per thread) | No (separate AI per page) | No | Single conversation model across agents, projects, external channels — genuinely novel |
+| CRM | No | No | Basic contact tracking | Multi-value fields + AI analysis from interaction history — agent-native CRM |
+| File associations | Yes (per conversation) | Yes (per page) | No | Cross-context association (project + contact + conversation) — more flexible |
+| Agent templates | 30 GPTs | No | ~20 templates | 100 quality templates with category search — coverage + discoverability |
+| Autonomous learning | No | No | No | Web/GitHub/Reddit learning stored as Memory V2 concepts — novel |
+| Billing | OpenAI billing (token cost) | Notion seat billing | Seat billing | Lemon Squeezy metered billing with plan enforcement — transparent + scalable |
+| Error capture | Sentry external | Sentry external | Unknown | Self-hosted in Porter DB — no external dependency |
+| API spec | OpenAI-compatible | No public API | No public API | Auto-generated OpenAPI from Fastify routes — enables SDK generation |
 
 ---
 
 ## Sources
 
-- [Relevance AI features overview 2026](https://www.selecthub.com/p/ai-agent-builder-software/relevance-ai/)
-- [Lindy AI feature review 2026](https://www.lindy.ai/blog/ai-agent-platform)
-- [CrewAI vs AutoGen vs n8n vs Langflow comparison 2026](https://aiagentbase.app/blog/langgraph-vs-crewai-vs-autogen-vs-n8n-choosing-the-right-ai-framework)
-- [n8n AI agent frameworks comparison](https://blog.n8n.io/ai-agent-frameworks/)
-- [WhatsApp Business API 2026 guide](https://www.wati.io/en/blog/discovering-whatsapp-business-api/)
-- [AI agent audit trail and observability 2026](https://fast.io/resources/ai-agent-audit-trail/)
-- [AI agent platform table stakes for SaaS 2026](https://www.vellum.ai/blog/top-13-ai-agent-builder-platforms-for-enterprises)
-- [n8n vs Zapier integration anti-patterns](https://hatchworks.com/blog/ai-agents/n8n-vs-zapier/)
-- [Multi-agent orchestration collaboration 2026](https://www.codebridge.tech/articles/mastering-multi-agent-orchestration-coordination-is-the-new-scale-frontier)
-- [Agentic AI SaaS trends 2026](https://www.saassimply.com/post/the-agentic-era-how-software-slaughter-and-self-driving-workflows-will-change-saas-in-2026)
+- [SSE streaming production patterns 2026](https://procedure.tech/blogs/the-streaming-backbone-of-llms-why-server-sent-events-(sse)-still-wins-in-2025)
+- [AbortController cancellation in Node.js](https://blog.appsignal.com/2025/02/12/managing-asynchronous-operations-in-nodejs-with-abortcontroller.html)
+- [Lemon Squeezy usage-based billing docs](https://docs.lemonsqueezy.com/guides/tutorials/usage-based-subscriptions)
+- [Lemon Squeezy metered billing](https://docs.lemonsqueezy.com/help/products/usage-based-billing)
+- [Stripe acquired Lemon Squeezy — Stripe vs Lemon Squeezy 2026](https://designrevision.com/blog/stripe-vs-lemonsqueezy)
+- [SaaS billing enforcement patterns — rate limiting as billing control](https://kinde.com/learn/billing/billing-infrastructure/api-rate-limiting-as-a-billing-control-mechanism/)
+- [Usage-based billing implementation guide](https://schematichq.com/blog/why-usage-based-billing-is-taking-over-saas)
+- [AI CRM table stakes 2026](https://monday.com/blog/crm-and-sales/crm-with-ai/)
+- [AI agent templates competitive landscape](https://beam.ai/agents)
+- [Agentic AI production readiness 2026 — Deloitte](https://www.deloitte.com/us/en/insights/industry/technology/technology-media-and-telecom-predictions/2026/saas-ai-agents.html)
+- [Autonomous learning SaaS trends 2026](https://machinelearningmastery.com/7-agentic-ai-trends-to-watch-in-2026/)
+- [Fastify OpenAPI auto-generation — @fastify/swagger](https://www.speakeasy.com/openapi/frameworks/fastify)
+- [Frontend error monitoring patterns — Sentry](https://docs.sentry.io/product/sentry-basics/integrate-frontend/)
+- [Multi-tenant SaaS RBAC patterns](https://www.enterpriseready.io/features/role-based-access-control/)
+- [SaaS collaboration invite patterns](https://userpilot.com/blog/onboard-invited-users-saas/)
+- [Omnichannel messaging unified API](https://www.centripe.ai/omnichannel-messaging-guide)
 
 ---
 
-*Feature research for: AI orchestration platform (Porter) — non-technical SaaS users*
-*Researched: 2026-03-20*
+*Feature research for: Porter v2.0 Backend Ready — streaming, collaboration, CRM, billing, observability*
+*Researched: 2026-03-21*
