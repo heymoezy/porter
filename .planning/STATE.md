@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 04-00-PLAN.md
-last_updated: "2026-03-21T03:19:37.259Z"
+stopped_at: Completed 04-agent-autonomy-01-PLAN.md
+last_updated: "2026-03-21T03:20:29.599Z"
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 28
-  completed_plans: 23
+  completed_plans: 25
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 ## Current Position
 
 Phase: 04 (agent-autonomy) — EXECUTING
-Plan: 1 of 6
+Plan: 3 of 6
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Plan: 1 of 6
 | Phase 03-route-migration P03 | 5min | 2 tasks | 4 files |
 | Phase 03-route-migration P05 | 23min | 2 tasks | 3 files |
 | Phase 04-agent-autonomy P00 | 4min | 2 tasks | 7 files |
+| Phase 04-agent-autonomy P01 | 5min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -137,6 +138,9 @@ Recent decisions affecting current work:
 - [Phase 04-agent-autonomy]: Wave 0 tests are /tmp/-only — not committed to git per Phase 2 convention
 - [Phase 04-agent-autonomy]: test_agnt04_depth.py uses is_temporary field inspection to detect pre-implementation state — SKIP when fields ignored, FAIL only when feature is active but limit not enforced
 - [Phase 04-agent-autonomy]: test_agnt02_deadline.py validates deadline SQL directly (not scheduler wait) — verifies trigger SQL correctness without 65s sleep
+- [Phase 04-agent-autonomy]: migrate-04.ts applies SQL migrations idempotently via schema_migrations guard — safe on repeated server restarts
+- [Phase 04-agent-autonomy]: Scheduler uses shared sqlite instance from db/client.ts — reuses WAL + busy_timeout=30000, avoids SQLITE_BUSY
+- [Phase 04-agent-autonomy]: Plan 04-01 dispatches to porter.py /api/dispatch proxy — native TypeScript ai-router.ts is plan 04-02 scope
 
 ### Pending Todos
 
@@ -151,6 +155,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T03:19:37.256Z
-Stopped at: Completed 04-00-PLAN.md
+Last session: 2026-03-21T03:20:29.596Z
+Stopped at: Completed 04-agent-autonomy-01-PLAN.md
 Resume file: None
