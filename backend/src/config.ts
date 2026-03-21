@@ -9,6 +9,17 @@ export const config = {
   dbPath: process.env.PORTER_DB_PATH || path.join(process.env.HOME || os.homedir(), '.porter', 'porter.db'),
   dataDir: process.env.PORTER_DATA_DIR || path.join(process.env.HOME || os.homedir(), '.porter'),
   logLevel: process.env.LOG_LEVEL || 'info',
+
+  // AI backend URLs — override these in the environment for your deployment.
+  // Defaults reflect the standard local dev setup documented in porter/CLAUDE.md.
+  ollamaUrl: process.env.OLLAMA_URL || 'http://127.0.0.1:11434',
+  openclawUrl: process.env.OPENCLAW_URL || 'http://127.0.0.1:18789',
+  ollamaModel: process.env.OLLAMA_MODEL || 'qwen2.5-coder:1.5b',
+  openclawModel: process.env.OPENCLAW_MODEL || 'openai-codex/gpt-5.4',
+
+  // Auth token for openclaw gateway. Must be set via OPENCLAW_TOKEN env var.
+  // No hardcoded fallback — if unset, openclaw dispatch will fail with a clear error.
+  openclawToken: process.env.OPENCLAW_TOKEN ?? '',
 };
 
 export const featureFlags = {
