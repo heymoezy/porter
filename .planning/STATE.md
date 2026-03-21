@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-03-21T16:43:23.047Z"
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-03-21T16:47:10.868Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 51
-  completed_plans: 42
+  completed_plans: 43
 ---
 
 # Project State
@@ -88,6 +88,7 @@ Plan: 1 of 11
 | Phase 06-real-time-and-transparency PP05 | 10min | 3 tasks | 6 files |
 | Phase 07-external-connections P00 | 2min | 1 tasks | 3 files |
 | Phase 07-external-connections PP01 | 6min | 2 tasks | 5 files |
+| Phase 07-external-connections P02 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -215,6 +216,9 @@ Recent decisions affecting current work:
 - [Phase 07-external-connections]: migrate-07-ext-connections.ts named separately from migrate-07.ts (billing) — both cover phase 7 but different subsystems
 - [Phase 07-external-connections]: Credential format: iv_hex:tag_hex:ciphertext_hex in one string — no separate columns needed for IV or auth tag
 - [Phase 07-external-connections]: getDerivedKey() reads PORTER_SECRET at call-time (not module-load) — consistent with getBackends() pattern from Phase 4
+- [Phase 07-external-connections]: meta_json masked as '[encrypted]' in list/detail responses when meta_encrypted=1 — credentials never reach frontend
+- [Phase 07-external-connections]: DELETE /:id checks connection existence before delete — returns 404 for missing connections, prevents silent no-op cascades
+- [Phase 07-external-connections]: POST /project/:projectId validates workspace connection exists before INSERT — returns 404 rather than silent FK violation
 
 ### Pending Todos
 
@@ -237,6 +241,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T16:43:23.044Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-03-21T16:47:10.865Z
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None
