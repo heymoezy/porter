@@ -134,7 +134,19 @@ export default async function emailRoutes(fastify: FastifyInstance) {
   // GET /api/admin/email/changelog — serve CHANGELOG.md as release notes
   fastify.get('/changelog', async () => {
     try {
-      const changelogPath = path.resolve(__dirname, '../../../../CHANGELOG.md');
+      // Try multiple paths since __dirname varies with tsx vs compiled
+      const candidates = [
+        path.resolve(__dirname, '../../../CHANGELOG.md'),
+        path.resolve(__dirname, '../../CHANGELOG.md'),
+        path.resolve(__dirname, '../../../../admin/CHANGELOG.md'),
+        path.resolve(process.cwd(), 'CHANGELOG.md'),
+        path.resolve(process.cwd(), '../CHANGELOG.md'),
+      ];
+      let changelogPath = '';
+      for (const p of candidates) {
+        if (fs.existsSync(p)) { changelogPath = p; break; }
+      }
+      if (!changelogPath) return ok({ content: '# No release notes found' });
       const content = fs.readFileSync(changelogPath, 'utf-8');
       return ok({ content });
     } catch {

@@ -1,5 +1,40 @@
 # Porter Admin — Changelog
 
+## v0.1.5 (2026-03-21)
+
+- Skills page rewritten: full catalog with 30 skills, descriptions, categories, sources, agent assignments
+- Email compose: from selector (Porter, Growth, Retention, Security, Billing, Support, Moe), rich text toolbar
+- Agents page excludes Porter (has own dedicated tab)
+- Release notes page at /changelog, linked from sidebar version
+- Changelog endpoint moved to correct path
+
+## v0.1.4 (2026-03-21)
+
+- Full email system: inbox, sent, drafts, trash (Gmail-style)
+- Compose, save drafts, send, delete to trash, permanent delete
+- email_messages DB table with folder management
+
+## v0.1.3 (2026-03-21)
+
+- Agent management system: list all personas with skills, files, deployments
+- Agent detail page: .md file editors, skills toggles, project deployments
+- Removed global search from top bar (pages have contextual search)
+
+## v0.1.2 (2026-03-21)
+
+- Activity feed: 5746 audit entries with action type filtering
+- Learnings tab: 35 extracted session learnings from Porter
+- Nav: added Activity to Ops, renamed Billing to Revenue
+
+## v0.1.1 (2026-03-21)
+
+- Email engine: SMTP config form, queue table
+- Revenue page: MRR, cost, margin, LTV, customer funnel, token breakdown
+- System monitor: memory, disk, CPU, uptime, Porter runtimes
+- Tools: compact tables with visibility toggles, server/runtime separation
+- Skills: search filter, enable/disable toggles per agent
+- Theme toggle fix: reads localStorage on mount
+
 ## v0.1.0 (2026-03-21)
 
 **Initial release — Platform Control Plane**

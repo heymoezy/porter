@@ -63,12 +63,15 @@ type Pages = {
   "/activity": {
     params: {};
   };
+  "/changelog": {
+    params: {};
+  };
 };
 
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/login" | "/users" | "/users/:username" | "/email" | "/billing" | "/agents" | "/agents/:id" | "/diagnostics" | "/templates" | "/models" | "/porter" | "/tools" | "/skills" | "/system" | "/activity";
+    page: "/" | "/login" | "/users" | "/users/:username" | "/email" | "/billing" | "/agents" | "/agents/:id" | "/diagnostics" | "/templates" | "/models" | "/porter" | "/tools" | "/skills" | "/system" | "/activity" | "/changelog";
   };
   "routes/home.tsx": {
     id: "routes/home";
@@ -134,6 +137,10 @@ type RouteFiles = {
     id: "routes/activity";
     page: "/activity";
   };
+  "routes/changelog.tsx": {
+    id: "routes/changelog";
+    page: "/changelog";
+  };
 };
 
 type RouteModules = {
@@ -154,4 +161,5 @@ type RouteModules = {
   "routes/skills": typeof import("./app/routes/skills.tsx");
   "routes/system": typeof import("./app/routes/system.tsx");
   "routes/activity": typeof import("./app/routes/activity.tsx");
+  "routes/changelog": typeof import("./app/routes/changelog.tsx");
 };

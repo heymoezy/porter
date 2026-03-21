@@ -5,29 +5,30 @@ import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
 import { Switch } from "~/components/ui/switch"
 import { Input } from "~/components/ui/input"
-import { Sparkles, Search, ChevronDown, ChevronRight } from "lucide-react"
+import { Sparkles, Search, ChevronDown, ChevronRight, Bot } from "lucide-react"
 
-interface SkillAgent {
-  id: string
-  name: string
-  role: string
-  enabled: boolean
-}
-
+interface SkillAgent { id: string; name: string; role: string; enabled: boolean }
 interface Skill {
-  name: string
+  id: string; name: string; description: string; category: string; source: string
   agents: SkillAgent[]
 }
-
 interface SkillsResponse {
-  skills: Skill[]
-  totalSkills: number
-  totalAssignments: number
+  skills: Skill[]; totalSkills: number; totalAssignments: number; assignedSkills: number
+  categories: Record<string, number>; sources: Record<string, number>
+}
+
+const sourceColors: Record<string, string> = {
+  "porter-core": "bg-accent-porter/15 text-accent-porter",
+  "porter-internal": "bg-warning/15 text-warning",
+  "porter-curated": "bg-success/15 text-success",
+  "runtime": "bg-blue-500/15 text-blue-400",
+  "detected": "bg-text3/15 text-text3",
 }
 
 function SkillsContent() {
   const qc = useQueryClient()
   const [search, setSearch] = useState("")
+  const [activeCat, setActiveCat] = useState("all")
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -50,76 +51,136 @@ function SkillsContent() {
   }
 
   const allSkills = data?.skills ?? []
-  const skills = search
-    ? allSkills.filter(s =>
-        s.name.toLowerCase().includes(search.toLowerCase()) ||
-        s.agents.some(a => a.name.toLowerCase().includes(search.toLowerCase()))
-      )
-    : allSkills
+  const categories = data?.categories ?? {}
+  const sources = data?.sources ?? {}
+
+  let skills = allSkills
+  if (activeCat !== "all") skills = skills.filter(s => s.category === activeCat)
+  if (search) {
+    const q = search.toLowerCase()
+    skills = skills.filter(s =>
+      s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) ||
+      s.id.toLowerCase().includes(q) || s.category.toLowerCase().includes(q)
+    )
+  }
 
   return (
     <div className="space-y-2">
-      {/* Header + search */}
+      {/* Stats + search */}
       <div className="flex items-center gap-2">
         <Sparkles className="size-3 text-accent-porter" />
         <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">
-          {data?.totalSkills ?? 0} skills · {data?.totalAssignments ?? 0} assignments
+          {data?.totalSkills ?? 0} skills · {data?.assignedSkills ?? 0} assigned · {data?.totalAssignments ?? 0} deployments
         </span>
-        <div className="relative ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {Object.entries(sources).map(([src, cnt]) => (
+            <Badge key={src} className={`text-[9px] border-0 ${sourceColors[src] || "bg-text3/15 text-text3"}`}>
+              {src} ({cnt})
+            </Badge>
+          ))}
+        </div>
+        <div className="relative">
           <Search className="absolute left-2 top-1/2 size-3 -translate-y-1/2 text-text3" />
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Filter skills..."
-            className="h-7 w-[180px] bg-raised border-border pl-7 text-xs"
+            placeholder="Filter..."
+            className="h-7 w-[150px] bg-raised border-border pl-7 text-xs"
           />
         </div>
       </div>
 
+      {/* Category tabs */}
+      <div className="flex flex-wrap gap-1">
+        <button
+          onClick={() => setActiveCat("all")}
+          className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+            activeCat === "all" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
+          }`}
+        >all ({allSkills.length})</button>
+        {Object.entries(categories).sort(([,a],[,b]) => b - a).map(([cat, cnt]) => (
+          <button
+            key={cat}
+            onClick={() => setActiveCat(cat)}
+            className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+              activeCat === cat ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
+            }`}
+          >{cat} ({cnt})</button>
+        ))}
+      </div>
+
       {/* Skills table */}
       <div className="rounded-xl border border-border overflow-hidden">
-        {skills.map(skill => {
-          const isExpanded = expandedSkill === skill.name
-          const enabledCount = skill.agents.filter(a => a.enabled).length
-          return (
-            <div key={skill.name} className="border-b border-border/30 last:border-0">
-              <button
-                onClick={() => setExpandedSkill(isExpanded ? null : skill.name)}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface/80 transition-colors"
-              >
-                {isExpanded
-                  ? <ChevronDown className="size-3 text-text3 shrink-0" />
-                  : <ChevronRight className="size-3 text-text3 shrink-0" />
-                }
-                <span className="text-xs font-medium text-text flex-1">{skill.name}</span>
-                <Badge className="text-[10px] bg-accent-porter/15 text-accent-porter border-0">
-                  {enabledCount}/{skill.agents.length}
-                </Badge>
-              </button>
-              {isExpanded && (
-                <div className="bg-surface/50 border-t border-border/30">
-                  {skill.agents.map(a => (
-                    <div key={a.id} className="flex items-center gap-2 px-3 py-1 pl-8 border-b border-border/20 last:border-0">
-                      <span className="text-[11px] font-medium text-text flex-1">{a.name}</span>
-                      <span className="text-[10px] text-text3 truncate max-w-[200px]">{a.role}</span>
-                      <Switch
-                        checked={a.enabled}
-                        onCheckedChange={() => toggleSkill.mutate({ personaId: a.id, skillName: skill.name })}
-                        className="scale-75"
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border/50 bg-surface text-left">
+              <th className="w-5 px-2 py-1.5" />
+              <th className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3">Skill</th>
+              <th className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3">Description</th>
+              <th className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3">Source</th>
+              <th className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3 text-right">Agents</th>
+            </tr>
+          </thead>
+          <tbody>
+            {skills.map(skill => {
+              const isExpanded = expandedSkill === skill.id
+              const enabledCount = skill.agents.filter(a => a.enabled).length
+              return (
+                <>
+                  <tr
+                    key={skill.id}
+                    onClick={() => setExpandedSkill(isExpanded ? null : skill.id)}
+                    className="border-b border-border/20 last:border-0 cursor-pointer hover:bg-surface/60 transition-colors"
+                  >
+                    <td className="px-2 py-1">
+                      {skill.agents.length > 0 ? (
+                        isExpanded ? <ChevronDown className="size-3 text-text3" /> : <ChevronRight className="size-3 text-text3" />
+                      ) : <span className="size-3" />}
+                    </td>
+                    <td className="px-2 py-1 text-xs font-bold text-text whitespace-nowrap">{skill.name}</td>
+                    <td className="px-2 py-1 text-[11px] text-text3 truncate max-w-[300px]">{skill.description}</td>
+                    <td className="px-2 py-1">
+                      <Badge className={`text-[9px] border-0 ${sourceColors[skill.source] || "bg-text3/15 text-text3"}`}>
+                        {skill.source}
+                      </Badge>
+                    </td>
+                    <td className="px-2 py-1 text-right">
+                      {skill.agents.length > 0 ? (
+                        <span className="text-xs text-text2">{enabledCount}/{skill.agents.length}</span>
+                      ) : (
+                        <span className="text-[10px] text-text3">—</span>
+                      )}
+                    </td>
+                  </tr>
+                  {isExpanded && skill.agents.length > 0 && (
+                    <tr key={`${skill.id}-agents`}>
+                      <td colSpan={5} className="bg-surface/50 border-b border-border/20">
+                        <div className="px-8 py-1">
+                          {skill.agents.map(a => (
+                            <div key={a.id} className="flex items-center gap-2 py-0.5">
+                              <Bot className="size-2.5 text-text3" />
+                              <span className="text-[11px] font-medium text-text flex-1">{a.name}</span>
+                              <span className="text-[10px] text-text3 truncate max-w-[200px]">{a.role}</span>
+                              <Switch
+                                checked={a.enabled}
+                                onCheckedChange={() => toggleSkill.mutate({ personaId: a.id, skillName: skill.id })}
+                                className="scale-[0.65]"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
 
       {skills.length === 0 && (
-        <div className="py-6 text-center text-xs text-text3">
-          {search ? "No skills match" : "No skills found"}
-        </div>
+        <div className="py-6 text-center text-xs text-text3">{search ? "No skills match" : "No skills"}</div>
       )}
     </div>
   )
