@@ -19333,7 +19333,7 @@ const CHANGELOG = [
   ]},
   { ver:'v0.14.21', date:'2026-02-28', notes:[
     'Sprint 9: Hardcoding elimination pass — systematic audit of all paths, hosts, ports, and machine-specific assumptions',
-    'Fixed: is_writable() no longer references hardcoded /home/lobster — uses os.getuid() for portable ownership check',
+    'Fixed: is_writable() no longer references a hardcoded home path — uses os.getuid() for portable ownership check',
     'Audit result: 12+ path/host/port configurations already properly env-driven from Sprint P0',
     'All critical paths derive from PORTER_DATA_DIR env var or XDG defaults',
     'HOST auto-detected via PORTER_HOST env var or external IP lookup',
@@ -22641,11 +22641,13 @@ function _projArtifactUrl(path, inline) {
   if (!path) return '';
   var clean = path.replace(/^\/+/, '');
   var root = 'documents';
-  if (clean.indexOf('/home/lobster/workspace/') === 0) {
-    clean = clean.replace('/home/lobster/workspace/', '');
+  var _homeWsMatch = clean.match(/^(?:\/home\/[^\/]+\/)?workspace\//);
+  var _homeDocMatch = clean.match(/^(?:\/home\/[^\/]+\/)?documents\//);
+  if (clean.match(/^\/home\/[^\/]+\/workspace\//)) {
+    clean = clean.replace(/^\/home\/[^\/]+\/workspace\//, '');
     root = 'workspace';
-  } else if (clean.indexOf('/home/lobster/documents/') === 0) {
-    clean = clean.replace('/home/lobster/documents/', '');
+  } else if (clean.match(/^\/home\/[^\/]+\/documents\//)) {
+    clean = clean.replace(/^\/home\/[^\/]+\/documents\//, '');
     root = 'documents';
   } else {
     if (clean.indexOf('workspace/') === 0) {
@@ -29329,7 +29331,7 @@ function chatSend() {
         lines.push('');
         if (allGood && data.git_clean) {
           lines.push('**Status: Ready to ship** \u2705');
-          lines.push('\nRun: `systemctl --user restart porter && cd /home/lobster/documents/porter/tests && npx playwright test && git add porter.py && git commit && git push`');
+          lines.push('\nRun: `systemctl --user restart porter` then run tests and commit.');
         } else if (allGood) {
           lines.push('**Status: Code ready, needs commit** \u26a0\ufe0f');
           lines.push('\nRun ship process: syntax check \u2192 restart \u2192 test \u2192 commit \u2192 push');
@@ -36728,7 +36730,7 @@ function openConfigPanel(type, id) {
     if (id === 'coordination') {
       // Show coordination files (projects.md)
       title.textContent = 'Coordination Files';
-      var projPath = '/home/lobster/documents/projects.md';
+      var projPath = (window._porterDataDir ? window._porterDataDir + '/projects.md' : '');
       body.innerHTML = '<div style="margin-bottom:12px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Shared Files</div><div style="font-size:12px;color:var(--text2)">These files are referenced by multiple agents for cross-session coordination.</div></div>'
         + '<div id="mem-cfg-editor-wrap" style="display:none" class="mem-cfg-editor"><textarea id="mem-cfg-textarea" spellcheck="false"></textarea><div style="display:flex;gap:6px;margin-top:6px"><button id="mem-cfg-save" class="btn btn-accent" style="font-size:11px" onclick="_memCfgSave()">Save</button></div></div>';
       _memCfgViewFile('coordination', projPath);
