@@ -61,11 +61,11 @@ Source: `frontend/src/design-system/tokens.ts` and `frontend-v2/app/app.css`. Ge
 | Role | Size | Weight | Line Height | Usage |
 |------|------|--------|-------------|-------|
 | Body | 14px (0.875rem) | 400 | 1.5 | Connection description text, form helper text, rule descriptions |
-| Label | 12px (0.75rem) | 500 | 1.4 | Status dot labels, badge text, field labels, last sync time |
+| Label | 12px (0.75rem) | 400 | 1.4 | Status dot labels, badge text, field labels, last sync time |
 | Heading | 16px (1rem) | 600 | 1.3 | Service card title, settings section heading, panel sub-heading |
 | Display | 20px (1.25rem) | 600 | 1.2 | Connections page title, modal/dialog heading |
 
-Maximum 4 sizes, 2 weights in active use: 400 (regular) and 600 (semibold). Weight 500 for labels only — a third weight limited to micro-copy.
+Exactly 2 weights in active use: 400 (regular) and 600 (semibold). Weight 500 (medium) is collapsed into 400 — labels and micro-copy use regular weight.
 
 ---
 
@@ -175,15 +175,15 @@ ServiceCard (--surface bg, 1px --border, radius-lg, shadow-card)
 │   ├── Service name                    [Heading 16px/600]
 │   └── ConnectionStatusBadge
 │       ├── Status dot (8×8px)
-│       └── State label                 [Label 12px/500]
+│       └── State label                 [Label 12px/400]
 ├── Card Body
 │   ├── Description (1 sentence)        [Body 14px/400, --text2]
-│   └── Last sync: "2 hours ago"        [Label 12px/500, --text3]
+│   └── Last sync: "2 hours ago"        [Label 12px/400, --text3]
 └── Card Footer
     └── Action button (full-width)
         ├── State: disconnected → "Connect" (accent/filled)
         ├── State: needs_reauth  → "Reconnect" (warning/outline)
-        ├── State: connected     → "Manage"   (ghost)
+        ├── State: connected     → "Manage Connection"   (ghost)
         └── Admin only: operators see button disabled with tooltip
 ```
 
@@ -226,7 +226,7 @@ Uses `DisconnectDialog` (shadcn Dialog):
 - Trigger: "Disconnect" button in Manage state
 - Title: "Disconnect [Service]?"
 - Body: "Connected agents will lose access. Active jobs will be paused."
-- Actions: "Cancel" (ghost) | "Disconnect" (destructive red)
+- Actions: "Keep Connected" (ghost) | "Disconnect" (destructive red)
 - On confirm: DELETE /api/v1/connections/:id, SSE fires connection:status disconnected, card re-renders
 
 ### Project-Level Override
@@ -270,7 +270,7 @@ Reuse existing motion tokens from `app.css`:
 | Primary CTA (OAuth) | Connect [Service] | e.g. "Connect GitHub", "Connect Google Calendar" |
 | Primary CTA (API key) | Save Key | Short. Verb + noun. |
 | CTA reauth state | Reconnect | Single word — clear intent. |
-| CTA manage state | Manage | Opens credential detail/edit panel. |
+| CTA manage state | Manage Connection | Verb + noun. Opens credential detail/edit panel. |
 | Empty state heading | No connections yet | Simple, factual. |
 | Empty state body | Connect GitHub, email, or calendar to let your agents take action in the real world. | One sentence. No questions. |
 | Connection success toast | [Service] connected | e.g. "GitHub connected" — SSE-driven toast |
@@ -280,6 +280,7 @@ Reuse existing motion tokens from `app.css`:
 | Never synced label | Never synced | --text3, not an error. |
 | Disconnect dialog title | Disconnect [Service]? | Direct question, service name in title. |
 | Disconnect dialog body | Connected agents will lose access. Active jobs will be paused. | Two sentences. No fluff. |
+| Disconnect cancel button | Keep Connected | Ghost button. Names the preserved state. Mirrors the destructive action's object. |
 | Disconnect confirm button | Disconnect | Same word as action. Destructive red. |
 | Admin-only tooltip | Only admins can manage connections | Short. Shows on disabled button hover. |
 | WhatsApp prerequisite | WhatsApp requires a public HTTPS URL. Set PORTER_PUBLIC_URL first. | Inline callout, not a toast. |
