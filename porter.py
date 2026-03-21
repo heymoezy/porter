@@ -20907,10 +20907,12 @@ function switchModule(name) {
 
   // v0.31.60 — F3 fix: clear stale chat context when leaving modules
   if (_currentModule === 'projects' && name !== 'projects') {
+    window._projCurrent = null;
     _chatRouteContext = '';
     if (window._chatProject && window._chatProject.id && window._chatProject.id !== '_personality') {
-      // Don't auto-clear if user explicitly selected a project in chat selector
+      window._chatProject = null;
     }
+    if (typeof buildChatCtxSelectors === 'function') buildChatCtxSelectors();
   }
   if (name !== 'settings') closeSettings();
   const leavingFiles = _currentModule === 'files' && name !== 'files';
@@ -21773,6 +21775,14 @@ function _projBack() {
   if (hdrBack) hdrBack.style.display = 'none';
   var actions = document.getElementById('proj-detail-actions');
   if (actions) actions.innerHTML = '';
+  // Clear project context from chat when leaving project detail
+  window._projCurrent = null;
+  _chatRouteContext = '';
+  if (window._chatProject && window._chatProject.id && window._chatProject.id !== '_personality') {
+    window._chatProject = null;
+  }
+  if (typeof buildChatCtxSelectors === 'function') buildChatCtxSelectors();
+  if (typeof _popupChatUpdateCtx === 'function') _popupChatUpdateCtx();
 }
 
 function _projOpenGlobalChat() {
