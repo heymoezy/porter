@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-03-21T07:23:32.525Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-03-21T07:24:16.099Z"
 progress:
   total_phases: 7
   completed_phases: 5
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 ## Current Position
 
 Phase: 06 (real-time-and-transparency) — EXECUTING
-Plan: 1 of 6
+Plan: 4 of 6
 
 ## Performance Metrics
 
@@ -84,6 +84,7 @@ Plan: 1 of 6
 | Phase 06-real-time-and-transparency P00 | 3min | 2 tasks | 4 files |
 | Phase 06-real-time-and-transparency P01 | 8min | 3 tasks | 5 files |
 | Phase 06-real-time-and-transparency PP04 | 2min | 2 tasks | 5 files |
+| Phase 06-real-time-and-transparency P03 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -200,6 +201,9 @@ Recent decisions affecting current work:
 - [Phase 06-04]: emitSSE exported from scheduler.ts for shared use by ai-router.ts — no duplication
 - [Phase 06-04]: logDecision only fires when 2+ backends available (altAvailable probe) — no noise when fallback forced by outage
 - [Phase 06-04]: trackTokenUsage uses ON CONFLICT upsert on (model, date) — requires UNIQUE INDEX from migrate-06.ts (already present)
+- [Phase 06-03]: ActivityFeed categorized prop replaces flat events prop -- hook returns both for backward compat with future consumers
+- [Phase 06-03]: Active section: only job_started/wizard_start; Completed: today-only job_complete/job_failed/agent_retired; Queued: /api/v1/jobs?status=pending
+- [Phase 06-03]: onStatusChange on AgentStatusStrip is optional -- guards with early return so strips without parent callback are unaffected
 
 ### Pending Todos
 
@@ -214,6 +218,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T07:23:32.522Z
-Stopped at: Completed 06-04-PLAN.md
+Last session: 2026-03-21T07:24:16.095Z
+Stopped at: Completed 06-03-PLAN.md
 Resume file: None
