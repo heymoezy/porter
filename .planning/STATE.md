@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 07-06-PLAN.md
-last_updated: "2026-03-21T17:02:26.557Z"
+stopped_at: Completed 07-10-PLAN.md
+last_updated: "2026-03-21T17:07:33.726Z"
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 51
-  completed_plans: 49
+  completed_plans: 51
 ---
 
 # Project State
@@ -95,6 +95,7 @@ Plan: 1 of 11
 | Phase 07-external-connections P07 | 4min | 2 tasks | 3 files |
 | Phase 07-external-connections P05 | 8min | 2 tasks | 5 files |
 | Phase 07-external-connections PP06 | 8min | 3 tasks | 5 files |
+| Phase 07-external-connections P10 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -244,6 +245,9 @@ Recent decisions affecting current work:
 - [Phase 07-06]: Both email and google_calendar connections share the same encrypted Google token — one OAuth grant covers all scopes
 - [Phase 07-06]: startImapIdle is fire-and-forget — called without await from server startup and OAuth callback
 - [Phase 07-06]: IMAP IDLE degrades to degraded status after MAX_CONSECUTIVE_FAILURES=3 failures
+- [Phase 07-10]: CalendarEventsDisplay returns null when events array is empty — keeps dashboard clean when calendar not connected
+- [Phase 07-10]: ProjectConnectionsPanel only renders rows for providers with at least one workspace connection — avoids empty useless dropdowns
+- [Phase 07-10]: Operators and admins can manage project-level overrides; only viewers see disabled selects — per UI-SPEC line 237
 
 ### Pending Todos
 
@@ -266,6 +270,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T17:02:26.552Z
-Stopped at: Completed 07-06-PLAN.md
+Last session: 2026-03-21T17:07:04.119Z
+Stopped at: Completed 07-10-PLAN.md
 Resume file: None
