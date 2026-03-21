@@ -13,6 +13,7 @@ import adminRoutes from './routes/index.js';
 import { migrateAdmin01 } from './db/migrate-admin-01.js';
 import { migrateAdmin02 } from './db/migrate-admin-02.js';
 import { migrateAdmin03 } from './db/migrate-admin-03.js';
+import { migrateAdmin04 } from './db/migrate-admin-04.js';
 import { sqlite } from './db/client.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -83,6 +84,7 @@ const start = async () => {
     migrateAdmin01();
     migrateAdmin02();
     migrateAdmin03();
+    migrateAdmin04();
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Porter Admin running at http://${config.host}:${config.port}`);
   } catch (err) {

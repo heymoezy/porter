@@ -103,7 +103,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
         {!collapsed && (
           <p className="mt-2 text-center text-[10px] uppercase tracking-widest text-text3">
-            Porter Admin v0.1.0
+            Porter Admin v0.1.4
           </p>
         )}
       </div>
