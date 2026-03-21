@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 06-00-PLAN.md
-last_updated: "2026-03-21T07:13:12.863Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-21T07:18:49.025Z"
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 40
-  completed_plans: 36
+  completed_plans: 37
 ---
 
 # Project State
@@ -82,6 +82,7 @@ Plan: 1 of 6
 | Phase 05-guided-project-wizard P05 | 5min | 3 tasks | 4 files |
 | Phase 06-real-time-and-transparency P02 | 3min | 2 tasks | 4 files |
 | Phase 06-real-time-and-transparency P00 | 3min | 2 tasks | 4 files |
+| Phase 06-real-time-and-transparency P01 | 8min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -191,6 +192,10 @@ Recent decisions affecting current work:
 - [Phase 06-real-time-and-transparency]: Wave 0 test stubs gate on feature availability: 404 from endpoint = SKIP to prevent false FAILs before features land
 - [Phase 06-real-time-and-transparency]: PERF-03 poller removal check gates on emit endpoint availability to avoid false FAIL in pre-migration state
 - [Phase 06-real-time-and-transparency]: TRNS-03 treats 401/403/404 from decisions endpoint as SKIP -- auth may not be wired in stub phase
+- [Phase 06-real-time-and-transparency]: events.ts rewritten from WebSocket to SSE proxy -- porter.py remains single source of truth for SSE event broadcasting
+- [Phase 06-real-time-and-transparency]: /api/events/emit added to porter.py do_POST() (not do_GET) -- POST requests in HTTPServer route to do_POST, not do_GET
+- [Phase 06-real-time-and-transparency]: Token usage UNIQUE INDEX on (model, date) enables ON CONFLICT REPLACE upsert in Plan 06-04
+- [Phase 06-real-time-and-transparency]: 6 setInterval pollers replaced with recursive setTimeout at 60s -- reduces idle HTTP traffic by ~80% (PERF-03)
 
 ### Pending Todos
 
@@ -205,6 +210,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T07:13:12.858Z
-Stopped at: Completed 06-00-PLAN.md
+Last session: 2026-03-21T07:18:49.022Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None
