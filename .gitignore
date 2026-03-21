@@ -41,3 +41,4 @@ backend/node_modules/
 # Frontend build artifacts and dependencies (source is tracked)
 frontend/dist/
 frontend/node_modules/
+frontend-v2/
