@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { sqlite } from '../../db/client.js';
+import { ok } from '../../lib/envelope.js';
 
 export default async function decisionV1Routes(fastify: FastifyInstance) {
   // GET /api/v1/decisions — paginated decision log
@@ -47,13 +48,11 @@ export default async function decisionV1Routes(fastify: FastifyInstance) {
       // Table may not exist yet
     }
 
-    return reply.send({
-      data: {
-        decisions,
-        total,
-        limit,
-        offset,
-      },
-    });
+    return reply.send(ok({
+      decisions,
+      total,
+      limit,
+      offset,
+    }));
   });
 }

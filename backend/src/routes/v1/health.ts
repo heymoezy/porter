@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { sqlite } from '../../db/client.js';
 import { config } from '../../config.js';
+import { ok } from '../../lib/envelope.js';
 
 interface BackendStatus {
   name: string;
@@ -67,13 +68,11 @@ export default async function healthV1Routes(fastify: FastifyInstance) {
       // Table may not exist yet — empty is fine
     }
 
-    return reply.send({
-      data: {
-        backends,
-        database: { status: dbStatus, latencyMs: dbLatencyMs },
-        tokenUsage,
-        checkedAt: new Date().toISOString(),
-      },
-    });
+    return reply.send(ok({
+      backends,
+      database: { status: dbStatus, latencyMs: dbLatencyMs },
+      tokenUsage,
+      checkedAt: new Date().toISOString(),
+    }));
   });
 }

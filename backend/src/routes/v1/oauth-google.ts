@@ -5,6 +5,7 @@ import { config } from '../../config.js';
 import { sqlite } from '../../db/client.js';
 import { emitSSE } from '../../services/scheduler.js';
 import crypto from 'crypto';
+import { err } from '../../lib/envelope.js';
 
 // Extend FastifyInstance with the googleOAuth2 namespace added by plugin registration
 declare module 'fastify' {
@@ -57,10 +58,10 @@ export default async function oauthGoogleRoutes(fastify: FastifyInstance) {
   // Guard: skip OAuth2 plugin registration if Google OAuth is not configured
   if (!process.env.GOOGLE_CLIENT_ID) {
     fastify.get('/start', async (_request, reply) => {
-      return reply.status(400).send({ error: 'Google OAuth not configured' });
+      return reply.code(400).send(err('GOOGLE_NOT_CONFIGURED', 'Google OAuth not configured — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars'));
     });
     fastify.get('/callback', async (_request, reply) => {
-      return reply.status(400).send({ error: 'Google OAuth not configured' });
+      return reply.code(400).send(err('GOOGLE_NOT_CONFIGURED', 'Google OAuth not configured — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars'));
     });
     return;
   }

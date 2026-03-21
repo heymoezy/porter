@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { routeInboundWhatsApp, verifyWebhookSignature } from '../../services/whatsapp.js';
+import { ok, err } from '../../lib/envelope.js';
 
 // ── Meta Cloud API payload types ──────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ export default async function webhookWhatsAppRoutes(
     }
 
     fastify.log.warn('[whatsapp-webhook] Verification failed — invalid mode or verify_token');
-    return reply.code(403).send({ error: 'Forbidden' });
+    return reply.code(403).send(err('FORBIDDEN', 'Webhook verification failed'));
   });
 
   // ── POST / — Inbound message handler ───────────────────────────────────────
@@ -80,12 +81,12 @@ export default async function webhookWhatsAppRoutes(
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       fastify.log.error(`[whatsapp-webhook] Signature verification error: ${message}`);
-      return reply.code(500).send({ error: 'Webhook signature verification not configured' });
+      return reply.code(500).send(err('WEBHOOK_CONFIG_ERROR', 'Webhook signature verification not configured'));
     }
 
     if (!signatureValid) {
       fastify.log.warn('[whatsapp-webhook] Invalid X-Hub-Signature-256 — rejecting request');
-      return reply.code(403).send({ error: 'Forbidden' });
+      return reply.code(403).send(err('FORBIDDEN', 'Invalid webhook signature'));
     }
 
     // Parse Meta Cloud API payload
@@ -100,7 +101,7 @@ export default async function webhookWhatsAppRoutes(
       if (!messages || messages.length === 0) {
         // Status updates or other non-message payloads — acknowledge and ignore
         fastify.log.debug('[whatsapp-webhook] No messages in payload, acknowledging');
-        return reply.code(200).send({ status: 'ok' });
+        return reply.code(200).send(ok({ status: 'acknowledged' }));
       }
 
       const msg = messages[0];
@@ -109,7 +110,7 @@ export default async function webhookWhatsAppRoutes(
 
       if (!from || !messageText) {
         fastify.log.warn('[whatsapp-webhook] Missing from or message text, acknowledging');
-        return reply.code(200).send({ status: 'ok' });
+        return reply.code(200).send(ok({ status: 'acknowledged' }));
       }
 
       // Detect group context from metadata
@@ -127,6 +128,6 @@ export default async function webhookWhatsAppRoutes(
     }
 
     // Always return 200 to Meta (acknowledge receipt even if routing fails)
-    return reply.code(200).send({ status: 'ok' });
+    return reply.code(200).send(ok({ status: 'acknowledged' }));
   });
 }

@@ -5,6 +5,7 @@ import { config } from '../../config.js';
 import { sqlite } from '../../db/client.js';
 import { emitSSE } from '../../services/scheduler.js';
 import crypto from 'crypto';
+import { err } from '../../lib/envelope.js';
 
 // Extend FastifyInstance with the githubOAuth2 namespace added by plugin registration
 declare module 'fastify' {
@@ -22,10 +23,7 @@ export default async function oauthGithubRoutes(
   // Guard: if GITHUB_CLIENT_ID is not set, register a stub /start that returns 400
   if (!process.env.GITHUB_CLIENT_ID) {
     fastify.get('/start', async (_request, reply) => {
-      return reply.code(400).send({
-        error: 'GITHUB_NOT_CONFIGURED',
-        message: 'GitHub OAuth not configured — set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET env vars',
-      });
+      return reply.code(400).send(err('GITHUB_NOT_CONFIGURED', 'GitHub OAuth not configured — set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET env vars'));
     });
     return;
   }
