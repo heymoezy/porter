@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 04-agent-autonomy-01-PLAN.md
-last_updated: "2026-03-21T03:20:29.599Z"
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-03-21T03:29:30.793Z"
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 28
-  completed_plans: 25
+  completed_plans: 27
 ---
 
 # Project State
@@ -70,6 +70,8 @@ Plan: 3 of 6
 | Phase 04-agent-autonomy P00 | 4min | 2 tasks | 7 files |
 | Phase 04-agent-autonomy P01 | 5min | 3 tasks | 6 files |
 | Phase 04-agent-autonomy P02 | 4min | 3 tasks | 2 files |
+| Phase 04-agent-autonomy P03 | 6min | 3 tasks | 4 files |
+| Phase 04-agent-autonomy P04 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -146,6 +148,11 @@ Recent decisions affecting current work:
 - [Phase 04-agent-autonomy]: openclawToken has no hardcoded fallback — empty string produces clear 401, guiding operator to set OPENCLAW_TOKEN
 - [Phase 04-agent-autonomy]: HEAD probe accepted as available on 405 — some APIs disallow HEAD but server is running
 - [Phase 04-agent-autonomy]: dispatch() throws on empty response to guarantee agent_jobs.result is always non-empty on success
+- [Phase 04-agent-autonomy]: 60-second dedup window prevents trigger storms; implemented via created_at guard in agent_jobs
+- [Phase 04-agent-autonomy]: deadline uses string BETWEEN on TEXT ISO dates (not CAST) — lexicographic order matches chronological
+- [Phase 04-agent-autonomy]: Zod v4 requires z.record(z.string(), z.unknown()) — z.record(z.unknown()) is 1-arg and invalid in v4
+- [Phase 04-agent-autonomy]: Activity endpoint uses raw sqlite.prepare() with LEFT JOIN for agent_jobs — Drizzle lacks multi-table join fluency for this query
+- [Phase 04-agent-autonomy]: config import removed from scheduler — only featureFlags needed after ai-router integration
 
 ### Pending Todos
 
@@ -160,6 +167,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T03:20:29.596Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-03-21T03:29:30.784Z
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None
