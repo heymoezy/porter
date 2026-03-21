@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { onFileCreated } from '../services/event-triggers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -108,6 +109,10 @@ export default async function fileRoutes(fastify: FastifyInstance, options: Fast
       return reply.code(403).send({ error: 'forbidden' });
     }
 
+    // NOTE: The primary file upload endpoint is /api/files/upload in porter.py (Python handler).
+    // That endpoint should call POST /api/v1/jobs/events/notify after each successful upload
+    // to trigger file-created events. This Fastify handler covers the Fastify-native path.
+    // When /api/files/upload is migrated to Fastify (Phase 7+), call onFileCreated() directly.
     const { action, path: relPath } = request.body as any;
     if (!relPath) return reply.code(400).send({ error: 'path required' });
 
@@ -128,6 +133,17 @@ export default async function fileRoutes(fastify: FastifyInstance, options: Fast
       } catch (err: any) {
         return reply.code(500).send({ ok: false, error: err.message });
       }
+    }
+
+    if (action === 'create') {
+      // action='create' signals a file was written to the project path
+      // Fire the file-created event trigger (non-blocking — inserts a job row if subscribed agents exist)
+      const projectId = (request.body as any).project_id ?? null;
+      const filename = path.basename(absPath);
+      if (projectId) {
+        onFileCreated(projectId, filename);
+      }
+      return reply.send({ ok: true, triggered: !!projectId });
     }
 
     return reply.code(400).send({ error: 'unknown action' });
