@@ -17,6 +17,8 @@ import eventRoutes from './routes/events.js';
 import authPlugin from './plugins/auth.js';
 import v1Routes from './routes/v1/index.js';
 import proxyPlugin from './plugins/proxy.js';
+import { migrate04AgentAutonomy } from './db/migrate-04.js';
+import * as scheduler from './services/scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDist = path.resolve(__dirname, '../../frontend/dist');
@@ -77,12 +79,17 @@ fastify.register(proxyPlugin);
 
 const start = async () => {
   try {
+    migrate04AgentAutonomy();
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
+    scheduler.start();
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
   }
 };
+
+process.on('SIGINT', () => { scheduler.stop(); process.exit(0); });
+process.on('SIGTERM', () => { scheduler.stop(); process.exit(0); });
 
 start();
