@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-03-21T05:54:10.311Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-21T05:54:59.327Z"
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 34
-  completed_plans: 30
+  completed_plans: 31
 ---
 
 # Project State
@@ -75,6 +75,7 @@ Plan: 1 of 6
 | Phase 04-agent-autonomy P05 | 4min | 2 tasks | 3 files |
 | Phase 05-guided-project-wizard P00 | 3min | 2 tasks | 7 files |
 | Phase 05-guided-project-wizard P02 | 7min | 4 tasks | 6 files |
+| Phase 05-guided-project-wizard P01 | 9min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -165,6 +166,9 @@ Recent decisions affecting current work:
 - [Phase 05-02]: GSDModeToggle only renders when activeProjectId is non-null — no mode chip outside project context
 - [Phase 05-02]: getGsdMode uses get() inside action definition — correct Zustand v5 pattern for reading state in actions
 - [Phase 05-02]: Wizard state machine: all wizard UI reads wizardStage from useAppStore, never local component state
+- [Phase 05-guided-project-wizard]: approve action returns HTTP 200 (not 201) to match pre-written test contract
+- [Phase 05-guided-project-wizard]: detect uses heuristic-first + LLM fallback — avoids LLM call on obvious non-project messages
+- [Phase 05-guided-project-wizard]: AVAILABLE_TEMPLATES loaded at module load from personas/ directory — cached for process lifetime
 
 ### Pending Todos
 
@@ -179,6 +183,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T05:54:10.308Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-03-21T05:54:59.324Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
