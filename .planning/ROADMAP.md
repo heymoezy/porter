@@ -163,9 +163,10 @@ Plans:
   5. All external API calls are queued to background workers — no HTTP handler blocks waiting for an external response
   6. WhatsApp bridge sends and receives messages — agents can be chatted with via WhatsApp
   7. Zero hardcoded API keys, tokens, service URLs, or file paths in codebase — all configurable via UI settings
-**Plans**: 9 plans
+**Plans**: 11 plans
 
 Plans:
+- [ ] 07-00-PLAN.md — Wave 0 test scaffolding: behavioral test script for CONN-01 through CONN-05 (Wave 0)
 - [ ] 07-01-PLAN.md — Credential encryption (AES-256-GCM), DB migration, Drizzle schemas, feature flag (Wave 1)
 - [ ] 07-02-PLAN.md — Connections CRUD API: workspace + project connection routes (Wave 2)
 - [ ] 07-03-PLAN.md — Connections UI: service cards, status badges, sidebar nav, API key form (Wave 2)
@@ -174,7 +175,8 @@ Plans:
 - [ ] 07-06-PLAN.md — Email integration: Google OAuth, nodemailer outbound, imapflow IMAP IDLE inbound (Wave 3)
 - [ ] 07-07-PLAN.md — Calendar integration: googleapis sync, deadline triggers, scheduler wiring (Wave 3)
 - [ ] 07-08-PLAN.md — WhatsApp bridge: Meta Cloud API send, webhook receiver, agent routing (Wave 3)
-- [ ] 07-09-PLAN.md — External call dispatcher, OAuth UI finalization, human verification (Wave 4)
+- [ ] 07-09-PLAN.md — External call dispatcher with blocked-status gating, queueExternalCall utility, OAuth UI finalization, human verification (Wave 4)
+- [ ] 07-10-PLAN.md — Calendar events route + dashboard display, project connection override UI (Wave 4)
 
 ## Progress
 
@@ -189,4 +191,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 4. Agent Autonomy | 6/6 | Complete   | 2026-03-21 |
 | 5. Guided Project Wizard | 6/6 | Complete   | 2026-03-21 |
 | 6. Real-Time and Transparency | 6/6 | Complete   | 2026-03-21 |
-| 7. External Connections | 0/9 | Not started | - |
+| 7. External Connections | 0/11 | Not started | - |
