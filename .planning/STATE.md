@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 07-10-PLAN.md
-last_updated: "2026-03-21T17:07:33.726Z"
+stopped_at: "Checkpoint: 07-09 Task 3 human-verify"
+last_updated: "2026-03-21T17:08:23.542Z"
 progress:
   total_phases: 7
   completed_phases: 7
@@ -96,6 +96,7 @@ Plan: 1 of 11
 | Phase 07-external-connections P05 | 8min | 2 tasks | 5 files |
 | Phase 07-external-connections PP06 | 8min | 3 tasks | 5 files |
 | Phase 07-external-connections P10 | 2min | 2 tasks | 4 files |
+| Phase 07-external-connections P09 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -248,6 +249,9 @@ Recent decisions affecting current work:
 - [Phase 07-10]: CalendarEventsDisplay returns null when events array is empty — keeps dashboard clean when calendar not connected
 - [Phase 07-10]: ProjectConnectionsPanel only renders rows for providers with at least one workspace connection — avoids empty useless dropdowns
 - [Phase 07-10]: Operators and admins can manage project-level overrides; only viewers see disabled selects — per UI-SPEC line 237
+- [Phase 07-09]: dispatchExternalCall routes external_call jobs by service key — bypasses AI router entirely
+- [Phase 07-09]: Blocked jobs auto-unblock on 30s tick when checkConnectionHealth returns ok
+- [Phase 07-09]: OAuth connect uses window.location.href redirect not popup — simpler and more reliable
 
 ### Pending Todos
 
@@ -270,6 +274,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T17:07:04.119Z
-Stopped at: Completed 07-10-PLAN.md
+Last session: 2026-03-21T17:08:23.539Z
+Stopped at: Checkpoint: 07-09 Task 3 human-verify
 Resume file: None
