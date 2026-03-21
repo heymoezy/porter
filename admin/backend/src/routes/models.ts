@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { ok, err } from '../lib/envelope.js';
+import { ok } from '../lib/envelope.js';
 import { config } from '../config.js';
 import { sqlite } from '../db/client.js';
 import fs from 'fs';
@@ -12,14 +12,13 @@ async function probe(url: string, timeoutMs = 3000): Promise<{ ok: boolean; late
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
     let data: unknown;
-    try { data = await res.json(); } catch { /* not json */ }
+    try { data = await res.json(); } catch {}
     return { ok: res.ok, latencyMs: Date.now() - start, data };
   } catch {
     return { ok: false, latencyMs: Date.now() - start };
   }
 }
 
-// Simple cost-per-token estimates (USD per 1M tokens)
 const COST_PER_M: Record<string, { input: number; output: number }> = {
   'claude-sonnet-4-20250514': { input: 3, output: 15 },
   'claude-opus-4-20250514': { input: 15, output: 75 },
@@ -38,11 +37,9 @@ function estimateCost(model: string, inputTokens: number, outputTokens: number):
 export default async function modelsRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', fastify.requirePlatformAdmin);
 
-  // GET /api/admin/models — probe all backends, return health/version/latency
+  // GET /api/admin/models — AI gateways only (not Porter runtimes)
   fastify.get('/', async () => {
-    const [porterPy, fastifyBackend, ollama, openclaw] = await Promise.all([
-      probe(`${config.porterPyUrl}/api/admin/health`),
-      probe(`${config.fastifyUrl}/health`),
+    const [ollama, openclaw] = await Promise.all([
       probe(`${config.ollamaUrl}/api/tags`),
       probe(`${config.openclawUrl}/health`),
     ]);
@@ -63,37 +60,12 @@ export default async function modelsRoutes(fastify: FastifyInstance) {
       const cfg = JSON.parse(raw);
       activeModels = cfg?.preferences?.active_models || {};
       backendConfig = cfg?.backend_config || {};
-    } catch { /* config not found */ }
+    } catch {}
 
     const gateways = [
       {
-        name: 'Porter.py',
-        type: 'product-backend',
-        url: config.porterPyUrl,
-        status: porterPy.ok ? 'healthy' : 'down',
-        latencyMs: porterPy.latencyMs,
-        version: porterPy.ok && porterPy.data && typeof porterPy.data === 'object' ? (porterPy.data as Record<string, unknown>).porter_version || null : null,
-      },
-      {
-        name: 'Fastify Backend',
-        type: 'api-server',
-        url: config.fastifyUrl,
-        status: fastifyBackend.ok ? 'healthy' : 'down',
-        latencyMs: fastifyBackend.latencyMs,
-        version: null,
-      },
-      {
-        name: 'OpenClaw',
-        type: 'ai-gateway',
-        url: config.openclawUrl,
-        status: openclaw.ok ? 'healthy' : 'down',
-        latencyMs: openclaw.latencyMs,
-        model: activeModels.openclaw || activeModels.codex || null,
-        version: null,
-      },
-      {
         name: 'Ollama',
-        type: 'local-inference',
+        type: 'Local inference',
         url: config.ollamaUrl,
         status: ollama.ok ? 'healthy' : 'down',
         latencyMs: ollama.latencyMs,
@@ -101,26 +73,32 @@ export default async function modelsRoutes(fastify: FastifyInstance) {
         activeModel: activeModels.ollama || null,
       },
       {
+        name: 'Claude',
+        type: 'Anthropic API',
+        url: 'claude CLI',
+        status: 'configured',
+        latencyMs: 0,
+        activeModel: activeModels.claude || null,
+      },
+      {
+        name: 'OpenClaw',
+        type: 'Multi-model gateway',
+        url: config.openclawUrl,
+        status: openclaw.ok ? 'healthy' : 'down',
+        latencyMs: openclaw.latencyMs,
+        activeModel: activeModels.openclaw || activeModels.codex || null,
+      },
+      {
         name: 'Gemini',
-        type: 'cloud-api',
+        type: 'Google API',
         url: 'gemini CLI',
         status: 'configured',
         latencyMs: 0,
-        model: activeModels.gemini || null,
+        activeModel: activeModels.gemini || null,
       },
     ];
 
-    // DB health
-    let dbInfo = { size: 0, walSize: 0, tables: 0 };
-    try {
-      const stat = fs.statSync(config.dbPath);
-      dbInfo.size = stat.size;
-      try { dbInfo.walSize = fs.statSync(config.dbPath + '-wal').size; } catch {}
-      const tables = sqlite.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table'").get() as { c: number };
-      dbInfo.tables = tables.c;
-    } catch {}
-
-    return ok({ gateways, activeModels, backendConfig, db: dbInfo });
+    return ok({ gateways, activeModels, backendConfig });
   });
 
   // GET /api/admin/models/usage — token usage aggregated by model
@@ -130,8 +108,7 @@ export default async function modelsRoutes(fastify: FastifyInstance) {
         SELECT model,
                sum(input_tokens) as input_tokens,
                sum(output_tokens) as output_tokens,
-               sum(request_count) as requests,
-               date as date
+               sum(request_count) as requests
         FROM token_usage_daily
         GROUP BY model
         ORDER BY sum(input_tokens) + sum(output_tokens) DESC
@@ -150,7 +127,7 @@ export default async function modelsRoutes(fastify: FastifyInstance) {
       const totalRequests = usage.reduce((s, u) => s + u.requests, 0);
 
       return ok({ usage, totalCost, totalTokens, totalRequests });
-    } catch (e) {
+    } catch {
       return ok({ usage: [], totalCost: 0, totalTokens: 0, totalRequests: 0 });
     }
   });

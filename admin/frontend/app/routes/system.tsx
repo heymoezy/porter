@@ -13,6 +13,7 @@ interface SystemData {
   db: { size: number; path: string }
   sessions: { active: number }
   process: { rss: number; heapUsed: number; heapTotal: number }
+  runtimes: Array<{ name: string; url: string; status: string; latencyMs: number }>
 }
 
 function fmtBytes(b: number) {
@@ -130,6 +131,36 @@ function SystemContent() {
           </div>
         </div>
       </div>
+
+      {/* Porter Runtimes */}
+      {s.runtimes?.length > 0 && (
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="px-3 py-2 bg-surface border-b border-border">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Porter Runtimes</span>
+          </div>
+          <table className="w-full">
+            <tbody>
+              {s.runtimes.map(rt => (
+                <tr key={rt.name} className="border-b border-border/30 last:border-0">
+                  <td className="px-3 py-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className={`size-2 rounded-full ${rt.status === "healthy" ? "bg-success animate-pulse-badge" : "bg-danger"}`} />
+                      <span className="text-xs font-medium text-text">{rt.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-1.5 text-xs text-text3">{rt.url}</td>
+                  <td className="px-3 py-1.5 text-xs text-text2 text-right">{rt.latencyMs}ms</td>
+                  <td className="px-3 py-1.5 text-right">
+                    <Badge className={`text-[10px] border-0 ${rt.status === "healthy" ? "bg-success/15 text-success" : "bg-danger/15 text-danger"}`}>
+                      {rt.status}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Process + DB */}
       <div className="grid grid-cols-2 gap-2">

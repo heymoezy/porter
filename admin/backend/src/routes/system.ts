@@ -48,6 +48,25 @@ export default async function systemRoutes(fastify: FastifyInstance) {
     // Process memory
     const proc = process.memoryUsage();
 
+    // Porter runtimes health
+    const runtimes: Array<{ name: string; url: string; status: string; latencyMs: number }> = [];
+    async function probeRuntime(name: string, url: string) {
+      const start = Date.now();
+      try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 3000);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(t);
+        runtimes.push({ name, url, status: res.ok ? 'healthy' : 'down', latencyMs: Date.now() - start });
+      } catch {
+        runtimes.push({ name, url, status: 'down', latencyMs: Date.now() - start });
+      }
+    }
+    await Promise.all([
+      probeRuntime('Porter.py', `${config.porterPyUrl}/api/admin/health`),
+      probeRuntime('Fastify Backend', `${config.fastifyUrl}/health`),
+    ]);
+
     return ok({
       memory: {
         total: memTotal,
@@ -68,6 +87,7 @@ export default async function systemRoutes(fastify: FastifyInstance) {
       db: { size: dbSize, path: config.dbPath },
       sessions: { active: activeSessions },
       process: { rss: proc.rss, heapUsed: proc.heapUsed, heapTotal: proc.heapTotal },
+      runtimes,
     });
   });
 }
