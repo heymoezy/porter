@@ -172,8 +172,8 @@ function TemplatesContent() {
             >
               <div className="flex items-center gap-2 p-3">
                 <PixelPortrait
-                  skin={spec.skin || "#f1c27d"}
                   hair={spec.hair || "#2c1b18"}
+                  skin={spec.skin || "#f1c27d"}
                   eyes={spec.eyes || "#1a1a2e"}
                   shirt={spec.shirt || "#64748b"}
                   hairStyle={(["short","long","mohawk","bald","parted","buzz","curly","ponytail"].includes(spec.hair_style) ? spec.hair_style : "short") as "short" | "long" | "mohawk" | "bald" | "parted" | "buzz" | "curly" | "ponytail"}

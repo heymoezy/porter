@@ -85,7 +85,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Footer */}
       <div className="border-t border-border p-3">
         <div className="flex items-center gap-2">
-          <PixelPortrait skin="#E0AC69" hair="#2C1B18" eyes="#1A1A2E" shirt="#64748B" hairStyle="short" size="sm" />
+          <PixelPortrait hair="#2C1B18" skin="#E0AC69" eyes="#1A1A2E" shirt="#64748B" hairStyle="short" size="sm" />
           {!collapsed && (
             <>
               <div className="min-w-0 flex-1">

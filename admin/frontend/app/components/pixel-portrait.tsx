@@ -1,8 +1,8 @@
 import { cn } from "~/lib/utils"
 
 interface PixelPortraitProps {
-  skin: string
   hair: string
+  skin: string
   eyes: string
   shirt: string
   hairStyle: "short" | "long" | "mohawk" | "bald" | "parted" | "buzz" | "curly" | "ponytail"
@@ -88,8 +88,8 @@ const statusColors: Record<string, string> = {
 }
 
 export function PixelPortrait({
-  skin,
   hair,
+  skin,
   eyes,
   shirt,
   hairStyle,

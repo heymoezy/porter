@@ -188,8 +188,8 @@ function PorterContent() {
       <div className="rounded-xl border border-border bg-surface p-3 shrink-0">
         <div className="flex items-center gap-2">
           <PixelPortrait
-            skin={(palette as Record<string, string>).skin || "#f1c27d"}
             hair={(palette as Record<string, string>).hair || "#1e293b"}
+            skin={(palette as Record<string, string>).skin || "#f1c27d"}
             eyes={(palette as Record<string, string>).eyes || "#0f172a"}
             shirt={(palette as Record<string, string>).shirt || "#1e3a5f"}
             hairStyle="short"
