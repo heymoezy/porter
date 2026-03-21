@@ -29,6 +29,7 @@ function formatProject(row: typeof schema.projects.$inferSelect) {
     artifacts: parseJsonField(row.artifacts, [] as unknown[]),
     links: parseJsonField(row.links, [] as unknown[]),
     metadata: parseJsonField(row.metadata, {} as Record<string, unknown>),
+    deadline: row.deadline,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
   };
@@ -45,6 +46,7 @@ const updateProjectSchema = z.object({
   description: z.string().optional(),
   status: z.string().optional(),
   type: z.string().optional(),
+  deadline: z.string().optional(),
 });
 
 export default async function projectV1Routes(fastify: FastifyInstance, _options: FastifyPluginOptions) {
@@ -136,6 +138,7 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
     if (parsed.data.description !== undefined) updates.description = parsed.data.description;
     if (parsed.data.status !== undefined) updates.status = parsed.data.status;
     if (parsed.data.type !== undefined) updates.type = parsed.data.type;
+    if (parsed.data.deadline !== undefined) updates.deadline = parsed.data.deadline;
 
     db.update(schema.projects).set(updates)
       .where(eq(schema.projects.id, id)).run();
