@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 07-07-PLAN.md
-last_updated: "2026-03-21T16:59:44.414Z"
+stopped_at: Completed 07-06-PLAN.md
+last_updated: "2026-03-21T17:02:26.557Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 51
-  completed_plans: 47
+  completed_plans: 49
 ---
 
 # Project State
@@ -93,6 +93,8 @@ Plan: 1 of 11
 | Phase 07-external-connections P03 | 6min | 2 tasks | 8 files |
 | Phase 07-external-connections P08 | 4min | 2 tasks | 3 files |
 | Phase 07-external-connections P07 | 4min | 2 tasks | 3 files |
+| Phase 07-external-connections P05 | 8min | 2 tasks | 5 files |
+| Phase 07-external-connections PP06 | 8min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -235,6 +237,13 @@ Recent decisions affecting current work:
 - [Phase 07-07]: googleapis installed as npm dependency — not in original package.json, added as Rule 3 auto-fix
 - [Phase 07-07]: checkCalendarDeadlines implements inline dedup (not via insertTriggerJob) because calendar trigger_data structure differs from project deadline triggers
 - [Phase 07-07]: calendar sync only runs when both externalConnections flag AND a connected google_calendar connection exist
+- [Phase 07-05]: FastifyInstance augmentation via declare module 'fastify' for githubOAuth2 typed property — matches oauth-google.ts precedent
+- [Phase 07-05]: Existing GitHub connection reused on re-auth (INSERT OR REPLACE with same id) — prevents duplicate workspace_connections rows
+- [Phase 07-05]: 401 from GitHub API triggers needs_reauth status + SSE connection:status event — UI can prompt reconnect without polling
+- [Phase 07-06]: workspace_connections has no UNIQUE on provider — upsert uses SELECT+INSERT/UPDATE rather than ON CONFLICT
+- [Phase 07-06]: Both email and google_calendar connections share the same encrypted Google token — one OAuth grant covers all scopes
+- [Phase 07-06]: startImapIdle is fire-and-forget — called without await from server startup and OAuth callback
+- [Phase 07-06]: IMAP IDLE degrades to degraded status after MAX_CONSECUTIVE_FAILURES=3 failures
 
 ### Pending Todos
 
@@ -257,6 +266,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T16:59:44.411Z
-Stopped at: Completed 07-07-PLAN.md
+Last session: 2026-03-21T17:02:26.552Z
+Stopped at: Completed 07-06-PLAN.md
 Resume file: None
