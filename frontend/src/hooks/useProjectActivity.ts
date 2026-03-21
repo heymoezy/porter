@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
+import { useSSEBus } from '../providers/SSEProvider';
 
 export interface ActivityEvent {
   id: number;
@@ -27,6 +28,7 @@ export function useProjectActivity(projectId: string | null) {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [total, setTotal] = useState(0);
+  const bus = useSSEBus();
 
   // Initial fetch
   const fetchActivity = useCallback(async () => {
@@ -47,44 +49,36 @@ export function useProjectActivity(projectId: string | null) {
     fetchActivity();
   }, [fetchActivity]);
 
-  // SSE subscription for real-time updates
+  // SSE subscription via shared SSEProvider -- no per-component EventSource
   useEffect(() => {
     if (!projectId) return;
-    let es: EventSource | null = null;
-    try {
-      es = new EventSource('/api/events');
-      const handler = (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (data.project_id === projectId) {
-            const newEvent: ActivityEvent = {
-              id: Date.now(), // temporary ID for SSE-pushed events
-              agent_id: data.agent_id || '',
-              agent_name: data.agent_name || 'Agent',
-              agent_role: data.agent_role || '',
-              agent_avatar: data.agent_avatar || '',
-              job_id: data.job_id || null,
-              event_type: data.event_type || 'unknown',
-              summary: data.summary || '',
-              detail: data.detail || null,
-              created_at: data.created_at || Date.now() / 1000,
-            };
-            setEvents(prev => [newEvent, ...prev].slice(0, 100));
-            setTotal(prev => prev + 1);
-          }
-        } catch { /* ignore parse errors */ }
+
+    const handler = (payload: unknown) => {
+      const data = payload as Record<string, unknown>;
+      // Filter for project-specific events using data.data or top-level fields
+      const eventData = (data.data || data) as Record<string, unknown>;
+      if (eventData.project_id !== projectId) return;
+
+      const newEvent: ActivityEvent = {
+        id: Date.now(),
+        agent_id: String(eventData.agent_id || ''),
+        agent_name: String(eventData.agent_name || 'Agent'),
+        agent_role: String(eventData.agent_role || ''),
+        agent_avatar: String(eventData.agent_avatar || ''),
+        job_id: eventData.job_id ? String(eventData.job_id) : null,
+        event_type: String(eventData.event_type || 'unknown'),
+        summary: String(eventData.summary || ''),
+        detail: eventData.detail || null,
+        created_at: Number(eventData.created_at) || Date.now() / 1000,
       };
-      es.addEventListener('project:activity', handler);
-      es.addEventListener('agent:activity', handler);
-      es.onerror = () => {
-        // Reconnection is automatic with EventSource
-        console.debug('[useProjectActivity] SSE reconnecting...');
-      };
-    } catch {
-      console.debug('[useProjectActivity] SSE not available');
-    }
-    return () => { if (es) { es.close(); } };
-  }, [projectId]);
+      setEvents(prev => [newEvent, ...prev].slice(0, 100));
+      setTotal(prev => prev + 1);
+    };
+
+    const unsub1 = bus.subscribe('project:activity', handler);
+    const unsub2 = bus.subscribe('agent:activity', handler);
+    return () => { unsub1(); unsub2(); };
+  }, [projectId, bus]);
 
   return { events, isLoading, total, refresh: fetchActivity };
 }
