@@ -3,6 +3,7 @@ import { config, featureFlags } from '../config.js';
 import { dispatch as aiRouterDispatch } from './ai-router.js';
 import { checkDeadlineTriggers } from './event-triggers.js';
 import { syncCalendarEvents, checkCalendarDeadlines } from './calendar.js';
+import { dispatchExternalCall, checkConnectionHealth } from './external-dispatcher.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -80,6 +81,23 @@ async function tick() {
         console.error('[scheduler] calendar sync error', e);
       }
     }
+
+    // Unblock jobs whose connections have been restored -- every 30 seconds
+    if (featureFlags.externalConnections && tickCount % 15 === 0) {
+      const blockedJobs = sqlite.prepare(
+        `SELECT id, trigger_data FROM agent_jobs WHERE status = 'blocked' AND trigger_type = 'external_call'`
+      ).all() as { id: string; trigger_data: string }[];
+      for (const bj of blockedJobs) {
+        try {
+          const td = JSON.parse(bj.trigger_data) as { service: string };
+          if (checkConnectionHealth(td.service) === 'ok') {
+            sqlite.prepare(`UPDATE agent_jobs SET status = 'pending' WHERE id = ?`).run(bj.id);
+          }
+        } catch {
+          // Ignore malformed trigger_data
+        }
+      }
+    }
   } catch (e) {
     console.error('[scheduler] tick error', e);
   }
@@ -105,6 +123,61 @@ function claimNextJob(): JobRow | undefined {
 }
 
 async function executeJob(job: JobRow): Promise<void> {
+  // CONN-05 locked decision: external_call jobs bypass the AI router and go
+  // directly to the appropriate service module. Jobs targeting broken connections
+  // get 'blocked' status — they are not failed and are auto-unblocked when the
+  // connection is restored.
+  if (job.trigger_type === 'external_call') {
+    const triggerData = JSON.parse(job.trigger_data) as { service: string };
+    const healthStatus = checkConnectionHealth(triggerData.service);
+
+    if (healthStatus === 'blocked') {
+      // Set job to 'blocked' — it will be retried when the connection is restored
+      sqlite.prepare(
+        `UPDATE agent_jobs SET status = 'blocked', result = ? WHERE id = ?`
+      ).run(`Connection ${triggerData.service} is not available — waiting for reauth`, job.id);
+      logActivity(job.agent_id, job.id, job.project_id, 'job_blocked',
+        `Blocked: ${triggerData.service} connection needs reauth`,
+        JSON.stringify({ service: triggerData.service, reason: 'connection_unavailable' }));
+      emitSSE('agent:activity', {
+        agent_id: job.agent_id,
+        project_id: job.project_id,
+        event_type: 'job_blocked',
+        summary: `Waiting for ${triggerData.service} reconnection`,
+      }).catch(() => {});
+      return;
+    }
+
+    try {
+      const result = await dispatchExternalCall(job.trigger_data);
+      markJobComplete(job.id, result);
+      logActivity(job.agent_id, job.id, job.project_id, 'job_complete',
+        `External call completed (${triggerData.service})`,
+        JSON.stringify({ service: triggerData.service }));
+      emitSSE('agent:activity', {
+        agent_id: job.agent_id,
+        project_id: job.project_id,
+        event_type: 'job_complete',
+        summary: `External call completed`,
+      }).catch(() => {});
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      if (job.attempt_count < MAX_ATTEMPTS) {
+        const backoffSec = job.attempt_count * 30;
+        sqlite.prepare(`
+          UPDATE agent_jobs SET status = 'pending',
+            scheduled_for = unixepoch('now') + @backoff
+          WHERE id = @id
+        `).run({ id: job.id, backoff: backoffSec });
+      } else {
+        markJobFailed(job.id, errMsg);
+        logActivity(job.agent_id, job.id, job.project_id, 'job_failed',
+          `External call failed after ${MAX_ATTEMPTS} attempts: ${errMsg}`, '{}');
+      }
+    }
+    return;
+  }
+
   try {
     const result = await aiRouterDispatch({
       agentId: job.agent_id,
