@@ -78,8 +78,8 @@ export default async function webhookWhatsAppRoutes(
     let signatureValid: boolean;
     try {
       signatureValid = verifyWebhookSignature(signatureHeader, bodyStr);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
+    } catch (sigErr: unknown) {
+      const message = sigErr instanceof Error ? sigErr.message : 'Unknown error';
       fastify.log.error(`[whatsapp-webhook] Signature verification error: ${message}`);
       return reply.code(500).send(err('WEBHOOK_CONFIG_ERROR', 'Webhook signature verification not configured'));
     }

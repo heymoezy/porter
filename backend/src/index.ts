@@ -16,6 +16,7 @@ import adminRoutes from './routes/admin.js';
 import aiRoutes from './routes/ai.js';
 import eventRoutes from './routes/events.js';
 import authPlugin from './plugins/auth.js';
+import openapiPlugin from './plugins/openapi.js';
 import v1Routes from './routes/v1/index.js';
 import proxyPlugin from './plugins/proxy.js';
 import { migrate04AgentAutonomy } from './db/migrate-04.js';
@@ -23,6 +24,7 @@ import { migrate05GuidedWizard } from './db/migrate-05.js';
 import { migrate06RealTimeTransparency } from './db/migrate-06.js';
 import { migrate07Billing } from './db/migrate-07.js';
 import { migrate07ExternalConnections } from './db/migrate-07-ext-connections.js';
+import { migrate08ApiFoundation } from './db/migrate-08.js';
 import * as scheduler from './services/scheduler.js';
 import { startImapIdle, stopImapIdle } from './services/email.js';
 import { sqlite } from './db/client.js';
@@ -72,6 +74,9 @@ fastify.register(cors, {
 fastify.register(cookie);
 fastify.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB max
 
+// OpenAPI spec generation — must register before routes for Zod schema compilation
+fastify.register(openapiPlugin);
+
 // Auth plugin (session resolution)
 fastify.register(authPlugin);
 
@@ -90,6 +95,11 @@ fastify.register(eventRoutes);
 // Health check
 fastify.get('/health', async () => {
   return { status: 'ok', engine: 'fastify', version: '1.0.0' };
+});
+
+// Serve OpenAPI spec — public, no auth
+fastify.get('/api/v1/openapi.json', async () => {
+  return fastify.swagger();
 });
 
 // Serve React SPA static files at /v2/
@@ -124,6 +134,7 @@ const start = async () => {
     migrate06RealTimeTransparency();
     migrate07Billing();
     migrate07ExternalConnections();
+    migrate08ApiFoundation();
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
     scheduler.start();

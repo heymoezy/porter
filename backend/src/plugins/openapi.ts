@@ -1,12 +1,12 @@
 import fp from 'fastify-plugin';
 import { FastifyInstance } from 'fastify';
-import { fastifyZodOpenApi, serializerCompiler, validatorCompiler } from 'fastify-zod-openapi';
+import { fastifyZodOpenApiPlugin, serializerCompiler, validatorCompiler } from 'fastify-zod-openapi';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 
 async function openapiPlugin(fastify: FastifyInstance) {
   // Register Zod-OpenAPI integration — MUST happen before routes
-  await fastify.register(fastifyZodOpenApi);
+  await fastify.register(fastifyZodOpenApiPlugin);
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
 

@@ -10,7 +10,7 @@ const postErrorSchema = z.object({
   severity: z.enum(['error', 'warning', 'info']).default('error'),
   user_id: z.union([z.string(), z.number()]).optional(),
   url: z.string().max(500).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export default async function errorV1Routes(fastify: FastifyInstance) {
