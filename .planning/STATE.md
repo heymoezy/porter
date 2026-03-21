@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 06-05-PLAN.md (Phase 06 Plan 05)
-last_updated: "2026-03-21T07:45:38.953Z"
+stopped_at: Phase 7 context gathered
+last_updated: "2026-03-21T15:07:48.978Z"
 progress:
   total_phases: 7
   completed_phases: 6
@@ -213,6 +213,14 @@ Recent decisions affecting current work:
 
 None yet.
 
+### Infrastructure Events
+
+- [2026-03-21]: shadcn/ui scaffold initialized at `/home/lobster/porter/` (separate from legacy `/home/lobster/documents/porter/`)
+  - Stack: React Router 7.13, Radix (Nova preset), shadcn 4.1, Tailwind 4.2, Vite 7.3
+  - React 19, TypeScript 5.9, Lucide icons, Geist font
+  - CSS variables enabled, no RSC, aliases configured (~/components, ~/lib, ~/hooks)
+  - This is the new Porter frontend — replaces the existing `/documents/porter/frontend/` design system
+
 ### Blockers/Concerns
 
 - [Phase 1]: porter.py is ~900KB — Edit tool silently fails on it. All patches must use Python scripts at /tmp/patch_*.py
@@ -222,6 +230,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T07:32:06.824Z
-Stopped at: Completed 06-05-PLAN.md (Phase 06 Plan 05)
-Resume file: None
+Last session: 2026-03-21T15:07:48.975Z
+Stopped at: Phase 7 context gathered
+Resume file: .planning/phases/07-external-connections/07-CONTEXT.md
