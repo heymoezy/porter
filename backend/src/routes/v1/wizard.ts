@@ -70,7 +70,13 @@ const approveSchema = z.object({
   }),
 });
 
-const wizardSchema = z.union([detectSchema, proposeSchema, approveSchema]);
+const gsdDispatchSchema = z.object({
+  action: z.literal('gsd_dispatch'),
+  projectId: z.string().uuid(),
+  message: z.string().min(1).max(2000),
+});
+
+const wizardSchema = z.union([detectSchema, proposeSchema, approveSchema, gsdDispatchSchema]);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -376,6 +382,99 @@ Respond with JSON only, matching this exact shape:
 
       const result: WizardApproveResult = { projectId, agentIds, jobIds };
       return reply.send(ok(result));
+    }
+
+    // -----------------------------------------------------------------------
+    // gsd_dispatch action
+    // -----------------------------------------------------------------------
+    if (data.action === 'gsd_dispatch') {
+      const { projectId, message } = data;
+
+      // Verify project exists
+      const project = sqlite.prepare('SELECT id, name FROM projects WHERE id = ?').get(projectId) as { id: string; name: string } | undefined;
+      if (!project) return reply.code(404).send(err('NOT_FOUND', 'Project not found'));
+
+      // Get project agents — those with jobs on this project OR config pointing to it
+      const agents = sqlite.prepare(`
+        SELECT DISTINCT p.id, p.name, p.role FROM personas p
+        WHERE p.status != 'retired' AND (
+          p.id IN (
+            SELECT DISTINCT aj.agent_id FROM agent_jobs aj WHERE aj.project_id = ?
+          ) OR json_extract(p.config, '$.project_id') = ?
+        )
+      `).all(projectId, projectId) as Array<{ id: string; name: string; role: string }>;
+
+      if (agents.length === 0) {
+        return reply.send(ok({ dispatched: false, jobsCreated: 0, agentNames: [], summary: 'No agents assigned to this project. Create agents first via the wizard.' }));
+      }
+
+      // Call Porter LLM with orchestration prompt — Porter decides which agents handle what
+      const masterAgent = sqlite.prepare(`SELECT id FROM personas WHERE is_master = 1 AND status != 'retired' LIMIT 1`).get() as { id: string } | undefined;
+      const agentList = agents.map(a => `- ${a.name} (${a.role})`).join('\n');
+      const orchestratorId = masterAgent?.id || agents[0].id;
+
+      const orchestrationPrompt = `You are Porter, the orchestrator. A user sent this message for project "${project.name}": "${message}"
+
+Available agents on this project:
+${agentList}
+
+Decide which agent(s) should handle this. For each agent, write a specific task prompt.
+Respond with JSON only:
+{"tasks":[{"agentId":"<id>","agentName":"<name>","prompt":"<specific task for this agent>"}]}
+
+Rules:
+- Assign 1-3 agents maximum
+- Each agent gets a specific, actionable task — not a vague instruction
+- You do NOT do the work yourself — you delegate`;
+
+      const dispatchResult = await dispatch({
+        agentId: orchestratorId,
+        message: orchestrationPrompt,
+      });
+
+      // Parse Porter's response to get task assignments
+      let tasks: Array<{ agentId: string; agentName: string; prompt: string }> = [];
+      try {
+        const parsedResponse = extractJson(dispatchResult.response);
+        if (parsedResponse && typeof parsedResponse === 'object' && 'tasks' in (parsedResponse as Record<string, unknown>)) {
+          tasks = (parsedResponse as { tasks: Array<{ agentId: string; agentName: string; prompt: string }> }).tasks || [];
+        }
+      } catch {
+        // If LLM didn't return valid JSON, create a single task for the first agent
+        tasks = [{ agentId: agents[0].id, agentName: agents[0].name, prompt: message }];
+      }
+
+      // Fallback: if tasks is empty, assign to first agent
+      if (tasks.length === 0) {
+        tasks = [{ agentId: agents[0].id, agentName: agents[0].name, prompt: message }];
+      }
+
+      // Create agent_jobs for each dispatched task (atomic transaction)
+      const jobIds: string[] = [];
+      const agentNames: string[] = [];
+      sqlite.transaction(() => {
+        for (const task of tasks) {
+          const jobId = crypto.randomUUID();
+          sqlite.prepare(`
+            INSERT INTO agent_jobs (id, agent_id, project_id, trigger_type, prompt, status, scheduled_for, created_at)
+            VALUES (?, ?, ?, 'gsd_dispatch', ?, 'pending', unixepoch('now'), unixepoch('now'))
+          `).run(jobId, task.agentId, projectId, task.prompt);
+
+          sqlite.prepare(`
+            INSERT INTO agent_activity (agent_id, job_id, project_id, event_type, summary, detail, created_at)
+            VALUES (?, ?, ?, 'gsd_dispatch', ?, ?, unixepoch('now'))
+          `).run(task.agentId, jobId, projectId, `${task.agentName} assigned: ${task.prompt.substring(0, 100)}`, JSON.stringify({ prompt: task.prompt }));
+
+          jobIds.push(jobId);
+          agentNames.push(task.agentName);
+        }
+      })();
+
+      const summary = agentNames.length === 1
+        ? `Dispatched task to ${agentNames[0]}`
+        : `Dispatched ${agentNames.length} tasks to ${agentNames.join(', ')}`;
+
+      return reply.send(ok({ dispatched: true, jobsCreated: jobIds.length, agentNames, summary }));
     }
 
     // Should be unreachable due to zod union validation
