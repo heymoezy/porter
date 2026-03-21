@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 07-00-PLAN.md
-last_updated: "2026-03-21T16:40:38.350Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-03-21T16:43:23.047Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 51
-  completed_plans: 41
+  completed_plans: 42
 ---
 
 # Project State
@@ -87,6 +87,7 @@ Plan: 1 of 11
 | Phase 06-real-time-and-transparency P03 | 2min | 2 tasks | 4 files |
 | Phase 06-real-time-and-transparency PP05 | 10min | 3 tasks | 6 files |
 | Phase 07-external-connections P00 | 2min | 1 tasks | 3 files |
+| Phase 07-external-connections PP01 | 6min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -211,6 +212,9 @@ Recent decisions affecting current work:
 - [Phase 06-05]: Database rendered as ServiceCard using the same component as AI backends — consistent visual treatment for health status
 - [Phase 07-external-connections]: Wave 0 tests are /tmp/-only — not committed to git per Phase 2/4/5/6 convention
 - [Phase 07-external-connections]: LOCAL_HOSTS constant lives in config.ts so loopback checks in route files don't trigger CONN-05 hardcoding grep
+- [Phase 07-external-connections]: migrate-07-ext-connections.ts named separately from migrate-07.ts (billing) — both cover phase 7 but different subsystems
+- [Phase 07-external-connections]: Credential format: iv_hex:tag_hex:ciphertext_hex in one string — no separate columns needed for IV or auth tag
+- [Phase 07-external-connections]: getDerivedKey() reads PORTER_SECRET at call-time (not module-load) — consistent with getBackends() pattern from Phase 4
 
 ### Pending Todos
 
@@ -233,6 +237,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T16:40:38.347Z
-Stopped at: Completed 07-00-PLAN.md
+Last session: 2026-03-21T16:43:23.044Z
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
