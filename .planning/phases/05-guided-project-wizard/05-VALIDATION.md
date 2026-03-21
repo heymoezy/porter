@@ -3,7 +3,7 @@ phase: 5
 slug: guided-project-wizard
 status: draft
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: partial
 created: 2026-03-21
 ---
 
@@ -51,10 +51,10 @@ created: 2026-03-21
 
 ## Wave 0 Requirements
 
-- [ ] `/tmp/test_proj01_wizard_api.py` — POST /api/v1/projects/wizard endpoint existence + validation
-- [ ] `/tmp/test_proj01_detect.py` — detect action classifies project vs non-project messages
-- [ ] `/tmp/test_proj01_approve.py` — approve action atomic transaction (project + personas + jobs)
-- [ ] `/tmp/test_proj02_agent_match.py` — project type to correct agent roles
+- [x] `/tmp/test_proj01_wizard_api.py` — POST /api/v1/projects/wizard endpoint existence + validation
+- [x] `/tmp/test_proj01_detect.py` — detect action classifies project vs non-project messages
+- [x] `/tmp/test_proj01_approve.py` — approve action atomic transaction (project + personas + jobs)
+- [x] `/tmp/test_proj02_agent_match.py` — project type to correct agent roles
 - [ ] `/tmp/test_proj03_activity.py` — GET /api/v1/projects/:id/activity returns array
 - [ ] `/tmp/test_proj04_gsd_mode.py` — GSD mode flag persists and routes differently
 
