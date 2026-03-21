@@ -12,6 +12,9 @@ import preferencesV1Routes from './preferences.js';
 import profileV1Routes from './profile.js';
 import billingV1Routes from './billing.js';
 import connectionsV1Routes from './connections.js';
+import oauthGithubRoutes from './oauth-github.js';
+import oauthGoogleRoutes from './oauth-google.js';
+import webhookWhatsAppRoutes from './webhooks-whatsapp.js';
 
 export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(authV1Routes, { prefix: '/auth' });
@@ -27,4 +30,7 @@ export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(profileV1Routes, { prefix: '/profile' });
   fastify.register(billingV1Routes, { prefix: '/billing' });
   fastify.register(connectionsV1Routes, { prefix: '/connections' });
+  fastify.register(oauthGithubRoutes, { prefix: '/oauth/github' });
+  fastify.register(oauthGoogleRoutes, { prefix: '/oauth/google' });
+  fastify.register(webhookWhatsAppRoutes, { prefix: '/webhooks/whatsapp' });
 }
