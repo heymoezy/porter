@@ -87,6 +87,7 @@ export const projects = sqliteTable('projects', {
   metadata: text('metadata'),         // JSON blob for extensibility
   createdAt: real('created_at').default(sql`(strftime('%s','now'))`),
   updatedAt: real('updated_at').default(sql`(strftime('%s','now'))`),
+  deadline: text('deadline'),         // ISO date string YYYY-MM-DD
 });
 
 export const personas = sqliteTable('personas', {
@@ -123,4 +124,34 @@ export const personas = sqliteTable('personas', {
 export const schemaMigrations = sqliteTable('schema_migrations', {
   id: text('id').primaryKey(),
   appliedAt: real('applied_at').default(sql`(strftime('%s','now'))`),
+});
+
+export const agentJobs = sqliteTable('agent_jobs', {
+  id: text('id').primaryKey(),
+  agentId: text('agent_id').notNull(),
+  projectId: text('project_id'),
+  parentAgentId: text('parent_agent_id'),
+  triggerType: text('trigger_type').notNull().default('scheduled'),
+  triggerData: text('trigger_data').default('{}'),
+  prompt: text('prompt'),
+  status: text('status').notNull().default('pending'),
+  scheduledFor: real('scheduled_for').notNull(),
+  startedAt: real('started_at'),
+  completedAt: real('completed_at'),
+  workerId: text('worker_id'),
+  attemptCount: integer('attempt_count').default(0),
+  result: text('result'),
+  error: text('error'),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+});
+
+export const agentActivity = sqliteTable('agent_activity', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  agentId: text('agent_id').notNull(),
+  jobId: text('job_id'),
+  projectId: text('project_id'),
+  eventType: text('event_type').notNull(),
+  summary: text('summary'),
+  detail: text('detail'),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
 });
