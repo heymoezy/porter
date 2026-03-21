@@ -21,18 +21,18 @@ const groups = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/" },
     { icon: Users, label: "Customers", path: "/users" },
     { icon: Shield, label: "Porter", path: "/porter" },
+    { icon: Bot, label: "Agents", path: "/agents" },
     { icon: Blocks, label: "Templates", path: "/templates" },
+    { icon: Sparkles, label: "Skills", path: "/skills" },
     { icon: Server, label: "Models", path: "/models" },
     { icon: Wrench, label: "Tools", path: "/tools" },
-    { icon: Monitor, label: "System", path: "/system" },
   ]},
   { label: "Ops", items: [
-    { icon: Bot, label: "Agents", path: "/agents" },
-    { icon: Bug, label: "Diagnostics", path: "/diagnostics" },
     { icon: Activity, label: "Activity", path: "/activity" },
+    { icon: Bug, label: "Diagnostics", path: "/diagnostics" },
+    { icon: Monitor, label: "System", path: "/system" },
     { icon: Mail, label: "Email", path: "/email" },
     { icon: CreditCard, label: "Revenue", path: "/billing" },
-    { icon: Sparkles, label: "Skills", path: "/skills" },
   ]},
 ]
 
