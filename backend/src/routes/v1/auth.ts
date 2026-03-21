@@ -84,4 +84,46 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
       email: user?.email ?? null,
     }));
   });
+
+  // POST /api/v1/auth/change-password
+  fastify.post('/change-password', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const body = request.body as { current_password?: string; new_password?: string };
+    const currentPw = body.current_password ?? '';
+    const newPw = body.new_password ?? '';
+
+    if (!currentPw) {
+      return reply.code(400).send(err('INVALID_INPUT', 'Current password is required'));
+    }
+    if (newPw.length < 8) {
+      return reply.code(400).send(err('INVALID_INPUT', 'New password must be at least 8 characters'));
+    }
+
+    const username = request.sessionUser!.username;
+
+    // Verify current password against users table
+    const user = db.select().from(schema.users)
+      .where(eq(schema.users.username, username)).get();
+
+    if (!user) {
+      return reply.code(401).send(err('UNAUTHORIZED', 'User not found'));
+    }
+
+    const currentHash = (await scrypt(currentPw, user.salt, 32)) as Buffer;
+    if (currentHash.toString('hex') !== user.passwordHash) {
+      return reply.code(401).send(err('INVALID_CREDENTIALS', 'Current password is incorrect'));
+    }
+
+    // Hash new password
+    const newSalt = crypto.randomBytes(16).toString('hex');
+    const newHash = (await scrypt(newPw, newSalt, 32)) as Buffer;
+
+    db.update(schema.users).set({
+      passwordHash: newHash.toString('hex'),
+      salt: newSalt,
+    }).where(eq(schema.users.username, username)).run();
+
+    return reply.send(ok({ changed: true }));
+  });
 }

@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import staticFiles from '@fastify/static';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -36,6 +37,7 @@ fastify.register(cors, {
   credentials: true,
 });
 fastify.register(cookie);
+fastify.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB max
 
 // Auth plugin (session resolution)
 fastify.register(authPlugin);
