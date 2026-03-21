@@ -201,4 +201,67 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
 
     return reply.send(ok({ deleted: true }));
   });
+
+  // GET /api/v1/projects/:id/activity — activity feed for project dashboard
+  fastify.get<{ Params: { id: string }; Querystring: { limit?: string; offset?: string } }>(
+    '/:id/activity',
+    { preHandler: [fastify.requireAuth] },
+    async (req, reply) => {
+      const { id } = req.params;
+      const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
+      const offset = parseInt(req.query.offset || '0', 10);
+
+      // Verify project exists
+      const project = db.select().from(schema.projects).where(eq(schema.projects.id, id)).get();
+      if (!project) {
+        return reply.code(404).send(err('NOT_FOUND', 'Project not found'));
+      }
+
+      // Fetch activity with agent name via LEFT JOIN
+      const rows = sqlite.prepare(`
+        SELECT
+          aa.id,
+          aa.agent_id,
+          aa.job_id,
+          aa.project_id,
+          aa.event_type,
+          aa.summary,
+          aa.detail,
+          aa.created_at,
+          p.name AS agent_name,
+          p.role AS agent_role,
+          p.avatar AS agent_avatar
+        FROM agent_activity aa
+        LEFT JOIN personas p ON p.id = aa.agent_id
+        WHERE aa.project_id = @projectId
+        ORDER BY aa.created_at DESC
+        LIMIT @limit OFFSET @offset
+      `).all({ projectId: id, limit, offset }) as Array<{
+        id: number; agent_id: string; job_id: string | null;
+        project_id: string; event_type: string; summary: string;
+        detail: string; created_at: number;
+        agent_name: string | null; agent_role: string | null; agent_avatar: string | null;
+      }>;
+
+      // Get total count for pagination
+      const countRow = sqlite.prepare(
+        'SELECT COUNT(*) as total FROM agent_activity WHERE project_id = @projectId'
+      ).get({ projectId: id }) as { total: number };
+
+      const events = rows.map(r => ({
+        id: r.id,
+        agent_id: r.agent_id,
+        agent_name: r.agent_name || 'Unknown Agent',
+        agent_role: r.agent_role || '',
+        agent_avatar: r.agent_avatar || '',
+        job_id: r.job_id,
+        event_type: r.event_type,
+        summary: r.summary,
+        detail: r.detail ? JSON.parse(r.detail) : null,
+        created_at: r.created_at,
+      }));
+
+      return reply.send(ok({ events, total: countRow.total, limit, offset }));
+    },
+  );
 }
