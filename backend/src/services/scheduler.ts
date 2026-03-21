@@ -1,11 +1,15 @@
 import { sqlite } from '../db/client.js';
-import { config, featureFlags } from '../config.js';
+import { featureFlags } from '../config.js';
+import { dispatch as aiRouterDispatch } from './ai-router.js';
+import { checkDeadlineTriggers } from './event-triggers.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_ATTEMPTS = 3;
+const DEADLINE_CHECK_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const WORKER_ID = crypto.randomUUID();
 let intervalId: ReturnType<typeof setInterval> | null = null;
+let tickCount = 0;
 
 interface JobRow {
   id: string;
@@ -41,10 +45,17 @@ async function tick() {
   if (!featureFlags.agentScheduling) return;
   try {
     const job = claimNextJob();
-    if (!job) return;
-    logActivity(job.agent_id, job.id, job.project_id, 'job_started',
-      `Job ${job.id.slice(0, 8)} started (trigger: ${job.trigger_type})`, '{}');
-    await executeJob(job);
+    if (job) {
+      logActivity(job.agent_id, job.id, job.project_id, 'job_started',
+        `Job ${job.id.slice(0, 8)} started (trigger: ${job.trigger_type})`, '{}');
+      await executeJob(job);
+    }
+
+    // Check deadline triggers periodically (every 60s, not every 2s)
+    tickCount++;
+    if (tickCount % DEADLINE_CHECK_INTERVAL === 0) {
+      checkDeadlineTriggers();
+    }
   } catch (e) {
     console.error('[scheduler] tick error', e);
   }
@@ -69,19 +80,20 @@ function claimNextJob(): JobRow | undefined {
 
 async function executeJob(job: JobRow): Promise<void> {
   try {
-    const resp = await fetch(`${config.porterPyUrl}/api/dispatch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        persona_id: job.agent_id,
-        message: job.prompt ?? `Execute scheduled task (trigger: ${job.trigger_type})`,
-        project_id: job.project_id,
-      }),
+    const result = await aiRouterDispatch({
+      agentId: job.agent_id,
+      message: job.prompt ?? `Execute scheduled task (trigger: ${job.trigger_type})`,
+      projectId: job.project_id,
     });
-    const body = await resp.text();
-    markJobComplete(job.id, body);
+
+    markJobComplete(job.id, JSON.stringify({
+      response: result.response.slice(0, 2000), // Cap stored result size
+      model: result.model,
+      routingReason: result.routingReason,
+    }));
     logActivity(job.agent_id, job.id, job.project_id, 'job_complete',
-      `Job ${job.id.slice(0, 8)} completed`, JSON.stringify({ status: resp.status }));
+      `Job ${job.id.slice(0, 8)} completed via ${result.model}`,
+      JSON.stringify({ model: result.model, routingReason: result.routingReason }));
   } catch (e: unknown) {
     const errMsg = e instanceof Error ? e.message : String(e);
     if (job.attempt_count < MAX_ATTEMPTS) {
