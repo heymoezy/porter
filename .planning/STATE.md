@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 07-04-PLAN.md
-last_updated: "2026-03-21T16:48:59.145Z"
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-03-21T16:52:02.343Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 51
-  completed_plans: 44
+  completed_plans: 45
 ---
 
 # Project State
@@ -90,6 +90,7 @@ Plan: 1 of 11
 | Phase 07-external-connections PP01 | 6min | 2 tasks | 5 files |
 | Phase 07-external-connections P02 | 2min | 2 tasks | 2 files |
 | Phase 07-external-connections P04 | 8min | 2 tasks | 2 files |
+| Phase 07-external-connections P03 | 6min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -223,6 +224,9 @@ Recent decisions affecting current work:
 - [Phase 07-04]: billing.ts redirect_url fallback changed from localhost:8877 (porter.py port) to localhost:3001 (Fastify backend port) — aligns with Fastify-first architecture
 - [Phase 07-04]: _projArtifactUrl JS function uses /home/<user>/ regex stripping — works on any Linux deployment, not just hardcoded machine
 - [Phase 07-04]: config.publicUrl as the single source for public-facing URL in backend — never process.env.PORTER_PUBLIC_URL directly
+- [Phase 07-03]: ConnectionsPage fetches user role from /api/v1/auth/me — no separate profile endpoint needed
+- [Phase 07-03]: Inline API key form below card rather than dialog — preserves spatial context while entering credentials
+- [Phase 07-03]: Stagger animation via CSS @keyframes fadeSlideIn in JSX style block — avoids CSS module overhead for localized animation
 
 ### Pending Todos
 
@@ -245,6 +249,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T16:48:59.142Z
-Stopped at: Completed 07-04-PLAN.md
+Last session: 2026-03-21T16:52:02.340Z
+Stopped at: Completed 07-03-PLAN.md
 Resume file: None
