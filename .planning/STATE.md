@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-03-21T16:52:02.343Z"
+stopped_at: Completed 07-08-PLAN.md
+last_updated: "2026-03-21T16:58:29.262Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 51
-  completed_plans: 45
+  completed_plans: 46
 ---
 
 # Project State
@@ -91,6 +91,7 @@ Plan: 1 of 11
 | Phase 07-external-connections P02 | 2min | 2 tasks | 2 files |
 | Phase 07-external-connections P04 | 8min | 2 tasks | 2 files |
 | Phase 07-external-connections P03 | 6min | 2 tasks | 8 files |
+| Phase 07-external-connections P08 | 4min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -227,6 +228,9 @@ Recent decisions affecting current work:
 - [Phase 07-03]: ConnectionsPage fetches user role from /api/v1/auth/me — no separate profile endpoint needed
 - [Phase 07-03]: Inline API key form below card rather than dialog — preserves spatial context while entering credentials
 - [Phase 07-03]: Stagger animation via CSS @keyframes fadeSlideIn in JSX style block — avoids CSS module overhead for localized animation
+- [Phase 07-08]: verifyWebhookSignature throws Error('WHATSAPP_APP_SECRET env var is required') when secret missing — no empty-string fallback
+- [Phase 07-08]: Webhook POST always returns 200 to Meta even on routing errors — prevents Meta retry storms
+- [Phase 07-08]: routeInboundWhatsApp: @mention routes to named agent, Porter (is_master=1) is fallback dispatcher
 
 ### Pending Todos
 
@@ -249,6 +253,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T16:52:02.340Z
-Stopped at: Completed 07-03-PLAN.md
+Last session: 2026-03-21T16:58:29.257Z
+Stopped at: Completed 07-08-PLAN.md
 Resume file: None
