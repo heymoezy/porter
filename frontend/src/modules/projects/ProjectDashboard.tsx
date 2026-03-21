@@ -3,6 +3,8 @@ import { api } from '../../lib/api';
 import { useProjectActivity } from '../../hooks/useProjectActivity';
 import { ActivityFeed } from './ActivityFeed';
 import { AgentStatusStrip, type AgentEntry } from './AgentStatusStrip';
+import { CalendarEventsDisplay } from './CalendarEventsDisplay';
+import { ProjectConnectionsPanel } from '../connections/ProjectConnectionsPanel';
 
 interface Milestone {
   label: string;
@@ -168,6 +170,9 @@ export function ProjectDashboard({ projectId }: ProjectDashboardProps) {
               )}
             </div>
 
+            {/* Calendar events — alongside milestones per CONTEXT.md */}
+            <CalendarEventsDisplay projectId={project.id} />
+
             {/* Next steps card */}
             <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
               <h3 className="text-sm font-semibold text-[var(--text2)] mb-2">Next steps</h3>
@@ -175,6 +180,9 @@ export function ProjectDashboard({ projectId }: ProjectDashboardProps) {
                 {nextStepHint(projectAgents, agentsLoading)}
               </p>
             </div>
+
+            {/* Project connection overrides */}
+            <ProjectConnectionsPanel projectId={project.id} />
           </div>
         </div>
       </div>
