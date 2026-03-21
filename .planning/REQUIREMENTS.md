@@ -54,7 +54,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [x] **PERF-01**: System prompt audit — cap interactive prompts at 2K tokens, eliminate bloat causing slowness
 - [x] **PERF-02**: Core route migration to Fastify (auth, projects, agents) via strangler fig proxy
-- [ ] **PERF-03**: SSE real-time hub replacing polling with server-sent events for live updates
+- [x] **PERF-03**: SSE real-time hub replacing polling with server-sent events for live updates
 
 ### UI Quality
 
@@ -116,7 +116,7 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | TRNS-01 | Phase 6 | Pending |
 | TRNS-02 | Phase 6 | Pending |
 | TRNS-03 | Phase 6 | Pending |
-| PERF-03 | Phase 6 | Pending |
+| PERF-03 | Phase 6 | Complete |
 | CONN-01 | Phase 7 | Pending |
 | CONN-02 | Phase 7 | Pending |
 | CONN-03 | Phase 7 | Pending |
