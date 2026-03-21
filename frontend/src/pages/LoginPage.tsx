@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { motion, useAnimationControls } from 'framer-motion';
-import { colors, radius } from '../design-system/tokens';
 
 const PorterLogo = () => (
   <svg width="40" height="40" viewBox="0 0 34 34" fill="none">
