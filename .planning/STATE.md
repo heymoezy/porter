@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 7 context gathered
-last_updated: "2026-03-21T15:07:48.978Z"
+stopped_at: Completed 07-00-PLAN.md
+last_updated: "2026-03-21T16:40:38.350Z"
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 40
-  completed_plans: 40
+  total_plans: 51
+  completed_plans: 41
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input
-**Current focus:** Phase 06 — real-time-and-transparency
+**Current focus:** Phase 07 — external-connections
 
 ## Current Position
 
-Phase: 06 (real-time-and-transparency) — EXECUTING
-Plan: 4 of 6
+Phase: 07 (external-connections) — EXECUTING
+Plan: 1 of 11
 
 ## Performance Metrics
 
@@ -86,6 +86,7 @@ Plan: 4 of 6
 | Phase 06-real-time-and-transparency PP04 | 2min | 2 tasks | 5 files |
 | Phase 06-real-time-and-transparency P03 | 2min | 2 tasks | 4 files |
 | Phase 06-real-time-and-transparency PP05 | 10min | 3 tasks | 6 files |
+| Phase 07-external-connections P00 | 2min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -208,6 +209,8 @@ Recent decisions affecting current work:
 - [Phase 06-05]: useSystemHealth uses both SSE (system:health event) and 30s polling for reliability — either mechanism refreshes data
 - [Phase 06-05]: SystemHealthPanel embeds DecisionLog as a section rather than a separate page — single health tab shows TRNS-02 and TRNS-03 together
 - [Phase 06-05]: Database rendered as ServiceCard using the same component as AI backends — consistent visual treatment for health status
+- [Phase 07-external-connections]: Wave 0 tests are /tmp/-only — not committed to git per Phase 2/4/5/6 convention
+- [Phase 07-external-connections]: LOCAL_HOSTS constant lives in config.ts so loopback checks in route files don't trigger CONN-05 hardcoding grep
 
 ### Pending Todos
 
@@ -230,6 +233,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T15:07:48.975Z
-Stopped at: Phase 7 context gathered
-Resume file: .planning/phases/07-external-connections/07-CONTEXT.md
+Last session: 2026-03-21T16:40:38.347Z
+Stopped at: Completed 07-00-PLAN.md
+Resume file: None

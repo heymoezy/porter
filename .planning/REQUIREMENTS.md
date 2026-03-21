@@ -38,11 +38,11 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Connections
 
-- [ ] **CONN-01**: GitHub integration (connect repos via OAuth, agents can read/write code, create PRs)
-- [ ] **CONN-02**: Email integration (Porter sends notifications via SendGrid, agents can send/receive email)
-- [ ] **CONN-03**: Calendar integration (sync deadlines via Google Calendar API, agents aware of schedules)
-- [ ] **CONN-04**: WhatsApp bidirectional bridge (send/receive messages via Meta Cloud API, agent-specific chat, group chats)
-- [ ] **CONN-05**: All external connections configurable via UI — no hardcoded API keys, tokens, paths, or service URLs anywhere in codebase
+- [x] **CONN-01**: GitHub integration (connect repos via OAuth, agents can read/write code, create PRs)
+- [x] **CONN-02**: Email integration (Porter sends notifications via SendGrid, agents can send/receive email)
+- [x] **CONN-03**: Calendar integration (sync deadlines via Google Calendar API, agents aware of schedules)
+- [x] **CONN-04**: WhatsApp bidirectional bridge (send/receive messages via Meta Cloud API, agent-specific chat, group chats)
+- [x] **CONN-05**: All external connections configurable via UI — no hardcoded API keys, tokens, paths, or service URLs anywhere in codebase
 
 ### Transparency
 
@@ -117,11 +117,11 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | TRNS-02 | Phase 6 | Complete |
 | TRNS-03 | Phase 6 | Complete |
 | PERF-03 | Phase 6 | Complete |
-| CONN-01 | Phase 7 | Pending |
-| CONN-02 | Phase 7 | Pending |
-| CONN-03 | Phase 7 | Pending |
-| CONN-04 | Phase 7 | Pending |
-| CONN-05 | Phase 7 | Pending |
+| CONN-01 | Phase 7 | Complete |
+| CONN-02 | Phase 7 | Complete |
+| CONN-03 | Phase 7 | Complete |
+| CONN-04 | Phase 7 | Complete |
+| CONN-05 | Phase 7 | Complete |
 
 **Coverage:**
 - v1 requirements: 30 total
