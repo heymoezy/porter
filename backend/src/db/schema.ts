@@ -155,3 +155,25 @@ export const agentActivity = sqliteTable('agent_activity', {
   detail: text('detail'),
   createdAt: real('created_at').default(sql`(unixepoch('now'))`),
 });
+
+export const decisionLog = sqliteTable('decision_log', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  decisionType: text('decision_type').notNull(), // 'model_selection' | 'agent_routing' | 'task_skip'
+  chosen: text('chosen').notNull(),              // e.g. "Claude Opus" or "Writer Agent"
+  reasoning: text('reasoning').notNull(),        // Plain English sentence
+  alternatives: text('alternatives').default('[]'), // JSON array of considered options
+  projectId: text('project_id'),
+  agentId: text('agent_id'),
+  jobId: text('job_id'),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+});
+
+export const tokenUsageDaily = sqliteTable('token_usage_daily', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  model: text('model').notNull(),           // e.g. "openai-codex/gpt-5.4" or "qwen2.5-coder:1.5b"
+  date: text('date').notNull(),             // ISO date YYYY-MM-DD
+  inputTokens: integer('input_tokens').default(0),
+  outputTokens: integer('output_tokens').default(0),
+  requestCount: integer('request_count').default(0),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+});
