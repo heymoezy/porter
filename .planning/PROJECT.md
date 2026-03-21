@@ -8,6 +8,22 @@ Porter is an AI orchestration platform where non-technical users create projects
 
 Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input — the "GSD-like flow" applied to everything Porter does.
 
+## Current Milestone: v2.0 Backend Ready
+
+**Goal:** Build a killer backend API layer — all features pure API, zero frontend. Frontend-v2 connects later.
+
+**Target features:**
+- API standardization (consistent envelopes, error codes, OpenAPI)
+- Token-by-token streaming chat across all AI backends
+- Collaborative sessions (invite, roles, shared agents)
+- Unified chat (single conversation model for agents/projects/external)
+- CRM backend (multi-email, multi-phone, social links, AI analysis)
+- File associations (projects, contacts, conversations)
+- 100 agent templates with complete specs
+- Autonomous agent learning (web/social/GitHub knowledge acquisition)
+- SaaS billing (Lemon Squeezy subscriptions, usage metering)
+- Error capture API (frontend error logging)
+
 ## Requirements
 
 ### Validated
@@ -18,10 +34,10 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ Chat with streaming responses (SSE) — existing
 - ✓ Project CRUD with milestones, tasks, artifacts — existing
 - ✓ Agent/Persona system with templates and identity — existing
-- ✓ Memory V2 system (4-layer: directives, concepts, episodes, signals — complete) — Validated in Phase 2: memory-v2
+- ✓ Memory V2 system (4-layer: directives, concepts, episodes, signals) — v1.0 Phase 2
 - ✓ Background workflow system (7 registered workflows) — existing
 - ✓ File management with upload, serve, path traversal protection — existing
-- ✓ Connections infrastructure (3-table model) — existing
+- ✓ Connections infrastructure (GitHub, email, calendar, WhatsApp) — v1.0 Phase 7
 - ✓ People module (CRM with user cards, stats) — existing
 - ✓ Invite system with registration page — existing
 - ✓ Audit logging (structured via mlog.emit) — existing
@@ -29,64 +45,68 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ React frontend with Zustand + React Query — existing
 - ✓ Playwright test suite (35 tests) — existing
 - ✓ RBAC API protection on admin endpoints — existing
+- ✓ Guided project creation wizard — v1.0 Phase 5
+- ✓ Agent autonomy (scheduled + event-driven) — v1.0 Phase 4
+- ✓ Ephemeral project-scoped agents — v1.0 Phase 4
+- ✓ Transparency dashboard (activity, health, decisions) — v1.0 Phase 6
+- ✓ SSE real-time hub replacing polling — v1.0 Phase 6
 
 ### Active
 
-- ✓ Guided project creation wizard (collaborative questioning, agent proposal, plan generation) — Validated in Phase 5: guided-project-wizard
-- ✓ Agent autonomy (scheduled + event-driven work, AI router, activity logs) — Validated in Phase 4: agent-autonomy
-- ✓ Persistent and temporary agents (ephemeral project-scoped agents with auto-retire) — Validated in Phase 4: agent-autonomy
-- [ ] Collaborative sessions (invite people to projects, share agents, custom per-person roles)
-- [ ] Unified global chat (all conversations in one interface — agents, projects, external)
-- ✓ WhatsApp integration (bidirectional, agent-specific chat, webhook inbound) — Validated in Phase 7: external-connections
-- ✓ Connections (GitHub, Mail, Calendar, WhatsApp at account-level defaults + project-level overrides) — Validated in Phase 7: external-connections
-- ✓ Memory V2 completion (structured, noise-free, real-time visibility, no signal noise from logins/uploads) — Validated in Phase 2: memory-v2
-- ✓ Transparency dashboard (agent activity, memory changes, system health, decision log — all visible) — Validated in Phase 6: real-time-and-transparency
-- ✓ Performance overhaul (SSE replaces polling, 6 pollers killed, single EventSource) — Validated in Phase 6: real-time-and-transparency
-- [ ] Codebase migration (gradual move from porter.py monolith to Fastify backend, new features in TypeScript)
-- [ ] SaaS billing (subscription management, usage tracking — deferred until core works)
+- [ ] API standardization (consistent /api/v1/* surface, envelopes, error codes, OpenAPI)
+- [ ] Streaming chat (token-by-token SSE from all AI backends, cancellation)
+- [ ] Collaborative sessions (invite by email, per-person roles, shared project/agent access)
+- [ ] Unified global chat (single conversation model — agents, projects, external channels)
+- [ ] CRM backend (multi-email, multi-phone, country codes, social links, AI analysis, activity timeline)
+- [ ] File associations (link files to projects, contacts, conversations; drag-drop upload API)
+- [ ] Agent templates (100 templates with complete skills/tools/system prompts)
+- [ ] Autonomous learning (agents search web/social/GitHub, store as Memory V2 concepts)
+- [ ] SaaS billing (Lemon Squeezy subscriptions, usage metering, plan limit enforcement)
+- [ ] Error capture (frontend error POST endpoint with stack traces, component context)
+- [ ] Codebase migration (gradual — porter.py shrinks as features move to Fastify)
 
 ### Out of Scope
 
-- Full monolith rewrite — gradual migration instead, porter.py shrinks over time
+- Frontend UI for v2 features — frontend-v2 being built separately
+- Full porter.py deprecation — gradual shrink, not a v2 goal
 - Mobile native app — web-first, responsive design
 - Self-hosting support — SaaS-only for now
 - Custom model training — use existing model providers via routing
 - Video/voice calling — chat and messaging only
+- AARRR analytics — being built by another Claude session
 
 ## Context
 
-Porter has been in development since Feb 18, 2026. Current version is v0.33.28. The codebase is a ~900KB Python monolith (`porter.py`) that served as rapid prototyping but accumulated significant tech debt:
+Porter has been in development since Feb 18, 2026. Current version is v0.34.23. The codebase has two stacks:
 
-- 683 broad exception catches masking real errors
-- Duplicate function definitions (3 functions defined twice)
-- ~~Deprecated Cortex memory system~~ — fully removed in Phase 2 (194KB deleted)
-- No connection pooling, 5-second SQLite timeout under concurrent load
-- Global mutable state (_sessions, _login_attempts, _wf_registry, _config)
-- Projects stored in JSON config file instead of database
-- Heavy system prompts causing slowness across the app
+**Fastify backend** (`backend/src/`): TypeScript, Drizzle ORM, 17 v1 route groups, AI router, scheduler, event triggers, external connections. This is the active stack — all new work goes here.
 
-A Fastify backend (`backend/src/`) exists with Drizzle ORM, route structure, and TypeScript types but is currently reference-only — all logic lives in porter.py.
+**porter.py** (~57K lines): Legacy Python monolith. Still handles some brain functions (memory injection, chat commands, system prompts). Shrinks gradually as functions migrate to Fastify. Proxy plugin forwards unhandled routes to it.
 
-The frontend (React 19 + Vite 8 + TailwindCSS 4) is functional but coupled to the Python backend's API surface.
+**frontend-v2** (`frontend-v2/`): React Router 7 + shadcn/ui + Tailwind 4. Being built by another Claude session. All v2 backend work is API-only — frontend connects later.
+
+**frontend** (`frontend/`): Legacy React frontend. Being replaced by frontend-v2.
 
 ## Constraints
 
-- **Timeline**: Days, not weeks — ruthlessly prioritize project flow first
-- **Architecture**: Gradual migration — new features in Fastify/TypeScript, existing features migrated opportunistically
-- **Runtime**: Linux VPS, 8GB RAM, 2 vCPU, no GPU — must stay performant under these constraints
+- **Architecture**: All v2 work is pure backend API. Zero frontend. Frontend-v2 connects later.
+- **Runtime**: Linux VPS, 8GB RAM, 2 vCPU, no GPU — must stay performant
 - **No pip installs**: Python backend is stdlib-only, new backend work goes to Node/TypeScript
-- **Backwards compatibility**: Existing 35 Playwright tests must keep passing throughout migration
-- **Single DB**: SQLite for now, but architecture should allow future PostgreSQL migration
+- **Backwards compatibility**: Existing 35 Playwright tests must keep passing
+- **Single DB**: SQLite with WAL mode, architecture should allow future PostgreSQL migration
+- **Coordination**: Another Claude session building frontend-v2 and admin analytics — avoid conflicts on shared files
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Gradual monolith split (porter.py → Fastify) | 900KB monolith unmaintainable, but full rewrite too risky | — Pending |
-| Project flow is first priority | Core value is "create project, agents work" — everything else builds on this | — Pending |
-| SaaS product model with collaborative sessions | Unique differentiator: invite people to work with your projects and agents | — Pending |
+| Gradual monolith split (porter.py → Fastify) | 900KB monolith unmaintainable, but full rewrite too risky | ✓ Working — v1.0 migrated core routes |
+| Project flow is first priority | Core value is "create project, agents work" — everything else builds on this | ✓ Shipped — guided wizard in Phase 5 |
+| SaaS product model with collaborative sessions | Unique differentiator: invite people to work with your projects and agents | — v2.0 scope |
 | Account-level + project-level connections | Flexibility: connect GitHub once, override per project if needed | ✓ Shipped Phase 7 |
-| Memory V2 must filter noise (logins, uploads) | Current system captures everything, dilutes actual learning | — Pending |
+| Memory V2 must filter noise (logins, uploads) | Current system captures everything, dilutes actual learning | ✓ Shipped Phase 2 |
+| v2.0 is backend-only | Frontend-v2 being built separately. All v2 features are pure API. | — v2.0 |
+| porter.py gradual shrink | Don't spend v2 time on migration. Brain migrates naturally as features move. | — v2.0 |
 
 ---
-*Last updated: 2026-03-21 after Phase 7 (External Connections) completion*
+*Last updated: 2026-03-21 after v2.0 milestone initialization*

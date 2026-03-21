@@ -1,133 +1,141 @@
 # Requirements: Porter
 
-**Defined:** 2026-03-20
+**Defined:** 2026-03-21
 **Core Value:** Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input
 
-## v1 Requirements
+## v1 Requirements (COMPLETE)
 
-Requirements for this milestone. Each maps to roadmap phases.
+All 30 v1 requirements shipped in Milestone v1.0 (Phases 1-7). See MILESTONES.md for details.
 
-### Foundation
-
-- [x] **FOUND-01**: Replace broad exception catches with specific types + structured logging across porter.py
-- [x] **FOUND-02**: Implement SQLite connection pooling with busy_timeout and retry logic for concurrent agent access
-- [x] **FOUND-03**: Migrate projects from config JSON to SQLite table with full query capability
-- [x] **FOUND-04**: Remove all deprecated Cortex code and hard cutover to Memory V2
-- [x] **FOUND-05**: Boot sequence — detects missing dependencies, installs/configures what it can, prompts for API keys and external credentials, organizes directory structure, verifies everything works before starting, badges unavailable features
-
-### Memory
-
-- [x] **MEM-01**: Complete Memory V2 with structured directives/concepts/signals and noise filtering (no login/upload/file-browse signals)
-- [x] **MEM-02**: Real-time memory feed showing what Porter learned, forgot, or updated as it happens
-- [x] **MEM-03**: Memory scoping with clear boundaries (global, project, agent, task-level)
-- [x] **MEM-04**: FTS5 cross-session search — agents can search their own past sessions for prior work before asking users to repeat (ref: hermes-agent pattern)
-
-### Project Flow
-
-- [x] **PROJ-01**: Guided project creation wizard (describe project → Porter proposes agents/plan → approve → work starts)
-- [x] **PROJ-02**: Auto agent assignment based on project type and requirements
-- [x] **PROJ-03**: Project dashboard showing progress, active agents, recent activity, and next steps
-- [x] **PROJ-04**: GSD plan mode in chat — toggleable structured planning mode (question → research → requirements → roadmap → execute) vs free chat
-
-### Agents
-
-- [x] **AGNT-01**: Scheduled agent work (wake on configurable intervals, execute assigned tasks, report back)
-- [x] **AGNT-02**: Event-driven triggers (new file, message, deadline approaching → agent responds)
-- [x] **AGNT-03**: Agent activity log (user-readable feed: what each agent did, when, why, what's queued)
-- [x] **AGNT-04**: Ephemeral project-scoped agents that auto-retire when project completes or on explicit dismissal
-
-### Connections
-
-- [x] **CONN-01**: GitHub integration (connect repos via OAuth, agents can read/write code, create PRs)
-- [x] **CONN-02**: Email integration (Porter sends notifications via SendGrid, agents can send/receive email)
-- [x] **CONN-03**: Calendar integration (sync deadlines via Google Calendar API, agents aware of schedules)
-- [x] **CONN-04**: WhatsApp bidirectional bridge (send/receive messages via Meta Cloud API, agent-specific chat, group chats)
-- [x] **CONN-05**: All external connections configurable via UI — no hardcoded API keys, tokens, paths, or service URLs anywhere in codebase
-
-### Transparency
-
-- [x] **TRNS-01**: Agent activity feed (real-time: what agents are doing now, did today, what's queued)
-- [x] **TRNS-02**: System health panel (which services are up, token usage, response times)
-- [x] **TRNS-03**: Decision log (why Porter chose X model, routed to Y agent, skipped Z task)
-
-### Performance
-
-- [x] **PERF-01**: System prompt audit — cap interactive prompts at 2K tokens, eliminate bloat causing slowness
-- [x] **PERF-02**: Core route migration to Fastify (auth, projects, agents) via strangler fig proxy
-- [x] **PERF-03**: SSE real-time hub replacing polling with server-sent events for live updates
-
-### UI Quality
-
-- [x] **UI-01**: CSS audit and consolidation — consistent styling across all Porter views, no regressions to existing UI
-- [x] **UI-02**: Proper dark/light mode implementation — complete, consistent theming across all views with clean toggle
+- [x] **FOUND-01** through **FOUND-05**: Foundation (exception handling, SQLite pooling, project migration, Cortex removal, boot sequence)
+- [x] **MEM-01** through **MEM-04**: Memory V2 (structured memory, real-time feed, scoping, FTS5 search)
+- [x] **PROJ-01** through **PROJ-04**: Project Flow (guided wizard, auto agent assignment, dashboard, GSD plan mode)
+- [x] **AGNT-01** through **AGNT-04**: Agents (scheduled work, event triggers, activity log, ephemeral agents)
+- [x] **CONN-01** through **CONN-05**: Connections (GitHub, email, calendar, WhatsApp, configurable UI)
+- [x] **TRNS-01** through **TRNS-03**: Transparency (activity feed, health panel, decision log)
+- [x] **PERF-01** through **PERF-03**: Performance (system prompt audit, route migration, SSE hub)
+- [x] **UI-01** through **UI-02**: UI Quality (CSS audit, dark/light mode)
 
 ## v2 Requirements
 
-Deferred to future milestone. Tracked but not in current roadmap.
+Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. Frontend-v2 connects later.
+
+### API Surface
+
+- [ ] **API-01**: All endpoints follow /api/v1/* with consistent JSON response envelopes ({ok, data, error})
+- [ ] **API-02**: All error responses include error code, message, and request trace ID
+- [ ] **API-03**: OpenAPI spec auto-generated from route definitions
+
+### Streaming
+
+- [ ] **STRM-01**: Chat responses stream token-by-token via SSE to the client
+- [ ] **STRM-02**: Streaming works across all AI backends (Ollama, OpenClaw, any future provider)
+- [ ] **STRM-03**: Client can cancel a streaming response mid-stream and the backend stops generation
 
 ### Collaboration
 
-- **COLLAB-01**: Invite people to projects by email with assigned role
-- **COLLAB-02**: Custom per-person roles (view, chat, edit, admin)
-- **COLLAB-03**: Collaborators can chat with and direct project agents
+- [ ] **COLLAB-01**: User can invite people to a project by email with an assigned role
+- [ ] **COLLAB-02**: Per-person roles (view, chat, edit, admin) with granular permission checks on every API call
+- [ ] **COLLAB-03**: Collaborators can chat with and direct project agents
+- [ ] **COLLAB-04**: Project owner can revoke collaborator access
 
-### Business
+### Unified Chat
 
-- **BIZ-01**: SaaS billing (subscription management, usage tracking)
-- **BIZ-02**: Usage-based pricing model
+- [ ] **CHAT-01**: Single conversation API covering agent, project, and external channel messages
+- [ ] **CHAT-02**: Threaded messages with parent/child relationships
+- [ ] **CHAT-03**: Chat history persists across sessions with full-text search
+- [ ] **CHAT-04**: External channel messages (WhatsApp, email) surface in unified conversation stream
+
+### CRM
+
+- [ ] **CRM-01**: Contact model supports multiple emails and phone numbers with country codes
+- [ ] **CRM-02**: Social links (LinkedIn, X, GitHub) stored on contact records
+- [ ] **CRM-03**: AI-powered contact analysis generated from interaction history
+- [ ] **CRM-04**: Contact activity timeline aggregates all touchpoints across projects
+
+### File Handling
+
+- [ ] **FILE-01**: Files can be associated with projects, contacts, and conversations via API
+- [ ] **FILE-02**: Upload endpoint accepts files with target context (project_id, contact_id, conversation_id)
+- [ ] **FILE-03**: File metadata searchable and filterable by association, type, and date
+
+### Agent Templates
+
+- [ ] **TMPL-01**: 100 agent templates with complete skills, tools, and system prompt definitions
+- [ ] **TMPL-02**: Templates searchable and filterable by category via API
+- [ ] **TMPL-03**: Template instantiation creates a fully configured, ready-to-work agent
+
+### Autonomous Learning
+
+- [ ] **LEARN-01**: Agents can search external sources (web, X, Reddit, GitHub) for domain knowledge
+- [ ] **LEARN-02**: Learned knowledge stored as concepts in Memory V2 with source attribution
+- [ ] **LEARN-03**: Learning sessions logged with sources, confidence scores, and what was retained
+
+### Billing
+
+- [ ] **BILL-01**: Subscription management via Lemon Squeezy (create, upgrade, cancel, webhook handling)
+- [ ] **BILL-02**: Usage metering tracks API calls, tokens consumed, and storage per workspace
+- [ ] **BILL-03**: Plan limits enforced at API level (rate limiting, storage caps, agent count)
+
+### Observability
+
+- [ ] **OBS-01**: Frontend errors POST to /api/v1/errors with stack trace, component, user context
+- [ ] **OBS-02**: Error reports queryable by severity, component, and time range
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Visual workflow canvas | Anti-feature — signals developer tool, incompatible with non-technical user target |
-| Mobile native app | Responsive web serves mobile needs now |
+| Frontend UI for any v2 feature | Frontend-v2 being built separately — all v2 work is pure API |
+| porter.py full deprecation | Gradual shrink — brain migrates naturally as features move to Fastify |
+| Visual workflow canvas | Anti-feature — signals developer tool, incompatible with non-technical users |
+| Mobile native app | Responsive web serves mobile needs |
 | Self-hosting support | SaaS-only for this milestone |
-| Custom model training/fine-tuning | Per-agent directives provide equivalent customization |
-| Integration marketplace (400+ connectors) | Depth over breadth — 3 solid connections beat 400 shallow ones |
-| Full monolith rewrite | Gradual migration via strangler fig pattern instead |
-| Agent-to-agent debate loops | Noise that non-technical users cannot interpret |
+| Custom model training | Per-agent directives provide equivalent customization |
+| AARRR analytics | Being built by another Claude session in admin |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | Phase 1 | Complete |
-| FOUND-02 | Phase 1 | Complete |
-| FOUND-03 | Phase 1 | Complete |
-| FOUND-04 | Phase 1 | Complete |
-| FOUND-05 | Phase 1 | Complete |
-| UI-01 | Phase 1 | Complete |
-| UI-02 | Phase 1 | Complete |
-| MEM-01 | Phase 2 | Complete |
-| MEM-02 | Phase 2 | Complete |
-| MEM-03 | Phase 2 | Complete |
-| MEM-04 | Phase 2 | Complete |
-| PERF-01 | Phase 3 | Complete |
-| PERF-02 | Phase 3 | Complete |
-| AGNT-01 | Phase 4 | Complete |
-| AGNT-02 | Phase 4 | Complete |
-| AGNT-03 | Phase 4 | Complete |
-| AGNT-04 | Phase 4 | Complete |
-| PROJ-01 | Phase 5 | Complete |
-| PROJ-02 | Phase 5 | Complete |
-| PROJ-03 | Phase 5 | Complete |
-| PROJ-04 | Phase 5 | Complete |
-| TRNS-01 | Phase 6 | Complete |
-| TRNS-02 | Phase 6 | Complete |
-| TRNS-03 | Phase 6 | Complete |
-| PERF-03 | Phase 6 | Complete |
-| CONN-01 | Phase 7 | Complete |
-| CONN-02 | Phase 7 | Complete |
-| CONN-03 | Phase 7 | Complete |
-| CONN-04 | Phase 7 | Complete |
-| CONN-05 | Phase 7 | Complete |
+| API-01 | — | Pending |
+| API-02 | — | Pending |
+| API-03 | — | Pending |
+| STRM-01 | — | Pending |
+| STRM-02 | — | Pending |
+| STRM-03 | — | Pending |
+| COLLAB-01 | — | Pending |
+| COLLAB-02 | — | Pending |
+| COLLAB-03 | — | Pending |
+| COLLAB-04 | — | Pending |
+| CHAT-01 | — | Pending |
+| CHAT-02 | — | Pending |
+| CHAT-03 | — | Pending |
+| CHAT-04 | — | Pending |
+| CRM-01 | — | Pending |
+| CRM-02 | — | Pending |
+| CRM-03 | — | Pending |
+| CRM-04 | — | Pending |
+| FILE-01 | — | Pending |
+| FILE-02 | — | Pending |
+| FILE-03 | — | Pending |
+| TMPL-01 | — | Pending |
+| TMPL-02 | — | Pending |
+| TMPL-03 | — | Pending |
+| LEARN-01 | — | Pending |
+| LEARN-02 | — | Pending |
+| LEARN-03 | — | Pending |
+| BILL-01 | — | Pending |
+| BILL-02 | — | Pending |
+| BILL-03 | — | Pending |
+| OBS-01 | — | Pending |
+| OBS-02 | — | Pending |
 
 **Coverage:**
-- v1 requirements: 30 total
-- Mapped to phases: 30
-- Unmapped: 0 ✓
+- v2 requirements: 32 total
+- Mapped to phases: 0
+- Unmapped: 32 (awaiting roadmap)
 
 ---
-*Requirements defined: 2026-03-20*
-*Last updated: 2026-03-20 — phase mapping complete*
+*Requirements defined: 2026-03-21*
+*Last updated: 2026-03-21 — v2.0 milestone requirements defined*
