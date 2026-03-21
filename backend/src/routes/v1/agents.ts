@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { db } from '../../db/client.js';
+import { db, sqlite } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 import { eq, ne } from 'drizzle-orm';
 import { ok, err } from '../../lib/envelope.js';
@@ -62,6 +62,34 @@ function formatAgent(row: PersonaRow) {
     skills: config.skills ?? [],
     tools: config.tools ?? [],
     awareness_mode: config.awareness_mode ?? 'aware',
+  };
+}
+
+interface ActivityRow {
+  id: number;
+  agent_id: string;
+  job_id: string | null;
+  project_id: string | null;
+  event_type: string;
+  summary: string | null;
+  detail: string | null;
+  created_at: number;
+  trigger_type?: string;
+  job_status?: string;
+}
+
+function formatActivity(row: ActivityRow) {
+  return {
+    id: row.id,
+    agent_id: row.agent_id,
+    job_id: row.job_id,
+    project_id: row.project_id,
+    event_type: row.event_type,
+    summary: row.summary,
+    detail: row.detail ? parseJsonField(row.detail, {}) : null,
+    created_at: row.created_at,
+    trigger_type: row.trigger_type ?? null,
+    job_status: row.job_status ?? null,
   };
 }
 
@@ -204,5 +232,60 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
       .where(eq(schema.personas.id, id)).run();
 
     return reply.send(ok({ retired: true }));
+  });
+
+  // GET /api/v1/agents/:id/activity — chronological activity feed with pagination
+  fastify.get('/:id/activity', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { limit, offset } = request.query as { limit?: string; offset?: string };
+
+    const agent = db.select().from(schema.personas)
+      .where(eq(schema.personas.id, id)).get();
+
+    if (!agent) {
+      return reply.code(404).send(err('AGENT_NOT_FOUND', 'Agent not found'));
+    }
+
+    const maxLimit = Math.min(parseInt(limit ?? '50', 10), 200);
+    const skip = parseInt(offset ?? '0', 10);
+
+    const rows = sqlite.prepare(`
+      SELECT a.*, j.trigger_type, j.status as job_status
+      FROM agent_activity a
+      LEFT JOIN agent_jobs j ON j.id = a.job_id
+      WHERE a.agent_id = @agentId
+      ORDER BY a.created_at DESC
+      LIMIT @limit OFFSET @offset
+    `).all({ agentId: id, limit: maxLimit, offset: skip }) as ActivityRow[];
+
+    const total = sqlite.prepare(`
+      SELECT COUNT(*) as count FROM agent_activity WHERE agent_id = ?
+    `).get(id) as { count: number };
+
+    return reply.send(ok({
+      activity: rows.map(formatActivity),
+      agent_id: id,
+      total: total.count,
+      limit: maxLimit,
+      offset: skip,
+    }));
+  });
+
+  // GET /api/v1/agents/:id/jobs — agent's job queue
+  fastify.get('/:id/jobs', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { status } = request.query as { status?: string };
+
+    let sql = 'SELECT * FROM agent_jobs WHERE agent_id = @agentId';
+    const params: Record<string, unknown> = { agentId: id };
+    if (status) { sql += ' AND status = @status'; params.status = status; }
+    sql += ' ORDER BY created_at DESC LIMIT 50';
+
+    const rows = sqlite.prepare(sql).all(params);
+    return reply.send(ok({ jobs: rows, agent_id: id, count: rows.length }));
   });
 }
