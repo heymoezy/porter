@@ -13236,7 +13236,7 @@ body {
 .login-links a:hover { color: var(--accent); }
 </style>
 <script>
-(function(){var t=localStorage.getItem('porter_theme');if(t&&t!=='system')document.documentElement.setAttribute('data-theme',t)})();
+(function(){var t=localStorage.getItem('porter_theme');if(!t||t==='dark'){document.documentElement.setAttribute('data-theme','dark')}else if(t==='light'){document.documentElement.setAttribute('data-theme','light')}else if(t==='system'){/*let @media decide*/}})();
 </script>
 </head>
 <body>
@@ -13404,7 +13404,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .links a:hover{color:var(--accent)}
 </style>
 <script>
-(function(){var t=localStorage.getItem('porter_theme');if(t&&t!=='system')document.documentElement.setAttribute('data-theme',t)})();
+(function(){var t=localStorage.getItem('porter_theme');if(!t||t==='dark'){document.documentElement.setAttribute('data-theme','dark')}else if(t==='light'){document.documentElement.setAttribute('data-theme','light')}else if(t==='system'){/*let @media decide*/}})();
 </script>
 </head>
 <body>
@@ -13495,7 +13495,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .links a:hover{color:var(--accent)}
 </style>
 <script>
-(function(){var t=localStorage.getItem('porter_theme');if(t&&t!=='system')document.documentElement.setAttribute('data-theme',t)})();
+(function(){var t=localStorage.getItem('porter_theme');if(!t||t==='dark'){document.documentElement.setAttribute('data-theme','dark')}else if(t==='light'){document.documentElement.setAttribute('data-theme','light')}else if(t==='system'){/*let @media decide*/}})();
 </script>
 </head>
 <body>
@@ -13637,7 +13637,7 @@ body {
 }
 .loc:hover { background: var(--raised); color: var(--text); }
 .loc.active { color: var(--accent); border-left-color: var(--accent);
-              background: rgba(247,147,26,.06); }
+              background: rgba(99,102,241,.06); }
 .loc svg { flex-shrink: 0; opacity: .7; }
 .loc.active svg { opacity: 1; }
 .loc-name { font-size: 13px; font-weight: 500; display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -13670,7 +13670,7 @@ body.sidebar-collapsed .mount-item { padding-left: 0; justify-content: center; }
   font-size:13px; color:var(--text2); cursor:pointer; background:transparent; border:none;
   width:100%; text-align:left; font-family:inherit; }
 .mnav-item:hover { background:var(--raised); color:var(--text); }
-.mnav-item.active { background:rgba(247,147,26,.10); color:var(--accent); font-weight:500; }
+.mnav-item.active { background:rgba(99,102,241,.10); color:var(--accent); font-weight:500; }
 .mnav-badge { margin-left:auto; display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 6px; border-radius:999px; background:var(--accent); color:#FFFFFF; font-size:10px; font-weight:800; line-height:1; }
 .mnav-badge.dim { background:color-mix(in srgb,var(--border) 85%, transparent); color:var(--text3); }
 .mnav-sep { height:1px; background:var(--border); margin:6px 0; }
@@ -13857,7 +13857,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 /* selection toolbar */
 .selection-toolbar {
   display: none; align-items: center; gap: 10px;
-  padding: 8px 28px; background: rgba(247,147,26,.06);
+  padding: 8px 28px; background: rgba(99,102,241,.06);
   border-bottom: 1px solid color-mix(in srgb, var(--warning) 15%, var(--bg)); flex-shrink: 0;
   font-size: 13px;
 }
@@ -13897,7 +13897,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .view-toggle button.active { background:var(--accent); color:var(--text); }
 .file-area.drag-over::after {
   content: 'Drop to upload'; position: absolute; inset: 0;
-  background: rgba(247,147,26,.08);
+  background: rgba(99,102,241,.08);
   border: 2px dashed var(--accent);
   border-radius: var(--radius); margin: 16px;
   display: flex; align-items: center; justify-content: center;
@@ -15012,7 +15012,7 @@ body.sidebar-collapsed .loc { padding: 9px 0; justify-content: center; }
 .banner {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 28px; font-size: 12px; color: #c07020;
-  background: rgba(247,147,26,.05); border-bottom: 1px solid color-mix(in srgb, var(--warning) 10%, var(--bg));
+  background: rgba(99,102,241,.05); border-bottom: 1px solid color-mix(in srgb, var(--warning) 10%, var(--bg));
   flex-shrink: 0;
 }
 
@@ -15140,7 +15140,7 @@ progress.ubar::-webkit-progress-value { background: var(--accent); }
 }
 .fp-current {
   padding: 8px 16px; font-size: 11px; color: var(--accent);
-  font-weight: 600; letter-spacing: .4px; background: rgba(247,147,26,.05);
+  font-weight: 600; letter-spacing: .4px; background: rgba(99,102,241,.05);
 }
 .fp-item {
   padding: 9px 16px; font-size: 13px; cursor: pointer;
@@ -15268,7 +15268,7 @@ body.density-compact .file-name { padding: 6px 0; }
   border-bottom: none; font-family: inherit; width: 100%; text-align: left; }
 .settings-nav-item:hover { background: var(--raised); color: var(--text); }
 .settings-nav-item.active { color: var(--accent); border-left-color: var(--accent);
-  background: rgba(247,147,26,.06); }
+  background: rgba(99,102,241,.06); }
 .settings-content { flex: 1; overflow-y: auto; padding: 28px 32px; position: relative; }
 .settings-shell { max-width: 720px; }
 .settings-compact { display:flex; flex-direction:column; gap:18px; max-width:520px; }
@@ -15298,7 +15298,7 @@ body.density-compact .file-name { padding: 6px 0; }
 .audit-row { padding:10px 0; border-bottom:1px solid var(--border); font-size:12px;
   display:flex; gap:10px; align-items:baseline; }
 .agent-clarity { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
-.aw-file-active { border-color: var(--accent) !important; color: var(--accent) !important; background: rgba(247,147,26,.08) !important; }
+.aw-file-active { border-color: var(--accent) !important; color: var(--accent) !important; background: rgba(99,102,241,.08) !important; }
 @media (max-width: 1100px) { #agents-module-list > div { grid-template-columns: 1fr !important; } }
 
 /* orchestration flow */
@@ -17178,7 +17178,7 @@ input[type="number"].settings-input { min-width: 60px; }
   cursor: pointer; text-align: left; font-family: inherit; width: 100%;
   transition: border-color .15s, background .15s;
 }
-.loc-type-card:not(:disabled):hover { border-color: var(--accent); background: rgba(247,147,26,.05); }
+.loc-type-card:not(:disabled):hover { border-color: var(--accent); background: rgba(99,102,241,.05); }
 .loc-type-card:disabled { opacity: .45; cursor: default; }
 .loc-card-title { font-size: 13px; font-weight: 600; color: var(--text); }
 .loc-card-desc  { font-size: 11px; color: var(--text3); }
@@ -17216,7 +17216,7 @@ input[type="number"].settings-input { min-width: 60px; }
 .loc-badge--local  { background: rgba(80,200,120,.12);  color: var(--success); }
 .loc-badge--vps    { background: rgba(100,160,255,.12); color: var(--accent-h); }
 .loc-badge--remote { background: rgba(100,140,255,.12); color: var(--accent-h); }
-.loc-badge--rw { background: rgba(247,147,26,.10); color: var(--accent); }
+.loc-badge--rw { background: rgba(99,102,241,.10); color: var(--accent); }
 .loc-badge--ro { background: rgba(150,150,150,.10); color: var(--text3); }
 .loc-quickpicks { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .pw-section-title { font-size: 12px; font-weight: 600; color: var(--text3);
@@ -38690,7 +38690,7 @@ function showFilesHome() {
           const isActive = _fhomeActive && _fhomeActive.mountId === m.id;
           const mIcon = (lbl.includes("web")||lbl.includes("site")||lbl.includes("www")) ? webIcon : fldIcon;
           const activeSty = isActive
-            ? ' style="background:rgba(247,147,26,.08);border-left:2px solid var(--accent)"'
+            ? ' style="background:rgba(99,102,241,.08);border-left:2px solid var(--accent)"'
             : "";
           html += `<div class="fhome-mount"${activeSty} onclick="selectMount('${esc(m.id)}','')">`;
           html += `<div></div>`;
@@ -46395,7 +46395,7 @@ body {
 }
 </style>
 <script>
-(function(){var t=localStorage.getItem('porter_theme');if(t&&t!=='system')document.documentElement.setAttribute('data-theme',t)})();
+(function(){var t=localStorage.getItem('porter_theme');if(!t||t==='dark'){document.documentElement.setAttribute('data-theme','dark')}else if(t==='light'){document.documentElement.setAttribute('data-theme','light')}else if(t==='system'){/*let @media decide*/}})();
 </script>
 </head>
 <body>
