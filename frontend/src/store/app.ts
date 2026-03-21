@@ -21,6 +21,32 @@ function applyTheme(theme: ThemePreference) {
   localStorage.setItem('porter_theme', theme);
 }
 
+// Wizard types
+type WizardStage = 'idle' | 'detecting' | 'questioning' | 'proposing' | 'refining' | 'approved';
+
+interface ProposedAgentUI {
+  templateId: string;
+  name: string;
+  role: string;
+  portrait: string;
+  whyChosen: string;
+}
+
+interface WizardProposal {
+  projectName: string;
+  projectType: string;
+  agents: ProposedAgentUI[];
+  milestones: string[];
+  scopeLabel: string;
+  explanation: string;
+}
+
+interface WizardQuestionData {
+  id: string;
+  text: string;
+  options: { id: string; label: string; description?: string }[];
+}
+
 interface AppState {
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
@@ -28,6 +54,25 @@ interface AppState {
   toggleSidebar: () => void;
   themePreference: ThemePreference;
   cycleTheme: () => void;
+
+  // Wizard state machine
+  wizardStage: WizardStage;
+  wizardProposal: WizardProposal | null;
+  wizardQuestions: WizardQuestionData[];
+  wizardAnswers: string[];
+  setWizardStage: (stage: WizardStage) => void;
+  setWizardProposal: (proposal: WizardProposal | null) => void;
+  addWizardAnswer: (answer: string) => void;
+  resetWizard: () => void;
+
+  // GSD mode — per-project, persisted to localStorage
+  gsdModes: Record<string, boolean>;  // { [projectId]: boolean }
+  setGsdMode: (projectId: string, mode: boolean) => void;
+  getGsdMode: (projectId: string) => boolean;
+
+  // Active project context
+  activeProjectId: string | null;
+  setActiveProjectId: (id: string | null) => void;
 }
 
 const CYCLE: Record<ThemePreference, ThemePreference> = {
@@ -49,4 +94,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     applyTheme(next);
     set({ themePreference: next });
   },
+
+  // Wizard
+  wizardStage: 'idle',
+  wizardProposal: null,
+  wizardQuestions: [],
+  wizardAnswers: [],
+  setWizardStage: (stage) => set({ wizardStage: stage }),
+  setWizardProposal: (proposal) => set({ wizardProposal: proposal }),
+  addWizardAnswer: (answer) => set((s) => ({ wizardAnswers: [...s.wizardAnswers, answer] })),
+  resetWizard: () => set({ wizardStage: 'idle', wizardProposal: null, wizardQuestions: [], wizardAnswers: [] }),
+
+  // GSD mode
+  gsdModes: JSON.parse(localStorage.getItem('porter_gsd_modes') || '{}'),
+  setGsdMode: (projectId, mode) => set((s) => {
+    const updated = { ...s.gsdModes, [projectId]: mode };
+    localStorage.setItem('porter_gsd_modes', JSON.stringify(updated));
+    return { gsdModes: updated };
+  }),
+  getGsdMode: (projectId) => get().gsdModes[projectId] ?? false,
+
+  // Active project
+  activeProjectId: null,
+  setActiveProjectId: (id) => set({ activeProjectId: id }),
 }));
