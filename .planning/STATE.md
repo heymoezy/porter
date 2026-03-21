@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-03-21T03:29:30.793Z"
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-03-21T03:47:03.067Z"
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 28
-  completed_plans: 27
+  completed_plans: 28
 ---
 
 # Project State
@@ -72,6 +72,7 @@ Plan: 3 of 6
 | Phase 04-agent-autonomy P02 | 4min | 3 tasks | 2 files |
 | Phase 04-agent-autonomy P03 | 6min | 3 tasks | 4 files |
 | Phase 04-agent-autonomy P04 | 5min | 2 tasks | 2 files |
+| Phase 04-agent-autonomy P05 | 4min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -153,6 +154,9 @@ Recent decisions affecting current work:
 - [Phase 04-agent-autonomy]: Zod v4 requires z.record(z.string(), z.unknown()) — z.record(z.unknown()) is 1-arg and invalid in v4
 - [Phase 04-agent-autonomy]: Activity endpoint uses raw sqlite.prepare() with LEFT JOIN for agent_jobs — Drizzle lacks multi-table join fluency for this query
 - [Phase 04-agent-autonomy]: config import removed from scheduler — only featureFlags needed after ai-router integration
+- [Phase 04-agent-autonomy]: ephemeral agent auto-retire guarded by featureFlags.ephemeralAgents — consistent kill-switch behavior
+- [Phase 04-agent-autonomy]: json_extract(config, '$.project_id') used to find ephemeral agents belonging to a project — avoids new DB column
+- [Phase 04-agent-autonomy]: scheduler LEFT JOIN projects for ephemeral job pickup — non-ephemeral agents unaffected by project status
 
 ### Pending Todos
 
@@ -167,6 +171,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T03:29:30.784Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-03-21T03:47:03.065Z
+Stopped at: Completed 04-05-PLAN.md
 Resume file: None
