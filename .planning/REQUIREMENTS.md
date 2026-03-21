@@ -24,10 +24,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Project Flow
 
-- [ ] **PROJ-01**: Guided project creation wizard (describe project → Porter proposes agents/plan → approve → work starts)
-- [ ] **PROJ-02**: Auto agent assignment based on project type and requirements
-- [ ] **PROJ-03**: Project dashboard showing progress, active agents, recent activity, and next steps
-- [ ] **PROJ-04**: GSD plan mode in chat — toggleable structured planning mode (question → research → requirements → roadmap → execute) vs free chat
+- [x] **PROJ-01**: Guided project creation wizard (describe project → Porter proposes agents/plan → approve → work starts)
+- [x] **PROJ-02**: Auto agent assignment based on project type and requirements
+- [x] **PROJ-03**: Project dashboard showing progress, active agents, recent activity, and next steps
+- [x] **PROJ-04**: GSD plan mode in chat — toggleable structured planning mode (question → research → requirements → roadmap → execute) vs free chat
 
 ### Agents
 
@@ -109,10 +109,10 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | AGNT-02 | Phase 4 | Complete |
 | AGNT-03 | Phase 4 | Complete |
 | AGNT-04 | Phase 4 | Complete |
-| PROJ-01 | Phase 5 | Pending |
-| PROJ-02 | Phase 5 | Pending |
-| PROJ-03 | Phase 5 | Pending |
-| PROJ-04 | Phase 5 | Pending |
+| PROJ-01 | Phase 5 | Complete |
+| PROJ-02 | Phase 5 | Complete |
+| PROJ-03 | Phase 5 | Complete |
+| PROJ-04 | Phase 5 | Complete |
 | TRNS-01 | Phase 6 | Pending |
 | TRNS-02 | Phase 6 | Pending |
 | TRNS-03 | Phase 6 | Pending |
