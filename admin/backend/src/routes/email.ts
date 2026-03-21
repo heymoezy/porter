@@ -85,9 +85,9 @@ export default async function emailRoutes(fastify: FastifyInstance) {
 
   // POST /api/admin/email/messages — create/send message
   fastify.post('/messages', async (req) => {
-    const { to_email, to_name, subject, body, body_html, folder = 'drafts', send } = req.body as Record<string, string>;
-    const fromEmail = getSetting('smtp_from_email') || config.smtp.fromEmail || 'noreply@askporter.app';
-    const fromName = getSetting('smtp_from_name') || config.smtp.fromName || 'Porter';
+    const { from_email, from_name, to_email, to_name, subject, body, body_html, folder = 'drafts', send } = req.body as Record<string, string>;
+    const fromEmail = from_email || getSetting('smtp_from_email') || config.smtp.fromEmail || 'porter@askporter.app';
+    const fromName = from_name || getSetting('smtp_from_name') || config.smtp.fromName || 'Porter';
 
     const targetFolder = send === 'true' ? 'sent' : folder;
     const status = send === 'true' ? 'sent' : 'draft';

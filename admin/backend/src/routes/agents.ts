@@ -30,7 +30,7 @@ export default async function agentsRoutes(fastify: FastifyInstance) {
         SELECT id, name, role, avatar, preferred_backend, status, agent_group,
                is_system, is_locked, is_master, owner, appearance_style, appearance_spec,
                dispatch_mode, created_at, last_active
-        FROM personas ORDER BY is_system DESC, sort_order, name
+        FROM personas WHERE id != 'porter-core' ORDER BY sort_order, name
       `).all() as Array<Record<string, unknown>>;
 
       // Skills per persona
