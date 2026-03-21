@@ -3,7 +3,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../db/client.js';
 import * as schema from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import crypto from 'crypto';
+import { err } from '../lib/envelope.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -39,10 +39,7 @@ async function authPlugin(fastify: FastifyInstance) {
 
   fastify.decorate('requireAuth', async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.sessionUser) {
-      reply.code(401).send({
-        error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-        meta: { request_id: crypto.randomUUID(), timestamp: Date.now() },
-      });
+      reply.code(401).send(err('UNAUTHORIZED', 'Authentication required', request.id));
     }
   });
 }

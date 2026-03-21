@@ -6,6 +6,7 @@ import staticFiles from '@fastify/static';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import crypto from 'crypto';
 import { config } from './config.js';
 import authRoutes from './routes/auth.js';
 import taskRoutes from './routes/tasks.js';
@@ -33,6 +34,34 @@ const fastify = Fastify({
   logger: {
     level: config.logLevel,
   },
+  genReqId: () => crypto.randomUUID(),
+  requestIdHeader: 'x-request-id',
+});
+
+// Global hook: set X-Request-ID header and sync trace_id in JSON response bodies
+fastify.addHook('onSend', async (request, reply, payload) => {
+  reply.header('X-Request-ID', request.id);
+  // Sync trace_id in JSON responses to match request.id
+  if (typeof payload === 'string') {
+    const ct = reply.getHeader('content-type');
+    if (ct && typeof ct === 'string' && ct.includes('application/json')) {
+      try {
+        const body = JSON.parse(payload);
+        if (body && typeof body === 'object') {
+          if (body.meta && typeof body.meta.trace_id === 'string') {
+            body.meta.trace_id = request.id;
+          }
+          if (body.error && typeof body.error.trace_id === 'string') {
+            body.error.trace_id = request.id;
+          }
+          return JSON.stringify(body);
+        }
+      } catch {
+        // Not valid JSON, pass through unchanged
+      }
+    }
+  }
+  return payload;
 });
 
 // Infrastructure plugins
