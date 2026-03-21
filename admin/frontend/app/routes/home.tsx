@@ -1,16 +1,21 @@
 import { AdminShell } from "~/components/layout/admin-shell"
-import { useCustomers } from "~/hooks/use-admin-api"
-import { Card, CardContent } from "~/components/ui/card"
+import { useQuery } from "@tanstack/react-query"
+import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
 import { Link } from "react-router"
 import {
-  Users, DollarSign, TrendingUp, AlertTriangle,
-  Heart, Share2, Target, ChevronRight,
+  Users, DollarSign, Bot, Sparkles, Monitor, Activity,
+  Server, HardDrive, Cpu, ChevronRight,
 } from "lucide-react"
 
-function fmt$(n: number) { return n >= 0 ? `$${n.toFixed(2)}` : `-$${Math.abs(n).toFixed(2)}` }
-function fmtRel(ts: number | null) {
-  if (!ts) return "never"
+function fmt$(n: number) { return n >= 0 ? `$${n.toFixed(0)}` : `-$${Math.abs(n).toFixed(0)}` }
+function fmtBytes(b: number) {
+  if (!b) return "0"
+  const k = 1024, s = ["B", "KB", "MB", "GB"]
+  const i = Math.floor(Math.log(b) / Math.log(k))
+  return `${(b / Math.pow(k, i)).toFixed(0)}${s[i]}`
+}
+function fmtRel(ts: number) {
   const d = Date.now() / 1000 - ts
   if (d < 60) return "now"
   if (d < 3600) return `${Math.floor(d / 60)}m`
@@ -19,161 +24,122 @@ function fmtRel(ts: number | null) {
 }
 
 function DashboardContent() {
-  const { data, isLoading } = useCustomers()
+  const { data: custData } = useQuery({
+    queryKey: ["admin", "customers"],
+    queryFn: () => api<{ customers: Array<Record<string, unknown>>; stats: { total: number; paying: number; trialing: number; free: number } }>("/api/admin/users"),
+  })
+  const { data: sysData } = useQuery({
+    queryKey: ["admin", "system"],
+    queryFn: () => api<{
+      memory: { pct: number; used: number; total: number }
+      disk: { pct: number; used: number; total: number }
+      cpu: { cores: number; load1m: number }
+      sessions: { active: number }
+      uptime: number
+      runtimes: Array<{ name: string; status: string; latencyMs: number }>
+    }>("/api/admin/system"),
+    refetchInterval: 15_000,
+  })
+  const { data: agentData } = useQuery({
+    queryKey: ["admin", "agents"],
+    queryFn: () => api<{ total: number; system: number; user: number }>("/api/admin/agents"),
+  })
+  const { data: skillData } = useQuery({
+    queryKey: ["admin", "skills"],
+    queryFn: () => api<{ totalSkills: number; totalAssignments: number }>("/api/admin/skills"),
+  })
+  const { data: actData } = useQuery({
+    queryKey: ["admin", "activity", ""],
+    queryFn: () => api<{ entries: Array<{ ts: number; actor: string; action: string; target: string }>; total: number }>("/api/admin/activity?limit=8"),
+  })
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="size-6 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
-      </div>
-    )
-  }
-
-  const customers = data?.customers ?? []
-  const stats = data?.stats ?? { total: 0, paying: 0, trialing: 0, free: 0 }
-
-  // Aggregate metrics
-  const totalMrr = customers.reduce((s, c) => s + (c.mrr ?? 0), 0)
-  const totalCost = customers.reduce((s, c) => s + (c.cost ?? 0), 0)
-  const totalMargin = totalMrr - totalCost
-  const avgHealth = customers.length > 0 ? Math.round(customers.reduce((s, c) => s + (c.health ?? 50), 0) / customers.length) : 0
-  const avgChurn = customers.length > 0 ? Math.round(customers.reduce((s, c) => s + (c.churn ?? 50), 0) / customers.length) : 0
-  const totalLtv = customers.reduce((s, c) => s + (c.ltv ?? 0), 0)
-
-  // At-risk customers (churn > 60)
-  const atRisk = customers.filter(c => (c.churn ?? 0) > 60)
-  // Conversion candidates (conversion > 40 and free)
-  const conversionCandidates = customers.filter(c => (c.conversion ?? 0) > 40 && c.plan === 'free')
-  // Viral leaders
-  const viralLeaders = customers.filter(c => (c.viral ?? 0) > 30).sort((a, b) => (b.viral ?? 0) - (a.viral ?? 0))
+  const stats = custData?.stats ?? { total: 0, paying: 0, trialing: 0, free: 0 }
+  const customers = custData?.customers ?? []
+  const totalMrr = customers.reduce((s: number, c: Record<string, unknown>) => s + ((c.mrr as number) ?? 0), 0)
+  const sys = sysData
 
   return (
-    <div className="space-y-3">
-      {/* Revenue row */}
-      <div className="grid grid-cols-5 gap-2">
+    <div className="space-y-2">
+      {/* Top metrics */}
+      <div className="grid grid-cols-6 gap-2">
         {[
-          { icon: Users, label: "Customers", value: String(stats.total), sub: `${stats.paying} paying · ${stats.trialing} trial`, color: "#6366F1" },
-          { icon: DollarSign, label: "MRR", value: fmt$(totalMrr), sub: `${stats.paying} subscriptions`, color: "#22C55E" },
-          { icon: TrendingUp, label: "Margin", value: fmt$(totalMargin), sub: `Cost ${fmt$(totalCost)}`, color: totalMargin >= 0 ? "#22C55E" : "#EF4444" },
-          { icon: Target, label: "12mo LTV", value: fmt$(totalLtv), sub: `Avg ${fmt$(customers.length > 0 ? totalLtv / customers.length : 0)}`, color: "#6366F1" },
-          { icon: Heart, label: "Avg Health", value: String(avgHealth), sub: `Churn risk ${avgChurn}%`, color: avgHealth >= 70 ? "#22C55E" : avgHealth >= 40 ? "#F59E0B" : "#EF4444" },
+          { icon: Users, label: "Customers", value: String(stats.total), sub: `${stats.paying} paying` },
+          { icon: DollarSign, label: "MRR", value: fmt$(totalMrr), sub: `${stats.paying} subs` },
+          { icon: Bot, label: "Agents", value: String(agentData?.total ?? 0), sub: `${agentData?.user ?? 0} user` },
+          { icon: Sparkles, label: "Skills", value: String(skillData?.totalSkills ?? 0), sub: `${skillData?.totalAssignments ?? 0} deployed` },
+          { icon: Monitor, label: "Sessions", value: String(sys?.sessions?.active ?? 0), sub: `up ${sys ? Math.floor(sys.uptime / 3600) + "h" : "—"}` },
+          { icon: Activity, label: "Events", value: String(actData?.total ?? 0), sub: "audit log" },
         ].map((m, i) => (
-          <Card key={i} className="animate-card-deal-in border-border bg-surface" style={{ animationDelay: `${i * 50}ms` }}>
-            <CardContent className="flex items-center gap-2 p-3">
-              <div className="flex size-6 items-center justify-center rounded-lg" style={{ backgroundColor: `${m.color}15` }}>
-                <m.icon className="size-3" style={{ color: m.color }} />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-text">{m.value}</p>
-                <p className="text-[11px] text-text3">{m.label}</p>
-                <p className="text-[10px] text-text3">{m.sub}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <div key={i} className="animate-card-deal-in rounded-xl border border-border bg-surface p-2" style={{ animationDelay: `${i * 40}ms` }}>
+            <div className="flex items-center gap-1.5">
+              <m.icon className="size-3 text-accent-porter" />
+              <span className="text-[10px] text-text3 uppercase">{m.label}</span>
+            </div>
+            <p className="text-sm font-bold text-text mt-0.5">{m.value}</p>
+            <p className="text-[10px] text-text3">{m.sub}</p>
+          </div>
         ))}
       </div>
 
-      {/* Action lanes: At-risk + Conversion + Viral */}
       <div className="grid grid-cols-3 gap-2">
-        {/* At-risk */}
-        <Card className="border-border bg-surface">
-          <CardContent className="p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="size-3.5 text-danger" />
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text3">Churn Risk</h3>
-              </div>
-              <Badge variant="destructive" className="text-[10px]">{atRisk.length}</Badge>
-            </div>
-            {atRisk.length === 0 ? (
-              <p className="text-xs text-text3">No at-risk customers</p>
-            ) : (
-              <div className="space-y-1">
-                {atRisk.slice(0, 5).map(c => (
-                  <Link key={c.username} to={`/users/${c.username}`} className="flex items-center justify-between rounded-md bg-background px-2.5 py-1.5 hover:bg-raised transition-colors">
-                    <div>
-                      <p className="text-xs font-medium text-text">{c.display_name || c.username}</p>
-                      <p className="text-[11px] text-text3">Last seen {fmtRel(c.last_seen_at)}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-danger">{c.churn}%</span>
-                      <ChevronRight className="size-3 text-text3" />
-                    </div>
-                  </Link>
+        {/* System gauges */}
+        <div className="rounded-xl border border-border bg-surface p-2.5 space-y-2">
+          <div className="flex items-center gap-1.5">
+            <Server className="size-3 text-accent-porter" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">System</span>
+          </div>
+          {sys && (
+            <>
+              {[
+                { icon: Monitor, label: "Memory", pct: sys.memory.pct, detail: `${fmtBytes(sys.memory.used)} / ${fmtBytes(sys.memory.total)}` },
+                { icon: HardDrive, label: "Disk", pct: sys.disk.pct, detail: `${fmtBytes(sys.disk.used)} / ${fmtBytes(sys.disk.total)}` },
+                { icon: Cpu, label: "CPU", pct: Math.round(sys.cpu.load1m / sys.cpu.cores * 100), detail: `${sys.cpu.cores} cores, load ${sys.cpu.load1m.toFixed(1)}` },
+              ].map(g => (
+                <div key={g.label}>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-text3">{g.label}</span>
+                    <span className={g.pct >= 80 ? "text-danger font-bold" : "text-text2"}>{g.pct}%</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-border mt-0.5">
+                    <div className={`h-full rounded-full transition-all ${g.pct >= 90 ? "bg-danger" : g.pct >= 70 ? "bg-warning" : "bg-success"}`} style={{ width: `${Math.min(g.pct, 100)}%` }} />
+                  </div>
+                </div>
+              ))}
+              {/* Runtimes */}
+              <div className="pt-1 space-y-0.5">
+                {sys.runtimes?.map(rt => (
+                  <div key={rt.name} className="flex items-center gap-1.5 text-[10px]">
+                    <div className={`size-1.5 rounded-full ${rt.status === "healthy" ? "bg-success" : "bg-danger"}`} />
+                    <span className="text-text3">{rt.name}</span>
+                    {rt.latencyMs > 0 && <span className="text-text3 ml-auto">{rt.latencyMs}ms</span>}
+                  </div>
                 ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </>
+          )}
+        </div>
 
-        {/* Conversion candidates */}
-        <Card className="border-border bg-surface">
-          <CardContent className="p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <DollarSign className="size-3.5 text-success" />
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text3">Ready to Convert</h3>
-              </div>
-              <Badge className="text-[10px] bg-success/15 text-success border-0">{conversionCandidates.length}</Badge>
+        {/* Recent activity */}
+        <div className="col-span-2 rounded-xl border border-border bg-surface p-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <Activity className="size-3 text-accent-porter" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Recent Activity</span>
             </div>
-            {conversionCandidates.length === 0 ? (
-              <p className="text-xs text-text3">No conversion candidates</p>
-            ) : (
-              <div className="space-y-1">
-                {conversionCandidates.slice(0, 5).map(c => (
-                  <Link key={c.username} to={`/users/${c.username}`} className="flex items-center justify-between rounded-md bg-background px-2.5 py-1.5 hover:bg-raised transition-colors">
-                    <div>
-                      <p className="text-xs font-medium text-text">{c.display_name || c.username}</p>
-                      <p className="text-[11px] text-text3">{c.project_count} projects · {c.agent_count} agents</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-success">{c.conversion}%</span>
-                      <ChevronRight className="size-3 text-text3" />
-                    </div>
-                  </Link>
-                ))}
+            <Link to="/activity" className="text-[10px] text-accent-porter hover:underline">View all</Link>
+          </div>
+          <div className="space-y-px">
+            {(actData?.entries ?? []).map((e, i) => (
+              <div key={i} className="flex items-center gap-2 py-0.5">
+                <span className="text-[10px] text-text3 w-8 shrink-0">{fmtRel(e.ts)}</span>
+                <span className="text-[11px] font-medium text-text">{e.actor}</span>
+                <Badge className="text-[9px] bg-text3/15 text-text3 border-0">{e.action}</Badge>
+                <span className="text-[10px] text-text3 truncate ml-auto">{e.target}</span>
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Viral leaders */}
-        <Card className="border-border bg-surface">
-          <CardContent className="p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Share2 className="size-3.5 text-accent-porter" />
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text3">Viral Leaders</h3>
-              </div>
-              <Badge className="text-[10px] bg-accent-porter/15 text-accent-porter border-0">{viralLeaders.length}</Badge>
-            </div>
-            {viralLeaders.length === 0 ? (
-              <p className="text-xs text-text3">No viral activity yet</p>
-            ) : (
-              <div className="space-y-1">
-                {viralLeaders.slice(0, 5).map(c => (
-                  <Link key={c.username} to={`/users/${c.username}`} className="flex items-center justify-between rounded-md bg-background px-2.5 py-1.5 hover:bg-raised transition-colors">
-                    <div>
-                      <p className="text-xs font-medium text-text">{c.display_name || c.username}</p>
-                      <p className="text-[11px] text-text3">{c.invitesSent ?? 0} invites · {c.invitesConverted ?? 0} converted</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-accent-porter">{c.viral}%</span>
-                      <ChevronRight className="size-3 text-text3" />
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Quick counts */}
-      <div className="flex items-center gap-4 px-1 text-xs text-text3">
-        <span>{stats.total} customers</span>
-        <span>{atRisk.length} at risk</span>
-        <span>{conversionCandidates.length} ready to convert</span>
+            ))}
+            {(!actData?.entries?.length) && <p className="text-xs text-text3 py-2 text-center">No recent activity</p>}
+          </div>
+        </div>
       </div>
     </div>
   )
