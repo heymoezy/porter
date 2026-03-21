@@ -40,8 +40,8 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - [ ] WhatsApp integration (bidirectional, agent-specific chat, group chats via WhatsApp)
 - [ ] Connections (GitHub, Mail, Calendar at account-level defaults + project-level overrides)
 - ✓ Memory V2 completion (structured, noise-free, real-time visibility, no signal noise from logins/uploads) — Validated in Phase 2: memory-v2
-- [ ] Transparency dashboard (agent activity, memory changes, system health, decision log — all visible)
-- [ ] Performance overhaul (fast page loads, responsive chat, eliminate heavy system prompts)
+- ✓ Transparency dashboard (agent activity, memory changes, system health, decision log — all visible) — Validated in Phase 6: real-time-and-transparency
+- ✓ Performance overhaul (SSE replaces polling, 6 pollers killed, single EventSource) — Validated in Phase 6: real-time-and-transparency
 - [ ] Codebase migration (gradual move from porter.py monolith to Fastify backend, new features in TypeScript)
 - [ ] SaaS billing (subscription management, usage tracking — deferred until core works)
 
@@ -89,4 +89,4 @@ The frontend (React 19 + Vite 8 + TailwindCSS 4) is functional but coupled to th
 | Memory V2 must filter noise (logins, uploads) | Current system captures everything, dilutes actual learning | — Pending |
 
 ---
-*Last updated: 2026-03-21 after Phase 5 (Guided Project Wizard) completion*
+*Last updated: 2026-03-21 after Phase 6 (Real-Time and Transparency) completion*
