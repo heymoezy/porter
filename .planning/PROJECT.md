@@ -37,8 +37,8 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ Persistent and temporary agents (ephemeral project-scoped agents with auto-retire) — Validated in Phase 4: agent-autonomy
 - [ ] Collaborative sessions (invite people to projects, share agents, custom per-person roles)
 - [ ] Unified global chat (all conversations in one interface — agents, projects, external)
-- [ ] WhatsApp integration (bidirectional, agent-specific chat, group chats via WhatsApp)
-- [ ] Connections (GitHub, Mail, Calendar at account-level defaults + project-level overrides)
+- ✓ WhatsApp integration (bidirectional, agent-specific chat, webhook inbound) — Validated in Phase 7: external-connections
+- ✓ Connections (GitHub, Mail, Calendar, WhatsApp at account-level defaults + project-level overrides) — Validated in Phase 7: external-connections
 - ✓ Memory V2 completion (structured, noise-free, real-time visibility, no signal noise from logins/uploads) — Validated in Phase 2: memory-v2
 - ✓ Transparency dashboard (agent activity, memory changes, system health, decision log — all visible) — Validated in Phase 6: real-time-and-transparency
 - ✓ Performance overhaul (SSE replaces polling, 6 pollers killed, single EventSource) — Validated in Phase 6: real-time-and-transparency
@@ -85,8 +85,8 @@ The frontend (React 19 + Vite 8 + TailwindCSS 4) is functional but coupled to th
 | Gradual monolith split (porter.py → Fastify) | 900KB monolith unmaintainable, but full rewrite too risky | — Pending |
 | Project flow is first priority | Core value is "create project, agents work" — everything else builds on this | — Pending |
 | SaaS product model with collaborative sessions | Unique differentiator: invite people to work with your projects and agents | — Pending |
-| Account-level + project-level connections | Flexibility: connect GitHub once, override per project if needed | — Pending |
+| Account-level + project-level connections | Flexibility: connect GitHub once, override per project if needed | ✓ Shipped Phase 7 |
 | Memory V2 must filter noise (logins, uploads) | Current system captures everything, dilutes actual learning | — Pending |
 
 ---
-*Last updated: 2026-03-21 after Phase 6 (Real-Time and Transparency) completion*
+*Last updated: 2026-03-21 after Phase 7 (External Connections) completion*
