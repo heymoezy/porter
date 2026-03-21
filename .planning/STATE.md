@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-03-21T07:11:59.550Z"
+stopped_at: Completed 06-00-PLAN.md
+last_updated: "2026-03-21T07:13:12.863Z"
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 40
-  completed_plans: 35
+  completed_plans: 36
 ---
 
 # Project State
@@ -81,6 +81,7 @@ Plan: 1 of 6
 | Phase 05-guided-project-wizard P05 | 5min | 2 tasks | 4 files |
 | Phase 05-guided-project-wizard P05 | 5min | 3 tasks | 4 files |
 | Phase 06-real-time-and-transparency P02 | 3min | 2 tasks | 4 files |
+| Phase 06-real-time-and-transparency P00 | 3min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -187,6 +188,9 @@ Recent decisions affecting current work:
 - [Phase 06-02]: SSEProvider creates one EventSource('/api/events') at app root — no per-component connections
 - [Phase 06-02]: TYPED_EVENTS list covers agent:status, agent:activity, system:health, decision:made, project:update, memory:change for all Phase 6 consumers
 - [Phase 06-02]: useProjectActivity now uses useSSEBus() shared bus — subscribes to both project:activity and agent:activity typed events
+- [Phase 06-real-time-and-transparency]: Wave 0 test stubs gate on feature availability: 404 from endpoint = SKIP to prevent false FAILs before features land
+- [Phase 06-real-time-and-transparency]: PERF-03 poller removal check gates on emit endpoint availability to avoid false FAIL in pre-migration state
+- [Phase 06-real-time-and-transparency]: TRNS-03 treats 401/403/404 from decisions endpoint as SKIP -- auth may not be wired in stub phase
 
 ### Pending Todos
 
@@ -201,6 +205,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T07:11:59.547Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-03-21T07:13:12.858Z
+Stopped at: Completed 06-00-PLAN.md
 Resume file: None

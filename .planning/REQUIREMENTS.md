@@ -46,9 +46,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Transparency
 
-- [ ] **TRNS-01**: Agent activity feed (real-time: what agents are doing now, did today, what's queued)
-- [ ] **TRNS-02**: System health panel (which services are up, token usage, response times)
-- [ ] **TRNS-03**: Decision log (why Porter chose X model, routed to Y agent, skipped Z task)
+- [x] **TRNS-01**: Agent activity feed (real-time: what agents are doing now, did today, what's queued)
+- [x] **TRNS-02**: System health panel (which services are up, token usage, response times)
+- [x] **TRNS-03**: Decision log (why Porter chose X model, routed to Y agent, skipped Z task)
 
 ### Performance
 
@@ -113,9 +113,9 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | PROJ-02 | Phase 5 | Complete |
 | PROJ-03 | Phase 5 | Complete |
 | PROJ-04 | Phase 5 | Complete |
-| TRNS-01 | Phase 6 | Pending |
-| TRNS-02 | Phase 6 | Pending |
-| TRNS-03 | Phase 6 | Pending |
+| TRNS-01 | Phase 6 | Complete |
+| TRNS-02 | Phase 6 | Complete |
+| TRNS-03 | Phase 6 | Complete |
 | PERF-03 | Phase 6 | Complete |
 | CONN-01 | Phase 7 | Pending |
 | CONN-02 | Phase 7 | Pending |
