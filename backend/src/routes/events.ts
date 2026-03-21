@@ -1,35 +1,67 @@
-import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import websocket from '@fastify/websocket';
+import { FastifyInstance } from 'fastify';
+import { config } from '../config.js';
 
-export default async function eventRoutes(fastify: FastifyInstance, options: FastifyPluginOptions) {
-  const clients = new Set<any>();
+export default async function eventRoutes(fastify: FastifyInstance) {
+  // SSE proxy -- forwards porter.py's /api/events stream to v1 consumers
+  // This keeps porter.py as the single source of truth for SSE events
+  fastify.get('/api/events', async (request, reply) => {
+    const upstream = await fetch(`${config.porterPyUrl}/api/events`, {
+      headers: { cookie: request.headers.cookie || '' },
+    });
 
-  fastify.get('/api/events', { websocket: true }, (connection, req) => {
-    clients.add(connection);
-    fastify.log.info('WebSocket client connected');
+    if (!upstream.ok || !upstream.body) {
+      return reply.code(502).send({ error: 'SSE upstream unavailable' });
+    }
 
-    connection.socket.on('message', (message: Buffer | string) => {
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-store',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    const reader = upstream.body.getReader();
+    const pump = async () => {
       try {
-        const data = JSON.parse(message.toString());
-        if (data.type === 'ping') {
-          connection.socket.send(JSON.stringify({ type: 'pong' }));
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          reply.raw.write(value);
         }
-      } catch (e) {}
-    });
+      } catch {
+        // upstream closed or client disconnected
+      } finally {
+        reply.raw.end();
+      }
+    };
 
-    connection.socket.on('close', () => {
-      clients.delete(connection);
-      fastify.log.info('WebSocket client disconnected');
-    });
+    request.raw.on('close', () => { reader.cancel().catch(() => {}); });
+    pump();
   });
 
-  // Decoration to allow other routes to broadcast events
-  fastify.decorate('broadcast', (event: any) => {
-    const message = JSON.stringify(event);
-    for (const client of clients) {
-      if (client.socket.readyState === 1) { // OPEN
-        client.socket.send(message);
+  // Emit endpoint -- Fastify services POST here to push events through porter.py SSE hub
+  // This is what scheduler.ts emitSSE() calls
+  fastify.post('/api/events/emit', async (request, reply) => {
+    const body = request.body as { event: string; data: Record<string, unknown> };
+    if (!body?.event) {
+      return reply.code(400).send({ error: 'Missing event field' });
+    }
+    try {
+      const resp = await fetch(`${config.porterPyUrl}/api/events/emit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          cookie: request.headers.cookie || '',
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!resp.ok) {
+        return reply.code(resp.status).send({ error: 'Upstream emit failed' });
       }
+      return { ok: true };
+    } catch {
+      return reply.code(502).send({ error: 'SSE emit upstream unavailable' });
     }
   });
 }

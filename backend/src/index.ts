@@ -1,7 +1,6 @@
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
-import websocket from '@fastify/websocket';
 import staticFiles from '@fastify/static';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -37,7 +36,6 @@ fastify.register(cors, {
   credentials: true,
 });
 fastify.register(cookie);
-fastify.register(websocket);
 
 // Auth plugin (session resolution)
 fastify.register(authPlugin);
