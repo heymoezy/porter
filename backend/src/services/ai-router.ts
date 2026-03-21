@@ -5,6 +5,8 @@
  */
 
 import { config } from '../config.js';
+import { sqlite } from '../db/client.js';
+import { emitSSE } from './scheduler.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -201,6 +203,49 @@ function repairToolCallBoundaries(
 }
 
 // ---------------------------------------------------------------------------
+// Decision logging
+// ---------------------------------------------------------------------------
+
+/**
+ * Persist a model selection decision to decision_log and emit decision:made SSE.
+ * Non-critical — failures are swallowed so dispatch is never blocked.
+ */
+function logDecision(
+  decisionType: 'model_selection' | 'agent_routing' | 'task_skip',
+  chosen: string,
+  reasoning: string,
+  alternatives: string[],
+  extra?: { projectId?: string | null; agentId?: string },
+) {
+  try {
+    sqlite.prepare(`
+      INSERT INTO decision_log (decision_type, chosen, reasoning, alternatives, project_id, agent_id, job_id)
+      VALUES (@decisionType, @chosen, @reasoning, @alternatives, @projectId, @agentId, @jobId)
+    `).run({
+      decisionType,
+      chosen,
+      reasoning,
+      alternatives: JSON.stringify(alternatives),
+      projectId: extra?.projectId ?? null,
+      agentId: extra?.agentId ?? null,
+      jobId: null,
+    });
+  } catch {
+    // Decision logging is non-critical — never block dispatch
+  }
+
+  // SSE push — fire and forget
+  emitSSE('decision:made', {
+    decision_type: decisionType,
+    chosen,
+    reasoning,
+    alternatives,
+    project_id: extra?.projectId ?? null,
+    agent_id: extra?.agentId ?? null,
+  }).catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatch function
 // ---------------------------------------------------------------------------
 
@@ -209,6 +254,7 @@ function repairToolCallBoundaries(
  * Routing: cheap (Ollama) for simple messages, strong (openclaw) for complex.
  * Fallback: preferred → other tier → porter.py proxy.
  * Throws on empty response — guarantees agent_jobs.result is non-empty on success.
+ * Logs model selection decisions to decision_log when 2+ backends are available.
  */
 export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
   const { tier, backend, reason } = await selectModel(req.message);
@@ -236,9 +282,29 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: backend.model, prompt: req.message, stream: false }),
     });
-    const data = await resp.json() as { response: string };
+    const data = await resp.json() as { response: string; eval_count?: number };
     if (!data.response) throw new Error('ollama returned empty response field');
-    return { response: data.response, model: backend.model, routingReason: reason };
+
+    const result: DispatchResult = { response: data.response, model: backend.model, routingReason: reason };
+
+    // Log decision when routing was a real choice (not fallback due to outage)
+    // Probe the alternative backend to see if 2+ were available
+    const BACKENDS = getBackends();
+    const altTier: ModelTier = tier === 'cheap' ? 'strong' : 'cheap';
+    const altAvailable = await probeBackend(BACKENDS[altTier].url);
+    if (altAvailable) {
+      logDecision('model_selection', `${backend.name} (${backend.model})`, reason,
+        [`${BACKENDS[altTier].name} (${BACKENDS[altTier].model})`],
+        { projectId: req.projectId, agentId: req.agentId });
+    }
+
+    // Track token usage (Ollama reports eval_count as output tokens)
+    if (data.eval_count && data.eval_count > 0) {
+      trackTokenUsage(backend.model, 0, data.eval_count);
+      result.tokensUsed = data.eval_count;
+    }
+
+    return result;
   }
 
   // openclaw/codex via OpenAI-compatible API — token from config (no hardcoded value)
@@ -257,8 +323,52 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
     },
     body: JSON.stringify({ model: backend.model, messages, stream: false }),
   });
-  const data = await resp.json() as { choices: { message: { content: string } }[] };
+  const data = await resp.json() as {
+    choices: { message: { content: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
   const content = data.choices?.[0]?.message?.content ?? '';
   if (!content) throw new Error('openclaw returned empty content');
-  return { response: content, model: backend.model, routingReason: reason };
+
+  const result: DispatchResult = { response: content, model: backend.model, routingReason: reason };
+
+  // Log decision when routing was a real choice (not fallback due to outage)
+  const BACKENDS = getBackends();
+  const altTier: ModelTier = tier === 'cheap' ? 'strong' : 'cheap';
+  const altAvailable = await probeBackend(BACKENDS[altTier].url);
+  if (altAvailable) {
+    logDecision('model_selection', `${backend.name} (${backend.model})`, reason,
+      [`${BACKENDS[altTier].name} (${BACKENDS[altTier].model})`],
+      { projectId: req.projectId, agentId: req.agentId });
+  }
+
+  // Track token usage from OpenAI-compatible usage object
+  const inputTokens = data.usage?.prompt_tokens ?? 0;
+  const outputTokens = data.usage?.completion_tokens ?? 0;
+  if (inputTokens > 0 || outputTokens > 0) {
+    trackTokenUsage(backend.model, inputTokens, outputTokens);
+    result.tokensUsed = inputTokens + outputTokens;
+  }
+
+  return result;
+}
+
+/**
+ * Upsert daily token usage for the given model.
+ * Non-critical — failures are swallowed so dispatch is never blocked.
+ */
+function trackTokenUsage(model: string, inputTokens: number, outputTokens: number) {
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    sqlite.prepare(`
+      INSERT INTO token_usage_daily (model, date, input_tokens, output_tokens, request_count)
+      VALUES (@model, @date, @inputTokens, @outputTokens, 1)
+      ON CONFLICT(model, date) DO UPDATE SET
+        input_tokens = input_tokens + @inputTokens,
+        output_tokens = output_tokens + @outputTokens,
+        request_count = request_count + 1
+    `).run({ model, date: today, inputTokens, outputTokens });
+  } catch {
+    // Non-critical — never block dispatch
+  }
 }

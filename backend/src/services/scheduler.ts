@@ -141,7 +141,7 @@ function markJobFailed(jobId: string, error: string) {
   `).run({ id: jobId, error });
 }
 
-async function emitSSE(eventType: string, data: Record<string, unknown>): Promise<void> {
+export async function emitSSE(eventType: string, data: Record<string, unknown>): Promise<void> {
   try {
     const url = `${config.porterPyUrl}/api/events/emit`;
     const body = JSON.stringify({ event: eventType, data });
