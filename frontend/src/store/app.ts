@@ -8,7 +8,8 @@ export type TabId =
   | 'projects'
   | 'workflows'
   | 'locations'
-  | 'files';
+  | 'files'
+  | 'health';
 
 type ThemePreference = 'system' | 'dark' | 'light';
 

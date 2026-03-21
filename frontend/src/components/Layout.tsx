@@ -2,6 +2,7 @@ import { Sidebar } from './Sidebar';
 import { useAppStore } from '../store/app';
 import { ChatView } from '../modules/chat/ChatView';
 import { ProjectDashboard } from '../modules/projects/ProjectDashboard';
+import { SystemHealthPanel } from '../modules/health/SystemHealthPanel';
 
 function ProjectListPlaceholder() {
   return (
@@ -17,6 +18,7 @@ function ProjectListPlaceholder() {
 // Lazy placeholder for each tab — will be replaced with real modules
 function TabPlaceholder({ name }: { name: string }) {
   if (name === 'chat') return <ChatView />;
+  if (name === 'health') return <SystemHealthPanel />;
   if (name === 'projects') {
     const projectId = useAppStore.getState().activeProjectId;
     if (projectId) {
