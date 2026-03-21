@@ -33,8 +33,8 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 ### Active
 
 - [ ] Guided project creation wizard (collaborative questioning, agent proposal, plan generation)
-- [ ] Agent autonomy (scheduled + event-driven work, Porter controls model/tools/skills)
-- [ ] Persistent and temporary agents (permanent agents + project-scoped ephemeral agents)
+- ✓ Agent autonomy (scheduled + event-driven work, AI router, activity logs) — Validated in Phase 4: agent-autonomy
+- ✓ Persistent and temporary agents (ephemeral project-scoped agents with auto-retire) — Validated in Phase 4: agent-autonomy
 - [ ] Collaborative sessions (invite people to projects, share agents, custom per-person roles)
 - [ ] Unified global chat (all conversations in one interface — agents, projects, external)
 - [ ] WhatsApp integration (bidirectional, agent-specific chat, group chats via WhatsApp)
@@ -89,4 +89,4 @@ The frontend (React 19 + Vite 8 + TailwindCSS 4) is functional but coupled to th
 | Memory V2 must filter noise (logins, uploads) | Current system captures everything, dilutes actual learning | — Pending |
 
 ---
-*Last updated: 2026-03-20 after initialization*
+*Last updated: 2026-03-21 after Phase 4 (Agent Autonomy) completion*
