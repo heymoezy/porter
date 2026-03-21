@@ -61,13 +61,13 @@ export function ProjectDashboard({ projectId }: ProjectDashboardProps) {
     staleTime: 60_000,
   });
 
-  const { data: agentsData, isLoading: agentsLoading } = useQuery({
+  const { data: agentsData, isLoading: agentsLoading, refetch: refetchAgents } = useQuery({
     queryKey: ['agents'],
     queryFn: () => api<{ data: { agents: AgentRaw[] } }>('/api/v1/agents'),
     staleTime: 30_000,
   });
 
-  const { events, isLoading: activityLoading } = useProjectActivity(projectId);
+  const { categorized, isLoading: activityLoading } = useProjectActivity(projectId);
 
   const project = projectData?.data;
 
@@ -116,7 +116,7 @@ export function ProjectDashboard({ projectId }: ProjectDashboardProps) {
         )}
         {/* Agent strip */}
         <div className="mt-3">
-          <AgentStatusStrip agents={agentsLoading ? [] : projectAgents} />
+          <AgentStatusStrip agents={agentsLoading ? [] : projectAgents} onStatusChange={() => { void refetchAgents(); }} />
         </div>
       </div>
 
@@ -128,7 +128,7 @@ export function ProjectDashboard({ projectId }: ProjectDashboardProps) {
             <div className="px-4 pt-4 pb-2 border-b border-[var(--border)]">
               <h3 className="text-sm font-semibold text-[var(--text2)]">Activity</h3>
             </div>
-            <ActivityFeed events={events} isLoading={activityLoading} />
+            <ActivityFeed categorized={categorized} isLoading={activityLoading} />
           </div>
 
           {/* Side column */}

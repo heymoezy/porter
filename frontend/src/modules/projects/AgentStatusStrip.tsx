@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useSSEBus } from '../../providers/SSEProvider';
 
 export interface AgentEntry {
   id: string;
@@ -9,6 +11,7 @@ export interface AgentEntry {
 
 interface AgentStatusStripProps {
   agents: AgentEntry[];
+  onStatusChange?: () => void; // parent can re-fetch agents on status change
 }
 
 function statusDot(status: string): string {
@@ -23,7 +26,15 @@ function statusDot(status: string): string {
   }
 }
 
-export function AgentStatusStrip({ agents }: AgentStatusStripProps) {
+export function AgentStatusStrip({ agents, onStatusChange }: AgentStatusStripProps) {
+  const bus = useSSEBus();
+
+  useEffect(() => {
+    if (!onStatusChange) return;
+    const unsub = bus.subscribe('agent:status', () => { onStatusChange(); });
+    return () => { unsub(); };
+  }, [bus, onStatusChange]);
+
   if (agents.length === 0) {
     return (
       <p className="text-sm text-[var(--text3)] italic px-1 py-2">
