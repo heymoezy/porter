@@ -53,7 +53,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 
 ### Active
 
-- [ ] API standardization (consistent /api/v1/* surface, envelopes, error codes, OpenAPI)
+- ✓ API standardization (consistent /api/v1/* surface, envelopes, error codes, OpenAPI) — v2.0 Phase 8
 - [ ] Streaming chat (token-by-token SSE from all AI backends, cancellation)
 - [ ] Collaborative sessions (invite by email, per-person roles, shared project/agent access)
 - [ ] Unified global chat (single conversation model — agents, projects, external channels)
@@ -62,7 +62,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - [ ] Agent templates (100 templates with complete skills/tools/system prompts)
 - [ ] Autonomous learning (agents search web/social/GitHub, store as Memory V2 concepts)
 - [ ] SaaS billing (Lemon Squeezy subscriptions, usage metering, plan limit enforcement)
-- [ ] Error capture (frontend error POST endpoint with stack traces, component context)
+- ✓ Error capture (frontend error POST endpoint with stack traces, component context) — v2.0 Phase 8
 - [ ] Codebase migration (gradual — porter.py shrinks as features move to Fastify)
 
 ### Out of Scope
@@ -109,4 +109,4 @@ Porter has been in development since Feb 18, 2026. Current version is v0.34.23. 
 | porter.py gradual shrink | Don't spend v2 time on migration. Brain migrates naturally as features move. | — v2.0 |
 
 ---
-*Last updated: 2026-03-21 after v2.0 milestone initialization*
+*Last updated: 2026-03-21 after Phase 8 (API Foundation) completion*
