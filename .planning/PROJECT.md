@@ -109,4 +109,4 @@ Porter has been in development since Feb 18, 2026. Current version is v0.34.23. 
 | porter.py gradual shrink | Don't spend v2 time on migration. Brain migrates naturally as features move. | — v2.0 |
 
 ---
-*Last updated: 2026-03-22 after Phase 11 (Unified Chat and CRM Schema) completion*
+*Last updated: 2026-03-22 after Phase 12 (CRM Intelligence and Agent Templates) completion*
