@@ -1,3 +1,8 @@
+## v0.2.16 (2026-03-22)
+
+- Sidebar: Customers moved between Dashboard and Revenue
+- User site: Chat removed from sidebar + dashboard, notification bell shows count, ChatPanel removed
+
 ## v0.2.15 (2026-03-22)
 
 - Notification bell: red pulsing dot badge on admin TopBar
