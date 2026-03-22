@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 12-01-PLAN.md
-last_updated: "2026-03-22T16:19:12.164Z"
+stopped_at: Completed 12-03-PLAN.md
+last_updated: "2026-03-22T16:23:01.303Z"
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 16
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -76,6 +76,8 @@ Recent decisions affecting current work:
 - [Phase 11-unified-chat-and-crm-schema]: WhatsApp conversation external_id = phone number (not Meta message ID): all messages from one contact share one conversation
 - [Phase 12]: ALTER TABLE personas wrapped in try/catch for idempotency — SQLite has no IF NOT EXISTS for ALTER TABLE
 - [Phase 12]: Smoke test scaffold created before API implementation to define expected contract
+- [Phase 12-crm-intelligence-and-agent-templates]: contact_projects has no attached_at column — project_event arm uses p.created_at as timestamp
+- [Phase 12-crm-intelligence-and-agent-templates]: messages.id INTEGER requires CAST to TEXT for UNION ALL type compatibility in timeline query
 
 ### Pending Todos
 
@@ -90,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T16:19:12.162Z
-Stopped at: Completed 12-01-PLAN.md
+Last session: 2026-03-22T16:23:01.300Z
+Stopped at: Completed 12-03-PLAN.md
 Resume file: None
