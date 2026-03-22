@@ -271,6 +271,28 @@ export async function startImapIdle(connectionId?: string): Promise<void> {
             const body = sourceText.length > 2000 ? sourceText.slice(-2000) : sourceText;
 
             console.log('[email] Inbound email from %s: %s', fromAddr, subject);
+
+            // Phase 11: Archive inbound email in unified table BEFORE routing
+            const contactId = findOrCreateEmailContact(fromAddr);
+            const conversationId = findOrCreateEmailConversation(fromAddr, contactId);
+
+            sqlite.prepare(
+              `INSERT INTO messages (conversation_id, sender_type, sender_id, sender_name, content, channel_type, channel_metadata, created_at)
+               VALUES (?, 'external', ?, ?, ?, 'email', ?, unixepoch('now'))`
+            ).run(
+              conversationId,
+              fromAddr,
+              fromAddr,
+              `Subject: ${subject}\n\n${body}`,
+              JSON.stringify({ from: fromAddr, subject })
+            );
+
+            sqlite.prepare(
+              `UPDATE conversations SET updated_at = unixepoch('now') WHERE id = ?`
+            ).run(conversationId);
+
+            console.log('[email] Archived inbound email from %s in conversation %s', fromAddr, conversationId);
+
             const agentId = routeInboundEmail(fromAddr, subject, body);
 
             emitSSE('agent:activity', {
@@ -343,4 +365,92 @@ export function stopImapIdle(): void {
     imapRunning = false;
     console.log('[email] IMAP IDLE stopped');
   }
+}
+
+// ── Unified table helpers (Phase 11) ──────────────────────────────────────────
+
+/**
+ * Find an existing contact by email address, or create one.
+ * Returns the contact ID.
+ */
+export function findOrCreateEmailContact(
+  emailAddress: string,
+  displayName?: string
+): string {
+  const normalized = emailAddress.trim().toLowerCase();
+
+  // Look up by email value in contact_emails
+  const existing = sqlite.prepare(
+    `SELECT ce.contact_id FROM contact_emails ce WHERE ce.value = ?`
+  ).get(normalized) as { contact_id: string } | undefined;
+
+  if (existing) return existing.contact_id;
+
+  // Create new contact
+  const contactId = crypto.randomUUID();
+  const name = displayName || normalized;
+
+  const insertContact = sqlite.transaction(() => {
+    sqlite.prepare(
+      `INSERT INTO contacts (id, display_name, created_by, created_at, updated_at)
+       VALUES (?, ?, 'system', unixepoch('now'), unixepoch('now'))`
+    ).run(contactId, name);
+
+    sqlite.prepare(
+      `INSERT INTO contact_emails (contact_id, value, label, is_primary)
+       VALUES (?, ?, 'work', 1)`
+    ).run(contactId, normalized);
+  });
+
+  insertContact();
+  return contactId;
+}
+
+/**
+ * Find an existing conversation by email address external_id, or create one.
+ * Links the conversation to the contact.
+ * Returns the conversation ID.
+ */
+export function findOrCreateEmailConversation(
+  emailAddress: string,
+  contactId: string
+): string {
+  const normalized = emailAddress.trim().toLowerCase();
+
+  const existing = sqlite.prepare(
+    `SELECT id FROM conversations WHERE external_id = ?`
+  ).get(normalized) as { id: string } | undefined;
+
+  if (existing) {
+    // Ensure contact link exists
+    sqlite.prepare(
+      `INSERT OR IGNORE INTO contact_conversations (contact_id, conversation_id)
+       VALUES (?, ?)`
+    ).run(contactId, existing.id);
+    return existing.id;
+  }
+
+  const convId = crypto.randomUUID();
+
+  const createConv = sqlite.transaction(() => {
+    sqlite.prepare(
+      `INSERT OR IGNORE INTO conversations
+         (id, scope_type, scope_id, external_id, channel_type, created_at, updated_at)
+       VALUES (?, 'contact', ?, ?, 'email', unixepoch('now'), unixepoch('now'))`
+    ).run(convId, contactId, normalized);
+
+    sqlite.prepare(
+      `INSERT OR IGNORE INTO contact_conversations (contact_id, conversation_id)
+       VALUES (?, ?)`
+    ).run(contactId, convId);
+  });
+
+  createConv();
+
+  // Handle race: if INSERT OR IGNORE was a no-op, another request created it first
+  const check = sqlite.prepare(
+    `SELECT id FROM conversations WHERE external_id = ?`
+  ).get(normalized) as { id: string };
+
+  return check.id;
 }
