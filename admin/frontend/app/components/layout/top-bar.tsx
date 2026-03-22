@@ -72,6 +72,7 @@ export function TopBar({ onToggleTheme, theme }: TopBarProps) {
       <div className="flex items-center gap-1.5">
         <button className="relative flex h-7 w-7 items-center justify-center rounded text-text3 hover:bg-raised hover:text-text2">
           <Bell className="h-3.5 w-3.5" />
+          <div className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-danger animate-pulse-badge" />
         </button>
         <button
           onClick={onToggleTheme}

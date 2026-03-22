@@ -1,3 +1,8 @@
+## v0.2.15 (2026-03-22)
+
+- Notification bell: red pulsing dot badge on admin TopBar
+- User site: logout wired up, theme toggle reads localStorage, sidebar uses router Links
+
 ## v0.2.14 (2026-03-22)
 
 - Dashboard URL: /dashboard (with / redirect). Sidebar, TopBar, active state all updated
