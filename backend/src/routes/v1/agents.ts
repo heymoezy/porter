@@ -337,6 +337,56 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
     }));
   });
 
+  // GET /api/v1/agents/:id/learning-sessions — learning session history for a template
+  fastify.get('/:id/learning-sessions', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { limit: limitStr, offset: offsetStr } = request.query as { limit?: string; offset?: string };
+
+    const limit = Math.min(parseInt(limitStr ?? '20', 10), 100);
+    const offset = parseInt(offsetStr ?? '0', 10);
+
+    interface LearningSessionRow {
+      id: string;
+      template_id: string;
+      job_id: string | null;
+      sources_visited: string;
+      concepts_retained: number;
+      confidence_distribution: string;
+      capped: number;
+      duration_ms: number;
+      error: string | null;
+      created_at: string;
+    }
+
+    const rows = sqlite.prepare(`
+      SELECT * FROM learning_sessions
+      WHERE template_id = ?
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(id, limit, offset) as LearningSessionRow[];
+
+    const parsedRows = rows.map(row => ({
+      id: row.id,
+      template_id: row.template_id,
+      job_id: row.job_id,
+      sources_visited: (() => {
+        try { return JSON.parse(row.sources_visited); } catch { return []; }
+      })(),
+      concepts_retained: row.concepts_retained,
+      confidence_distribution: (() => {
+        try { return JSON.parse(row.confidence_distribution); } catch { return { high: 0, medium: 0, low: 0 }; }
+      })(),
+      capped: Boolean(row.capped),
+      duration_ms: row.duration_ms,
+      error: row.error,
+      created_at: row.created_at,
+    }));
+
+    return reply.send(ok({ sessions: parsedRows, count: parsedRows.length }));
+  });
+
   // GET /api/v1/agents/:id/jobs — agent's job queue
   fastify.get('/:id/jobs', {
     preHandler: [fastify.requireAuth],
