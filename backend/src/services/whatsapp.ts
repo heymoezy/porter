@@ -209,6 +209,98 @@ export function routeInboundWhatsApp(
   return agentId;
 }
 
+// ── CRM findOrCreate helpers (Phase 11) ──────────────────────────────────────
+
+/**
+ * Find an existing contact by phone number, or create one.
+ * Returns the contact ID.
+ */
+export function findOrCreateWhatsAppContact(
+  phoneNumber: string,
+  profileName?: string,
+): string {
+  // Normalize phone: strip leading zeros, ensure starts with +
+  const normalized = phoneNumber.startsWith('+')
+    ? phoneNumber
+    : '+' + phoneNumber.replace(/^0+/, '');
+
+  // Look up by phone value in contact_phones
+  const existing = sqlite.prepare(
+    `SELECT cp.contact_id FROM contact_phones cp WHERE cp.value = ?`,
+  ).get(normalized) as { contact_id: string } | undefined;
+
+  if (existing) return existing.contact_id;
+
+  // Create new contact
+  const contactId = crypto.randomUUID();
+  const displayName = profileName || normalized;
+
+  const insertContact = sqlite.transaction(() => {
+    sqlite.prepare(
+      `INSERT INTO contacts (id, display_name, created_by, created_at, updated_at)
+       VALUES (?, ?, 'system', unixepoch('now'), unixepoch('now'))`,
+    ).run(contactId, displayName);
+
+    sqlite.prepare(
+      `INSERT INTO contact_phones (contact_id, value, label, is_primary)
+       VALUES (?, ?, 'mobile', 1)`,
+    ).run(contactId, normalized);
+  });
+
+  insertContact();
+  return contactId;
+}
+
+/**
+ * Find an existing conversation by WhatsApp external_id, or create one.
+ * Links the conversation to the contact.
+ * Returns the conversation ID.
+ */
+export function findOrCreateWhatsAppConversation(
+  externalId: string,
+  contactId: string,
+): string {
+  // Use INSERT OR IGNORE + SELECT pattern to handle race conditions
+  // (two concurrent messages from same sender)
+  const existing = sqlite.prepare(
+    `SELECT id FROM conversations WHERE external_id = ?`,
+  ).get(externalId) as { id: string } | undefined;
+
+  if (existing) {
+    // Ensure contact link exists
+    sqlite.prepare(
+      `INSERT OR IGNORE INTO contact_conversations (contact_id, conversation_id)
+       VALUES (?, ?)`,
+    ).run(contactId, existing.id);
+    return existing.id;
+  }
+
+  const convId = crypto.randomUUID();
+
+  const createConv = sqlite.transaction(() => {
+    sqlite.prepare(
+      `INSERT OR IGNORE INTO conversations
+         (id, scope_type, scope_id, external_id, channel_type, created_at, updated_at)
+       VALUES (?, 'contact', ?, ?, 'whatsapp', unixepoch('now'), unixepoch('now'))`,
+    ).run(convId, contactId, externalId);
+
+    // Link contact to conversation
+    sqlite.prepare(
+      `INSERT OR IGNORE INTO contact_conversations (contact_id, conversation_id)
+       VALUES (?, ?)`,
+    ).run(contactId, convId);
+  });
+
+  createConv();
+
+  // Handle race: if INSERT OR IGNORE was a no-op, another request created it first
+  const check = sqlite.prepare(
+    `SELECT id FROM conversations WHERE external_id = ?`,
+  ).get(externalId) as { id: string };
+
+  return check.id;
+}
+
 // ── Webhook signature verification ───────────────────────────────────────────
 
 /**
