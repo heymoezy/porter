@@ -1,3 +1,10 @@
+## v0.2.18 (2026-03-22)
+
+- Dashboard badge in sidebar nav for both user and admin (syncs with notification count)
+- Admin: notification state lifted to shell, shared between TopBar dropdown and Sidebar badge
+- User: dismiss now also resolves (reduces bell count), badge on Dashboard nav item
+- Dismiss updates bell + sidebar badge on both sites
+
 ## v0.2.17 (2026-03-22)
 
 - Admin bell: click opens notification dropdown with 3 seed alerts, dismiss per item, count badge, outside-click close

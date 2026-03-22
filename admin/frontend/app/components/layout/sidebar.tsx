@@ -14,6 +14,7 @@ import { useCurrentUser } from "~/lib/session-context"
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
+  notificationCount?: number
 }
 
 const groups = [
@@ -36,7 +37,7 @@ const groups = [
   ]},
 ]
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, notificationCount = 0 }: SidebarProps) {
   const location = useLocation()
   const user = useCurrentUser()
   const logout = useLogout()
@@ -75,6 +76,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 >
                   <item.icon className="h-4 w-4 shrink-0" strokeWidth={2} />
                   {!collapsed && <span className="flex-1 text-left">{item.label}</span>}
+                  {!collapsed && item.path === "/dashboard" && notificationCount > 0 && (
+                    <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">
+                      {notificationCount}
+                    </span>
+                  )}
                 </Link>
               )
             })}
@@ -103,7 +109,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
         {!collapsed && (
           <Link to="/changelog" className="mt-2 block text-center text-[10px] uppercase tracking-widest text-text3 hover:text-accent-porter transition-colors">
-            Porter Admin v0.2.17
+            Porter Admin v0.2.18
           </Link>
         )}
       </div>

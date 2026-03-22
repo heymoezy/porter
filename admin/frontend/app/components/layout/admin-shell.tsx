@@ -6,6 +6,12 @@ import { SessionProvider } from "~/lib/session-context"
 import { ErrorBoundary } from "~/components/error-boundary"
 import { useSession } from "~/hooks/use-api"
 
+export const INITIAL_ADMIN_NOTIFICATIONS = [
+  { id: 1, text: "CPU usage exceeded 80% threshold", color: "warning" as const, time: "2m ago" },
+  { id: 2, text: "New user signup: john@acme.com", color: "success" as const, time: "5m ago" },
+  { id: 3, text: "Agent 'SEO Specialist' failed task", color: "danger" as const, time: "12m ago" },
+]
+
 interface AdminShellProps {
   children: ReactNode
 }
@@ -28,6 +34,7 @@ function AdminShellInner({ children }: { children: ReactNode }) {
   const { data: session } = useSession()
   const [collapsed, setCollapsed] = useState(false)
   const [theme, setTheme] = useState<"dark" | "light">(getInitialTheme)
+  const [notifications, setNotifications] = useState(INITIAL_ADMIN_NOTIFICATIONS)
 
   // Sync DOM class on mount and theme change
   useEffect(() => {
@@ -40,6 +47,10 @@ function AdminShellInner({ children }: { children: ReactNode }) {
     localStorage.setItem("porter_theme", next)
   }
 
+  function dismissNotification(id: number) {
+    setNotifications(prev => prev.filter(n => n.id !== id))
+  }
+
   return (
     <SessionProvider session={session!}>
       <div className="flex h-screen bg-background text-foreground overflow-hidden">
@@ -47,11 +58,17 @@ function AdminShellInner({ children }: { children: ReactNode }) {
           <Sidebar
             collapsed={collapsed}
             onToggle={() => setCollapsed(!collapsed)}
+            notificationCount={notifications.length}
           />
         </ErrorBoundary>
         <div className="flex flex-1 flex-col overflow-hidden min-w-0">
           <ErrorBoundary module="TopBar">
-            <TopBar onToggleTheme={toggleTheme} theme={theme} />
+            <TopBar
+              onToggleTheme={toggleTheme}
+              theme={theme}
+              notifications={notifications}
+              onDismissNotification={dismissNotification}
+            />
           </ErrorBoundary>
           <ErrorBoundary module="Content">
             <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">

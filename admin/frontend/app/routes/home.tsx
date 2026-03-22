@@ -308,7 +308,7 @@ function DashboardContent() {
             <h2 className="text-xs font-bold text-foreground uppercase tracking-wide">Projects</h2>
             <button className="text-[10px] text-text3 hover:text-accent-porter transition-colors">all &rarr;</button>
           </div>
-          <div className="flex-1 overflow-y-auto space-y-2 min-h-0 scrollbar-thin">
+          <div className="flex-1 overflow-y-auto space-y-2 min-h-0 scrollbar-thin pt-px">
             {projectTimeline.map((p, i) => (
               <div
                 key={p._key}

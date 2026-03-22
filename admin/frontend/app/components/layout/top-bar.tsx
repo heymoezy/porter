@@ -7,9 +7,18 @@ import {
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
+export interface AdminNotification {
+  id: number
+  text: string
+  color: "danger" | "warning" | "success"
+  time: string
+}
+
 interface TopBarProps {
   onToggleTheme: () => void
   theme: "dark" | "light"
+  notifications: AdminNotification[]
+  onDismissNotification: (id: number) => void
 }
 
 const backRoutes: Record<string, { label: string; path: string }> = {
@@ -36,29 +45,15 @@ const pageTitles: Array<{ path: string; exact?: boolean; label: string; icon: Lu
   { path: "/changelog", label: "Changelog", icon: FileText },
 ]
 
-interface Notification {
-  id: number
-  text: string
-  color: "danger" | "warning" | "success"
-  time: string
-}
-
-const INITIAL_NOTIFICATIONS: Notification[] = [
-  { id: 1, text: "CPU usage exceeded 80% threshold", color: "warning", time: "2m ago" },
-  { id: 2, text: "New user signup: john@acme.com", color: "success", time: "5m ago" },
-  { id: 3, text: "Agent 'SEO Specialist' failed task", color: "danger", time: "12m ago" },
-]
-
 const colorDot: Record<string, string> = {
   danger: "bg-danger",
   warning: "bg-warning",
   success: "bg-success",
 }
 
-export function TopBar({ onToggleTheme, theme }: TopBarProps) {
+export function TopBar({ onToggleTheme, theme, notifications, onDismissNotification }: TopBarProps) {
   const location = useLocation()
   const navigate = useNavigate()
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS)
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -71,10 +66,6 @@ export function TopBar({ onToggleTheme, theme }: TopBarProps) {
     document.addEventListener("mousedown", handleClick)
     return () => document.removeEventListener("mousedown", handleClick)
   }, [open])
-
-  function dismiss(id: number) {
-    setNotifications(prev => prev.filter(n => n.id !== id))
-  }
 
   let back: { label: string; path: string } | null = null
   for (const [prefix, route] of Object.entries(backRoutes)) {
@@ -139,7 +130,7 @@ export function TopBar({ onToggleTheme, theme }: TopBarProps) {
                         <p className="text-[9px] text-text3 mt-0.5">{n.time}</p>
                       </div>
                       <button
-                        onClick={() => dismiss(n.id)}
+                        onClick={() => onDismissNotification(n.id)}
                         className="flex h-4 w-4 items-center justify-center rounded text-text3 opacity-0 group-hover:opacity-100 hover:bg-raised hover:text-foreground transition-opacity shrink-0"
                       >
                         <X className="h-2.5 w-2.5" />
