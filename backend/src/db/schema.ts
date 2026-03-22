@@ -293,3 +293,124 @@ export const collaborationEvents = sqliteTable('collaboration_events', {
   detail: text('detail'),
   createdAt: real('created_at').default(sql`(unixepoch('now'))`),
 });
+
+// -- Unified Chat + CRM + Files (Phase 11) -----------------------------------------
+
+export const companies = sqliteTable('companies', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  industry: text('industry'),
+  website: text('website'),
+  notes: text('notes'),
+  createdBy: text('created_by'),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+});
+
+export const contacts = sqliteTable('contacts', {
+  id: text('id').primaryKey(),
+  displayName: text('display_name').notNull(),
+  firstName: text('first_name'),
+  lastName: text('last_name'),
+  companyId: text('company_id'),
+  jobTitle: text('job_title'),
+  notes: text('notes'),
+  createdBy: text('created_by'),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+});
+
+export const contactEmails = sqliteTable('contact_emails', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  contactId: text('contact_id').notNull(),
+  value: text('value').notNull(),
+  label: text('label').default('work'),
+  isPrimary: integer('is_primary').default(0),
+});
+
+export const contactPhones = sqliteTable('contact_phones', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  contactId: text('contact_id').notNull(),
+  value: text('value').notNull(),
+  countryCode: text('country_code'),
+  label: text('label').default('mobile'),
+  isPrimary: integer('is_primary').default(0),
+});
+
+export const contactSocial = sqliteTable('contact_social', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  contactId: text('contact_id').notNull(),
+  platform: text('platform').notNull(),
+  handle: text('handle').notNull(),
+});
+
+export const conversations = sqliteTable('conversations', {
+  id: text('id').primaryKey(),
+  scopeType: text('scope_type').notNull(),
+  scopeId: text('scope_id'),
+  title: text('title'),
+  channelType: text('channel_type').default('internal'),
+  externalId: text('external_id'),
+  metadata: text('metadata').default('{}'),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+});
+
+export const messages = sqliteTable('messages', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  conversationId: text('conversation_id').notNull(),
+  parentMessageId: integer('parent_message_id'),
+  senderType: text('sender_type').notNull(),
+  senderId: text('sender_id'),
+  senderName: text('sender_name'),
+  content: text('content').notNull(),
+  channelType: text('channel_type').default('internal'),
+  channelMetadata: text('channel_metadata').default('{}'),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+});
+
+export const filesRegistry = sqliteTable('files', {
+  id: text('id').primaryKey(),
+  filename: text('filename').notNull(),
+  diskPath: text('disk_path').notNull(),
+  mimeType: text('mime_type'),
+  sizeBytes: integer('size_bytes'),
+  uploadedBy: text('uploaded_by').notNull(),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+});
+
+export const fileProjects = sqliteTable('file_projects', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  fileId: text('file_id').notNull(),
+  projectId: text('project_id').notNull(),
+  attachedBy: text('attached_by').notNull(),
+  attachedAt: real('attached_at').default(sql`(unixepoch('now'))`),
+});
+
+export const fileContacts = sqliteTable('file_contacts', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  fileId: text('file_id').notNull(),
+  contactId: text('contact_id').notNull(),
+  attachedBy: text('attached_by').notNull(),
+  attachedAt: real('attached_at').default(sql`(unixepoch('now'))`),
+});
+
+export const fileConversations = sqliteTable('file_conversations', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  fileId: text('file_id').notNull(),
+  conversationId: text('conversation_id').notNull(),
+  attachedBy: text('attached_by').notNull(),
+  attachedAt: real('attached_at').default(sql`(unixepoch('now'))`),
+});
+
+export const contactConversations = sqliteTable('contact_conversations', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  contactId: text('contact_id').notNull(),
+  conversationId: text('conversation_id').notNull(),
+});
+
+export const contactProjects = sqliteTable('contact_projects', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  contactId: text('contact_id').notNull(),
+  projectId: text('project_id').notNull(),
+});

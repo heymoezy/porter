@@ -27,6 +27,7 @@ import { migrate07ExternalConnections } from './db/migrate-07-ext-connections.js
 import { migrate08ApiFoundation } from './db/migrate-08.js';
 import { migrate09EmailAuth } from './db/migrate-09.js';
 import { migrate10Collaboration } from './db/migrate-10.js';
+import { migrate11UnifiedChat } from './db/migrate-11.js';
 import * as scheduler from './services/scheduler.js';
 import { startImapIdle, stopImapIdle } from './services/email.js';
 import { sqlite } from './db/client.js';
@@ -139,6 +140,7 @@ const start = async () => {
     migrate08ApiFoundation();
     migrate09EmailAuth();
     migrate10Collaboration();
+    migrate11UnifiedChat();
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
     scheduler.start();
