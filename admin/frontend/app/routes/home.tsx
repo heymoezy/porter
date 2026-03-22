@@ -48,18 +48,7 @@ const FAKE_ACTIVITY = [
   { agent: "Jacob", action: "viewed Agent Templates", status: "complete" as const, _sec: 1200 },
 ]
 
-const ERROR_LOG = [
-  { text: "▸ [moe] auth.login.ok — 127.0.0.1 · 23ms", color: "text-success" },
-  { text: "▸ [jacob] project.create — Brand Guide", color: "text-accent-porter" },
-  { text: "▸ [sarah] persona.assign — SEO Specialist → Brand Guide", color: "text-chart-2" },
-  { text: "✗ [john] auth.login.fail — wrong password · 45.32.1.100", color: "text-danger" },
-  { text: "▸ [moe] porter.identity.update — SOUL.md · 2.3KB", color: "text-accent-porter" },
-  { text: "▸ [system] email.send — welcome → john@acme.com", color: "text-warning" },
-  { text: "✓ [porter] dispatch.complete — chat-orchestrator · 1.2s", color: "text-success" },
-  { text: "▸ [jacob] chat.message — 'update the color palette'", color: "text-text3" },
-  { text: "✗ [system] smtp.error — connection refused :25", color: "text-danger" },
-  { text: "▸ [sarah] agent.create — Content Writer from template", color: "text-chart-2" },
-]
+interface LogLine { text: string; color: string }
 
 const CHART_BARS = [12,18,15,22,28,25,35,32,41,38,45,52,48,55,62,58,68,72,65,78,82,75,88,92,85,95,98,90,100,96]
 
@@ -75,7 +64,8 @@ function DashboardContent() {
   const [mounted, setMounted] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [timeline, setTimeline] = useState(FAKE_ACTIVITY.map((e, i) => ({ ...e, _key: i })))
-  const [termLines, setTermLines] = useState(ERROR_LOG.slice(0, 4).map((l, i) => ({ ...l, _key: i })))
+  const [termLines, setTermLines] = useState<Array<LogLine & { _key: number }>>([])
+  const [logsLoaded, setLogsLoaded] = useState(false)
 
   useMountEffect(() => { requestAnimationFrame(() => setMounted(true)) })
   useMountEffect(() => { const id = setInterval(() => setElapsed(e => e + 1), 1000); return () => clearInterval(id) })
@@ -88,13 +78,18 @@ function DashboardContent() {
     }, 5000)
     return () => clearInterval(id)
   })
+  // Fetch real logs from API
   useMountEffect(() => {
-    let idx = 4
-    const id = setInterval(() => {
-      const l = ERROR_LOG[idx % ERROR_LOG.length]
-      idx++
-      setTermLines(p => [...p.slice(-3), { ...l, _key: Date.now() }])
-    }, 3000)
+    async function fetchLogs() {
+      try {
+        const res = await api<{ logs: Array<{ ts: number; text: string; color: string }> }>("/api/admin/health/logs?limit=6")
+        const lines = res.logs.map((l, i) => ({ ...l, _key: Date.now() + i }))
+        setTermLines(lines)
+        setLogsLoaded(true)
+      } catch {}
+    }
+    fetchLogs()
+    const id = setInterval(fetchLogs, 10_000)
     return () => clearInterval(id)
   })
 
@@ -256,7 +251,7 @@ function DashboardContent() {
                   { label: "CPU", pct: Math.round(sys.cpu.load1m / sys.cpu.cores * 100), icon: Cpu },
                 ].map(g => (
                   <div key={g.label} className="flex-1 flex flex-col items-center gap-1">
-                    <span className={`text-xs font-bold tabular-nums ${g.pct >= 80 ? "text-danger" : "text-foreground"}`}>{g.pct}%</span>
+                    <span className={`text-xs font-bold tabular-nums ${g.pct >= 80 ? "text-danger" : g.pct >= 70 ? "text-warning" : "text-foreground"}`}>{g.pct}%</span>
                     <div className="w-full h-[50px] rounded bg-raised/50 relative overflow-hidden">
                       <div
                         className={`absolute bottom-0 left-0 right-0 rounded transition-all duration-700 ${g.pct >= 90 ? "bg-danger" : g.pct >= 70 ? "bg-warning" : "bg-success/70"}`}
@@ -266,10 +261,15 @@ function DashboardContent() {
                     <span className="text-[8px] text-text3 font-mono">{g.label}</span>
                   </div>
                 ))}
-                <div className="flex-1 flex flex-col items-center justify-end gap-1">
-                  <span className="text-xs font-bold text-foreground tabular-nums">{sys.sessions.active}</span>
-                  <span className="text-[8px] text-text3">sessions</span>
-                  <span className="text-[8px] text-text3">{Math.floor(sys.uptime / 3600)}h up</span>
+                <div className="flex-1 flex flex-col items-center gap-1">
+                  <span className={`text-xs font-bold tabular-nums ${sys.cpu.load1m > sys.cpu.cores ? "text-danger" : "text-foreground"}`}>
+                    {sys.cpu.load1m.toFixed(1)}
+                  </span>
+                  <div className="w-full h-[50px] flex flex-col justify-end items-center">
+                    <span className="text-[10px] font-bold text-foreground">{Math.floor(sys.uptime / 3600)}h</span>
+                    <span className="text-[8px] text-text3">uptime</span>
+                  </div>
+                  <span className="text-[8px] text-text3 font-mono">LOAD</span>
                 </div>
               </div>
             )}

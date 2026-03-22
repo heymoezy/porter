@@ -1,3 +1,11 @@
+## v0.2.6 (2026-03-22)
+
+- User Logs terminal: now pulls REAL data from audit_log + error_log (not fake)
+- Combined /api/admin/health/logs merges user actions + system errors
+- Errors show in red (MetaMask failures, CRM 500s visible immediately)
+- System Health: replaced 'sessions' with LOAD gauge (actual system stress indicator)
+- Auto-refreshes logs every 10s
+
 ## v0.2.5 (2026-03-22)
 
 - Hero: fixed stats to +62% vs last month, ~124 hrs saved, $2,480 value (not orchestrations)
