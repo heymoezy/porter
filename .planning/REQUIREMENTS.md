@@ -28,9 +28,9 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 ### Streaming
 
-- [ ] **STRM-01**: Chat responses stream token-by-token via SSE to the client
-- [ ] **STRM-02**: Streaming works across all AI backends (Ollama, OpenClaw, any future provider)
-- [ ] **STRM-03**: Client can cancel a streaming response mid-stream and the backend stops generation
+- [x] **STRM-01**: Chat responses stream token-by-token via SSE to the client
+- [x] **STRM-02**: Streaming works across all AI backends (Ollama, OpenClaw, any future provider)
+- [x] **STRM-03**: Client can cancel a streaming response mid-stream and the backend stops generation
 
 ### Collaboration
 
@@ -103,9 +103,9 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 | API-03 | Phase 8 | Complete |
 | OBS-01 | Phase 8 | Complete |
 | OBS-02 | Phase 8 | Complete |
-| STRM-01 | Phase 9 | Pending |
-| STRM-02 | Phase 9 | Pending |
-| STRM-03 | Phase 9 | Pending |
+| STRM-01 | Phase 9 | Complete |
+| STRM-02 | Phase 9 | Complete |
+| STRM-03 | Phase 9 | Complete |
 | COLLAB-01 | Phase 10 | Pending |
 | COLLAB-02 | Phase 10 | Pending |
 | COLLAB-03 | Phase 10 | Pending |

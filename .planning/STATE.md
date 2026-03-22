@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 08-api-foundation-02-PLAN.md
-last_updated: "2026-03-21T19:25:00.597Z"
+stopped_at: Completed 09-streaming-chat-01-PLAN.md
+last_updated: "2026-03-22T03:40:42.754Z"
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input
-**Current focus:** Phase 08 — api-foundation
+**Current focus:** Phase 09 — streaming-chat
 
 ## Current Position
 
-Phase: 08 (api-foundation) — EXECUTING
-Plan: 2 of 2 (next)
+Phase: 09 (streaming-chat) — EXECUTING
+Plan: 1 of 2
 
 ## Performance Metrics
 
@@ -53,6 +53,8 @@ Recent decisions affecting current work:
 - [Phase 08-api-foundation]: meta() function removed — callers always use ok() or err() directly
 - [Phase 08-api-foundation]: fastifyZodOpenApiPlugin is the correct export name from fastify-zod-openapi@5.5.0 — not fastifyZodOpenApi as shown in documentation examples
 - [Phase 08-api-foundation]: openapiPlugin must register at root Fastify instance (not inside v1Routes) to collect paths from all child plugins for the OpenAPI spec
+- [Phase 09-streaming-chat]: AbortSignal passed directly to fetch() in OllamaStreamBackend for network-level cancellation
+- [Phase 09-streaming-chat]: selectStreamBackend() re-uses shouldRouteCheap() from ai-router.ts — no routing logic duplicated
 
 ### Pending Todos
 
@@ -67,6 +69,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T19:19:56.142Z
-Stopped at: Completed 08-api-foundation-02-PLAN.md
+Last session: 2026-03-22T03:40:42.752Z
+Stopped at: Completed 09-streaming-chat-01-PLAN.md
 Resume file: None
