@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 09-streaming-chat-01-PLAN.md
-last_updated: "2026-03-22T03:40:42.754Z"
+stopped_at: Completed 09-streaming-chat-02-PLAN.md
+last_updated: "2026-03-22T03:50:50.882Z"
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -55,6 +55,9 @@ Recent decisions affecting current work:
 - [Phase 08-api-foundation]: openapiPlugin must register at root Fastify instance (not inside v1Routes) to collect paths from all child plugins for the OpenAPI spec
 - [Phase 09-streaming-chat]: AbortSignal passed directly to fetch() in OllamaStreamBackend for network-level cancellation
 - [Phase 09-streaming-chat]: selectStreamBackend() re-uses shouldRouteCheap() from ai-router.ts — no routing logic duplicated
+- [Phase 09-streaming-chat]: reply.raw.writeHead() before first await prevents Fastify response hijack in SSE handlers
+- [Phase 09-streaming-chat]: done event in finally block guarantees client completion signal even on error paths
+- [Phase 09-streaming-chat]: Tombstone 404 in ai.ts blocks proxy fallthrough to stale port-8877 backend for deprecated /api/chat/stream
 
 ### Pending Todos
 
@@ -69,6 +72,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T03:40:42.752Z
-Stopped at: Completed 09-streaming-chat-01-PLAN.md
+Last session: 2026-03-22T03:50:50.880Z
+Stopped at: Completed 09-streaming-chat-02-PLAN.md
 Resume file: None
