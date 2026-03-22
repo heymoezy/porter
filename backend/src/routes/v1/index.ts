@@ -17,6 +17,7 @@ import oauthGithubRoutes from './oauth-github.js';
 import oauthGoogleRoutes from './oauth-google.js';
 import webhookWhatsAppRoutes from './webhooks-whatsapp.js';
 import errorV1Routes from './errors.js';
+import contactV1Routes from './contacts.js';
 
 export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(authV1Routes, { prefix: '/auth' });
@@ -38,4 +39,5 @@ export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(oauthGoogleRoutes, { prefix: '/oauth/google' });
   fastify.register(webhookWhatsAppRoutes, { prefix: '/webhooks/whatsapp' });
   fastify.register(errorV1Routes, { prefix: '/errors' });
+  fastify.register(contactV1Routes, { prefix: '/contacts' });
 }
