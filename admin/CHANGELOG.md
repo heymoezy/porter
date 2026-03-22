@@ -1,3 +1,9 @@
+## v0.2.14 (2026-03-22)
+
+- Dashboard URL: /dashboard (with / redirect). Sidebar, TopBar, active state all updated
+- Browser tab title: "Porter Dashboard" (was "Porter Admin")
+- Route /dashboard added alongside index redirect
+
 ## v0.2.13 (2026-03-22)
 
 - Scrollbar: opt-in .scrollbar-thin class — all scrollbars hidden globally by default

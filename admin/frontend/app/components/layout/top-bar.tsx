@@ -19,6 +19,7 @@ const backRoutes: Record<string, { label: string; path: string }> = {
 
 const pageTitles: Array<{ path: string; exact?: boolean; label: string; icon: LucideIcon }> = [
   { path: "/", exact: true, label: "Dashboard", icon: LayoutDashboard },
+  { path: "/dashboard", exact: true, label: "Dashboard", icon: LayoutDashboard },
   { path: "/billing", label: "Revenue", icon: CreditCard },
   { path: "/users", label: "Customers", icon: Users },
   { path: "/porter", label: "Porter", icon: Shield },
