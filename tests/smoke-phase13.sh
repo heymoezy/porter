@@ -12,7 +12,7 @@ PASS=0
 FAIL=0
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-LOGIN_RESP=$(curl -s -c /tmp/smoke-phase13-cookies.txt "$BASE_URL/../login" -X POST \
+LOGIN_RESP=$(curl -s -c /tmp/smoke-phase13-cookies.txt "$BASE_URL/auth/login" -X POST \
   -H "Content-Type: application/json" \
   -d '{"email":"moe@themozaic.com","password":"porter"}')
 
@@ -74,7 +74,7 @@ AGENTS_RESP=$(curl -s $AUTH "$BASE_URL/agents")
 AGENT_ID=$(echo "$AGENTS_RESP" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
-agents = data.get('data', data) if isinstance(data, dict) else data
+agents = data.get('data', {}).get('agents', data.get('data', data)) if isinstance(data, dict) else data
 if isinstance(agents, list) and len(agents) > 0:
     print(agents[0].get('id',''))
 " 2>/dev/null)
@@ -98,16 +98,18 @@ LEARN01_RESP=$(cat /tmp/smoke-p13-learn01.json 2>/dev/null)
 
 check_http "LEARN-01: GET /agents/:id/learning-sessions returns 200" "200" "$LEARN01_CODE" "$LEARN01_RESP"
 
-# Validate response is a JSON array (data field or direct array)
+# Validate response contains a sessions array
 if echo "$LEARN01_RESP" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
-arr = data.get('data', data) if isinstance(data, dict) else data
-assert isinstance(arr, list), f'Expected list, got {type(arr)}'
+# Handle envelope: { ok: true, data: { sessions: [], count: 0 } }
+inner = data.get('data', data) if isinstance(data, dict) else data
+sessions = inner.get('sessions', inner) if isinstance(inner, dict) else inner
+assert isinstance(sessions, list), f'Expected sessions list, got {type(sessions)}'
 " 2>/dev/null; then
-  pass "LEARN-01: learning-sessions response is a JSON array"
+  pass "LEARN-01: learning-sessions response contains sessions array"
 else
-  fail "LEARN-01: learning-sessions response is a JSON array" "list" "$LEARN01_RESP"
+  fail "LEARN-01: learning-sessions response contains sessions array" "sessions list" "$LEARN01_RESP"
 fi
 
 # ── LEARN-02: GET /memory/concepts returns 200 with source_url + confidence_score ──
@@ -141,7 +143,8 @@ check "LEARN-02: confidence_score in schema definition" "confidence_score" "sour
 SESSIONS=$(echo "$LEARN01_RESP" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
-arr = data.get('data', data) if isinstance(data, dict) else data
+inner = data.get('data', data) if isinstance(data, dict) else data
+arr = inner.get('sessions', inner) if isinstance(inner, dict) else inner
 if isinstance(arr, list) and len(arr) > 0:
     s = arr[0]
     fields = ['sources_visited', 'concepts_retained', 'confidence_distribution', 'capped']
@@ -158,11 +161,7 @@ if [ "$SESSIONS" = "OK" ]; then
   pass "LEARN-03: learning session record has sources_visited + concepts_retained + confidence_distribution + capped"
 elif [ "$SESSIONS" = "EMPTY" ]; then
   # No sessions yet — validate DB schema directly
-  DB_PATH=$(node -e "
-    const fs = require('fs');
-    const cfg = JSON.parse(fs.readFileSync('/home/lobster/documents/porter/porter_config.json', 'utf8'));
-    console.log(cfg.dataDir + '/porter.db');
-  " 2>/dev/null || echo "/home/lobster/.porter/porter.db")
+  DB_PATH="/home/lobster/.porter/porter.db"
 
   SCHEMA_CHECK=$(python3 -c "
 import sqlite3, sys
@@ -189,13 +188,7 @@ else
 fi
 
 # ── Schema validation: concepts table exists ───────────────────────────────────
-DB_PATH=$(node -e "
-  const fs = require('fs');
-  try {
-    const cfg = JSON.parse(fs.readFileSync('/home/lobster/documents/porter/porter_config.json', 'utf8'));
-    console.log(cfg.dataDir + '/porter.db');
-  } catch(e) { console.log('/home/lobster/.porter/porter.db'); }
-" 2>/dev/null || echo "/home/lobster/.porter/porter.db")
+DB_PATH="/home/lobster/.porter/porter.db"
 
 CONCEPTS_SCHEMA=$(python3 -c "
 import sqlite3
