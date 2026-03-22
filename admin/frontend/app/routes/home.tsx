@@ -235,44 +235,44 @@ function DashboardContent() {
       {/* ── Bottom bar ── */}
       <div className="h-[140px] shrink-0 border-t border-border bg-background overflow-hidden">
         <div className="py-2 h-full flex flex-col lg:flex-row gap-3">
-          {/* System Health Monitor */}
+          {/* System Health — monitor style (matches LLM terminal aesthetic) */}
           <div className="lg:w-1/2 min-w-0 overflow-hidden">
-            <div className="flex items-center justify-between mb-1.5">
-              <h2 className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
-                <Monitor className="h-3 w-3 text-accent-porter" /> System Health
-              </h2>
-              <Link to="/system" className="text-[10px] text-text3 hover:text-accent-porter transition-colors">details &rarr;</Link>
-            </div>
-            {sys && (
-              <div className="flex gap-4 items-end h-[80px]">
-                {[
-                  { label: "MEM", pct: sys.memory.pct, icon: Monitor },
-                  { label: "DISK", pct: sys.disk.pct, icon: HardDrive },
-                  { label: "CPU", pct: Math.round(sys.cpu.load1m / sys.cpu.cores * 100), icon: Cpu },
-                ].map(g => (
-                  <div key={g.label} className="flex-1 flex flex-col items-center gap-1">
-                    <span className={`text-xs font-bold tabular-nums ${g.pct >= 80 ? "text-danger" : g.pct >= 70 ? "text-warning" : "text-foreground"}`}>{g.pct}%</span>
-                    <div className="w-full h-[50px] rounded bg-raised/50 relative overflow-hidden">
-                      <div
-                        className={`absolute bottom-0 left-0 right-0 rounded transition-all duration-700 ${g.pct >= 90 ? "bg-danger" : g.pct >= 70 ? "bg-warning" : "bg-success/70"}`}
-                        style={{ height: `${g.pct}%` }}
-                      />
-                    </div>
-                    <span className="text-[8px] text-text3 font-mono">{g.label}</span>
-                  </div>
-                ))}
-                <div className="flex-1 flex flex-col items-center gap-1">
-                  <span className={`text-xs font-bold tabular-nums ${sys.cpu.load1m > sys.cpu.cores ? "text-danger" : "text-foreground"}`}>
-                    {sys.cpu.load1m.toFixed(1)}
-                  </span>
-                  <div className="w-full h-[50px] flex flex-col justify-end items-center">
-                    <span className="text-[10px] font-bold text-foreground">{Math.floor(sys.uptime / 3600)}h</span>
-                    <span className="text-[8px] text-text3">uptime</span>
-                  </div>
-                  <span className="text-[8px] text-text3 font-mono">LOAD</span>
+            <div className="rounded-lg border border-border overflow-hidden h-full">
+              <div className="flex items-center gap-2 bg-[color-mix(in_srgb,var(--background)_90%,black)] px-3 py-1.5 border-b border-border">
+                <div className="flex gap-1">
+                  <div className="h-2 w-2 rounded-full bg-danger/60" />
+                  <div className="h-2 w-2 rounded-full bg-warning/60" />
+                  <div className="h-2 w-2 rounded-full bg-success/60" />
                 </div>
+                <div className="flex items-center gap-1.5 flex-1">
+                  <Monitor className="h-3 w-3 text-accent-porter" />
+                  <span className="text-[10px] font-mono text-text3">System Health</span>
+                </div>
+                <Link to="/system" className="text-[9px] text-text3 hover:text-accent-porter font-mono">details →</Link>
               </div>
-            )}
+              <div className="bg-[color-mix(in_srgb,var(--background)_90%,black)] p-2.5 font-mono text-[10px] leading-[1.8]">
+                {sys ? (
+                  <>
+                    {[
+                      { label: "MEM", pct: sys.memory.pct },
+                      { label: "CPU", pct: Math.round(sys.cpu.load1m / sys.cpu.cores * 100) },
+                      { label: "DSK", pct: sys.disk.pct },
+                    ].map(g => (
+                      <div key={g.label} className="flex items-center gap-2">
+                        <span className="w-6 text-text3">{g.label}</span>
+                        <div className="flex-1 h-2 rounded-sm bg-raised/30 overflow-hidden">
+                          <div className={`h-full rounded-sm transition-all duration-700 ${g.pct >= 90 ? "bg-danger" : g.pct >= 70 ? "bg-warning" : "bg-success/70"}`} style={{ width: `${g.pct}%` }} />
+                        </div>
+                        <span className={`w-8 text-right tabular-nums ${g.pct >= 80 ? "text-danger" : "text-text3"}`}>{g.pct}%</span>
+                      </div>
+                    ))}
+                    <p className="text-text3 mt-1">
+                      load {sys.cpu.load1m.toFixed(2)} · {sys.cpu.cores} cores · up {Math.floor(sys.uptime / 3600)}h
+                    </p>
+                  </>
+                ) : <p className="text-text3">loading...</p>}
+              </div>
+            </div>
           </div>
 
           {/* System Log */}

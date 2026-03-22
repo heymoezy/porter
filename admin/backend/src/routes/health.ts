@@ -6,7 +6,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-let ADMIN_VERSION = '0.2.6';
+let ADMIN_VERSION = '0.2.7';
 try {
   for (const p of [resolve(__dirname, '../../package.json'), resolve(process.cwd(), 'package.json')]) {
     try {
@@ -54,9 +54,12 @@ export default async function healthRoutes(fastify: FastifyInstance) {
         else logs.push({ ts: a.ts, text: `${t} [${a.actor}] ${a.action} → ${a.target}`, color: 'text-accent-porter' });
       }
     } catch {}
+    // Porter-related errors only — skip browser noise (MetaMask, extensions, etc.)
+    const NOISE = ['MetaMask', 'metamask', 'extension', 'chrome-extension', 'moz-extension', 'webpack', 'ResizeObserver'];
     try {
-      const errors = sqlite.prepare('SELECT created_at, source, severity, message, username FROM error_log ORDER BY created_at DESC LIMIT ?').all(limit) as Array<{ created_at: number; source: string; severity: string; message: string; username: string | null }>;
+      const errors = sqlite.prepare('SELECT created_at, source, severity, message, username FROM error_log ORDER BY created_at DESC LIMIT ?').all(limit * 2) as Array<{ created_at: number; source: string; severity: string; message: string; username: string | null }>;
       for (const e of errors) {
+        if (NOISE.some(n => e.message.includes(n))) continue;
         const t = new Date(e.created_at * 1000).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
         logs.push({ ts: e.created_at, text: `${t} [${e.username || 'system'}] ${e.severity}: ${e.message.slice(0, 80)}`, color: e.severity === 'error' || e.severity === 'critical' ? 'text-danger' : 'text-warning' });
       }

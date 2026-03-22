@@ -1,3 +1,9 @@
+## v0.2.7 (2026-03-22)
+
+- System Health: redesigned as terminal-style monitor (matches LLM terminal aesthetic) with horizontal progress bars for MEM/CPU/DSK, load/cores/uptime line
+- User Logs: filtered out browser noise (MetaMask, extensions, ResizeObserver) — only Porter-related errors
+- Noise filter applied server-side in /api/admin/health/logs
+
 ## v0.2.6 (2026-03-22)
 
 - User Logs terminal: now pulls REAL data from audit_log + error_log (not fake)
