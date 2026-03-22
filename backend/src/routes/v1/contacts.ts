@@ -409,4 +409,81 @@ export default async function contactV1Routes(
 
     return reply.code(201).send(ok({ linked: true }));
   });
+
+  // GET /:id/timeline — contact activity timeline (CRM-04)
+  fastify.get<{ Params: { id: string } }>('/:id/timeline', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const query = request.query as { limit?: string; offset?: string };
+
+    const existing = sqlite.prepare('SELECT id FROM contacts WHERE id = ?').get(id);
+    if (!existing) {
+      return reply.code(404).send(err('CONTACT_NOT_FOUND', 'Contact not found'));
+    }
+
+    const limit = Math.min(parseInt(query.limit ?? '50', 10) || 50, 200);
+    const offset = parseInt(query.offset ?? '0', 10) || 0;
+
+    const rows = sqlite.prepare(`
+      SELECT 'message' as type, CAST(m.id AS TEXT) as ref_id, m.content as detail,
+             m.created_at, m.sender_type as actor
+      FROM messages m
+      JOIN conversations c ON c.id = m.conversation_id
+      JOIN contact_conversations cc ON cc.conversation_id = c.id
+      WHERE cc.contact_id = ?
+
+      UNION ALL
+
+      SELECT 'project_event' as type, p.id as ref_id, p.name as detail,
+             p.created_at, 'system' as actor
+      FROM contact_projects cp
+      JOIN projects p ON p.id = cp.project_id
+      WHERE cp.contact_id = ?
+
+      UNION ALL
+
+      SELECT 'file' as type, f.id as ref_id, f.filename as detail,
+             fc.attached_at as created_at, f.uploaded_by as actor
+      FROM files f
+      JOIN file_contacts fc ON fc.file_id = f.id
+      WHERE fc.contact_id = ?
+
+      UNION ALL
+
+      SELECT 'analysis' as type, ca.id as ref_id,
+             ca.raw_json as detail, ca.created_at, 'system' as actor
+      FROM contact_analyses ca
+      WHERE ca.contact_id = ?
+
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(id, id, id, id, limit, offset) as Array<{
+      type: string;
+      ref_id: string;
+      detail: string | null;
+      created_at: number;
+      actor: string;
+    }>;
+
+    // Get total count for pagination metadata
+    const totalRow = sqlite.prepare(`
+      SELECT (
+        (SELECT COUNT(*) FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         JOIN contact_conversations cc ON cc.conversation_id = c.id
+         WHERE cc.contact_id = ?) +
+        (SELECT COUNT(*) FROM contact_projects WHERE contact_id = ?) +
+        (SELECT COUNT(*) FROM file_contacts WHERE contact_id = ?) +
+        (SELECT COUNT(*) FROM contact_analyses WHERE contact_id = ?)
+      ) as total
+    `).get(id, id, id, id) as { total: number };
+
+    return reply.send(ok({
+      timeline: rows,
+      total: totalRow.total,
+      limit,
+      offset,
+    }));
+  });
 }
