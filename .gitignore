@@ -41,4 +41,6 @@ backend/node_modules/
 # Frontend build artifacts and dependencies (source is tracked)
 frontend/dist/
 frontend/node_modules/
-frontend-v2/
+frontend-v2/build/
+frontend-v2/node_modules/
+frontend-v2/.react-router/

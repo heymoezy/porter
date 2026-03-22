@@ -1,7 +1,8 @@
 import { AdminShell } from "~/components/layout/admin-shell"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
-import { FileText } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
+import { Link } from "react-router"
 
 function ChangelogContent() {
   const { data, isLoading } = useQuery({
@@ -21,10 +22,9 @@ function ChangelogContent() {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <FileText className="size-3 text-accent-porter" />
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Release Notes</span>
-      </div>
+      <Link to="/dashboard" className="inline-flex items-center gap-1 text-xs text-text3 hover:text-accent-porter transition-colors">
+        <ArrowLeft className="h-3 w-3" /> Dashboard
+      </Link>
       <div className="rounded-xl border border-border bg-surface p-3 overflow-y-auto max-h-[calc(100vh-var(--header-height)-6rem)]">
         <div className="prose prose-sm prose-invert max-w-none text-xs text-text2 leading-relaxed">
           {lines.map((line, i) => {
