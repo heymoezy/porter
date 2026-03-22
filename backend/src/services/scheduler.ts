@@ -67,6 +67,37 @@ export function scheduleNextContactAnalysis(contactId: string, engagementScore: 
   );
 }
 
+/**
+ * Schedule the next autonomous learning session for an agent template.
+ * Self-adjusting cadence based on domain_activity score:
+ *   - Error/unknown (-1): retry in 12 hours
+ *   - High activity (70-100): re-learn every 24 hours (fast-moving domains: AI, JS frameworks)
+ *   - Medium activity (30-69): re-learn every 48 hours
+ *   - Low activity (0-29): re-learn every 7 days (stable domains: accounting, law basics)
+ */
+export function scheduleNextLearningSession(templateId: string, domainActivity: number): void {
+  let intervalSec: number;
+  if (domainActivity < 0) {
+    intervalSec = 12 * 3600;       // 12 hours (error backoff)
+  } else if (domainActivity >= 70) {
+    intervalSec = 24 * 3600;       // 24 hours (fast-moving domain: AI, JS frameworks)
+  } else if (domainActivity >= 30) {
+    intervalSec = 48 * 3600;       // 48 hours (medium-velocity domain)
+  } else {
+    intervalSec = 7 * 24 * 3600;   // 7 days (stable domain: accounting, law basics)
+  }
+
+  const scheduledFor = Date.now() / 1000 + intervalSec;
+  sqlite.prepare(`
+    INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
+    VALUES (?, 'system', 'learning_session', ?, 'pending', ?, unixepoch('now'))
+  `).run(
+    crypto.randomUUID(),
+    JSON.stringify({ template_id: templateId }),
+    scheduledFor,
+  );
+}
+
 // ── Bootstrap helpers ─────────────────────────────────────────────────────────
 
 /**
@@ -107,6 +138,42 @@ function bootstrapContactAnalysis(): void {
   }
 }
 
+/**
+ * On scheduler startup, seed one pending learning_session job per non-internal
+ * agent template that doesn't already have a pending job.
+ * Staggered over 10 minutes to prevent thundering herd on startup.
+ */
+function bootstrapLearning(): void {
+  const templatesNeedingJobs = sqlite.prepare(`
+    SELECT id FROM agent_templates
+    WHERE is_internal = 0
+    AND NOT EXISTS (
+      SELECT 1 FROM agent_jobs
+      WHERE trigger_type = 'learning_session'
+        AND status = 'pending'
+        AND json_extract(trigger_data, '$.template_id') = agent_templates.id
+    )
+  `).all() as { id: string }[];
+
+  if (templatesNeedingJobs.length > 0) {
+    console.log('[scheduler] bootstrapping learning sessions for %d templates', templatesNeedingJobs.length);
+    const staggerSec = templatesNeedingJobs.length > 1
+      ? 600 / templatesNeedingJobs.length
+      : 0;
+    for (let i = 0; i < templatesNeedingJobs.length; i++) {
+      const scheduledFor = Date.now() / 1000 + (i * staggerSec);
+      sqlite.prepare(`
+        INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
+        VALUES (?, 'system', 'learning_session', ?, 'pending', ?, unixepoch('now'))
+      `).run(
+        crypto.randomUUID(),
+        JSON.stringify({ template_id: templatesNeedingJobs[i].id }),
+        scheduledFor,
+      );
+    }
+  }
+}
+
 interface JobRow {
   id: string;
   agent_id: string;
@@ -136,6 +203,7 @@ export function start() {
   console.log('[scheduler] started — polling every %dms, worker=%s', POLL_INTERVAL_MS, WORKER_ID.slice(0, 8));
   logFeatureFlagState();
   bootstrapContactAnalysis();
+  bootstrapLearning();
   intervalId = setInterval(tick, POLL_INTERVAL_MS);
 }
 
@@ -362,6 +430,50 @@ async function executeJob(job: JobRow): Promise<void> {
       // Re-enqueue even on failure — use a longer backoff (6 hours)
       // so the sweep doesn't stop permanently on transient errors.
       scheduleNextContactAnalysis(contactId, -1);
+    }
+    return;
+  }
+
+  // ── Autonomous learning session (LEARN-01/02/03) ──────────────────────────
+  if (job.trigger_type === 'learning_session') {
+    const data = JSON.parse(job.trigger_data || '{}') as { template_id?: string };
+    const templateId = data.template_id;
+    if (!templateId) {
+      markJobFailed(job.id, 'Missing template_id in learning_session trigger_data');
+      return;
+    }
+
+    // Verify template still exists
+    const template = sqlite.prepare('SELECT id FROM agent_templates WHERE id = ?').get(templateId);
+    if (!template) {
+      markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'template_deleted' }));
+      // Template deleted — do NOT re-enqueue
+      return;
+    }
+
+    try {
+      const { runLearningSession } = await import('./learner.js');
+      const result = await runLearningSession(templateId);
+
+      markJobComplete(job.id, JSON.stringify({
+        session_id: result.session_id,
+        concepts_retained: result.concepts_retained,
+        capped: result.capped,
+      }));
+      logActivity('system', job.id, null, 'learning_session_complete',
+        `Learning session for template ${templateId}: ${result.concepts_retained} concepts`,
+        JSON.stringify({ session_id: result.session_id, template_id: templateId }));
+
+      // Re-enqueue: autonomous 24/7 sweep with self-adjusting cadence
+      scheduleNextLearningSession(templateId, result.domain_activity);
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      markJobFailed(job.id, errMsg);
+      logActivity('system', job.id, null, 'learning_session_failed',
+        `Learning session failed for template ${templateId}: ${errMsg}`, '{}');
+
+      // Re-enqueue even on failure — 12h error backoff
+      scheduleNextLearningSession(templateId, -1);
     }
     return;
   }
