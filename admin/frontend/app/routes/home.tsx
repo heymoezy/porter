@@ -212,7 +212,7 @@ function DashboardContent() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-var(--header-height)-2rem)]">
+    <div className="flex flex-col h-[calc(100vh-var(--header-height)-2rem)] overflow-hidden">
       <div className="shrink-0 space-y-3">
 
         {/* ── Hero ── */}
@@ -308,7 +308,7 @@ function DashboardContent() {
             <h2 className="text-xs font-bold text-foreground uppercase tracking-wide">Projects</h2>
             <button className="text-[10px] text-text3 hover:text-accent-porter transition-colors">all &rarr;</button>
           </div>
-          <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-2 min-h-0 scrollbar-thin">
             {projectTimeline.map((p, i) => (
               <div
                 key={p._key}
@@ -344,7 +344,7 @@ function DashboardContent() {
             </h2>
             <Link to="/activity" className="text-[10px] text-text3 hover:text-accent-porter transition-colors">all &rarr;</Link>
           </div>
-          <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin">
             {timeline.map((e, i) => (
               <div
                 key={e._key}

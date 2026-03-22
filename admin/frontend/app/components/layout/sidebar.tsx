@@ -52,7 +52,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto p-2 space-y-0.5 scrollbar-thin">
         {groups.map(g => (
           <div key={g.label}>
             {collapsed
@@ -103,7 +103,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
         {!collapsed && (
           <Link to="/changelog" className="mt-2 block text-center text-[10px] uppercase tracking-widest text-text3 hover:text-accent-porter transition-colors">
-            Porter Admin v0.2.12
+            Porter Admin v0.2.13
           </Link>
         )}
       </div>

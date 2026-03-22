@@ -1,3 +1,10 @@
+## v0.2.13 (2026-03-22)
+
+- Scrollbar: opt-in .scrollbar-thin class — all scrollbars hidden globally by default
+- Only elements with .scrollbar-thin get consistent 3px auto-hide scrollbars
+- Applied to: dashboard projects, activity, admin-shell content, sidebar nav
+- Eliminated competing scrollbar from outer shell container
+
 ## v0.2.12 (2026-03-22)
 
 - Scrollbar design system tokens: --scrollbar-size (3px), --scrollbar-thumb, --scrollbar-thumb-hover
