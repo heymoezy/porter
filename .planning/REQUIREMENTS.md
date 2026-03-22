@@ -50,8 +50,8 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 - [x] **CRM-01**: Contact model supports multiple emails and phone numbers with country codes
 - [x] **CRM-02**: Social links (LinkedIn, X, GitHub) stored on contact records
-- [ ] **CRM-03**: AI-powered contact analysis generated from interaction history
-- [ ] **CRM-04**: Contact activity timeline aggregates all touchpoints across projects
+- [x] **CRM-03**: AI-powered contact analysis generated from interaction history
+- [x] **CRM-04**: Contact activity timeline aggregates all touchpoints across projects
 
 ### File Handling
 
@@ -61,9 +61,9 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 ### Agent Templates
 
-- [ ] **TMPL-01**: 100 agent templates with complete skills, tools, and system prompt definitions
-- [ ] **TMPL-02**: Templates searchable and filterable by category via API
-- [ ] **TMPL-03**: Template instantiation creates a fully configured, ready-to-work agent
+- [x] **TMPL-01**: 100 agent templates with complete skills, tools, and system prompt definitions
+- [x] **TMPL-02**: Templates searchable and filterable by category via API
+- [x] **TMPL-03**: Template instantiation creates a fully configured, ready-to-work agent
 
 ### Autonomous Learning
 
@@ -119,11 +119,11 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 | FILE-01 | Phase 11 | Complete |
 | FILE-02 | Phase 11 | Complete |
 | FILE-03 | Phase 11 | Complete |
-| CRM-03 | Phase 12 | Pending |
-| CRM-04 | Phase 12 | Pending |
-| TMPL-01 | Phase 12 | Pending |
-| TMPL-02 | Phase 12 | Pending |
-| TMPL-03 | Phase 12 | Pending |
+| CRM-03 | Phase 12 | Complete |
+| CRM-04 | Phase 12 | Complete |
+| TMPL-01 | Phase 12 | Complete |
+| TMPL-02 | Phase 12 | Complete |
+| TMPL-03 | Phase 12 | Complete |
 | LEARN-01 | Phase 13 | Pending |
 | LEARN-02 | Phase 13 | Pending |
 | LEARN-03 | Phase 13 | Pending |

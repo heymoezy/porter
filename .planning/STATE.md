@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Phase 12 context gathered
-last_updated: "2026-03-22T13:15:58.260Z"
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-03-22T16:19:12.164Z"
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
+  total_plans: 16
+  completed_plans: 13
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input
-**Current focus:** Phase 11 — unified-chat-and-crm-schema
+**Current focus:** Phase 12 — crm-intelligence-and-agent-templates
 
 ## Current Position
 
-Phase: 11 (unified-chat-and-crm-schema) — EXECUTING
-Plan: 5 of 5
+Phase: 12 (crm-intelligence-and-agent-templates) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -74,6 +74,8 @@ Recent decisions affecting current work:
 - [Phase 11-unified-chat-and-crm-schema]: Outbound-first conversations use scope_type='global' with NULL scope_id when no prior inbound contact exists
 - [Phase 11-unified-chat-and-crm-schema]: Archive BEFORE routing in WhatsApp webhook: unified table write happens before agent_jobs insert to prevent unarchived messages on routing failure
 - [Phase 11-unified-chat-and-crm-schema]: WhatsApp conversation external_id = phone number (not Meta message ID): all messages from one contact share one conversation
+- [Phase 12]: ALTER TABLE personas wrapped in try/catch for idempotency — SQLite has no IF NOT EXISTS for ALTER TABLE
+- [Phase 12]: Smoke test scaffold created before API implementation to define expected contract
 
 ### Pending Todos
 
@@ -88,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T13:15:58.255Z
-Stopped at: Phase 12 context gathered
-Resume file: .planning/phases/12-crm-intelligence-and-agent-templates/12-CONTEXT.md
+Last session: 2026-03-22T16:19:12.162Z
+Stopped at: Completed 12-01-PLAN.md
+Resume file: None
