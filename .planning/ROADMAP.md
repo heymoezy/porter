@@ -147,7 +147,7 @@ Plans:
 | 8. API Foundation | v2.0 | 2/2 | Complete | 2026-03-21 |
 | 9. Streaming Chat | 2/2 | Complete   | 2026-03-22 | - |
 | 10. Collaborative Sessions | 3/3 | Complete    | 2026-03-22 | - |
-| 11. Unified Chat and CRM Schema | 5/5 | Complete   | 2026-03-22 | - |
+| 11. Unified Chat and CRM Schema | 5/5 | Complete    | 2026-03-22 | - |
 | 12. CRM Intelligence and Agent Templates | v2.0 | 0/TBD | Not started | - |
 | 13. Autonomous Learning | v2.0 | 0/TBD | Not started | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
