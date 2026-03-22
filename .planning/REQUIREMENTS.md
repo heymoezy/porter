@@ -67,9 +67,9 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 ### Autonomous Learning
 
-- [ ] **LEARN-01**: Agents can search external sources (web, X, Reddit, GitHub) for domain knowledge
-- [ ] **LEARN-02**: Learned knowledge stored as concepts in Memory V2 with source attribution
-- [ ] **LEARN-03**: Learning sessions logged with sources, confidence scores, and what was retained
+- [x] **LEARN-01**: Agents can search external sources (web, X, Reddit, GitHub) for domain knowledge
+- [x] **LEARN-02**: Learned knowledge stored as concepts in Memory V2 with source attribution
+- [x] **LEARN-03**: Learning sessions logged with sources, confidence scores, and what was retained
 
 ### Billing
 
@@ -124,9 +124,9 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 | TMPL-01 | Phase 12 | Complete |
 | TMPL-02 | Phase 12 | Complete |
 | TMPL-03 | Phase 12 | Complete |
-| LEARN-01 | Phase 13 | Pending |
-| LEARN-02 | Phase 13 | Pending |
-| LEARN-03 | Phase 13 | Pending |
+| LEARN-01 | Phase 13 | Complete |
+| LEARN-02 | Phase 13 | Complete |
+| LEARN-03 | Phase 13 | Complete |
 | BILL-01 | Phase 14 | Pending |
 | BILL-02 | Phase 14 | Pending |
 | BILL-03 | Phase 14 | Pending |

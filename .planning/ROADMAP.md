@@ -4,6 +4,7 @@
 
 - **v1.0 Foundation + Core Platform** - Phases 1-7 (shipped 2026-03-21) — see MILESTONES.md
 - **v2.0 Backend Ready** - Phases 8-14 (active)
+- **v3.0 Agent-First UI** - Phases 15-19 (planned) — agents own every surface
 
 ## Phases
 
@@ -130,7 +131,7 @@ Plans:
   1. After porter starts, `learning_session` jobs appear in `agent_jobs` for all non-internal templates — the scheduler processes them autonomously; after sessions complete, `GET /api/v1/memory/concepts?scope=agent&scope_id=:template_id` returns concepts attributed to source URLs
   2. Every concept stored from a learning session has `source_url` and `confidence_score` fields populated — grepping the stored concept corpus for email addresses, @usernames, or full personal names returns zero results
   3. `GET /api/v1/agents/:id/learning-sessions` returns a log with `sources_visited`, `concepts_retained`, `confidence_distribution`, and `capped: true` for any session that hit the 20-request limit — all fields present on every record
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 13-01-PLAN.md — Schema migration, Drizzle definitions, FTS5, smoke test scaffold (LEARN-01, LEARN-02, LEARN-03)
@@ -148,9 +149,71 @@ Plans:
   4. When the billing service is unreachable, resource-creating routes log the failure, allow the request through, and return 2xx — not 500
 **Plans**: TBD
 
+---
+
+### v3.0 Agent-First UI
+
+**Milestone Goal:** Every surface in Porter is visually owned by an agent. Agents aren't hidden behind a chat bubble — they're the first thing you see, already working, surfacing what matters. When you walk into Porter, you walk into an office full of agents at their desks.
+
+### Phase 15: Live Dashboard
+**Goal**: Replace the hardcoded mock dashboard with real agent data — every supervisor card, activity item, and stat tile reflects actual agent state from the API, powered by SSE for real-time updates
+**Depends on**: Phase 14 (v2.0 complete)
+**Requirements**: DASH-01, DASH-02, DASH-03, DASH-04
+**Success Criteria** (what must be TRUE):
+  1. Dashboard supervisor cards fetch from `GET /api/v1/agents` and render real agent names, roles, pixel portraits from `appearance_spec`, and live status — zero hardcoded agent data remains in the component
+  2. Activity feed connects to SSE and shows real `agent_activity` events as they happen — new events appear within 2 seconds of creation without page refresh
+  3. Stats tiles (active agents, running jobs, token usage, project count) pull from real API endpoints and update live — values match what `curl` returns within 1 second
+  4. Dashboard renders correctly with 0 agents (empty state), 1 agent, and 20+ agents — no layout breaks, no phantom cards
+**Plans**: TBD
+
+### Phase 16: Agent Workspace
+**Goal**: Each agent gets a full-page workspace at `/agents/:id` with tabbed views for chat, activity timeline, concepts/memory, config, and job queue — this is where you go to see what an agent is doing and talk to them
+**Depends on**: Phase 15
+**Requirements**: AGWS-01, AGWS-02, AGWS-03, AGWS-04, AGWS-05
+**Success Criteria** (what must be TRUE):
+  1. Navigating to `/agents/:id` renders a full-page workspace with the agent's pixel portrait, name, role, status badge, and tabbed content — not a slide-out panel
+  2. The Chat tab streams messages via SSE using the Phase 9 streaming API — first token appears under 2 seconds, the agent's persona and memory are injected as context
+  3. The Activity tab shows a chronological feed from `GET /api/v1/agents/:id/activity` with event type icons, timestamps, and expandable detail — pagination loads more on scroll
+  4. The Concepts tab shows the agent's learned knowledge from Memory V2 with source attribution and confidence scores — editable by the user (add/dismiss)
+  5. The Jobs tab shows the agent's pending/running/completed jobs from `GET /api/v1/agents/:id/jobs` with status badges, trigger types, and duration — cancel button for pending jobs
+**Plans**: TBD
+
+### Phase 17: Section Ownership
+**Goal**: Every product module (Projects, CRM, Chat, Files) visually shows which agent manages it — the agent's portrait appears in the section header, their recent actions show inline, and clicking the portrait navigates to their workspace
+**Depends on**: Phase 16
+**Requirements**: SECT-01, SECT-02, SECT-03, SECT-04
+**Success Criteria** (what must be TRUE):
+  1. Each module page (Projects list, CRM contacts, Conversations, Files) renders a section owner bar showing the assigned agent's pixel portrait, name, status, and last action — clicking navigates to `/agents/:id`
+  2. `GET /api/v1/agents` returns an `owned_sections` field (JSON array) for each agent; `PUT /api/v1/agents/:id` accepts section assignments — the dashboard reflects ownership changes immediately
+  3. The Projects list page shows inline agent annotations: which agent last touched each project, what they did, and when — derived from `agent_activity` joined to `project_id`
+  4. The CRM contacts page shows the last analysis result per contact and which agent produced it — clicking opens the analysis detail without leaving the page
+**Plans**: TBD
+
+### Phase 18: Proactive Surfaces
+**Goal**: Agents push insights, suggestions, and flags to their owned sections without being asked — when you arrive at a page, the agent has already been working and has things to tell you
+**Depends on**: Phase 17
+**Requirements**: PROACT-01, PROACT-02, PROACT-03, PROACT-04
+**Success Criteria** (what must be TRUE):
+  1. Each section owner agent generates a "briefing" — top 3 items needing attention — visible as a collapsible card at the top of their section, updated on every page load from `GET /api/v1/agents/:id/briefing`
+  2. The backend `POST /api/v1/agents/:id/briefing/generate` creates briefings asynchronously by analyzing the agent's owned data (projects, contacts, conversations) — briefings are cached and refreshed on a configurable interval (default 1 hour)
+  3. Agents surface anomalies (overdue projects, contacts going cold, unread conversations) as notification-style badges on their section — badge count updates via SSE
+  4. Clicking a briefing item navigates directly to the relevant entity (project, contact, conversation) with the agent's analysis pre-expanded — zero dead-end clicks
+**Plans**: TBD
+
+### Phase 19: Agent Management
+**Goal**: Users can create, configure, and assign agents through the UI — template browsing, one-click instantiation, section assignment, skill/tool editing, and appearance customization — all through Porter's chat-first interaction model
+**Depends on**: Phase 18
+**Requirements**: AGMGMT-01, AGMGMT-02, AGMGMT-03, AGMGMT-04
+**Success Criteria** (what must be TRUE):
+  1. `/agents` route renders a grid of agent cards (pixel portrait, name, 1-2 word role, status indicator, owned section badge) — uniform card sizing, sorted by `sort_order`
+  2. "New Agent" flow starts as a Porter chat conversation ("What kind of agent do you need?") that guides through role, skills, tools, appearance, and section assignment — creates via `POST /api/v1/agents` on confirmation
+  3. `/agents/templates` shows the 30+ template catalog from `GET /api/v1/templates` with category filters and search — clicking "Use this template" calls `POST /api/v1/templates/:id/instantiate` and navigates to the new agent's workspace
+  4. The PixelPortraitEditor component lets users customize skin, hair, eyes, shirt, and hair style — changes save to `appearance_spec` via `PUT /api/v1/agents/:id` and reflect everywhere the agent appears within 1 second
+**Plans**: TBD
+
 ## Progress
 
-**Execution Order:** 8 -> 9 -> 10 -> 11 -> 12 -> 13 -> 14
+**Execution Order:** 8 -> 9 -> 10 -> 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -160,5 +223,10 @@ Plans:
 | 10. Collaborative Sessions | 3/3 | Complete    | 2026-03-22 | - |
 | 11. Unified Chat and CRM Schema | 5/5 | Complete    | 2026-03-22 | - |
 | 12. CRM Intelligence and Agent Templates | 4/4 | Complete    | 2026-03-22 | - |
-| 13. Autonomous Learning | v2.0 | 0/3 | Planned | - |
+| 13. Autonomous Learning | 1/3 | In Progress|  | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
+| 15. Live Dashboard | v3.0 | 0/TBD | Not started | - |
+| 16. Agent Workspace | v3.0 | 0/TBD | Not started | - |
+| 17. Section Ownership | v3.0 | 0/TBD | Not started | - |
+| 18. Proactive Surfaces | v3.0 | 0/TBD | Not started | - |
+| 19. Agent Management | v3.0 | 0/TBD | Not started | - |

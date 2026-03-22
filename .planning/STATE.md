@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Phase 13 context gathered
-last_updated: "2026-03-22T20:26:51.505Z"
+stopped_at: Completed 13-01-PLAN.md
+last_updated: "2026-03-22T21:28:32.066Z"
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 16
-  completed_plans: 16
+  total_plans: 19
+  completed_plans: 17
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input
-**Current focus:** Phase 12 — crm-intelligence-and-agent-templates
+**Current focus:** Phase 13 — autonomous-learning
 
 ## Current Position
 
-Phase: 12 (crm-intelligence-and-agent-templates) — EXECUTING
-Plan: 2 of 4
+Phase: 13 (autonomous-learning) — EXECUTING
+Plan: 1 of 3
 
 ## Performance Metrics
 
@@ -82,6 +82,8 @@ Recent decisions affecting current work:
 - [Phase 12]: contact_analysis re-enqueue always fires (success AND error) so the 24/7 autonomous sweep never permanently stops; error path uses 6h backoff
 - [Phase 12]: bootstrapContactAnalysis staggered over 5 minutes on startup to prevent thundering herd when many contacts need seeding
 - [Phase 12-crm-intelligence-and-agent-templates]: 103 templates seeded (100 user-visible + 3 is_internal=1 system templates); seedTemplates() wired to migrate-12.ts; 422 MISSING_DEPENDENCIES with specific arrays on instantiation; .md file rollback on write failure
+- [Phase 13-autonomous-learning]: content_rowid='rowid' (not 'id') for FTS5 on concepts — references SQLite implicit INTEGER rowid, consistent with Phase 11 messages_fts
+- [Phase 13-autonomous-learning]: learning_sessions.template_id FK REFERENCES agent_templates ON DELETE CASCADE — sessions deleted with their template
 
 ### Pending Todos
 
@@ -96,6 +98,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T20:26:51.502Z
-Stopped at: Phase 13 context gathered
-Resume file: .planning/phases/13-autonomous-learning/13-CONTEXT.md
+Last session: 2026-03-22T21:28:32.063Z
+Stopped at: Completed 13-01-PLAN.md
+Resume file: None
