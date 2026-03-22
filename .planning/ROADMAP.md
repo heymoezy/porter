@@ -36,7 +36,7 @@
 - [x] **Phase 10: Collaborative Sessions** - Invite by email, per-project roles (view/chat/edit/admin), RBAC enforcement on every project-scoped route (completed 2026-03-22)
 - [x] **Phase 11: Unified Chat and CRM Schema** - Single conversation model for all message sources, multi-value CRM contacts, file associations via single upload endpoint (completed 2026-03-22)
 - [x] **Phase 12: CRM Intelligence and Agent Templates** - AI-powered contact analysis from interaction history, searchable 30+ agent template catalog with one-call instantiation (completed 2026-03-22)
-- [ ] **Phase 13: Autonomous Learning** - Agents search web/GitHub/Reddit, store GDPR-safe concepts in Memory V2 with source attribution and confidence scores
+- [x] **Phase 13: Autonomous Learning** - Agents search web/GitHub/Reddit, store GDPR-safe concepts in Memory V2 with source attribution and confidence scores (completed 2026-03-22)
 - [ ] **Phase 14: Billing Enforcement** - Lemon Squeezy subscription management, usage metering, atomic plan limit enforcement on all resource-creating routes
 
 ## Phase Details
@@ -131,7 +131,7 @@ Plans:
   1. After porter starts, `learning_session` jobs appear in `agent_jobs` for all non-internal templates — the scheduler processes them autonomously; after sessions complete, `GET /api/v1/memory/concepts?scope=agent&scope_id=:template_id` returns concepts attributed to source URLs
   2. Every concept stored from a learning session has `source_url` and `confidence_score` fields populated — grepping the stored concept corpus for email addresses, @usernames, or full personal names returns zero results
   3. `GET /api/v1/agents/:id/learning-sessions` returns a log with `sources_visited`, `concepts_retained`, `confidence_distribution`, and `capped: true` for any session that hit the 20-request limit — all fields present on every record
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 13-01-PLAN.md — Schema migration, Drizzle definitions, FTS5, smoke test scaffold (LEARN-01, LEARN-02, LEARN-03)
@@ -223,7 +223,7 @@ Plans:
 | 10. Collaborative Sessions | 3/3 | Complete    | 2026-03-22 | - |
 | 11. Unified Chat and CRM Schema | 5/5 | Complete    | 2026-03-22 | - |
 | 12. CRM Intelligence and Agent Templates | 4/4 | Complete    | 2026-03-22 | - |
-| 13. Autonomous Learning | 2/3 | In Progress|  | - |
+| 13. Autonomous Learning | 3/3 | Complete   | 2026-03-22 | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
 | 15. Live Dashboard | v3.0 | 0/TBD | Not started | - |
 | 16. Agent Workspace | v3.0 | 0/TBD | Not started | - |
