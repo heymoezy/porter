@@ -1,3 +1,8 @@
+## v0.2.17 (2026-03-22)
+
+- Admin bell: click opens notification dropdown with 3 seed alerts, dismiss per item, count badge, outside-click close
+- User NotificationBar: "1 of 3" counter + X dismiss button, bell count syncs with live notification state
+
 ## v0.2.16 (2026-03-22)
 
 - Sidebar: Customers moved between Dashboard and Revenue
