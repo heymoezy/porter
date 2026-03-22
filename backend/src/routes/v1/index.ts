@@ -19,6 +19,7 @@ import webhookWhatsAppRoutes from './webhooks-whatsapp.js';
 import errorV1Routes from './errors.js';
 import contactV1Routes from './contacts.js';
 import conversationV1Routes from './conversations.js';
+import templateV1Routes from './templates.js';
 
 export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(authV1Routes, { prefix: '/auth' });
@@ -42,4 +43,5 @@ export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(errorV1Routes, { prefix: '/errors' });
   fastify.register(contactV1Routes, { prefix: '/contacts' });
   fastify.register(conversationV1Routes, { prefix: '/conversations' });
+  fastify.register(templateV1Routes, { prefix: '/templates' });
 }
