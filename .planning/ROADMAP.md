@@ -123,14 +123,19 @@ Plans:
 - [ ] 12-04-PLAN.md — Template catalog API, instantiation, 100 template seed data (TMPL-01, TMPL-02, TMPL-03)
 
 ### Phase 13: Autonomous Learning
-**Goal**: Agents can be directed to acquire domain knowledge from web, GitHub, and Reddit; learned knowledge is stored as Memory V2 concepts with full attribution and confidence scores; no personal identifiers are stored; session caps and robots.txt are respected
+**Goal**: Porter autonomously acquires domain expertise for all agent templates by searching web, GitHub, and Reddit; learned knowledge is stored as Memory V2 concepts with full source attribution and confidence scores; no personal identifiers are stored; session caps and robots.txt are respected
 **Depends on**: Phase 12
 **Requirements**: LEARN-01, LEARN-02, LEARN-03
 **Success Criteria** (what must be TRUE):
-  1. `POST /api/v1/agents/:id/learn` with `{"topic":"TypeScript streaming patterns","sources":["web","github"]}` returns 202; after the session completes, `GET /api/v1/memory/concepts?agent_id=:id` shows new concepts attributed to source URLs from this session
+  1. After porter starts, `learning_session` jobs appear in `agent_jobs` for all non-internal templates — the scheduler processes them autonomously; after sessions complete, `GET /api/v1/memory/concepts?scope=agent&scope_id=:template_id` returns concepts attributed to source URLs
   2. Every concept stored from a learning session has `source_url` and `confidence_score` fields populated — grepping the stored concept corpus for email addresses, @usernames, or full personal names returns zero results
   3. `GET /api/v1/agents/:id/learning-sessions` returns a log with `sources_visited`, `concepts_retained`, `confidence_distribution`, and `capped: true` for any session that hit the 20-request limit — all fields present on every record
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 13-01-PLAN.md — Schema migration, Drizzle definitions, FTS5, smoke test scaffold (LEARN-01, LEARN-02, LEARN-03)
+- [ ] 13-02-PLAN.md — learner.ts research loop engine with web/GitHub/Reddit sources (LEARN-01, LEARN-02)
+- [ ] 13-03-PLAN.md — Scheduler integration, bootstrap, API routes for concepts and learning sessions (LEARN-01, LEARN-02, LEARN-03)
 
 ### Phase 14: Billing Enforcement
 **Goal**: Lemon Squeezy subscriptions are created, updated, and cancelled via idempotent webhook handling; every resource-creating route meters usage atomically; plan limits are enforced under concurrent load with no bypass possible
@@ -155,5 +160,5 @@ Plans:
 | 10. Collaborative Sessions | 3/3 | Complete    | 2026-03-22 | - |
 | 11. Unified Chat and CRM Schema | 5/5 | Complete    | 2026-03-22 | - |
 | 12. CRM Intelligence and Agent Templates | 4/4 | Complete    | 2026-03-22 | - |
-| 13. Autonomous Learning | v2.0 | 0/TBD | Not started | - |
+| 13. Autonomous Learning | v2.0 | 0/3 | Planned | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
