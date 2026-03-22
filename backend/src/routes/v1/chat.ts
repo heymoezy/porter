@@ -6,6 +6,7 @@ import { ok, err } from '../../lib/envelope.js';
 import { config } from '../../config.js';
 import { z } from 'zod';
 import { selectStreamBackend } from '../../services/stream-service.js';
+import type { ProjectRole } from '../../lib/roles.js';
 
 // --- Schemas ----------------------------------------------------------------
 
@@ -35,7 +36,14 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
         : `SELECT c.id, c.title, c.model_id, c.updated_at, c.username,
                   c.project_id, c.metadata,
                   (SELECT count(*) FROM chat_messages WHERE chat_id = c.id) as msg_count
-           FROM chats c WHERE c.username = @username OR c.username IS NULL
+           FROM chats c
+           WHERE (c.username = @username OR c.username IS NULL)
+              OR (c.project_id IS NOT NULL AND EXISTS (
+                SELECT 1 FROM project_collaborators pc
+                WHERE pc.project_id = c.project_id
+                  AND pc.username = @username
+                  AND pc.status = 'active'
+              ))
            ORDER BY c.updated_at DESC`;
 
       const rows = isAdmin
@@ -170,6 +178,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       message?: string;
       agent_id?: string;
       chat_id?: string;
+      project_id?: string;  // COLLAB-03: project context for identity injection
       backend?: 'ollama' | 'openclaw' | 'auto';
     } | null;
 
@@ -180,7 +189,30 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
 
     const agentId = body?.agent_id;
     const chatId = body?.chat_id;
+    const projectId = body?.project_id;
     const backendHint = body?.backend;
+
+    // COLLAB-03: If a project context is provided, verify project access (chat role minimum)
+    if (projectId) {
+      if (request.sessionUser!.role !== 'platform_admin') {
+        const projectAccess = sqlite.prepare(
+          `SELECT role FROM project_collaborators WHERE project_id = ? AND username = ? AND status = 'active'`
+        ).get(projectId, request.sessionUser!.username) as { role: ProjectRole } | undefined;
+
+        if (!projectAccess) {
+          return reply.code(403).send(err('FORBIDDEN', 'No access to this project', request.id));
+        }
+
+        const roleOrder: ProjectRole[] = ['view', 'chat', 'edit', 'admin', 'owner'];
+        if (roleOrder.indexOf(projectAccess.role) < roleOrder.indexOf('chat')) {
+          return reply.code(403).send(err('FORBIDDEN', 'Chat access required for this project', request.id));
+        }
+
+        request.projectRole = projectAccess.role;
+      } else {
+        request.projectRole = 'owner';
+      }
+    }
 
     const ac = new AbortController();
 
@@ -195,12 +227,22 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       'X-Accel-Buffering': 'no',
     });
 
+    // COLLAB-03: Build identity prefix for agent context awareness
+    let identityPrefix = '';
+    if (request.projectRole) {
+      const displayName = request.sessionUser!.displayName ?? request.sessionUser!.username;
+      identityPrefix = `[Collaborator: ${displayName}, Project Role: ${request.projectRole}]\n`;
+    }
+
+    // Augmented message includes identity prefix for the agent; original is persisted to chat history
+    const augmentedMessage = identityPrefix ? identityPrefix + message : message;
+
     // STRM-02: backend selection via stream-service — zero provider-specific code here
     const backend = selectStreamBackend(message, backendHint);
     let fullResponse = '';
 
     try {
-      for await (const token of backend.stream(message, ac.signal)) {
+      for await (const token of backend.stream(augmentedMessage, ac.signal)) {
         if (ac.signal.aborted) break;
         fullResponse += token;
         reply.raw.write(`data: ${JSON.stringify({ token })}\n\n`);
@@ -215,6 +257,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       reply.raw.end();
 
       // Persist completed message to chat history (non-blocking, best-effort)
+      // Store original message (not augmented) — identity prefix is runtime context, not user message
       if (chatId && fullResponse && !ac.signal.aborted) {
         try {
           const user = request.sessionUser!;
@@ -222,10 +265,10 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
           const existingChat = sqlite.prepare('SELECT id FROM chats WHERE id = ?').get(chatId) as { id: string } | undefined;
           if (!existingChat) {
             sqlite.prepare(
-              'INSERT INTO chats (id, title, model_id, username, created_at, updated_at) VALUES (?, ?, ?, ?, datetime(\'now\'), datetime(\'now\'))'
-            ).run(chatId, message.slice(0, 50), backend.name, user.username);
+              'INSERT INTO chats (id, title, model_id, username, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'), datetime(\'now\'))'
+            ).run(chatId, message.slice(0, 50), backend.name, user.username, projectId ?? null);
           }
-          // Insert user message
+          // Insert user message (original, without identity prefix)
           sqlite.prepare(
             'INSERT INTO chat_messages (chat_id, role, content, model_id, timestamp) VALUES (?, ?, ?, ?, datetime(\'now\'))'
           ).run(chatId, 'user', message, null);
