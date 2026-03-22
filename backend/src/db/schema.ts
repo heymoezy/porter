@@ -9,6 +9,8 @@ export const users = sqliteTable('users', {
   passwordHash: text('password_hash').notNull(),
   salt: text('salt').notNull(),
   role: text('role').default('operator'),
+  emailVerified: integer('email_verified').default(0),
+  status: text('status').default('active'),
   createdAt: real('created_at').default(sql`(strftime('%s','now'))`),
 });
 
@@ -240,11 +242,54 @@ export const subscriptions = sqliteTable('subscriptions', {
   updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
 });
 
+export const authTokens = sqliteTable('auth_tokens', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  email: text('email').notNull(),
+  code: text('code').notNull(),
+  purpose: text('purpose').notNull(),       // 'verify_email' | 'reset_password'
+  expiresAt: real('expires_at').notNull(),
+  usedAt: real('used_at'),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+});
+
 export const billingEvents = sqliteTable('billing_events', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   username: text('username'),
   eventType: text('event_type').notNull(),                          // subscription_created | subscription_updated | payment_success | payment_failed | trial_started | trial_expired
   lsEventId: text('ls_event_id'),                                  // Lemon Squeezy webhook event ID (dedup)
   payload: text('payload').default('{}'),                           // raw webhook JSON
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+});
+
+// -- Collaboration (Phase 10) --
+
+export const projectCollaborators = sqliteTable('project_collaborators', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  username: text('username'),
+  email: text('email').notNull(),
+  role: text('role').notNull(),
+  status: text('status').notNull().default('pending'),
+  inviteToken: text('invite_token'),
+  invitedBy: text('invited_by').notNull(),
+  invitedAt: real('invited_at').default(sql`(unixepoch('now'))`),
+  acceptedAt: real('accepted_at'),
+  revokedAt: real('revoked_at'),
+  revokedBy: text('revoked_by'),
+  lastDripAt: real('last_drip_at'),
+  dripCount: integer('drip_count').default(0),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+});
+
+export const collaborationEvents = sqliteTable('collaboration_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  projectId: text('project_id').notNull(),
+  collaboratorId: text('collaborator_id').notNull(),
+  actorUsername: text('actor_username').notNull(),
+  eventType: text('event_type').notNull(),
+  previousRole: text('previous_role'),
+  newRole: text('new_role'),
+  detail: text('detail'),
   createdAt: real('created_at').default(sql`(unixepoch('now'))`),
 });
