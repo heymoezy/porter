@@ -6,6 +6,7 @@ import { ok, err } from '../../lib/envelope.js';
 import { featureFlags } from '../../config.js';
 import { z } from 'zod';
 import crypto from 'crypto';
+import type { ProjectRole } from '../../lib/roles.js';
 
 function parseJsonField<T>(value: string | null | undefined, fallback: T): T {
   if (!value) return fallback;
@@ -91,6 +92,22 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
       updatedAt: now,
     }).run();
 
+    // Auto-create owner collaborator record so requireProjectAccess finds the creator
+    const ownerUser = sqlite.prepare('SELECT email FROM users WHERE username = ?').get(ownerId) as { email: string | null } | undefined;
+    sqlite.prepare(`
+      INSERT INTO project_collaborators (id, project_id, username, email, role, status, invited_by, accepted_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'owner', 'active', ?, ?, ?, ?)
+    `).run(
+      crypto.randomUUID(),
+      id,
+      ownerId,
+      ownerUser?.email ?? ownerId + '@placeholder.porter',
+      ownerId,
+      now,
+      now,
+      now,
+    );
+
     const project = db.select().from(schema.projects)
       .where(eq(schema.projects.id, id)).get();
 
@@ -99,7 +116,7 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
 
   // GET /api/v1/projects/:id — get single project
   fastify.get('/:id', {
-    preHandler: [fastify.requireAuth],
+    preHandler: [fastify.requireAuth, fastify.requireProjectAccess('view')],
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
@@ -115,7 +132,7 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
 
   // PUT /api/v1/projects/:id — update a project
   fastify.put('/:id', {
-    preHandler: [fastify.requireAuth],
+    preHandler: [fastify.requireAuth, fastify.requireProjectAccess('edit')],
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
@@ -186,7 +203,7 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
 
   // DELETE /api/v1/projects/:id — delete a project
   fastify.delete('/:id', {
-    preHandler: [fastify.requireAuth],
+    preHandler: [fastify.requireAuth, fastify.requireProjectAccess('owner')],
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
@@ -199,13 +216,17 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
 
     db.delete(schema.projects).where(eq(schema.projects.id, id)).run();
 
+    // Clean up collaboration data on project deletion
+    sqlite.prepare('DELETE FROM project_collaborators WHERE project_id = ?').run(id);
+    sqlite.prepare('DELETE FROM collaboration_events WHERE project_id = ?').run(id);
+
     return reply.send(ok({ deleted: true }));
   });
 
   // GET /api/v1/projects/:id/activity — activity feed for project dashboard
   fastify.get<{ Params: { id: string }; Querystring: { limit?: string; offset?: string } }>(
     '/:id/activity',
-    { preHandler: [fastify.requireAuth] },
+    { preHandler: [fastify.requireAuth, fastify.requireProjectAccess('view')] },
     async (req, reply) => {
       const { id } = req.params;
       const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
