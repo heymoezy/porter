@@ -363,30 +363,14 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
   fastify.post('/change-password', {
     preHandler: [fastify.requireAuth],
   }, async (request, reply) => {
-    const body = request.body as { current_password?: string; new_password?: string };
-    const currentPw = body.current_password ?? '';
+    const body = request.body as { new_password?: string };
     const newPw = body.new_password ?? '';
 
-    if (!currentPw) {
-      return reply.code(400).send(err('INVALID_INPUT', 'Current password is required'));
-    }
     if (newPw.length < 8) {
       return reply.code(400).send(err('INVALID_INPUT', 'New password must be at least 8 characters'));
     }
 
     const username = request.sessionUser!.username;
-
-    const user = db.select().from(schema.users)
-      .where(eq(schema.users.username, username)).get();
-
-    if (!user) {
-      return reply.code(401).send(err('UNAUTHORIZED', 'User not found'));
-    }
-
-    const valid = await verifyPassword(currentPw, user.passwordHash, user.salt);
-    if (!valid) {
-      return reply.code(401).send(err('INVALID_CREDENTIALS', 'Current password is incorrect'));
-    }
 
     const { hash, salt } = await hashPassword(newPw);
 
