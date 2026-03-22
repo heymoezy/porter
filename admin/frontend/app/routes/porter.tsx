@@ -258,7 +258,7 @@ function PorterContent() {
           }`}
         >
           <MessageSquare className="size-3" />
-          Direct Line
+          Direct Chat
         </button>
       </div>
 

@@ -11,6 +11,7 @@ export default [
   route("agents/:id", "routes/agent-detail.tsx"),
   route("diagnostics", "routes/diagnostics.tsx"),
   route("templates", "routes/templates.tsx"),
+  route("templates/:id", "routes/template-detail.tsx"),
   route("models", "routes/models.tsx"),
   route("porter", "routes/porter.tsx"),
   route("tools", "routes/tools.tsx"),

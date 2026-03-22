@@ -55,7 +55,7 @@ function AgentsContent() {
       <div className="flex items-center gap-2">
         <Bot className="size-3 text-accent-porter" />
         <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">
-          {data?.total ?? 0} agents · {data?.system ?? 0} system · {data?.user ?? 0} user
+          User Agents ({data?.total ?? 0})
         </span>
         <div className="relative ml-auto">
           <Search className="absolute left-2 top-1/2 size-3 -translate-y-1/2 text-text3" />
