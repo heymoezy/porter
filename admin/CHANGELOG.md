@@ -1,3 +1,10 @@
+## v0.2.12 (2026-03-22)
+
+- Scrollbar design system tokens: --scrollbar-size (3px), --scrollbar-thumb, --scrollbar-thumb-hover
+- Scrollbars invisible by default, fade in on container hover, consistent everywhere
+- Dark mode: white 15%/25% opacity. Light mode: black 15%/30% opacity
+- Removed pr-1 buffer padding (no longer needed with auto-hide scrollbars)
+
 ## v0.2.11 (2026-03-22)
 
 - Dashboard: full design system sweep — all hardcoded values replaced with CSS tokens
