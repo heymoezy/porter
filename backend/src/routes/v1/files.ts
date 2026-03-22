@@ -1,11 +1,13 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { ok, err } from '../../lib/envelope.js';
 import { config, LOCAL_HOSTS } from '../../config.js';
+import { sqlite } from '../../db/client.js';
 import { z } from 'zod';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import os from 'os';
+import crypto from 'crypto';
 
 // --- MIME detection ---------------------------------------------------------
 
@@ -485,5 +487,117 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
     } catch (e: any) {
       return reply.code(500).send(err('FS_ERROR', e.message ?? 'Failed to rename'));
     }
+  });
+
+  // POST /api/v1/files/registry/upload — atomic file upload with DB registration (FILE-02)
+  fastify.post('/registry/upload', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    let data: any;
+    try {
+      data = await request.file();
+    } catch {
+      return reply.code(400).send(err('INVALID_INPUT', 'Multipart file expected'));
+    }
+
+    if (!data) {
+      return reply.code(400).send(err('NO_FILE', 'No file uploaded'));
+    }
+
+    const projectId = (data.fields.project_id as any)?.value as string | undefined;
+    const contactId = (data.fields.contact_id as any)?.value as string | undefined;
+    const conversationId = (data.fields.conversation_id as any)?.value as string | undefined;
+
+    // At least one association target required
+    if (!projectId && !contactId && !conversationId) {
+      return reply.code(400).send(err('INVALID_INPUT', 'At least one of project_id, contact_id, conversation_id required'));
+    }
+
+    // Validate association targets exist before writing to disk
+    if (projectId) {
+      const proj = sqlite.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+      if (!proj) {
+        return reply.code(404).send(err('PROJECT_NOT_FOUND', 'Project not found'));
+      }
+    }
+    if (contactId) {
+      const contact = sqlite.prepare('SELECT id FROM contacts WHERE id = ?').get(contactId);
+      if (!contact) {
+        return reply.code(404).send(err('CONTACT_NOT_FOUND', 'Contact not found'));
+      }
+    }
+    if (conversationId) {
+      const conv = sqlite.prepare('SELECT id FROM conversations WHERE id = ?').get(conversationId);
+      if (!conv) {
+        return reply.code(404).send(err('CONVERSATION_NOT_FOUND', 'Conversation not found'));
+      }
+    }
+
+    // Read file into buffer
+    const chunks: Buffer[] = [];
+    for await (const chunk of data.file) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+
+    // Enforce 10MB limit
+    if (buffer.length > 10 * 1024 * 1024) {
+      return reply.code(413).send(err('FILE_TOO_LARGE', 'File exceeds 10MB limit'));
+    }
+
+    const fileId = crypto.randomUUID();
+    const uploadedBy = request.sessionUser!.username;
+    const filename = safeName(data.filename || 'upload');
+    const ext = path.extname(filename).toLowerCase().replace('.', '');
+    const mimeType = getMime(ext);
+
+    // Determine upload directory
+    const uploadDir = path.join(config.dataDir, 'uploads');
+    await fs.mkdir(uploadDir, { recursive: true });
+
+    const diskPath = path.join(uploadDir, `${fileId}_${filename}`);
+
+    // Write file to disk
+    await fs.writeFile(diskPath, buffer);
+
+    // Atomically register in DB; rollback disk write on failure
+    try {
+      sqlite.transaction(() => {
+        sqlite.prepare(`
+          INSERT INTO files (id, filename, disk_path, mime_type, size_bytes, uploaded_by, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, unixepoch('now'))
+        `).run(fileId, filename, diskPath, mimeType, buffer.length, uploadedBy);
+
+        if (projectId) {
+          sqlite.prepare(`
+            INSERT INTO file_projects (file_id, project_id, attached_by) VALUES (?, ?, ?)
+          `).run(fileId, projectId, uploadedBy);
+        }
+        if (contactId) {
+          sqlite.prepare(`
+            INSERT INTO file_contacts (file_id, contact_id, attached_by) VALUES (?, ?, ?)
+          `).run(fileId, contactId, uploadedBy);
+        }
+        if (conversationId) {
+          sqlite.prepare(`
+            INSERT INTO file_conversations (file_id, conversation_id, attached_by) VALUES (?, ?, ?)
+          `).run(fileId, conversationId, uploadedBy);
+        }
+      })();
+    } catch (e: unknown) {
+      // DB failed — remove orphan file from disk
+      await fs.unlink(diskPath).catch(() => {});
+      throw e;
+    }
+
+    return reply.code(201).send(ok({
+      file: {
+        id: fileId,
+        filename,
+        disk_path: diskPath,
+        mime_type: mimeType,
+        size_bytes: buffer.length,
+      },
+    }));
   });
 }
