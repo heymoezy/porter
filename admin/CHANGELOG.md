@@ -1,3 +1,10 @@
+## v0.2.8 (2026-03-22)
+
+- Projects + Activity: both fill available space (flex-1 overflow-y-auto)
+- Projects: scrolling list with push animation — new projects slide in from top every 8s
+- Activity: fills remaining vertical space, scrollable
+- Dashboard stretches to use full viewport height
+
 ## v0.2.7 (2026-03-22)
 
 - System Health: redesigned as terminal-style monitor (matches LLM terminal aesthetic) with horizontal progress bars for MEM/CPU/DSK, load/cores/uptime line

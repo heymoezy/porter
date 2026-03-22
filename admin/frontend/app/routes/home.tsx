@@ -64,6 +64,7 @@ function DashboardContent() {
   const [mounted, setMounted] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [timeline, setTimeline] = useState(FAKE_ACTIVITY.map((e, i) => ({ ...e, _key: i })))
+  const [projectTimeline, setProjectTimeline] = useState(FAKE_PROJECTS.map((p, i) => ({ ...p, _key: i })))
   const [termLines, setTermLines] = useState<Array<LogLine & { _key: number }>>([])
   const [logsLoaded, setLogsLoaded] = useState(false)
 
@@ -78,6 +79,17 @@ function DashboardContent() {
     }, 5000)
     return () => clearInterval(id)
   })
+  // Rotate projects with push animation
+  useMountEffect(() => {
+    let idx = 0
+    const id = setInterval(() => {
+      const p = FAKE_PROJECTS[idx % FAKE_PROJECTS.length]
+      idx++
+      setProjectTimeline(prev => [{ ...p, _key: Date.now() }, ...prev.slice(0, 5)])
+    }, 8000)
+    return () => clearInterval(id)
+  })
+
   // Fetch real logs from API
   useMountEffect(() => {
     async function fetchLogs() {
@@ -176,17 +188,17 @@ function DashboardContent() {
           ))}
         </div>
 
-        {/* ── Two columns: Projects + Activity ── */}
-        <div className="flex flex-col lg:flex-row gap-3">
-          {/* Projects (from project-list.tsx) */}
-          <div className="lg:w-1/2 min-w-0">
-            <div className="flex items-center justify-between mb-2">
+        {/* ── Two columns: Projects + Activity — fills available space ── */}
+        <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0">
+          {/* Projects (scrolling, push animation) */}
+          <div className="lg:w-1/2 min-w-0 flex flex-col">
+            <div className="flex items-center justify-between mb-2 shrink-0">
               <h2 className="text-xs font-bold text-foreground uppercase tracking-wide">Projects</h2>
               <button className="text-[10px] text-text3 hover:text-accent-porter transition-colors">all &rarr;</button>
             </div>
-            <div className="space-y-2">
-              {FAKE_PROJECTS.map((p, i) => (
-                <div key={p.name} className={`group rounded-lg border border-border bg-surface p-3 cursor-pointer transition-all duration-200 hover:border-accent-porter/30 hover:shadow-[var(--shadow-card)] hover:-translate-y-px ${mounted ? "animate-card-deal-in" : "opacity-0"}`} style={{ animationDelay: `${250 + i * 80}ms`, animationFillMode: "both" }}>
+            <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+              {projectTimeline.map((p, i) => (
+                <div key={p._key} className={`group rounded-lg border border-border bg-surface p-3 cursor-pointer transition-all duration-200 hover:border-accent-porter/30 hover:shadow-[var(--shadow-card)] hover:-translate-y-px ${i === 0 ? "animate-[slideDown_0.3s_ease-out_both]" : ""}`}>
                   <div className="flex items-center gap-2">
                     <p className="text-xs font-bold text-foreground truncate flex-1 min-w-0">{p.name}</p>
                     <Sparkline values={p.spark} />
@@ -194,7 +206,7 @@ function DashboardContent() {
                   </div>
                   <div className="mt-1.5 flex items-center gap-2">
                     <div className="flex-1 h-1 rounded-full bg-raised overflow-hidden">
-                      <div className="h-full rounded-full bg-accent-porter transition-all duration-[1.2s] ease-out" style={{ width: mounted ? `${p.progress}%` : "0%" }} />
+                      <div className="h-full rounded-full bg-accent-porter transition-all duration-[1.2s] ease-out" style={{ width: `${p.progress}%` }} />
                     </div>
                     <span className="text-[9px] text-text3 tabular-nums w-6">{p.progress}%</span>
                   </div>
@@ -207,17 +219,17 @@ function DashboardContent() {
             </div>
           </div>
 
-          {/* Activity (from activity-feed.tsx) */}
-          <div className="lg:w-1/2 min-w-0">
-            <div className="flex items-center justify-between mb-2">
+          {/* Activity — fills available space */}
+          <div className="lg:w-1/2 min-w-0 flex flex-col">
+            <div className="flex items-center justify-between mb-2 shrink-0">
               <h2 className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
                 Activity
                 <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-badge" />
               </h2>
               <Link to="/activity" className="text-[10px] text-text3 hover:text-accent-porter transition-colors">all &rarr;</Link>
             </div>
-            <div>
-              {timeline.slice(0, 8).map((e, i) => (
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {timeline.map((e, i) => (
                 <div key={e._key} className={`flex items-center gap-2 rounded-md py-1.5 px-2 cursor-pointer hover:bg-surface ${i === 0 ? "animate-[slideDown_0.3s_ease-out_both]" : "transition-all duration-300 ease-out"}`}>
                   <div className={`h-2 w-2 rounded-full shrink-0 ${e.status === "working" ? "bg-accent-porter animate-pulse-badge" : e.status === "complete" ? "bg-success" : "bg-border2"}`} />
                   <div className="flex-1 min-w-0">
