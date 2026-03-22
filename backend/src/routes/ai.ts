@@ -58,9 +58,14 @@ export default async function aiRoutes(fastify: FastifyInstance, options: Fastif
   fastify.get('/agent-usage/current', async (request, reply) => {
     const session = await getSession(request);
     if (!session) return reply.code(401).send({ error: 'unauthorized' });
-    
+
     // Placeholder: real implementation would query a usage table or external metrics
     return { ok: true, agents: [] };
+  });
+
+  // Tombstone: deprecated mock SSE stream — always 404 to prevent proxy fallthrough
+  fastify.get('/api/chat/stream', async (_request, reply) => {
+    return reply.code(404).send({ error: 'not_found', message: 'Use POST /api/v1/chat/stream' });
   });
 
 }
