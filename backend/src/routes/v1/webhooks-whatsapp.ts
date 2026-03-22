@@ -1,5 +1,11 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { routeInboundWhatsApp, verifyWebhookSignature } from '../../services/whatsapp.js';
+import { sqlite } from '../../db/client.js';
+import {
+  routeInboundWhatsApp,
+  verifyWebhookSignature,
+  findOrCreateWhatsAppContact,
+  findOrCreateWhatsAppConversation,
+} from '../../services/whatsapp.js';
 import { ok, err } from '../../lib/envelope.js';
 
 // ── Meta Cloud API payload types ──────────────────────────────────────────────
@@ -113,6 +119,36 @@ export default async function webhookWhatsAppRoutes(
         return reply.code(200).send(ok({ status: 'acknowledged' }));
       }
 
+      // Extract contact profile name from payload
+      const profileName = value?.contacts?.[0]?.profile?.name;
+
+      // Phase 11: Archive message in unified table BEFORE routing
+      // 1. Find or create CRM contact from phone number
+      const contactId = findOrCreateWhatsAppContact(from, profileName);
+
+      // 2. Find or create conversation keyed by phone number (external_id)
+      const conversationId = findOrCreateWhatsAppConversation(from, contactId);
+
+      // 3. Archive normalized message + raw payload in messages table
+      sqlite.prepare(
+        `INSERT INTO messages (conversation_id, sender_type, sender_id, sender_name, content, channel_type, channel_metadata, created_at)
+         VALUES (?, 'external', ?, ?, ?, 'whatsapp', ?, unixepoch('now'))`,
+      ).run(
+        conversationId,
+        from,
+        profileName || from,
+        messageText,
+        JSON.stringify(value),
+      );
+
+      // 4. Update conversation timestamp
+      sqlite.prepare(
+        `UPDATE conversations SET updated_at = unixepoch('now') WHERE id = ?`,
+      ).run(conversationId);
+
+      fastify.log.info(`[whatsapp-webhook] Archived message from ${from} in conversation ${conversationId}`);
+
+      // 5. Route to agent (existing behavior)
       // Detect group context from metadata
       // WhatsApp groups surface a group_id in the message context field (not always present)
       // For now, groupId is not directly in the standard payload — leave as undefined
