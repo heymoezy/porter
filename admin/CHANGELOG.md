@@ -1,7 +1,13 @@
+## v0.1.9 (2026-03-22)
+
+- Dashboard: full platform command center — 4 hero metrics (Projects, Agents, Conversations, Customers), 6 activity counters (Messages, Agent Msgs, Tasks, Orchestrations, Skills, Learnings), token usage, system gauges, live activity feed
+- New /api/admin/health/dashboard endpoint aggregating all platform data
+- 15s auto-refresh on dashboard
+
 ## v0.1.8 (2026-03-22)
 
 - Fixed logout button (drizzle ORM mismatch → raw sqlite)
-- Removed redundant "Porter Admin — Changelog" title from release notes
+- Removed redundant changelog title from release notes
 - Version synced to v0.1.7 across all locations
 
 ## v0.1.7 (2026-03-22)
