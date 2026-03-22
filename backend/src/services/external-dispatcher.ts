@@ -76,6 +76,59 @@ export function checkConnectionHealth(service: string): 'ok' | 'blocked' {
   return 'blocked';
 }
 
+// ── Unified table helper (Phase 11) ───────────────────────────────────────────
+
+/**
+ * Archive an outbound message in the unified messages table before dispatching.
+ * Finds or creates the conversation by external_id, records the agent's outbound message.
+ * Per locked decision: "All outbound through unified table."
+ */
+function archiveOutboundMessage(opts: {
+  channelType: 'email' | 'whatsapp';
+  externalId: string;       // recipient phone or email (conversation external_id)
+  agentId: string;
+  agentName: string;
+  content: string;
+  rawPayload: Record<string, unknown>;
+}): void {
+  // Find conversation by external_id (should exist if we received inbound first)
+  let conv = sqlite.prepare(
+    `SELECT id FROM conversations WHERE external_id = ?`
+  ).get(opts.externalId) as { id: string } | undefined;
+
+  if (!conv) {
+    // Create conversation for outbound-first scenario (agent initiates contact)
+    const convId = crypto.randomUUID();
+    sqlite.prepare(
+      `INSERT OR IGNORE INTO conversations
+         (id, scope_type, scope_id, external_id, channel_type, created_at, updated_at)
+       VALUES (?, 'global', NULL, ?, ?, unixepoch('now'), unixepoch('now'))`
+    ).run(convId, opts.externalId, opts.channelType);
+
+    conv = sqlite.prepare(
+      `SELECT id FROM conversations WHERE external_id = ?`
+    ).get(opts.externalId) as { id: string };
+  }
+
+  // Archive the outbound message
+  sqlite.prepare(
+    `INSERT INTO messages (conversation_id, sender_type, sender_id, sender_name, content, channel_type, channel_metadata, created_at)
+     VALUES (?, 'agent', ?, ?, ?, ?, ?, unixepoch('now'))`
+  ).run(
+    conv.id,
+    opts.agentId,
+    opts.agentName,
+    opts.content,
+    opts.channelType,
+    JSON.stringify(opts.rawPayload)
+  );
+
+  // Update conversation timestamp
+  sqlite.prepare(
+    `UPDATE conversations SET updated_at = unixepoch('now') WHERE id = ?`
+  ).run(conv.id);
+}
+
 // ── Main dispatcher ───────────────────────────────────────────────────────────
 
 /**
@@ -146,6 +199,16 @@ async function dispatchGitHub(data: Record<string, unknown>): Promise<string> {
 async function dispatchEmail(data: Record<string, unknown>): Promise<string> {
   switch (data.action) {
     case 'send': {
+      // Phase 11: Archive outbound email in unified table before sending
+      archiveOutboundMessage({
+        channelType: 'email',
+        externalId: (data.to as string).trim().toLowerCase(),
+        agentId: (data.agent_id as string) || 'unknown',
+        agentName: (data.agent_name as string) || 'Porter',
+        content: `Subject: ${data.subject as string}\n\n${data.body as string}`,
+        rawPayload: { to: data.to, subject: data.subject },
+      });
+
       const result = await sendEmail({
         to: data.to as string,
         subject: data.subject as string,
@@ -178,6 +241,20 @@ async function dispatchCalendar(data: Record<string, unknown>): Promise<string> 
 async function dispatchWhatsApp(data: Record<string, unknown>): Promise<string> {
   switch (data.action) {
     case 'send': {
+      // Phase 11: Archive outbound WhatsApp in unified table before sending
+      const toPhone = (data.to as string).startsWith('+')
+        ? (data.to as string)
+        : '+' + (data.to as string).replace(/^0+/, '');
+
+      archiveOutboundMessage({
+        channelType: 'whatsapp',
+        externalId: toPhone,
+        agentId: (data.agent_id as string) || 'unknown',
+        agentName: (data.agent_name as string) || 'Porter',
+        content: data.text as string,
+        rawPayload: { to: data.to, text: data.text },
+      });
+
       const result = await sendWhatsAppMessage({
         to: data.to as string,
         text: data.text as string,
