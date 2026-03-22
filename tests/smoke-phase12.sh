@@ -6,7 +6,7 @@
 #       Some tests require plans 02-04 to be fully implemented.
 #       Run from repo root: ./tests/smoke-phase12.sh
 
-BASE_URL="http://127.0.0.1:8877/api/v1"
+BASE_URL="http://127.0.0.1:3001/api/v1"
 PASS=0
 FAIL=0
 
@@ -126,14 +126,14 @@ if [ -n "$CONTACT_ID" ]; then
   # GET /contacts/:id/timeline — expect 200 with array
   TIMELINE_RESP=$(curl -s $AUTH "$BASE_URL/contacts/$CONTACT_ID/timeline")
   check "CRM-04 GET /contacts/:id/timeline returns ok" '"ok":true' "$TIMELINE_RESP"
-  check "CRM-04 GET /contacts/:id/timeline returns items array" '"items"' "$TIMELINE_RESP"
+  check "CRM-04 GET /contacts/:id/timeline returns timeline array" '"timeline"' "$TIMELINE_RESP"
 
   # GET /contacts/:id/timeline?limit=10&offset=0 — expect 200
   TIMELINE_PAGED=$(curl -s $AUTH "$BASE_URL/contacts/$CONTACT_ID/timeline?limit=10&offset=0")
   check "CRM-04 GET /contacts/:id/timeline?limit=10&offset=0 returns ok" '"ok":true' "$TIMELINE_PAGED"
 
   # Verify items have type field if any exist
-  ITEM_COUNT=$(echo "$TIMELINE_RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('data',{}).get('items',[])))" 2>/dev/null || echo "0")
+  ITEM_COUNT=$(echo "$TIMELINE_RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('data',{}).get('timeline',[])))" 2>/dev/null || echo "0")
   if [ "$ITEM_COUNT" -gt 0 ] 2>/dev/null; then
     check "CRM-04 timeline items have type field" '"type"' "$TIMELINE_RESP"
   else
