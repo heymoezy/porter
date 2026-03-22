@@ -20,6 +20,21 @@ const sessionActionSchema = z.object({
 
 export default async function chatV1Routes(fastify: FastifyInstance, _opts: FastifyPluginOptions) {
 
+  // POST /api/v1/chat/warm — pre-load Ollama model so first chat is instant
+  fastify.post('/warm', {
+    preHandler: [fastify.requireAuth],
+  }, async (_request, reply) => {
+    try {
+      await fetch(`${config.ollamaUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: config.ollamaModel, prompt: '', keep_alive: '10m' }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch { /* best-effort */ }
+    return reply.send({ ok: true });
+  });
+
   // GET /api/v1/chat/sessions — list all chat sessions with metadata
   fastify.get('/sessions', {
     preHandler: [fastify.requireAuth],
@@ -237,8 +252,8 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     // Augmented message includes identity prefix for the agent; original is persisted to chat history
     const augmentedMessage = identityPrefix ? identityPrefix + message : message;
 
-    // STRM-02: backend selection via stream-service — zero provider-specific code here
-    const backend = selectStreamBackend(message, backendHint);
+    // STRM-02: prefer strong model for user chat, fall back to ollama if unavailable
+    const backend = selectStreamBackend(message, backendHint ?? 'auto');
     let fullResponse = '';
 
     try {
@@ -253,7 +268,8 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       }
     } finally {
       // Always emit done event (prevents client EventSource reconnect loops)
-      reply.raw.write(`data: ${JSON.stringify({ done: true, backend: backend.name, full_response: fullResponse })}\n\n`);
+      const modelLabel = backend.name === 'ollama' ? `ollama/${config.ollamaModel}` : backend.name;
+      reply.raw.write(`data: ${JSON.stringify({ done: true, backend: modelLabel, full_response: fullResponse })}\n\n`);
       reply.raw.end();
 
       // Persist completed message to chat history (non-blocking, best-effort)

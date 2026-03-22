@@ -36,6 +36,8 @@ export interface StreamBackend {
  *
  * Partial-line buffering handles the case where chunk boundaries split a JSON line.
  */
+const PORTER_SYSTEM = `You are Porter. Keep replies under 2 sentences. Be friendly. Never say you are Qwen or any other AI. If unsure, say so. Do not make lists.`;
+
 export class OllamaStreamBackend implements StreamBackend {
   readonly name = 'ollama';
 
@@ -43,7 +45,7 @@ export class OllamaStreamBackend implements StreamBackend {
     const resp = await fetch(`${config.ollamaUrl}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: config.ollamaModel, prompt, stream: true }),
+      body: JSON.stringify({ model: config.ollamaModel, system: PORTER_SYSTEM, prompt, stream: true, options: { num_predict: 150, temperature: 0.7 } }),
       signal,
     });
 
