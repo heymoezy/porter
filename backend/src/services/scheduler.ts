@@ -36,6 +36,77 @@ export function scheduleDripReminder(collaboratorId: string, dripCount: number):
   );
 }
 
+/**
+ * Schedule the next autonomous contact analysis sweep for a contact.
+ * Self-adjusting frequency based on engagement_score:
+ *   - High engagement (70-100): re-analyze every 4 hours (active relationships change fast)
+ *   - Medium engagement (30-69): re-analyze every 12 hours
+ *   - Low engagement (0-29): re-analyze every 24 hours
+ *   - Error/unknown (-1): retry in 6 hours
+ */
+export function scheduleNextContactAnalysis(contactId: string, engagementScore: number): void {
+  let intervalSec: number;
+  if (engagementScore < 0) {
+    intervalSec = 6 * 3600;       // 6 hours (error backoff)
+  } else if (engagementScore >= 70) {
+    intervalSec = 4 * 3600;       // 4 hours (high engagement)
+  } else if (engagementScore >= 30) {
+    intervalSec = 12 * 3600;      // 12 hours (medium engagement)
+  } else {
+    intervalSec = 24 * 3600;      // 24 hours (low engagement)
+  }
+
+  const scheduledFor = Date.now() / 1000 + intervalSec;
+  sqlite.prepare(`
+    INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
+    VALUES (?, 'system', 'contact_analysis', ?, 'pending', ?, unixepoch('now'))
+  `).run(
+    crypto.randomUUID(),
+    JSON.stringify({ contact_id: contactId }),
+    scheduledFor,
+  );
+}
+
+// ── Bootstrap helpers ─────────────────────────────────────────────────────────
+
+/**
+ * On scheduler startup, seed a pending contact_analysis job for every contact
+ * that has at least one linked conversation but no existing pending analysis job.
+ * This ensures the 24/7 autonomous sweep starts without manual intervention.
+ */
+function bootstrapContactAnalysis(): void {
+  const contactsNeedingJobs = sqlite.prepare(`
+    SELECT DISTINCT cc.contact_id
+    FROM contact_conversations cc
+    JOIN contacts c ON c.id = cc.contact_id
+    WHERE NOT EXISTS (
+      SELECT 1 FROM agent_jobs
+      WHERE trigger_type = 'contact_analysis'
+        AND status = 'pending'
+        AND json_extract(trigger_data, '$.contact_id') = cc.contact_id
+    )
+  `).all() as { contact_id: string }[];
+
+  if (contactsNeedingJobs.length > 0) {
+    console.log('[scheduler] bootstrapping contact analysis for %d contacts', contactsNeedingJobs.length);
+    // Stagger jobs so they don't all fire at once — spread over first 5 minutes
+    const staggerSec = contactsNeedingJobs.length > 1
+      ? 300 / contactsNeedingJobs.length   // 300 seconds / N contacts
+      : 0;
+    for (let i = 0; i < contactsNeedingJobs.length; i++) {
+      const scheduledFor = Date.now() / 1000 + (i * staggerSec);
+      sqlite.prepare(`
+        INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
+        VALUES (?, 'system', 'contact_analysis', ?, 'pending', ?, unixepoch('now'))
+      `).run(
+        crypto.randomUUID(),
+        JSON.stringify({ contact_id: contactsNeedingJobs[i].contact_id }),
+        scheduledFor,
+      );
+    }
+  }
+}
+
 interface JobRow {
   id: string;
   agent_id: string;
@@ -64,6 +135,7 @@ export function start() {
   if (intervalId) return;
   console.log('[scheduler] started — polling every %dms, worker=%s', POLL_INTERVAL_MS, WORKER_ID.slice(0, 8));
   logFeatureFlagState();
+  bootstrapContactAnalysis();
   intervalId = setInterval(tick, POLL_INTERVAL_MS);
 }
 
@@ -232,6 +304,65 @@ async function executeJob(job: JobRow): Promise<void> {
     }
 
     markJobComplete(job.id, JSON.stringify({ drip_count: collab.drip_count + 1 }));
+    return;
+  }
+
+  // ── Contact analysis (CRM-03) ──────────────────────────────────────────────
+  if (job.trigger_type === 'contact_analysis') {
+    const data = JSON.parse(job.trigger_data || '{}') as { contact_id?: string };
+    const contactId = data.contact_id;
+    if (!contactId) {
+      markJobFailed(job.id, 'Missing contact_id in contact_analysis trigger_data');
+      return;
+    }
+
+    // Verify contact still exists
+    const contact = sqlite.prepare('SELECT id FROM contacts WHERE id = ?').get(contactId);
+    if (!contact) {
+      markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'contact_deleted' }));
+      // Contact deleted — do NOT re-enqueue
+      return;
+    }
+
+    try {
+      const { analyzeContact } = await import('./contact-analyzer.js');
+      const analysis = await analyzeContact(contactId);
+
+      // Write to contact_analyses table
+      const analysisId = crypto.randomUUID();
+      sqlite.prepare(`
+        INSERT INTO contact_analyses (id, contact_id, sentiment, engagement_score, churn_risk, relationship_stage, key_topics, last_interaction_summary, communication_style, raw_json, job_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch('now'))
+      `).run(
+        analysisId,
+        contactId,
+        analysis.sentiment,
+        analysis.engagement_score,
+        analysis.churn_risk,
+        analysis.relationship_stage,
+        JSON.stringify(analysis.key_topics),
+        analysis.last_interaction_summary,
+        analysis.communication_style,
+        JSON.stringify(analysis),
+        job.id,
+      );
+
+      markJobComplete(job.id, JSON.stringify({ analysis_id: analysisId, contact_id: contactId }));
+      logActivity('system', job.id, null, 'contact_analysis_complete',
+        `Analyzed contact ${contactId}`, JSON.stringify({ analysis_id: analysisId }));
+
+      // ── Re-enqueue: autonomous 24/7 sweep with self-adjusting frequency ──
+      scheduleNextContactAnalysis(contactId, analysis.engagement_score);
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      markJobFailed(job.id, errMsg);
+      logActivity('system', job.id, null, 'contact_analysis_failed',
+        `Analysis failed for contact ${contactId}: ${errMsg}`, '{}');
+
+      // Re-enqueue even on failure — use a longer backoff (6 hours)
+      // so the sweep doesn't stop permanently on transient errors.
+      scheduleNextContactAnalysis(contactId, -1);
+    }
     return;
   }
 

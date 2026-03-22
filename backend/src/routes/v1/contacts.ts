@@ -192,6 +192,23 @@ export default async function contactV1Routes(
     return reply.code(201).send(ok({ contact: getContactFull(id) }));
   });
 
+  // POST /:id/analyze — queue AI analysis job (CRM-03)
+  fastify.post<{ Params: { id: string } }>('/:id/analyze', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const existing = sqlite.prepare('SELECT id FROM contacts WHERE id = ?').get(id);
+    if (!existing) return reply.code(404).send(err('CONTACT_NOT_FOUND', 'Contact not found'));
+
+    const jobId = crypto.randomUUID();
+    sqlite.prepare(`
+      INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
+      VALUES (?, 'system', 'contact_analysis', ?, 'pending', unixepoch('now'), unixepoch('now'))
+    `).run(jobId, JSON.stringify({ contact_id: id }));
+
+    return reply.code(202).send(ok({ job_id: jobId, message: 'Analysis queued' }));
+  });
+
   // GET /:id — get full contact with sub-resources
   fastify.get<{ Params: { id: string } }>('/:id', {
     preHandler: [fastify.requireAuth],
@@ -211,11 +228,27 @@ export default async function contactV1Routes(
       'SELECT cp.project_id FROM contact_projects cp WHERE cp.contact_id = ?'
     ).all(id) as Array<{ project_id: string }>;
 
+    // Fetch latest AI analysis (CRM-03)
+    const latestAnalysis = sqlite.prepare(`
+      SELECT id, sentiment, engagement_score, churn_risk, relationship_stage,
+             key_topics, last_interaction_summary, communication_style, created_at
+      FROM contact_analyses
+      WHERE contact_id = ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(id) as any | undefined;
+
+    const aiAnalysis = latestAnalysis ? {
+      ...latestAnalysis,
+      key_topics: JSON.parse(latestAnalysis.key_topics || '[]'),
+    } : null;
+
     return reply.send(ok({
       contact: {
         ...contact,
         conversation_ids: conversationRows.map(r => r.conversation_id),
         project_ids: projectRows.map(r => r.project_id),
+        ai_analysis: aiAnalysis,
       },
     }));
   });
