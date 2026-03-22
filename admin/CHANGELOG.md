@@ -1,3 +1,13 @@
+## v0.2.5 (2026-03-22)
+
+- Hero: fixed stats to +62% vs last month, ~124 hrs saved, $2,480 value (not orchestrations)
+- Projects: card list with sparklines, progress bars, agent counts (from project-list.tsx pattern)
+- Activity: live feed with fake user data (Moe logged in, Jacob created project, etc.) — ActivityFeed pattern
+- System Health: vertical bar monitor (not cards) showing MEM/DISK/CPU fill levels + sessions
+- User Logs: terminal showing real user actions and errors (replaces generic system log)
+- Removed SaaS metrics from dashboard (moved to Revenue page)
+- Stat tiles: 'today' sub text on Tasks instead of 'runs'
+
 ## v0.2.4 (2026-03-22)
 
 - Dashboard: exact match to user dashboard layout from dashboard-mockup.tsx

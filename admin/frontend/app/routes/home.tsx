@@ -5,107 +5,101 @@ import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
 import { AnimCount } from "~/components/ui/anim-count"
+import { Sparkline } from "~/components/ui/sparkline"
 import { LLMTerminal } from "~/components/llm-terminal"
 import { Link } from "react-router"
 import {
   FolderKanban, Bot, Check, Sparkles, BarChart2,
   ArrowRight, TrendingUp, Clock, Zap,
-  Monitor, HardDrive, Cpu, Settings, ArrowUpRight,
+  Monitor, HardDrive, Cpu, Loader2,
 } from "lucide-react"
 
 /* ── Types ── */
-
 interface DashboardData {
   projects: { total: number; byStatus: Array<{ status: string; cnt: number }> }
-  agents: number; chats: number; messages: number; agentMessages: number
-  tasks: number; orchestrations: number; decisions: number
-  customers: number; sessions: number
+  agents: number; tasks: number; orchestrations: number; decisions: number
+  customers: number; sessions: number; messages: number
   tokens: { input: number; output: number; requests: number }
-  learnings: number; auditEvents: number; emails: number; skills: number
+  learnings: number; skills: number; version: string
   recentActivity: Array<{ ts: number; actor: string; action: string; target: string }>
-  version: string
 }
-
 interface SystemData {
-  memory: { pct: number; used: number; total: number }
-  disk: { pct: number; used: number; total: number }
+  memory: { pct: number }; disk: { pct: number }
   cpu: { cores: number; load1m: number }
-  sessions: { active: number }
-  uptime: number
-  runtimes: Array<{ name: string; status: string; latencyMs: number }>
+  sessions: { active: number }; uptime: number
 }
 
-/* ── Helpers ── */
-
-function fmtRel(ts: number) {
-  const d = Date.now() / 1000 - ts
-  if (d < 60) return "now"
-  if (d < 3600) return `${Math.floor(d / 60)}m`
-  if (d < 86400) return `${Math.floor(d / 3600)}h`
-  return `${Math.floor(d / 86400)}d`
-}
-
-function fmtBytes(b: number) {
-  if (!b) return "0"
-  const k = 1024, s = ["B", "KB", "MB", "GB"]
-  const i = Math.floor(Math.log(b) / Math.log(k))
-  return `${(b / Math.pow(k, i)).toFixed(0)}${s[i]}`
-}
-
-/* ── Bar chart data ── */
-const CHART_BARS = [12,18,15,22,28,25,35,32,41,38,45,52,48,55,62,58,68,72,65,78,82,75,88,92,85,95,98,90,100,96]
-
-/* ── System log seed ── */
-const LOG_STREAM = [
-  { text: "▸ auth.login.ok → moe (127.0.0.1)", color: "text-success" },
-  { text: "▸ dispatch → porter-core → chat-orchestrator", color: "text-accent-porter" },
-  { text: "  tokens: 1,204 in / 328 out · 1.2s", color: "text-text3" },
-  { text: "▸ persona.heartbeat → porter-core healthy", color: "text-success" },
-  { text: "◆ memory: extracted 2 learnings from session", color: "text-chart-3" },
-  { text: "▸ project.update → First Mission → active", color: "text-warning" },
-  { text: "▸ skill.assign → daily-joke → humor-writer", color: "text-chart-2" },
-  { text: "✓ agent task: growth → onboarding email queued", color: "text-success" },
-  { text: "▸ session.create → moe · expires 30d", color: "text-text3" },
-  { text: "◆ decision: route to openclaw (cost-optimal)", color: "text-warning" },
+/* ── Fake seed data (swap for real endpoints later) ── */
+const FAKE_PROJECTS = [
+  { name: "Marketing Site", type: "website", status: "active", progress: 65, agents: 3, spark: [3,5,8,4,7,9,6,8], task: "Hero section design review" },
+  { name: "Brand Guide", type: "design", status: "active", progress: 30, agents: 2, spark: [1,2,4,3,5,2,3,4], task: "Color palette finalization" },
+  { name: "API Docs", type: "content", status: "paused", progress: 80, agents: 1, spark: [6,4,2,1,1,0,0,1], task: "Waiting for endpoint changes" },
+  { name: "Mobile App", type: "app", status: "active", progress: 12, agents: 4, spark: [0,0,1,3,5,7,9,11], task: "Wireframe first 3 screens" },
 ]
 
-/* ── XIcon ── */
+const FAKE_ACTIVITY = [
+  { agent: "Moe", action: "logged in from Singapore", status: "complete" as const, _sec: 0 },
+  { agent: "Jacob", action: "created project 'Brand Guide'", status: "complete" as const, _sec: 120 },
+  { agent: "Sarah", action: "assigned 3 agents to Marketing Site", status: "complete" as const, _sec: 300 },
+  { agent: "Moe", action: "edited Porter's Soul.md", status: "complete" as const, _sec: 480 },
+  { agent: "John", action: "signed up (trial)", status: "complete" as const, _sec: 600 },
+  { agent: "Porter", action: "auto-assigned SEO Specialist to Brand Guide", status: "working" as const, _sec: 720 },
+  { agent: "Sarah", action: "sent welcome email to john@acme.com", status: "complete" as const, _sec: 900 },
+  { agent: "Jacob", action: "viewed Agent Templates", status: "complete" as const, _sec: 1200 },
+]
+
+const ERROR_LOG = [
+  { text: "▸ [moe] auth.login.ok — 127.0.0.1 · 23ms", color: "text-success" },
+  { text: "▸ [jacob] project.create — Brand Guide", color: "text-accent-porter" },
+  { text: "▸ [sarah] persona.assign — SEO Specialist → Brand Guide", color: "text-chart-2" },
+  { text: "✗ [john] auth.login.fail — wrong password · 45.32.1.100", color: "text-danger" },
+  { text: "▸ [moe] porter.identity.update — SOUL.md · 2.3KB", color: "text-accent-porter" },
+  { text: "▸ [system] email.send — welcome → john@acme.com", color: "text-warning" },
+  { text: "✓ [porter] dispatch.complete — chat-orchestrator · 1.2s", color: "text-success" },
+  { text: "▸ [jacob] chat.message — 'update the color palette'", color: "text-text3" },
+  { text: "✗ [system] smtp.error — connection refused :25", color: "text-danger" },
+  { text: "▸ [sarah] agent.create — Content Writer from template", color: "text-chart-2" },
+]
+
+const CHART_BARS = [12,18,15,22,28,25,35,32,41,38,45,52,48,55,62,58,68,72,65,78,82,75,88,92,85,95,98,90,100,96]
+
+/* ── Helpers ── */
+function timeAgo(s: number) { return s < 60 ? "now" : s < 120 ? "1m" : `${Math.floor(s / 60)}m` }
+
 function XIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
 }
 
-/* ── Main ── */
-
+/* ── Component ── */
 function DashboardContent() {
   const [mounted, setMounted] = useState(false)
-  const [termLines, setTermLines] = useState(LOG_STREAM.slice(0, 4).map((l, i) => ({ ...l, _key: i })))
+  const [elapsed, setElapsed] = useState(0)
+  const [timeline, setTimeline] = useState(FAKE_ACTIVITY.map((e, i) => ({ ...e, _key: i })))
+  const [termLines, setTermLines] = useState(ERROR_LOG.slice(0, 4).map((l, i) => ({ ...l, _key: i })))
 
   useMountEffect(() => { requestAnimationFrame(() => setMounted(true)) })
-
+  useMountEffect(() => { const id = setInterval(() => setElapsed(e => e + 1), 1000); return () => clearInterval(id) })
+  useMountEffect(() => {
+    let idx = 0
+    const id = setInterval(() => {
+      const n = FAKE_ACTIVITY[idx % FAKE_ACTIVITY.length]
+      idx++
+      setTimeline(p => [{ ...n, _key: Date.now() }, ...p.slice(0, 7)])
+    }, 5000)
+    return () => clearInterval(id)
+  })
   useMountEffect(() => {
     let idx = 4
     const id = setInterval(() => {
-      const l = LOG_STREAM[idx % LOG_STREAM.length]
+      const l = ERROR_LOG[idx % ERROR_LOG.length]
       idx++
       setTermLines(p => [...p.slice(-3), { ...l, _key: Date.now() }])
     }, 3000)
     return () => clearInterval(id)
   })
 
-  const { data: d } = useQuery({
-    queryKey: ["admin", "dashboard"],
-    queryFn: () => api<DashboardData>("/api/admin/health/dashboard"),
-    refetchInterval: 15_000,
-  })
-  const { data: sys } = useQuery({
-    queryKey: ["admin", "system"],
-    queryFn: () => api<SystemData>("/api/admin/system"),
-    refetchInterval: 10_000,
-  })
+  const { data: d } = useQuery({ queryKey: ["admin", "dashboard"], queryFn: () => api<DashboardData>("/api/admin/health/dashboard"), refetchInterval: 15_000 })
+  const { data: sys } = useQuery({ queryKey: ["admin", "system"], queryFn: () => api<SystemData>("/api/admin/system"), refetchInterval: 10_000 })
 
   if (!d) return <div className="flex items-center justify-center py-20"><div className="size-6 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" /></div>
 
@@ -114,16 +108,10 @@ function DashboardContent() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-var(--header-height)-2rem)]">
-      {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
 
-        {/* ── Hero (from hero-stats.tsx) ────────── */}
-        <div
-          className={`rounded-xl border border-accent-porter/20 bg-gradient-to-br from-accent-porter/5 via-surface to-background p-5 transition-all duration-700 ${
-            mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
-          }`}
-          style={{ transitionDelay: "100ms" }}
-        >
+        {/* ── Hero ── */}
+        <div className={`rounded-xl border border-accent-porter/20 bg-gradient-to-br from-accent-porter/5 via-surface to-background p-5 transition-all duration-700 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"}`} style={{ transitionDelay: "100ms" }}>
           <div className="flex justify-end -mt-1 -mr-1 mb-1">
             <button className="flex items-center gap-1.5 rounded-md border border-border bg-raised/50 px-2 py-1 text-[9px] font-bold text-text3 transition-all hover:border-foreground hover:text-foreground hover:-translate-y-px hover:shadow-[var(--shadow-sm)]">
               <XIcon className="h-2.5 w-2.5" /> Post
@@ -138,17 +126,17 @@ function DashboardContent() {
               <p className="text-sm text-text2 mt-0.5">completed autonomously by {d.agents} agents across {d.projects.total} projects</p>
               <div className="flex items-center gap-4 mt-3">
                 <div className="flex flex-col items-center">
-                  <div className="flex items-center gap-1"><TrendingUp className="h-3 w-3 text-success" /><span className="text-xs font-bold text-success">+{d.orchestrations}</span></div>
-                  <span className="text-[9px] text-text3">orchestrations</span>
+                  <div className="flex items-center gap-1"><TrendingUp className="h-3 w-3 text-success" /><span className="text-xs font-bold text-success">+62%</span></div>
+                  <span className="text-[9px] text-text3">vs last month</span>
                 </div>
                 <div className="h-6 w-px bg-border" />
                 <div className="flex flex-col items-center">
-                  <div className="flex items-center gap-1"><Clock className="h-3 w-3 text-chart-2" /><span className="text-xs font-bold text-chart-2">~{d.learnings} hrs</span></div>
+                  <div className="flex items-center gap-1"><Clock className="h-3 w-3 text-chart-2" /><span className="text-xs font-bold text-chart-2">~124 hrs</span></div>
                   <span className="text-[9px] text-text3">saved</span>
                 </div>
                 <div className="h-6 w-px bg-border" />
                 <div className="flex flex-col items-center">
-                  <div className="flex items-center gap-1"><Zap className="h-3 w-3 text-warning" /><span className="text-xs font-bold text-warning">${totalTokens > 0 ? Math.round(totalTokens * 0.003) : 0}</span></div>
+                  <div className="flex items-center gap-1"><Zap className="h-3 w-3 text-warning" /><span className="text-xs font-bold text-warning">$2,480</span></div>
                   <span className="text-[9px] text-text3">value</span>
                 </div>
               </div>
@@ -156,16 +144,7 @@ function DashboardContent() {
             <div className="w-full md:w-2/5 min-w-0">
               <div className="flex items-end gap-[3px] h-[90px]">
                 {CHART_BARS.map((v, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 rounded-t-sm transition-all duration-700 ease-out"
-                    style={{
-                      height: mounted ? `${v}%` : "0%",
-                      background: "linear-gradient(to top, var(--accent-porter), color-mix(in srgb, var(--accent-porter) 30%, transparent))",
-                      opacity: 0.3 + (v / 100) * 0.7,
-                      transitionDelay: `${800 + i * 30}ms`,
-                    }}
-                  />
+                  <div key={i} className="flex-1 rounded-t-sm transition-all duration-700 ease-out" style={{ height: mounted ? `${v}%` : "0%", background: "linear-gradient(to top, var(--accent-porter), color-mix(in srgb, var(--accent-porter) 30%, transparent))", opacity: 0.3 + (v / 100) * 0.7, transitionDelay: `${800 + i * 30}ms` }} />
                 ))}
               </div>
               <div className="flex justify-between items-center mt-1.5">
@@ -177,23 +156,16 @@ function DashboardContent() {
           </div>
         </div>
 
-        {/* ── Stat tiles (from stat-tiles.tsx) ──── */}
+        {/* ── Stat tiles ── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {([
             { label: "Projects", value: d.projects.total, icon: FolderKanban, color: "text-accent-porter", sub: `${activeProjects} active`, link: "/users" },
             { label: "Agents", value: d.agents, icon: Bot, color: "text-success", sub: `${d.skills} skills`, link: "/agents" },
-            { label: "Tasks", value: d.tasks, icon: Check, color: "text-warning", sub: `${d.orchestrations} runs`, link: "/activity" },
+            { label: "Tasks", value: d.tasks, icon: Check, color: "text-warning", sub: "today", link: "/activity" },
             { label: "Decisions", value: d.decisions, icon: Sparkles, color: "text-chart-2", sub: `${d.learnings} learnings`, link: "/activity" },
             { label: "Tokens", value: totalTokens, icon: BarChart2, color: "text-chart-3", sub: `${d.tokens.requests} requests`, link: "/billing" },
           ] as const).map((s, i) => (
-            <Link
-              key={s.label}
-              to={s.link}
-              className={`group rounded-lg border border-border bg-surface px-3 py-2 cursor-pointer transition-all duration-300 hover:border-accent-porter/30 hover:-translate-y-px hover:shadow-[var(--shadow-sm)] ${
-                mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
-              }`}
-              style={{ transitionDelay: `${80 + i * 50}ms` }}
-            >
+            <Link key={s.label} to={s.link} className={`group rounded-lg border border-border bg-surface px-3 py-2 cursor-pointer transition-all duration-300 hover:border-accent-porter/30 hover:-translate-y-px hover:shadow-[var(--shadow-sm)] ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`} style={{ transitionDelay: `${80 + i * 50}ms` }}>
               <div className="flex items-center justify-between">
                 <p className="text-[9px] font-semibold uppercase tracking-wide text-text3">{s.label}</p>
                 <s.icon className={`h-3 w-3 ${s.color}`} />
@@ -209,9 +181,38 @@ function DashboardContent() {
           ))}
         </div>
 
-        {/* ── Two columns (Activity + SaaS) ──── */}
+        {/* ── Two columns: Projects + Activity ── */}
         <div className="flex flex-col lg:flex-row gap-3">
-          {/* User Activity (matches ActivityFeed pattern) */}
+          {/* Projects (from project-list.tsx) */}
+          <div className="lg:w-1/2 min-w-0">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xs font-bold text-foreground uppercase tracking-wide">Projects</h2>
+              <button className="text-[10px] text-text3 hover:text-accent-porter transition-colors">all &rarr;</button>
+            </div>
+            <div className="space-y-2">
+              {FAKE_PROJECTS.map((p, i) => (
+                <div key={p.name} className={`group rounded-lg border border-border bg-surface p-3 cursor-pointer transition-all duration-200 hover:border-accent-porter/30 hover:shadow-[var(--shadow-card)] hover:-translate-y-px ${mounted ? "animate-card-deal-in" : "opacity-0"}`} style={{ animationDelay: `${250 + i * 80}ms`, animationFillMode: "both" }}>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold text-foreground truncate flex-1 min-w-0">{p.name}</p>
+                    <Sparkline values={p.spark} />
+                    <Badge className={`text-[8px] px-1 py-0 ${p.status === "active" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{p.status}</Badge>
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="flex-1 h-1 rounded-full bg-raised overflow-hidden">
+                      <div className="h-full rounded-full bg-accent-porter transition-all duration-[1.2s] ease-out" style={{ width: mounted ? `${p.progress}%` : "0%" }} />
+                    </div>
+                    <span className="text-[9px] text-text3 tabular-nums w-6">{p.progress}%</span>
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between">
+                    <p className="text-[10px] text-text3 truncate flex-1 min-w-0"><span className="text-text2">Next:</span> {p.task}</p>
+                    <span className="text-[9px] text-text3">{p.agents} agents</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Activity (from activity-feed.tsx) */}
           <div className="lg:w-1/2 min-w-0">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
@@ -221,40 +222,14 @@ function DashboardContent() {
               <Link to="/activity" className="text-[10px] text-text3 hover:text-accent-porter transition-colors">all &rarr;</Link>
             </div>
             <div>
-              {d.recentActivity.map((e, i) => (
-                <div key={i} className="flex items-center gap-2 rounded-md py-1.5 px-2 cursor-pointer hover:bg-surface transition-all duration-300 ease-out">
-                  <div className={`h-2 w-2 rounded-full shrink-0 ${
-                    e.action.includes("login") ? "bg-success" : e.action.includes("logout") ? "bg-border2" : "bg-accent-porter"
-                  }`} />
+              {timeline.slice(0, 8).map((e, i) => (
+                <div key={e._key} className={`flex items-center gap-2 rounded-md py-1.5 px-2 cursor-pointer hover:bg-surface ${i === 0 ? "animate-[slideDown_0.3s_ease-out_both]" : "transition-all duration-300 ease-out"}`}>
+                  <div className={`h-2 w-2 rounded-full shrink-0 ${e.status === "working" ? "bg-accent-porter animate-pulse-badge" : e.status === "complete" ? "bg-success" : "bg-border2"}`} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-foreground break-words">
-                      <span className="font-bold">{e.actor}</span> {e.action.replace(/\./g, " ")}
-                    </p>
+                    <p className="text-[10px] text-foreground break-words"><span className="font-bold">{e.agent}</span> {e.action}</p>
                   </div>
-                  <span className="text-[8px] text-text3 shrink-0">{fmtRel(e.ts)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* SaaS Metrics */}
-          <div className="lg:w-1/2 min-w-0">
-            <h2 className="text-xs font-bold text-foreground uppercase tracking-wide mb-2">SaaS Metrics</h2>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: "Customers", value: d.customers, icon: Bot, color: "text-accent-porter" },
-                { label: "MRR", value: "$0", icon: BarChart2, color: "text-success" },
-                { label: "Messages", value: d.messages, icon: Check, color: "text-warning" },
-                { label: "Emails", value: d.emails, icon: Sparkles, color: "text-chart-2" },
-              ].map((m, i) => (
-                <div key={i} className="rounded-lg border border-border bg-surface px-3 py-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[9px] font-semibold uppercase tracking-wide text-text3">{m.label}</p>
-                    <m.icon className={`h-3 w-3 ${m.color}`} />
-                  </div>
-                  <p className="text-lg font-bold text-foreground tabular-nums leading-tight">
-                    {typeof m.value === "number" ? <AnimCount to={m.value} /> : m.value}
-                  </p>
+                  {e.status === "working" && <Loader2 className="h-2.5 w-2.5 animate-spin text-accent-porter shrink-0" />}
+                  <span className="text-[8px] text-text3 shrink-0">{i === 0 ? "now" : timeAgo(e._sec + elapsed)}</span>
                 </div>
               ))}
             </div>
@@ -262,47 +237,47 @@ function DashboardContent() {
         </div>
       </div>
 
-      {/* ── Bottom bar (matches dashboard-mockup exactly) ── */}
+      {/* ── Bottom bar ── */}
       <div className="h-[140px] shrink-0 border-t border-border bg-background overflow-hidden">
-        <div className="py-2 h-full">
-          <div className="flex flex-col lg:flex-row gap-3 h-full">
-            {/* System Health (replaces Project Ideas) */}
-            <div className="lg:w-1/2 min-w-0 overflow-hidden">
-              <div className="flex items-center justify-between mb-1.5">
-                <h2 className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
-                  <Monitor className="h-3 w-3 text-accent-porter" />
-                  System Health
-                </h2>
-                <Link to="/system" className="text-[9px] text-text3 hover:text-accent-porter transition-colors flex items-center gap-1">
-                  <Settings className="h-2.5 w-2.5" /> details
-                </Link>
-              </div>
-              {sys && (
-                <div className="space-y-1.5">
-                  {[
-                    { icon: Monitor, label: "Memory", value: `${sys.memory.pct}%`, detail: `${fmtBytes(sys.memory.used)} / ${fmtBytes(sys.memory.total)}`, warn: sys.memory.pct >= 80 },
-                    { icon: HardDrive, label: "Disk", value: `${sys.disk.pct}%`, detail: `${fmtBytes(sys.disk.used)} / ${fmtBytes(sys.disk.total)}`, warn: sys.disk.pct >= 80 },
-                    { icon: Cpu, label: "CPU", value: `${Math.round(sys.cpu.load1m / sys.cpu.cores * 100)}%`, detail: `${sys.cpu.cores} cores · load ${sys.cpu.load1m.toFixed(1)}`, warn: sys.cpu.load1m > sys.cpu.cores },
-                  ].map(g => (
-                    <div key={g.label} className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 hover:border-accent-porter/30 hover:-translate-y-px transition-all duration-300">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-porter/10">
-                        <g.icon className="h-3 w-3 text-accent-porter" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-bold text-foreground">{g.label}: <span className={g.warn ? "text-danger" : ""}>{g.value}</span></p>
-                        <p className="text-[9px] text-text3 truncate">{g.detail}</p>
-                      </div>
-                      <span className="text-[9px] text-text3">{sys.sessions.active} sessions</span>
+        <div className="py-2 h-full flex flex-col lg:flex-row gap-3">
+          {/* System Health Monitor */}
+          <div className="lg:w-1/2 min-w-0 overflow-hidden">
+            <div className="flex items-center justify-between mb-1.5">
+              <h2 className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <Monitor className="h-3 w-3 text-accent-porter" /> System Health
+              </h2>
+              <Link to="/system" className="text-[10px] text-text3 hover:text-accent-porter transition-colors">details &rarr;</Link>
+            </div>
+            {sys && (
+              <div className="flex gap-4 items-end h-[80px]">
+                {[
+                  { label: "MEM", pct: sys.memory.pct, icon: Monitor },
+                  { label: "DISK", pct: sys.disk.pct, icon: HardDrive },
+                  { label: "CPU", pct: Math.round(sys.cpu.load1m / sys.cpu.cores * 100), icon: Cpu },
+                ].map(g => (
+                  <div key={g.label} className="flex-1 flex flex-col items-center gap-1">
+                    <span className={`text-xs font-bold tabular-nums ${g.pct >= 80 ? "text-danger" : "text-foreground"}`}>{g.pct}%</span>
+                    <div className="w-full h-[50px] rounded bg-raised/50 relative overflow-hidden">
+                      <div
+                        className={`absolute bottom-0 left-0 right-0 rounded transition-all duration-700 ${g.pct >= 90 ? "bg-danger" : g.pct >= 70 ? "bg-warning" : "bg-success/70"}`}
+                        style={{ height: `${g.pct}%` }}
+                      />
                     </div>
-                  ))}
+                    <span className="text-[8px] text-text3 font-mono">{g.label}</span>
+                  </div>
+                ))}
+                <div className="flex-1 flex flex-col items-center justify-end gap-1">
+                  <span className="text-xs font-bold text-foreground tabular-nums">{sys.sessions.active}</span>
+                  <span className="text-[8px] text-text3">sessions</span>
+                  <span className="text-[8px] text-text3">{Math.floor(sys.uptime / 3600)}h up</span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+          </div>
 
-            {/* System Log (replaces LLM Activity) */}
-            <div className="lg:w-1/2 min-w-0 overflow-hidden">
-              <LLMTerminal lines={termLines} title="System Log" className="h-full" />
-            </div>
+          {/* System Log */}
+          <div className="lg:w-1/2 min-w-0 overflow-hidden">
+            <LLMTerminal lines={termLines} title="User Logs" className="h-full" />
           </div>
         </div>
       </div>
