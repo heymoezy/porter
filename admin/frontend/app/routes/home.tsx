@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
 import { Link } from "react-router"
+import { PixelPortrait } from "~/components/pixel-portrait"
 import {
   FolderKanban, Bot, MessageSquare, Sparkles, Users,
-  Zap, Brain, Activity, Mail, Monitor, Server,
+  Zap, Brain, Activity, Monitor, Server,
   HardDrive, Cpu, ChevronRight, BarChart3,
 } from "lucide-react"
 
@@ -96,7 +97,29 @@ function DashboardContent() {
 
   return (
     <div className="space-y-2">
-      {/* Hero metrics — the numbers that matter */}
+      {/* Hero banner */}
+      <div className="rounded-xl border border-border bg-surface p-3 flex items-center gap-3 animate-card-deal-in">
+        <PixelPortrait hair="#1e293b" skin="#f1c27d" eyes="#0f172a" shirt="#1e3a5f" hairStyle="short" size="md" />
+        <div className="flex-1">
+          <h1 className="text-base font-bold text-text">Porter Command Center</h1>
+          <p className="text-xs text-text3">Platform control plane · {d.customers} customers · {d.agents} agents · {fmtN(d.messages)} messages</p>
+          <div className="flex items-center gap-3 mt-1">
+            {sys?.runtimes?.map(rt => (
+              <div key={rt.name} className="flex items-center gap-1">
+                <div className={`size-1.5 rounded-full ${rt.status === "healthy" ? "bg-success animate-pulse-badge" : "bg-danger"}`} />
+                <span className="text-[10px] text-text3">{rt.name}</span>
+              </div>
+            ))}
+            <span className="text-[10px] text-text3">v{d.version}</span>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-lg font-bold text-accent-porter">{fmtN(totalTokens)}</p>
+          <p className="text-[10px] text-text3">tokens processed</p>
+        </div>
+      </div>
+
+      {/* Hero metrics */}
       <div className="grid grid-cols-4 gap-2">
         {[
           { icon: FolderKanban, label: "Projects", value: d.projects.total, color: "text-accent-porter", link: "/users" },

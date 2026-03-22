@@ -1,3 +1,8 @@
+## v0.2.1 (2026-03-22)
+
+- Dashboard hero banner: Porter pixel portrait, platform name, runtime health dots, token counter, version
+- Summary line: customers, agents, messages at a glance
+
 ## v0.2.0 (2026-03-22)
 
 - Templates: card grid restored (was table — Moe prefers cards)
