@@ -71,7 +71,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.post('/logout', async (request, reply) => {
     const token = request.cookies?.porter_session;
     if (token) {
-      db.delete(schema.sessions).where(eq(schema.sessions.token, token)).run();
+      try {
+        sqlite.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+      } catch { /* ignore */ }
     }
     reply.clearCookie('porter_session', { path: '/' });
     return reply.send(ok({ loggedOut: true }));

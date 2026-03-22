@@ -6,10 +6,14 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-let ADMIN_VERSION = '0.1.0';
+let ADMIN_VERSION = '0.1.8';
 try {
-  const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf-8'));
-  ADMIN_VERSION = pkg.version || ADMIN_VERSION;
+  for (const p of [resolve(__dirname, '../../package.json'), resolve(process.cwd(), 'package.json')]) {
+    try {
+      const pkg = JSON.parse(readFileSync(p, 'utf-8'));
+      if (pkg.version) { ADMIN_VERSION = pkg.version; break; }
+    } catch {}
+  }
 } catch {}
 
 export default async function healthRoutes(fastify: FastifyInstance) {

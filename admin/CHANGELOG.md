@@ -1,4 +1,8 @@
-# Porter Admin — Changelog
+## v0.1.8 (2026-03-22)
+
+- Fixed logout button (drizzle ORM mismatch → raw sqlite)
+- Removed redundant "Porter Admin — Changelog" title from release notes
+- Version synced to v0.1.7 across all locations
 
 ## v0.1.7 (2026-03-22)
 
