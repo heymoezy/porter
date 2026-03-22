@@ -1074,8 +1074,8 @@ def _db_init():
             _ssalt = _s.token_hex(16)
             _shash = _hash_password("porter", _ssalt)
             conn.execute(
-                "INSERT INTO users (username, display_name, full_name, email, password_hash, salt, role) VALUES (?,?,?,?,?,?,?)",
-                (_su, _sdn, "", "", _shash, _ssalt, _sr)
+                "INSERT OR IGNORE INTO users (username, display_name, full_name, email, password_hash, salt, role) VALUES (?,?,?,?,?,?,?)",
+                (_su, _sdn, "", f"{_su}@seed.porter.local", _shash, _ssalt, _sr)
             )
             conn.commit()
             log.info("Seeded account: %s (role=%s)", _su, _sr)
