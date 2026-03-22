@@ -77,9 +77,9 @@ export function Sidebar({ collapsed, onToggle, notificationCount = 0 }: SidebarP
                   <item.icon className="h-4 w-4 shrink-0" strokeWidth={2} />
                   {!collapsed && <span className="flex-1 text-left">{item.label}</span>}
                   {!collapsed && item.path === "/dashboard" && notificationCount > 0 && (
-                    <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">
+                    <Badge className="bg-danger text-white text-[10px] px-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full">
                       {notificationCount}
-                    </span>
+                    </Badge>
                   )}
                 </Link>
               )
@@ -109,7 +109,7 @@ export function Sidebar({ collapsed, onToggle, notificationCount = 0 }: SidebarP
         </div>
         {!collapsed && (
           <Link to="/changelog" className="mt-2 block text-center text-[10px] uppercase tracking-widest text-text3 hover:text-accent-porter transition-colors">
-            Porter Admin v0.2.18
+            Porter Admin v0.2.19
           </Link>
         )}
       </div>

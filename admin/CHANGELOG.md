@@ -1,3 +1,12 @@
+## v0.2.19 (2026-03-22)
+
+- System health card: bg-surface instead of terminal-bg grey
+- New Project button moved from notification row to Projects section header
+- Hardcoded durations replaced with design tokens in project-list and activity-feed
+- Admin sidebar badge unified to shadcn Badge component
+- Added animate-slide-down utility to user CSS
+- Deleted unused chat-panel.tsx, removed dead imports (Plus, Button from dashboard)
+
 ## v0.2.18 (2026-03-22)
 
 - Dashboard badge in sidebar nav for both user and admin (syncs with notification count)

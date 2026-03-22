@@ -369,7 +369,7 @@ function DashboardContent() {
           {/* System Health */}
           <div className="lg:w-1/2 min-w-0 overflow-hidden">
             <div className="rounded-lg border border-border overflow-hidden h-full">
-              <div className="flex items-center gap-2 bg-[var(--terminal-bg)] px-3 py-1.5 border-b border-border">
+              <div className="flex items-center gap-2 bg-surface px-3 py-1.5 border-b border-border">
                 <div className="flex gap-1">
                   <div className="h-2 w-2 rounded-full bg-danger/60" />
                   <div className="h-2 w-2 rounded-full bg-warning/60" />
@@ -381,7 +381,7 @@ function DashboardContent() {
                 </div>
                 <Link to="/system" className="text-[9px] text-text3 hover:text-accent-porter font-mono">details →</Link>
               </div>
-              <div className="bg-[var(--terminal-bg)] p-2.5 font-mono text-[10px] leading-[1.8]">
+              <div className="bg-surface p-2.5 font-mono text-[10px] leading-[1.8]">
                 {sys ? (
                   <>
                     {[
