@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 11-03-PLAN.md
-last_updated: "2026-03-22T12:21:17.904Z"
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-03-22T12:21:46.792Z"
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -68,6 +68,8 @@ Recent decisions affecting current work:
 - [Phase 11-unified-chat-and-crm-schema]: messages.id INTEGER AUTOINCREMENT required for FTS5 rowid alignment in messages_fts virtual table
 - [Phase 11-unified-chat-and-crm-schema]: Replace-all semantics for emails/phones/social on PATCH: simpler API contract avoids partial-update edge cases
 - [Phase 11-unified-chat-and-crm-schema]: Disk write before sqlite.transaction in file upload: DB failure triggers fs.unlink to prevent orphan files on disk
+- [Phase 11-unified-chat-and-crm-schema]: GET /search registered before /:id param route to avoid Fastify route conflict
+- [Phase 11-unified-chat-and-crm-schema]: z.record() requires two args in Zod v4: z.record(z.string(), z.unknown()) not z.record(z.unknown())
 
 ### Pending Todos
 
@@ -82,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T12:21:17.901Z
-Stopped at: Completed 11-03-PLAN.md
+Last session: 2026-03-22T12:21:46.790Z
+Stopped at: Completed 11-02-PLAN.md
 Resume file: None
