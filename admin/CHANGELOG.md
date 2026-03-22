@@ -1,3 +1,13 @@
+## v0.2.4 (2026-03-22)
+
+- Dashboard: exact match to user dashboard layout from dashboard-mockup.tsx
+- Hero: Post to X button, animated bar chart with dates, task counter, orchestrations/saved/value stats
+- Stat tiles: same component pattern as stat-tiles.tsx with text-[9px] sub text
+- Two columns: User Activity feed (ActivityFeed pattern) + SaaS Metrics
+- Bottom bar: System Health (replaces Project Ideas) + System Log terminal (replaces LLM Activity)
+- LLMTerminal component: copied from frontend-v2, added configurable title prop
+- All patterns sourced from frontend-v2 components, not reinvented
+
 ## v0.2.3 (2026-03-22)
 
 - Dashboard: matches user dashboard exactly — hero gradient with animated bar chart, stat tiles (Projects/Agents/Tasks/Decisions/Tokens) with AnimCount + hover lift, SaaS metrics row, user activity feed, live system gauges
