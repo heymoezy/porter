@@ -52,8 +52,8 @@
 **Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 08-01-PLAN.md — Envelope upgrade + trace ID + route conformance (API-01, API-02)
-- [ ] 08-02-PLAN.md — OpenAPI spec generation + frontend error capture (API-03, OBS-01, OBS-02)
+- [x] 08-01-PLAN.md — Envelope upgrade + trace ID + route conformance (API-01, API-02)
+- [x] 08-02-PLAN.md — OpenAPI spec generation + frontend error capture (API-03, OBS-01, OBS-02)
 
 ### Phase 9: Streaming Chat
 **Goal**: Chat responses stream token-by-token to clients via SSE — first token arrives under 2 seconds, cancellation stops upstream AI generation, and all AI backends stream through the same code path
@@ -63,7 +63,11 @@ Plans:
   1. `curl -N /api/v1/chat/stream -d '{"message":"explain recursion"}'` receives the first `data:` SSE event within 2 seconds — time_to_first_token is measurably less than total response time
   2. Closing the curl connection mid-stream causes Ollama and OpenClaw generation to abort within 1 second — no orphaned backend processes continue consuming CPU or tokens
   3. Switching the AI router to any registered backend (Ollama, OpenClaw, future provider) produces the same SSE event format — no provider-specific code paths exist in the route handler or stream service
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — StreamService with StreamBackend interface, Ollama + OpenClaw backends, unit tests (STRM-01, STRM-02, STRM-03)
+- [ ] 09-02-PLAN.md — POST /api/v1/chat/stream SSE route, legacy stub cleanup, integration validation (STRM-01, STRM-02, STRM-03)
 
 ### Phase 10: Collaborative Sessions
 **Goal**: Project owners can invite people by email, assign roles, and every subsequent API call on that project enforces the caller's role — collaborators with chat access can direct agents, revocation is immediate
@@ -128,8 +132,8 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1-7. Foundation through Connections | v1.0 | 51/51 | Complete | 2026-03-21 |
-| 8. API Foundation | 2/2 | Complete   | 2026-03-21 | - |
-| 9. Streaming Chat | v2.0 | 0/TBD | Not started | - |
+| 8. API Foundation | v2.0 | 2/2 | Complete | 2026-03-21 |
+| 9. Streaming Chat | v2.0 | 0/2 | Planned | - |
 | 10. Collaborative Sessions | v2.0 | 0/TBD | Not started | - |
 | 11. Unified Chat and CRM Schema | v2.0 | 0/TBD | Not started | - |
 | 12. CRM Intelligence and Agent Templates | v2.0 | 0/TBD | Not started | - |
