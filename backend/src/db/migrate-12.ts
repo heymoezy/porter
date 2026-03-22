@@ -1,4 +1,5 @@
 import { sqlite } from './client.js';
+import { seedTemplates } from './seed-templates.js';
 
 export function migrate12CrmIntelligence(): void {
   const migrationId = 'phase12_crm_intelligence';
@@ -62,4 +63,6 @@ export function migrate12CrmIntelligence(): void {
 
   sqlite.prepare(`INSERT INTO schema_migrations (id) VALUES (?)`).run(migrationId);
   console.log('[migrate-12] CRM intelligence + agent templates: 2 tables + 1 ALTER created');
+  seedTemplates();
+  console.log('[migrate-12] Agent templates seeded');
 }
