@@ -1,3 +1,10 @@
+## v0.2.3 (2026-03-22)
+
+- Dashboard: matches user dashboard exactly — hero gradient with animated bar chart, stat tiles (Projects/Agents/Tasks/Decisions/Tokens) with AnimCount + hover lift, SaaS metrics row, user activity feed, live system gauges
+- Same component patterns: rounded-lg, text-[9px] labels, text-lg bold values, tabular-nums, hover:-translate-y-px
+- AnimCount animated counters on all numbers
+- Nav: "Agent Templates" label, Revenue at #2
+
 ## v0.2.2 (2026-03-22)
 
 - Dashboard: hero banner with gradient, metric cards matching user dashboard pattern (Projects, Agents, Tasks, Decisions, Tokens), SaaS row, user activity feed, live system gauges
