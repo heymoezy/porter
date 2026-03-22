@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-03-22T12:15:44.230Z"
+stopped_at: Completed 11-03-PLAN.md
+last_updated: "2026-03-22T12:21:17.904Z"
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 12
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -66,6 +66,8 @@ Recent decisions affecting current work:
 - [Phase 10-collaborative-sessions]: claimNextJob LEFT JOIN fix: agent_id='system' system jobs bypass persona JOIN requirement for drip scheduler
 - [Phase 11-unified-chat-and-crm-schema]: filesRegistry (not files) as Drizzle export name to avoid collision with routes/files.ts module
 - [Phase 11-unified-chat-and-crm-schema]: messages.id INTEGER AUTOINCREMENT required for FTS5 rowid alignment in messages_fts virtual table
+- [Phase 11-unified-chat-and-crm-schema]: Replace-all semantics for emails/phones/social on PATCH: simpler API contract avoids partial-update edge cases
+- [Phase 11-unified-chat-and-crm-schema]: Disk write before sqlite.transaction in file upload: DB failure triggers fs.unlink to prevent orphan files on disk
 
 ### Pending Todos
 
@@ -80,6 +82,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T12:15:44.228Z
-Stopped at: Completed 11-01-PLAN.md
+Last session: 2026-03-22T12:21:17.901Z
+Stopped at: Completed 11-03-PLAN.md
 Resume file: None
