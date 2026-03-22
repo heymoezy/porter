@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 11-05-PLAN.md
-last_updated: "2026-03-22T12:29:00Z"
+stopped_at: Completed 11-04-PLAN.md
+last_updated: "2026-03-22T12:26:39.377Z"
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 12
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # Project State
@@ -72,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 11-unified-chat-and-crm-schema]: z.record() requires two args in Zod v4: z.record(z.string(), z.unknown()) not z.record(z.unknown())
 - [Phase 11-unified-chat-and-crm-schema]: Archive-before-dispatch pattern for outbound messages — write to unified table BEFORE network send ensures history consistency even on send failure
 - [Phase 11-unified-chat-and-crm-schema]: Outbound-first conversations use scope_type='global' with NULL scope_id when no prior inbound contact exists
+- [Phase 11-unified-chat-and-crm-schema]: Archive BEFORE routing in WhatsApp webhook: unified table write happens before agent_jobs insert to prevent unarchived messages on routing failure
+- [Phase 11-unified-chat-and-crm-schema]: WhatsApp conversation external_id = phone number (not Meta message ID): all messages from one contact share one conversation
 
 ### Pending Todos
 
@@ -86,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T12:29:00Z
-Stopped at: Completed 11-05-PLAN.md
+Last session: 2026-03-22T12:26:39.374Z
+Stopped at: Completed 11-04-PLAN.md
 Resume file: None

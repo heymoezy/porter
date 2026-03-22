@@ -33,7 +33,7 @@
 - [x] **Phase 8: API Foundation** - Standardize all endpoints to /api/v1/*, add error codes with trace IDs, auto-generate OpenAPI spec, capture frontend errors (completed 2026-03-21)
 - [x] **Phase 9: Streaming Chat** - Native token-by-token SSE streaming from all AI backends with clean mid-stream cancellation (completed 2026-03-22)
 - [x] **Phase 10: Collaborative Sessions** - Invite by email, per-project roles (view/chat/edit/admin), RBAC enforcement on every project-scoped route (completed 2026-03-22)
-- [ ] **Phase 11: Unified Chat and CRM Schema** - Single conversation model for all message sources, multi-value CRM contacts, file associations via single upload endpoint
+- [x] **Phase 11: Unified Chat and CRM Schema** - Single conversation model for all message sources, multi-value CRM contacts, file associations via single upload endpoint (completed 2026-03-22)
 - [ ] **Phase 12: CRM Intelligence and Agent Templates** - AI-powered contact analysis from interaction history, searchable 30+ agent template catalog with one-call instantiation
 - [ ] **Phase 13: Autonomous Learning** - Agents search web/GitHub/Reddit, store GDPR-safe concepts in Memory V2 with source attribution and confidence scores
 - [ ] **Phase 14: Billing Enforcement** - Lemon Squeezy subscription management, usage metering, atomic plan limit enforcement on all resource-creating routes
@@ -96,7 +96,7 @@ Plans:
   3. `GET /api/v1/conversations?q=budget+review` returns conversations with matching message content, ranked by relevance — FTS5 search across the full message corpus
   4. `PATCH /api/v1/contacts/:id` with `{"emails":[{"value":"a@b.com","label":"work"}],"phones":[{"value":"+6591234567","country_code":"SG"}],"social":{"linkedin":"...","x":"..."}}` stores all multi-value fields and returns them on subsequent GET
   5. `POST /api/v1/files/upload` with `project_id=X` uploads the file and creates the association atomically — if the insert fails, the file is not stored; `GET /api/v1/files?project_id=X` returns it; same behavior for `contact_id` and `conversation_id`
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 - [ ] 11-01-PLAN.md — Schema migration, Drizzle definitions, FTS5 triggers, smoke test script (all reqs)
@@ -147,7 +147,7 @@ Plans:
 | 8. API Foundation | v2.0 | 2/2 | Complete | 2026-03-21 |
 | 9. Streaming Chat | 2/2 | Complete   | 2026-03-22 | - |
 | 10. Collaborative Sessions | 3/3 | Complete    | 2026-03-22 | - |
-| 11. Unified Chat and CRM Schema | 4/5 | In Progress|  | - |
+| 11. Unified Chat and CRM Schema | 5/5 | Complete   | 2026-03-22 | - |
 | 12. CRM Intelligence and Agent Templates | v2.0 | 0/TBD | Not started | - |
 | 13. Autonomous Learning | v2.0 | 0/TBD | Not started | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
