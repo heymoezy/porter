@@ -1,3 +1,10 @@
+## v0.2.2 (2026-03-22)
+
+- Dashboard: hero banner with gradient, metric cards matching user dashboard pattern (Projects, Agents, Tasks, Decisions, Tokens), SaaS row, user activity feed, live system gauges
+- Nav: Revenue moved to #2 position below Dashboard
+- Template detail: Overview removed, replaced with "Who Is" preview button showing what users see
+- All metric cards are clickable links to their detail pages
+
 ## v0.2.1 (2026-03-22)
 
 - Dashboard hero banner: Porter pixel portrait, platform name, runtime health dots, token counter, version

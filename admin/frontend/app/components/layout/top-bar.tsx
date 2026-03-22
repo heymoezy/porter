@@ -8,7 +8,8 @@ interface TopBarProps {
 
 const backRoutes: Record<string, { label: string; path: string }> = {
   "/users/": { label: "Customers", path: "/users" },
-  "/agents/": { label: "Agents", path: "/agents" },
+  "/agents/": { label: "User Agents", path: "/agents" },
+  "/templates/": { label: "Agent Templates", path: "/templates" },
 }
 
 export function TopBar({ onToggleTheme, theme }: TopBarProps) {

@@ -19,9 +19,10 @@ interface SidebarProps {
 const groups = [
   { label: "Platform", items: [
     { icon: LayoutDashboard, label: "Dashboard", path: "/" },
+    { icon: CreditCard, label: "Revenue", path: "/billing" },
     { icon: Users, label: "Customers", path: "/users" },
     { icon: Shield, label: "Porter", path: "/porter" },
-    { icon: Blocks, label: "Templates", path: "/templates" },
+    { icon: Blocks, label: "Agent Templates", path: "/templates" },
     { icon: Bot, label: "User Agents", path: "/agents" },
     { icon: Sparkles, label: "Skills", path: "/skills" },
     { icon: Server, label: "Models", path: "/models" },
@@ -32,7 +33,6 @@ const groups = [
     { icon: Bug, label: "Diagnostics", path: "/diagnostics" },
     { icon: Monitor, label: "System", path: "/system" },
     { icon: Mail, label: "Email", path: "/email" },
-    { icon: CreditCard, label: "Revenue", path: "/billing" },
   ]},
 ]
 
@@ -103,7 +103,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
         {!collapsed && (
           <Link to="/changelog" className="mt-2 block text-center text-[10px] uppercase tracking-widest text-text3 hover:text-accent-porter transition-colors">
-            Porter Admin v0.2.0
+            Porter Admin v0.2.2
           </Link>
         )}
       </div>
