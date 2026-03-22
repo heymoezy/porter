@@ -79,7 +79,12 @@ Plans:
   3. A user with role "chat" on a project can `POST /api/v1/projects/:id/messages` and receive a response from an assigned agent — the agent receives the collaborator's identity in its context
   4. `DELETE /api/v1/projects/:id/collaborators/:user_id` by the project owner returns 200 and immediately blocks that user's subsequent requests with 403
   5. A collaborator authenticated to project A who sends requests to project B's endpoints receives 403 — IDOR is blocked at the `requireProjectAccess` middleware layer, not in individual handlers
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — Schema, migration, role types, requireProjectAccess middleware (COLLAB-02)
+- [ ] 10-02-PLAN.md — Collaborator CRUD routes, invite/accept flow, email, drip scheduling (COLLAB-01, COLLAB-04)
+- [ ] 10-03-PLAN.md — Route enforcement across all project endpoints, agent identity injection (COLLAB-02, COLLAB-03)
 
 ### Phase 11: Unified Chat and CRM Schema
 **Goal**: All messages — agent, project, WhatsApp inbound, email inbound — flow through a single conversations/messages API; CRM contacts hold multiple emails, phones, and social links; files attach to any entity atomically
@@ -134,7 +139,7 @@ Plans:
 | 1-7. Foundation through Connections | v1.0 | 51/51 | Complete | 2026-03-21 |
 | 8. API Foundation | v2.0 | 2/2 | Complete | 2026-03-21 |
 | 9. Streaming Chat | 2/2 | Complete   | 2026-03-22 | - |
-| 10. Collaborative Sessions | v2.0 | 0/TBD | Not started | - |
+| 10. Collaborative Sessions | v2.0 | 0/3 | Planning complete | - |
 | 11. Unified Chat and CRM Schema | v2.0 | 0/TBD | Not started | - |
 | 12. CRM Intelligence and Agent Templates | v2.0 | 0/TBD | Not started | - |
 | 13. Autonomous Learning | v2.0 | 0/TBD | Not started | - |
