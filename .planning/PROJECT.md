@@ -54,7 +54,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 ### Active
 
 - ✓ API standardization (consistent /api/v1/* surface, envelopes, error codes, OpenAPI) — v2.0 Phase 8
-- [ ] Streaming chat (token-by-token SSE from all AI backends, cancellation)
+- ✓ Streaming chat (token-by-token SSE from all AI backends, cancellation) — v2.0 Phase 9
 - [ ] Collaborative sessions (invite by email, per-person roles, shared project/agent access)
 - [ ] Unified global chat (single conversation model — agents, projects, external channels)
 - [ ] CRM backend (multi-email, multi-phone, country codes, social links, AI analysis, activity timeline)
