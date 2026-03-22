@@ -55,7 +55,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 
 - ✓ API standardization (consistent /api/v1/* surface, envelopes, error codes, OpenAPI) — v2.0 Phase 8
 - ✓ Streaming chat (token-by-token SSE from all AI backends, cancellation) — v2.0 Phase 9
-- [ ] Collaborative sessions (invite by email, per-person roles, shared project/agent access)
+- ✓ Collaborative sessions (invite by email, per-person roles, shared project/agent access) — v2.0 Phase 10
 - [ ] Unified global chat (single conversation model — agents, projects, external channels)
 - [ ] CRM backend (multi-email, multi-phone, country codes, social links, AI analysis, activity timeline)
 - [ ] File associations (link files to projects, contacts, conversations; drag-drop upload API)
@@ -109,4 +109,4 @@ Porter has been in development since Feb 18, 2026. Current version is v0.34.23. 
 | porter.py gradual shrink | Don't spend v2 time on migration. Brain migrates naturally as features move. | — v2.0 |
 
 ---
-*Last updated: 2026-03-21 after Phase 8 (API Foundation) completion*
+*Last updated: 2026-03-22 after Phase 10 (Collaborative Sessions) completion*
