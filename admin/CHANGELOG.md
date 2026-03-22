@@ -1,3 +1,9 @@
+## v0.2.10 (2026-03-22)
+
+- TopBar: route-aware page titles with icons on every page (Dashboard, Customers, Agents, etc.)
+- Activity feed: 50 entries, no cap on timeline growth, scrollable fills available space
+- Activity feed: removed border and background shading — clean flat look
+
 ## v0.2.9 (2026-03-22)
 
 - System Health: added concurrent users (distinct users active in last 5min) — shows '1 online' etc

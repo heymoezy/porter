@@ -37,16 +37,59 @@ const FAKE_PROJECTS = [
   { name: "Mobile App", type: "app", status: "active", progress: 12, agents: 4, spark: [0,0,1,3,5,7,9,11], task: "Wireframe first 3 screens" },
 ]
 
-const FAKE_ACTIVITY = [
-  { agent: "Moe", action: "logged in from Singapore", status: "complete" as const, _sec: 0 },
-  { agent: "Jacob", action: "created project 'Brand Guide'", status: "complete" as const, _sec: 120 },
-  { agent: "Sarah", action: "assigned 3 agents to Marketing Site", status: "complete" as const, _sec: 300 },
-  { agent: "Moe", action: "edited Porter's Soul.md", status: "complete" as const, _sec: 480 },
-  { agent: "John", action: "signed up (trial)", status: "complete" as const, _sec: 600 },
-  { agent: "Porter", action: "auto-assigned SEO Specialist to Brand Guide", status: "working" as const, _sec: 720 },
-  { agent: "Sarah", action: "sent welcome email to john@acme.com", status: "complete" as const, _sec: 900 },
-  { agent: "Jacob", action: "viewed Agent Templates", status: "complete" as const, _sec: 1200 },
+const FAKE_ACTIVITY_TEMPLATES = [
+  { agent: "Moe", action: "logged in from Singapore", status: "complete" as const },
+  { agent: "Jacob", action: "created project 'Brand Guide'", status: "complete" as const },
+  { agent: "Sarah", action: "assigned 3 agents to Marketing Site", status: "complete" as const },
+  { agent: "Moe", action: "edited Porter's Soul.md", status: "complete" as const },
+  { agent: "John", action: "signed up (trial)", status: "complete" as const },
+  { agent: "Porter", action: "auto-assigned SEO Specialist to Brand Guide", status: "working" as const },
+  { agent: "Sarah", action: "sent welcome email to john@acme.com", status: "complete" as const },
+  { agent: "Jacob", action: "viewed Agent Templates", status: "complete" as const },
+  { agent: "Porter", action: "generated weekly report for Marketing Site", status: "complete" as const },
+  { agent: "Moe", action: "updated billing plan to Cloud", status: "complete" as const },
+  { agent: "Sarah", action: "deployed API Docs to staging", status: "complete" as const },
+  { agent: "Porter", action: "resolved 3 task conflicts in Mobile App", status: "complete" as const },
+  { agent: "John", action: "invited team member lisa@acme.com", status: "complete" as const },
+  { agent: "Jacob", action: "reviewed Brand Guide deliverables", status: "complete" as const },
+  { agent: "Porter", action: "learned new skill: competitor analysis", status: "working" as const },
+  { agent: "Sarah", action: "created project 'Q2 Campaign'", status: "complete" as const },
+  { agent: "Moe", action: "configured webhook for Slack notifications", status: "complete" as const },
+  { agent: "Porter", action: "auto-scaled agents for Marketing Site sprint", status: "complete" as const },
+  { agent: "John", action: "completed onboarding checklist", status: "complete" as const },
+  { agent: "Jacob", action: "exported Brand Guide assets to Figma", status: "complete" as const },
+  { agent: "Porter", action: "summarized 12 tasks for daily standup", status: "complete" as const },
+  { agent: "Sarah", action: "ran A/B test on landing hero", status: "complete" as const },
+  { agent: "Moe", action: "approved Brand Guide color palette", status: "complete" as const },
+  { agent: "Porter", action: "detected anomaly in API response times", status: "working" as const },
+  { agent: "John", action: "uploaded brand assets to shared drive", status: "complete" as const },
+  { agent: "Jacob", action: "scheduled deployment for Mobile App v0.2", status: "complete" as const },
+  { agent: "Sarah", action: "closed 5 support tickets", status: "complete" as const },
+  { agent: "Porter", action: "retrained sentiment model on new feedback", status: "complete" as const },
+  { agent: "Moe", action: "reviewed Q1 revenue dashboard", status: "complete" as const },
+  { agent: "John", action: "connected Stripe integration", status: "complete" as const },
+  { agent: "Porter", action: "migrated 3 agents to new skill format", status: "complete" as const },
+  { agent: "Sarah", action: "published blog post 'AI Agents in 2026'", status: "complete" as const },
+  { agent: "Jacob", action: "fixed broken webhook for Slack", status: "complete" as const },
+  { agent: "Moe", action: "set up monitoring alerts for uptime", status: "complete" as const },
+  { agent: "Porter", action: "auto-resolved merge conflict in Brand Guide", status: "complete" as const },
+  { agent: "John", action: "added 2FA to account", status: "complete" as const },
+  { agent: "Sarah", action: "onboarded new client workspace", status: "complete" as const },
+  { agent: "Porter", action: "pruned 8 stale agent sessions", status: "complete" as const },
+  { agent: "Jacob", action: "benchmarked API response under load", status: "complete" as const },
+  { agent: "Moe", action: "renamed project 'MVP' to 'Mobile App'", status: "complete" as const },
+  { agent: "Porter", action: "generated accessibility audit for Marketing Site", status: "working" as const },
+  { agent: "Sarah", action: "synced CRM contacts from HubSpot", status: "complete" as const },
+  { agent: "John", action: "submitted feedback on onboarding flow", status: "complete" as const },
+  { agent: "Jacob", action: "tagged release v0.2.8 for admin panel", status: "complete" as const },
+  { agent: "Porter", action: "cached 200 embeddings for knowledge base", status: "complete" as const },
+  { agent: "Moe", action: "archived project 'Legacy Docs'", status: "complete" as const },
+  { agent: "Sarah", action: "created email template for trial expiry", status: "complete" as const },
+  { agent: "Porter", action: "routed 14 queries to specialized agents", status: "complete" as const },
+  { agent: "John", action: "upgraded workspace to Cloud plan", status: "complete" as const },
+  { agent: "Jacob", action: "reviewed Porter's weekly learning summary", status: "complete" as const },
 ]
+const FAKE_ACTIVITY = FAKE_ACTIVITY_TEMPLATES.map((e, i) => ({ ...e, _sec: i * 180 }))
 
 interface LogLine { text: string; color: string }
 
@@ -75,7 +118,7 @@ function DashboardContent() {
     const id = setInterval(() => {
       const n = FAKE_ACTIVITY[idx % FAKE_ACTIVITY.length]
       idx++
-      setTimeline(p => [{ ...n, _key: Date.now() }, ...p.slice(0, 7)])
+      setTimeline(p => [{ ...n, _key: Date.now() }, ...p])
     }, 5000)
     return () => clearInterval(id)
   })
@@ -115,7 +158,7 @@ function DashboardContent() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-var(--header-height)-2rem)]">
-      <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
+      <div className="shrink-0 space-y-3">
 
         {/* ── Hero ── */}
         <div className={`rounded-xl border border-accent-porter/20 bg-gradient-to-br from-accent-porter/5 via-surface to-background p-5 transition-all duration-700 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"}`} style={{ transitionDelay: "100ms" }}>
@@ -188,58 +231,65 @@ function DashboardContent() {
           ))}
         </div>
 
-        {/* ── Two columns: Projects + Activity — fills available space ── */}
-        <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0">
-          {/* Projects (scrolling, push animation) */}
-          <div className="lg:w-1/2 min-w-0 flex flex-col">
-            <div className="flex items-center justify-between mb-2 shrink-0">
-              <h2 className="text-xs font-bold text-foreground uppercase tracking-wide">Projects</h2>
-              <button className="text-[10px] text-text3 hover:text-accent-porter transition-colors">all &rarr;</button>
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
-              {projectTimeline.map((p, i) => (
-                <div key={p._key} className={`group rounded-lg border border-border bg-surface p-3 cursor-pointer transition-all duration-200 hover:border-accent-porter/30 hover:shadow-[var(--shadow-card)] hover:-translate-y-px ${i === 0 ? "animate-[slideDown_0.3s_ease-out_both]" : ""}`}>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-bold text-foreground truncate flex-1 min-w-0">{p.name}</p>
-                    <Sparkline values={p.spark} />
-                    <Badge className={`text-[8px] px-1 py-0 ${p.status === "active" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{p.status}</Badge>
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <div className="flex-1 h-1 rounded-full bg-raised overflow-hidden">
-                      <div className="h-full rounded-full bg-accent-porter transition-all duration-[1.2s] ease-out" style={{ width: `${p.progress}%` }} />
-                    </div>
-                    <span className="text-[9px] text-text3 tabular-nums w-6">{p.progress}%</span>
-                  </div>
-                  <div className="mt-1.5 flex items-center justify-between">
-                    <p className="text-[10px] text-text3 truncate flex-1 min-w-0"><span className="text-text2">Next:</span> {p.task}</p>
-                    <span className="text-[9px] text-text3">{p.agents} agents</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+      </div>
 
-          {/* Activity — fills available space */}
-          <div className="lg:w-1/2 min-w-0 flex flex-col">
-            <div className="flex items-center justify-between mb-2 shrink-0">
-              <h2 className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
-                Activity
-                <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-badge" />
-              </h2>
-              <Link to="/activity" className="text-[10px] text-text3 hover:text-accent-porter transition-colors">all &rarr;</Link>
-            </div>
-            <div className="flex-1 overflow-y-auto min-h-0">
-              {timeline.map((e, i) => (
-                <div key={e._key} className={`flex items-center gap-2 rounded-md py-1.5 px-2 cursor-pointer hover:bg-surface ${i === 0 ? "animate-[slideDown_0.3s_ease-out_both]" : "transition-all duration-300 ease-out"}`}>
-                  <div className={`h-2 w-2 rounded-full shrink-0 ${e.status === "working" ? "bg-accent-porter animate-pulse-badge" : e.status === "complete" ? "bg-success" : "bg-border2"}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-foreground break-words"><span className="font-bold">{e.agent}</span> {e.action}</p>
-                  </div>
-                  {e.status === "working" && <Loader2 className="h-2.5 w-2.5 animate-spin text-accent-porter shrink-0" />}
-                  <span className="text-[8px] text-text3 shrink-0">{i === 0 ? "now" : timeAgo(e._sec + elapsed)}</span>
+      {/* ── Two columns: Projects + Activity — between scroll and bottom bar ── */}
+      <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0 mt-3">
+        {/* Projects */}
+        <div className="lg:w-1/2 min-w-0 flex flex-col h-full">
+          <div className="flex items-center justify-between mb-2 shrink-0">
+            <h2 className="text-xs font-bold text-foreground uppercase tracking-wide">Projects</h2>
+            <button className="text-[10px] text-text3 hover:text-accent-porter transition-colors">all &rarr;</button>
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+            {projectTimeline.map((p, i) => (
+              <div
+                key={p._key}
+                className={`group rounded-lg border border-border bg-surface p-3 cursor-pointer transition-all duration-200 hover:border-accent-porter/30 hover:shadow-[var(--shadow-card)] hover:-translate-y-px ${
+                  mounted ? "animate-card-deal-in" : "opacity-0"
+                }`}
+                style={{ animationDelay: `${250 + i * 80}ms`, animationFillMode: "both" }}
+              >
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-bold text-foreground truncate flex-1 min-w-0">{p.name}</p>
+                  <Sparkline values={p.spark} />
+                  <Badge className={`text-[9px] px-1.5 py-0 ${p.status === "active" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{p.status}</Badge>
                 </div>
-              ))}
-            </div>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <div className="flex-1 h-1 rounded-full bg-raised overflow-hidden">
+                    <div className="h-full rounded-full bg-accent-porter transition-all duration-[1.2s] ease-out" style={{ width: `${p.progress}%` }} />
+                  </div>
+                  <span className="text-[9px] text-text3 tabular-nums w-8 text-right">{p.progress}%</span>
+                </div>
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <p className="text-[10px] text-text3 truncate min-w-0"><span className="text-text2">Next:</span> {p.task}</p>
+                  <span className="text-[9px] text-text3 shrink-0">{p.agents} agents</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Activity */}
+        <div className="lg:w-1/2 min-w-0 flex flex-col h-full">
+          <div className="flex items-center justify-between mb-2 shrink-0">
+            <h2 className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+              Activity
+              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-badge" />
+            </h2>
+            <Link to="/activity" className="text-[10px] text-text3 hover:text-accent-porter transition-colors">all &rarr;</Link>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {timeline.map((e, i) => (
+              <div key={e._key} className={`flex items-center gap-2 rounded-md py-1.5 px-2 cursor-pointer hover:bg-surface ${i === 0 ? "animate-[slideDown_0.3s_ease-out_both]" : "transition-all duration-300 ease-out"}`}>
+                <div className={`h-2 w-2 rounded-full shrink-0 ${e.status === "working" ? "bg-accent-porter animate-pulse-badge" : e.status === "complete" ? "bg-success" : "bg-border2"}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-foreground break-words"><span className="font-bold">{e.agent}</span> {e.action}</p>
+                </div>
+                {e.status === "working" && <Loader2 className="h-2.5 w-2.5 animate-spin text-accent-porter shrink-0" />}
+                <span className="text-[8px] text-text3 shrink-0">{i === 0 ? "now" : timeAgo(e._sec + elapsed)}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
