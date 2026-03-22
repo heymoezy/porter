@@ -1,3 +1,10 @@
+## v0.2.0 (2026-03-22)
+
+- Templates: card grid restored (was table — Moe prefers cards)
+- Template detail: full .md file editor tabs (Soul, Identity, Role Card, Skills, Deliverables, Mission) + Overview tab with soul/mission/inputs/outputs/authority
+- Template files saved to templates/<id>/ directory (strangler fig)
+- Green dot indicator on tabs with existing files
+
 ## v0.1.9 (2026-03-22)
 
 - Dashboard: full platform command center — 4 hero metrics (Projects, Agents, Conversations, Customers), 6 activity counters (Messages, Agent Msgs, Tasks, Orchestrations, Skills, Learnings), token usage, system gauges, live activity feed

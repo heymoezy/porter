@@ -23,7 +23,6 @@ interface TemplatesResponse {
   templates: Template[]
   count: number
   categories: Record<string, number>
-  archetypes: Record<string, number>
 }
 
 const archetypeColors: Record<string, string> = {
@@ -69,14 +68,13 @@ function TemplatesContent() {
   const filtered = search
     ? templates.filter(t =>
         t.name.toLowerCase().includes(search.toLowerCase()) ||
-        t.description.toLowerCase().includes(search.toLowerCase()) ||
-        t.tags.some(tag => tag.toLowerCase().includes(search.toLowerCase()))
+        t.description.toLowerCase().includes(search.toLowerCase())
       )
     : templates
 
   return (
     <div className="space-y-2">
-      {/* Header + search */}
+      {/* Header */}
       <div className="flex items-center gap-2">
         <Blocks className="size-3 text-accent-porter" />
         <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">
@@ -102,57 +100,42 @@ function TemplatesContent() {
             className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
               activeCat === cat ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
             }`}
-          >
-            {cat}{cat !== "all" && categories[cat] ? ` (${categories[cat]})` : ""}
-          </button>
+          >{cat}{cat !== "all" && categories[cat] ? ` (${categories[cat]})` : ""}</button>
         ))}
       </div>
 
-      {/* Template table */}
-      <div className="rounded-xl border border-border overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border/50 bg-surface text-left">
-              <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3">Agent</th>
-              <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3">Description</th>
-              <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3">Archetype</th>
-              <th className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text3">Category</th>
-              <th className="w-6" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((t, i) => {
-              const spec = (t.appearance_spec || {}) as Record<string, string>
-              return (
-                <tr key={t.id} className="border-b border-border/20 last:border-0 hover:bg-surface/60 transition-colors animate-list-stagger-in" style={{ animationDelay: `${i * 15}ms` }}>
-                  <td className="px-3 py-1.5">
-                    <Link to={`/templates/${t.id}`} className="flex items-center gap-2">
-                      <PixelPortrait
-                        hair={spec.hair || "#2c1b18"}
-                        skin={spec.skin || "#f1c27d"}
-                        eyes={spec.eyes || "#1a1a2e"}
-                        shirt={spec.shirt || "#64748b"}
-                        hairStyle={(["short","long","mohawk","bald","parted","buzz","curly","ponytail"].includes(spec.hair_style) ? spec.hair_style : "short") as "short" | "long" | "mohawk" | "bald" | "parted" | "buzz" | "curly" | "ponytail"}
-                        size="xs"
-                      />
-                      <span className="text-xs font-bold text-text">{t.name}</span>
-                    </Link>
-                  </td>
-                  <td className="px-3 py-1.5 text-[11px] text-text3 truncate max-w-[300px]">{t.description}</td>
-                  <td className="px-3 py-1.5">
-                    <Badge className={`text-[9px] border-0 ${archetypeColors[t.archetype] || "bg-text3/15 text-text3"}`}>
-                      {t.archetype}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-1.5 text-[11px] text-text3">{t.category}</td>
-                  <td className="px-1 py-1.5">
-                    <Link to={`/templates/${t.id}`}><ChevronRight className="size-3 text-text3" /></Link>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+      {/* Card grid */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {filtered.map((t, i) => {
+          const spec = (t.appearance_spec || {}) as Record<string, string>
+          return (
+            <Link
+              key={t.id}
+              to={`/templates/${t.id}`}
+              className="animate-card-deal-in rounded-xl border border-border bg-surface p-2.5 hover:border-text3/30 transition-all group"
+              style={{ animationDelay: `${i * 20}ms` }}
+            >
+              <div className="flex items-center gap-2">
+                <PixelPortrait
+                  hair={spec.hair || "#2c1b18"}
+                  skin={spec.skin || "#f1c27d"}
+                  eyes={spec.eyes || "#1a1a2e"}
+                  shirt={spec.shirt || "#64748b"}
+                  hairStyle={(["short","long","mohawk","bald","parted","buzz","curly","ponytail"].includes(spec.hair_style) ? spec.hair_style : "short") as "short" | "long" | "mohawk" | "bald" | "parted" | "buzz" | "curly" | "ponytail"}
+                  size="xs"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-text truncate">{t.name}</p>
+                  <Badge className={`text-[8px] border-0 ${archetypeColors[t.archetype] || "bg-text3/15 text-text3"}`}>
+                    {t.archetype}
+                  </Badge>
+                </div>
+                <ChevronRight className="size-3 text-text3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <p className="text-[10px] text-text3 mt-1.5 line-clamp-2">{t.description}</p>
+            </Link>
+          )
+        })}
       </div>
 
       {filtered.length === 0 && (
