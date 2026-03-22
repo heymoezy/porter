@@ -121,6 +121,7 @@ export const personas = sqliteTable('personas', {
   heartbeatEnabled: integer('heartbeat_enabled').default(0),
   heartbeatCron: text('heartbeat_cron').default(''),
   lastHeartbeat: text('last_heartbeat'),
+  templateId: text('template_id'),
 });
 
 export const schemaMigrations = sqliteTable('schema_migrations', {
@@ -413,4 +414,41 @@ export const contactProjects = sqliteTable('contact_projects', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   contactId: text('contact_id').notNull(),
   projectId: text('project_id').notNull(),
+});
+
+// -- CRM Intelligence + Agent Templates (Phase 12) ------------------------------------
+
+export const contactAnalyses = sqliteTable('contact_analyses', {
+  id: text('id').primaryKey(),
+  contactId: text('contact_id').notNull(),
+  sentiment: text('sentiment').notNull(),
+  engagementScore: integer('engagement_score').notNull(),
+  churnRisk: text('churn_risk').notNull(),
+  relationshipStage: text('relationship_stage').notNull(),
+  keyTopics: text('key_topics').notNull().default('[]'),
+  lastInteractionSummary: text('last_interaction_summary'),
+  communicationStyle: text('communication_style'),
+  rawJson: text('raw_json'),
+  jobId: text('job_id'),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+});
+
+export const agentTemplates = sqliteTable('agent_templates', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  category: text('category').notNull(),
+  description: text('description'),
+  tags: text('tags').notNull().default('[]'),
+  skills: text('skills').notNull().default('[]'),
+  tools: text('tools').notNull().default('[]'),
+  requiredBackends: text('required_backends').notNull().default('[]'),
+  requiredTools: text('required_tools').notNull().default('[]'),
+  systemPrompt: text('system_prompt').notNull().default(''),
+  soulText: text('soul_text').notNull().default(''),
+  roleCardText: text('role_card_text').notNull().default(''),
+  identityText: text('identity_text').notNull().default(''),
+  skillsText: text('skills_text').notNull().default(''),
+  isInternal: integer('is_internal').notNull().default(0),
+  sortOrder: integer('sort_order').default(50),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
 });
