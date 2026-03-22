@@ -36,7 +36,7 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 - [ ] **COLLAB-01**: User can invite people to a project by email with an assigned role
 - [x] **COLLAB-02**: Per-person roles (view, chat, edit, admin) with granular permission checks on every API call
-- [ ] **COLLAB-03**: Collaborators can chat with and direct project agents
+- [x] **COLLAB-03**: Collaborators can chat with and direct project agents
 - [ ] **COLLAB-04**: Project owner can revoke collaborator access
 
 ### Unified Chat
@@ -108,7 +108,7 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 | STRM-03 | Phase 9 | Complete |
 | COLLAB-01 | Phase 10 | Pending |
 | COLLAB-02 | Phase 10 | Complete |
-| COLLAB-03 | Phase 10 | Pending |
+| COLLAB-03 | Phase 10 | Complete |
 | COLLAB-04 | Phase 10 | Pending |
 | CHAT-01 | Phase 11 | Pending |
 | CHAT-02 | Phase 11 | Pending |

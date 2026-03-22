@@ -79,7 +79,7 @@ Plans:
   3. A user with role "chat" on a project can `POST /api/v1/projects/:id/messages` and receive a response from an assigned agent — the agent receives the collaborator's identity in its context
   4. `DELETE /api/v1/projects/:id/collaborators/:user_id` by the project owner returns 200 and immediately blocks that user's subsequent requests with 403
   5. A collaborator authenticated to project A who sends requests to project B's endpoints receives 403 — IDOR is blocked at the `requireProjectAccess` middleware layer, not in individual handlers
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 10-01-PLAN.md — Schema, migration, role types, requireProjectAccess middleware (COLLAB-02)
@@ -139,7 +139,7 @@ Plans:
 | 1-7. Foundation through Connections | v1.0 | 51/51 | Complete | 2026-03-21 |
 | 8. API Foundation | v2.0 | 2/2 | Complete | 2026-03-21 |
 | 9. Streaming Chat | 2/2 | Complete   | 2026-03-22 | - |
-| 10. Collaborative Sessions | 1/3 | In Progress|  | - |
+| 10. Collaborative Sessions | 2/3 | In Progress|  | - |
 | 11. Unified Chat and CRM Schema | v2.0 | 0/TBD | Not started | - |
 | 12. CRM Intelligence and Agent Templates | v2.0 | 0/TBD | Not started | - |
 | 13. Autonomous Learning | v2.0 | 0/TBD | Not started | - |
