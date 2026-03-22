@@ -63,28 +63,4 @@ export default async function aiRoutes(fastify: FastifyInstance, options: Fastif
     return { ok: true, agents: [] };
   });
 
-  // SSE Chat Stream Placeholder
-  fastify.get('/api/chat/stream', async (request, reply) => {
-    const { prompt, model, chat_id } = request.query as any;
-    
-    reply.raw.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
-    });
-
-    // Mock stream for now
-    const tokens = [`Replying to: ${prompt}`, ' from ', ' Fastify ', ' backend!'];
-    for (const token of tokens) {
-      reply.raw.write(`data: ${JSON.stringify({ token })}
-
-`);
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    
-    reply.raw.write(`data: ${JSON.stringify({ done: true })}
-
-`);
-    reply.raw.end();
-  });
 }

@@ -5,6 +5,7 @@ import { eq, desc, isNull, or } from 'drizzle-orm';
 import { ok, err } from '../../lib/envelope.js';
 import { config } from '../../config.js';
 import { z } from 'zod';
+import { selectStreamBackend } from '../../services/stream-service.js';
 
 // --- Schemas ----------------------------------------------------------------
 
@@ -161,68 +162,85 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     return reply.code(400).send(err('UNKNOWN_ACTION', 'Unknown action'));
   });
 
-  // GET /api/v1/chat/stream — proxy to porter.py SSE endpoint
-  fastify.get('/stream', {
+  // POST /api/v1/chat/stream — SSE streaming chat endpoint (STRM-01, STRM-02, STRM-03)
+  fastify.post('/stream', {
     preHandler: [fastify.requireAuth],
   }, async (request, reply) => {
-    const url = new URL(request.url, `http://${request.hostname}`);
-    const targetUrl = `${config.porterPyUrl}/api/chat/stream${url.search}`;
+    const body = request.body as {
+      message?: string;
+      agent_id?: string;
+      chat_id?: string;
+      backend?: 'ollama' | 'openclaw' | 'auto';
+    } | null;
+
+    const message = body?.message?.trim();
+    if (!message) {
+      return reply.code(400).send(err('INVALID_INPUT', 'message is required', request.id));
+    }
+
+    const agentId = body?.agent_id;
+    const chatId = body?.chat_id;
+    const backendHint = body?.backend;
+
+    const ac = new AbortController();
+
+    // STRM-03: detect client disconnect, abort upstream generation
+    request.raw.on('close', () => ac.abort());
+
+    // Set SSE headers before first await (prevents Fastify from sending its own response)
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    // STRM-02: backend selection via stream-service — zero provider-specific code here
+    const backend = selectStreamBackend(message, backendHint);
+    let fullResponse = '';
 
     try {
-      const headers: Record<string, string> = {
-        'Accept': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-      };
-
-      // Forward session cookie
-      const cookie = request.headers.cookie;
-      if (cookie) headers['Cookie'] = cookie;
-
-      const upstream = await fetch(targetUrl, {
-        method: 'GET',
-        headers,
-        signal: AbortSignal.timeout(120_000),
-      });
-
-      if (!upstream.ok) {
-        return reply.code(upstream.status).send(err('UPSTREAM_ERROR', `Porter.py returned ${upstream.status}`));
+      for await (const token of backend.stream(message, ac.signal)) {
+        if (ac.signal.aborted) break;
+        fullResponse += token;
+        reply.raw.write(`data: ${JSON.stringify({ token })}\n\n`);
       }
-
-      reply.raw.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      });
-
-      // Pipe the upstream body to the client
-      const reader = upstream.body?.getReader();
-      if (!reader) {
-        reply.raw.end();
-        return;
-      }
-
-      const pump = async () => {
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            reply.raw.write(value);
-          }
-        } catch {
-          // Client disconnected or upstream closed
-        } finally {
-          reply.raw.end();
-        }
-      };
-
-      // Don't await — let it stream
-      pump();
-
-      // Prevent Fastify from sending its own response
-      return reply;
     } catch (e: any) {
-      return reply.code(502).send(err('PROXY_ERROR', e.message ?? 'Failed to connect to porter.py'));
+      if (!ac.signal.aborted) {
+        reply.raw.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
+      }
+    } finally {
+      // Always emit done event (prevents client EventSource reconnect loops)
+      reply.raw.write(`data: ${JSON.stringify({ done: true, backend: backend.name, full_response: fullResponse })}\n\n`);
+      reply.raw.end();
+
+      // Persist completed message to chat history (non-blocking, best-effort)
+      if (chatId && fullResponse && !ac.signal.aborted) {
+        try {
+          const user = request.sessionUser!;
+          // Ensure chat exists, create if not
+          const existingChat = sqlite.prepare('SELECT id FROM chats WHERE id = ?').get(chatId) as { id: string } | undefined;
+          if (!existingChat) {
+            sqlite.prepare(
+              'INSERT INTO chats (id, title, model_id, username, created_at, updated_at) VALUES (?, ?, ?, ?, datetime(\'now\'), datetime(\'now\'))'
+            ).run(chatId, message.slice(0, 50), backend.name, user.username);
+          }
+          // Insert user message
+          sqlite.prepare(
+            'INSERT INTO chat_messages (chat_id, role, content, model_id, timestamp) VALUES (?, ?, ?, ?, datetime(\'now\'))'
+          ).run(chatId, 'user', message, null);
+          // Insert assistant response
+          sqlite.prepare(
+            'INSERT INTO chat_messages (chat_id, role, content, model_id, timestamp) VALUES (?, ?, ?, ?, datetime(\'now\'))'
+          ).run(chatId, 'assistant', fullResponse, backend.name);
+          // Update chat timestamp
+          sqlite.prepare('UPDATE chats SET updated_at = datetime(\'now\') WHERE id = ?').run(chatId);
+        } catch {
+          // Persistence is best-effort — never fail the stream for a DB error
+        }
+      }
     }
+
+    return reply; // prevent Fastify from sending its own response
   });
 }
