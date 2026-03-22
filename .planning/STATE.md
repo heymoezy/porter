@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 13-01-PLAN.md
-last_updated: "2026-03-22T21:28:32.066Z"
+stopped_at: Completed 13-02-PLAN.md
+last_updated: "2026-03-22T21:34:54.407Z"
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 19
-  completed_plans: 17
+  completed_plans: 18
 ---
 
 # Project State
@@ -84,6 +84,8 @@ Recent decisions affecting current work:
 - [Phase 12-crm-intelligence-and-agent-templates]: 103 templates seeded (100 user-visible + 3 is_internal=1 system templates); seedTemplates() wired to migrate-12.ts; 422 MISSING_DEPENDENCIES with specific arrays on instantiation; .md file rollback on write failure
 - [Phase 13-autonomous-learning]: content_rowid='rowid' (not 'id') for FTS5 on concepts — references SQLite implicit INTEGER rowid, consistent with Phase 11 messages_fts
 - [Phase 13-autonomous-learning]: learning_sessions.template_id FK REFERENCES agent_templates ON DELETE CASCADE — sessions deleted with their template
+- [Phase 13-autonomous-learning]: Source authority (not LLM self-assessment) for confidence scores — domain-based hierarchy: official docs (85/high), medium blogs (55/medium), reddit (30/low)
+- [Phase 13-autonomous-learning]: robots.txt fetches excluded from 20-request session cap — politeness layer should not burn learning budget
 
 ### Pending Todos
 
@@ -98,6 +100,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T21:28:32.063Z
-Stopped at: Completed 13-01-PLAN.md
+Last session: 2026-03-22T21:34:54.403Z
+Stopped at: Completed 13-02-PLAN.md
 Resume file: None
