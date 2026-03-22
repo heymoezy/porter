@@ -1,3 +1,14 @@
+## v0.2.11 (2026-03-22)
+
+- Dashboard: full design system sweep — all hardcoded values replaced with CSS tokens
+- Added design tokens: --terminal-bg, --bottom-bar-height, --duration-long, --duration-chart
+- Added animate-slide-down utility class for activity feed entrance
+- Removed dead code: unused imports (HardDrive, Cpu), unused state (logsLoaded), unused fields
+- Timeline capped at 200 entries to prevent memory leak
+- Stat tiles refactored to data-driven config
+- Scrollbars: thinner (4px), Firefox support (scrollbar-width: thin), buffer padding on scroll areas
+- All stagger delays use --stagger-delay token, all durations use motion tokens
+
 ## v0.2.10 (2026-03-22)
 
 - TopBar: route-aware page titles with icons on every page (Dashboard, Customers, Agents, etc.)

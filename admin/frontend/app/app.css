@@ -172,6 +172,10 @@
   --sidebar-width: 220px;
   --sidebar-width-collapsed: 52px;
   --chat-panel-width: 340px;
+  --bottom-bar-height: 140px;
+
+  /* Derived surfaces */
+  --terminal-bg: color-mix(in srgb, var(--background) 90%, black);
 
   /* Motion */
   --duration-instant: 100ms;
@@ -179,6 +183,8 @@
   --duration-normal:  250ms;
   --duration-slow:    350ms;
   --duration-page:    450ms;
+  --duration-long:    700ms;
+  --duration-chart:   1200ms;
   --ease-default: cubic-bezier(0.25, 0.1, 0.25, 1.0);
   --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-out:     cubic-bezier(0, 0, 0.2, 1);
@@ -274,6 +280,9 @@
   /* Send button text */
   --send-btn-text: #FFFFFF;
 
+  /* Derived surfaces */
+  --terminal-bg: color-mix(in srgb, var(--background) 90%, black);
+
   /* Banner opacity */
   --banner-accent-opacity:  0.20;
   --banner-warning-opacity: 0.20;
@@ -344,10 +353,11 @@
   animation: streaming-cursor 0.8s ease-in-out infinite;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
+/* Scrollbar — thin, unobtrusive, auto-fade */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border2); }
 
 /* Progress Ring (SVG) */
@@ -554,6 +564,9 @@
 .animate-orbit-dot-2     { animation: orbit-dot-2 2s var(--ease-default) infinite; }
 .animate-orbit-dot-3     { animation: orbit-dot-3 2s var(--ease-default) infinite; }
 .animate-orbit-dot-4     { animation: orbit-dot-4 2s var(--ease-default) infinite; }
+
+/* Activity / Timeline */
+.animate-slide-down      { animation: slideDown 0.3s var(--ease-out) both; }
 
 /* Page Transitions */
 .animate-page-fade-slide { animation: page-fade-slide var(--duration-normal) var(--ease-out) both; }
