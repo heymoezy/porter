@@ -600,4 +600,198 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
       },
     }));
   });
+
+  // GET /api/v1/files/registry — query file registry with filters (FILE-01, FILE-03)
+  fastify.get('/registry', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const query = request.query as {
+      project_id?: string;
+      contact_id?: string;
+      conversation_id?: string;
+      mime_type?: string;
+      after?: string;
+      before?: string;
+      limit?: string;
+      offset?: string;
+    };
+
+    const limit = Math.min(parseInt(query.limit ?? '50', 10) || 50, 200);
+    const offset = parseInt(query.offset ?? '0', 10) || 0;
+
+    const joins: string[] = [];
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (query.project_id) {
+      joins.push('JOIN file_projects fp ON fp.file_id = f.id');
+      conditions.push('fp.project_id = ?');
+      params.push(query.project_id);
+    }
+    if (query.contact_id) {
+      joins.push('JOIN file_contacts fc ON fc.file_id = f.id');
+      conditions.push('fc.contact_id = ?');
+      params.push(query.contact_id);
+    }
+    if (query.conversation_id) {
+      joins.push('JOIN file_conversations fconv ON fconv.file_id = f.id');
+      conditions.push('fconv.conversation_id = ?');
+      params.push(query.conversation_id);
+    }
+    if (query.mime_type) {
+      conditions.push('f.mime_type = ?');
+      params.push(query.mime_type);
+    }
+    if (query.after) {
+      conditions.push('f.created_at >= ?');
+      params.push(parseFloat(query.after));
+    }
+    if (query.before) {
+      conditions.push('f.created_at <= ?');
+      params.push(parseFloat(query.before));
+    }
+
+    const joinClause = joins.join(' ');
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const total = (sqlite.prepare(
+      `SELECT COUNT(*) as count FROM files f ${joinClause} ${whereClause}`
+    ).get(...params) as { count: number }).count;
+
+    const files = sqlite.prepare(
+      `SELECT f.* FROM files f ${joinClause} ${whereClause} ORDER BY f.created_at DESC LIMIT ? OFFSET ?`
+    ).all(...params, limit, offset);
+
+    return reply.send(ok({ files, total }));
+  });
+
+  // GET /api/v1/files/registry/:id — get single file metadata with associations
+  fastify.get<{ Params: { id: string } }>('/registry/:id', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const { id } = request.params;
+
+    const fileRow = sqlite.prepare('SELECT * FROM files WHERE id = ?').get(id) as any;
+    if (!fileRow) {
+      return reply.code(404).send(err('FILE_NOT_FOUND', 'File not found'));
+    }
+
+    const projectIds = (sqlite.prepare(
+      'SELECT project_id FROM file_projects WHERE file_id = ?'
+    ).all(id) as Array<{ project_id: string }>).map(r => r.project_id);
+
+    const contactIds = (sqlite.prepare(
+      'SELECT contact_id FROM file_contacts WHERE file_id = ?'
+    ).all(id) as Array<{ contact_id: string }>).map(r => r.contact_id);
+
+    const conversationIds = (sqlite.prepare(
+      'SELECT conversation_id FROM file_conversations WHERE file_id = ?'
+    ).all(id) as Array<{ conversation_id: string }>).map(r => r.conversation_id);
+
+    return reply.send(ok({
+      file: {
+        ...fileRow,
+        project_ids: projectIds,
+        contact_ids: contactIds,
+        conversation_ids: conversationIds,
+      },
+    }));
+  });
+
+  // POST /api/v1/files/registry/:id/associate — add association to existing file (FILE-01)
+  fastify.post<{ Params: { id: string } }>('/registry/:id/associate', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const body = request.body as {
+      project_id?: string;
+      contact_id?: string;
+      conversation_id?: string;
+    };
+
+    if (!body.project_id && !body.contact_id && !body.conversation_id) {
+      return reply.code(400).send(err('INVALID_INPUT', 'At least one of project_id, contact_id, conversation_id required'));
+    }
+
+    const fileRow = sqlite.prepare('SELECT id FROM files WHERE id = ?').get(id);
+    if (!fileRow) {
+      return reply.code(404).send(err('FILE_NOT_FOUND', 'File not found'));
+    }
+
+    const attachedBy = request.sessionUser!.username;
+
+    if (body.project_id) {
+      const proj = sqlite.prepare('SELECT id FROM projects WHERE id = ?').get(body.project_id);
+      if (!proj) {
+        return reply.code(404).send(err('PROJECT_NOT_FOUND', 'Project not found'));
+      }
+      sqlite.prepare(
+        'INSERT OR IGNORE INTO file_projects (file_id, project_id, attached_by) VALUES (?, ?, ?)'
+      ).run(id, body.project_id, attachedBy);
+    }
+
+    if (body.contact_id) {
+      const contact = sqlite.prepare('SELECT id FROM contacts WHERE id = ?').get(body.contact_id);
+      if (!contact) {
+        return reply.code(404).send(err('CONTACT_NOT_FOUND', 'Contact not found'));
+      }
+      sqlite.prepare(
+        'INSERT OR IGNORE INTO file_contacts (file_id, contact_id, attached_by) VALUES (?, ?, ?)'
+      ).run(id, body.contact_id, attachedBy);
+    }
+
+    if (body.conversation_id) {
+      const conv = sqlite.prepare('SELECT id FROM conversations WHERE id = ?').get(body.conversation_id);
+      if (!conv) {
+        return reply.code(404).send(err('CONVERSATION_NOT_FOUND', 'Conversation not found'));
+      }
+      sqlite.prepare(
+        'INSERT OR IGNORE INTO file_conversations (file_id, conversation_id, attached_by) VALUES (?, ?, ?)'
+      ).run(id, body.conversation_id, attachedBy);
+    }
+
+    return reply.send(ok({ associated: true }));
+  });
+
+  // DELETE /api/v1/files/registry/:id/associate — remove association (FILE-01)
+  // Note: removing the last association does NOT delete the file (orphan preservation)
+  fastify.delete<{ Params: { id: string } }>('/registry/:id/associate', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const body = request.body as {
+      project_id?: string;
+      contact_id?: string;
+      conversation_id?: string;
+    };
+
+    if (!body.project_id && !body.contact_id && !body.conversation_id) {
+      return reply.code(400).send(err('INVALID_INPUT', 'At least one of project_id, contact_id, conversation_id required'));
+    }
+
+    const fileRow = sqlite.prepare('SELECT id FROM files WHERE id = ?').get(id);
+    if (!fileRow) {
+      return reply.code(404).send(err('FILE_NOT_FOUND', 'File not found'));
+    }
+
+    if (body.project_id) {
+      sqlite.prepare(
+        'DELETE FROM file_projects WHERE file_id = ? AND project_id = ?'
+      ).run(id, body.project_id);
+    }
+
+    if (body.contact_id) {
+      sqlite.prepare(
+        'DELETE FROM file_contacts WHERE file_id = ? AND contact_id = ?'
+      ).run(id, body.contact_id);
+    }
+
+    if (body.conversation_id) {
+      sqlite.prepare(
+        'DELETE FROM file_conversations WHERE file_id = ? AND conversation_id = ?'
+      ).run(id, body.conversation_id);
+    }
+
+    return reply.send(ok({ disassociated: true }));
+  });
 }
