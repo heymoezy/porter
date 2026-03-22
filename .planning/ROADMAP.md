@@ -96,7 +96,13 @@ Plans:
   3. `GET /api/v1/conversations?q=budget+review` returns conversations with matching message content, ranked by relevance — FTS5 search across the full message corpus
   4. `PATCH /api/v1/contacts/:id` with `{"emails":[{"value":"a@b.com","label":"work"}],"phones":[{"value":"+6591234567","country_code":"SG"}],"social":{"linkedin":"...","x":"..."}}` stores all multi-value fields and returns them on subsequent GET
   5. `POST /api/v1/files/upload` with `project_id=X` uploads the file and creates the association atomically — if the insert fails, the file is not stored; `GET /api/v1/files?project_id=X` returns it; same behavior for `contact_id` and `conversation_id`
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+- [ ] 11-01-PLAN.md — Schema migration, Drizzle definitions, FTS5 triggers, smoke test script (all reqs)
+- [ ] 11-02-PLAN.md — Conversations API: CRUD, threading, FTS5 search (CHAT-01, CHAT-02, CHAT-03)
+- [ ] 11-03-PLAN.md — CRM contacts + file registry with atomic upload (CRM-01, CRM-02, FILE-01, FILE-02, FILE-03)
+- [ ] 11-04-PLAN.md — WhatsApp external channel integration (CHAT-04)
 
 ### Phase 12: CRM Intelligence and Agent Templates
 **Goal**: Contacts get AI-powered analysis generated asynchronously from their real interaction history; 30+ agent templates are searchable by category and instantiate into fully configured, ready-to-work agents in one API call
@@ -140,7 +146,7 @@ Plans:
 | 8. API Foundation | v2.0 | 2/2 | Complete | 2026-03-21 |
 | 9. Streaming Chat | 2/2 | Complete   | 2026-03-22 | - |
 | 10. Collaborative Sessions | 3/3 | Complete    | 2026-03-22 | - |
-| 11. Unified Chat and CRM Schema | v2.0 | 0/TBD | Not started | - |
+| 11. Unified Chat and CRM Schema | v2.0 | 0/4 | Planning complete | - |
 | 12. CRM Intelligence and Agent Templates | v2.0 | 0/TBD | Not started | - |
 | 13. Autonomous Learning | v2.0 | 0/TBD | Not started | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
