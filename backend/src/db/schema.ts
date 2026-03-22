@@ -452,3 +452,38 @@ export const agentTemplates = sqliteTable('agent_templates', {
   sortOrder: integer('sort_order').default(50),
   createdAt: real('created_at').default(sql`(unixepoch('now'))`),
 });
+
+// -- Autonomous Learning + Memory V2 Concepts (Phase 13) -------------------------
+
+export const concepts = sqliteTable('concepts', {
+  id: text('id').primaryKey(),
+  memoryKind: text('memory_kind').notNull().default('concept'),
+  trustTier: text('trust_tier').notNull().default('low'),
+  scope: text('scope').notNull().default('global'),
+  scopeId: text('scope_id'),
+  content: text('content').notNull(),
+  sourceType: text('source_type').notNull().default('learning'),
+  sourceUrl: text('source_url'),
+  confidenceScore: integer('confidence_score').notNull().default(0),
+  status: text('status').notNull().default('active'),
+  reviewState: text('review_state').notNull().default('accepted'),
+  supersededById: text('superseded_by_id'),
+  lastUsedAt: real('last_used_at'),
+  useCount: integer('use_count').notNull().default(0),
+  sessionId: text('session_id'),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+});
+
+export const learningSessions = sqliteTable('learning_sessions', {
+  id: text('id').primaryKey(),
+  templateId: text('template_id').notNull(),
+  jobId: text('job_id'),
+  sourcesVisited: text('sources_visited').notNull().default('[]'),
+  conceptsRetained: integer('concepts_retained').notNull().default(0),
+  confidenceDistribution: text('confidence_distribution').notNull().default('{"high":0,"medium":0,"low":0}'),
+  capped: integer('capped').notNull().default(0),
+  durationMs: integer('duration_ms'),
+  error: text('error'),
+  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+});
