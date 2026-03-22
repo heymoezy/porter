@@ -33,14 +33,14 @@ archive/
 /chat/
 diagrams/
 /docs/
+frontend/
 
 # Backend build artifacts and dependencies (source is tracked)
 backend/dist/
 backend/node_modules/
 
-# Frontend build artifacts and dependencies (source is tracked)
-frontend/dist/
-frontend/node_modules/
-frontend-v2/build/
-frontend-v2/node_modules/
-frontend-v2/.react-router/
+# Admin (own repo: heymoezy/porter-admin)
+admin/
+
+# Frontend V2 (own repo: heymoezy/porter-ui)
+frontend-v2/
