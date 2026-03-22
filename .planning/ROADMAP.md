@@ -34,7 +34,7 @@
 - [x] **Phase 9: Streaming Chat** - Native token-by-token SSE streaming from all AI backends with clean mid-stream cancellation (completed 2026-03-22)
 - [x] **Phase 10: Collaborative Sessions** - Invite by email, per-project roles (view/chat/edit/admin), RBAC enforcement on every project-scoped route (completed 2026-03-22)
 - [x] **Phase 11: Unified Chat and CRM Schema** - Single conversation model for all message sources, multi-value CRM contacts, file associations via single upload endpoint (completed 2026-03-22)
-- [ ] **Phase 12: CRM Intelligence and Agent Templates** - AI-powered contact analysis from interaction history, searchable 30+ agent template catalog with one-call instantiation
+- [x] **Phase 12: CRM Intelligence and Agent Templates** - AI-powered contact analysis from interaction history, searchable 30+ agent template catalog with one-call instantiation (completed 2026-03-22)
 - [ ] **Phase 13: Autonomous Learning** - Agents search web/GitHub/Reddit, store GDPR-safe concepts in Memory V2 with source attribution and confidence scores
 - [ ] **Phase 14: Billing Enforcement** - Lemon Squeezy subscription management, usage metering, atomic plan limit enforcement on all resource-creating routes
 
@@ -114,7 +114,7 @@ Plans:
   2. `GET /api/v1/contacts/:id/timeline` returns all touchpoints (messages sent/received, project events, file uploads) in descending chronological order with type labels — no touchpoint type missing
   3. `GET /api/v1/templates?category=marketing` returns all templates in that category, each with `skills`, `tools`, and `system_prompt` fields fully populated — zero templates with empty required fields
   4. `POST /api/v1/templates/:id/instantiate` returns a ready agent record (201) when required backends and tools are available; returns 422 with a specific reason when they are not — no silent partial instantiation
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [ ] 12-01-PLAN.md — Schema migration, Drizzle definitions, smoke test scaffold (CRM-03, CRM-04, TMPL-01, TMPL-02, TMPL-03)
@@ -154,6 +154,6 @@ Plans:
 | 9. Streaming Chat | 2/2 | Complete   | 2026-03-22 | - |
 | 10. Collaborative Sessions | 3/3 | Complete    | 2026-03-22 | - |
 | 11. Unified Chat and CRM Schema | 5/5 | Complete    | 2026-03-22 | - |
-| 12. CRM Intelligence and Agent Templates | 3/4 | In Progress|  | - |
+| 12. CRM Intelligence and Agent Templates | 4/4 | Complete   | 2026-03-22 | - |
 | 13. Autonomous Learning | v2.0 | 0/TBD | Not started | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |

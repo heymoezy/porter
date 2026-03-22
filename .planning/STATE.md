@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-03-22T16:25:07.122Z"
+stopped_at: Completed 12-04-PLAN.md
+last_updated: "2026-03-22T17:24:37.629Z"
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 16
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -81,6 +81,7 @@ Recent decisions affecting current work:
 - [Phase 12]: Ollama called directly via fetch() in contact-analyzer.ts — never through AI router — to decouple CRM background analysis from routing heuristics
 - [Phase 12]: contact_analysis re-enqueue always fires (success AND error) so the 24/7 autonomous sweep never permanently stops; error path uses 6h backoff
 - [Phase 12]: bootstrapContactAnalysis staggered over 5 minutes on startup to prevent thundering herd when many contacts need seeding
+- [Phase 12-crm-intelligence-and-agent-templates]: 103 templates seeded (100 user-visible + 3 is_internal=1 system templates); seedTemplates() wired to migrate-12.ts; 422 MISSING_DEPENDENCIES with specific arrays on instantiation; .md file rollback on write failure
 
 ### Pending Todos
 
@@ -95,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T16:25:00.714Z
-Stopped at: Completed 12-02-PLAN.md
+Last session: 2026-03-22T17:24:37.618Z
+Stopped at: Completed 12-04-PLAN.md
 Resume file: None
