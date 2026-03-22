@@ -38,11 +38,16 @@ export default async function systemRoutes(fastify: FastifyInstance) {
     let dbSize = 0;
     try { dbSize = fs.statSync(config.dbPath).size; } catch {}
 
-    // Active sessions
+    // Active sessions (valid tokens)
     let activeSessions = 0;
     try {
-      const row = sqlite.prepare("SELECT count(*) as c FROM sessions WHERE expires > unixepoch('now')").get() as { c: number };
-      activeSessions = row.c;
+      activeSessions = (sqlite.prepare("SELECT count(*) as c FROM sessions WHERE expires > unixepoch('now')").get() as { c: number }).c;
+    } catch {}
+
+    // Concurrent users — distinct users active in last 5 minutes
+    let concurrentUsers = 0;
+    try {
+      concurrentUsers = (sqlite.prepare("SELECT count(DISTINCT username) as c FROM sessions WHERE last_seen_at > unixepoch('now') - 300").get() as { c: number }).c;
     } catch {}
 
     // Process memory
@@ -85,7 +90,7 @@ export default async function systemRoutes(fastify: FastifyInstance) {
       uptime: uptimeS,
       platform: { os: os.platform(), arch: os.arch(), hostname: os.hostname(), nodeVersion: process.version },
       db: { size: dbSize, path: config.dbPath },
-      sessions: { active: activeSessions },
+      sessions: { active: activeSessions, concurrent: concurrentUsers },
       process: { rss: proc.rss, heapUsed: proc.heapUsed, heapTotal: proc.heapTotal },
       runtimes,
     });

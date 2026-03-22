@@ -1,3 +1,9 @@
+## v0.2.9 (2026-03-22)
+
+- System Health: added concurrent users (distinct users active in last 5min) — shows '1 online' etc
+- Concurrent != sessions (44 stale tokens vs 1 actual user right now)
+- System monitor shows: MEM% · CPU% · DSK% · concurrent online · load · cores · uptime
+
 ## v0.2.8 (2026-03-22)
 
 - Projects + Activity: both fill available space (flex-1 overflow-y-auto)

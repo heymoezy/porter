@@ -6,7 +6,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-let ADMIN_VERSION = '0.2.8';
+let ADMIN_VERSION = '0.2.9';
 try {
   for (const p of [resolve(__dirname, '../../package.json'), resolve(process.cwd(), 'package.json')]) {
     try {

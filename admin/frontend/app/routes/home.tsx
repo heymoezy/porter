@@ -26,7 +26,7 @@ interface DashboardData {
 interface SystemData {
   memory: { pct: number }; disk: { pct: number }
   cpu: { cores: number; load1m: number }
-  sessions: { active: number }; uptime: number
+  sessions: { active: number; concurrent: number }; uptime: number
 }
 
 /* ── Fake seed data (swap for real endpoints later) ── */
@@ -279,7 +279,7 @@ function DashboardContent() {
                       </div>
                     ))}
                     <p className="text-text3 mt-1">
-                      load {sys.cpu.load1m.toFixed(2)} · {sys.cpu.cores} cores · up {Math.floor(sys.uptime / 3600)}h
+                      <span className={sys.sessions.concurrent > 0 ? "text-success" : ""}>{sys.sessions.concurrent} online</span> · load {sys.cpu.load1m.toFixed(2)} · {sys.cpu.cores} cores · up {Math.floor(sys.uptime / 3600)}h
                     </p>
                   </>
                 ) : <p className="text-text3">loading...</p>}
