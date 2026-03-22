@@ -11,8 +11,30 @@ const MAX_ATTEMPTS = 3;
 const DEADLINE_CHECK_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const CALENDAR_SYNC_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const WORKER_ID = crypto.randomUUID();
+const MAX_DRIP_COUNT = 20;
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let tickCount = 0;
+
+// ── Drip Reminder Scheduling ──────────────────────────────────────────────────
+
+/**
+ * Schedule a drip reminder job for a collaborator invite.
+ * Cadence: first 3 drips = daily, drips 3-7 = weekly, drip 7+ = monthly.
+ */
+export function scheduleDripReminder(collaboratorId: string, dripCount: number): void {
+  if (dripCount >= MAX_DRIP_COUNT) return;
+  const offsetDays = dripCount < 3 ? 1 : dripCount < 7 ? 7 : 30;
+  const scheduledFor = Date.now() / 1000 + offsetDays * 86400;
+
+  sqlite.prepare(`
+    INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
+    VALUES (?, 'system', 'invite_drip', ?, 'pending', ?, unixepoch('now'))
+  `).run(
+    crypto.randomUUID(),
+    JSON.stringify({ collaborator_id: collaboratorId }),
+    scheduledFor,
+  );
+}
 
 interface JobRow {
   id: string;
@@ -104,18 +126,22 @@ async function tick() {
 }
 
 function claimNextJob(): JobRow | undefined {
+  // Use LEFT JOIN on personas to allow system jobs (agent_id='system') to be claimed.
+  // For non-system agents, the original constraints apply (not retired, not ephemeral on finished project).
   return sqlite.prepare(`
     UPDATE agent_jobs
     SET status = 'running', started_at = unixepoch('now'), worker_id = @workerId,
         attempt_count = attempt_count + 1
     WHERE id = (
       SELECT aj.id FROM agent_jobs aj
-      JOIN personas p ON p.id = aj.agent_id
+      LEFT JOIN personas p ON p.id = aj.agent_id
       LEFT JOIN projects pr ON pr.id = aj.project_id
       WHERE aj.status = 'pending'
         AND aj.scheduled_for <= unixepoch('now')
-        AND p.status != 'retired'
-        AND (p.is_temporary = 0 OR pr.status IS NULL OR pr.status NOT IN ('complete', 'archived'))
+        AND (aj.agent_id = 'system' OR (
+          p.status != 'retired'
+          AND (p.is_temporary = 0 OR pr.status IS NULL OR pr.status NOT IN ('complete', 'archived'))
+        ))
       ORDER BY aj.scheduled_for ASC LIMIT 1
     )
     RETURNING *
@@ -123,6 +149,92 @@ function claimNextJob(): JobRow | undefined {
 }
 
 async function executeJob(job: JobRow): Promise<void> {
+  // ── Invite drip reminders ─────────────────────────────────────────────────
+  if (job.trigger_type === 'invite_drip') {
+    const data = JSON.parse(job.trigger_data || '{}') as { collaborator_id?: string };
+    const collaboratorId = data.collaborator_id;
+    if (!collaboratorId) {
+      markJobFailed(job.id, 'Missing collaborator_id in invite_drip trigger_data');
+      return;
+    }
+
+    const collab = sqlite.prepare(`
+      SELECT pc.id, pc.project_id, pc.email, pc.role, pc.status, pc.invite_token,
+             pc.invited_by, pc.drip_count,
+             p.name AS project_name,
+             u2.display_name AS inviter_display_name, u2.full_name AS inviter_full_name
+      FROM project_collaborators pc
+      LEFT JOIN projects p ON p.id = pc.project_id
+      LEFT JOIN users u2 ON u2.username = pc.invited_by
+      WHERE pc.id = ?
+    `).get(collaboratorId) as {
+      id: string;
+      project_id: string;
+      email: string;
+      role: string;
+      status: string;
+      invite_token: string | null;
+      invited_by: string;
+      drip_count: number;
+      project_name: string | null;
+      inviter_display_name: string | null;
+      inviter_full_name: string | null;
+    } | undefined;
+
+    if (!collab || collab.status !== 'pending') {
+      // Already accepted or revoked — mark job complete, no more drips
+      markJobComplete(job.id, JSON.stringify({ skipped: true, reason: collab ? collab.status : 'not_found' }));
+      return;
+    }
+
+    if (collab.drip_count >= MAX_DRIP_COUNT) {
+      markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'max_drips_reached' }));
+      return;
+    }
+
+    if (!collab.invite_token) {
+      markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'no_invite_token' }));
+      return;
+    }
+
+    // Send drip email
+    const { sendDripReminder: sendDrip } = await import('./transactional-email.js');
+    const inviterName = collab.inviter_display_name || collab.inviter_full_name || collab.invited_by;
+
+    await sendDrip({
+      to: collab.email,
+      projectName: collab.project_name || 'a project',
+      inviterName,
+      role: collab.role,
+      token: collab.invite_token,
+      dripCount: collab.drip_count,
+    });
+
+    // Update drip tracking
+    sqlite.prepare(
+      `UPDATE project_collaborators SET drip_count = drip_count + 1, last_drip_at = unixepoch('now') WHERE id = ?`
+    ).run(collaboratorId);
+
+    // Log drip event to collaboration_events
+    sqlite.prepare(`
+      INSERT INTO collaboration_events
+        (project_id, collaborator_id, actor_username, event_type, detail, created_at)
+      VALUES (?, ?, 'system', 'drip_sent', ?, unixepoch('now'))
+    `).run(
+      collab.project_id,
+      collaboratorId,
+      JSON.stringify({ drip_count: collab.drip_count + 1 }),
+    );
+
+    // Schedule next drip if under max
+    if (collab.drip_count + 1 < MAX_DRIP_COUNT) {
+      scheduleDripReminder(collaboratorId, collab.drip_count + 1);
+    }
+
+    markJobComplete(job.id, JSON.stringify({ drip_count: collab.drip_count + 1 }));
+    return;
+  }
+
   // CONN-05 locked decision: external_call jobs bypass the AI router and go
   // directly to the appropriate service module. Jobs targeting broken connections
   // get 'blocked' status — they are not failed and are auto-unblocked when the
