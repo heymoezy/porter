@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Phase 11 context gathered
-last_updated: "2026-03-22T11:19:31.502Z"
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-03-22T12:15:44.230Z"
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 12
+  completed_plans: 8
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input
-**Current focus:** Phase 10 — collaborative-sessions
+**Current focus:** Phase 11 — unified-chat-and-crm-schema
 
 ## Current Position
 
-Phase: 10 (collaborative-sessions) — EXECUTING
-Plan: 3 of 3
+Phase: 11 (unified-chat-and-crm-schema) — EXECUTING
+Plan: 1 of 5
 
 ## Performance Metrics
 
@@ -64,6 +64,8 @@ Recent decisions affecting current work:
 - [Phase 10-collaborative-sessions]: Identity prefix is runtime context only — original message persisted to chat history without prefix
 - [Phase 10-collaborative-sessions]: Two-plugin export pattern: collaboratorV1Routes (default) for /projects prefix, collaboratorAcceptRoutes (named) for /collaborators/accept — no auth on accept route
 - [Phase 10-collaborative-sessions]: claimNextJob LEFT JOIN fix: agent_id='system' system jobs bypass persona JOIN requirement for drip scheduler
+- [Phase 11-unified-chat-and-crm-schema]: filesRegistry (not files) as Drizzle export name to avoid collision with routes/files.ts module
+- [Phase 11-unified-chat-and-crm-schema]: messages.id INTEGER AUTOINCREMENT required for FTS5 rowid alignment in messages_fts virtual table
 
 ### Pending Todos
 
@@ -78,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T11:19:31.499Z
-Stopped at: Phase 11 context gathered
-Resume file: .planning/phases/11-unified-chat-and-crm-schema/11-CONTEXT.md
+Last session: 2026-03-22T12:15:44.228Z
+Stopped at: Completed 11-01-PLAN.md
+Resume file: None

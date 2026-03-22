@@ -41,23 +41,23 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 ### Unified Chat
 
-- [ ] **CHAT-01**: Single conversation API covering agent, project, and external channel messages
-- [ ] **CHAT-02**: Threaded messages with parent/child relationships
-- [ ] **CHAT-03**: Chat history persists across sessions with full-text search
-- [ ] **CHAT-04**: External channel messages (WhatsApp, email) surface in unified conversation stream
+- [x] **CHAT-01**: Single conversation API covering agent, project, and external channel messages
+- [x] **CHAT-02**: Threaded messages with parent/child relationships
+- [x] **CHAT-03**: Chat history persists across sessions with full-text search
+- [x] **CHAT-04**: External channel messages (WhatsApp, email) surface in unified conversation stream
 
 ### CRM
 
-- [ ] **CRM-01**: Contact model supports multiple emails and phone numbers with country codes
-- [ ] **CRM-02**: Social links (LinkedIn, X, GitHub) stored on contact records
+- [x] **CRM-01**: Contact model supports multiple emails and phone numbers with country codes
+- [x] **CRM-02**: Social links (LinkedIn, X, GitHub) stored on contact records
 - [ ] **CRM-03**: AI-powered contact analysis generated from interaction history
 - [ ] **CRM-04**: Contact activity timeline aggregates all touchpoints across projects
 
 ### File Handling
 
-- [ ] **FILE-01**: Files can be associated with projects, contacts, and conversations via API
-- [ ] **FILE-02**: Upload endpoint accepts files with target context (project_id, contact_id, conversation_id)
-- [ ] **FILE-03**: File metadata searchable and filterable by association, type, and date
+- [x] **FILE-01**: Files can be associated with projects, contacts, and conversations via API
+- [x] **FILE-02**: Upload endpoint accepts files with target context (project_id, contact_id, conversation_id)
+- [x] **FILE-03**: File metadata searchable and filterable by association, type, and date
 
 ### Agent Templates
 
@@ -110,15 +110,15 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 | COLLAB-02 | Phase 10 | Complete |
 | COLLAB-03 | Phase 10 | Complete |
 | COLLAB-04 | Phase 10 | Complete |
-| CHAT-01 | Phase 11 | Pending |
-| CHAT-02 | Phase 11 | Pending |
-| CHAT-03 | Phase 11 | Pending |
-| CHAT-04 | Phase 11 | Pending |
-| CRM-01 | Phase 11 | Pending |
-| CRM-02 | Phase 11 | Pending |
-| FILE-01 | Phase 11 | Pending |
-| FILE-02 | Phase 11 | Pending |
-| FILE-03 | Phase 11 | Pending |
+| CHAT-01 | Phase 11 | Complete |
+| CHAT-02 | Phase 11 | Complete |
+| CHAT-03 | Phase 11 | Complete |
+| CHAT-04 | Phase 11 | Complete |
+| CRM-01 | Phase 11 | Complete |
+| CRM-02 | Phase 11 | Complete |
+| FILE-01 | Phase 11 | Complete |
+| FILE-02 | Phase 11 | Complete |
+| FILE-03 | Phase 11 | Complete |
 | CRM-03 | Phase 12 | Pending |
 | CRM-04 | Phase 12 | Pending |
 | TMPL-01 | Phase 12 | Pending |
