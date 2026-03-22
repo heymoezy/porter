@@ -1,5 +1,19 @@
 # Porter Admin — Changelog
 
+## v0.1.7 (2026-03-22)
+
+- Template detail pages: full agent spec view with soul, mission, inputs, outputs, authority, communication style
+- Templates list: table layout with pixel portraits linking to detail views
+- Nav: Templates before User Agents. "Agents" → "User Agents". "Direct Line" → "Direct Chat"
+- Back navigation for /agents/ and /templates/ detail pages
+
+## v0.1.6 (2026-03-22)
+
+- Dashboard rewritten as command center: 6-metric row (Customers, MRR, Agents, Skills, Sessions, Events)
+- System gauges: memory/disk/CPU with progress bars, runtime health dots
+- Recent activity feed on dashboard with "View all" link
+- Useful pre-launch with zero customers
+
 ## v0.1.5 (2026-03-21)
 
 - Skills page rewritten: full catalog with 30 skills, descriptions, categories, sources, agent assignments
