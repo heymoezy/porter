@@ -32,7 +32,7 @@
 
 - [x] **Phase 8: API Foundation** - Standardize all endpoints to /api/v1/*, add error codes with trace IDs, auto-generate OpenAPI spec, capture frontend errors (completed 2026-03-21)
 - [x] **Phase 9: Streaming Chat** - Native token-by-token SSE streaming from all AI backends with clean mid-stream cancellation (completed 2026-03-22)
-- [ ] **Phase 10: Collaborative Sessions** - Invite by email, per-project roles (view/chat/edit/admin), RBAC enforcement on every project-scoped route
+- [x] **Phase 10: Collaborative Sessions** - Invite by email, per-project roles (view/chat/edit/admin), RBAC enforcement on every project-scoped route (completed 2026-03-22)
 - [ ] **Phase 11: Unified Chat and CRM Schema** - Single conversation model for all message sources, multi-value CRM contacts, file associations via single upload endpoint
 - [ ] **Phase 12: CRM Intelligence and Agent Templates** - AI-powered contact analysis from interaction history, searchable 30+ agent template catalog with one-call instantiation
 - [ ] **Phase 13: Autonomous Learning** - Agents search web/GitHub/Reddit, store GDPR-safe concepts in Memory V2 with source attribution and confidence scores
@@ -79,7 +79,7 @@ Plans:
   3. A user with role "chat" on a project can `POST /api/v1/projects/:id/messages` and receive a response from an assigned agent — the agent receives the collaborator's identity in its context
   4. `DELETE /api/v1/projects/:id/collaborators/:user_id` by the project owner returns 200 and immediately blocks that user's subsequent requests with 403
   5. A collaborator authenticated to project A who sends requests to project B's endpoints receives 403 — IDOR is blocked at the `requireProjectAccess` middleware layer, not in individual handlers
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 10-01-PLAN.md — Schema, migration, role types, requireProjectAccess middleware (COLLAB-02)
@@ -139,7 +139,7 @@ Plans:
 | 1-7. Foundation through Connections | v1.0 | 51/51 | Complete | 2026-03-21 |
 | 8. API Foundation | v2.0 | 2/2 | Complete | 2026-03-21 |
 | 9. Streaming Chat | 2/2 | Complete   | 2026-03-22 | - |
-| 10. Collaborative Sessions | 2/3 | In Progress|  | - |
+| 10. Collaborative Sessions | 3/3 | Complete   | 2026-03-22 | - |
 | 11. Unified Chat and CRM Schema | v2.0 | 0/TBD | Not started | - |
 | 12. CRM Intelligence and Agent Templates | v2.0 | 0/TBD | Not started | - |
 | 13. Autonomous Learning | v2.0 | 0/TBD | Not started | - |
