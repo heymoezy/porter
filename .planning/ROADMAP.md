@@ -150,13 +150,14 @@ Plans:
   2. All existing data (users, projects, agents, concepts, learning_sessions, conversations, messages, contacts, files, collaborators, templates) exists in PostgreSQL with identical row counts to the SQLite source
   3. Full-text search queries via tsvector return equivalent results to FTS5 — `GET /api/v1/conversations?q=budget` and `GET /api/v1/memory/concepts?q=react` return matching records
   4. All 35 Playwright tests pass against the PostgreSQL-backed server with no test modifications beyond connection config
-**Plans:** 4 plans
+**Plans:** 5 plans
 
 Plans:
 - [ ] 13.05-01-PLAN.md — Schema rewrite (pgTable), client swap (pg Pool), consolidated migration DDL, infrastructure (PG-01)
 - [ ] 13.05-02-PLAN.md — Convert all service files and auth plugin from sqlite to pool.query (PG-02)
-- [ ] 13.05-03-PLAN.md — Convert all route files, FTS5 to tsvector, health endpoint, boot sequence (PG-02, PG-03)
-- [ ] 13.05-04-PLAN.md — Data migration script, validation, cleanup of old migrations and SQLite deps (PG-04, PG-01)
+- [ ] 13.05-03-PLAN.md — FTS5 to tsvector conversion, health endpoint db_engine, boot sequence update (PG-03, PG-01)
+- [ ] 13.05-04-PLAN.md — Convert remaining route files and seed-templates from sqlite to pool.query (PG-02)
+- [ ] 13.05-05-PLAN.md — Data migration script with spot-checks and FTS verification, cleanup (PG-04, PG-01)
 
 ### Phase 13.1: Memory V3 State Engine (INSERTED)
 
@@ -261,7 +262,7 @@ Plans:
 | 11. Unified Chat and CRM Schema | 5/5 | Complete    | 2026-03-22 | - |
 | 12. CRM Intelligence and Agent Templates | 4/4 | Complete    | 2026-03-22 | - |
 | 13. Autonomous Learning | 3/3 | Complete    | 2026-03-22 | - |
-| 13.05. PostgreSQL Migration | v2.0 | 0/4 | Not started | - |
+| 13.05. PostgreSQL Migration | v2.0 | 0/5 | Not started | - |
 | 13.1. Memory V3 State Engine | v2.0 | 0/TBD | Not started | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
 | 15. Live Dashboard | v3.0 | 0/TBD | Not started | - |
