@@ -37,6 +37,8 @@
 - [x] **Phase 11: Unified Chat and CRM Schema** - Single conversation model for all message sources, multi-value CRM contacts, file associations via single upload endpoint (completed 2026-03-22)
 - [x] **Phase 12: CRM Intelligence and Agent Templates** - AI-powered contact analysis from interaction history, searchable 30+ agent template catalog with one-call instantiation (completed 2026-03-22)
 - [x] **Phase 13: Autonomous Learning** - Agents search web/GitHub/Reddit, store GDPR-safe concepts in Memory V2 with source attribution and confidence scores (completed 2026-03-22)
+- [ ] **Phase 13.05: PostgreSQL Migration** - Migrate from SQLite to PostgreSQL 16 + pgvector; port all Drizzle schemas, migrations, raw SQL queries, FTS5→tsvector; zero data loss (INSERTED)
+- [ ] **Phase 13.1: Memory V3 State Engine** - Project-first state engine with structured directives/notes tables, tiered injection, concept consolidation, agent self-edit API, admin overview (INSERTED)
 - [ ] **Phase 14: Billing Enforcement** - Lemon Squeezy subscription management, usage metering, atomic plan limit enforcement on all resource-creating routes
 
 ## Phase Details
@@ -138,6 +140,41 @@ Plans:
 - [ ] 13-02-PLAN.md — learner.ts research loop engine with web/GitHub/Reddit sources (LEARN-01, LEARN-02)
 - [ ] 13-03-PLAN.md — Scheduler integration, bootstrap, API routes for concepts and learning sessions (LEARN-01, LEARN-02, LEARN-03)
 
+### Phase 13.05: PostgreSQL Migration (INSERTED)
+
+**Goal**: Migrate Porter's entire data layer from SQLite/better-sqlite3 to PostgreSQL 16 + pgvector — all Drizzle schemas ported, all raw SQL converted, FTS5 replaced with tsvector/GIN, all 13 migrations consolidated into one PostgreSQL-native migration, existing data migrated with zero loss, boot sequence and config updated
+**Depends on**: Phase 13
+**Requirements**: PG-01, PG-02, PG-03, PG-04
+**Success Criteria** (what must be TRUE):
+  1. `porter` Fastify server starts, connects to PostgreSQL, and `GET /api/v1/health` returns `{"ok":true}` with `db_engine: "postgresql"` — zero SQLite imports remain in backend/src/
+  2. All existing data (users, projects, agents, concepts, learning_sessions, conversations, messages, contacts, files, collaborators, templates) exists in PostgreSQL with identical row counts to the SQLite source
+  3. Full-text search queries via tsvector return equivalent results to FTS5 — `GET /api/v1/conversations?q=budget` and `GET /api/v1/memory/concepts?q=react` return matching records
+  4. All 35 Playwright tests pass against the PostgreSQL-backed server with no test modifications beyond connection config
+**Plans:** 4 plans
+
+Plans:
+- [ ] 13.05-01-PLAN.md — Schema rewrite (pgTable), client swap (pg Pool), consolidated migration DDL, infrastructure (PG-01)
+- [ ] 13.05-02-PLAN.md — Convert all service files and auth plugin from sqlite to pool.query (PG-02)
+- [ ] 13.05-03-PLAN.md — Convert all route files, FTS5 to tsvector, health endpoint, boot sequence (PG-02, PG-03)
+- [ ] 13.05-04-PLAN.md — Data migration script, validation, cleanup of old migrations and SQLite deps (PG-04, PG-01)
+
+### Phase 13.1: Memory V3 State Engine (INSERTED)
+
+**Goal**: Replace extraction-heavy memory with a project-first state engine: explicit directives, project_notes, agent_notes tables; tiered injection reading identity→directives→project state→agent state→archival; concept consolidation service merging duplicates; agent self-edit API for promote/dismiss/create via tool calls; memory aggregation endpoints for admin; stop auto-extraction from chat responses
+**Depends on**: Phase 13
+**Requirements**: MEMV3-01, MEMV3-02, MEMV3-03, MEMV3-04, MEMV3-05
+**Success Criteria** (what must be TRUE):
+  1. `directives`, `project_notes`, and `agent_notes` tables exist with proper schemas; existing high-value concepts are migrated into the appropriate structured table — no data loss for active/accepted concepts
+  2. The injection pipeline reads identity → directives → project state → agent state → archival search in that order; structured state is always injected before retrieval memory; token budget respects tier priority
+  3. Running consolidation on an agent with 50+ similar concepts reduces the count by at least 40% while preserving unique information — consolidated concepts link back to originals via `superseded_by_id`
+  4. An agent can call `POST /api/v1/memory/self-edit` during a run to promote a signal to concept, dismiss a stale concept, or create a new directive — the change is reflected in subsequent injection within the same session
+  5. `GET /api/v1/admin/memory/overview` returns per-agent concept counts, average confidence, pending review count, and memory health score — the response covers all agents in one call
+**Plans**: TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 13.1 to break down)
+
 ### Phase 14: Billing Enforcement
 **Goal**: Lemon Squeezy subscriptions are created, updated, and cancelled via idempotent webhook handling; every resource-creating route meters usage atomically; plan limits are enforced under concurrent load with no bypass possible
 **Depends on**: Phase 13
@@ -213,7 +250,7 @@ Plans:
 
 ## Progress
 
-**Execution Order:** 8 -> 9 -> 10 -> 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19
+**Execution Order:** 8 -> 9 -> 10 -> 11 -> 12 -> 13 -> 13.05 -> 13.1 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -224,6 +261,8 @@ Plans:
 | 11. Unified Chat and CRM Schema | 5/5 | Complete    | 2026-03-22 | - |
 | 12. CRM Intelligence and Agent Templates | 4/4 | Complete    | 2026-03-22 | - |
 | 13. Autonomous Learning | 3/3 | Complete    | 2026-03-22 | - |
+| 13.05. PostgreSQL Migration | v2.0 | 0/4 | Not started | - |
+| 13.1. Memory V3 State Engine | v2.0 | 0/TBD | Not started | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
 | 15. Live Dashboard | v3.0 | 0/TBD | Not started | - |
 | 16. Agent Workspace | v3.0 | 0/TBD | Not started | - |
