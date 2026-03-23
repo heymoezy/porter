@@ -1,5 +1,22 @@
 # Porter Release Notes
 
+## v2.0.0 (2026-03-23)
+
+**PostgreSQL Migration — Complete data layer rewrite**
+
+- Migrated from SQLite/better-sqlite3 to PostgreSQL 16 + pgvector
+- 52 tables defined in pgTable (zero sqliteTable remaining)
+- pg Pool connection replacing better-sqlite3
+- All 20+ v1 route files and 12 services converted to pool.query()
+- Auth plugin: Drizzle .get()/.run() converted to async array destructuring
+- FTS5 replaced with tsvector + GIN indexes
+- 9 legacy migration files consolidated into one PG-native DDL
+- docker-compose.yml + .env.example + DATABASE_URL config
+- Legacy routes deleted (admin, ai, auth, chat, files, tasks)
+- Admin v1 routes staged but disabled pending import fixes
+- Forge service + customer intel service added
+- Playwright tests need rewriting (legacy porter.py selectors obsolete)
+
 ## v0.34.17 (2026-03-20)
 
 - Popup chat input enlarged (14px font, 44px min-height, 12px padding). Header title changed to "Ask Porter".
