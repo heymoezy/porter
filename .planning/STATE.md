@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 13-03-PLAN.md
-last_updated: "2026-03-22T21:48:46.136Z"
+stopped_at: Phase 13.05 context gathered
+last_updated: "2026-03-23T15:11:00.293Z"
 progress:
-  total_phases: 7
+  total_phases: 9
   completed_phases: 6
   total_plans: 19
   completed_plans: 19
@@ -89,6 +89,11 @@ Recent decisions affecting current work:
 - [Phase 13-autonomous-learning]: Dynamic import('./learner.js') in executeJob — learner only loads when job runs, same lazy pattern as contact-analyzer.ts
 - [Phase 13-autonomous-learning]: memory.ts registered at prefix '/memory/concepts' so GET / maps to /api/v1/memory/concepts (no extra nesting)
 
+### Roadmap Evolution
+
+- Phase 13.05 inserted after Phase 13: PostgreSQL Migration (URGENT) — migrate from SQLite to PostgreSQL 16 + pgvector before Memory V3
+- Phase 13.1 inserted after Phase 13.05: Memory V3 State Engine (URGENT) — project-first state engine replacing extraction-heavy memory with structured directives/notes, tiered injection, consolidation, agent self-edit API, admin overview
+
 ### Pending Todos
 
 None yet.
@@ -102,6 +107,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T21:43:32.866Z
-Stopped at: Completed 13-03-PLAN.md
-Resume file: None
+Last session: 2026-03-23T15:11:00.288Z
+Stopped at: Phase 13.05 context gathered
+Resume file: .planning/phases/13.05-postgresql-migration/13.05-CONTEXT.md
