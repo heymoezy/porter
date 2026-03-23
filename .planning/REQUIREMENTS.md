@@ -71,6 +71,21 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 - [x] **LEARN-02**: Learned knowledge stored as concepts in Memory V2 with source attribution
 - [x] **LEARN-03**: Learning sessions logged with sources, confidence scores, and what was retained
 
+### PostgreSQL Migration
+
+- [ ] **PG-01**: All Drizzle schemas ported from SQLite to PostgreSQL (types, constraints, indexes)
+- [ ] **PG-02**: All raw SQL queries converted from SQLite dialect to PostgreSQL
+- [ ] **PG-03**: FTS5 virtual tables replaced with tsvector + GIN indexes
+- [ ] **PG-04**: Data migration script moves all existing SQLite data to PostgreSQL with zero loss
+
+### Memory V3
+
+- [ ] **MEMV3-01**: Structured state tables (directives, project_notes, agent_notes) with migration from concepts
+- [ ] **MEMV3-02**: Tiered injection pipeline reading structured state before archival search
+- [ ] **MEMV3-03**: Concept consolidation service merging similar concepts by content similarity
+- [ ] **MEMV3-04**: Agent self-edit memory API (promote/dismiss/edit concepts during runs)
+- [ ] **MEMV3-05**: Admin memory aggregation endpoints (counts per agent, health scores, pending review queue)
+
 ### Billing
 
 - [ ] **BILL-01**: Subscription management via Lemon Squeezy (create, upgrade, cancel, webhook handling)
@@ -127,13 +142,22 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 | LEARN-01 | Phase 13 | Complete |
 | LEARN-02 | Phase 13 | Complete |
 | LEARN-03 | Phase 13 | Complete |
+| PG-01 | Phase 13.05 | Pending |
+| PG-02 | Phase 13.05 | Pending |
+| PG-03 | Phase 13.05 | Pending |
+| PG-04 | Phase 13.05 | Pending |
+| MEMV3-01 | Phase 13.1 | Pending |
+| MEMV3-02 | Phase 13.1 | Pending |
+| MEMV3-03 | Phase 13.1 | Pending |
+| MEMV3-04 | Phase 13.1 | Pending |
+| MEMV3-05 | Phase 13.1 | Pending |
 | BILL-01 | Phase 14 | Pending |
 | BILL-02 | Phase 14 | Pending |
 | BILL-03 | Phase 14 | Pending |
 
 **Coverage:**
-- v2 requirements: 32 total
-- Mapped to phases: 32
+- v2 requirements: 41 total
+- Mapped to phases: 41
 - Unmapped: 0
 
 ---

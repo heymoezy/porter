@@ -1,5 +1,5 @@
 import { decryptCredential } from '../lib/credential-crypto.js';
-import { sqlite } from '../db/client.js';
+import { pool } from '../db/client.js';
 import { emitSSE } from './scheduler.js';
 import crypto from 'crypto';
 
@@ -23,22 +23,22 @@ interface WorkspaceConnectionRow {
  * Load WhatsApp Cloud API credentials from a connected workspace connection.
  * Reads and decrypts meta_json from workspace_connections WHERE provider='whatsapp'.
  */
-function getWhatsAppCredentials(connectionId?: string): WhatsAppCredentials {
+async function getWhatsAppCredentials(connectionId?: string): Promise<WhatsAppCredentials> {
   let row: WorkspaceConnectionRow | undefined;
 
   if (connectionId) {
-    row = sqlite.prepare(`
+    row = (await pool.query(`
       SELECT id, status, meta_json, meta_encrypted
       FROM workspace_connections
-      WHERE id = @connectionId AND provider = 'whatsapp' AND status = 'connected'
-    `).get({ connectionId }) as WorkspaceConnectionRow | undefined;
+      WHERE id = $1 AND provider = 'whatsapp' AND status = 'connected'
+    `, [connectionId])).rows[0] as WorkspaceConnectionRow | undefined;
   } else {
-    row = sqlite.prepare(`
+    row = (await pool.query(`
       SELECT id, status, meta_json, meta_encrypted
       FROM workspace_connections
       WHERE provider = 'whatsapp' AND status = 'connected'
       LIMIT 1
-    `).get() as WorkspaceConnectionRow | undefined;
+    `)).rows[0] as WorkspaceConnectionRow | undefined;
   }
 
   if (!row) {
@@ -81,7 +81,7 @@ export async function sendWhatsAppMessage(params: {
   agentEmoji?: string;
   connectionId?: string;
 }): Promise<{ messageId: string }> {
-  const creds = getWhatsAppCredentials(params.connectionId);
+  const creds = await getWhatsAppCredentials(params.connectionId);
 
   const messageText = params.agentName
     ? `${params.agentEmoji ?? '🤖'} ${params.agentName}: ${params.text}`
@@ -106,11 +106,11 @@ export async function sendWhatsAppMessage(params: {
 
     if (statusCode === 401) {
       // Mark connection as needing re-auth
-      sqlite.prepare(`
+      await pool.query(`
         UPDATE workspace_connections
-        SET status = 'needs_reauth', updated_at = unixepoch('now')
+        SET status = 'needs_reauth', updated_at = EXTRACT(EPOCH FROM NOW())
         WHERE provider = 'whatsapp' AND status = 'connected'
-      `).run();
+      `);
 
       emitSSE('connection:status', { provider: 'whatsapp', status: 'needs_reauth' }).catch(() => {
         // Best-effort SSE — never block on failure
@@ -133,22 +133,22 @@ export async function sendWhatsAppMessage(params: {
  * - No mention: dispatches to Porter (master persona) for AI-based dispatch
  * - Returns the agent_id that was dispatched to, or null if no agent found
  */
-export function routeInboundWhatsApp(
+export async function routeInboundWhatsApp(
   from: string,
   message: string,
   groupId?: string,
-): string | null {
+): Promise<string | null> {
   let agentId: string | null = null;
 
   // Check for @mention routing: regex /@(\w+)/
   const mentionMatch = message.match(/@(\w+)/);
   if (mentionMatch) {
     const mentionedName = mentionMatch[1];
-    const agent = sqlite.prepare(`
+    const agent = (await pool.query(`
       SELECT id FROM personas
-      WHERE lower(name) = lower(@name) AND status != 'retired'
+      WHERE lower(name) = lower($1) AND status != 'retired'
       LIMIT 1
-    `).get({ name: mentionedName }) as { id: string } | undefined;
+    `, [mentionedName])).rows[0] as { id: string } | undefined;
 
     if (agent) {
       agentId = agent.id;
@@ -157,9 +157,9 @@ export function routeInboundWhatsApp(
 
   // Fall back to Porter (master persona) if no @mention or agent not found
   if (!agentId) {
-    const porter = sqlite.prepare(`
+    const porter = (await pool.query(`
       SELECT id FROM personas WHERE is_master = 1 LIMIT 1
-    `).get() as { id: string } | undefined;
+    `)).rows[0] as { id: string } | undefined;
 
     if (!porter) {
       return null;
@@ -170,11 +170,11 @@ export function routeInboundWhatsApp(
   // Look up project linked to group if groupId provided
   let projectId: string | null = null;
   if (groupId) {
-    const groupRow = sqlite.prepare(`
+    const groupRow = (await pool.query(`
       SELECT meta_json, meta_encrypted FROM workspace_connections
       WHERE provider = 'whatsapp' AND status = 'connected'
       LIMIT 1
-    `).get() as { meta_json: string | null; meta_encrypted: number | null } | undefined;
+    `)).rows[0] as { meta_json: string | null; meta_encrypted: number | null } | undefined;
 
     if (groupRow?.meta_json) {
       try {
@@ -195,16 +195,16 @@ export function routeInboundWhatsApp(
   }
 
   const id = crypto.randomUUID();
-  sqlite.prepare(`
+  await pool.query(`
     INSERT INTO agent_jobs (id, agent_id, project_id, trigger_type, trigger_data, prompt, status, scheduled_for)
-    VALUES (@id, @agentId, @projectId, 'whatsapp_message', @triggerData, @prompt, 'pending', unixepoch('now'))
-  `).run({
+    VALUES ($1, $2, $3, 'whatsapp_message', $4, $5, 'pending', EXTRACT(EPOCH FROM NOW()))
+  `, [
     id,
     agentId,
-    projectId: projectId ?? null,
-    triggerData: JSON.stringify({ from, message, group_id: groupId ?? null }),
-    prompt: message,
-  });
+    projectId ?? null,
+    JSON.stringify({ from, message, group_id: groupId ?? null }),
+    message,
+  ]);
 
   return agentId;
 }
@@ -215,19 +215,20 @@ export function routeInboundWhatsApp(
  * Find an existing contact by phone number, or create one.
  * Returns the contact ID.
  */
-export function findOrCreateWhatsAppContact(
+export async function findOrCreateWhatsAppContact(
   phoneNumber: string,
   profileName?: string,
-): string {
+): Promise<string> {
   // Normalize phone: strip leading zeros, ensure starts with +
   const normalized = phoneNumber.startsWith('+')
     ? phoneNumber
     : '+' + phoneNumber.replace(/^0+/, '');
 
   // Look up by phone value in contact_phones
-  const existing = sqlite.prepare(
-    `SELECT cp.contact_id FROM contact_phones cp WHERE cp.value = ?`,
-  ).get(normalized) as { contact_id: string } | undefined;
+  const existing = (await pool.query(
+    `SELECT cp.contact_id FROM contact_phones cp WHERE cp.value = $1`,
+    [normalized]
+  )).rows[0] as { contact_id: string } | undefined;
 
   if (existing) return existing.contact_id;
 
@@ -235,19 +236,27 @@ export function findOrCreateWhatsAppContact(
   const contactId = crypto.randomUUID();
   const displayName = profileName || normalized;
 
-  const insertContact = sqlite.transaction(() => {
-    sqlite.prepare(
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
       `INSERT INTO contacts (id, display_name, created_by, created_at, updated_at)
-       VALUES (?, ?, 'system', unixepoch('now'), unixepoch('now'))`,
-    ).run(contactId, displayName);
-
-    sqlite.prepare(
+       VALUES ($1, $2, 'system', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))`,
+      [contactId, displayName]
+    );
+    await client.query(
       `INSERT INTO contact_phones (contact_id, value, label, is_primary)
-       VALUES (?, ?, 'mobile', 1)`,
-    ).run(contactId, normalized);
-  });
+       VALUES ($1, $2, 'mobile', 1)`,
+      [contactId, normalized]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 
-  insertContact();
   return contactId;
 }
 
@@ -256,47 +265,60 @@ export function findOrCreateWhatsAppContact(
  * Links the conversation to the contact.
  * Returns the conversation ID.
  */
-export function findOrCreateWhatsAppConversation(
+export async function findOrCreateWhatsAppConversation(
   externalId: string,
   contactId: string,
-): string {
-  // Use INSERT OR IGNORE + SELECT pattern to handle race conditions
+): Promise<string> {
+  // Use INSERT ... ON CONFLICT DO NOTHING + SELECT pattern to handle race conditions
   // (two concurrent messages from same sender)
-  const existing = sqlite.prepare(
-    `SELECT id FROM conversations WHERE external_id = ?`,
-  ).get(externalId) as { id: string } | undefined;
+  const existing = (await pool.query(
+    `SELECT id FROM conversations WHERE external_id = $1`,
+    [externalId]
+  )).rows[0] as { id: string } | undefined;
 
   if (existing) {
     // Ensure contact link exists
-    sqlite.prepare(
-      `INSERT OR IGNORE INTO contact_conversations (contact_id, conversation_id)
-       VALUES (?, ?)`,
-    ).run(contactId, existing.id);
+    await pool.query(
+      `INSERT INTO contact_conversations (contact_id, conversation_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [contactId, existing.id]
+    );
     return existing.id;
   }
 
   const convId = crypto.randomUUID();
 
-  const createConv = sqlite.transaction(() => {
-    sqlite.prepare(
-      `INSERT OR IGNORE INTO conversations
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO conversations
          (id, scope_type, scope_id, external_id, channel_type, created_at, updated_at)
-       VALUES (?, 'contact', ?, ?, 'whatsapp', unixepoch('now'), unixepoch('now'))`,
-    ).run(convId, contactId, externalId);
-
+       VALUES ($1, 'contact', $2, $3, 'whatsapp', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+       ON CONFLICT DO NOTHING`,
+      [convId, contactId, externalId]
+    );
     // Link contact to conversation
-    sqlite.prepare(
-      `INSERT OR IGNORE INTO contact_conversations (contact_id, conversation_id)
-       VALUES (?, ?)`,
-    ).run(contactId, convId);
-  });
+    await client.query(
+      `INSERT INTO contact_conversations (contact_id, conversation_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [contactId, convId]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 
-  createConv();
-
-  // Handle race: if INSERT OR IGNORE was a no-op, another request created it first
-  const check = sqlite.prepare(
-    `SELECT id FROM conversations WHERE external_id = ?`,
-  ).get(externalId) as { id: string };
+  // Handle race: if INSERT was a no-op, another request created it first
+  const check = (await pool.query(
+    `SELECT id FROM conversations WHERE external_id = $1`,
+    [externalId]
+  )).rows[0] as { id: string };
 
   return check.id;
 }

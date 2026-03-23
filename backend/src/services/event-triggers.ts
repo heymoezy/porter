@@ -1,4 +1,4 @@
-import { sqlite } from '../db/client.js';
+import { pool } from '../db/client.js';
 import { featureFlags } from '../config.js';
 import crypto from 'crypto';
 
@@ -14,16 +14,16 @@ const DEDUP_WINDOW_SEC = 60; // 60-second deduplication window
  * Reads event_subscriptions from persona config JSON.
  * Returns array of agent IDs.
  */
-export function getEventSubscribers(eventType: string, projectId: string | null): string[] {
-  const rows = sqlite.prepare(`
+export async function getEventSubscribers(eventType: string, projectId: string | null): Promise<string[]> {
+  const rows = (await pool.query(`
     SELECT id, config FROM personas
     WHERE status != 'retired'
-  `).all() as { id: string; config: string }[];
+  `)).rows as { id: string; config: string }[];
 
   const subscribers: string[] = [];
   for (const row of rows) {
     try {
-      const cfg = JSON.parse(row.config || '{}');
+      const cfg = typeof row.config === 'string' ? JSON.parse(row.config || '{}') : (row.config || {});
       const subs: EventSubscription[] = cfg.event_subscriptions ?? [];
       for (const sub of subs) {
         if (sub.type === eventType) {
@@ -45,42 +45,42 @@ export function getEventSubscribers(eventType: string, projectId: string | null)
  * Skips insertion if a pending job with the same agent_id + trigger_type + project_id
  * exists within the dedup window.
  */
-function insertTriggerJob(
+async function insertTriggerJob(
   triggerType: string,
   projectId: string | null,
   agentId: string,
   triggerData: Record<string, unknown>,
   prompt?: string
-): boolean {
-  const existing = sqlite.prepare(`
+): Promise<boolean> {
+  const existing = (await pool.query(`
     SELECT 1 FROM agent_jobs
-    WHERE agent_id = @agentId
-      AND trigger_type = @triggerType
-      AND (project_id = @projectId OR (@projectId IS NULL AND project_id IS NULL))
+    WHERE agent_id = $1
+      AND trigger_type = $2
+      AND (project_id = $3 OR ($3 IS NULL AND project_id IS NULL))
       AND status = 'pending'
-      AND created_at > unixepoch('now') - @dedupWindow
+      AND created_at > EXTRACT(EPOCH FROM NOW()) - $4
     LIMIT 1
-  `).get({
+  `, [
     agentId,
     triggerType,
-    projectId: projectId ?? null,
-    dedupWindow: DEDUP_WINDOW_SEC,
-  });
+    projectId ?? null,
+    DEDUP_WINDOW_SEC,
+  ])).rows[0];
 
   if (existing) return false;
 
   const id = crypto.randomUUID();
-  sqlite.prepare(`
+  await pool.query(`
     INSERT INTO agent_jobs (id, agent_id, project_id, trigger_type, trigger_data, prompt, status, scheduled_for)
-    VALUES (@id, @agentId, @projectId, @triggerType, @triggerData, @prompt, 'pending', unixepoch('now'))
-  `).run({
+    VALUES ($1, $2, $3, $4, $5, $6, 'pending', EXTRACT(EPOCH FROM NOW()))
+  `, [
     id,
     agentId,
-    projectId: projectId ?? null,
+    projectId ?? null,
     triggerType,
-    triggerData: JSON.stringify(triggerData),
-    prompt: prompt ?? null,
-  });
+    JSON.stringify(triggerData),
+    prompt ?? null,
+  ]);
 
   return true;
 }
@@ -89,13 +89,13 @@ function insertTriggerJob(
  * Called when a file is uploaded/created in a project.
  * Inserts pending jobs for all agents subscribed to file-created events.
  */
-export function onFileCreated(projectId: string, filename: string): number {
+export async function onFileCreated(projectId: string, filename: string): Promise<number> {
   if (!featureFlags.eventTriggers) return 0;
 
-  const subscribers = getEventSubscribers('file-created', projectId);
+  const subscribers = await getEventSubscribers('file-created', projectId);
   let inserted = 0;
   for (const agentId of subscribers) {
-    const created = insertTriggerJob('file-created', projectId, agentId,
+    const created = await insertTriggerJob('file-created', projectId, agentId,
       { filename, projectId },
       `New file uploaded: ${filename}. Review and process as needed.`
     );
@@ -108,13 +108,13 @@ export function onFileCreated(projectId: string, filename: string): number {
  * Called when a new message is received in a project context.
  * Inserts pending jobs for agents subscribed to message-received events.
  */
-export function onMessageReceived(projectId: string, message: string, fromUser: string): number {
+export async function onMessageReceived(projectId: string, message: string, fromUser: string): Promise<number> {
   if (!featureFlags.eventTriggers) return 0;
 
-  const subscribers = getEventSubscribers('message-received', projectId);
+  const subscribers = await getEventSubscribers('message-received', projectId);
   let inserted = 0;
   for (const agentId of subscribers) {
-    const created = insertTriggerJob('message-received', projectId, agentId,
+    const created = await insertTriggerJob('message-received', projectId, agentId,
       { message: message.slice(0, 500), fromUser, projectId },
       `New message from ${fromUser}: ${message.slice(0, 200)}`
     );
@@ -134,31 +134,31 @@ export function onMessageReceived(projectId: string, message: string, fromUser: 
  * for ISO date strings and will produce wrong results.
  * Correct pattern: deadline BETWEEN '2026-03-20' AND '2026-03-21'
  */
-export function checkDeadlineTriggers(): number {
+export async function checkDeadlineTriggers(): Promise<number> {
   if (!featureFlags.eventTriggers) return 0;
 
   // deadline is TEXT 'YYYY-MM-DD' — use string BETWEEN for ISO date comparison.
-  // SQLite string comparison on ISO dates works correctly because the format is
+  // PostgreSQL string comparison on ISO dates works correctly because the format is
   // lexicographically ordered (YYYY-MM-DD sorts the same as chronologically).
   const now = new Date();
   const tomorrow = new Date(now.getTime() + 86400000);
   const todayStr = now.toISOString().slice(0, 10);         // e.g. '2026-03-20'
   const tomorrowStr = tomorrow.toISOString().slice(0, 10); // e.g. '2026-03-21'
 
-  const approaching = sqlite.prepare(`
+  const approaching = (await pool.query(`
     SELECT id, name, deadline FROM projects
     WHERE status = 'active'
       AND deadline IS NOT NULL
-      AND deadline BETWEEN @today AND @tomorrow
-  `).all({ today: todayStr, tomorrow: tomorrowStr }) as {
+      AND deadline BETWEEN $1 AND $2
+  `, [todayStr, tomorrowStr])).rows as {
     id: string; name: string; deadline: string;
   }[];
 
   let inserted = 0;
   for (const proj of approaching) {
-    const subscribers = getEventSubscribers('deadline-approaching', proj.id);
+    const subscribers = await getEventSubscribers('deadline-approaching', proj.id);
     for (const agentId of subscribers) {
-      const created = insertTriggerJob('deadline-approaching', proj.id, agentId,
+      const created = await insertTriggerJob('deadline-approaching', proj.id, agentId,
         { projectName: proj.name, deadline: proj.deadline, projectId: proj.id },
         `Project "${proj.name}" deadline approaching: ${proj.deadline}. Review status and take action.`
       );

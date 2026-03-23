@@ -8,31 +8,16 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
 import { config } from './config.js';
-import authRoutes from './routes/auth.js';
-import taskRoutes from './routes/tasks.js';
-import chatRoutes from './routes/chat.js';
-import fileRoutes from './routes/files.js';
-import adminRoutes from './routes/admin.js';
-import aiRoutes from './routes/ai.js';
 import eventRoutes from './routes/events.js';
+import { startBrainUI } from './routes/brain-ui.js';
 import authPlugin from './plugins/auth.js';
 import openapiPlugin from './plugins/openapi.js';
 import v1Routes from './routes/v1/index.js';
 import proxyPlugin from './plugins/proxy.js';
-import { migrate04AgentAutonomy } from './db/migrate-04.js';
-import { migrate05GuidedWizard } from './db/migrate-05.js';
-import { migrate06RealTimeTransparency } from './db/migrate-06.js';
-import { migrate07Billing } from './db/migrate-07.js';
-import { migrate07ExternalConnections } from './db/migrate-07-ext-connections.js';
-import { migrate08ApiFoundation } from './db/migrate-08.js';
-import { migrate09EmailAuth } from './db/migrate-09.js';
-import { migrate10Collaboration } from './db/migrate-10.js';
-import { migrate11UnifiedChat } from './db/migrate-11.js';
-import { migrate12CrmIntelligence } from './db/migrate-12.js';
-import { migrate13AutonomousLearning } from './db/migrate-13.js';
+import { migrateConsolidated } from './db/migrate-consolidated.js';
 import * as scheduler from './services/scheduler.js';
 import { startImapIdle, stopImapIdle } from './services/email.js';
-import { sqlite } from './db/client.js';
+import { pool } from './db/client.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDist = path.resolve(__dirname, '../../frontend/dist');
@@ -88,14 +73,11 @@ fastify.register(authPlugin);
 // V1 routes (Fastify-native, with response envelope)
 fastify.register(v1Routes, { prefix: '/api/v1' });
 
-// Legacy routes (proxied to porter.py as fallback)
-fastify.register(authRoutes);
-fastify.register(taskRoutes);
-fastify.register(chatRoutes);
-fastify.register(fileRoutes);
-fastify.register(adminRoutes);
-fastify.register(aiRoutes);
+// SSE events proxy (still used by frontends)
 fastify.register(eventRoutes);
+
+// Brain dashboard UI — separate server on :5176
+startBrainUI().catch(err => console.error('[brain-ui] Failed to start:', err));
 
 // Health check
 fastify.get('/health', async () => {
@@ -134,28 +116,18 @@ fastify.addHook('onClose', async () => {
 
 const start = async () => {
   try {
-    migrate04AgentAutonomy();
-    migrate05GuidedWizard();
-    migrate06RealTimeTransparency();
-    migrate07Billing();
-    migrate07ExternalConnections();
-    migrate08ApiFoundation();
-    migrate09EmailAuth();
-    migrate10Collaboration();
-    migrate11UnifiedChat();
-    migrate12CrmIntelligence();
-    migrate13AutonomousLearning();
+    await migrateConsolidated(pool);
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
     scheduler.start();
 
     // Auto-start IMAP IDLE if a connected email connection exists
     try {
-      const emailConn = sqlite.prepare(
+      const { rows } = await pool.query(
         "SELECT id FROM workspace_connections WHERE provider = 'email' AND status = 'connected' LIMIT 1"
-      ).get() as { id: string } | undefined;
-      if (emailConn) {
-        startImapIdle(emailConn.id).catch((err) => {
+      );
+      if (rows[0]) {
+        startImapIdle(rows[0].id).catch((err: unknown) => {
           console.error('[email] IMAP IDLE auto-start failed:', err instanceof Error ? err.message : err);
         });
         console.log('[email] IMAP IDLE auto-started for existing connection');

@@ -15,7 +15,7 @@ import { listRepos, readFile, createBranch, createPullRequest } from './github.j
 import { sendEmail } from './email.js';
 import { pushMilestoneToCalendar } from './calendar.js';
 import { sendWhatsAppMessage } from './whatsapp.js';
-import { sqlite } from '../db/client.js';
+import { pool } from '../db/client.js';
 import crypto from 'crypto';
 
 // ── Queue utility ─────────────────────────────────────────────────────────────
@@ -31,19 +31,19 @@ import crypto from 'crypto';
  * @param params     Action parameters (merged into trigger_data alongside service + action)
  * @returns          The new job ID
  */
-export function queueExternalCall(
+export async function queueExternalCall(
   agentId: string,
   projectId: string | null,
   service: 'github' | 'email' | 'calendar' | 'whatsapp',
   action: string,
   params: Record<string, unknown>,
-): string {
+): Promise<string> {
   const jobId = crypto.randomUUID();
-  sqlite.prepare(`
+  await pool.query(`
     INSERT INTO agent_jobs
       (id, agent_id, project_id, trigger_type, trigger_data, status, scheduled_for)
-    VALUES (?, ?, ?, 'external_call', ?, 'pending', unixepoch('now'))
-  `).run(jobId, agentId, projectId, JSON.stringify({ service, action, ...params }));
+    VALUES ($1, $2, $3, 'external_call', $4, 'pending', EXTRACT(EPOCH FROM NOW()))
+  `, [jobId, agentId, projectId, JSON.stringify({ service, action, ...params })]);
   return jobId;
 }
 
@@ -54,7 +54,7 @@ export function queueExternalCall(
  * Returns 'blocked' when the connection is missing, needs reauth, or in error state.
  * Returns 'ok' when the connection status is 'connected'.
  */
-export function checkConnectionHealth(service: string): 'ok' | 'blocked' {
+export async function checkConnectionHealth(service: string): Promise<'ok' | 'blocked'> {
   // Map service name to provider column value in workspace_connections
   const providerMap: Record<string, string> = {
     github: 'github',
@@ -66,9 +66,10 @@ export function checkConnectionHealth(service: string): 'ok' | 'blocked' {
   const provider = providerMap[service];
   if (!provider) return 'blocked';
 
-  const row = sqlite.prepare(
-    `SELECT status FROM workspace_connections WHERE provider = ? LIMIT 1`
-  ).get(provider) as { status: string } | undefined;
+  const row = (await pool.query(
+    `SELECT status FROM workspace_connections WHERE provider = $1 LIMIT 1`,
+    [provider]
+  )).rows[0] as { status: string } | undefined;
 
   if (!row) return 'blocked'; // No connection configured
   if (row.status === 'connected') return 'ok';
@@ -83,50 +84,56 @@ export function checkConnectionHealth(service: string): 'ok' | 'blocked' {
  * Finds or creates the conversation by external_id, records the agent's outbound message.
  * Per locked decision: "All outbound through unified table."
  */
-function archiveOutboundMessage(opts: {
+async function archiveOutboundMessage(opts: {
   channelType: 'email' | 'whatsapp';
   externalId: string;       // recipient phone or email (conversation external_id)
   agentId: string;
   agentName: string;
   content: string;
   rawPayload: Record<string, unknown>;
-}): void {
+}): Promise<void> {
   // Find conversation by external_id (should exist if we received inbound first)
-  let conv = sqlite.prepare(
-    `SELECT id FROM conversations WHERE external_id = ?`
-  ).get(opts.externalId) as { id: string } | undefined;
+  let conv = (await pool.query(
+    `SELECT id FROM conversations WHERE external_id = $1`,
+    [opts.externalId]
+  )).rows[0] as { id: string } | undefined;
 
   if (!conv) {
     // Create conversation for outbound-first scenario (agent initiates contact)
     const convId = crypto.randomUUID();
-    sqlite.prepare(
-      `INSERT OR IGNORE INTO conversations
+    await pool.query(
+      `INSERT INTO conversations
          (id, scope_type, scope_id, external_id, channel_type, created_at, updated_at)
-       VALUES (?, 'global', NULL, ?, ?, unixepoch('now'), unixepoch('now'))`
-    ).run(convId, opts.externalId, opts.channelType);
+       VALUES ($1, 'global', NULL, $2, $3, EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+       ON CONFLICT DO NOTHING`,
+      [convId, opts.externalId, opts.channelType]
+    );
 
-    conv = sqlite.prepare(
-      `SELECT id FROM conversations WHERE external_id = ?`
-    ).get(opts.externalId) as { id: string };
+    conv = (await pool.query(
+      `SELECT id FROM conversations WHERE external_id = $1`,
+      [opts.externalId]
+    )).rows[0] as { id: string };
   }
 
   // Archive the outbound message
-  sqlite.prepare(
+  await pool.query(
     `INSERT INTO messages (conversation_id, sender_type, sender_id, sender_name, content, channel_type, channel_metadata, created_at)
-     VALUES (?, 'agent', ?, ?, ?, ?, ?, unixepoch('now'))`
-  ).run(
-    conv.id,
-    opts.agentId,
-    opts.agentName,
-    opts.content,
-    opts.channelType,
-    JSON.stringify(opts.rawPayload)
+     VALUES ($1, 'agent', $2, $3, $4, $5, $6, EXTRACT(EPOCH FROM NOW()))`,
+    [
+      conv.id,
+      opts.agentId,
+      opts.agentName,
+      opts.content,
+      opts.channelType,
+      JSON.stringify(opts.rawPayload),
+    ]
   );
 
   // Update conversation timestamp
-  sqlite.prepare(
-    `UPDATE conversations SET updated_at = unixepoch('now') WHERE id = ?`
-  ).run(conv.id);
+  await pool.query(
+    `UPDATE conversations SET updated_at = EXTRACT(EPOCH FROM NOW()) WHERE id = $1`,
+    [conv.id]
+  );
 }
 
 // ── Main dispatcher ───────────────────────────────────────────────────────────
@@ -200,7 +207,7 @@ async function dispatchEmail(data: Record<string, unknown>): Promise<string> {
   switch (data.action) {
     case 'send': {
       // Phase 11: Archive outbound email in unified table before sending
-      archiveOutboundMessage({
+      await archiveOutboundMessage({
         channelType: 'email',
         externalId: (data.to as string).trim().toLowerCase(),
         agentId: (data.agent_id as string) || 'unknown',
@@ -246,7 +253,7 @@ async function dispatchWhatsApp(data: Record<string, unknown>): Promise<string> 
         ? (data.to as string)
         : '+' + (data.to as string).replace(/^0+/, '');
 
-      archiveOutboundMessage({
+      await archiveOutboundMessage({
         channelType: 'whatsapp',
         externalId: toPhone,
         agentId: (data.agent_id as string) || 'unknown',

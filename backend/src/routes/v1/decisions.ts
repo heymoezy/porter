@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { sqlite } from '../../db/client.js';
+import { pool } from '../../db/client.js';
 import { ok } from '../../lib/envelope.js';
 
 export default async function decisionV1Routes(fastify: FastifyInstance) {
@@ -15,34 +15,40 @@ export default async function decisionV1Routes(fastify: FastifyInstance) {
     const decisionType = query.type || null;
 
     let sql = 'SELECT * FROM decision_log';
-    const params: Record<string, unknown> = { limit, offset };
+    const params: unknown[] = [];
+    let paramIdx = 1;
 
     if (decisionType) {
-      sql += ' WHERE decision_type = @decisionType';
-      params.decisionType = decisionType;
+      sql += ` WHERE decision_type = $${paramIdx}`;
+      params.push(decisionType);
+      paramIdx++;
     }
 
-    sql += ' ORDER BY created_at DESC LIMIT @limit OFFSET @offset';
+    sql += ` ORDER BY created_at DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
+    params.push(limit, offset);
 
     let decisions: unknown[] = [];
     let total = 0;
     try {
-      decisions = sqlite.prepare(sql).all(params);
+      const result = await pool.query(sql, params);
+      decisions = result.rows;
 
       // Parse alternatives JSON for each decision
       decisions = (decisions as Record<string, unknown>[]).map((d) => ({
         ...d,
-        alternatives: (() => {
-          try { return JSON.parse(String(d.alternatives || '[]')); } catch { return []; }
-        })(),
+        alternatives: typeof d.alternatives === 'string'
+          ? (() => { try { return JSON.parse(String(d.alternatives || '[]')); } catch { return []; } })()
+          : (d.alternatives || []),
       }));
 
       // Count total
       let countSql = 'SELECT COUNT(*) as count FROM decision_log';
-      if (decisionType) countSql += ' WHERE decision_type = @decisionType';
-      const countResult = sqlite.prepare(countSql).get(
-        decisionType ? { decisionType } : {}
-      ) as { count: number } | undefined;
+      const countParams: unknown[] = [];
+      if (decisionType) {
+        countSql += ' WHERE decision_type = $1';
+        countParams.push(decisionType);
+      }
+      const countResult = (await pool.query(countSql, countParams)).rows[0] as { count: number } | undefined;
       total = countResult?.count || 0;
     } catch {
       // Table may not exist yet

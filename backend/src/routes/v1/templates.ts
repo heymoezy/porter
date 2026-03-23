@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { sqlite } from '../../db/client.js';
+import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
 import { config } from '../../config.js';
 import { z } from 'zod';
@@ -7,8 +7,9 @@ import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
-function parseJsonField<T>(value: string | null | undefined, fallback: T): T {
+function parseJsonField<T>(value: string | null | undefined | T, fallback: T): T {
   if (!value) return fallback;
+  if (typeof value !== 'string') return value as T;
   try {
     return JSON.parse(value) as T;
   } catch {
@@ -188,33 +189,37 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
 
     let sql = 'SELECT * FROM agent_templates WHERE 1=1';
     const params: unknown[] = [];
+    let paramIdx = 1;
 
     if (!showInternal) {
       sql += ' AND is_internal = 0';
     }
 
     if (category) {
-      sql += ' AND category = ?';
+      sql += ` AND category = $${paramIdx}`;
       params.push(category);
+      paramIdx++;
     }
 
     if (tag) {
-      sql += ' AND id IN (SELECT at.id FROM agent_templates at, json_each(at.tags) jt WHERE jt.value = ?)';
+      sql += ` AND id IN (SELECT at2.id FROM agent_templates at2, jsonb_array_elements_text(at2.tags) jt WHERE jt = $${paramIdx})`;
       params.push(tag);
+      paramIdx++;
     }
 
     if (q) {
-      sql += ' AND (name LIKE ? OR description LIKE ?)';
+      sql += ` AND (name ILIKE $${paramIdx} OR description ILIKE $${paramIdx + 1})`;
       params.push(`%${q}%`, `%${q}%`);
+      paramIdx += 2;
     }
 
     const countSql = sql.replace('SELECT *', 'SELECT COUNT(*) as n');
-    const totalRow = sqlite.prepare(countSql).get(...params) as { n: number };
+    const totalRow = (await pool.query(countSql, params)).rows[0] as { n: number };
 
-    sql += ' ORDER BY sort_order ASC, name ASC LIMIT ? OFFSET ?';
+    sql += ` ORDER BY sort_order ASC, name ASC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
     params.push(maxLimit, skip);
 
-    const rows = sqlite.prepare(sql).all(...params) as TemplateRow[];
+    const rows = (await pool.query(sql, params)).rows as TemplateRow[];
 
     return reply.send(ok({
       templates: rows.map(formatTemplate),
@@ -228,7 +233,7 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    const row = sqlite.prepare('SELECT * FROM agent_templates WHERE id = ?').get(id) as TemplateRow | undefined;
+    const row = (await pool.query('SELECT * FROM agent_templates WHERE id = $1', [id])).rows[0] as TemplateRow | undefined;
 
     if (!row) {
       return reply.code(404).send(err('TEMPLATE_NOT_FOUND', 'Template not found'));
@@ -248,7 +253,7 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
       return reply.code(400).send(err('INVALID_INPUT', parsed.error.issues[0]?.message ?? 'Invalid input'));
     }
 
-    const template = sqlite.prepare('SELECT * FROM agent_templates WHERE id = ?').get(id) as TemplateRow | undefined;
+    const template = (await pool.query('SELECT * FROM agent_templates WHERE id = $1', [id])).rows[0] as TemplateRow | undefined;
     if (!template) {
       return reply.code(404).send(err('TEMPLATE_NOT_FOUND', 'Template not found'));
     }
@@ -272,9 +277,10 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
     const requiredTools = parseJsonField<string[]>(template.required_tools, []);
     const missingTools: string[] = [];
     for (const toolName of requiredTools) {
-      const conn = sqlite.prepare(
-        `SELECT id, status FROM workspace_connections WHERE provider = ? AND status = 'connected'`
-      ).get(toolName) as { id: string; status: string } | undefined;
+      const conn = (await pool.query(
+        `SELECT id, status FROM workspace_connections WHERE provider = $1 AND status = 'connected'`,
+        [toolName]
+      )).rows[0] as { id: string; status: string } | undefined;
       if (!conn) {
         missingTools.push(toolName);
       }
@@ -298,10 +304,10 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
       project_id: parsed.data.project_id || null,
     };
 
-    sqlite.prepare(`
+    await pool.query(`
       INSERT INTO personas (id, name, role, config, created_at, status, owner, is_temporary, template_id)
-      VALUES (?, ?, ?, ?, ?, 'idle', ?, 0, ?)
-    `).run(
+      VALUES ($1, $2, $3, $4, $5, 'idle', $6, 0, $7)
+    `, [
       agentId,
       parsed.data.name || template.name,
       parsed.data.role || template.category,
@@ -309,7 +315,7 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
       now,
       request.sessionUser!.username,
       template.id,
-    );
+    ]);
 
     // Write .md files to personas directory
     const personaDir = path.join(process.env.HOME!, 'documents/porter/personas', agentId);
@@ -321,12 +327,12 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
       await fs.writeFile(path.join(personaDir, 'SKILLS.md'), template.skills_text);
     } catch (fsErr) {
       // Rollback: delete persona row on file write failure
-      sqlite.prepare('DELETE FROM personas WHERE id = ?').run(agentId);
+      await pool.query('DELETE FROM personas WHERE id = $1', [agentId]);
       throw fsErr;
     }
 
     // Fetch back the created row and return it
-    const agent = sqlite.prepare('SELECT * FROM personas WHERE id = ?').get(agentId) as PersonaRow | undefined;
+    const agent = (await pool.query('SELECT * FROM personas WHERE id = $1', [agentId])).rows[0] as PersonaRow | undefined;
 
     return reply.code(201).send(ok({ agent: agent ? formatAgent(agent) : null }));
   });

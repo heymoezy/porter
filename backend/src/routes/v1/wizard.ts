@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { db, sqlite } from '../../db/client.js';
+import { db, pool } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 import { ok, err } from '../../lib/envelope.js';
 import { featureFlags } from '../../config.js';
@@ -96,15 +96,15 @@ function heuristicIsProject(message: string): boolean {
  * Get the Porter master agent ID for dispatch calls.
  * Falls back to first persona if no master found.
  */
-function getMasterAgentId(): string | null {
-  const master = sqlite.prepare(
+async function getMasterAgentId(): Promise<string | null> {
+  const master = (await pool.query(
     `SELECT id FROM personas WHERE is_master = 1 AND status != 'retired' LIMIT 1`
-  ).get() as { id: string } | undefined;
+  )).rows[0] as { id: string } | undefined;
   if (master) return master.id;
 
-  const first = sqlite.prepare(
+  const first = (await pool.query(
     `SELECT id FROM personas WHERE status != 'retired' LIMIT 1`
-  ).get() as { id: string } | undefined;
+  )).rows[0] as { id: string } | undefined;
   return first?.id ?? null;
 }
 
@@ -178,7 +178,7 @@ export default async function wizardV1Routes(fastify: FastifyInstance, _opts: Fa
       }
 
       // LLM classification
-      const agentId = getMasterAgentId();
+      const agentId = await getMasterAgentId();
       const classifyPrompt = `Classify this message. Is the user requesting a new project? Respond with JSON only:
 {"isProject":true,"clarity":"clear","projectType":"website|app|content|research|design|ops|custom","suggestedQuestions":[]}
 Or if vague: {"isProject":true,"clarity":"vague","projectType":"custom","suggestedQuestions":[{"id":"q1","text":"What type of project?","options":[{"id":"o1","label":"Website"},{"id":"o2","label":"App"},{"id":"o3","label":"Content"}]}]}
@@ -237,7 +237,7 @@ Message: "${message.slice(0, 500)}"`;
     // -----------------------------------------------------------------------
     if (data.action === 'propose') {
       const { goal, answers } = data;
-      const agentId = getMasterAgentId();
+      const agentId = await getMasterAgentId();
 
       const templateList = AVAILABLE_TEMPLATES.length > 0
         ? AVAILABLE_TEMPLATES.map(t => t.templateId).join(', ')
@@ -321,64 +321,72 @@ Respond with JSON only, matching this exact shape:
       const jobIds: string[] = [];
 
       // Atomic transaction: project + personas + jobs
-      const transact = sqlite.transaction(() => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
         // 1. Insert project
-        sqlite.prepare(`
+        await client.query(`
           INSERT INTO projects (id, name, slug, type, status, description, owner_id, milestones, metadata, created_at, updated_at)
-          VALUES (@id, @name, @slug, @type, 'active', @description, @ownerId, @milestones, @metadata, unixepoch('now'), unixepoch('now'))
-        `).run({
-          id: projectId,
-          name: proposal.projectName,
+          VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+        `, [
+          projectId,
+          proposal.projectName,
           slug,
-          type: proposal.projectType ?? 'custom',
-          description: proposal.explanation ?? '',
+          proposal.projectType ?? 'custom',
+          proposal.explanation ?? '',
           ownerId,
-          milestones: JSON.stringify(proposal.milestones),
-          metadata: JSON.stringify({ wizard: true }),
-        });
+          JSON.stringify(proposal.milestones),
+          JSON.stringify({ wizard: true }),
+        ]);
 
         // 2. Create ephemeral persona + job per proposed agent
         for (const agent of proposal.agents) {
           const personaId = crypto.randomUUID();
           const jobId = crypto.randomUUID();
 
-          sqlite.prepare(`
+          await client.query(`
             INSERT INTO personas (id, name, role, status, is_temporary, config, created_at)
-            VALUES (@id, @name, @role, 'idle', 1, @config, @createdAt)
-          `).run({
-            id: personaId,
-            name: agent.name,
-            role: agent.role,
-            config: JSON.stringify({ project_id: projectId, template_id: agent.templateId }),
-            createdAt: new Date().toISOString(),
-          });
+            VALUES ($1, $2, $3, 'idle', 1, $4, $5)
+          `, [
+            personaId,
+            agent.name,
+            agent.role,
+            JSON.stringify({ project_id: projectId, template_id: agent.templateId }),
+            new Date().toISOString(),
+          ]);
 
-          sqlite.prepare(`
+          await client.query(`
             INSERT INTO agent_jobs (id, agent_id, project_id, trigger_type, prompt, status, scheduled_for, created_at)
-            VALUES (@id, @agentId, @projectId, 'wizard_start', @prompt, 'pending', unixepoch('now'), unixepoch('now'))
-          `).run({
-            id: jobId,
-            agentId: personaId,
+            VALUES ($1, $2, $3, 'wizard_start', $4, 'pending', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+          `, [
+            jobId,
+            personaId,
             projectId,
-            prompt: `Project "${proposal.projectName}" just started. Your role: ${agent.role}. Review the milestones and begin your first task.`,
-          });
+            `Project "${proposal.projectName}" just started. Your role: ${agent.role}. Review the milestones and begin your first task.`,
+          ]);
 
           // Log activity
-          sqlite.prepare(`
+          await client.query(`
             INSERT INTO agent_activity (agent_id, project_id, event_type, summary)
-            VALUES (@agentId, @projectId, 'wizard_start', @summary)
-          `).run({
-            agentId: personaId,
+            VALUES ($1, $2, 'wizard_start', $3)
+          `, [
+            personaId,
             projectId,
-            summary: `${agent.name} assigned to ${proposal.projectName}`,
-          });
+            `${agent.name} assigned to ${proposal.projectName}`,
+          ]);
 
           agentIds.push(personaId);
           jobIds.push(jobId);
         }
-      });
 
-      transact();
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
 
       const result: WizardApproveResult = { projectId, agentIds, jobIds };
       return reply.send(ok(result));
@@ -391,25 +399,25 @@ Respond with JSON only, matching this exact shape:
       const { projectId, message } = data;
 
       // Verify project exists
-      const project = sqlite.prepare('SELECT id, name FROM projects WHERE id = ?').get(projectId) as { id: string; name: string } | undefined;
+      const project = (await pool.query('SELECT id, name FROM projects WHERE id = $1', [projectId])).rows[0] as { id: string; name: string } | undefined;
       if (!project) return reply.code(404).send(err('NOT_FOUND', 'Project not found'));
 
       // Get project agents — those with jobs on this project OR config pointing to it
-      const agents = sqlite.prepare(`
+      const agents = (await pool.query(`
         SELECT DISTINCT p.id, p.name, p.role FROM personas p
         WHERE p.status != 'retired' AND (
           p.id IN (
-            SELECT DISTINCT aj.agent_id FROM agent_jobs aj WHERE aj.project_id = ?
-          ) OR json_extract(p.config, '$.project_id') = ?
+            SELECT DISTINCT aj.agent_id FROM agent_jobs aj WHERE aj.project_id = $1
+          ) OR p.config->>'project_id' = $2
         )
-      `).all(projectId, projectId) as Array<{ id: string; name: string; role: string }>;
+      `, [projectId, projectId])).rows as Array<{ id: string; name: string; role: string }>;
 
       if (agents.length === 0) {
         return reply.send(ok({ dispatched: false, jobsCreated: 0, agentNames: [], summary: 'No agents assigned to this project. Create agents first via the wizard.' }));
       }
 
       // Call Porter LLM with orchestration prompt — Porter decides which agents handle what
-      const masterAgent = sqlite.prepare(`SELECT id FROM personas WHERE is_master = 1 AND status != 'retired' LIMIT 1`).get() as { id: string } | undefined;
+      const masterAgent = (await pool.query(`SELECT id FROM personas WHERE is_master = 1 AND status != 'retired' LIMIT 1`)).rows[0] as { id: string } | undefined;
       const agentList = agents.map(a => `- ${a.name} (${a.role})`).join('\n');
       const orchestratorId = masterAgent?.id || agents[0].id;
 
@@ -452,23 +460,31 @@ Rules:
       // Create agent_jobs for each dispatched task (atomic transaction)
       const jobIds: string[] = [];
       const agentNames: string[] = [];
-      sqlite.transaction(() => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
         for (const task of tasks) {
           const jobId = crypto.randomUUID();
-          sqlite.prepare(`
+          await client.query(`
             INSERT INTO agent_jobs (id, agent_id, project_id, trigger_type, prompt, status, scheduled_for, created_at)
-            VALUES (?, ?, ?, 'gsd_dispatch', ?, 'pending', unixepoch('now'), unixepoch('now'))
-          `).run(jobId, task.agentId, projectId, task.prompt);
+            VALUES ($1, $2, $3, 'gsd_dispatch', $4, 'pending', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+          `, [jobId, task.agentId, projectId, task.prompt]);
 
-          sqlite.prepare(`
+          await client.query(`
             INSERT INTO agent_activity (agent_id, job_id, project_id, event_type, summary, detail, created_at)
-            VALUES (?, ?, ?, 'gsd_dispatch', ?, ?, unixepoch('now'))
-          `).run(task.agentId, jobId, projectId, `${task.agentName} assigned: ${task.prompt.substring(0, 100)}`, JSON.stringify({ prompt: task.prompt }));
+            VALUES ($1, $2, $3, 'gsd_dispatch', $4, $5, EXTRACT(EPOCH FROM NOW()))
+          `, [task.agentId, jobId, projectId, `${task.agentName} assigned: ${task.prompt.substring(0, 100)}`, JSON.stringify({ prompt: task.prompt })]);
 
           jobIds.push(jobId);
           agentNames.push(task.agentName);
         }
-      })();
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
 
       const summary = agentNames.length === 1
         ? `Dispatched task to ${agentNames[0]}`

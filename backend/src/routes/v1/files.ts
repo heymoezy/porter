@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { ok, err } from '../../lib/envelope.js';
 import { config, LOCAL_HOSTS } from '../../config.js';
-import { sqlite } from '../../db/client.js';
+import { pool } from '../../db/client.js';
 import { z } from 'zod';
 import fs from 'fs/promises';
 import fsSync from 'fs';
@@ -515,19 +515,19 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
 
     // Validate association targets exist before writing to disk
     if (projectId) {
-      const proj = sqlite.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+      const proj = (await pool.query('SELECT id FROM projects WHERE id = $1', [projectId])).rows[0];
       if (!proj) {
         return reply.code(404).send(err('PROJECT_NOT_FOUND', 'Project not found'));
       }
     }
     if (contactId) {
-      const contact = sqlite.prepare('SELECT id FROM contacts WHERE id = ?').get(contactId);
+      const contact = (await pool.query('SELECT id FROM contacts WHERE id = $1', [contactId])).rows[0];
       if (!contact) {
         return reply.code(404).send(err('CONTACT_NOT_FOUND', 'Contact not found'));
       }
     }
     if (conversationId) {
-      const conv = sqlite.prepare('SELECT id FROM conversations WHERE id = ?').get(conversationId);
+      const conv = (await pool.query('SELECT id FROM conversations WHERE id = $1', [conversationId])).rows[0];
       if (!conv) {
         return reply.code(404).send(err('CONVERSATION_NOT_FOUND', 'Conversation not found'));
       }
@@ -561,33 +561,39 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
     await fs.writeFile(diskPath, buffer);
 
     // Atomically register in DB; rollback disk write on failure
+    const client = await pool.connect();
     try {
-      sqlite.transaction(() => {
-        sqlite.prepare(`
-          INSERT INTO files (id, filename, disk_path, mime_type, size_bytes, uploaded_by, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, unixepoch('now'))
-        `).run(fileId, filename, diskPath, mimeType, buffer.length, uploadedBy);
+      await client.query('BEGIN');
 
-        if (projectId) {
-          sqlite.prepare(`
-            INSERT INTO file_projects (file_id, project_id, attached_by) VALUES (?, ?, ?)
-          `).run(fileId, projectId, uploadedBy);
-        }
-        if (contactId) {
-          sqlite.prepare(`
-            INSERT INTO file_contacts (file_id, contact_id, attached_by) VALUES (?, ?, ?)
-          `).run(fileId, contactId, uploadedBy);
-        }
-        if (conversationId) {
-          sqlite.prepare(`
-            INSERT INTO file_conversations (file_id, conversation_id, attached_by) VALUES (?, ?, ?)
-          `).run(fileId, conversationId, uploadedBy);
-        }
-      })();
+      await client.query(`
+        INSERT INTO files (id, filename, disk_path, mime_type, size_bytes, uploaded_by, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, EXTRACT(EPOCH FROM NOW()))
+      `, [fileId, filename, diskPath, mimeType, buffer.length, uploadedBy]);
+
+      if (projectId) {
+        await client.query(`
+          INSERT INTO file_projects (file_id, project_id, attached_by) VALUES ($1, $2, $3)
+        `, [fileId, projectId, uploadedBy]);
+      }
+      if (contactId) {
+        await client.query(`
+          INSERT INTO file_contacts (file_id, contact_id, attached_by) VALUES ($1, $2, $3)
+        `, [fileId, contactId, uploadedBy]);
+      }
+      if (conversationId) {
+        await client.query(`
+          INSERT INTO file_conversations (file_id, conversation_id, attached_by) VALUES ($1, $2, $3)
+        `, [fileId, conversationId, uploadedBy]);
+      }
+
+      await client.query('COMMIT');
     } catch (e: unknown) {
+      await client.query('ROLLBACK');
       // DB failed — remove orphan file from disk
       await fs.unlink(diskPath).catch(() => {});
       throw e;
+    } finally {
+      client.release();
     }
 
     return reply.code(201).send(ok({
@@ -622,45 +628,53 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
     const joins: string[] = [];
     const conditions: string[] = [];
     const params: any[] = [];
+    let paramIdx = 1;
 
     if (query.project_id) {
       joins.push('JOIN file_projects fp ON fp.file_id = f.id');
-      conditions.push('fp.project_id = ?');
+      conditions.push(`fp.project_id = $${paramIdx}`);
       params.push(query.project_id);
+      paramIdx++;
     }
     if (query.contact_id) {
       joins.push('JOIN file_contacts fc ON fc.file_id = f.id');
-      conditions.push('fc.contact_id = ?');
+      conditions.push(`fc.contact_id = $${paramIdx}`);
       params.push(query.contact_id);
+      paramIdx++;
     }
     if (query.conversation_id) {
       joins.push('JOIN file_conversations fconv ON fconv.file_id = f.id');
-      conditions.push('fconv.conversation_id = ?');
+      conditions.push(`fconv.conversation_id = $${paramIdx}`);
       params.push(query.conversation_id);
+      paramIdx++;
     }
     if (query.mime_type) {
-      conditions.push('f.mime_type = ?');
+      conditions.push(`f.mime_type = $${paramIdx}`);
       params.push(query.mime_type);
+      paramIdx++;
     }
     if (query.after) {
-      conditions.push('f.created_at >= ?');
+      conditions.push(`f.created_at >= $${paramIdx}`);
       params.push(parseFloat(query.after));
+      paramIdx++;
     }
     if (query.before) {
-      conditions.push('f.created_at <= ?');
+      conditions.push(`f.created_at <= $${paramIdx}`);
       params.push(parseFloat(query.before));
+      paramIdx++;
     }
 
     const joinClause = joins.join(' ');
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const total = (sqlite.prepare(
-      `SELECT COUNT(*) as count FROM files f ${joinClause} ${whereClause}`
-    ).get(...params) as { count: number }).count;
+    const total = ((await pool.query(
+      `SELECT COUNT(*) as count FROM files f ${joinClause} ${whereClause}`, params
+    )).rows[0] as { count: number }).count;
 
-    const files = sqlite.prepare(
-      `SELECT f.* FROM files f ${joinClause} ${whereClause} ORDER BY f.created_at DESC LIMIT ? OFFSET ?`
-    ).all(...params, limit, offset);
+    const files = (await pool.query(
+      `SELECT f.* FROM files f ${joinClause} ${whereClause} ORDER BY f.created_at DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+      [...params, limit, offset]
+    )).rows;
 
     return reply.send(ok({ files, total }));
   });
@@ -671,22 +685,22 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const fileRow = sqlite.prepare('SELECT * FROM files WHERE id = ?').get(id) as any;
+    const fileRow = (await pool.query('SELECT * FROM files WHERE id = $1', [id])).rows[0] as any;
     if (!fileRow) {
       return reply.code(404).send(err('FILE_NOT_FOUND', 'File not found'));
     }
 
-    const projectIds = (sqlite.prepare(
-      'SELECT project_id FROM file_projects WHERE file_id = ?'
-    ).all(id) as Array<{ project_id: string }>).map(r => r.project_id);
+    const projectIds = ((await pool.query(
+      'SELECT project_id FROM file_projects WHERE file_id = $1', [id]
+    )).rows as Array<{ project_id: string }>).map(r => r.project_id);
 
-    const contactIds = (sqlite.prepare(
-      'SELECT contact_id FROM file_contacts WHERE file_id = ?'
-    ).all(id) as Array<{ contact_id: string }>).map(r => r.contact_id);
+    const contactIds = ((await pool.query(
+      'SELECT contact_id FROM file_contacts WHERE file_id = $1', [id]
+    )).rows as Array<{ contact_id: string }>).map(r => r.contact_id);
 
-    const conversationIds = (sqlite.prepare(
-      'SELECT conversation_id FROM file_conversations WHERE file_id = ?'
-    ).all(id) as Array<{ conversation_id: string }>).map(r => r.conversation_id);
+    const conversationIds = ((await pool.query(
+      'SELECT conversation_id FROM file_conversations WHERE file_id = $1', [id]
+    )).rows as Array<{ conversation_id: string }>).map(r => r.conversation_id);
 
     return reply.send(ok({
       file: {
@@ -713,7 +727,7 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
       return reply.code(400).send(err('INVALID_INPUT', 'At least one of project_id, contact_id, conversation_id required'));
     }
 
-    const fileRow = sqlite.prepare('SELECT id FROM files WHERE id = ?').get(id);
+    const fileRow = (await pool.query('SELECT id FROM files WHERE id = $1', [id])).rows[0];
     if (!fileRow) {
       return reply.code(404).send(err('FILE_NOT_FOUND', 'File not found'));
     }
@@ -721,33 +735,36 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
     const attachedBy = request.sessionUser!.username;
 
     if (body.project_id) {
-      const proj = sqlite.prepare('SELECT id FROM projects WHERE id = ?').get(body.project_id);
+      const proj = (await pool.query('SELECT id FROM projects WHERE id = $1', [body.project_id])).rows[0];
       if (!proj) {
         return reply.code(404).send(err('PROJECT_NOT_FOUND', 'Project not found'));
       }
-      sqlite.prepare(
-        'INSERT OR IGNORE INTO file_projects (file_id, project_id, attached_by) VALUES (?, ?, ?)'
-      ).run(id, body.project_id, attachedBy);
+      await pool.query(
+        'INSERT INTO file_projects (file_id, project_id, attached_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+        [id, body.project_id, attachedBy]
+      );
     }
 
     if (body.contact_id) {
-      const contact = sqlite.prepare('SELECT id FROM contacts WHERE id = ?').get(body.contact_id);
+      const contact = (await pool.query('SELECT id FROM contacts WHERE id = $1', [body.contact_id])).rows[0];
       if (!contact) {
         return reply.code(404).send(err('CONTACT_NOT_FOUND', 'Contact not found'));
       }
-      sqlite.prepare(
-        'INSERT OR IGNORE INTO file_contacts (file_id, contact_id, attached_by) VALUES (?, ?, ?)'
-      ).run(id, body.contact_id, attachedBy);
+      await pool.query(
+        'INSERT INTO file_contacts (file_id, contact_id, attached_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+        [id, body.contact_id, attachedBy]
+      );
     }
 
     if (body.conversation_id) {
-      const conv = sqlite.prepare('SELECT id FROM conversations WHERE id = ?').get(body.conversation_id);
+      const conv = (await pool.query('SELECT id FROM conversations WHERE id = $1', [body.conversation_id])).rows[0];
       if (!conv) {
         return reply.code(404).send(err('CONVERSATION_NOT_FOUND', 'Conversation not found'));
       }
-      sqlite.prepare(
-        'INSERT OR IGNORE INTO file_conversations (file_id, conversation_id, attached_by) VALUES (?, ?, ?)'
-      ).run(id, body.conversation_id, attachedBy);
+      await pool.query(
+        'INSERT INTO file_conversations (file_id, conversation_id, attached_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+        [id, body.conversation_id, attachedBy]
+      );
     }
 
     return reply.send(ok({ associated: true }));
@@ -769,27 +786,30 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
       return reply.code(400).send(err('INVALID_INPUT', 'At least one of project_id, contact_id, conversation_id required'));
     }
 
-    const fileRow = sqlite.prepare('SELECT id FROM files WHERE id = ?').get(id);
+    const fileRow = (await pool.query('SELECT id FROM files WHERE id = $1', [id])).rows[0];
     if (!fileRow) {
       return reply.code(404).send(err('FILE_NOT_FOUND', 'File not found'));
     }
 
     if (body.project_id) {
-      sqlite.prepare(
-        'DELETE FROM file_projects WHERE file_id = ? AND project_id = ?'
-      ).run(id, body.project_id);
+      await pool.query(
+        'DELETE FROM file_projects WHERE file_id = $1 AND project_id = $2',
+        [id, body.project_id]
+      );
     }
 
     if (body.contact_id) {
-      sqlite.prepare(
-        'DELETE FROM file_contacts WHERE file_id = ? AND contact_id = ?'
-      ).run(id, body.contact_id);
+      await pool.query(
+        'DELETE FROM file_contacts WHERE file_id = $1 AND contact_id = $2',
+        [id, body.contact_id]
+      );
     }
 
     if (body.conversation_id) {
-      sqlite.prepare(
-        'DELETE FROM file_conversations WHERE file_id = ? AND conversation_id = ?'
-      ).run(id, body.conversation_id);
+      await pool.query(
+        'DELETE FROM file_conversations WHERE file_id = $1 AND conversation_id = $2',
+        [id, body.conversation_id]
+      );
     }
 
     return reply.send(ok({ disassociated: true }));

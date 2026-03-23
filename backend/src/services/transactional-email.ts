@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
-import { sqlite } from '../db/client.js';
+import { pool } from '../db/client.js';
 import { config } from '../config.js';
 
 // ── SMTP Config ──────────────────────────────────────────────────────────────
@@ -14,21 +14,21 @@ interface SmtpConfig {
   fromEmail: string;
 }
 
-function getSetting(key: string): string | null {
+async function getSetting(key: string): Promise<string | null> {
   try {
-    const row = sqlite.prepare('SELECT value FROM workspace_settings WHERE key = ?').get(key) as { value: string } | undefined;
+    const row = (await pool.query('SELECT value FROM workspace_settings WHERE key = $1', [key])).rows[0] as { value: string } | undefined;
     return row?.value ?? null;
   } catch { return null; }
 }
 
-function getSmtpConfig(): SmtpConfig | null {
+async function getSmtpConfig(): Promise<SmtpConfig | null> {
   // Read from workspace_settings (admin SMTP config UI), fall back to env vars
-  const host = getSetting('smtp_host') || process.env.SMTP_HOST || '';
-  const port = parseInt(getSetting('smtp_port') || process.env.SMTP_PORT || '587');
-  const user = getSetting('smtp_user') || process.env.SMTP_USER || '';
-  const pass = getSetting('smtp_pass') || process.env.SMTP_PASS || '';
-  const fromName = getSetting('smtp_from_name') || process.env.SMTP_FROM_NAME || 'Porter';
-  const fromEmail = getSetting('smtp_from_email') || process.env.SMTP_FROM_EMAIL || '';
+  const host = await getSetting('smtp_host') || process.env.SMTP_HOST || '';
+  const port = parseInt(await getSetting('smtp_port') || process.env.SMTP_PORT || '587');
+  const user = await getSetting('smtp_user') || process.env.SMTP_USER || '';
+  const pass = await getSetting('smtp_pass') || process.env.SMTP_PASS || '';
+  const fromName = await getSetting('smtp_from_name') || process.env.SMTP_FROM_NAME || 'Porter';
+  const fromEmail = await getSetting('smtp_from_email') || process.env.SMTP_FROM_EMAIL || '';
 
   if (!host || !user || !pass || !fromEmail) return null;
   return { host, port, user, pass, fromName, fromEmail };
@@ -39,8 +39,8 @@ function getSmtpConfig(): SmtpConfig | null {
 let transport: Transporter | null = null;
 let lastConfigHash = '';
 
-function getTransport(): Transporter | null {
-  const cfg = getSmtpConfig();
+async function getTransport(): Promise<Transporter | null> {
+  const cfg = await getSmtpConfig();
   if (!cfg) return null;
 
   const hash = `${cfg.host}:${cfg.port}:${cfg.user}`;
@@ -58,9 +58,9 @@ function getTransport(): Transporter | null {
 
 // ── Send Functions ───────────────────────────────────────────────────────────
 
-async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  const cfg = getSmtpConfig();
-  const mailer = getTransport();
+async function sendEmailInternal(to: string, subject: string, html: string): Promise<boolean> {
+  const cfg = await getSmtpConfig();
+  const mailer = await getTransport();
 
   if (!mailer || !cfg) {
     // Dev fallback: no SMTP configured
@@ -78,7 +78,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
 }
 
 export async function sendVerificationCode(email: string, code: string): Promise<void> {
-  const sent = await sendEmail(email, `${code} is your Porter verification code`, `
+  const sent = await sendEmailInternal(email, `${code} is your Porter verification code`, `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 440px; margin: 0 auto; padding: 32px 0;">
       <div style="text-align: center; margin-bottom: 24px;">
         <h2 style="margin: 0; font-size: 20px; color: #1a1a2e;">Verify your email</h2>
@@ -100,7 +100,7 @@ export async function sendVerificationCode(email: string, code: string): Promise
 }
 
 export async function sendPasswordResetCode(email: string, code: string): Promise<void> {
-  const sent = await sendEmail(email, `${code} is your Porter password reset code`, `
+  const sent = await sendEmailInternal(email, `${code} is your Porter password reset code`, `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 440px; margin: 0 auto; padding: 32px 0;">
       <div style="text-align: center; margin-bottom: 24px;">
         <h2 style="margin: 0; font-size: 20px; color: #1a1a2e;">Reset your password</h2>
@@ -142,7 +142,7 @@ export async function sendInviteEmail(opts: {
       <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">Or copy this link: ${acceptUrl}</p>
     </div>
   `;
-  const sent = await sendEmail(to, subject, html);
+  const sent = await sendEmailInternal(to, subject, html);
   if (!sent) {
     console.log(`[email-dev] Invite for ${to}: ${acceptUrl}`);
   }
@@ -169,7 +169,7 @@ export async function sendDripReminder(opts: {
       <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">Or copy this link: ${acceptUrl}</p>
     </div>
   `;
-  const sent = await sendEmail(to, subject, html);
+  const sent = await sendEmailInternal(to, subject, html);
   if (!sent) {
     console.log(`[email-dev] Drip reminder #${dripCount + 1} for ${to}: ${acceptUrl}`);
   }
@@ -182,36 +182,36 @@ export function generateCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
 }
 
-export function createAuthToken(email: string, purpose: string, ttlMinutes = 15): string {
+export async function createAuthToken(email: string, purpose: string, ttlMinutes = 15): Promise<string> {
   const code = generateCode();
   const expiresAt = Date.now() / 1000 + ttlMinutes * 60;
 
   // Invalidate prior unused tokens for this email + purpose
-  sqlite.prepare(`
-    UPDATE auth_tokens SET used_at = unixepoch('now')
-    WHERE email = ? AND purpose = ? AND used_at IS NULL
-  `).run(email, purpose);
+  await pool.query(`
+    UPDATE auth_tokens SET used_at = EXTRACT(EPOCH FROM NOW())
+    WHERE email = $1 AND purpose = $2 AND used_at IS NULL
+  `, [email, purpose]);
 
-  sqlite.prepare(`
+  await pool.query(`
     INSERT INTO auth_tokens (email, code, purpose, expires_at)
-    VALUES (?, ?, ?, ?)
-  `).run(email, code, purpose, expiresAt);
+    VALUES ($1, $2, $3, $4)
+  `, [email, code, purpose, expiresAt]);
 
   return code;
 }
 
-export function verifyAuthToken(email: string, code: string, purpose: string): boolean {
+export async function verifyAuthToken(email: string, code: string, purpose: string): Promise<boolean> {
   const now = Date.now() / 1000;
 
-  const token = sqlite.prepare(`
+  const token = (await pool.query(`
     SELECT id FROM auth_tokens
-    WHERE email = ? AND code = ? AND purpose = ? AND used_at IS NULL AND expires_at > ?
+    WHERE email = $1 AND code = $2 AND purpose = $3 AND used_at IS NULL AND expires_at > $4
     ORDER BY created_at DESC LIMIT 1
-  `).get(email, code, purpose, now) as { id: number } | undefined;
+  `, [email, code, purpose, now])).rows[0] as { id: number } | undefined;
 
   if (!token) return false;
 
   // Mark as used
-  sqlite.prepare(`UPDATE auth_tokens SET used_at = unixepoch('now') WHERE id = ?`).run(token.id);
+  await pool.query(`UPDATE auth_tokens SET used_at = EXTRACT(EPOCH FROM NOW()) WHERE id = $1`, [token.id]);
   return true;
 }

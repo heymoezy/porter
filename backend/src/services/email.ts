@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import { ImapFlow } from 'imapflow';
 import { decryptCredential } from '../lib/credential-crypto.js';
-import { sqlite } from '../db/client.js';
+import { pool } from '../db/client.js';
 import { emitSSE } from './scheduler.js';
 import crypto from 'crypto';
 
@@ -39,15 +39,16 @@ async function getEmailCredentials(connectionId?: string): Promise<EmailCredenti
   let row: ConnectionRow | undefined;
 
   if (connectionId) {
-    row = sqlite.prepare(
+    row = (await pool.query(
       `SELECT id, meta_json FROM workspace_connections
-       WHERE id = ? AND provider = 'email' AND status = 'connected' LIMIT 1`
-    ).get(connectionId) as ConnectionRow | undefined;
+       WHERE id = $1 AND provider = 'email' AND status = 'connected' LIMIT 1`,
+      [connectionId]
+    )).rows[0] as ConnectionRow | undefined;
   } else {
-    row = sqlite.prepare(
+    row = (await pool.query(
       `SELECT id, meta_json FROM workspace_connections
        WHERE provider = 'email' AND status = 'connected' LIMIT 1`
-    ).get() as ConnectionRow | undefined;
+    )).rows[0] as ConnectionRow | undefined;
   }
 
   if (!row) {
@@ -61,12 +62,12 @@ async function getEmailCredentials(connectionId?: string): Promise<EmailCredenti
 /**
  * Mark an email connection as needing re-authentication and emit SSE.
  */
-function markNeedsReauth(reason: string): void {
-  sqlite.prepare(`
+async function markNeedsReauth(reason: string): Promise<void> {
+  await pool.query(`
     UPDATE workspace_connections
-    SET status = 'needs_reauth', last_error = @reason, updated_at = unixepoch('now')
+    SET status = 'needs_reauth', last_error = $1, updated_at = EXTRACT(EPOCH FROM NOW())
     WHERE provider = 'email' AND status = 'connected'
-  `).run({ reason });
+  `, [reason]);
 
   emitSSE('connection:status', {
     provider: 'email',
@@ -117,7 +118,7 @@ export async function sendEmail(params: SendEmailParams): Promise<{ messageId: s
     const message = err instanceof Error ? err.message : String(err);
     // Auth errors signal expired tokens
     if (message.includes('invalid_grant') || message.includes('Token has been expired')) {
-      markNeedsReauth(message);
+      await markNeedsReauth(message);
     }
     throw err;
   }
@@ -130,17 +131,17 @@ export async function sendEmail(params: SendEmailParams): Promise<{ messageId: s
  * Falls back to Porter (master agent) for AI-based routing if no rule matches.
  * Returns the agent_id dispatched to, or null if no connection.
  */
-export function routeInboundEmail(
+export async function routeInboundEmail(
   from: string,
   subject: string,
   body: string,
   projectId?: string
-): string | null {
+): Promise<string | null> {
   // Get connection to read routing_rules from meta_json
-  const row = sqlite.prepare(
+  const row = (await pool.query(
     `SELECT id, meta_json FROM workspace_connections
      WHERE provider = 'email' AND status = 'connected' LIMIT 1`
-  ).get() as ConnectionRow | undefined;
+  )).rows[0] as ConnectionRow | undefined;
 
   if (!row) return null;
 
@@ -156,7 +157,7 @@ export function routeInboundEmail(
   for (const rule of routingRules) {
     try {
       if (from.includes(rule.pattern) || new RegExp(rule.pattern, 'i').test(from)) {
-        insertEmailJob(rule.agent_id, projectId ?? null, from, subject, body);
+        await insertEmailJob(rule.agent_id, projectId ?? null, from, subject, body);
         return rule.agent_id;
       }
     } catch {
@@ -165,51 +166,51 @@ export function routeInboundEmail(
   }
 
   // No rule matched — dispatch to Porter (master agent) for AI routing
-  const porterAgent = sqlite.prepare(
+  const porterAgent = (await pool.query(
     `SELECT id FROM personas WHERE name = 'Porter' AND status != 'retired' LIMIT 1`
-  ).get() as { id: string } | undefined;
+  )).rows[0] as { id: string } | undefined;
 
   if (!porterAgent) return null;
 
   const prompt = `New email received:\nFrom: ${from}\nSubject: ${subject}\n\n${body}`;
-  insertEmailJob(porterAgent.id, projectId ?? null, from, subject, prompt);
+  await insertEmailJob(porterAgent.id, projectId ?? null, from, subject, prompt);
   return porterAgent.id;
 }
 
 /**
  * Insert an agent_job for an inbound email with 60-second deduplication.
  */
-function insertEmailJob(
+async function insertEmailJob(
   agentId: string,
   projectId: string | null,
   from: string,
   subject: string,
   prompt: string
-): void {
-  const existing = sqlite.prepare(`
+): Promise<void> {
+  const existing = (await pool.query(`
     SELECT 1 FROM agent_jobs
-    WHERE agent_id = @agentId
+    WHERE agent_id = $1
       AND trigger_type = 'email_received'
       AND status = 'pending'
-      AND created_at > unixepoch('now') - 60
+      AND created_at > EXTRACT(EPOCH FROM NOW()) - 60
     LIMIT 1
-  `).get({ agentId });
+  `, [agentId])).rows[0];
 
   if (existing) return;
 
   const id = crypto.randomUUID();
-  sqlite.prepare(`
+  await pool.query(`
     INSERT INTO agent_jobs
       (id, agent_id, project_id, trigger_type, trigger_data, prompt, status, scheduled_for)
     VALUES
-      (@id, @agentId, @projectId, 'email_received', @triggerData, @prompt, 'pending', unixepoch('now'))
-  `).run({
+      ($1, $2, $3, 'email_received', $4, $5, 'pending', EXTRACT(EPOCH FROM NOW()))
+  `, [
     id,
     agentId,
     projectId,
-    triggerData: JSON.stringify({ from, subject }),
+    JSON.stringify({ from, subject }),
     prompt,
-  });
+  ]);
 }
 
 // ── IMAP IDLE ─────────────────────────────────────────────────────────────────
@@ -273,27 +274,29 @@ export async function startImapIdle(connectionId?: string): Promise<void> {
             console.log('[email] Inbound email from %s: %s', fromAddr, subject);
 
             // Phase 11: Archive inbound email in unified table BEFORE routing
-            const contactId = findOrCreateEmailContact(fromAddr);
-            const conversationId = findOrCreateEmailConversation(fromAddr, contactId);
+            const contactId = await findOrCreateEmailContact(fromAddr);
+            const conversationId = await findOrCreateEmailConversation(fromAddr, contactId);
 
-            sqlite.prepare(
+            await pool.query(
               `INSERT INTO messages (conversation_id, sender_type, sender_id, sender_name, content, channel_type, channel_metadata, created_at)
-               VALUES (?, 'external', ?, ?, ?, 'email', ?, unixepoch('now'))`
-            ).run(
-              conversationId,
-              fromAddr,
-              fromAddr,
-              `Subject: ${subject}\n\n${body}`,
-              JSON.stringify({ from: fromAddr, subject })
+               VALUES ($1, 'external', $2, $3, $4, 'email', $5, EXTRACT(EPOCH FROM NOW()))`,
+              [
+                conversationId,
+                fromAddr,
+                fromAddr,
+                `Subject: ${subject}\n\n${body}`,
+                JSON.stringify({ from: fromAddr, subject }),
+              ]
             );
 
-            sqlite.prepare(
-              `UPDATE conversations SET updated_at = unixepoch('now') WHERE id = ?`
-            ).run(conversationId);
+            await pool.query(
+              `UPDATE conversations SET updated_at = EXTRACT(EPOCH FROM NOW()) WHERE id = $1`,
+              [conversationId]
+            );
 
             console.log('[email] Archived inbound email from %s in conversation %s', fromAddr, conversationId);
 
-            const agentId = routeInboundEmail(fromAddr, subject, body);
+            const agentId = await routeInboundEmail(fromAddr, subject, body);
 
             emitSSE('agent:activity', {
               event_type: 'email_received',
@@ -325,11 +328,11 @@ export async function startImapIdle(connectionId?: string): Promise<void> {
 
       if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
         console.error('[email] IMAP IDLE: max consecutive failures — marking connection degraded');
-        sqlite.prepare(`
+        await pool.query(`
           UPDATE workspace_connections
-          SET status = 'degraded', last_error = @error, updated_at = unixepoch('now')
+          SET status = 'degraded', last_error = $1, updated_at = EXTRACT(EPOCH FROM NOW())
           WHERE provider = 'email'
-        `).run({ error: message });
+        `, [message]);
 
         emitSSE('connection:status', {
           provider: 'email',
@@ -373,16 +376,17 @@ export function stopImapIdle(): void {
  * Find an existing contact by email address, or create one.
  * Returns the contact ID.
  */
-export function findOrCreateEmailContact(
+export async function findOrCreateEmailContact(
   emailAddress: string,
   displayName?: string
-): string {
+): Promise<string> {
   const normalized = emailAddress.trim().toLowerCase();
 
   // Look up by email value in contact_emails
-  const existing = sqlite.prepare(
-    `SELECT ce.contact_id FROM contact_emails ce WHERE ce.value = ?`
-  ).get(normalized) as { contact_id: string } | undefined;
+  const existing = (await pool.query(
+    `SELECT ce.contact_id FROM contact_emails ce WHERE ce.value = $1`,
+    [normalized]
+  )).rows[0] as { contact_id: string } | undefined;
 
   if (existing) return existing.contact_id;
 
@@ -390,19 +394,27 @@ export function findOrCreateEmailContact(
   const contactId = crypto.randomUUID();
   const name = displayName || normalized;
 
-  const insertContact = sqlite.transaction(() => {
-    sqlite.prepare(
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
       `INSERT INTO contacts (id, display_name, created_by, created_at, updated_at)
-       VALUES (?, ?, 'system', unixepoch('now'), unixepoch('now'))`
-    ).run(contactId, name);
-
-    sqlite.prepare(
+       VALUES ($1, $2, 'system', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))`,
+      [contactId, name]
+    );
+    await client.query(
       `INSERT INTO contact_emails (contact_id, value, label, is_primary)
-       VALUES (?, ?, 'work', 1)`
-    ).run(contactId, normalized);
-  });
+       VALUES ($1, $2, 'work', 1)`,
+      [contactId, normalized]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 
-  insertContact();
   return contactId;
 }
 
@@ -411,46 +423,59 @@ export function findOrCreateEmailContact(
  * Links the conversation to the contact.
  * Returns the conversation ID.
  */
-export function findOrCreateEmailConversation(
+export async function findOrCreateEmailConversation(
   emailAddress: string,
   contactId: string
-): string {
+): Promise<string> {
   const normalized = emailAddress.trim().toLowerCase();
 
-  const existing = sqlite.prepare(
-    `SELECT id FROM conversations WHERE external_id = ?`
-  ).get(normalized) as { id: string } | undefined;
+  const existing = (await pool.query(
+    `SELECT id FROM conversations WHERE external_id = $1`,
+    [normalized]
+  )).rows[0] as { id: string } | undefined;
 
   if (existing) {
     // Ensure contact link exists
-    sqlite.prepare(
-      `INSERT OR IGNORE INTO contact_conversations (contact_id, conversation_id)
-       VALUES (?, ?)`
-    ).run(contactId, existing.id);
+    await pool.query(
+      `INSERT INTO contact_conversations (contact_id, conversation_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [contactId, existing.id]
+    );
     return existing.id;
   }
 
   const convId = crypto.randomUUID();
 
-  const createConv = sqlite.transaction(() => {
-    sqlite.prepare(
-      `INSERT OR IGNORE INTO conversations
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO conversations
          (id, scope_type, scope_id, external_id, channel_type, created_at, updated_at)
-       VALUES (?, 'contact', ?, ?, 'email', unixepoch('now'), unixepoch('now'))`
-    ).run(convId, contactId, normalized);
+       VALUES ($1, 'contact', $2, $3, 'email', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+       ON CONFLICT DO NOTHING`,
+      [convId, contactId, normalized]
+    );
+    await client.query(
+      `INSERT INTO contact_conversations (contact_id, conversation_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [contactId, convId]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 
-    sqlite.prepare(
-      `INSERT OR IGNORE INTO contact_conversations (contact_id, conversation_id)
-       VALUES (?, ?)`
-    ).run(contactId, convId);
-  });
-
-  createConv();
-
-  // Handle race: if INSERT OR IGNORE was a no-op, another request created it first
-  const check = sqlite.prepare(
-    `SELECT id FROM conversations WHERE external_id = ?`
-  ).get(normalized) as { id: string };
+  // Handle race: if INSERT was a no-op, another request created it first
+  const check = (await pool.query(
+    `SELECT id FROM conversations WHERE external_id = $1`,
+    [normalized]
+  )).rows[0] as { id: string };
 
   return check.id;
 }

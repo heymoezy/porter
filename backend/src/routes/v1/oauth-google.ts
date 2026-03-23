@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import oauth2, { OAuth2Namespace } from '@fastify/oauth2';
 import { encryptCredential } from '../../lib/credential-crypto.js';
 import { config } from '../../config.js';
-import { sqlite } from '../../db/client.js';
+import { pool } from '../../db/client.js';
 import { emitSSE } from '../../services/scheduler.js';
 import crypto from 'crypto';
 import { err } from '../../lib/envelope.js';
@@ -18,39 +18,34 @@ declare module 'fastify' {
  * Insert or update a workspace_connections row for a given provider.
  * workspace_connections has no UNIQUE on provider, so we use SELECT + INSERT/UPDATE.
  */
-function upsertConnection(
+async function upsertConnection(
   provider: string,
   displayName: string,
   encryptedMeta: string,
   now: number
-): void {
-  const existing = sqlite.prepare(
-    `SELECT id FROM workspace_connections WHERE provider = ? LIMIT 1`
-  ).get(provider) as { id: string } | undefined;
+): Promise<void> {
+  const existing = (await pool.query(
+    `SELECT id FROM workspace_connections WHERE provider = $1 LIMIT 1`,
+    [provider]
+  )).rows[0] as { id: string } | undefined;
 
   if (existing) {
-    sqlite.prepare(`
+    await pool.query(`
       UPDATE workspace_connections
       SET status = 'connected',
-          display_name = @displayName,
-          meta_json = @meta,
+          display_name = $1,
+          meta_json = $2,
           meta_encrypted = 1,
-          updated_at = @now
-      WHERE id = @id
-    `).run({ id: existing.id, displayName, meta: encryptedMeta, now });
+          updated_at = $3
+      WHERE id = $4
+    `, [displayName, encryptedMeta, now, existing.id]);
   } else {
-    sqlite.prepare(`
+    await pool.query(`
       INSERT INTO workspace_connections
         (id, provider, kind, status, display_name, meta_json, meta_encrypted, created_at, updated_at)
       VALUES
-        (@id, @provider, 'oauth2', 'connected', @displayName, @meta, 1, @now, @now)
-    `).run({
-      id: crypto.randomUUID(),
-      provider,
-      displayName,
-      meta: encryptedMeta,
-      now,
-    });
+        ($1, $2, 'oauth2', 'connected', $3, $4, 1, $5, $6)
+    `, [crypto.randomUUID(), provider, displayName, encryptedMeta, now, now]);
   }
 }
 
@@ -129,10 +124,10 @@ export default async function oauthGoogleRoutes(fastify: FastifyInstance) {
       const now = Math.floor(Date.now() / 1000);
 
       // Upsert email connection (provider='email')
-      upsertConnection('email', userEmail, encryptedMeta, now);
+      await upsertConnection('email', userEmail, encryptedMeta, now);
 
       // Upsert google_calendar connection (same token grants calendar access)
-      upsertConnection('google_calendar', userEmail, encryptedMeta, now);
+      await upsertConnection('google_calendar', userEmail, encryptedMeta, now);
 
       // Emit SSE to notify clients both connections are now active
       await emitSSE('connection:status', {

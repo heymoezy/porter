@@ -1,7 +1,6 @@
 import fp from 'fastify-plugin';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { db } from '../db/client.js';
-import { sqlite } from '../db/client.js';
+import { db, pool } from '../db/client.js';
 import * as schema from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { err } from '../lib/envelope.js';
@@ -27,12 +26,12 @@ async function authPlugin(fastify: FastifyInstance) {
     const token = request.cookies?.porter_session;
     if (!token) return;
 
-    const session = db.select().from(schema.sessions)
-      .where(eq(schema.sessions.token, token)).get();
+    const [session] = await db.select().from(schema.sessions)
+      .where(eq(schema.sessions.token, token));
     if (!session || session.expires < Date.now() / 1000) return;
 
-    const user = db.select().from(schema.users)
-      .where(eq(schema.users.username, session.username)).get();
+    const [user] = await db.select().from(schema.users)
+      .where(eq(schema.users.username, session.username));
     if (user) {
       request.sessionUser = {
         username: user.username,
@@ -68,9 +67,10 @@ async function authPlugin(fastify: FastifyInstance) {
       }
 
       // 4. Look up collaborator record (active only, not pending/revoked)
-      const collab = sqlite.prepare(
-        `SELECT role FROM project_collaborators WHERE project_id = ? AND username = ? AND status = 'active'`
-      ).get(projectId, request.sessionUser.username) as { role: ProjectRole } | undefined;
+      const collab = (await pool.query(
+        `SELECT role FROM project_collaborators WHERE project_id = $1 AND username = $2 AND status = 'active'`,
+        [projectId, request.sessionUser.username]
+      )).rows[0] as { role: ProjectRole } | undefined;
 
       if (!collab) {
         return reply.code(403).send(err('FORBIDDEN', 'Access denied', request.id));

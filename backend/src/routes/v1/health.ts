@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { sqlite } from '../../db/client.js';
+import { pool } from '../../db/client.js';
 import { config } from '../../config.js';
 import { ok } from '../../lib/envelope.js';
 
@@ -42,7 +42,7 @@ export default async function healthV1Routes(fastify: FastifyInstance) {
     let dbLatencyMs: number | null = null;
     try {
       const dbStart = Date.now();
-      sqlite.prepare('SELECT 1').get();
+      await pool.query('SELECT 1');
       dbLatencyMs = Date.now() - dbStart;
       dbStatus = 'up';
     } catch {
@@ -54,23 +54,23 @@ export default async function healthV1Routes(fastify: FastifyInstance) {
 
     let tokenUsage: { model: string; total_input: number; total_output: number; total_requests: number }[] = [];
     try {
-      tokenUsage = sqlite.prepare(`
+      tokenUsage = (await pool.query(`
         SELECT model,
                SUM(input_tokens) as total_input,
                SUM(output_tokens) as total_output,
                SUM(request_count) as total_requests
         FROM token_usage_daily
-        WHERE date >= @since
+        WHERE date >= $1
         GROUP BY model
         ORDER BY total_requests DESC
-      `).all({ since: sevenDaysAgo }) as typeof tokenUsage;
+      `, [sevenDaysAgo])).rows as typeof tokenUsage;
     } catch {
       // Table may not exist yet — empty is fine
     }
 
     return reply.send(ok({
       backends,
-      database: { status: dbStatus, latencyMs: dbLatencyMs },
+      database: { engine: 'postgresql', status: dbStatus, latencyMs: dbLatencyMs },
       tokenUsage,
       checkedAt: new Date().toISOString(),
     }));

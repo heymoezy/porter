@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { sqlite } from '../../db/client.js';
+import { pool } from '../../db/client.js';
 import {
   routeInboundWhatsApp,
   verifyWebhookSignature,
@@ -124,27 +124,29 @@ export default async function webhookWhatsAppRoutes(
 
       // Phase 11: Archive message in unified table BEFORE routing
       // 1. Find or create CRM contact from phone number
-      const contactId = findOrCreateWhatsAppContact(from, profileName);
+      const contactId = await findOrCreateWhatsAppContact(from, profileName);
 
       // 2. Find or create conversation keyed by phone number (external_id)
-      const conversationId = findOrCreateWhatsAppConversation(from, contactId);
+      const conversationId = await findOrCreateWhatsAppConversation(from, contactId);
 
       // 3. Archive normalized message + raw payload in messages table
-      sqlite.prepare(
+      await pool.query(
         `INSERT INTO messages (conversation_id, sender_type, sender_id, sender_name, content, channel_type, channel_metadata, created_at)
-         VALUES (?, 'external', ?, ?, ?, 'whatsapp', ?, unixepoch('now'))`,
-      ).run(
-        conversationId,
-        from,
-        profileName || from,
-        messageText,
-        JSON.stringify(value),
+         VALUES ($1, 'external', $2, $3, $4, 'whatsapp', $5, EXTRACT(EPOCH FROM NOW()))`,
+        [
+          conversationId,
+          from,
+          profileName || from,
+          messageText,
+          JSON.stringify(value),
+        ]
       );
 
       // 4. Update conversation timestamp
-      sqlite.prepare(
-        `UPDATE conversations SET updated_at = unixepoch('now') WHERE id = ?`,
-      ).run(conversationId);
+      await pool.query(
+        `UPDATE conversations SET updated_at = EXTRACT(EPOCH FROM NOW()) WHERE id = $1`,
+        [conversationId]
+      );
 
       fastify.log.info(`[whatsapp-webhook] Archived message from ${from} in conversation ${conversationId}`);
 

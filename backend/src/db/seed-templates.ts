@@ -1,36 +1,42 @@
-import { sqlite } from './client.js';
+import { pool } from './client.js';
 
-function insertTemplate(t: {
+let _client: import('pg').PoolClient | null = null;
+
+async function insertTemplate(t: {
   id: string; name: string; category: string; description: string;
   tags: string[]; skills: string[]; tools: string[];
   required_backends: string[]; required_tools: string[];
   system_prompt: string; soul_text: string; role_card_text: string;
   identity_text: string; skills_text: string;
   is_internal: number; sort_order: number;
-}): void {
-  sqlite.prepare(`
-    INSERT OR IGNORE INTO agent_templates
+}): Promise<void> {
+  const q = _client || pool;
+  await q.query(`
+    INSERT INTO agent_templates
       (id, name, category, description, tags, skills, tools, required_backends, required_tools,
        system_prompt, soul_text, role_card_text, identity_text, skills_text, is_internal, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    ON CONFLICT DO NOTHING
+  `, [
     t.id, t.name, t.category, t.description,
     JSON.stringify(t.tags), JSON.stringify(t.skills), JSON.stringify(t.tools),
     JSON.stringify(t.required_backends), JSON.stringify(t.required_tools),
     t.system_prompt, t.soul_text, t.role_card_text, t.identity_text, t.skills_text,
     t.is_internal, t.sort_order,
-  );
+  ]);
 }
 
-export function seedTemplates(): void {
-  const row = sqlite.prepare(`SELECT COUNT(*) as n FROM agent_templates`).get() as { n: number };
-  if (row.n >= 100) return;
+export async function seedTemplates(): Promise<void> {
+  const { rows } = await pool.query(`SELECT COUNT(*) as n FROM agent_templates`);
+  if (Number(rows[0].n) >= 100) return;
 
-  sqlite.transaction(() => {
+  _client = await pool.connect();
+  try {
+    await _client.query('BEGIN');
 
     // ── ENGINEERING (15) ────────────────────────────────────────────────────
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-frontend-dev', name: 'Frontend Developer', category: 'engineering',
       description: 'Builds responsive, accessible React/TypeScript UIs.',
       tags: ['react', 'typescript', 'css', 'frontend', 'ui'],
@@ -56,7 +62,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 10,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-backend-dev', name: 'Backend Developer', category: 'engineering',
       description: 'Designs and implements robust server-side APIs and services.',
       tags: ['node', 'api', 'backend', 'typescript', 'database'],
@@ -82,7 +88,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 11,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-fullstack', name: 'Full-Stack Developer', category: 'engineering',
       description: 'Owns features end-to-end from database to UI.',
       tags: ['fullstack', 'react', 'node', 'typescript', 'api'],
@@ -108,7 +114,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 12,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-mobile-dev', name: 'Mobile Developer', category: 'engineering',
       description: 'Builds native-quality iOS and Android apps with React Native.',
       tags: ['mobile', 'react-native', 'ios', 'android', 'typescript'],
@@ -134,7 +140,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 13,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-devops', name: 'DevOps Engineer', category: 'engineering',
       description: 'Automates infrastructure, CI/CD pipelines, and deployment workflows.',
       tags: ['devops', 'docker', 'ci-cd', 'kubernetes', 'infrastructure'],
@@ -160,7 +166,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 14,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-dba', name: 'Database Administrator', category: 'engineering',
       description: 'Optimizes queries, designs schemas, and ensures data integrity.',
       tags: ['database', 'sql', 'postgres', 'performance', 'schema'],
@@ -186,7 +192,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 15,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-api-designer', name: 'API Designer', category: 'engineering',
       description: 'Designs clean, versioned REST and GraphQL APIs from first principles.',
       tags: ['api', 'rest', 'graphql', 'openapi', 'design'],
@@ -212,7 +218,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 16,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-security', name: 'Security Engineer', category: 'engineering',
       description: 'Audits code, designs threat models, and hardens systems against attack.',
       tags: ['security', 'auth', 'penetration-testing', 'vulnerability', 'compliance'],
@@ -238,7 +244,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 17,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-performance', name: 'Performance Engineer', category: 'engineering',
       description: 'Profiles, benchmarks, and optimizes systems for speed and efficiency.',
       tags: ['performance', 'profiling', 'optimization', 'benchmarking', 'metrics'],
@@ -264,7 +270,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 18,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-embedded', name: 'Embedded Systems Engineer', category: 'engineering',
       description: 'Programs microcontrollers and IoT devices in C/C++ and Rust.',
       tags: ['embedded', 'iot', 'c', 'rust', 'firmware'],
@@ -290,7 +296,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 19,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-ml', name: 'ML Engineer', category: 'engineering',
       description: 'Trains, evaluates, and deploys machine learning models.',
       tags: ['ml', 'python', 'pytorch', 'data-science', 'model-training'],
@@ -316,7 +322,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 20,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-data-engineer', name: 'Data Engineer', category: 'engineering',
       description: 'Builds pipelines that move, transform, and deliver data reliably.',
       tags: ['data-engineering', 'etl', 'pipelines', 'sql', 'airflow'],
@@ -342,7 +348,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 21,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-platform', name: 'Platform Engineer', category: 'engineering',
       description: 'Builds internal developer platforms and golden paths for engineering teams.',
       tags: ['platform', 'developer-experience', 'infrastructure', 'tooling'],
@@ -368,7 +374,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 22,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-qa', name: 'QA Engineer', category: 'engineering',
       description: 'Designs test strategies, automates regression suites, and gates releases.',
       tags: ['qa', 'testing', 'automation', 'playwright', 'cypress'],
@@ -394,7 +400,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 23,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'eng-release-mgr', name: 'Release Manager', category: 'engineering',
       description: 'Coordinates safe, predictable software releases across teams.',
       tags: ['release', 'deployment', 'coordination', 'changelog', 'versioning'],
@@ -422,7 +428,7 @@ export function seedTemplates(): void {
 
     // ── DESIGN (10) ──────────────────────────────────────────────────────────
 
-    insertTemplate({
+    await insertTemplate({
       id: 'des-ui', name: 'UI Designer', category: 'design',
       description: 'Crafts beautiful, consistent user interface designs in Figma.',
       tags: ['ui', 'figma', 'design-system', 'components', 'visual'],
@@ -448,7 +454,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 30,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'des-ux-researcher', name: 'UX Researcher', category: 'design',
       description: 'Runs user research, usability tests, and synthesizes behavioral insights.',
       tags: ['ux', 'research', 'usability', 'interviews', 'insights'],
@@ -474,7 +480,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 31,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'des-brand', name: 'Brand Designer', category: 'design',
       description: 'Creates and maintains cohesive brand identities across all touchpoints.',
       tags: ['brand', 'identity', 'logo', 'visual-language', 'guidelines'],
@@ -500,7 +506,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 32,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'des-graphic', name: 'Graphic Designer', category: 'design',
       description: 'Produces visual content for marketing, social, and print materials.',
       tags: ['graphic-design', 'illustration', 'marketing', 'print', 'social'],
@@ -526,7 +532,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 33,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'des-motion', name: 'Motion Designer', category: 'design',
       description: 'Creates animations and motion graphics for UI, marketing, and video.',
       tags: ['motion', 'animation', 'after-effects', 'ui-animation', 'video'],
@@ -552,7 +558,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 34,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'des-product', name: 'Product Designer', category: 'design',
       description: 'Owns the end-to-end design of digital products from concept to launch.',
       tags: ['product-design', 'ux', 'ui', 'prototyping', 'figma'],
@@ -578,7 +584,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 35,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'des-system-lead', name: 'Design System Lead', category: 'design',
       description: 'Architects and governs the design system used across all products.',
       tags: ['design-system', 'tokens', 'components', 'governance', 'documentation'],
@@ -604,7 +610,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 36,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'des-accessibility', name: 'Accessibility Specialist', category: 'design',
       description: 'Audits interfaces for WCAG compliance and designs inclusive experiences.',
       tags: ['accessibility', 'a11y', 'wcag', 'screen-reader', 'inclusive-design'],
@@ -630,7 +636,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 37,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'des-interaction', name: 'Interaction Designer', category: 'design',
       description: 'Designs the behavior and microinteractions of digital products.',
       tags: ['interaction-design', 'microinteractions', 'prototyping', 'ux', 'flows'],
@@ -656,7 +662,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 38,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'des-visual-qa', name: 'Visual QA Specialist', category: 'design',
       description: 'Validates that implemented UIs match designs precisely before release.',
       tags: ['visual-qa', 'design-review', 'pixel-perfect', 'cross-browser', 'regression'],
@@ -684,7 +690,7 @@ export function seedTemplates(): void {
 
     // ── CONTENT (12) ────────────────────────────────────────────────────────
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cnt-writer', name: 'Content Writer', category: 'content',
       description: 'Writes clear, engaging long-form content for blogs, guides, and articles.',
       tags: ['writing', 'content', 'blog', 'long-form', 'storytelling'],
@@ -710,7 +716,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 40,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cnt-technical', name: 'Technical Writer', category: 'content',
       description: 'Writes developer docs, API references, and technical guides.',
       tags: ['technical-writing', 'docs', 'api-reference', 'developer', 'markdown'],
@@ -736,7 +742,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 41,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cnt-copywriter', name: 'Copywriter', category: 'content',
       description: 'Writes persuasive copy for ads, landing pages, and product marketing.',
       tags: ['copywriting', 'marketing', 'landing-pages', 'ads', 'conversion'],
@@ -762,7 +768,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 42,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cnt-editor', name: 'Content Editor', category: 'content',
       description: 'Edits and elevates content for clarity, accuracy, and brand consistency.',
       tags: ['editing', 'proofreading', 'content', 'clarity', 'style-guide'],
@@ -788,7 +794,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 43,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cnt-seo', name: 'SEO Content Strategist', category: 'content',
       description: 'Plans and optimizes content for organic search visibility and ranking.',
       tags: ['seo', 'content-strategy', 'keywords', 'organic', 'ranking'],
@@ -814,7 +820,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 44,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cnt-social-media', name: 'Social Media Manager', category: 'content',
       description: 'Creates and schedules social content that builds community and drives engagement.',
       tags: ['social-media', 'engagement', 'community', 'content', 'scheduling'],
@@ -840,7 +846,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 45,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cnt-email-marketer', name: 'Email Marketing Specialist', category: 'content',
       description: 'Designs email campaigns that nurture leads and drive conversions.',
       tags: ['email', 'marketing', 'campaigns', 'nurture', 'automation'],
@@ -866,7 +872,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 46,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cnt-blog', name: 'Blog Strategist', category: 'content',
       description: 'Plans and manages a blog strategy to drive traffic and establish authority.',
       tags: ['blog', 'content-strategy', 'editorial', 'traffic', 'thought-leadership'],
@@ -892,7 +898,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 47,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cnt-docs', name: 'Documentation Manager', category: 'content',
       description: 'Manages product documentation lifecycle from architecture to maintenance.',
       tags: ['documentation', 'product-docs', 'information-architecture', 'knowledge'],
@@ -918,7 +924,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 48,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cnt-translator', name: 'Localization Specialist', category: 'content',
       description: 'Translates and adapts content for target markets with cultural accuracy.',
       tags: ['localization', 'translation', 'i18n', 'multilingual', 'cultural'],
@@ -944,7 +950,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 49,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cnt-proofreader', name: 'Proofreader', category: 'content',
       description: 'Catches grammar, spelling, punctuation, and consistency errors before publishing.',
       tags: ['proofreading', 'grammar', 'editing', 'quality', 'publishing'],
@@ -970,7 +976,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 50,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cnt-strategist', name: 'Content Strategist', category: 'content',
       description: 'Designs the overall content strategy to achieve business and audience goals.',
       tags: ['content-strategy', 'planning', 'audience', 'measurement', 'editorial'],
@@ -998,7 +1004,7 @@ export function seedTemplates(): void {
 
     // ── RESEARCH (10) ────────────────────────────────────────────────────────
 
-    insertTemplate({
+    await insertTemplate({
       id: 'res-analyst', name: 'Research Analyst', category: 'research',
       description: 'Synthesizes information from multiple sources into actionable intelligence.',
       tags: ['research', 'analysis', 'synthesis', 'reports', 'intelligence'],
@@ -1024,7 +1030,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 60,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'res-data', name: 'Data Researcher', category: 'research',
       description: 'Collects, cleans, and analyzes data to answer specific research questions.',
       tags: ['data', 'research', 'analysis', 'python', 'statistics'],
@@ -1050,7 +1056,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 61,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'res-market', name: 'Market Researcher', category: 'research',
       description: 'Studies market size, customer segments, and industry trends.',
       tags: ['market-research', 'tam-sam-som', 'segments', 'trends', 'industry'],
@@ -1076,7 +1082,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 62,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'res-competitive', name: 'Competitive Intelligence Analyst', category: 'research',
       description: 'Monitors competitors and surfaces strategic intelligence for decision-making.',
       tags: ['competitive-intelligence', 'competitors', 'strategy', 'monitoring', 'analysis'],
@@ -1102,7 +1108,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 63,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'res-fact-checker', name: 'Fact Checker', category: 'research',
       description: 'Verifies claims, statistics, and attributions before publication.',
       tags: ['fact-checking', 'verification', 'accuracy', 'sources', 'journalism'],
@@ -1128,7 +1134,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 64,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'res-trend', name: 'Trend Analyst', category: 'research',
       description: 'Identifies emerging trends and signals that will shape markets and behavior.',
       tags: ['trends', 'futures', 'signals', 'emerging', 'foresight'],
@@ -1154,7 +1160,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 65,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'res-academic', name: 'Academic Researcher', category: 'research',
       description: 'Conducts rigorous literature reviews and synthesizes academic evidence.',
       tags: ['academic', 'literature-review', 'research', 'evidence', 'citations'],
@@ -1180,7 +1186,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 66,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'res-patent', name: 'Patent Researcher', category: 'research',
       description: 'Searches patent databases for prior art, freedom-to-operate, and landscape analysis.',
       tags: ['patents', 'ip', 'prior-art', 'freedom-to-operate', 'research'],
@@ -1206,7 +1212,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 67,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'res-user', name: 'User Researcher', category: 'research',
       description: 'Discovers user needs, mental models, and behaviors through qualitative methods.',
       tags: ['user-research', 'interviews', 'usability', 'personas', 'jobs-to-be-done'],
@@ -1232,7 +1238,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 68,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'res-survey', name: 'Survey Researcher', category: 'research',
       description: 'Designs, distributes, and analyzes surveys to gather quantitative user data.',
       tags: ['survey', 'quantitative', 'sampling', 'NPS', 'questionnaire'],
@@ -1260,7 +1266,7 @@ export function seedTemplates(): void {
 
     // ── BUSINESS (10) ────────────────────────────────────────────────────────
 
-    insertTemplate({
+    await insertTemplate({
       id: 'biz-product-mgr', name: 'Product Manager', category: 'business',
       description: 'Prioritizes product decisions, writes specs, and aligns cross-functional teams.',
       tags: ['product', 'roadmap', 'prioritization', 'specs', 'strategy'],
@@ -1286,7 +1292,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 70,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'biz-project-mgr', name: 'Project Manager', category: 'business',
       description: 'Plans, tracks, and delivers projects on time and within scope.',
       tags: ['project-management', 'planning', 'execution', 'risk', 'delivery'],
@@ -1312,7 +1318,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 71,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'biz-analyst', name: 'Business Analyst', category: 'business',
       description: 'Bridges business needs and technical solutions through requirements analysis.',
       tags: ['business-analysis', 'requirements', 'process', 'stakeholders', 'documentation'],
@@ -1338,7 +1344,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 72,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'biz-strategy', name: 'Strategy Consultant', category: 'business',
       description: 'Analyzes strategic options and helps organizations make high-stakes decisions.',
       tags: ['strategy', 'consulting', 'analysis', 'frameworks', 'decision-making'],
@@ -1364,7 +1370,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 73,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'biz-financial', name: 'Financial Analyst', category: 'business',
       description: 'Builds financial models, analyzes performance, and supports investment decisions.',
       tags: ['finance', 'modeling', 'analysis', 'forecasting', 'valuation'],
@@ -1390,7 +1396,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 74,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'biz-operations', name: 'Operations Manager', category: 'business',
       description: 'Designs and improves operational processes for efficiency and scale.',
       tags: ['operations', 'process', 'efficiency', 'scale', 'systems'],
@@ -1416,7 +1422,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 75,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'biz-risk', name: 'Risk Manager', category: 'business',
       description: 'Identifies, assesses, and mitigates business and operational risks.',
       tags: ['risk', 'compliance', 'assessment', 'mitigation', 'governance'],
@@ -1442,7 +1448,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 76,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'biz-growth', name: 'Growth Strategist', category: 'business',
       description: 'Designs growth experiments and optimizes the full acquisition-to-retention funnel.',
       tags: ['growth', 'acquisition', 'retention', 'funnel', 'experimentation'],
@@ -1468,7 +1474,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 77,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'biz-pricing', name: 'Pricing Strategist', category: 'business',
       description: 'Designs pricing models and packaging that maximize value capture.',
       tags: ['pricing', 'packaging', 'monetization', 'value', 'strategy'],
@@ -1494,7 +1500,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 78,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'biz-vendor', name: 'Vendor Manager', category: 'business',
       description: 'Manages vendor relationships, contracts, and performance.',
       tags: ['vendor-management', 'procurement', 'contracts', 'negotiation', 'relationships'],
@@ -1522,7 +1528,7 @@ export function seedTemplates(): void {
 
     // ── CREATIVE (8) ─────────────────────────────────────────────────────────
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cre-storyteller', name: 'Storyteller', category: 'creative',
       description: 'Crafts compelling narratives for brands, products, and campaigns.',
       tags: ['storytelling', 'narrative', 'brand', 'creative', 'writing'],
@@ -1548,7 +1554,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 80,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cre-game-designer', name: 'Game Designer', category: 'creative',
       description: 'Designs game mechanics, systems, and player experiences.',
       tags: ['game-design', 'mechanics', 'systems', 'player-experience', 'prototyping'],
@@ -1574,7 +1580,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 81,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cre-music', name: 'Music Producer', category: 'creative',
       description: 'Composes and produces music for brands, games, film, and digital content.',
       tags: ['music', 'production', 'composition', 'audio', 'sound-design'],
@@ -1600,7 +1606,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 82,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cre-video', name: 'Video Producer', category: 'creative',
       description: 'Plans, scripts, and produces video content from concept to delivery.',
       tags: ['video', 'production', 'editing', 'content', 'storytelling'],
@@ -1626,7 +1632,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 83,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cre-podcast', name: 'Podcast Producer', category: 'creative',
       description: 'Produces podcast series from format design through episode delivery.',
       tags: ['podcast', 'audio', 'production', 'editing', 'content'],
@@ -1652,7 +1658,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 84,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cre-director', name: 'Creative Director', category: 'creative',
       description: 'Sets creative vision and leads the execution across campaigns and projects.',
       tags: ['creative-direction', 'vision', 'campaigns', 'leadership', 'brand'],
@@ -1678,7 +1684,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 85,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cre-illustrator', name: 'Illustrator', category: 'creative',
       description: 'Creates original illustrations for editorial, brand, and product contexts.',
       tags: ['illustration', 'visual-art', 'editorial', 'brand', 'drawing'],
@@ -1704,7 +1710,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 86,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'cre-animator', name: '2D Animator', category: 'creative',
       description: 'Creates 2D animations for explainer videos, UI, and marketing.',
       tags: ['animation', '2d', 'explainer', 'motion', 'character'],
@@ -1732,7 +1738,7 @@ export function seedTemplates(): void {
 
     // ── SUPPORT (8) ──────────────────────────────────────────────────────────
 
-    insertTemplate({
+    await insertTemplate({
       id: 'sup-customer', name: 'Customer Support Agent', category: 'support',
       description: 'Handles customer inquiries and resolves issues with empathy and efficiency.',
       tags: ['customer-support', 'helpdesk', 'communication', 'resolution', 'empathy'],
@@ -1758,7 +1764,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 88,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'sup-technical', name: 'Technical Support Specialist', category: 'support',
       description: 'Resolves complex technical issues for users and developers.',
       tags: ['technical-support', 'troubleshooting', 'developer-support', 'debugging'],
@@ -1784,7 +1790,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 89,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'sup-community', name: 'Community Manager', category: 'support',
       description: 'Builds and nurtures user communities across forums, Discord, and social.',
       tags: ['community', 'discord', 'forums', 'engagement', 'moderation'],
@@ -1810,7 +1816,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 90,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'sup-knowledge-base', name: 'Knowledge Base Manager', category: 'support',
       description: 'Builds and maintains the self-service knowledge base that reduces support volume.',
       tags: ['knowledge-base', 'self-service', 'documentation', 'FAQs', 'support'],
@@ -1836,7 +1842,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 91,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'sup-training', name: 'Training Specialist', category: 'support',
       description: 'Designs and delivers training programs for product users and internal teams.',
       tags: ['training', 'learning', 'onboarding', 'curriculum', 'L&D'],
@@ -1862,7 +1868,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 92,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'sup-onboarding', name: 'Onboarding Specialist', category: 'support',
       description: 'Guides new users to their first value moment as quickly as possible.',
       tags: ['onboarding', 'activation', 'product-adoption', 'new-users', 'success'],
@@ -1888,7 +1894,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 93,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'sup-helpdesk', name: 'Help Desk Coordinator', category: 'support',
       description: 'Manages the support ticket queue and ensures SLA compliance.',
       tags: ['helpdesk', 'ticket-management', 'SLA', 'queue', 'routing'],
@@ -1914,7 +1920,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 94,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'sup-escalation', name: 'Escalation Manager', category: 'support',
       description: 'Owns complex, high-stakes customer issues through to resolution.',
       tags: ['escalation', 'customer-success', 'crisis', 'resolution', 'communication'],
@@ -1942,7 +1948,7 @@ export function seedTemplates(): void {
 
     // ── LEGAL (6) ────────────────────────────────────────────────────────────
 
-    insertTemplate({
+    await insertTemplate({
       id: 'leg-analyst', name: 'Legal Analyst', category: 'legal',
       description: 'Researches legal questions and summarizes applicable laws and precedents.',
       tags: ['legal', 'research', 'analysis', 'compliance', 'contracts'],
@@ -1968,7 +1974,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 96,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'leg-compliance', name: 'Compliance Officer', category: 'legal',
       description: 'Builds and maintains compliance programs for regulatory requirements.',
       tags: ['compliance', 'regulatory', 'risk', 'governance', 'policy'],
@@ -1994,7 +2000,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 97,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'leg-contract', name: 'Contract Specialist', category: 'legal',
       description: 'Drafts, reviews, and negotiates contracts to protect business interests.',
       tags: ['contracts', 'negotiation', 'drafting', 'legal', 'agreements'],
@@ -2020,7 +2026,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 98,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'leg-privacy', name: 'Privacy Counsel', category: 'legal',
       description: 'Advises on GDPR, CCPA, and data privacy compliance.',
       tags: ['privacy', 'GDPR', 'CCPA', 'data-protection', 'compliance'],
@@ -2046,7 +2052,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 99,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'leg-policy', name: 'Policy Writer', category: 'legal',
       description: 'Drafts clear, enforceable internal policies and terms of service.',
       tags: ['policy', 'terms', 'documentation', 'legal', 'governance'],
@@ -2072,7 +2078,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 100,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'leg-regulatory', name: 'Regulatory Affairs Specialist', category: 'legal',
       description: 'Manages regulatory submissions, approvals, and ongoing compliance.',
       tags: ['regulatory', 'submissions', 'approvals', 'compliance', 'government'],
@@ -2100,7 +2106,7 @@ export function seedTemplates(): void {
 
     // ── DATA-AI (8) ──────────────────────────────────────────────────────────
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dai-scientist', name: 'Data Scientist', category: 'data-ai',
       description: 'Extracts insights from complex data through statistical analysis and modeling.',
       tags: ['data-science', 'python', 'statistics', 'modeling', 'insights'],
@@ -2126,7 +2132,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 102,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dai-ml-ops', name: 'MLOps Engineer', category: 'data-ai',
       description: 'Deploys, monitors, and maintains machine learning systems in production.',
       tags: ['mlops', 'deployment', 'monitoring', 'pipelines', 'production'],
@@ -2152,7 +2158,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 103,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dai-prompt-eng', name: 'Prompt Engineer', category: 'data-ai',
       description: 'Designs and optimizes prompts for large language models and AI systems.',
       tags: ['prompt-engineering', 'llm', 'ai', 'optimization', 'evaluation'],
@@ -2178,7 +2184,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 104,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dai-trainer', name: 'Model Fine-Tuning Specialist', category: 'data-ai',
       description: 'Fine-tunes foundation models on domain-specific data for specialized tasks.',
       tags: ['fine-tuning', 'llm', 'training', 'domain-adaptation', 'LoRA'],
@@ -2204,7 +2210,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 105,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dai-annotator', name: 'Data Annotation Lead', category: 'data-ai',
       description: 'Designs annotation guidelines and manages data labeling workflows for ML.',
       tags: ['annotation', 'data-labeling', 'ml-data', 'guidelines', 'quality'],
@@ -2230,7 +2236,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 106,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dai-evaluator', name: 'AI Evaluator', category: 'data-ai',
       description: 'Designs and runs evaluation frameworks for AI system quality and safety.',
       tags: ['ai-evaluation', 'benchmarking', 'safety', 'quality', 'red-teaming'],
@@ -2256,7 +2262,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 107,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dai-etl', name: 'ETL Developer', category: 'data-ai',
       description: 'Builds data extraction, transformation, and loading pipelines for analytics.',
       tags: ['etl', 'data-pipelines', 'transformation', 'sql', 'airflow'],
@@ -2282,7 +2288,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 108,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dai-bi', name: 'BI Developer', category: 'data-ai',
       description: 'Builds business intelligence dashboards and self-service analytics infrastructure.',
       tags: ['bi', 'dashboards', 'analytics', 'sql', 'self-service'],
@@ -2310,7 +2316,7 @@ export function seedTemplates(): void {
 
     // ── DOMAIN (13) ──────────────────────────────────────────────────────────
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-crypto', name: 'Crypto & Web3 Specialist', category: 'domain',
       description: 'Advises on blockchain, DeFi, smart contracts, and crypto market dynamics.',
       tags: ['crypto', 'web3', 'blockchain', 'defi', 'smart-contracts'],
@@ -2336,7 +2342,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 110,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-healthcare', name: 'Healthcare Domain Expert', category: 'domain',
       description: 'Advises on healthcare workflows, regulations, and clinical data standards.',
       tags: ['healthcare', 'clinical', 'HIPAA', 'HL7', 'medical'],
@@ -2362,7 +2368,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 111,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-ecommerce', name: 'E-commerce Specialist', category: 'domain',
       description: 'Optimizes e-commerce operations, conversion, and customer experience.',
       tags: ['ecommerce', 'conversion', 'shopify', 'merchandising', 'checkout'],
@@ -2388,7 +2394,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 112,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-education', name: 'EdTech Specialist', category: 'domain',
       description: 'Designs learning experiences and advises on educational technology platforms.',
       tags: ['education', 'edtech', 'learning-design', 'LMS', 'curriculum'],
@@ -2414,7 +2420,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 113,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-real-estate', name: 'Real Estate Analyst', category: 'domain',
       description: 'Analyzes property markets, valuations, and investment opportunities.',
       tags: ['real-estate', 'property', 'valuation', 'investment', 'market-analysis'],
@@ -2440,7 +2446,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 114,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-supply-chain', name: 'Supply Chain Analyst', category: 'domain',
       description: 'Optimizes supply chain operations, sourcing, and logistics.',
       tags: ['supply-chain', 'logistics', 'sourcing', 'inventory', 'operations'],
@@ -2466,7 +2472,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 115,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-hr', name: 'People & HR Specialist', category: 'domain',
       description: 'Advises on HR policies, talent acquisition, and employee experience.',
       tags: ['hr', 'people', 'talent', 'culture', 'employment'],
@@ -2492,7 +2498,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 116,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-marketing', name: 'Marketing Strategist', category: 'domain',
       description: 'Designs integrated marketing strategies across channels to drive growth.',
       tags: ['marketing', 'strategy', 'campaigns', 'channels', 'brand'],
@@ -2518,7 +2524,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 117,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-sales-ops', name: 'Sales Operations Analyst', category: 'domain',
       description: 'Optimizes the sales process, CRM data, and revenue operations.',
       tags: ['sales-ops', 'crm', 'revenue-operations', 'pipeline', 'forecasting'],
@@ -2544,7 +2550,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 118,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-devrel', name: 'Developer Relations Engineer', category: 'domain',
       description: 'Builds developer communities, creates technical content, and drives API adoption.',
       tags: ['devrel', 'developer-experience', 'api', 'community', 'advocacy'],
@@ -2570,7 +2576,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 119,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-open-source', name: 'Open Source Maintainer', category: 'domain',
       description: 'Manages open source projects, community contributions, and governance.',
       tags: ['open-source', 'github', 'community', 'governance', 'contributions'],
@@ -2596,7 +2602,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 120,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-sustainability', name: 'Sustainability Analyst', category: 'domain',
       description: 'Analyzes environmental impact, ESG metrics, and sustainability strategies.',
       tags: ['sustainability', 'ESG', 'carbon', 'climate', 'reporting'],
@@ -2622,7 +2628,7 @@ export function seedTemplates(): void {
       is_internal: 0, sort_order: 121,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'dom-localization', name: 'Localization Program Manager', category: 'domain',
       description: 'Manages end-to-end localization programs for global product launches.',
       tags: ['localization', 'l10n', 'global', 'program-management', 'translation'],
@@ -2650,7 +2656,7 @@ export function seedTemplates(): void {
 
     // ── INTERNAL SYSTEM TEMPLATES (is_internal=1) ────────────────────────────
 
-    insertTemplate({
+    await insertTemplate({
       id: 'sys-crm-sweeper', name: 'CRM Sweep Agent', category: 'engineering',
       description: 'Internal agent that runs background contact analysis and enrichment sweeps.',
       tags: ['internal', 'crm', 'automation', 'analysis'],
@@ -2675,7 +2681,7 @@ export function seedTemplates(): void {
       is_internal: 1, sort_order: 200,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'sys-analytics-agent', name: 'Analytics Collector', category: 'data-ai',
       description: 'Internal agent that aggregates workspace activity and produces usage analytics.',
       tags: ['internal', 'analytics', 'usage', 'metrics'],
@@ -2700,7 +2706,7 @@ export function seedTemplates(): void {
       is_internal: 1, sort_order: 201,
     });
 
-    insertTemplate({
+    await insertTemplate({
       id: 'sys-maintenance', name: 'System Maintenance Agent', category: 'engineering',
       description: 'Internal agent that performs scheduled maintenance tasks on the workspace.',
       tags: ['internal', 'maintenance', 'cleanup', 'system'],
@@ -2725,6 +2731,13 @@ export function seedTemplates(): void {
       is_internal: 1, sort_order: 202,
     });
 
-  })();
+    await _client.query('COMMIT');
+  } catch (err) {
+    await _client.query('ROLLBACK');
+    throw err;
+  } finally {
+    _client.release();
+    _client = null;
+  }
 }
 

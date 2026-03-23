@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { sqlite } from '../../db/client.js';
+import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
 import { encryptCredential } from '../../lib/credential-crypto.js';
 import { emitSSE } from '../../services/scheduler.js';
@@ -97,9 +97,9 @@ export default async function connectionsV1Routes(
   fastify.get('/', {
     preHandler: [fastify.requireAuth],
   }, async (_request, reply) => {
-    const rows = sqlite.prepare(
+    const rows = (await pool.query(
       'SELECT * FROM workspace_connections ORDER BY provider ASC',
-    ).all() as WorkspaceConnectionRow[];
+    )).rows as WorkspaceConnectionRow[];
 
     return reply.send(ok({ connections: rows.map(formatConnection), count: rows.length }));
   });
@@ -110,9 +110,10 @@ export default async function connectionsV1Routes(
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    const row = sqlite.prepare(
-      'SELECT * FROM workspace_connections WHERE id = ?',
-    ).get(id) as WorkspaceConnectionRow | undefined;
+    const row = (await pool.query(
+      'SELECT * FROM workspace_connections WHERE id = $1',
+      [id]
+    )).rows[0] as WorkspaceConnectionRow | undefined;
 
     if (!row) {
       return reply.code(404).send(err('CONNECTION_NOT_FOUND', 'Connection not found'));
@@ -146,22 +147,23 @@ export default async function connectionsV1Routes(
       metaEncrypted = 1;
     }
 
-    sqlite.prepare(`
+    await pool.query(`
       INSERT INTO workspace_connections
         (id, provider, kind, status, display_name, scopes_json, meta_json, meta_encrypted, installed_by, created_at, updated_at)
       VALUES
-        (@id, @provider, @kind, 'disconnected', @displayName, @scopesJson, @metaJson, @metaEncrypted, @installedBy, @now, @now)
-    `).run({
+        ($1, $2, $3, 'disconnected', $4, $5, $6, $7, $8, $9, $10)
+    `, [
       id,
       provider,
       kind,
-      displayName: display_name ?? '',
-      scopesJson: JSON.stringify(scopes ?? []),
-      metaJson: storedMeta,
+      display_name ?? '',
+      JSON.stringify(scopes ?? []),
+      storedMeta,
       metaEncrypted,
-      installedBy: request.sessionUser!.username,
+      request.sessionUser!.username,
       now,
-    });
+      now,
+    ]);
 
     return reply.code(201).send(ok({ id, provider, status: 'disconnected' }));
   });
@@ -176,9 +178,10 @@ export default async function connectionsV1Routes(
 
     const { id } = request.params as { id: string };
 
-    const existing = sqlite.prepare(
-      'SELECT id FROM workspace_connections WHERE id = ?',
-    ).get(id) as { id: string } | undefined;
+    const existing = (await pool.query(
+      'SELECT id FROM workspace_connections WHERE id = $1',
+      [id]
+    )).rows[0] as { id: string } | undefined;
 
     if (!existing) {
       return reply.code(404).send(err('CONNECTION_NOT_FOUND', 'Connection not found'));
@@ -191,27 +194,34 @@ export default async function connectionsV1Routes(
 
     const { display_name, meta_json, status } = parsed.data;
 
-    const sets: string[] = ['updated_at = unixepoch(\'now\')'];
-    const params: Record<string, unknown> = { id };
+    const sets: string[] = ['updated_at = EXTRACT(EPOCH FROM NOW())'];
+    const params: unknown[] = [];
+    let paramIdx = 1;
 
     if (display_name !== undefined) {
-      sets.push('display_name = @displayName');
-      params.displayName = display_name;
+      sets.push(`display_name = $${paramIdx}`);
+      params.push(display_name);
+      paramIdx++;
     }
 
     if (status !== undefined) {
-      sets.push('status = @status');
-      params.status = status;
+      sets.push(`status = $${paramIdx}`);
+      params.push(status);
+      paramIdx++;
     }
 
     if (meta_json !== undefined) {
-      sets.push('meta_json = @metaJson, meta_encrypted = 1');
-      params.metaJson = encryptCredential(JSON.stringify(meta_json));
+      sets.push(`meta_json = $${paramIdx}, meta_encrypted = 1`);
+      params.push(encryptCredential(JSON.stringify(meta_json)));
+      paramIdx++;
     }
 
-    sqlite.prepare(
-      `UPDATE workspace_connections SET ${sets.join(', ')} WHERE id = @id`,
-    ).run(params);
+    params.push(id);
+
+    await pool.query(
+      `UPDATE workspace_connections SET ${sets.join(', ')} WHERE id = $${paramIdx}`,
+      params
+    );
 
     return reply.send(ok({ updated: true }));
   });
@@ -226,22 +236,25 @@ export default async function connectionsV1Routes(
 
     const { id } = request.params as { id: string };
 
-    const existing = sqlite.prepare(
-      'SELECT id, provider FROM workspace_connections WHERE id = ?',
-    ).get(id) as { id: string; provider: string } | undefined;
+    const existing = (await pool.query(
+      'SELECT id, provider FROM workspace_connections WHERE id = $1',
+      [id]
+    )).rows[0] as { id: string; provider: string } | undefined;
 
     if (!existing) {
       return reply.code(404).send(err('CONNECTION_NOT_FOUND', 'Connection not found'));
     }
 
     // Cascade delete project-level overrides first
-    sqlite.prepare(
-      'DELETE FROM project_connections WHERE connection_id = ?',
-    ).run(id);
+    await pool.query(
+      'DELETE FROM project_connections WHERE connection_id = $1',
+      [id]
+    );
 
-    sqlite.prepare(
-      'DELETE FROM workspace_connections WHERE id = ?',
-    ).run(id);
+    await pool.query(
+      'DELETE FROM workspace_connections WHERE id = $1',
+      [id]
+    );
 
     // Fire-and-forget SSE notification
     emitSSE('connection:status', { provider: existing.provider, status: 'disconnected' }).catch(() => {
@@ -257,16 +270,16 @@ export default async function connectionsV1Routes(
   }, async (request, reply) => {
     const { projectId } = request.params as { projectId: string };
 
-    const rows = sqlite.prepare(`
+    const rows = (await pool.query(`
       SELECT
         wc.*,
         pc.access_mode,
         pc.status AS override_status
       FROM workspace_connections wc
       LEFT JOIN project_connections pc
-        ON pc.connection_id = wc.id AND pc.project_id = @projectId
+        ON pc.connection_id = wc.id AND pc.project_id = $1
       ORDER BY wc.provider ASC
-    `).all({ projectId }) as ProjectConnectionRow[];
+    `, [projectId])).rows as ProjectConnectionRow[];
 
     return reply.send(ok({ connections: rows.map(formatProjectConnection), count: rows.length }));
   });
@@ -286,26 +299,26 @@ export default async function connectionsV1Routes(
     const now = Date.now() / 1000;
 
     // Verify the workspace connection exists
-    const conn = sqlite.prepare(
-      'SELECT id FROM workspace_connections WHERE id = ?',
-    ).get(connection_id) as { id: string } | undefined;
+    const conn = (await pool.query(
+      'SELECT id FROM workspace_connections WHERE id = $1',
+      [connection_id]
+    )).rows[0] as { id: string } | undefined;
 
     if (!conn) {
       return reply.code(404).send(err('CONNECTION_NOT_FOUND', 'Workspace connection not found'));
     }
 
-    sqlite.prepare(`
-      INSERT OR REPLACE INTO project_connections
+    await pool.query(`
+      INSERT INTO project_connections
         (project_id, connection_id, access_mode, status, attached_by, attached_at)
       VALUES
-        (@projectId, @connectionId, @accessMode, 'active', @attachedBy, @now)
-    `).run({
-      projectId,
-      connectionId: connection_id,
-      accessMode: access_mode,
-      attachedBy: request.sessionUser!.username,
-      now,
-    });
+        ($1, $2, $3, 'active', $4, $5)
+      ON CONFLICT (project_id, connection_id) DO UPDATE SET
+        access_mode = EXCLUDED.access_mode,
+        status = EXCLUDED.status,
+        attached_by = EXCLUDED.attached_by,
+        attached_at = EXCLUDED.attached_at
+    `, [projectId, connection_id, access_mode, request.sessionUser!.username, now]);
 
     return reply.send(ok({ attached: true }));
   });
@@ -316,10 +329,10 @@ export default async function connectionsV1Routes(
   }, async (request, reply) => {
     const { projectId, connectionId } = request.params as { projectId: string; connectionId: string };
 
-    sqlite.prepare(`
+    await pool.query(`
       DELETE FROM project_connections
-      WHERE project_id = @projectId AND connection_id = @connectionId
-    `).run({ projectId, connectionId });
+      WHERE project_id = $1 AND connection_id = $2
+    `, [projectId, connectionId]);
 
     return reply.send(ok({ detached: true }));
   });

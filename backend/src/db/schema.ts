@@ -1,7 +1,14 @@
-import { sqliteTable, text, integer, real, blob } from 'drizzle-orm/sqlite-core';
+import { pgTable, text, integer, doublePrecision, serial, jsonb, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { customType } from 'drizzle-orm/pg-core';
 
-export const users = sqliteTable('users', {
+const tsvector = customType<{ data: string }>({
+  dataType() { return 'tsvector'; },
+});
+
+// ── Users & Sessions ──────────────────────────────────────────────────────────
+
+export const users = pgTable('users', {
   username: text('username').primaryKey(),
   displayName: text('display_name'),
   fullName: text('full_name'),
@@ -11,20 +18,41 @@ export const users = sqliteTable('users', {
   role: text('role').default('operator'),
   emailVerified: integer('email_verified').default(0),
   status: text('status').default('active'),
-  createdAt: real('created_at').default(sql`(strftime('%s','now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  // Admin CRM fields
+  country: text('country'),
+  city: text('city'),
+  timezone: text('timezone'),
+  company: text('company'),
+  jobTitle: text('job_title'),
+  phone: text('phone'),
+  bio: text('bio'),
+  socialX: text('social_x'),
+  socialLinkedin: text('social_linkedin'),
+  socialGithub: text('social_github'),
+  avatarUrl: text('avatar_url'),
+  language: text('language').default('en'),
+  suspendedAt: doublePrecision('suspended_at'),
+  suspensionReason: text('suspension_reason'),
+  termsAcceptedAt: doublePrecision('terms_accepted_at'),
+  lastIp: text('last_ip'),
+  signupSource: text('signup_source'),
+  lifetimeFree: integer('lifetime_free').default(0),
 });
 
-export const sessions = sqliteTable('sessions', {
+export const sessions = pgTable('sessions', {
   token: text('token').primaryKey(),
   username: text('username').notNull(),
-  expires: real('expires').notNull(),
+  expires: doublePrecision('expires').notNull(),
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
-  lastSeenAt: real('last_seen_at').default(sql`(strftime('%s','now'))`),
-  createdAt: real('created_at').default(sql`(strftime('%s','now'))`),
+  lastSeenAt: doublePrecision('last_seen_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const tasks = sqliteTable('tasks', {
+// ── Tasks ─────────────────────────────────────────────────────────────────────
+
+export const tasks = pgTable('tasks', {
   id: text('id').primaryKey(),
   projectId: text('project_id'),
   username: text('username'),
@@ -33,49 +61,53 @@ export const tasks = sqliteTable('tasks', {
   status: text('status').default('pending').notNull(),
   priority: text('priority').default('normal').notNull(),
   phase: text('phase'),
-  createdAt: real('created_at').default(sql`(strftime('%s','now'))`),
-  updatedAt: real('updated_at'),
-  completedAt: real('completed_at'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at'),
+  completedAt: doublePrecision('completed_at'),
   assignedAgentId: text('assigned_agent_id'),
   tokensUsed: integer('tokens_used').default(0),
   timeMinutes: integer('time_minutes').default(0),
   result: text('result'),
-  tags: text('tags'), // JSON string
+  tags: jsonb('tags').default(sql`'[]'::jsonb`),
   sortOrder: integer('sort_order').default(0),
 });
 
-export const chats = sqliteTable('chats', {
+// ── Chats ─────────────────────────────────────────────────────────────────────
+
+export const chats = pgTable('chats', {
   id: text('id').primaryKey(),
   title: text('title'),
   projectId: text('project_id'),
   username: text('username'),
   modelId: text('model_id'),
-  metadata: text('metadata'), // JSON string
-  createdAt: real('created_at').default(sql`(strftime('%s','now'))`),
-  updatedAt: real('updated_at').default(sql`(strftime('%s','now'))`),
+  metadata: jsonb('metadata').default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const chatMessages = sqliteTable('chat_messages', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const chatMessages = pgTable('chat_messages', {
+  id: serial('id').primaryKey(),
   chatId: text('chat_id').notNull().references(() => chats.id, { onDelete: 'cascade' }),
   role: text('role').notNull(),
   content: text('content').notNull(),
-  timestamp: real('timestamp').default(sql`(strftime('%s','now'))`),
+  timestamp: doublePrecision('timestamp').default(sql`EXTRACT(EPOCH FROM NOW())`),
   modelId: text('model_id'),
 });
 
-export const chatAttachments = sqliteTable('chat_attachments', {
+export const chatAttachments = pgTable('chat_attachments', {
   id: text('id').primaryKey(),
   messageId: integer('message_id').references(() => chatMessages.id, { onDelete: 'cascade' }),
   chatId: text('chat_id').notNull().references(() => chats.id, { onDelete: 'cascade' }),
   filename: text('filename').notNull(),
   contentType: text('content_type'),
   size: integer('size'),
-  data: blob('data'),
-  createdAt: real('created_at').default(sql`(strftime('%s','now'))`),
+  data: text('data'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const projects = sqliteTable('projects', {
+// ── Projects ──────────────────────────────────────────────────────────────────
+
+export const projects = pgTable('projects', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug'),
@@ -83,28 +115,30 @@ export const projects = sqliteTable('projects', {
   status: text('status').default('active'),
   description: text('description'),
   ownerId: text('owner_id').notNull(),
-  milestones: text('milestones'),    // JSON array
-  artifacts: text('artifacts'),       // JSON array
-  links: text('links'),               // JSON array
-  metadata: text('metadata'),         // JSON blob for extensibility
-  createdAt: real('created_at').default(sql`(strftime('%s','now'))`),
-  updatedAt: real('updated_at').default(sql`(strftime('%s','now'))`),
+  milestones: jsonb('milestones').default(sql`'[]'::jsonb`),
+  artifacts: jsonb('artifacts').default(sql`'[]'::jsonb`),
+  links: jsonb('links').default(sql`'[]'::jsonb`),
+  metadata: jsonb('metadata').default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
   deadline: text('deadline'),         // ISO date string YYYY-MM-DD
 });
 
-export const personas = sqliteTable('personas', {
+// ── Personas (Agents) ─────────────────────────────────────────────────────────
+
+export const personas = pgTable('personas', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   role: text('role').default(''),
   avatar: text('avatar').default(''),
   preferredBackend: text('preferred_backend'),
-  fallbackBackends: text('fallback_backends').default('[]'),
+  fallbackBackends: jsonb('fallback_backends').default(sql`'[]'::jsonb`),
   status: text('status').default('idle'),
   soulHash: text('soul_hash').default(''),
   agentGroup: text('agent_group').default(''),
-  createdAt: text('created_at').notNull(),
-  lastActive: text('last_active'),
-  config: text('config').default('{}'),
+  createdAt: text('created_at').notNull(),          // ISO string, NOT epoch
+  lastActive: text('last_active'),                  // ISO string, NOT epoch
+  config: jsonb('config').default(sql`'{}'::jsonb`),
   sortOrder: integer('sort_order').default(50),
   owner: text('owner').default(''),
   isSystem: integer('is_system').default(0),
@@ -115,156 +149,164 @@ export const personas = sqliteTable('personas', {
   isTemporary: integer('is_temporary').default(0),
   managedByPorter: integer('managed_by_porter').default(0),
   appearanceStyle: text('appearance_style').default(''),
-  appearanceSpec: text('appearance_spec').default('{}'),
+  appearanceSpec: jsonb('appearance_spec').default(sql`'{}'::jsonb`),
   skinAssetPath: text('skin_asset_path').default(''),
   portraitAssetPath: text('portrait_asset_path').default(''),
   heartbeatEnabled: integer('heartbeat_enabled').default(0),
   heartbeatCron: text('heartbeat_cron').default(''),
-  lastHeartbeat: text('last_heartbeat'),
+  lastHeartbeat: text('last_heartbeat'),            // ISO string, NOT epoch
   templateId: text('template_id'),
 });
 
-export const schemaMigrations = sqliteTable('schema_migrations', {
+// ── Schema Migrations ─────────────────────────────────────────────────────────
+
+export const schemaMigrations = pgTable('schema_migrations', {
   id: text('id').primaryKey(),
-  appliedAt: real('applied_at').default(sql`(strftime('%s','now'))`),
+  appliedAt: doublePrecision('applied_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const agentJobs = sqliteTable('agent_jobs', {
+// ── Agent Jobs & Activity ─────────────────────────────────────────────────────
+
+export const agentJobs = pgTable('agent_jobs', {
   id: text('id').primaryKey(),
   agentId: text('agent_id').notNull(),
   projectId: text('project_id'),
   parentAgentId: text('parent_agent_id'),
   triggerType: text('trigger_type').notNull().default('scheduled'),
-  triggerData: text('trigger_data').default('{}'),
+  triggerData: jsonb('trigger_data').default(sql`'{}'::jsonb`),
   prompt: text('prompt'),
   status: text('status').notNull().default('pending'),
-  scheduledFor: real('scheduled_for').notNull(),
-  startedAt: real('started_at'),
-  completedAt: real('completed_at'),
+  scheduledFor: doublePrecision('scheduled_for').notNull(),
+  startedAt: doublePrecision('started_at'),
+  completedAt: doublePrecision('completed_at'),
   workerId: text('worker_id'),
   attemptCount: integer('attempt_count').default(0),
   result: text('result'),
   error: text('error'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const agentActivity = sqliteTable('agent_activity', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const agentActivity = pgTable('agent_activity', {
+  id: serial('id').primaryKey(),
   agentId: text('agent_id').notNull(),
   jobId: text('job_id'),
   projectId: text('project_id'),
   eventType: text('event_type').notNull(),
   summary: text('summary'),
   detail: text('detail'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const decisionLog = sqliteTable('decision_log', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  decisionType: text('decision_type').notNull(), // 'model_selection' | 'agent_routing' | 'task_skip'
-  chosen: text('chosen').notNull(),              // e.g. "Claude Opus" or "Writer Agent"
-  reasoning: text('reasoning').notNull(),        // Plain English sentence
-  alternatives: text('alternatives').default('[]'), // JSON array of considered options
+// ── Decision Log ──────────────────────────────────────────────────────────────
+
+export const decisionLog = pgTable('decision_log', {
+  id: serial('id').primaryKey(),
+  decisionType: text('decision_type').notNull(),
+  chosen: text('chosen').notNull(),
+  reasoning: text('reasoning').notNull(),
+  alternatives: jsonb('alternatives').default(sql`'[]'::jsonb`),
   projectId: text('project_id'),
   agentId: text('agent_id'),
   jobId: text('job_id'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const tokenUsageDaily = sqliteTable('token_usage_daily', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  model: text('model').notNull(),           // e.g. "openai-codex/gpt-5.4" or "qwen2.5-coder:1.5b"
+// ── Token Usage ───────────────────────────────────────────────────────────────
+
+export const tokenUsageDaily = pgTable('token_usage_daily', {
+  id: serial('id').primaryKey(),
+  model: text('model').notNull(),
   date: text('date').notNull(),             // ISO date YYYY-MM-DD
   inputTokens: integer('input_tokens').default(0),
   outputTokens: integer('output_tokens').default(0),
   requestCount: integer('request_count').default(0),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
 // ── External Connections ─────────────────────────────────────────────────────
 
-export const workspaceConnections = sqliteTable('workspace_connections', {
+export const workspaceConnections = pgTable('workspace_connections', {
   id: text('id').primaryKey(),
   provider: text('provider').notNull(),
   kind: text('kind').notNull().default('api_key'),
   status: text('status').notNull().default('disconnected'),
   displayName: text('display_name').default(''),
-  scopesJson: text('scopes_json').default('[]'),
-  toolsJson: text('tools_json').default('[]'),
-  lastSyncAt: real('last_sync_at').default(0),
+  scopesJson: jsonb('scopes_json').default(sql`'[]'::jsonb`),
+  toolsJson: jsonb('tools_json').default(sql`'[]'::jsonb`),
+  lastSyncAt: doublePrecision('last_sync_at').default(0),
   lastError: text('last_error').default(''),
   installedBy: text('installed_by').default(''),
-  metaJson: text('meta_json').default('{}'),
+  metaJson: jsonb('meta_json').default(sql`'{}'::jsonb`),
   metaEncrypted: integer('meta_encrypted').default(0),
-  createdAt: real('created_at').default(sql`(strftime('%s','now'))`),
-  updatedAt: real('updated_at').default(sql`(strftime('%s','now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const projectConnections = sqliteTable('project_connections', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const projectConnections = pgTable('project_connections', {
+  id: serial('id').primaryKey(),
   projectId: text('project_id').notNull(),
   connectionId: text('connection_id').notNull(),
   accessMode: text('access_mode').notNull().default('read'),
-  enabledToolsJson: text('enabled_tools_json').default('[]'),
+  enabledToolsJson: jsonb('enabled_tools_json').default(sql`'[]'::jsonb`),
   status: text('status').notNull().default('active'),
   attachedBy: text('attached_by').default(''),
-  attachedAt: real('attached_at').default(sql`(strftime('%s','now'))`),
+  attachedAt: doublePrecision('attached_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const calendarEvents = sqliteTable('calendar_events', {
+export const calendarEvents = pgTable('calendar_events', {
   id: text('id').primaryKey(),
   connectionId: text('connection_id').notNull(),
   projectId: text('project_id'),
   googleEventId: text('google_event_id').notNull(),
   title: text('title').notNull(),
-  startAt: text('start_at').notNull(),
-  endAt: text('end_at'),
+  startAt: text('start_at').notNull(),              // ISO date string
+  endAt: text('end_at'),                            // ISO date string
   allDay: integer('all_day').default(0),
-  syncedAt: real('synced_at').default(sql`(unixepoch('now'))`),
+  syncedAt: doublePrecision('synced_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
 // ── Billing ──────────────────────────────────────────────────────────────────
 
-export const subscriptions = sqliteTable('subscriptions', {
+export const subscriptions = pgTable('subscriptions', {
   id: text('id').primaryKey(),
   username: text('username').notNull(),
-  plan: text('plan').notNull().default('free'),                     // free | cloud | cloud_team | enterprise
-  status: text('status').notNull().default('trialing'),             // trialing | active | past_due | paused | cancelled | expired
-  lsCustomerId: text('ls_customer_id'),                             // Lemon Squeezy customer ID
-  lsSubscriptionId: text('ls_subscription_id'),                     // Lemon Squeezy subscription ID
-  lsVariantId: text('ls_variant_id'),                               // Lemon Squeezy variant ID
-  trialEndsAt: real('trial_ends_at'),                               // unix epoch
-  currentPeriodStart: real('current_period_start'),
-  currentPeriodEnd: real('current_period_end'),
-  cancelAt: real('cancel_at'),                                      // scheduled cancellation
-  cancelledAt: real('cancelled_at'),                                // actual cancellation
-  pausedAt: real('paused_at'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
-  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+  plan: text('plan').notNull().default('free'),
+  status: text('status').notNull().default('trialing'),
+  lsCustomerId: text('ls_customer_id'),
+  lsSubscriptionId: text('ls_subscription_id'),
+  lsVariantId: text('ls_variant_id'),
+  trialEndsAt: doublePrecision('trial_ends_at'),
+  currentPeriodStart: doublePrecision('current_period_start'),
+  currentPeriodEnd: doublePrecision('current_period_end'),
+  cancelAt: doublePrecision('cancel_at'),
+  cancelledAt: doublePrecision('cancelled_at'),
+  pausedAt: doublePrecision('paused_at'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const authTokens = sqliteTable('auth_tokens', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const authTokens = pgTable('auth_tokens', {
+  id: serial('id').primaryKey(),
   email: text('email').notNull(),
   code: text('code').notNull(),
-  purpose: text('purpose').notNull(),       // 'verify_email' | 'reset_password'
-  expiresAt: real('expires_at').notNull(),
-  usedAt: real('used_at'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  purpose: text('purpose').notNull(),
+  expiresAt: doublePrecision('expires_at').notNull(),
+  usedAt: doublePrecision('used_at'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const billingEvents = sqliteTable('billing_events', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const billingEvents = pgTable('billing_events', {
+  id: serial('id').primaryKey(),
   username: text('username'),
-  eventType: text('event_type').notNull(),                          // subscription_created | subscription_updated | payment_success | payment_failed | trial_started | trial_expired
-  lsEventId: text('ls_event_id'),                                  // Lemon Squeezy webhook event ID (dedup)
-  payload: text('payload').default('{}'),                           // raw webhook JSON
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  eventType: text('event_type').notNull(),
+  lsEventId: text('ls_event_id'),
+  payload: jsonb('payload').default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-// -- Collaboration (Phase 10) --
+// ── Collaboration ─────────────────────────────────────────────────────────────
 
-export const projectCollaborators = sqliteTable('project_collaborators', {
+export const projectCollaborators = pgTable('project_collaborators', {
   id: text('id').primaryKey(),
   projectId: text('project_id').notNull(),
   username: text('username'),
@@ -273,18 +315,18 @@ export const projectCollaborators = sqliteTable('project_collaborators', {
   status: text('status').notNull().default('pending'),
   inviteToken: text('invite_token'),
   invitedBy: text('invited_by').notNull(),
-  invitedAt: real('invited_at').default(sql`(unixepoch('now'))`),
-  acceptedAt: real('accepted_at'),
-  revokedAt: real('revoked_at'),
+  invitedAt: doublePrecision('invited_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  acceptedAt: doublePrecision('accepted_at'),
+  revokedAt: doublePrecision('revoked_at'),
   revokedBy: text('revoked_by'),
-  lastDripAt: real('last_drip_at'),
+  lastDripAt: doublePrecision('last_drip_at'),
   dripCount: integer('drip_count').default(0),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
-  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const collaborationEvents = sqliteTable('collaboration_events', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const collaborationEvents = pgTable('collaboration_events', {
+  id: serial('id').primaryKey(),
   projectId: text('project_id').notNull(),
   collaboratorId: text('collaborator_id').notNull(),
   actorUsername: text('actor_username').notNull(),
@@ -292,23 +334,23 @@ export const collaborationEvents = sqliteTable('collaboration_events', {
   previousRole: text('previous_role'),
   newRole: text('new_role'),
   detail: text('detail'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-// -- Unified Chat + CRM + Files (Phase 11) -----------------------------------------
+// ── Unified Chat + CRM + Files ────────────────────────────────────────────────
 
-export const companies = sqliteTable('companies', {
+export const companies = pgTable('companies', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   industry: text('industry'),
   website: text('website'),
   notes: text('notes'),
   createdBy: text('created_by'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
-  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const contacts = sqliteTable('contacts', {
+export const contacts = pgTable('contacts', {
   id: text('id').primaryKey(),
   displayName: text('display_name').notNull(),
   firstName: text('first_name'),
@@ -317,20 +359,20 @@ export const contacts = sqliteTable('contacts', {
   jobTitle: text('job_title'),
   notes: text('notes'),
   createdBy: text('created_by'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
-  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const contactEmails = sqliteTable('contact_emails', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const contactEmails = pgTable('contact_emails', {
+  id: serial('id').primaryKey(),
   contactId: text('contact_id').notNull(),
   value: text('value').notNull(),
   label: text('label').default('work'),
   isPrimary: integer('is_primary').default(0),
 });
 
-export const contactPhones = sqliteTable('contact_phones', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const contactPhones = pgTable('contact_phones', {
+  id: serial('id').primaryKey(),
   contactId: text('contact_id').notNull(),
   value: text('value').notNull(),
   countryCode: text('country_code'),
@@ -338,27 +380,27 @@ export const contactPhones = sqliteTable('contact_phones', {
   isPrimary: integer('is_primary').default(0),
 });
 
-export const contactSocial = sqliteTable('contact_social', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const contactSocial = pgTable('contact_social', {
+  id: serial('id').primaryKey(),
   contactId: text('contact_id').notNull(),
   platform: text('platform').notNull(),
   handle: text('handle').notNull(),
 });
 
-export const conversations = sqliteTable('conversations', {
+export const conversations = pgTable('conversations', {
   id: text('id').primaryKey(),
   scopeType: text('scope_type').notNull(),
   scopeId: text('scope_id'),
   title: text('title'),
   channelType: text('channel_type').default('internal'),
   externalId: text('external_id'),
-  metadata: text('metadata').default('{}'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
-  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+  metadata: jsonb('metadata').default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const messages = sqliteTable('messages', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const messages = pgTable('messages', {
+  id: serial('id').primaryKey(),
   conversationId: text('conversation_id').notNull(),
   parentMessageId: integer('parent_message_id'),
   senderType: text('sender_type').notNull(),
@@ -366,83 +408,84 @@ export const messages = sqliteTable('messages', {
   senderName: text('sender_name'),
   content: text('content').notNull(),
   channelType: text('channel_type').default('internal'),
-  channelMetadata: text('channel_metadata').default('{}'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  channelMetadata: jsonb('channel_metadata').default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  searchVector: tsvector('search_vector'),
 });
 
-export const filesRegistry = sqliteTable('files', {
+export const filesRegistry = pgTable('files', {
   id: text('id').primaryKey(),
   filename: text('filename').notNull(),
   diskPath: text('disk_path').notNull(),
   mimeType: text('mime_type'),
   sizeBytes: integer('size_bytes'),
   uploadedBy: text('uploaded_by').notNull(),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const fileProjects = sqliteTable('file_projects', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const fileProjects = pgTable('file_projects', {
+  id: serial('id').primaryKey(),
   fileId: text('file_id').notNull(),
   projectId: text('project_id').notNull(),
   attachedBy: text('attached_by').notNull(),
-  attachedAt: real('attached_at').default(sql`(unixepoch('now'))`),
+  attachedAt: doublePrecision('attached_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const fileContacts = sqliteTable('file_contacts', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const fileContacts = pgTable('file_contacts', {
+  id: serial('id').primaryKey(),
   fileId: text('file_id').notNull(),
   contactId: text('contact_id').notNull(),
   attachedBy: text('attached_by').notNull(),
-  attachedAt: real('attached_at').default(sql`(unixepoch('now'))`),
+  attachedAt: doublePrecision('attached_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const fileConversations = sqliteTable('file_conversations', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const fileConversations = pgTable('file_conversations', {
+  id: serial('id').primaryKey(),
   fileId: text('file_id').notNull(),
   conversationId: text('conversation_id').notNull(),
   attachedBy: text('attached_by').notNull(),
-  attachedAt: real('attached_at').default(sql`(unixepoch('now'))`),
+  attachedAt: doublePrecision('attached_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const contactConversations = sqliteTable('contact_conversations', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const contactConversations = pgTable('contact_conversations', {
+  id: serial('id').primaryKey(),
   contactId: text('contact_id').notNull(),
   conversationId: text('conversation_id').notNull(),
 });
 
-export const contactProjects = sqliteTable('contact_projects', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const contactProjects = pgTable('contact_projects', {
+  id: serial('id').primaryKey(),
   contactId: text('contact_id').notNull(),
   projectId: text('project_id').notNull(),
 });
 
-// -- CRM Intelligence + Agent Templates (Phase 12) ------------------------------------
+// ── CRM Intelligence + Agent Templates ────────────────────────────────────────
 
-export const contactAnalyses = sqliteTable('contact_analyses', {
+export const contactAnalyses = pgTable('contact_analyses', {
   id: text('id').primaryKey(),
   contactId: text('contact_id').notNull(),
   sentiment: text('sentiment').notNull(),
   engagementScore: integer('engagement_score').notNull(),
   churnRisk: text('churn_risk').notNull(),
   relationshipStage: text('relationship_stage').notNull(),
-  keyTopics: text('key_topics').notNull().default('[]'),
+  keyTopics: jsonb('key_topics').default(sql`'[]'::jsonb`),
   lastInteractionSummary: text('last_interaction_summary'),
   communicationStyle: text('communication_style'),
-  rawJson: text('raw_json'),
+  rawJson: jsonb('raw_json'),
   jobId: text('job_id'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-export const agentTemplates = sqliteTable('agent_templates', {
+export const agentTemplates = pgTable('agent_templates', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   category: text('category').notNull(),
   description: text('description'),
-  tags: text('tags').notNull().default('[]'),
-  skills: text('skills').notNull().default('[]'),
-  tools: text('tools').notNull().default('[]'),
-  requiredBackends: text('required_backends').notNull().default('[]'),
-  requiredTools: text('required_tools').notNull().default('[]'),
+  tags: jsonb('tags').default(sql`'[]'::jsonb`),
+  skills: jsonb('skills').default(sql`'[]'::jsonb`),
+  tools: jsonb('tools').default(sql`'[]'::jsonb`),
+  requiredBackends: jsonb('required_backends').default(sql`'[]'::jsonb`),
+  requiredTools: jsonb('required_tools').default(sql`'[]'::jsonb`),
   systemPrompt: text('system_prompt').notNull().default(''),
   soulText: text('soul_text').notNull().default(''),
   roleCardText: text('role_card_text').notNull().default(''),
@@ -450,12 +493,12 @@ export const agentTemplates = sqliteTable('agent_templates', {
   skillsText: text('skills_text').notNull().default(''),
   isInternal: integer('is_internal').notNull().default(0),
   sortOrder: integer('sort_order').default(50),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
-// -- Autonomous Learning + Memory V2 Concepts (Phase 13) -------------------------
+// ── Autonomous Learning + Memory V2 Concepts ─────────────────────────────────
 
-export const concepts = sqliteTable('concepts', {
+export const concepts = pgTable('concepts', {
   id: text('id').primaryKey(),
   memoryKind: text('memory_kind').notNull().default('concept'),
   trustTier: text('trust_tier').notNull().default('low'),
@@ -468,22 +511,231 @@ export const concepts = sqliteTable('concepts', {
   status: text('status').notNull().default('active'),
   reviewState: text('review_state').notNull().default('accepted'),
   supersededById: text('superseded_by_id'),
-  lastUsedAt: real('last_used_at'),
+  lastUsedAt: doublePrecision('last_used_at'),
   useCount: integer('use_count').notNull().default(0),
   sessionId: text('session_id'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
-  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  searchVector: tsvector('search_vector'),
 });
 
-export const learningSessions = sqliteTable('learning_sessions', {
+export const learningSessions = pgTable('learning_sessions', {
   id: text('id').primaryKey(),
   templateId: text('template_id').notNull(),
   jobId: text('job_id'),
-  sourcesVisited: text('sources_visited').notNull().default('[]'),
+  sourcesVisited: jsonb('sources_visited').default(sql`'[]'::jsonb`),
   conceptsRetained: integer('concepts_retained').notNull().default(0),
-  confidenceDistribution: text('confidence_distribution').notNull().default('{"high":0,"medium":0,"low":0}'),
+  confidenceDistribution: jsonb('confidence_distribution').default(sql`'{"high":0,"medium":0,"low":0}'::jsonb`),
   capped: integer('capped').notNull().default(0),
   durationMs: integer('duration_ms'),
   error: text('error'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
+
+// ── Admin: Customer Intelligence ──────────────────────────────────────────────
+
+export const customerEvents = pgTable('customer_events', {
+  id: serial('id').primaryKey(),
+  username: text('username').notNull(),
+  eventType: text('event_type').notNull(),
+  eventData: jsonb('event_data').default(sql`'{}'::jsonb`),
+  ipAddress: text('ip_address'),
+  country: text('country'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const customerScores = pgTable('customer_scores', {
+  username: text('username').primaryKey(),
+  health: integer('health').default(50),
+  conversionScore: integer('conversion_score').default(0),
+  churnRisk: integer('churn_risk').default(50),
+  viralScore: integer('viral_score').default(0),
+  ltvPredicted: doublePrecision('ltv_predicted').default(0),
+  nextAction: text('next_action').default(''),
+  computedAt: doublePrecision('computed_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const adminAgentTasks = pgTable('admin_agent_tasks', {
+  id: serial('id').primaryKey(),
+  agentType: text('agent_type').notNull(),
+  actionType: text('action_type').notNull(),
+  targetUsername: text('target_username'),
+  status: text('status').default('queued'),
+  priority: integer('priority').default(50),
+  payload: jsonb('payload').default(sql`'{}'::jsonb`),
+  result: text('result'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  startedAt: doublePrecision('started_at'),
+  completedAt: doublePrecision('completed_at'),
+});
+
+// ── Admin: Error Tracking ─────────────────────────────────────────────────────
+
+export const errorLog = pgTable('error_log', {
+  id: serial('id').primaryKey(),
+  source: text('source').notNull(),
+  severity: text('severity').default('error'),
+  message: text('message').notNull(),
+  stack: text('stack'),
+  url: text('url'),
+  username: text('username'),
+  userAgent: text('user_agent'),
+  ipAddress: text('ip_address'),
+  metadata: jsonb('metadata').default(sql`'{}'::jsonb`),
+  resolved: integer('resolved').default(0),
+  resolvedBy: text('resolved_by'),
+  resolvedAt: doublePrecision('resolved_at'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+// ── Admin: Email System ───────────────────────────────────────────────────────
+
+export const emailMessages = pgTable('email_messages', {
+  id: serial('id').primaryKey(),
+  folder: text('folder').notNull().default('drafts'),
+  fromEmail: text('from_email').notNull().default(''),
+  fromName: text('from_name').notNull().default(''),
+  toEmail: text('to_email').notNull().default(''),
+  toName: text('to_name').notNull().default(''),
+  cc: text('cc').notNull().default(''),
+  bcc: text('bcc').notNull().default(''),
+  subject: text('subject').notNull().default(''),
+  body: text('body').notNull().default(''),
+  bodyHtml: text('body_html').notNull().default(''),
+  status: text('status').notNull().default('draft'),
+  sentAt: doublePrecision('sent_at'),
+  readAt: doublePrecision('read_at'),
+  error: text('error'),
+  inReplyTo: integer('in_reply_to'),
+  threadId: text('thread_id'),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+// ── Admin: Workspace Settings ─────────────────────────────────────────────────
+
+export const workspaceSettings = pgTable('workspace_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});
+
+// ── Admin: Forge Pipeline ─────────────────────────────────────────────────────
+
+export const forgePipeline = pgTable('forge_pipeline', {
+  id: text('id').primaryKey(),
+  templateId: text('template_id').notNull(),
+  agentId: text('agent_id'),
+  station: integer('station').notNull().default(0),
+  status: text('status').notNull().default('queued'),
+  flags: jsonb('flags').default(sql`'[]'::jsonb`),
+  instanceLearnings: jsonb('instance_learnings').default(sql`'{}'::jsonb`),
+  wave: integer('wave').notNull().default(0),
+  tokensUsed: integer('tokens_used').default(0),
+  workerId: text('worker_id'),
+  leaseExpiresAt: doublePrecision('lease_expires_at'),
+  attemptCount: integer('attempt_count').default(0),
+  maxAttempts: integer('max_attempts').default(3),
+  startedAt: doublePrecision('started_at'),
+  completedAt: doublePrecision('completed_at'),
+  error: text('error'),
+  cycle: integer('cycle').notNull().default(1),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const forgeStationRuns = pgTable('forge_station_runs', {
+  id: text('id').primaryKey(),
+  pipelineId: text('pipeline_id').notNull(),
+  station: integer('station').notNull(),
+  phase: text('phase').notNull(),
+  runSequence: integer('run_sequence').notNull().default(1),
+  status: text('status').notNull().default('running'),
+  writerModel: text('writer_model'),
+  checkerModel: text('checker_model'),
+  qualityScore: integer('quality_score'),
+  rubric: jsonb('rubric').default(sql`'{}'::jsonb`),
+  qaRationale: text('qa_rationale'),
+  filesTouched: jsonb('files_touched').default(sql`'[]'::jsonb`),
+  skillsAssigned: jsonb('skills_assigned').default(sql`'[]'::jsonb`),
+  toolsMapped: jsonb('tools_mapped').default(sql`'[]'::jsonb`),
+  flags: jsonb('flags').default(sql`'[]'::jsonb`),
+  tokensUsed: integer('tokens_used').default(0),
+  costReserved: doublePrecision('cost_reserved').default(0),
+  costActual: doublePrecision('cost_actual').default(0),
+  promptVersion: text('prompt_version'),
+  durationMs: integer('duration_ms'),
+  startedAt: doublePrecision('started_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  completedAt: doublePrecision('completed_at'),
+});
+
+export const forgeSettings = pgTable('forge_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});
+
+// ── Admin: Audit Log ──────────────────────────────────────────────────────────
+
+export const auditLog = pgTable('audit_log', {
+  id: serial('id').primaryKey(),
+  ts: doublePrecision('ts').notNull(),
+  tsIso: text('ts_iso').notNull(),
+  actor: text('actor').notNull(),
+  actorType: text('actor_type').default('session'),
+  action: text('action').notNull(),
+  target: text('target'),
+  details: jsonb('details').default(sql`'{}'::jsonb`),
+  projectId: text('project_id'),
+  sessionId: text('session_id'),
+  ipAddress: text('ip_address'),
+});
+
+// ── Admin: Invites ────────────────────────────────────────────────────────────
+
+export const invites = pgTable('invites', {
+  code: text('code').primaryKey(),
+  role: text('role').default('operator'),
+  createdBy: text('created_by').notNull(),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  expiresAt: doublePrecision('expires_at'),
+  maxUses: integer('max_uses').default(1),
+  useCount: integer('use_count').default(0),
+  status: text('status').default('active'),
+});
+
+export const inviteUses = pgTable('invite_uses', {
+  id: serial('id').primaryKey(),
+  inviteCode: text('invite_code').notNull(),
+  username: text('username').notNull(),
+  usedAt: doublePrecision('used_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+// ── Agent Messages (legacy, used by admin health) ─────────────────────────────
+
+export const agentMessages = pgTable('agent_messages', {
+  id: serial('id').primaryKey(),
+  runId: text('run_id').notNull(),
+  fromAgent: text('from_agent').notNull().default('porter'),
+  toAgent: text('to_agent').notNull(),
+  message: text('message').notNull(),
+  response: text('response'),
+  status: text('status').notNull().default('pending'),
+  model: text('model'),
+  tokensTotal: integer('tokens_total').default(0),
+  durationMs: integer('duration_ms').default(0),
+  error: text('error'),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  completedAt: doublePrecision('completed_at'),
+  chainId: text('chain_id'),
+  stepNum: integer('step_num').default(0),
+  injectedMemories: jsonb('injected_memories').default(sql`'[]'::jsonb`),
+});
+
+// ── Persona Skills (junction table, used by forge) ────────────────────────────
+
+export const personaSkills = pgTable('persona_skills', {
+  personaId: text('persona_id').notNull(),
+  skillName: text('skill_name').notNull(),
+  enabled: integer('enabled').default(1),
+  assignedAt: doublePrecision('assigned_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+// Note: Primary key (persona_id, skill_name) defined in migration DDL

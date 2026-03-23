@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { db, sqlite } from '../../db/client.js';
+import { db, pool } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 import { eq, ne } from 'drizzle-orm';
 import { ok, err } from '../../lib/envelope.js';
@@ -34,8 +34,8 @@ type ConfigBlob = {
 };
 
 function formatAgent(row: PersonaRow) {
-  const config = parseJsonField<ConfigBlob>(row.config, {});
-  const appearance_spec = parseJsonField<Record<string, unknown>>(row.appearanceSpec, {});
+  const config = parseJsonField<ConfigBlob>(row.config as string | null | undefined, {});
+  const appearance_spec = parseJsonField<Record<string, unknown>>(row.appearanceSpec as string | null | undefined, {});
 
   return {
     id: row.id,
@@ -45,7 +45,7 @@ function formatAgent(row: PersonaRow) {
     status: row.status,
     agent_group: row.agentGroup,
     preferred_backend: row.preferredBackend,
-    fallback_backends: parseJsonField<string[]>(row.fallbackBackends, []),
+    fallback_backends: parseJsonField<string[]>(row.fallbackBackends as string | null | undefined, []),
     soul_hash: row.soulHash,
     owner: row.owner,
     is_system: Boolean(row.isSystem),
@@ -127,9 +127,8 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
   fastify.get('/', {
     preHandler: [fastify.requireAuth],
   }, async (request, reply) => {
-    const agents = db.select().from(schema.personas)
-      .where(ne(schema.personas.status, 'retired'))
-      .all();
+    const agents = await db.select().from(schema.personas)
+      .where(ne(schema.personas.status, 'retired'));
 
     // Sort by sort_order ascending (drizzle orderBy not available without import, sort in JS)
     agents.sort((a, b) => (a.sortOrder ?? 50) - (b.sortOrder ?? 50));
@@ -168,10 +167,10 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
 
       // Check concurrent children limit for parent
       if (parsed.data.parent_agent_id) {
-        const runningChildren = sqlite.prepare(`
+        const runningChildren = (await pool.query(`
           SELECT COUNT(*) as n FROM agent_jobs
-          WHERE parent_agent_id = @parentId AND status = 'running'
-        `).get({ parentId: parsed.data.parent_agent_id }) as { n: number };
+          WHERE parent_agent_id = $1 AND status = 'running'
+        `, [parsed.data.parent_agent_id])).rows[0] as { n: number };
 
         if (runningChildren.n >= MAX_CONCURRENT_CHILDREN) {
           return reply.code(429).send(err('CHILDREN_LIMIT',
@@ -192,7 +191,7 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
       config.blocked_tools = CHILD_BLOCKED_TOOLS;
     }
 
-    db.insert(schema.personas).values({
+    await db.insert(schema.personas).values({
       id,
       name,
       role: role ?? '',
@@ -202,10 +201,10 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
       status: 'idle',
       owner: request.sessionUser!.username,
       isTemporary: parsed.data.is_temporary ? 1 : 0,
-    }).run();
+    });
 
-    const agent = db.select().from(schema.personas)
-      .where(eq(schema.personas.id, id)).get();
+    const [agent] = await db.select().from(schema.personas)
+      .where(eq(schema.personas.id, id));
 
     return reply.code(201).send(ok({ agent: agent ? formatAgent(agent) : null }));
   });
@@ -216,8 +215,8 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    const agent = db.select().from(schema.personas)
-      .where(eq(schema.personas.id, id)).get();
+    const [agent] = await db.select().from(schema.personas)
+      .where(eq(schema.personas.id, id));
 
     if (!agent) {
       return reply.code(404).send(err('AGENT_NOT_FOUND', 'Agent not found'));
@@ -232,8 +231,8 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    const existing = db.select().from(schema.personas)
-      .where(eq(schema.personas.id, id)).get();
+    const [existing] = await db.select().from(schema.personas)
+      .where(eq(schema.personas.id, id));
 
     if (!existing) {
       return reply.code(404).send(err('AGENT_NOT_FOUND', 'Agent not found'));
@@ -245,7 +244,7 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
     }
 
     // Read-modify-write for config (to preserve existing fields)
-    const existingConfig = parseJsonField<ConfigBlob>(existing.config, {});
+    const existingConfig = parseJsonField<ConfigBlob>(existing.config as string | null | undefined, {});
     if (parsed.data.description !== undefined) {
       existingConfig.description = parsed.data.description;
     }
@@ -258,11 +257,11 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
     if (parsed.data.status !== undefined) updates.status = parsed.data.status;
     if (parsed.data.agent_group !== undefined) updates.agentGroup = parsed.data.agent_group;
 
-    db.update(schema.personas).set(updates)
-      .where(eq(schema.personas.id, id)).run();
+    await db.update(schema.personas).set(updates)
+      .where(eq(schema.personas.id, id));
 
-    const agent = db.select().from(schema.personas)
-      .where(eq(schema.personas.id, id)).get();
+    const [agent] = await db.select().from(schema.personas)
+      .where(eq(schema.personas.id, id));
 
     return reply.send(ok({ agent: agent ? formatAgent(agent) : null }));
   });
@@ -273,27 +272,27 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    const existing = db.select().from(schema.personas)
-      .where(eq(schema.personas.id, id)).get();
+    const [existing] = await db.select().from(schema.personas)
+      .where(eq(schema.personas.id, id));
 
     if (!existing) {
       return reply.code(404).send(err('AGENT_NOT_FOUND', 'Agent not found'));
     }
 
-    db.update(schema.personas).set({ status: 'retired' })
-      .where(eq(schema.personas.id, id)).run();
+    await db.update(schema.personas).set({ status: 'retired' })
+      .where(eq(schema.personas.id, id));
 
     // Cancel pending jobs for retired agent (prevent orphaned jobs)
-    sqlite.prepare(`
-      UPDATE agent_jobs SET status = 'cancelled', completed_at = unixepoch('now')
-      WHERE agent_id = @id AND status = 'pending'
-    `).run({ id });
+    await pool.query(`
+      UPDATE agent_jobs SET status = 'cancelled', completed_at = EXTRACT(EPOCH FROM NOW())
+      WHERE agent_id = $1 AND status = 'pending'
+    `, [id]);
 
     // Log the retirement
-    sqlite.prepare(`
+    await pool.query(`
       INSERT INTO agent_activity (agent_id, event_type, summary)
-      VALUES (@id, 'agent_retired', 'Agent retired — pending jobs cancelled')
-    `).run({ id });
+      VALUES ($1, 'agent_retired', 'Agent retired — pending jobs cancelled')
+    `, [id]);
 
     return reply.send(ok({ retired: true }));
   });
@@ -305,8 +304,8 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
     const { id } = request.params as { id: string };
     const { limit, offset } = request.query as { limit?: string; offset?: string };
 
-    const agent = db.select().from(schema.personas)
-      .where(eq(schema.personas.id, id)).get();
+    const [agent] = await db.select().from(schema.personas)
+      .where(eq(schema.personas.id, id));
 
     if (!agent) {
       return reply.code(404).send(err('AGENT_NOT_FOUND', 'Agent not found'));
@@ -315,18 +314,18 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
     const maxLimit = Math.min(parseInt(limit ?? '50', 10), 200);
     const skip = parseInt(offset ?? '0', 10);
 
-    const rows = sqlite.prepare(`
+    const rows = (await pool.query(`
       SELECT a.*, j.trigger_type, j.status as job_status
       FROM agent_activity a
       LEFT JOIN agent_jobs j ON j.id = a.job_id
-      WHERE a.agent_id = @agentId
+      WHERE a.agent_id = $1
       ORDER BY a.created_at DESC
-      LIMIT @limit OFFSET @offset
-    `).all({ agentId: id, limit: maxLimit, offset: skip }) as ActivityRow[];
+      LIMIT $2 OFFSET $3
+    `, [id, maxLimit, skip])).rows as ActivityRow[];
 
-    const total = sqlite.prepare(`
-      SELECT COUNT(*) as count FROM agent_activity WHERE agent_id = ?
-    `).get(id) as { count: number };
+    const total = (await pool.query(`
+      SELECT COUNT(*) as count FROM agent_activity WHERE agent_id = $1
+    `, [id])).rows[0] as { count: number };
 
     return reply.send(ok({
       activity: rows.map(formatActivity),
@@ -360,12 +359,12 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
       created_at: string;
     }
 
-    const rows = sqlite.prepare(`
+    const rows = (await pool.query(`
       SELECT * FROM learning_sessions
-      WHERE template_id = ?
+      WHERE template_id = $1
       ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
-    `).all(id, limit, offset) as LearningSessionRow[];
+      LIMIT $2 OFFSET $3
+    `, [id, limit, offset])).rows as LearningSessionRow[];
 
     const parsedRows = rows.map(row => ({
       id: row.id,
@@ -394,12 +393,12 @@ export default async function agentV1Routes(fastify: FastifyInstance, _options: 
     const { id } = request.params as { id: string };
     const { status } = request.query as { status?: string };
 
-    let sql = 'SELECT * FROM agent_jobs WHERE agent_id = @agentId';
-    const params: Record<string, unknown> = { agentId: id };
-    if (status) { sql += ' AND status = @status'; params.status = status; }
+    const params: unknown[] = [id];
+    let sql = 'SELECT * FROM agent_jobs WHERE agent_id = $1';
+    if (status) { sql += ` AND status = $${params.length + 1}`; params.push(status); }
     sql += ' ORDER BY created_at DESC LIMIT 50';
 
-    const rows = sqlite.prepare(sql).all(params);
+    const rows = (await pool.query(sql, params)).rows;
     return reply.send(ok({ jobs: rows, agent_id: id, count: rows.length }));
   });
 }

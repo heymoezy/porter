@@ -123,3 +123,12 @@ None - no external service configuration required.
 ---
 *Phase: 11-unified-chat-and-crm-schema*
 *Completed: 2026-03-22*
+
+## Self-Check: PASSED
+
+- FOUND: backend/src/services/whatsapp.ts
+- FOUND: backend/src/routes/v1/webhooks-whatsapp.ts
+- FOUND: .planning/phases/11-unified-chat-and-crm-schema/11-04-SUMMARY.md
+- FOUND commit: e5331e9 (Task 1: findOrCreate helpers)
+- FOUND commit: 6f8b784 (Task 2: webhook archival wiring)
+- FOUND commit: a672905 (docs: plan summary)

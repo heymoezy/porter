@@ -24,21 +24,21 @@ function now(): number {
 
 // ── Subscription CRUD ────────────────────────────────────────────────────────
 
-export function getSubscription(username: string) {
-  return db.select().from(schema.subscriptions)
-    .where(eq(schema.subscriptions.username, username))
-    .get() ?? null;
+export async function getSubscription(username: string) {
+  const [row] = await db.select().from(schema.subscriptions)
+    .where(eq(schema.subscriptions.username, username));
+  return row ?? null;
 }
 
-export function ensureSubscription(username: string): typeof schema.subscriptions.$inferSelect {
-  const existing = getSubscription(username);
+export async function ensureSubscription(username: string): Promise<typeof schema.subscriptions.$inferSelect> {
+  const existing = await getSubscription(username);
   if (existing) return existing;
 
   // Auto-create trial subscription for new users
   const id = crypto.randomUUID();
   const trialEnd = now() + (config.trialDays * 86400);
 
-  db.insert(schema.subscriptions).values({
+  await db.insert(schema.subscriptions).values({
     id,
     username,
     plan: 'free',
@@ -46,12 +46,12 @@ export function ensureSubscription(username: string): typeof schema.subscription
     trialEndsAt: trialEnd,
     createdAt: now(),
     updatedAt: now(),
-  }).run();
+  });
 
-  return getSubscription(username)!;
+  return (await getSubscription(username))!;
 }
 
-export function updateSubscription(
+export async function updateSubscription(
   username: string,
   updates: Partial<{
     plan: string;
@@ -67,15 +67,14 @@ export function updateSubscription(
     pausedAt: number | null;
   }>
 ) {
-  db.update(schema.subscriptions)
+  await db.update(schema.subscriptions)
     .set({ ...updates, updatedAt: now() })
-    .where(eq(schema.subscriptions.username, username))
-    .run();
+    .where(eq(schema.subscriptions.username, username));
 }
 
 // ── Billing events ───────────────────────────────────────────────────────────
 
-export function logBillingEvent(
+export async function logBillingEvent(
   username: string | null,
   eventType: string,
   lsEventId?: string,
@@ -83,18 +82,17 @@ export function logBillingEvent(
 ) {
   // Dedup by Lemon Squeezy event ID
   if (lsEventId) {
-    const existing = db.select().from(schema.billingEvents)
-      .where(eq(schema.billingEvents.lsEventId, lsEventId))
-      .get();
+    const [existing] = await db.select().from(schema.billingEvents)
+      .where(eq(schema.billingEvents.lsEventId, lsEventId));
     if (existing) return null; // Already processed
   }
 
-  db.insert(schema.billingEvents).values({
+  await db.insert(schema.billingEvents).values({
     username,
     eventType,
     lsEventId: lsEventId ?? null,
     payload: JSON.stringify(payload ?? {}),
-  }).run();
+  });
 
   return true;
 }
@@ -113,8 +111,8 @@ export interface ResolvedPlan {
   price: number;                   // cents
 }
 
-export function resolvePlan(username: string): ResolvedPlan {
-  const sub = ensureSubscription(username);
+export async function resolvePlan(username: string): Promise<ResolvedPlan> {
+  const sub = await ensureSubscription(username);
   const t = now();
 
   let status = sub.status as SubStatus;
@@ -123,7 +121,7 @@ export function resolvePlan(username: string): ResolvedPlan {
   // Check trial expiry
   if (isTrial && sub.trialEndsAt && sub.trialEndsAt < t) {
     status = 'expired';
-    updateSubscription(username, { status: 'expired' });
+    await updateSubscription(username, { status: 'expired' });
     isTrial = false;
   }
 
@@ -164,15 +162,14 @@ export interface UsageSummary {
   periodEnd: string;     // ISO date
 }
 
-export function getUsageThisMonth(): UsageSummary {
+export async function getUsageThisMonth(): Promise<UsageSummary> {
   const d = new Date();
   const periodStart = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
   const nextMonth = new Date(d.getFullYear(), d.getMonth() + 1, 1);
   const periodEnd = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
 
-  const rows = db.select().from(schema.tokenUsageDaily)
-    .where(gte(schema.tokenUsageDaily.date, periodStart))
-    .all();
+  const rows = await db.select().from(schema.tokenUsageDaily)
+    .where(gte(schema.tokenUsageDaily.date, periodStart));
 
   let totalTokens = 0;
   let totalRequests = 0;

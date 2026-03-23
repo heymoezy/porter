@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { sqlite } from '../../db/client.js';
+import { pool } from '../../db/client.js';
 import { ok } from '../../lib/envelope.js';
 
 interface ConceptRow {
@@ -49,49 +49,54 @@ export default async function memoryV1Routes(fastify: FastifyInstance, _options:
     let rows: ConceptRow[];
 
     if (q && q.trim()) {
-      // FTS5 full-text search
-      const conditions: string[] = ['concepts_fts MATCH ?', 'c.status = ?'];
+      // Full-text search using ts_rank + plainto_tsquery
+      const conditions: string[] = ["to_tsvector('english', c.content) @@ plainto_tsquery('english', $1)", 'c.status = $2'];
       const params: unknown[] = [q.trim(), status];
+      let paramIdx = 3;
 
       if (scope) {
-        conditions.push('c.scope = ?');
+        conditions.push(`c.scope = $${paramIdx}`);
         params.push(scope);
+        paramIdx++;
       }
       if (scope_id) {
-        conditions.push('c.scope_id = ?');
+        conditions.push(`c.scope_id = $${paramIdx}`);
         params.push(scope_id);
+        paramIdx++;
       }
 
       params.push(limit, offset);
 
-      rows = sqlite.prepare(`
+      rows = (await pool.query(`
         SELECT c.id, c.memory_kind, c.trust_tier, c.scope, c.scope_id, c.content,
                c.source_type, c.source_url, c.confidence_score, c.status,
                c.review_state, c.superseded_by_id, c.last_used_at, c.use_count,
                c.session_id, c.created_at, c.updated_at
         FROM concepts c
-        JOIN concepts_fts f ON f.rowid = c.rowid
         WHERE ${conditions.join(' AND ')}
-        ORDER BY rank
-        LIMIT ? OFFSET ?
-      `).all(...params) as ConceptRow[];
+        ORDER BY ts_rank(to_tsvector('english', c.content), plainto_tsquery('english', $1)) DESC
+        LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
+      `, params)).rows as ConceptRow[];
     } else {
-      // Direct query without FTS5
-      const conditions: string[] = ['status = ?'];
+      // Direct query without FTS
+      const conditions: string[] = ['status = $1'];
       const params: unknown[] = [status];
+      let paramIdx = 2;
 
       if (scope) {
-        conditions.push('scope = ?');
+        conditions.push(`scope = $${paramIdx}`);
         params.push(scope);
+        paramIdx++;
       }
       if (scope_id) {
-        conditions.push('scope_id = ?');
+        conditions.push(`scope_id = $${paramIdx}`);
         params.push(scope_id);
+        paramIdx++;
       }
 
       params.push(limit, offset);
 
-      rows = sqlite.prepare(`
+      rows = (await pool.query(`
         SELECT id, memory_kind, trust_tier, scope, scope_id, content,
                source_type, source_url, confidence_score, status,
                review_state, superseded_by_id, last_used_at, use_count,
@@ -99,8 +104,8 @@ export default async function memoryV1Routes(fastify: FastifyInstance, _options:
         FROM concepts
         WHERE ${conditions.join(' AND ')}
         ORDER BY created_at DESC
-        LIMIT ? OFFSET ?
-      `).all(...params) as ConceptRow[];
+        LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
+      `, params)).rows as ConceptRow[];
     }
 
     return reply.send(ok({ concepts: rows, count: rows.length }));

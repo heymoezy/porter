@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { db, sqlite } from '../../db/client.js';
+import { db, pool } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { ok, err } from '../../lib/envelope.js';
@@ -26,10 +26,10 @@ function formatProject(row: typeof schema.projects.$inferSelect) {
     status: row.status,
     description: row.description,
     owner_id: row.ownerId,
-    milestones: parseJsonField(row.milestones, [] as unknown[]),
-    artifacts: parseJsonField(row.artifacts, [] as unknown[]),
-    links: parseJsonField(row.links, [] as unknown[]),
-    metadata: parseJsonField(row.metadata, {} as Record<string, unknown>),
+    milestones: parseJsonField(row.milestones as string | null | undefined, [] as unknown[]),
+    artifacts: parseJsonField(row.artifacts as string | null | undefined, [] as unknown[]),
+    links: parseJsonField(row.links as string | null | undefined, [] as unknown[]),
+    metadata: parseJsonField(row.metadata as string | null | undefined, {} as Record<string, unknown>),
     deadline: row.deadline,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
@@ -55,9 +55,8 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
   fastify.get('/', {
     preHandler: [fastify.requireAuth],
   }, async (request, reply) => {
-    const projects = db.select().from(schema.projects)
-      .where(eq(schema.projects.status, 'active'))
-      .all();
+    const projects = await db.select().from(schema.projects)
+      .where(eq(schema.projects.status, 'active'));
 
     return reply.send(ok({
       projects: projects.map(formatProject),
@@ -80,7 +79,7 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
     const ownerId = request.sessionUser!.username;
     const now = Date.now() / 1000;
 
-    db.insert(schema.projects).values({
+    await db.insert(schema.projects).values({
       id,
       name,
       slug,
@@ -90,14 +89,14 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
       ownerId,
       createdAt: now,
       updatedAt: now,
-    }).run();
+    });
 
     // Auto-create owner collaborator record so requireProjectAccess finds the creator
-    const ownerUser = sqlite.prepare('SELECT email FROM users WHERE username = ?').get(ownerId) as { email: string | null } | undefined;
-    sqlite.prepare(`
+    const ownerUser = (await pool.query('SELECT email FROM users WHERE username = $1', [ownerId])).rows[0] as { email: string | null } | undefined;
+    await pool.query(`
       INSERT INTO project_collaborators (id, project_id, username, email, role, status, invited_by, accepted_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'owner', 'active', ?, ?, ?, ?)
-    `).run(
+      VALUES ($1, $2, $3, $4, 'owner', 'active', $5, $6, $7, $8)
+    `, [
       crypto.randomUUID(),
       id,
       ownerId,
@@ -106,10 +105,10 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
       now,
       now,
       now,
-    );
+    ]);
 
-    const project = db.select().from(schema.projects)
-      .where(eq(schema.projects.id, id)).get();
+    const [project] = await db.select().from(schema.projects)
+      .where(eq(schema.projects.id, id));
 
     return reply.code(201).send(ok({ project: project ? formatProject(project) : null }));
   });
@@ -120,8 +119,8 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    const project = db.select().from(schema.projects)
-      .where(eq(schema.projects.id, id)).get();
+    const [project] = await db.select().from(schema.projects)
+      .where(eq(schema.projects.id, id));
 
     if (!project) {
       return reply.code(404).send(err('PROJECT_NOT_FOUND', 'Project not found'));
@@ -136,8 +135,8 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    const existing = db.select().from(schema.projects)
-      .where(eq(schema.projects.id, id)).get();
+    const [existing] = await db.select().from(schema.projects)
+      .where(eq(schema.projects.id, id));
 
     if (!existing) {
       return reply.code(404).send(err('PROJECT_NOT_FOUND', 'Project not found'));
@@ -157,36 +156,37 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
     if (parsed.data.type !== undefined) updates.type = parsed.data.type;
     if (parsed.data.deadline !== undefined) updates.deadline = parsed.data.deadline;
 
-    db.update(schema.projects).set(updates)
-      .where(eq(schema.projects.id, id)).run();
+    await db.update(schema.projects).set(updates)
+      .where(eq(schema.projects.id, id));
 
     // Auto-retire ephemeral agents when project is completed/archived
     if (featureFlags.ephemeralAgents &&
         (parsed.data.status === 'complete' || parsed.data.status === 'archived')) {
       // Find ephemeral agents for this project
-      const ephemeralAgents = sqlite.prepare(`
+      const ephemeralAgents = (await pool.query(`
         SELECT id FROM personas
         WHERE is_temporary = 1 AND status != 'retired'
-          AND json_extract(config, '$.project_id') = @projectId
-      `).all({ projectId: id }) as { id: string }[];
+          AND config->>'project_id' = $1
+      `, [id])).rows as { id: string }[];
 
       for (const agent of ephemeralAgents) {
         // Retire the agent
-        sqlite.prepare(`
-          UPDATE personas SET status = 'retired' WHERE id = @agentId
-        `).run({ agentId: agent.id });
+        await pool.query(`
+          UPDATE personas SET status = 'retired' WHERE id = $1
+        `, [agent.id]);
 
         // Cancel their pending jobs
-        sqlite.prepare(`
-          UPDATE agent_jobs SET status = 'cancelled', completed_at = unixepoch('now')
-          WHERE agent_id = @agentId AND status = 'pending'
-        `).run({ agentId: agent.id });
+        await pool.query(`
+          UPDATE agent_jobs SET status = 'cancelled', completed_at = EXTRACT(EPOCH FROM NOW())
+          WHERE agent_id = $1 AND status = 'pending'
+        `, [agent.id]);
 
         // Log activity — 'agent_retired' event with 'Auto-retired' summary
         const retireStatus = parsed.data.status as string;
-        sqlite.prepare(
-          `INSERT INTO agent_activity (agent_id, project_id, event_type, summary) VALUES (@agentId, @projectId, 'agent_retired', 'Auto-retired: project marked ' || @retireStatus)`
-        ).run({ agentId: agent.id, projectId: id, retireStatus });
+        await pool.query(
+          `INSERT INTO agent_activity (agent_id, project_id, event_type, summary) VALUES ($1, $2, 'agent_retired', 'Auto-retired: project marked ' || $3)`,
+          [agent.id, id, retireStatus]
+        );
       }
 
       if (ephemeralAgents.length > 0) {
@@ -195,8 +195,8 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
       }
     }
 
-    const project = db.select().from(schema.projects)
-      .where(eq(schema.projects.id, id)).get();
+    const [project] = await db.select().from(schema.projects)
+      .where(eq(schema.projects.id, id));
 
     return reply.send(ok({ project: project ? formatProject(project) : null }));
   });
@@ -207,18 +207,18 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    const existing = db.select().from(schema.projects)
-      .where(eq(schema.projects.id, id)).get();
+    const [existing] = await db.select().from(schema.projects)
+      .where(eq(schema.projects.id, id));
 
     if (!existing) {
       return reply.code(404).send(err('PROJECT_NOT_FOUND', 'Project not found'));
     }
 
-    db.delete(schema.projects).where(eq(schema.projects.id, id)).run();
+    await db.delete(schema.projects).where(eq(schema.projects.id, id));
 
     // Clean up collaboration data on project deletion
-    sqlite.prepare('DELETE FROM project_collaborators WHERE project_id = ?').run(id);
-    sqlite.prepare('DELETE FROM collaboration_events WHERE project_id = ?').run(id);
+    await pool.query('DELETE FROM project_collaborators WHERE project_id = $1', [id]);
+    await pool.query('DELETE FROM collaboration_events WHERE project_id = $1', [id]);
 
     return reply.send(ok({ deleted: true }));
   });
@@ -233,13 +233,13 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
       const offset = parseInt(req.query.offset || '0', 10);
 
       // Verify project exists
-      const project = db.select().from(schema.projects).where(eq(schema.projects.id, id)).get();
+      const [project] = await db.select().from(schema.projects).where(eq(schema.projects.id, id));
       if (!project) {
         return reply.code(404).send(err('NOT_FOUND', 'Project not found'));
       }
 
       // Fetch activity with agent name via LEFT JOIN
-      const rows = sqlite.prepare(`
+      const rows = (await pool.query(`
         SELECT
           aa.id,
           aa.agent_id,
@@ -254,10 +254,10 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
           p.avatar AS agent_avatar
         FROM agent_activity aa
         LEFT JOIN personas p ON p.id = aa.agent_id
-        WHERE aa.project_id = @projectId
+        WHERE aa.project_id = $1
         ORDER BY aa.created_at DESC
-        LIMIT @limit OFFSET @offset
-      `).all({ projectId: id, limit, offset }) as Array<{
+        LIMIT $2 OFFSET $3
+      `, [id, limit, offset])).rows as Array<{
         id: number; agent_id: string; job_id: string | null;
         project_id: string; event_type: string; summary: string;
         detail: string; created_at: number;
@@ -265,9 +265,10 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
       }>;
 
       // Get total count for pagination
-      const countRow = sqlite.prepare(
-        'SELECT COUNT(*) as total FROM agent_activity WHERE project_id = @projectId'
-      ).get({ projectId: id }) as { total: number };
+      const countRow = (await pool.query(
+        'SELECT COUNT(*) as total FROM agent_activity WHERE project_id = $1',
+        [id]
+      )).rows[0] as { total: number };
 
       const events = rows.map(r => ({
         id: r.id,

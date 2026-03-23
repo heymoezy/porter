@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { sqlite } from '../../db/client.js';
+import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
 import { onFileCreated, onMessageReceived } from '../../services/event-triggers.js';
 import { z } from 'zod';
@@ -19,13 +19,13 @@ export default async function jobV1Routes(fastify: FastifyInstance, _options: Fa
     const { status, agent_id, limit } = request.query as {
       status?: string; agent_id?: string; limit?: string;
     };
+    const params: unknown[] = [];
     let sql = 'SELECT * FROM agent_jobs WHERE 1=1';
-    const params: Record<string, unknown> = {};
-    if (status) { sql += ' AND status = @status'; params.status = status; }
-    if (agent_id) { sql += ' AND agent_id = @agentId'; params.agentId = agent_id; }
-    sql += ' ORDER BY created_at DESC LIMIT @limit';
-    params.limit = parseInt(limit ?? '50', 10);
-    const rows = sqlite.prepare(sql).all(params);
+    if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
+    if (agent_id) { params.push(agent_id); sql += ` AND agent_id = $${params.length}`; }
+    params.push(parseInt(limit ?? '50', 10));
+    sql += ` ORDER BY created_at DESC LIMIT $${params.length}`;
+    const rows = (await pool.query(sql, params)).rows;
     return reply.send(ok({ jobs: rows, count: rows.length }));
   });
 
@@ -37,29 +37,29 @@ export default async function jobV1Routes(fastify: FastifyInstance, _options: Fa
     }
     const { agent_id, project_id, trigger_type, prompt, scheduled_for } = parsed.data;
     const id = crypto.randomUUID();
-    sqlite.prepare(`
+    await pool.query(`
       INSERT INTO agent_jobs (id, agent_id, project_id, trigger_type, prompt, status, scheduled_for)
-      VALUES (@id, @agentId, @projectId, @triggerType, @prompt, 'pending', @scheduledFor)
-    `).run({
+      VALUES ($1, $2, $3, $4, $5, 'pending', $6)
+    `, [
       id,
-      agentId: agent_id,
-      projectId: project_id ?? null,
-      triggerType: trigger_type,
-      prompt: prompt ?? null,
-      scheduledFor: scheduled_for ?? Date.now() / 1000,
-    });
-    const row = sqlite.prepare('SELECT * FROM agent_jobs WHERE id = ?').get(id);
+      agent_id,
+      project_id ?? null,
+      trigger_type,
+      prompt ?? null,
+      scheduled_for ?? Date.now() / 1000,
+    ]);
+    const row = (await pool.query('SELECT * FROM agent_jobs WHERE id = $1', [id])).rows[0];
     return reply.code(201).send(ok({ job: row }));
   });
 
   // POST /api/v1/jobs/:id/cancel — cancel a pending job
   fastify.post('/:id/cancel', { preHandler: [fastify.requireAuth] }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const result = sqlite.prepare(`
-      UPDATE agent_jobs SET status = 'cancelled', completed_at = unixepoch('now')
-      WHERE id = @id AND status = 'pending'
-    `).run({ id });
-    if (result.changes === 0) {
+    const result = await pool.query(`
+      UPDATE agent_jobs SET status = 'cancelled', completed_at = EXTRACT(EPOCH FROM NOW())
+      WHERE id = $1 AND status = 'pending'
+    `, [id]);
+    if (result.rowCount === 0) {
       return reply.code(404).send(err('JOB_NOT_FOUND', 'Job not found or not cancellable'));
     }
     return reply.send(ok({ cancelled: true }));
@@ -83,9 +83,9 @@ export default async function jobV1Routes(fastify: FastifyInstance, _options: Fa
     let inserted = 0;
 
     if (event_type === 'file-created') {
-      inserted = onFileCreated(project_id, (data as { filename?: string })?.filename ?? 'unknown');
+      inserted = await onFileCreated(project_id, (data as { filename?: string })?.filename ?? 'unknown');
     } else if (event_type === 'message-received') {
-      inserted = onMessageReceived(project_id,
+      inserted = await onMessageReceived(project_id,
         (data as { message?: string })?.message ?? '',
         (data as { from_user?: string })?.from_user ?? 'system'
       );

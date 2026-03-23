@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { sqlite } from '../../db/client.js';
+import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
 import { z } from 'zod';
 import crypto from 'crypto';
@@ -52,7 +52,7 @@ export default async function conversationV1Routes(
   fastify: FastifyInstance,
   _opts: FastifyPluginOptions,
 ) {
-  // GET /search — FTS5 full-text search across messages (CHAT-03)
+  // GET /search — full-text search across messages (CHAT-03)
   // Must be registered BEFORE /:id to avoid route conflict
   fastify.get('/search', {
     preHandler: [fastify.requireAuth],
@@ -67,22 +67,21 @@ export default async function conversationV1Routes(
     }
 
     try {
-      const results = sqlite.prepare(`
+      const results = (await pool.query(`
         SELECT m.id, m.conversation_id, m.content, m.sender_name, m.sender_type,
-               m.channel_type, m.created_at, rank
+               m.channel_type, m.created_at,
+               ts_rank(to_tsvector('english', m.content), plainto_tsquery('english', $1)) as rank
         FROM messages m
-        JOIN messages_fts ON messages_fts.rowid = m.id
-        WHERE messages_fts MATCH ?
-        ORDER BY rank
-        LIMIT ? OFFSET ?
-      `).all(q, limit, offset) as any[];
+        WHERE to_tsvector('english', m.content) @@ plainto_tsquery('english', $1)
+        ORDER BY rank DESC
+        LIMIT $2 OFFSET $3
+      `, [q, limit, offset])).rows as any[];
 
-      const totalRow = sqlite.prepare(`
+      const totalRow = (await pool.query(`
         SELECT COUNT(*) as total
         FROM messages m
-        JOIN messages_fts ON messages_fts.rowid = m.id
-        WHERE messages_fts MATCH ?
-      `).get(q) as { total: number } | undefined;
+        WHERE to_tsvector('english', m.content) @@ plainto_tsquery('english', $1)
+      `, [q])).rows[0] as { total: number } | undefined;
 
       return reply.send(ok({ results, total: totalRow?.total ?? 0 }));
     } catch (e: any) {
@@ -105,41 +104,45 @@ export default async function conversationV1Routes(
       let rows: any[];
 
       if (q) {
-        // FTS5 search: find conversations containing matching messages
-        rows = sqlite.prepare(`
+        // Full-text search: find conversations containing matching messages
+        rows = (await pool.query(`
           SELECT DISTINCT c.*
           FROM conversations c
           JOIN messages m ON m.conversation_id = c.id
-          JOIN messages_fts ON messages_fts.rowid = m.id
-          WHERE messages_fts MATCH ?
+          WHERE to_tsvector('english', m.content) @@ plainto_tsquery('english', $1)
           ORDER BY c.updated_at DESC
-          LIMIT ? OFFSET ?
-        `).all(q, limit, offset) as any[];
+          LIMIT $2 OFFSET $3
+        `, [q, limit, offset])).rows as any[];
       } else {
         // Build WHERE clauses dynamically
         const conditions: string[] = [];
         const params: unknown[] = [];
+        let paramIdx = 1;
 
         if (scopeType) {
-          conditions.push('scope_type = ?');
+          conditions.push(`scope_type = $${paramIdx}`);
           params.push(scopeType);
+          paramIdx++;
         }
         if (scopeId) {
-          conditions.push('scope_id = ?');
+          conditions.push(`scope_id = $${paramIdx}`);
           params.push(scopeId);
+          paramIdx++;
         }
 
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
         params.push(limit, offset);
 
-        rows = sqlite.prepare(`
-          SELECT * FROM conversations ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?
-        `).all(...params) as any[];
+        rows = (await pool.query(`
+          SELECT * FROM conversations ${where} ORDER BY updated_at DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
+        `, params)).rows as any[];
       }
 
       const conversations = rows.map(r => ({
         ...r,
-        metadata: (() => { try { return JSON.parse(r.metadata || '{}'); } catch { return {}; } })(),
+        metadata: typeof r.metadata === 'string'
+          ? (() => { try { return JSON.parse(r.metadata || '{}'); } catch { return {}; } })()
+          : (r.metadata || {}),
       }));
 
       return reply.send(ok({ conversations, total: conversations.length }));
@@ -169,7 +172,7 @@ export default async function conversationV1Routes(
       if (!scope_id) {
         return reply.code(400).send(err('INVALID_INPUT', 'scope_id is required for project scope'));
       }
-      const exists = sqlite.prepare('SELECT id FROM projects WHERE id = ?').get(scope_id);
+      const exists = (await pool.query('SELECT id FROM projects WHERE id = $1', [scope_id])).rows[0];
       if (!exists) {
         return reply.code(400).send(err('INVALID_SCOPE', 'Referenced project not found'));
       }
@@ -177,7 +180,7 @@ export default async function conversationV1Routes(
       if (!scope_id) {
         return reply.code(400).send(err('INVALID_INPUT', 'scope_id is required for agent scope'));
       }
-      const exists = sqlite.prepare('SELECT id FROM personas WHERE id = ?').get(scope_id);
+      const exists = (await pool.query('SELECT id FROM personas WHERE id = $1', [scope_id])).rows[0];
       if (!exists) {
         return reply.code(400).send(err('INVALID_SCOPE', 'Referenced agent not found'));
       }
@@ -185,7 +188,7 @@ export default async function conversationV1Routes(
       if (!scope_id) {
         return reply.code(400).send(err('INVALID_INPUT', 'scope_id is required for contact scope'));
       }
-      const exists = sqlite.prepare('SELECT id FROM contacts WHERE id = ?').get(scope_id);
+      const exists = (await pool.query('SELECT id FROM contacts WHERE id = $1', [scope_id])).rows[0];
       if (!exists) {
         return reply.code(400).send(err('INVALID_SCOPE', 'Referenced contact not found'));
       }
@@ -195,17 +198,19 @@ export default async function conversationV1Routes(
     const metadataJson = JSON.stringify(metadata ?? {});
 
     try {
-      sqlite.prepare(`
+      await pool.query(`
         INSERT INTO conversations (id, scope_type, scope_id, title, channel_type, external_id, metadata, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch('now'), unixepoch('now'))
-      `).run(id, scope_type, scope_id ?? null, title ?? null, channel_type, external_id ?? null, metadataJson);
+        VALUES ($1, $2, $3, $4, $5, $6, $7, EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+      `, [id, scope_type, scope_id ?? null, title ?? null, channel_type, external_id ?? null, metadataJson]);
 
-      const conversation = sqlite.prepare('SELECT * FROM conversations WHERE id = ?').get(id) as any;
+      const conversation = (await pool.query('SELECT * FROM conversations WHERE id = $1', [id])).rows[0] as any;
 
       return reply.code(201).send(ok({
         conversation: {
           ...conversation,
-          metadata: (() => { try { return JSON.parse(conversation.metadata || '{}'); } catch { return {}; } })(),
+          metadata: typeof conversation.metadata === 'string'
+            ? (() => { try { return JSON.parse(conversation.metadata || '{}'); } catch { return {}; } })()
+            : (conversation.metadata || {}),
         },
       }));
     } catch (e: any) {
@@ -220,7 +225,7 @@ export default async function conversationV1Routes(
     const { id } = request.params;
 
     try {
-      const row = sqlite.prepare('SELECT * FROM conversations WHERE id = ?').get(id) as any;
+      const row = (await pool.query('SELECT * FROM conversations WHERE id = $1', [id])).rows[0] as any;
       if (!row) {
         return reply.code(404).send(err('NOT_FOUND', 'Conversation not found'));
       }
@@ -228,7 +233,9 @@ export default async function conversationV1Routes(
       return reply.send(ok({
         conversation: {
           ...row,
-          metadata: (() => { try { return JSON.parse(row.metadata || '{}'); } catch { return {}; } })(),
+          metadata: typeof row.metadata === 'string'
+            ? (() => { try { return JSON.parse(row.metadata || '{}'); } catch { return {}; } })()
+            : (row.metadata || {}),
         },
       }));
     } catch (e: any) {
@@ -250,33 +257,38 @@ export default async function conversationV1Routes(
     const { title, metadata } = parsed.data;
 
     try {
-      const existing = sqlite.prepare('SELECT * FROM conversations WHERE id = ?').get(id) as any;
+      const existing = (await pool.query('SELECT * FROM conversations WHERE id = $1', [id])).rows[0] as any;
       if (!existing) {
         return reply.code(404).send(err('NOT_FOUND', 'Conversation not found'));
       }
 
-      const updates: string[] = ["updated_at = unixepoch('now')"];
+      const updates: string[] = ['updated_at = EXTRACT(EPOCH FROM NOW())'];
       const params: unknown[] = [];
+      let paramIdx = 1;
 
       if (title !== undefined) {
-        updates.push('title = ?');
+        updates.push(`title = $${paramIdx}`);
         params.push(title);
+        paramIdx++;
       }
       if (metadata !== undefined) {
-        updates.push('metadata = ?');
+        updates.push(`metadata = $${paramIdx}`);
         params.push(JSON.stringify(metadata));
+        paramIdx++;
       }
 
       params.push(id);
 
-      sqlite.prepare(`UPDATE conversations SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+      await pool.query(`UPDATE conversations SET ${updates.join(', ')} WHERE id = $${paramIdx}`, params);
 
-      const updated = sqlite.prepare('SELECT * FROM conversations WHERE id = ?').get(id) as any;
+      const updated = (await pool.query('SELECT * FROM conversations WHERE id = $1', [id])).rows[0] as any;
 
       return reply.send(ok({
         conversation: {
           ...updated,
-          metadata: (() => { try { return JSON.parse(updated.metadata || '{}'); } catch { return {}; } })(),
+          metadata: typeof updated.metadata === 'string'
+            ? (() => { try { return JSON.parse(updated.metadata || '{}'); } catch { return {}; } })()
+            : (updated.metadata || {}),
         },
       }));
     } catch (e: any) {
@@ -291,15 +303,23 @@ export default async function conversationV1Routes(
     const { id } = request.params;
 
     try {
-      const existing = sqlite.prepare('SELECT id FROM conversations WHERE id = ?').get(id);
+      const existing = (await pool.query('SELECT id FROM conversations WHERE id = $1', [id])).rows[0];
       if (!existing) {
         return reply.code(404).send(err('NOT_FOUND', 'Conversation not found'));
       }
 
-      sqlite.transaction(() => {
-        sqlite.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id);
-        sqlite.prepare('DELETE FROM conversations WHERE id = ?').run(id);
-      })();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('DELETE FROM messages WHERE conversation_id = $1', [id]);
+        await client.query('DELETE FROM conversations WHERE id = $1', [id]);
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
 
       return reply.send(ok({ deleted: true }));
     } catch (e: any) {
@@ -318,19 +338,19 @@ export default async function conversationV1Routes(
     const offset = parseInt(query.offset ?? '0', 10) || 0;
 
     try {
-      const convExists = sqlite.prepare('SELECT id FROM conversations WHERE id = ?').get(id);
+      const convExists = (await pool.query('SELECT id FROM conversations WHERE id = $1', [id])).rows[0];
       if (!convExists) {
         return reply.code(404).send(err('NOT_FOUND', 'Conversation not found'));
       }
 
-      const rows = sqlite.prepare(`
+      const rows = (await pool.query(`
         SELECT id, conversation_id, parent_message_id, sender_type, sender_id, sender_name,
                content, channel_type, channel_metadata, created_at
         FROM messages
-        WHERE conversation_id = ?
+        WHERE conversation_id = $1
         ORDER BY created_at ASC
-        LIMIT ? OFFSET ?
-      `).all(id, limit, offset) as Array<{
+        LIMIT $2 OFFSET $3
+      `, [id, limit, offset])).rows as Array<{
         id: number;
         conversation_id: string;
         parent_message_id: number | null;
@@ -339,13 +359,13 @@ export default async function conversationV1Routes(
         sender_name: string | null;
         content: string;
         channel_type: string;
-        channel_metadata: string;
+        channel_metadata: string | Record<string, unknown>;
         created_at: number;
       }>;
 
-      const total = (sqlite.prepare(
-        'SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = ?'
-      ).get(id) as { cnt: number }).cnt;
+      const total = ((await pool.query(
+        'SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = $1', [id]
+      )).rows[0] as { cnt: number }).cnt;
 
       const normalized = rows.map(r => ({
         id: r.id,
@@ -356,7 +376,9 @@ export default async function conversationV1Routes(
         sender_name: r.sender_name,
         content: r.content,
         channel_type: r.channel_type,
-        channel_metadata: (() => { try { return JSON.parse(r.channel_metadata || '{}'); } catch { return {}; } })() as Record<string, unknown>,
+        channel_metadata: (typeof r.channel_metadata === 'string'
+          ? (() => { try { return JSON.parse(r.channel_metadata || '{}'); } catch { return {}; } })()
+          : (r.channel_metadata || {})) as Record<string, unknown>,
         created_at: r.created_at,
         children: [] as MessageNode[],
       }));
@@ -407,16 +429,17 @@ export default async function conversationV1Routes(
 
     try {
       // Verify conversation exists
-      const conv = sqlite.prepare('SELECT id FROM conversations WHERE id = ?').get(id);
+      const conv = (await pool.query('SELECT id FROM conversations WHERE id = $1', [id])).rows[0];
       if (!conv) {
         return reply.code(404).send(err('NOT_FOUND', 'Conversation not found'));
       }
 
       // Validate parent_id if provided
       if (parent_id !== undefined) {
-        const parent = sqlite.prepare(
-          'SELECT id FROM messages WHERE id = ? AND conversation_id = ?'
-        ).get(parent_id, id);
+        const parent = (await pool.query(
+          'SELECT id FROM messages WHERE id = $1 AND conversation_id = $2',
+          [parent_id, id]
+        )).rows[0];
         if (!parent) {
           return reply.code(400).send(err('INVALID_PARENT', 'Parent message not found in this conversation'));
         }
@@ -431,12 +454,13 @@ export default async function conversationV1Routes(
 
       const channelMetaJson = JSON.stringify(channel_metadata ?? {});
 
-      sqlite.prepare(`
+      const insertResult = await pool.query(`
         INSERT INTO messages
           (conversation_id, parent_message_id, sender_type, sender_id, sender_name,
            content, channel_type, channel_metadata, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch('now'))
-      `).run(
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, EXTRACT(EPOCH FROM NOW()))
+        RETURNING *
+      `, [
         id,
         parent_id ?? null,
         sender_type,
@@ -445,19 +469,19 @@ export default async function conversationV1Routes(
         content,
         channel_type,
         channelMetaJson,
-      );
+      ]);
 
-      const message = sqlite.prepare(
-        'SELECT * FROM messages WHERE id = last_insert_rowid()'
-      ).get() as any;
+      const message = insertResult.rows[0] as any;
 
       // Update conversation's updated_at timestamp
-      sqlite.prepare("UPDATE conversations SET updated_at = unixepoch('now') WHERE id = ?").run(id);
+      await pool.query("UPDATE conversations SET updated_at = EXTRACT(EPOCH FROM NOW()) WHERE id = $1", [id]);
 
       return reply.code(201).send(ok({
         message: {
           ...message,
-          channel_metadata: (() => { try { return JSON.parse(message.channel_metadata || '{}'); } catch { return {}; } })(),
+          channel_metadata: typeof message.channel_metadata === 'string'
+            ? (() => { try { return JSON.parse(message.channel_metadata || '{}'); } catch { return {}; } })()
+            : (message.channel_metadata || {}),
         },
       }));
     } catch (e: any) {

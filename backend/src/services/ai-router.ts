@@ -5,7 +5,7 @@
  */
 
 import { config } from '../config.js';
-import { sqlite } from '../db/client.js';
+import { pool } from '../db/client.js';
 import { emitSSE } from './scheduler.js';
 
 // ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ function repairToolCallBoundaries(
  * Persist a model selection decision to decision_log and emit decision:made SSE.
  * Non-critical — failures are swallowed so dispatch is never blocked.
  */
-function logDecision(
+async function logDecision(
   decisionType: 'model_selection' | 'agent_routing' | 'task_skip',
   chosen: string,
   reasoning: string,
@@ -218,18 +218,18 @@ function logDecision(
   extra?: { projectId?: string | null; agentId?: string },
 ) {
   try {
-    sqlite.prepare(`
+    await pool.query(`
       INSERT INTO decision_log (decision_type, chosen, reasoning, alternatives, project_id, agent_id, job_id)
-      VALUES (@decisionType, @chosen, @reasoning, @alternatives, @projectId, @agentId, @jobId)
-    `).run({
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
       decisionType,
       chosen,
       reasoning,
-      alternatives: JSON.stringify(alternatives),
-      projectId: extra?.projectId ?? null,
-      agentId: extra?.agentId ?? null,
-      jobId: null,
-    });
+      JSON.stringify(alternatives),
+      extra?.projectId ?? null,
+      extra?.agentId ?? null,
+      null,
+    ]);
   } catch {
     // Decision logging is non-critical — never block dispatch
   }
@@ -293,14 +293,14 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
     const altTier: ModelTier = tier === 'cheap' ? 'strong' : 'cheap';
     const altAvailable = await probeBackend(BACKENDS[altTier].url);
     if (altAvailable) {
-      logDecision('model_selection', `${backend.name} (${backend.model})`, reason,
+      await logDecision('model_selection', `${backend.name} (${backend.model})`, reason,
         [`${BACKENDS[altTier].name} (${BACKENDS[altTier].model})`],
         { projectId: req.projectId, agentId: req.agentId });
     }
 
     // Track token usage (Ollama reports eval_count as output tokens)
     if (data.eval_count && data.eval_count > 0) {
-      trackTokenUsage(backend.model, 0, data.eval_count);
+      await trackTokenUsage(backend.model, 0, data.eval_count);
       result.tokensUsed = data.eval_count;
     }
 
@@ -337,7 +337,7 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
   const altTier: ModelTier = tier === 'cheap' ? 'strong' : 'cheap';
   const altAvailable = await probeBackend(BACKENDS[altTier].url);
   if (altAvailable) {
-    logDecision('model_selection', `${backend.name} (${backend.model})`, reason,
+    await logDecision('model_selection', `${backend.name} (${backend.model})`, reason,
       [`${BACKENDS[altTier].name} (${BACKENDS[altTier].model})`],
       { projectId: req.projectId, agentId: req.agentId });
   }
@@ -346,7 +346,7 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
   const inputTokens = data.usage?.prompt_tokens ?? 0;
   const outputTokens = data.usage?.completion_tokens ?? 0;
   if (inputTokens > 0 || outputTokens > 0) {
-    trackTokenUsage(backend.model, inputTokens, outputTokens);
+    await trackTokenUsage(backend.model, inputTokens, outputTokens);
     result.tokensUsed = inputTokens + outputTokens;
   }
 
@@ -357,17 +357,17 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
  * Upsert daily token usage for the given model.
  * Non-critical — failures are swallowed so dispatch is never blocked.
  */
-function trackTokenUsage(model: string, inputTokens: number, outputTokens: number) {
+async function trackTokenUsage(model: string, inputTokens: number, outputTokens: number) {
   const today = new Date().toISOString().slice(0, 10);
   try {
-    sqlite.prepare(`
+    await pool.query(`
       INSERT INTO token_usage_daily (model, date, input_tokens, output_tokens, request_count)
-      VALUES (@model, @date, @inputTokens, @outputTokens, 1)
+      VALUES ($1, $2, $3, $4, 1)
       ON CONFLICT(model, date) DO UPDATE SET
-        input_tokens = input_tokens + @inputTokens,
-        output_tokens = output_tokens + @outputTokens,
-        request_count = request_count + 1
-    `).run({ model, date: today, inputTokens, outputTokens });
+        input_tokens = token_usage_daily.input_tokens + $3,
+        output_tokens = token_usage_daily.output_tokens + $4,
+        request_count = token_usage_daily.request_count + 1
+    `, [model, today, inputTokens, outputTokens]);
   } catch {
     // Non-critical — never block dispatch
   }

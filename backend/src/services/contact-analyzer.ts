@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { sqlite } from '../db/client.js';
+import { pool } from '../db/client.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -106,9 +106,10 @@ function parseAnalysis(raw: unknown): ContactAnalysis {
  */
 export async function analyzeContact(contactId: string): Promise<ContactAnalysis> {
   // 1. Fetch contact display name for the prompt
-  const contact = sqlite.prepare(
-    'SELECT display_name, first_name, last_name FROM contacts WHERE id = ?'
-  ).get(contactId) as { display_name: string; first_name: string | null; last_name: string | null } | undefined;
+  const contact = (await pool.query(
+    'SELECT display_name, first_name, last_name FROM contacts WHERE id = $1',
+    [contactId]
+  )).rows[0] as { display_name: string; first_name: string | null; last_name: string | null } | undefined;
 
   if (!contact) {
     throw new Error(`Contact ${contactId} not found`);
@@ -119,15 +120,15 @@ export async function analyzeContact(contactId: string): Promise<ContactAnalysis
     'Unknown';
 
   // 2. Query interaction history FRESH from the DB (locked decision: never cached)
-  const messages = sqlite.prepare(`
+  const messages = (await pool.query(`
     SELECT m.content, m.sender_type, m.sender_name, m.created_at
     FROM messages m
     JOIN conversations c ON c.id = m.conversation_id
     JOIN contact_conversations cc ON cc.conversation_id = c.id
-    WHERE cc.contact_id = ?
+    WHERE cc.contact_id = $1
     ORDER BY m.created_at DESC
     LIMIT 20
-  `).all(contactId) as Array<{
+  `, [contactId])).rows as Array<{
     content: string;
     sender_type: string;
     sender_name: string | null;

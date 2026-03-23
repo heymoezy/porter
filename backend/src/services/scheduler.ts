@@ -1,4 +1,4 @@
-import { sqlite } from '../db/client.js';
+import { pool } from '../db/client.js';
 import { config, featureFlags } from '../config.js';
 import { dispatch as aiRouterDispatch } from './ai-router.js';
 import { checkDeadlineTriggers } from './event-triggers.js';
@@ -21,19 +21,19 @@ let tickCount = 0;
  * Schedule a drip reminder job for a collaborator invite.
  * Cadence: first 3 drips = daily, drips 3-7 = weekly, drip 7+ = monthly.
  */
-export function scheduleDripReminder(collaboratorId: string, dripCount: number): void {
+export async function scheduleDripReminder(collaboratorId: string, dripCount: number): Promise<void> {
   if (dripCount >= MAX_DRIP_COUNT) return;
   const offsetDays = dripCount < 3 ? 1 : dripCount < 7 ? 7 : 30;
   const scheduledFor = Date.now() / 1000 + offsetDays * 86400;
 
-  sqlite.prepare(`
+  await pool.query(`
     INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
-    VALUES (?, 'system', 'invite_drip', ?, 'pending', ?, unixepoch('now'))
-  `).run(
+    VALUES ($1, 'system', 'invite_drip', $2, 'pending', $3, EXTRACT(EPOCH FROM NOW()))
+  `, [
     crypto.randomUUID(),
     JSON.stringify({ collaborator_id: collaboratorId }),
     scheduledFor,
-  );
+  ]);
 }
 
 /**
@@ -44,7 +44,7 @@ export function scheduleDripReminder(collaboratorId: string, dripCount: number):
  *   - Low engagement (0-29): re-analyze every 24 hours
  *   - Error/unknown (-1): retry in 6 hours
  */
-export function scheduleNextContactAnalysis(contactId: string, engagementScore: number): void {
+export async function scheduleNextContactAnalysis(contactId: string, engagementScore: number): Promise<void> {
   let intervalSec: number;
   if (engagementScore < 0) {
     intervalSec = 6 * 3600;       // 6 hours (error backoff)
@@ -57,14 +57,14 @@ export function scheduleNextContactAnalysis(contactId: string, engagementScore: 
   }
 
   const scheduledFor = Date.now() / 1000 + intervalSec;
-  sqlite.prepare(`
+  await pool.query(`
     INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
-    VALUES (?, 'system', 'contact_analysis', ?, 'pending', ?, unixepoch('now'))
-  `).run(
+    VALUES ($1, 'system', 'contact_analysis', $2, 'pending', $3, EXTRACT(EPOCH FROM NOW()))
+  `, [
     crypto.randomUUID(),
     JSON.stringify({ contact_id: contactId }),
     scheduledFor,
-  );
+  ]);
 }
 
 /**
@@ -75,7 +75,7 @@ export function scheduleNextContactAnalysis(contactId: string, engagementScore: 
  *   - Medium activity (30-69): re-learn every 48 hours
  *   - Low activity (0-29): re-learn every 7 days (stable domains: accounting, law basics)
  */
-export function scheduleNextLearningSession(templateId: string, domainActivity: number): void {
+export async function scheduleNextLearningSession(templateId: string, domainActivity: number): Promise<void> {
   let intervalSec: number;
   if (domainActivity < 0) {
     intervalSec = 12 * 3600;       // 12 hours (error backoff)
@@ -88,14 +88,14 @@ export function scheduleNextLearningSession(templateId: string, domainActivity: 
   }
 
   const scheduledFor = Date.now() / 1000 + intervalSec;
-  sqlite.prepare(`
+  await pool.query(`
     INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
-    VALUES (?, 'system', 'learning_session', ?, 'pending', ?, unixepoch('now'))
-  `).run(
+    VALUES ($1, 'system', 'learning_session', $2, 'pending', $3, EXTRACT(EPOCH FROM NOW()))
+  `, [
     crypto.randomUUID(),
     JSON.stringify({ template_id: templateId }),
     scheduledFor,
-  );
+  ]);
 }
 
 // ── Bootstrap helpers ─────────────────────────────────────────────────────────
@@ -105,8 +105,8 @@ export function scheduleNextLearningSession(templateId: string, domainActivity: 
  * that has at least one linked conversation but no existing pending analysis job.
  * This ensures the 24/7 autonomous sweep starts without manual intervention.
  */
-function bootstrapContactAnalysis(): void {
-  const contactsNeedingJobs = sqlite.prepare(`
+async function bootstrapContactAnalysis(): Promise<void> {
+  const contactsNeedingJobs = (await pool.query(`
     SELECT DISTINCT cc.contact_id
     FROM contact_conversations cc
     JOIN contacts c ON c.id = cc.contact_id
@@ -114,9 +114,9 @@ function bootstrapContactAnalysis(): void {
       SELECT 1 FROM agent_jobs
       WHERE trigger_type = 'contact_analysis'
         AND status = 'pending'
-        AND json_extract(trigger_data, '$.contact_id') = cc.contact_id
+        AND trigger_data->>'contact_id' = cc.contact_id
     )
-  `).all() as { contact_id: string }[];
+  `)).rows as { contact_id: string }[];
 
   if (contactsNeedingJobs.length > 0) {
     console.log('[scheduler] bootstrapping contact analysis for %d contacts', contactsNeedingJobs.length);
@@ -126,14 +126,14 @@ function bootstrapContactAnalysis(): void {
       : 0;
     for (let i = 0; i < contactsNeedingJobs.length; i++) {
       const scheduledFor = Date.now() / 1000 + (i * staggerSec);
-      sqlite.prepare(`
+      await pool.query(`
         INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
-        VALUES (?, 'system', 'contact_analysis', ?, 'pending', ?, unixepoch('now'))
-      `).run(
+        VALUES ($1, 'system', 'contact_analysis', $2, 'pending', $3, EXTRACT(EPOCH FROM NOW()))
+      `, [
         crypto.randomUUID(),
         JSON.stringify({ contact_id: contactsNeedingJobs[i].contact_id }),
         scheduledFor,
-      );
+      ]);
     }
   }
 }
@@ -143,17 +143,17 @@ function bootstrapContactAnalysis(): void {
  * agent template that doesn't already have a pending job.
  * Staggered over 10 minutes to prevent thundering herd on startup.
  */
-function bootstrapLearning(): void {
-  const templatesNeedingJobs = sqlite.prepare(`
+async function bootstrapLearning(): Promise<void> {
+  const templatesNeedingJobs = (await pool.query(`
     SELECT id FROM agent_templates
     WHERE is_internal = 0
     AND NOT EXISTS (
       SELECT 1 FROM agent_jobs
       WHERE trigger_type = 'learning_session'
         AND status = 'pending'
-        AND json_extract(trigger_data, '$.template_id') = agent_templates.id
+        AND trigger_data->>'template_id' = agent_templates.id
     )
-  `).all() as { id: string }[];
+  `)).rows as { id: string }[];
 
   if (templatesNeedingJobs.length > 0) {
     console.log('[scheduler] bootstrapping learning sessions for %d templates', templatesNeedingJobs.length);
@@ -162,14 +162,14 @@ function bootstrapLearning(): void {
       : 0;
     for (let i = 0; i < templatesNeedingJobs.length; i++) {
       const scheduledFor = Date.now() / 1000 + (i * staggerSec);
-      sqlite.prepare(`
+      await pool.query(`
         INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
-        VALUES (?, 'system', 'learning_session', ?, 'pending', ?, unixepoch('now'))
-      `).run(
+        VALUES ($1, 'system', 'learning_session', $2, 'pending', $3, EXTRACT(EPOCH FROM NOW()))
+      `, [
         crypto.randomUUID(),
         JSON.stringify({ template_id: templatesNeedingJobs[i].id }),
         scheduledFor,
-      );
+      ]);
     }
   }
 }
@@ -198,12 +198,12 @@ function logFeatureFlagState() {
     featureFlags.agentScheduling, featureFlags.eventTriggers, featureFlags.ephemeralAgents);
 }
 
-export function start() {
+export async function start() {
   if (intervalId) return;
   console.log('[scheduler] started — polling every %dms, worker=%s', POLL_INTERVAL_MS, WORKER_ID.slice(0, 8));
   logFeatureFlagState();
-  bootstrapContactAnalysis();
-  bootstrapLearning();
+  await bootstrapContactAnalysis();
+  await bootstrapLearning();
   intervalId = setInterval(tick, POLL_INTERVAL_MS);
 }
 
@@ -215,9 +215,9 @@ export function stop() {
 async function tick() {
   if (!featureFlags.agentScheduling) return;
   try {
-    const job = claimNextJob();
+    const job = await claimNextJob();
     if (job) {
-      logActivity(job.agent_id, job.id, job.project_id, 'job_started',
+      await logActivity(job.agent_id, job.id, job.project_id, 'job_started',
         `Job ${job.id.slice(0, 8)} started (trigger: ${job.trigger_type})`, '{}');
       await executeJob(job);
     }
@@ -225,19 +225,19 @@ async function tick() {
     // Check deadline triggers periodically (every 60s, not every 2s)
     tickCount++;
     if (tickCount % DEADLINE_CHECK_INTERVAL === 0) {
-      checkDeadlineTriggers();
+      await checkDeadlineTriggers();
     }
 
     // Calendar sync -- every 60 seconds
     if (featureFlags.externalConnections && tickCount % CALENDAR_SYNC_INTERVAL === 0) {
       try {
         // Only sync if a calendar connection exists
-        const hasCalendar = sqlite.prepare(
+        const hasCalendar = (await pool.query(
           `SELECT 1 FROM workspace_connections WHERE provider = 'google_calendar' AND status = 'connected' LIMIT 1`
-        ).get();
+        )).rows[0];
         if (hasCalendar) {
           await syncCalendarEvents();
-          checkCalendarDeadlines();
+          await checkCalendarDeadlines();
         }
       } catch (e) {
         console.error('[scheduler] calendar sync error', e);
@@ -246,14 +246,14 @@ async function tick() {
 
     // Unblock jobs whose connections have been restored -- every 30 seconds
     if (featureFlags.externalConnections && tickCount % 15 === 0) {
-      const blockedJobs = sqlite.prepare(
+      const blockedJobs = (await pool.query(
         `SELECT id, trigger_data FROM agent_jobs WHERE status = 'blocked' AND trigger_type = 'external_call'`
-      ).all() as { id: string; trigger_data: string }[];
+      )).rows as { id: string; trigger_data: string }[];
       for (const bj of blockedJobs) {
         try {
-          const td = JSON.parse(bj.trigger_data) as { service: string };
-          if (checkConnectionHealth(td.service) === 'ok') {
-            sqlite.prepare(`UPDATE agent_jobs SET status = 'pending' WHERE id = ?`).run(bj.id);
+          const td = (typeof bj.trigger_data === 'string' ? JSON.parse(bj.trigger_data) : bj.trigger_data) as { service: string };
+          if (await checkConnectionHealth(td.service) === 'ok') {
+            await pool.query(`UPDATE agent_jobs SET status = 'pending' WHERE id = $1`, [bj.id]);
           }
         } catch {
           // Ignore malformed trigger_data
@@ -265,19 +265,19 @@ async function tick() {
   }
 }
 
-function claimNextJob(): JobRow | undefined {
+async function claimNextJob(): Promise<JobRow | undefined> {
   // Use LEFT JOIN on personas to allow system jobs (agent_id='system') to be claimed.
   // For non-system agents, the original constraints apply (not retired, not ephemeral on finished project).
-  return sqlite.prepare(`
+  const result = await pool.query(`
     UPDATE agent_jobs
-    SET status = 'running', started_at = unixepoch('now'), worker_id = @workerId,
+    SET status = 'running', started_at = EXTRACT(EPOCH FROM NOW()), worker_id = $1,
         attempt_count = attempt_count + 1
     WHERE id = (
       SELECT aj.id FROM agent_jobs aj
       LEFT JOIN personas p ON p.id = aj.agent_id
       LEFT JOIN projects pr ON pr.id = aj.project_id
       WHERE aj.status = 'pending'
-        AND aj.scheduled_for <= unixepoch('now')
+        AND aj.scheduled_for <= EXTRACT(EPOCH FROM NOW())
         AND (aj.agent_id = 'system' OR (
           p.status != 'retired'
           AND (p.is_temporary = 0 OR pr.status IS NULL OR pr.status NOT IN ('complete', 'archived'))
@@ -285,20 +285,21 @@ function claimNextJob(): JobRow | undefined {
       ORDER BY aj.scheduled_for ASC LIMIT 1
     )
     RETURNING *
-  `).get({ workerId: WORKER_ID }) as JobRow | undefined;
+  `, [WORKER_ID]);
+  return result.rows[0] as JobRow | undefined;
 }
 
 async function executeJob(job: JobRow): Promise<void> {
   // ── Invite drip reminders ─────────────────────────────────────────────────
   if (job.trigger_type === 'invite_drip') {
-    const data = JSON.parse(job.trigger_data || '{}') as { collaborator_id?: string };
+    const data = (typeof job.trigger_data === 'string' ? JSON.parse(job.trigger_data) : job.trigger_data) as { collaborator_id?: string };
     const collaboratorId = data.collaborator_id;
     if (!collaboratorId) {
-      markJobFailed(job.id, 'Missing collaborator_id in invite_drip trigger_data');
+      await markJobFailed(job.id, 'Missing collaborator_id in invite_drip trigger_data');
       return;
     }
 
-    const collab = sqlite.prepare(`
+    const collab = (await pool.query(`
       SELECT pc.id, pc.project_id, pc.email, pc.role, pc.status, pc.invite_token,
              pc.invited_by, pc.drip_count,
              p.name AS project_name,
@@ -306,8 +307,8 @@ async function executeJob(job: JobRow): Promise<void> {
       FROM project_collaborators pc
       LEFT JOIN projects p ON p.id = pc.project_id
       LEFT JOIN users u2 ON u2.username = pc.invited_by
-      WHERE pc.id = ?
-    `).get(collaboratorId) as {
+      WHERE pc.id = $1
+    `, [collaboratorId])).rows[0] as {
       id: string;
       project_id: string;
       email: string;
@@ -323,17 +324,17 @@ async function executeJob(job: JobRow): Promise<void> {
 
     if (!collab || collab.status !== 'pending') {
       // Already accepted or revoked — mark job complete, no more drips
-      markJobComplete(job.id, JSON.stringify({ skipped: true, reason: collab ? collab.status : 'not_found' }));
+      await markJobComplete(job.id, JSON.stringify({ skipped: true, reason: collab ? collab.status : 'not_found' }));
       return;
     }
 
     if (collab.drip_count >= MAX_DRIP_COUNT) {
-      markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'max_drips_reached' }));
+      await markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'max_drips_reached' }));
       return;
     }
 
     if (!collab.invite_token) {
-      markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'no_invite_token' }));
+      await markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'no_invite_token' }));
       return;
     }
 
@@ -351,43 +352,44 @@ async function executeJob(job: JobRow): Promise<void> {
     });
 
     // Update drip tracking
-    sqlite.prepare(
-      `UPDATE project_collaborators SET drip_count = drip_count + 1, last_drip_at = unixepoch('now') WHERE id = ?`
-    ).run(collaboratorId);
+    await pool.query(
+      `UPDATE project_collaborators SET drip_count = drip_count + 1, last_drip_at = EXTRACT(EPOCH FROM NOW()) WHERE id = $1`,
+      [collaboratorId]
+    );
 
     // Log drip event to collaboration_events
-    sqlite.prepare(`
+    await pool.query(`
       INSERT INTO collaboration_events
         (project_id, collaborator_id, actor_username, event_type, detail, created_at)
-      VALUES (?, ?, 'system', 'drip_sent', ?, unixepoch('now'))
-    `).run(
+      VALUES ($1, $2, 'system', 'drip_sent', $3, EXTRACT(EPOCH FROM NOW()))
+    `, [
       collab.project_id,
       collaboratorId,
       JSON.stringify({ drip_count: collab.drip_count + 1 }),
-    );
+    ]);
 
     // Schedule next drip if under max
     if (collab.drip_count + 1 < MAX_DRIP_COUNT) {
-      scheduleDripReminder(collaboratorId, collab.drip_count + 1);
+      await scheduleDripReminder(collaboratorId, collab.drip_count + 1);
     }
 
-    markJobComplete(job.id, JSON.stringify({ drip_count: collab.drip_count + 1 }));
+    await markJobComplete(job.id, JSON.stringify({ drip_count: collab.drip_count + 1 }));
     return;
   }
 
   // ── Contact analysis (CRM-03) ──────────────────────────────────────────────
   if (job.trigger_type === 'contact_analysis') {
-    const data = JSON.parse(job.trigger_data || '{}') as { contact_id?: string };
+    const data = (typeof job.trigger_data === 'string' ? JSON.parse(job.trigger_data) : job.trigger_data) as { contact_id?: string };
     const contactId = data.contact_id;
     if (!contactId) {
-      markJobFailed(job.id, 'Missing contact_id in contact_analysis trigger_data');
+      await markJobFailed(job.id, 'Missing contact_id in contact_analysis trigger_data');
       return;
     }
 
     // Verify contact still exists
-    const contact = sqlite.prepare('SELECT id FROM contacts WHERE id = ?').get(contactId);
+    const contact = (await pool.query('SELECT id FROM contacts WHERE id = $1', [contactId])).rows[0];
     if (!contact) {
-      markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'contact_deleted' }));
+      await markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'contact_deleted' }));
       // Contact deleted — do NOT re-enqueue
       return;
     }
@@ -398,10 +400,10 @@ async function executeJob(job: JobRow): Promise<void> {
 
       // Write to contact_analyses table
       const analysisId = crypto.randomUUID();
-      sqlite.prepare(`
+      await pool.query(`
         INSERT INTO contact_analyses (id, contact_id, sentiment, engagement_score, churn_risk, relationship_stage, key_topics, last_interaction_summary, communication_style, raw_json, job_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch('now'))
-      `).run(
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, EXTRACT(EPOCH FROM NOW()))
+      `, [
         analysisId,
         contactId,
         analysis.sentiment,
@@ -413,40 +415,40 @@ async function executeJob(job: JobRow): Promise<void> {
         analysis.communication_style,
         JSON.stringify(analysis),
         job.id,
-      );
+      ]);
 
-      markJobComplete(job.id, JSON.stringify({ analysis_id: analysisId, contact_id: contactId }));
-      logActivity('system', job.id, null, 'contact_analysis_complete',
+      await markJobComplete(job.id, JSON.stringify({ analysis_id: analysisId, contact_id: contactId }));
+      await logActivity('system', job.id, null, 'contact_analysis_complete',
         `Analyzed contact ${contactId}`, JSON.stringify({ analysis_id: analysisId }));
 
       // ── Re-enqueue: autonomous 24/7 sweep with self-adjusting frequency ──
-      scheduleNextContactAnalysis(contactId, analysis.engagement_score);
+      await scheduleNextContactAnalysis(contactId, analysis.engagement_score);
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e);
-      markJobFailed(job.id, errMsg);
-      logActivity('system', job.id, null, 'contact_analysis_failed',
+      await markJobFailed(job.id, errMsg);
+      await logActivity('system', job.id, null, 'contact_analysis_failed',
         `Analysis failed for contact ${contactId}: ${errMsg}`, '{}');
 
       // Re-enqueue even on failure — use a longer backoff (6 hours)
       // so the sweep doesn't stop permanently on transient errors.
-      scheduleNextContactAnalysis(contactId, -1);
+      await scheduleNextContactAnalysis(contactId, -1);
     }
     return;
   }
 
   // ── Autonomous learning session (LEARN-01/02/03) ──────────────────────────
   if (job.trigger_type === 'learning_session') {
-    const data = JSON.parse(job.trigger_data || '{}') as { template_id?: string };
+    const data = (typeof job.trigger_data === 'string' ? JSON.parse(job.trigger_data) : job.trigger_data) as { template_id?: string };
     const templateId = data.template_id;
     if (!templateId) {
-      markJobFailed(job.id, 'Missing template_id in learning_session trigger_data');
+      await markJobFailed(job.id, 'Missing template_id in learning_session trigger_data');
       return;
     }
 
     // Verify template still exists
-    const template = sqlite.prepare('SELECT id FROM agent_templates WHERE id = ?').get(templateId);
+    const template = (await pool.query('SELECT id FROM agent_templates WHERE id = $1', [templateId])).rows[0];
     if (!template) {
-      markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'template_deleted' }));
+      await markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'template_deleted' }));
       // Template deleted — do NOT re-enqueue
       return;
     }
@@ -455,25 +457,25 @@ async function executeJob(job: JobRow): Promise<void> {
       const { runLearningSession } = await import('./learner.js');
       const result = await runLearningSession(templateId);
 
-      markJobComplete(job.id, JSON.stringify({
+      await markJobComplete(job.id, JSON.stringify({
         session_id: result.session_id,
         concepts_retained: result.concepts_retained,
         capped: result.capped,
       }));
-      logActivity('system', job.id, null, 'learning_session_complete',
+      await logActivity('system', job.id, null, 'learning_session_complete',
         `Learning session for template ${templateId}: ${result.concepts_retained} concepts`,
         JSON.stringify({ session_id: result.session_id, template_id: templateId }));
 
       // Re-enqueue: autonomous 24/7 sweep with self-adjusting cadence
-      scheduleNextLearningSession(templateId, result.domain_activity);
+      await scheduleNextLearningSession(templateId, result.domain_activity);
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e);
-      markJobFailed(job.id, errMsg);
-      logActivity('system', job.id, null, 'learning_session_failed',
+      await markJobFailed(job.id, errMsg);
+      await logActivity('system', job.id, null, 'learning_session_failed',
         `Learning session failed for template ${templateId}: ${errMsg}`, '{}');
 
       // Re-enqueue even on failure — 12h error backoff
-      scheduleNextLearningSession(templateId, -1);
+      await scheduleNextLearningSession(templateId, -1);
     }
     return;
   }
@@ -483,15 +485,16 @@ async function executeJob(job: JobRow): Promise<void> {
   // get 'blocked' status — they are not failed and are auto-unblocked when the
   // connection is restored.
   if (job.trigger_type === 'external_call') {
-    const triggerData = JSON.parse(job.trigger_data) as { service: string };
-    const healthStatus = checkConnectionHealth(triggerData.service);
+    const triggerData = (typeof job.trigger_data === 'string' ? JSON.parse(job.trigger_data) : job.trigger_data) as { service: string };
+    const healthStatus = await checkConnectionHealth(triggerData.service);
 
     if (healthStatus === 'blocked') {
       // Set job to 'blocked' — it will be retried when the connection is restored
-      sqlite.prepare(
-        `UPDATE agent_jobs SET status = 'blocked', result = ? WHERE id = ?`
-      ).run(`Connection ${triggerData.service} is not available — waiting for reauth`, job.id);
-      logActivity(job.agent_id, job.id, job.project_id, 'job_blocked',
+      await pool.query(
+        `UPDATE agent_jobs SET status = 'blocked', result = $1 WHERE id = $2`,
+        [`Connection ${triggerData.service} is not available — waiting for reauth`, job.id]
+      );
+      await logActivity(job.agent_id, job.id, job.project_id, 'job_blocked',
         `Blocked: ${triggerData.service} connection needs reauth`,
         JSON.stringify({ service: triggerData.service, reason: 'connection_unavailable' }));
       emitSSE('agent:activity', {
@@ -504,9 +507,9 @@ async function executeJob(job: JobRow): Promise<void> {
     }
 
     try {
-      const result = await dispatchExternalCall(job.trigger_data);
-      markJobComplete(job.id, result);
-      logActivity(job.agent_id, job.id, job.project_id, 'job_complete',
+      const result = await dispatchExternalCall(typeof job.trigger_data === 'string' ? job.trigger_data : JSON.stringify(job.trigger_data));
+      await markJobComplete(job.id, result);
+      await logActivity(job.agent_id, job.id, job.project_id, 'job_complete',
         `External call completed (${triggerData.service})`,
         JSON.stringify({ service: triggerData.service }));
       emitSSE('agent:activity', {
@@ -519,14 +522,14 @@ async function executeJob(job: JobRow): Promise<void> {
       const errMsg = e instanceof Error ? e.message : String(e);
       if (job.attempt_count < MAX_ATTEMPTS) {
         const backoffSec = job.attempt_count * 30;
-        sqlite.prepare(`
+        await pool.query(`
           UPDATE agent_jobs SET status = 'pending',
-            scheduled_for = unixepoch('now') + @backoff
-          WHERE id = @id
-        `).run({ id: job.id, backoff: backoffSec });
+            scheduled_for = EXTRACT(EPOCH FROM NOW()) + $1
+          WHERE id = $2
+        `, [backoffSec, job.id]);
       } else {
-        markJobFailed(job.id, errMsg);
-        logActivity(job.agent_id, job.id, job.project_id, 'job_failed',
+        await markJobFailed(job.id, errMsg);
+        await logActivity(job.agent_id, job.id, job.project_id, 'job_failed',
           `External call failed after ${MAX_ATTEMPTS} attempts: ${errMsg}`, '{}');
       }
     }
@@ -540,12 +543,12 @@ async function executeJob(job: JobRow): Promise<void> {
       projectId: job.project_id,
     });
 
-    markJobComplete(job.id, JSON.stringify({
+    await markJobComplete(job.id, JSON.stringify({
       response: result.response.slice(0, 2000), // Cap stored result size
       model: result.model,
       routingReason: result.routingReason,
     }));
-    logActivity(job.agent_id, job.id, job.project_id, 'job_complete',
+    await logActivity(job.agent_id, job.id, job.project_id, 'job_complete',
       `Job ${job.id.slice(0, 8)} completed via ${result.model}`,
       JSON.stringify({ model: result.model, routingReason: result.routingReason }));
     emitSSE('agent:activity', {
@@ -558,33 +561,33 @@ async function executeJob(job: JobRow): Promise<void> {
     const errMsg = e instanceof Error ? e.message : String(e);
     if (job.attempt_count < MAX_ATTEMPTS) {
       const backoffSec = job.attempt_count * 30;
-      sqlite.prepare(`
+      await pool.query(`
         UPDATE agent_jobs SET status = 'pending',
-          scheduled_for = unixepoch('now') + @backoff
-        WHERE id = @id
-      `).run({ id: job.id, backoff: backoffSec });
+          scheduled_for = EXTRACT(EPOCH FROM NOW()) + $1
+        WHERE id = $2
+      `, [backoffSec, job.id]);
       console.log('[scheduler] job %s retry in %ds (attempt %d/%d)',
         job.id.slice(0, 8), backoffSec, job.attempt_count, MAX_ATTEMPTS);
     } else {
-      markJobFailed(job.id, errMsg);
-      logActivity(job.agent_id, job.id, job.project_id, 'job_failed',
+      await markJobFailed(job.id, errMsg);
+      await logActivity(job.agent_id, job.id, job.project_id, 'job_failed',
         `Job ${job.id.slice(0, 8)} failed after ${MAX_ATTEMPTS} attempts: ${errMsg}`, '{}');
     }
   }
 }
 
-function markJobComplete(jobId: string, result: string) {
-  sqlite.prepare(`
-    UPDATE agent_jobs SET status = 'complete', completed_at = unixepoch('now'), result = @result
-    WHERE id = @id
-  `).run({ id: jobId, result });
+async function markJobComplete(jobId: string, result: string) {
+  await pool.query(`
+    UPDATE agent_jobs SET status = 'complete', completed_at = EXTRACT(EPOCH FROM NOW()), result = $1
+    WHERE id = $2
+  `, [result, jobId]);
 }
 
-function markJobFailed(jobId: string, error: string) {
-  sqlite.prepare(`
-    UPDATE agent_jobs SET status = 'failed', completed_at = unixepoch('now'), error = @error
-    WHERE id = @id
-  `).run({ id: jobId, error });
+async function markJobFailed(jobId: string, error: string) {
+  await pool.query(`
+    UPDATE agent_jobs SET status = 'failed', completed_at = EXTRACT(EPOCH FROM NOW()), error = $1
+    WHERE id = $2
+  `, [error, jobId]);
 }
 
 export async function emitSSE(eventType: string, data: Record<string, unknown>): Promise<void> {
@@ -605,7 +608,7 @@ export async function emitSSE(eventType: string, data: Record<string, unknown>):
   }
 }
 
-function logActivity(
+async function logActivity(
   agentId: string,
   jobId: string | null,
   projectId: string | null,
@@ -613,10 +616,10 @@ function logActivity(
   summary: string,
   detail: string,
 ) {
-  sqlite.prepare(`
+  await pool.query(`
     INSERT INTO agent_activity (agent_id, job_id, project_id, event_type, summary, detail)
-    VALUES (@agentId, @jobId, @projectId, @eventType, @summary, @detail)
-  `).run({ agentId, jobId, projectId, eventType, summary, detail });
+    VALUES ($1, $2, $3, $4, $5, $6)
+  `, [agentId, jobId, projectId, eventType, summary, detail]);
 
   // Best-effort SSE push for real-time dashboard updates
   emitSSE('project:activity', {

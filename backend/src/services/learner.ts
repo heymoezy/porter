@@ -25,7 +25,7 @@ import crypto from 'crypto';
 import { search } from 'duck-duck-scrape';
 import robotsParser from 'robots-parser';
 import { config } from '../config.js';
-import { sqlite } from '../db/client.js';
+import { pool } from '../db/client.js';
 import { getGitHubClient } from './github.js';
 
 // ── Exported Types ─────────────────────────────────────────────────────────────
@@ -566,9 +566,10 @@ function deduplicateConcepts(concepts: ExtractedConcept[]): ExtractedConcept[] {
  */
 export async function runLearningSession(templateId: string): Promise<LearningSessionResult> {
   // 1. Load template from DB
-  const template = sqlite.prepare(
-    'SELECT id, name, category, description, tags FROM agent_templates WHERE id = ?',
-  ).get(templateId) as {
+  const template = (await pool.query(
+    'SELECT id, name, category, description, tags FROM agent_templates WHERE id = $1',
+    [templateId],
+  )).rows[0] as {
     id: string;
     name: string;
     category: string;
@@ -653,31 +654,36 @@ export async function runLearningSession(templateId: string): Promise<LearningSe
   const sessionId = crypto.randomUUID();
 
   // 11. Write concepts to DB in a transaction
-  const insertConcept = sqlite.prepare(
-    `INSERT INTO concepts
-       (id, memory_kind, trust_tier, scope, scope_id, content, source_type, source_url, confidence_score, session_id)
-     VALUES
-       (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-
-  const insertConceptsTx = sqlite.transaction((rows: ExtractedConcept[]) => {
-    for (const c of rows) {
-      insertConcept.run(
-        crypto.randomUUID(),  // id
-        'concept',            // memory_kind
-        c.trust_tier,         // trust_tier
-        'agent',              // scope — template-scoped (locked decision)
-        templateId,           // scope_id
-        c.content,            // content
-        'learning',           // source_type
-        c.source_url,         // source_url
-        c.confidence_score,   // confidence_score
-        sessionId,            // session_id
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const c of uniqueConcepts) {
+      await client.query(
+        `INSERT INTO concepts
+           (id, memory_kind, trust_tier, scope, scope_id, content, source_type, source_url, confidence_score, session_id)
+         VALUES
+           ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          crypto.randomUUID(),  // id
+          'concept',            // memory_kind
+          c.trust_tier,         // trust_tier
+          'agent',              // scope — template-scoped (locked decision)
+          templateId,           // scope_id
+          c.content,            // content
+          'learning',           // source_type
+          c.source_url,         // source_url
+          c.confidence_score,   // confidence_score
+          sessionId,            // session_id
+        ],
       );
     }
-  });
-
-  insertConceptsTx(uniqueConcepts);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 
   // 12. Calculate confidence distribution
   const confidenceDistribution = uniqueConcepts.reduce(
@@ -691,19 +697,20 @@ export async function runLearningSession(templateId: string): Promise<LearningSe
   const durationMs = Date.now() - startMs;
 
   // 13. Write learning_sessions record
-  sqlite.prepare(
+  await pool.query(
     `INSERT INTO learning_sessions
        (id, template_id, sources_visited, concepts_retained, confidence_distribution, capped, duration_ms)
      VALUES
-       (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    sessionId,
-    templateId,
-    JSON.stringify(allVisits),
-    uniqueConcepts.length,
-    JSON.stringify(confidenceDistribution),
-    budget.capped ? 1 : 0,
-    durationMs,
+       ($1, $2, $3, $4, $5, $6, $7)`,
+    [
+      sessionId,
+      templateId,
+      JSON.stringify(allVisits),
+      uniqueConcepts.length,
+      JSON.stringify(confidenceDistribution),
+      budget.capped ? 1 : 0,
+      durationMs,
+    ],
   );
 
   // 14. Return result

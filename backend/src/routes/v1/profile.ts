@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { db, sqlite } from '../../db/client.js';
+import { db, pool } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { ok, err } from '../../lib/envelope.js';
@@ -34,12 +34,12 @@ export default async function profileV1Routes(fastify: FastifyInstance, _opts: F
 
       // Only update email if non-empty AND different from current
       if (email.trim()) {
-        const current = db.select({ email: schema.users.email })
-          .from(schema.users).where(eq(schema.users.username, user.username)).get();
+        const [current] = await db.select({ email: schema.users.email })
+          .from(schema.users).where(eq(schema.users.username, user.username));
         if (current?.email !== email.trim()) {
           // Check uniqueness before updating
-          const conflict = sqlite.prepare('SELECT 1 FROM users WHERE email = ? AND username != ?')
-            .get(email.trim(), user.username);
+          const conflict = (await pool.query('SELECT 1 FROM users WHERE email = $1 AND username != $2',
+            [email.trim(), user.username])).rows[0];
           if (conflict) {
             return reply.code(409).send(err('EMAIL_EXISTS', 'This email is already used by another account'));
           }
@@ -49,11 +49,11 @@ export default async function profileV1Routes(fastify: FastifyInstance, _opts: F
 
       // Persist avatar spec as JSON in avatar_url column
       if (avatar_url) {
-        try { sqlite.prepare('UPDATE users SET avatar_url = ? WHERE username = ?').run(avatar_url, user.username); } catch {}
+        try { await pool.query('UPDATE users SET avatar_url = $1 WHERE username = $2', [avatar_url, user.username]); } catch {}
       }
 
-      db.update(schema.users).set(updates)
-        .where(eq(schema.users.username, user.username)).run();
+      await db.update(schema.users).set(updates)
+        .where(eq(schema.users.username, user.username));
 
       // Notify admin in real-time
       emitSSE('profile:updated', {

@@ -22,7 +22,7 @@
 import { Octokit } from 'octokit';
 import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
 import { decryptCredential } from '../lib/credential-crypto.js';
-import { sqlite } from '../db/client.js';
+import { pool } from '../db/client.js';
 import { emitSSE } from './scheduler.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -45,9 +45,10 @@ interface ConnectionRow {
  * Called on 401 responses from the GitHub API.
  */
 async function markNeedsReauth(connectionId: string): Promise<void> {
-  sqlite.prepare(
-    "UPDATE workspace_connections SET status = 'needs_reauth', updated_at = unixepoch('now') WHERE id = ?",
-  ).run(connectionId);
+  await pool.query(
+    "UPDATE workspace_connections SET status = 'needs_reauth', updated_at = EXTRACT(EPOCH FROM NOW()) WHERE id = $1",
+    [connectionId]
+  );
 
   emitSSE('connection:status', {
     provider: 'github',
@@ -66,13 +67,14 @@ async function resolveClient(connectionId?: string): Promise<{ octokit: Octokit;
   let row: ConnectionRow | undefined;
 
   if (connectionId) {
-    row = sqlite.prepare(
-      'SELECT id, meta_json FROM workspace_connections WHERE id = ? AND status = ?',
-    ).get(connectionId, 'connected') as ConnectionRow | undefined;
+    row = (await pool.query(
+      'SELECT id, meta_json FROM workspace_connections WHERE id = $1 AND status = $2',
+      [connectionId, 'connected']
+    )).rows[0] as ConnectionRow | undefined;
   } else {
-    row = sqlite.prepare(
-      "SELECT id, meta_json FROM workspace_connections WHERE provider = 'github' AND status = 'connected' LIMIT 1",
-    ).get() as ConnectionRow | undefined;
+    row = (await pool.query(
+      "SELECT id, meta_json FROM workspace_connections WHERE provider = 'github' AND status = 'connected' LIMIT 1"
+    )).rows[0] as ConnectionRow | undefined;
   }
 
   if (!row) {

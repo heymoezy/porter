@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import oauth2, { OAuth2Namespace } from '@fastify/oauth2';
 import { encryptCredential } from '../../lib/credential-crypto.js';
 import { config } from '../../config.js';
-import { sqlite } from '../../db/client.js';
+import { pool } from '../../db/client.js';
 import { emitSSE } from '../../services/scheduler.js';
 import crypto from 'crypto';
 import { err } from '../../lib/envelope.js';
@@ -73,25 +73,29 @@ export default async function oauthGithubRoutes(
       );
 
       // Check if a github connection already exists to reuse the same id
-      const existing = sqlite.prepare(
+      const existing = (await pool.query(
         "SELECT id FROM workspace_connections WHERE provider = 'github' LIMIT 1",
-      ).get() as { id: string } | undefined;
+      )).rows[0] as { id: string } | undefined;
 
       const connectionId = existing?.id ?? crypto.randomUUID();
       const displayName = githubUsername;
 
       // Upsert into workspace_connections
-      sqlite.prepare(`
-        INSERT OR REPLACE INTO workspace_connections
-          (id, provider, kind, status, display_name, meta_json, meta_encrypted, installed_by, scopes_json, updated_at)
-        VALUES
-          (@id, 'github', 'oauth2', 'connected', @displayName, @metaJson, 1, @installedBy, '["repo","read:user"]', unixepoch('now'))
-      `).run({
-        id: connectionId,
-        displayName,
-        metaJson: encryptedCreds,
-        installedBy: githubUsername,
-      });
+      if (existing) {
+        await pool.query(`
+          UPDATE workspace_connections
+          SET status = 'connected', display_name = $1, meta_json = $2, meta_encrypted = 1,
+              installed_by = $3, scopes_json = '["repo","read:user"]', updated_at = EXTRACT(EPOCH FROM NOW())
+          WHERE id = $4
+        `, [displayName, encryptedCreds, githubUsername, connectionId]);
+      } else {
+        await pool.query(`
+          INSERT INTO workspace_connections
+            (id, provider, kind, status, display_name, meta_json, meta_encrypted, installed_by, scopes_json, updated_at)
+          VALUES
+            ($1, 'github', 'oauth2', 'connected', $2, $3, 1, $4, '["repo","read:user"]', EXTRACT(EPOCH FROM NOW()))
+        `, [connectionId, displayName, encryptedCreds, githubUsername]);
+      }
 
       // Emit SSE notification — best-effort, never block response
       emitSSE('connection:status', {

@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { db, sqlite } from '../../db/client.js';
+import { db, pool } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { ok, err } from '../../lib/envelope.js';
@@ -53,18 +53,18 @@ function slugify(name: string): string {
     .substring(0, 30);
 }
 
-function generateUsername(name: string): string {
+async function generateUsername(name: string): Promise<string> {
   const base = slugify(name);
   if (!base) return `user-${crypto.randomBytes(3).toString('hex')}`;
 
   // Check if base username is available
-  const existing = sqlite.prepare('SELECT 1 FROM users WHERE username = ?').get(base);
+  const existing = (await pool.query('SELECT 1 FROM users WHERE username = $1', [base])).rows[0];
   if (!existing) return base;
 
   // Append incrementing number
   for (let i = 2; i <= 100; i++) {
     const candidate = `${base}-${i}`;
-    const exists = sqlite.prepare('SELECT 1 FROM users WHERE username = ?').get(candidate);
+    const exists = (await pool.query('SELECT 1 FROM users WHERE username = $1', [candidate])).rows[0];
     if (!exists) return candidate;
   }
 
@@ -82,17 +82,14 @@ async function verifyPassword(password: string, storedHash: string, storedSalt: 
   return derived.toString('hex') === storedHash;
 }
 
-function createSession(username: string, request: { ip: string; headers: Record<string, string | string[] | undefined> }): string {
+async function createSession(username: string, request: { ip: string; headers: Record<string, string | string[] | undefined> }): Promise<string> {
   const token = crypto.randomBytes(32).toString('hex');
   const expires = (Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
 
-  db.insert(schema.sessions).values({
-    token,
-    username,
-    expires,
-    ipAddress: request.ip,
-    userAgent: request.headers['user-agent'] as string | undefined,
-  }).run();
+  await pool.query(
+    `INSERT INTO sessions (token, username, expires, ip_address, user_agent) VALUES ($1, $2, $3, $4, $5)`,
+    [token, username, expires, request.ip, request.headers['user-agent'] as string | undefined]
+  );
 
   return token;
 }
@@ -106,17 +103,17 @@ function setSessionCookie(reply: any, token: string) {
   });
 }
 
-function trackLogin(username: string, ip: string) {
+async function trackLogin(username: string, ip: string) {
   try {
-    sqlite.prepare(`
+    await pool.query(`
       INSERT INTO customer_events (username, event_type, ip_address, created_at)
-      VALUES (?, 'login', ?, unixepoch('now'))
-    `).run(username, ip);
+      VALUES ($1, 'login', $2, EXTRACT(EPOCH FROM NOW()))
+    `, [username, ip]);
   } catch { /* customer_events table may not exist yet */ }
 
   // Update last_ip on user record
   try {
-    sqlite.prepare('UPDATE users SET last_ip = ? WHERE username = ?').run(ip, username);
+    await pool.query('UPDATE users SET last_ip = $1 WHERE username = $2', [ip, username]);
   } catch { /* last_ip column may not exist yet */ }
 
   // Async IP→country resolution (fire-and-forget, non-blocking)
@@ -135,13 +132,16 @@ async function resolveCountry(ip: string, username: string) {
     const data = await res.json() as { country?: string };
     if (data.country) {
       try {
-        sqlite.prepare('UPDATE users SET country = ? WHERE username = ? AND (country IS NULL OR country = ?)').run(data.country, username, '');
+        await pool.query('UPDATE users SET country = $1 WHERE username = $2 AND (country IS NULL OR country = $3)', [data.country, username, '']);
       } catch { /* ignore */ }
       // Also tag the latest login event with country
       try {
-        sqlite.prepare(
-          "UPDATE customer_events SET country = ? WHERE username = ? AND event_type = 'login' AND country IS NULL ORDER BY created_at DESC LIMIT 1"
-        ).run(data.country, username);
+        await pool.query(
+          `UPDATE customer_events SET country = $1 WHERE id = (
+            SELECT id FROM customer_events WHERE username = $2 AND event_type = 'login' AND country IS NULL ORDER BY created_at DESC LIMIT 1
+          )`,
+          [data.country, username]
+        );
       } catch { /* ignore */ }
     }
   } catch { /* geo failure must never break login */ }
@@ -162,7 +162,7 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
     const emailLower = email.toLowerCase().trim();
 
     // Check if email already registered
-    const existingUser = sqlite.prepare('SELECT username, email_verified FROM users WHERE email = ?').get(emailLower) as
+    const existingUser = (await pool.query('SELECT username, email_verified FROM users WHERE email = $1', [emailLower])).rows[0] as
       { username: string; email_verified: number } | undefined;
 
     if (existingUser) {
@@ -170,33 +170,33 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
         return reply.code(409).send(err('EMAIL_EXISTS', 'An account with this email already exists'));
       }
       // Unverified account — resend code
-      const code = createAuthToken(emailLower, 'verify_email');
+      const code = await createAuthToken(emailLower, 'verify_email');
       await sendVerificationCode(emailLower, code);
       return reply.send(ok({ message: 'Verification code sent', email: emailLower }));
     }
 
     // Generate username from name
-    const username = generateUsername(name);
+    const username = await generateUsername(name);
 
     // Hash password
     const { hash, salt } = await hashPassword(password);
 
     // Create user
-    sqlite.prepare(`
+    await pool.query(`
       INSERT INTO users (username, display_name, full_name, email, password_hash, salt, role, email_verified, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'operator', 0, 'pending')
-    `).run(username, name, name, emailLower, hash, salt);
+      VALUES ($1, $2, $3, $4, $5, $6, 'operator', 0, 'pending')
+    `, [username, name, name, emailLower, hash, salt]);
 
     // Create free subscription
     try {
-      sqlite.prepare(`
+      await pool.query(`
         INSERT INTO subscriptions (id, username, plan, status)
-        VALUES (?, ?, 'free', 'active')
-      `).run(crypto.randomUUID(), username);
+        VALUES ($1, $2, 'free', 'active')
+      `, [crypto.randomUUID(), username]);
     } catch { /* subscriptions table may not exist */ }
 
     // Generate and send verification code
-    const code = createAuthToken(emailLower, 'verify_email');
+    const code = await createAuthToken(emailLower, 'verify_email');
     await sendVerificationCode(emailLower, code);
 
     return reply.send(ok({ message: 'Verification code sent', email: emailLower }));
@@ -218,13 +218,13 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
     }
 
     // Mark user as verified + active
-    sqlite.prepare(`
+    await pool.query(`
       UPDATE users SET email_verified = 1, status = 'active'
-      WHERE email = ?
-    `).run(emailLower);
+      WHERE email = $1
+    `, [emailLower]);
 
     // Get user for session creation
-    const user = sqlite.prepare('SELECT username, display_name FROM users WHERE email = ?').get(emailLower) as
+    const user = (await pool.query('SELECT username, display_name FROM users WHERE email = $1', [emailLower])).rows[0] as
       { username: string; display_name: string | null } | undefined;
 
     if (!user) {
@@ -232,9 +232,9 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
     }
 
     // Auto-login: create session
-    const token = createSession(user.username, request as any);
+    const token = await createSession(user.username, request as any);
     setSessionCookie(reply, token);
-    trackLogin(user.username, request.ip);
+    await trackLogin(user.username, request.ip);
 
     return reply.send(ok({
       username: user.username,
@@ -252,7 +252,7 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
       return reply.code(400).send(err('INVALID_INPUT', 'Email required'));
     }
 
-    const user = sqlite.prepare('SELECT email_verified FROM users WHERE email = ?').get(email) as
+    const user = (await pool.query('SELECT email_verified FROM users WHERE email = $1', [email])).rows[0] as
       { email_verified: number } | undefined;
 
     if (!user || user.email_verified) {
@@ -260,7 +260,7 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
       return reply.send(ok({ sent: true }));
     }
 
-    const code = createAuthToken(email, 'verify_email');
+    const code = await createAuthToken(email, 'verify_email');
     await sendVerificationCode(email, code);
 
     return reply.send(ok({ sent: true }));
@@ -276,10 +276,11 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
     const { email, password } = parsed.data;
     const emailLower = email.toLowerCase().trim();
 
-    // Lookup by email — only product users (non-admin roles)
-    const user = sqlite.prepare(
-      "SELECT username, display_name, password_hash, salt, email_verified, status, role FROM users WHERE email = ? AND role NOT IN ('platform_admin', 'admin')"
-    ).get(emailLower) as {
+    // Lookup by email
+    const user = (await pool.query(
+      "SELECT username, display_name, password_hash, salt, email_verified, status, role FROM users WHERE email = $1",
+      [emailLower]
+    )).rows[0] as {
       username: string; display_name: string | null;
       password_hash: string; salt: string;
       email_verified: number; status: string; role: string;
@@ -297,7 +298,7 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
     // Check email verification
     if (!user.email_verified) {
       // Send a fresh code so they can verify
-      const code = createAuthToken(emailLower, 'verify_email');
+      const code = await createAuthToken(emailLower, 'verify_email');
       await sendVerificationCode(emailLower, code);
       return reply.code(403).send(err('EMAIL_NOT_VERIFIED', 'Please verify your email. A new code has been sent.'));
     }
@@ -305,19 +306,19 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
     // Reuse existing valid session if cookie present
     const existingToken = request.cookies?.porter_session;
     if (existingToken) {
-      const existing = db.select().from(schema.sessions)
-        .where(eq(schema.sessions.token, existingToken)).get();
+      const [existing] = await db.select().from(schema.sessions)
+        .where(eq(schema.sessions.token, existingToken));
       if (existing && existing.expires! > Date.now() / 1000 && existing.username === user.username) {
         return reply.send(ok({ username: user.username, displayName: user.display_name ?? user.username }));
       }
     }
 
     // Clean expired sessions
-    sqlite.prepare("DELETE FROM sessions WHERE username = ? AND expires <= unixepoch('now')").run(user.username);
+    await pool.query("DELETE FROM sessions WHERE username = $1 AND expires <= EXTRACT(EPOCH FROM NOW())", [user.username]);
 
-    const token = createSession(user.username, request as any);
+    const token = await createSession(user.username, request as any);
     setSessionCookie(reply, token);
-    trackLogin(user.username, request.ip);
+    await trackLogin(user.username, request.ip);
 
     return reply.send(ok({ username: user.username, displayName: user.display_name ?? user.username }));
   });
@@ -326,7 +327,7 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
   fastify.post('/logout', async (request, reply) => {
     const token = request.cookies?.porter_session;
     if (token) {
-      db.delete(schema.sessions).where(eq(schema.sessions.token, token)).run();
+      await db.delete(schema.sessions).where(eq(schema.sessions.token, token));
     }
     reply.clearCookie('porter_session', { path: '/' });
     return reply.send(ok({ loggedOut: true }));
@@ -338,13 +339,13 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
   }, async (request, reply) => {
     const sessionUser = request.sessionUser!;
 
-    const user = db.select().from(schema.users)
-      .where(eq(schema.users.username, sessionUser.username)).get();
+    const [user] = await db.select().from(schema.users)
+      .where(eq(schema.users.username, sessionUser.username));
 
     // avatar_url stores JSON appearance spec
     let avatarUrl: string | null = null;
     try {
-      const row = sqlite.prepare('SELECT avatar_url FROM users WHERE username = ?').get(sessionUser.username) as any;
+      const row = (await pool.query('SELECT avatar_url FROM users WHERE username = $1', [sessionUser.username])).rows[0] as any;
       avatarUrl = row?.avatar_url ?? null;
     } catch {}
 
@@ -374,10 +375,10 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
 
     const { hash, salt } = await hashPassword(newPw);
 
-    db.update(schema.users).set({
+    await db.update(schema.users).set({
       passwordHash: hash,
       salt,
-    }).where(eq(schema.users.username, username)).run();
+    }).where(eq(schema.users.username, username));
 
     return reply.send(ok({ changed: true }));
   });
@@ -392,11 +393,11 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
     const emailLower = parsed.data.email.toLowerCase().trim();
 
     // Always return success to prevent email enumeration
-    const user = sqlite.prepare('SELECT username FROM users WHERE email = ?').get(emailLower) as
+    const user = (await pool.query('SELECT username FROM users WHERE email = $1', [emailLower])).rows[0] as
       { username: string } | undefined;
 
     if (user) {
-      const code = createAuthToken(emailLower, 'reset_password');
+      const code = await createAuthToken(emailLower, 'reset_password');
       await sendPasswordResetCode(emailLower, code);
     }
 
@@ -420,12 +421,12 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
 
     const { hash, salt } = await hashPassword(password);
 
-    const result = sqlite.prepare(`
-      UPDATE users SET password_hash = ?, salt = ?
-      WHERE email = ?
-    `).run(hash, salt, emailLower);
+    const result = await pool.query(`
+      UPDATE users SET password_hash = $1, salt = $2
+      WHERE email = $3
+    `, [hash, salt, emailLower]);
 
-    if (result.changes === 0) {
+    if (result.rowCount === 0) {
       return reply.code(404).send(err('NOT_FOUND', 'User not found'));
     }
 

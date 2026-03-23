@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import { decryptCredential, encryptCredential } from '../lib/credential-crypto.js';
-import { sqlite } from '../db/client.js';
+import { pool } from '../db/client.js';
 import { getEventSubscribers } from './event-triggers.js';
 import crypto from 'crypto';
 
@@ -27,15 +27,19 @@ async function getCalendarClient(connectionId?: string): Promise<{
   calendar: ReturnType<typeof google.calendar>;
   connectionId: string;
 } | null> {
-  const query = connectionId
-    ? sqlite.prepare(
-        `SELECT id, meta_json, meta_encrypted FROM workspace_connections
-         WHERE id = @connectionId AND provider = 'google_calendar' AND status = 'connected' LIMIT 1`
-      ).get({ connectionId }) as CalendarConnection | undefined
-    : sqlite.prepare(
-        `SELECT id, meta_json, meta_encrypted FROM workspace_connections
-         WHERE provider = 'google_calendar' AND status = 'connected' LIMIT 1`
-      ).get() as CalendarConnection | undefined;
+  let query: CalendarConnection | undefined;
+  if (connectionId) {
+    query = (await pool.query(
+      `SELECT id, meta_json, meta_encrypted FROM workspace_connections
+       WHERE id = $1 AND provider = 'google_calendar' AND status = 'connected' LIMIT 1`,
+      [connectionId]
+    )).rows[0] as CalendarConnection | undefined;
+  } else {
+    query = (await pool.query(
+      `SELECT id, meta_json, meta_encrypted FROM workspace_connections
+       WHERE provider = 'google_calendar' AND status = 'connected' LIMIT 1`
+    )).rows[0] as CalendarConnection | undefined;
+  }
 
   if (!query) return null;
 
@@ -53,18 +57,18 @@ async function getCalendarClient(connectionId?: string): Promise<{
   });
 
   // Auto-update stored credentials on token refresh
-  auth.on('tokens', (tokens) => {
+  auth.on('tokens', async (tokens) => {
     if (tokens.access_token) {
       const updated: CalendarCredentials = {
         ...creds,
         access_token: tokens.access_token,
       };
       const encrypted = encryptCredential(JSON.stringify(updated));
-      sqlite.prepare(`
+      await pool.query(`
         UPDATE workspace_connections
-        SET meta_json = @meta, meta_encrypted = 1, updated_at = strftime('%s','now')
-        WHERE id = @id
-      `).run({ meta: encrypted, id: query.id });
+        SET meta_json = $1, meta_encrypted = 1, updated_at = EXTRACT(EPOCH FROM NOW())
+        WHERE id = $2
+      `, [encrypted, query!.id]);
     }
   });
 
@@ -101,24 +105,17 @@ export async function syncCalendarEvents(connectionId?: string): Promise<number>
   } catch (err: unknown) {
     const status = (err as { code?: number })?.code;
     if (status === 401) {
-      sqlite.prepare(`
+      await pool.query(`
         UPDATE workspace_connections
-        SET status = 'needs_reauth', last_error = 'Token expired — re-authenticate', updated_at = strftime('%s','now')
-        WHERE id = @id
-      `).run({ id: client.connectionId });
+        SET status = 'needs_reauth', last_error = 'Token expired — re-authenticate', updated_at = EXTRACT(EPOCH FROM NOW())
+        WHERE id = $1
+      `, [client.connectionId]);
       console.warn('[calendar] 401 on connection %s — marked needs_reauth', client.connectionId);
     } else {
       throw err;
     }
     return 0;
   }
-
-  const upsert = sqlite.prepare(`
-    INSERT OR REPLACE INTO calendar_events
-      (id, connection_id, project_id, google_event_id, title, start_at, end_at, all_day, synced_at)
-    VALUES
-      (@id, @connectionId, @projectId, @googleEventId, @title, @startAt, @endAt, @allDay, unixepoch('now'))
-  `);
 
   let count = 0;
   for (const event of events) {
@@ -144,31 +141,46 @@ export async function syncCalendarEvents(connectionId?: string): Promise<number>
       const match = desc.match(/^Project:\s*(.+)$/im);
       if (match) {
         const projectName = match[1].trim();
-        const proj = sqlite.prepare(
-          `SELECT id FROM projects WHERE name = @name LIMIT 1`
-        ).get({ name: projectName }) as { id: string } | undefined;
+        const proj = (await pool.query(
+          `SELECT id FROM projects WHERE name = $1 LIMIT 1`,
+          [projectName]
+        )).rows[0] as { id: string } | undefined;
         if (proj) projectId = proj.id;
       }
     }
 
-    upsert.run({
-      id: event.id,
-      connectionId: client.connectionId,
+    await pool.query(`
+      INSERT INTO calendar_events
+        (id, connection_id, project_id, google_event_id, title, start_at, end_at, all_day, synced_at)
+      VALUES
+        ($1, $2, $3, $4, $5, $6, $7, $8, EXTRACT(EPOCH FROM NOW()))
+      ON CONFLICT (id) DO UPDATE SET
+        connection_id = EXCLUDED.connection_id,
+        project_id = EXCLUDED.project_id,
+        google_event_id = EXCLUDED.google_event_id,
+        title = EXCLUDED.title,
+        start_at = EXCLUDED.start_at,
+        end_at = EXCLUDED.end_at,
+        all_day = EXCLUDED.all_day,
+        synced_at = EXTRACT(EPOCH FROM NOW())
+    `, [
+      event.id,
+      client.connectionId,
       projectId,
-      googleEventId: event.id,
-      title: event.summary,
+      event.id,
+      event.summary,
       startAt,
       endAt,
       allDay,
-    });
+    ]);
     count++;
   }
 
   // Update last sync timestamp
-  sqlite.prepare(`
-    UPDATE workspace_connections SET last_sync_at = unixepoch('now'), updated_at = strftime('%s','now')
-    WHERE id = @id
-  `).run({ id: client.connectionId });
+  await pool.query(`
+    UPDATE workspace_connections SET last_sync_at = EXTRACT(EPOCH FROM NOW()), updated_at = EXTRACT(EPOCH FROM NOW())
+    WHERE id = $1
+  `, [client.connectionId]);
 
   return count;
 }
@@ -206,19 +218,19 @@ export async function pushMilestoneToCalendar(params: {
 /**
  * Get all calendar events linked to a project.
  */
-export function getProjectCalendarEvents(projectId: string): {
+export async function getProjectCalendarEvents(projectId: string): Promise<{
   id: string;
   title: string;
   startAt: string;
   endAt: string | null;
   allDay: boolean;
-}[] {
-  const rows = sqlite.prepare(`
+}[]> {
+  const rows = (await pool.query(`
     SELECT id, title, start_at, end_at, all_day
     FROM calendar_events
-    WHERE project_id = @projectId
+    WHERE project_id = $1
     ORDER BY start_at ASC
-  `).all({ projectId }) as {
+  `, [projectId])).rows as {
     id: string;
     title: string;
     start_at: string;
@@ -241,19 +253,19 @@ export function getProjectCalendarEvents(projectId: string): {
  * Uses the same event trigger mechanism as checkDeadlineTriggers in event-triggers.ts.
  * Returns the number of jobs created.
  */
-export function checkCalendarDeadlines(): number {
+export async function checkCalendarDeadlines(): Promise<number> {
   const now = new Date();
   const in24h = new Date(now.getTime() + 86400000);
   const nowIso = now.toISOString();
   const in24hIso = in24h.toISOString();
 
-  const approaching = sqlite.prepare(`
+  const approaching = (await pool.query(`
     SELECT id, title, start_at, project_id
     FROM calendar_events
     WHERE project_id IS NOT NULL
-      AND start_at >= @now
-      AND start_at <= @in24h
-  `).all({ now: nowIso, in24h: in24hIso }) as {
+      AND start_at >= $1
+      AND start_at <= $2
+  `, [nowIso, in24hIso])).rows as {
     id: string;
     title: string;
     start_at: string;
@@ -262,18 +274,18 @@ export function checkCalendarDeadlines(): number {
 
   let inserted = 0;
   for (const event of approaching) {
-    const subscribers = getEventSubscribers('deadline-approaching', event.project_id);
+    const subscribers = await getEventSubscribers('deadline-approaching', event.project_id);
     for (const agentId of subscribers) {
       // Dedup: skip if a pending job already exists for this agent + event within dedup window
-      const existing = sqlite.prepare(`
+      const existing = (await pool.query(`
         SELECT 1 FROM agent_jobs
-        WHERE agent_id = @agentId
+        WHERE agent_id = $1
           AND trigger_type = 'deadline-approaching'
-          AND project_id = @projectId
+          AND project_id = $2
           AND status = 'pending'
-          AND created_at > unixepoch('now') - @dedupWindow
+          AND created_at > EXTRACT(EPOCH FROM NOW()) - $3
         LIMIT 1
-      `).get({ agentId, projectId: event.project_id, dedupWindow: DEDUP_WINDOW_SEC });
+      `, [agentId, event.project_id, DEDUP_WINDOW_SEC])).rows[0];
 
       if (existing) continue;
 
@@ -286,18 +298,18 @@ export function checkCalendarDeadlines(): number {
         source: 'google_calendar',
       });
 
-      sqlite.prepare(`
+      await pool.query(`
         INSERT INTO agent_jobs
           (id, agent_id, project_id, trigger_type, trigger_data, prompt, status, scheduled_for)
         VALUES
-          (@id, @agentId, @projectId, 'deadline-approaching', @triggerData, @prompt, 'pending', unixepoch('now'))
-      `).run({
-        id: jobId,
+          ($1, $2, $3, 'deadline-approaching', $4, $5, 'pending', EXTRACT(EPOCH FROM NOW()))
+      `, [
+        jobId,
         agentId,
-        projectId: event.project_id,
+        event.project_id,
         triggerData,
-        prompt: `Calendar event approaching: "${event.title}" starts at ${event.start_at}. Review and prepare accordingly.`,
-      });
+        `Calendar event approaching: "${event.title}" starts at ${event.start_at}. Review and prepare accordingly.`,
+      ]);
 
       inserted++;
     }
