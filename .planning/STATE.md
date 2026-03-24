@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
-status: in_progress
-stopped_at: Completed 13.05-04-PLAN.md
-last_updated: "2026-03-24T08:06:00Z"
+status: unknown
+stopped_at: Completed 13.05-02-PLAN.md
+last_updated: "2026-03-24T08:03:13.008Z"
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 26
-  completed_plans: 21
+  completed_plans: 23
 ---
 
 # Project State
@@ -93,6 +93,8 @@ Recent decisions affecting current work:
 - [Phase 13.05-postgresql-migration]: customType tsvector from drizzle-orm/pg-core — no native tsvector in Drizzle, customType is the correct pattern
 - [Phase 13.05-postgresql-migration]: Plan 04 routes pre-converted — all 16 route files + seed-templates.ts were already fully migrated by Plan 01's consolidated commit (e53ae59); Plan 04 was verification-only
 - [Phase 13.05-postgresql-migration]: Plan 02 services pre-converted — all 12 service/plugin files were already fully migrated by Plan 01's consolidated commit (e53ae59); Plan 02 was retrospective verification; 142 pool.query calls verified, 0 sqlite refs
+- [Phase 13.05-postgresql-migration]: websearch_to_tsquery used instead of plainto_tsquery for all user-facing FTS — handles multi-word queries safely
+- [Phase 13.05-postgresql-migration]: search_vector column (pre-built tsvector) used instead of inline to_tsvector() — avoids runtime computation on every FTS query
 
 ### Roadmap Evolution
 
