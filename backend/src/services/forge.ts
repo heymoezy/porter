@@ -303,11 +303,17 @@ async function runWriter(item: PipelineItem): Promise<void> {
   try {
     // Check if agent already exists (idempotent)
     if (!item.agent_id) {
-      // Call Brain to instantiate template
-      const res = await fetch(`${config.porterPyUrl}/api/v1/templates/${item.template_id}/instantiate`, {
+      // Look up the template's human-readable name
+      const tmplRow = (await pool.query(
+        `SELECT name FROM agent_templates WHERE id = $1`, [item.template_id]
+      )).rows[0];
+      const displayName = tmplRow?.name || item.template_id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+      // Call Fastify backend to instantiate template
+      const res = await fetch(`${config.fastifyUrl}/api/v1/templates/${item.template_id}/instantiate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: item.template_id }),
+        body: JSON.stringify({ name: displayName }),
       });
 
       if (!res.ok) {
