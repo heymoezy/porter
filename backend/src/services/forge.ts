@@ -379,9 +379,20 @@ async function runTrainer(item: PipelineItem): Promise<void> {
   });
 
   try {
-    // Read template skills
-    const template = (await pool.query('SELECT skills FROM agent_templates WHERE id = $1', [item.template_id])).rows[0] as { skills: string } | undefined;
-    const templateSkills: string[] = template?.skills ? JSON.parse(template.skills) : [];
+    // Read template skills — prefer junction table (Phase 15), fall back to JSONB if empty
+    const junctionSkills = (await pool.query(
+      'SELECT ts.skill_id FROM template_skills ts WHERE ts.template_id = $1 ORDER BY ts.sort_order',
+      [item.template_id]
+    )).rows as Array<{ skill_id: string }>;
+
+    let templateSkills: string[];
+    if (junctionSkills.length > 0) {
+      templateSkills = junctionSkills.map(r => r.skill_id);
+    } else {
+      // Fallback: read JSONB (pre-Phase 15 data or empty junction)
+      const template = (await pool.query('SELECT skills FROM agent_templates WHERE id = $1', [item.template_id])).rows[0] as { skills: string } | undefined;
+      templateSkills = template?.skills ? JSON.parse(template.skills) : [];
+    }
 
     // Map to persona_skills (upsert)
     const assigned: string[] = [];
@@ -427,9 +438,20 @@ async function runOutfitter(item: PipelineItem): Promise<void> {
   });
 
   try {
-    // Read template tools
-    const template = (await pool.query('SELECT tools, required_tools FROM agent_templates WHERE id = $1', [item.template_id])).rows[0] as { tools: string; required_tools: string } | undefined;
-    const templateTools: string[] = template?.tools ? JSON.parse(template.tools) : [];
+    // Read template tools — prefer junction table (Phase 15), fall back to JSONB if empty
+    const junctionTools = (await pool.query(
+      'SELECT tt.tool_id FROM template_tools tt WHERE tt.template_id = $1 ORDER BY tt.sort_order',
+      [item.template_id]
+    )).rows as Array<{ tool_id: string }>;
+
+    let templateTools: string[];
+    if (junctionTools.length > 0) {
+      templateTools = junctionTools.map(r => r.tool_id);
+    } else {
+      // Fallback: read JSONB (pre-Phase 15 data or empty junction)
+      const template = (await pool.query('SELECT tools FROM agent_templates WHERE id = $1', [item.template_id])).rows[0] as { tools: string } | undefined;
+      templateTools = template?.tools ? JSON.parse(template.tools) : [];
+    }
     const flags: string[] = [];
     const mapped: string[] = [];
 
