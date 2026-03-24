@@ -92,6 +92,16 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 - [ ] **BILL-02**: Usage metering tracks API calls, tokens consumed, and storage per workspace
 - [ ] **BILL-03**: Plan limits enforced at API level (rate limiting, storage caps, agent count)
 
+### Skills & Tools Architecture
+
+- [ ] **SKL-01**: skills PostgreSQL table with full schema (name, description, category, source, enabled/visible/featured toggles, icon, color, cover_image, short_label, sort_order, config_schema) + 37 skills seeded from SKILL_CATALOG
+- [ ] **SKL-02**: tools PostgreSQL table with full schema (name, description, category, type system/integration, enabled/visible/featured toggles, icon, color, cover_image, short_label, sort_order, config_schema, requires, version) + 15 tools seeded (6 system + 9 integration)
+- [ ] **SKL-03**: template_skills and template_tools junction tables populated from existing agent_templates JSONB arrays, replacing JSONB as relational source of truth
+- [ ] **SKL-04**: Admin skills CRUD API (GET list/single/categories/featured, POST create, PUT update, DELETE) with Zod validation — SKILL_CATALOG constant removed
+- [ ] **SKL-05**: Admin tools CRUD API (GET list/single/categories/featured, POST create, PUT update, DELETE) with Zod validation — environment_tools replaced by tools table
+- [ ] **SKL-06**: Forge Station 2 (Trainer) and Station 3 (Outfitter) read from junction tables with JSONB fallback
+- [ ] **SKL-07**: Template instantiation writes deployed_by field on persona and sources skills/tools config from junction tables
+
 ### Observability
 
 - [x] **OBS-01**: Frontend errors POST to /api/v1/errors with stack trace, component, user context
@@ -154,12 +164,19 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 | BILL-01 | Phase 14 | Pending |
 | BILL-02 | Phase 14 | Pending |
 | BILL-03 | Phase 14 | Pending |
+| SKL-01 | Phase 15 | Pending |
+| SKL-02 | Phase 15 | Pending |
+| SKL-03 | Phase 15 | Pending |
+| SKL-04 | Phase 15 | Pending |
+| SKL-05 | Phase 15 | Pending |
+| SKL-06 | Phase 15 | Pending |
+| SKL-07 | Phase 15 | Pending |
 
 **Coverage:**
-- v2 requirements: 41 total
-- Mapped to phases: 41
+- v2 requirements: 48 total
+- Mapped to phases: 48
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-21*
-*Last updated: 2026-03-21 — traceability complete, all 32 requirements mapped to Phases 8-14*
+*Last updated: 2026-03-24 — Phase 15 Skills & Tools requirements added (SKL-01 through SKL-07)*

@@ -188,15 +188,25 @@ Plans:
   4. When the billing service is unreachable, resource-creating routes log the failure, allow the request through, and return 2xx — not 500
 **Plans**: TBD
 
-### Phase 15: Skills & Tools Architecture
+### Phase 15: Skills & Tools Architecture (INSERTED)
 
-**Goal**: Define proper data models, APIs, and registry for skills and tools — skills are capabilities (what agents CAN do), tools are integrations (what agents USE). Both need schemas, CRUD APIs, template assignment, visibility/enabled toggles, and categories. No agent should be forged until skills and tools are properly modeled. Agent templates are immutable components; deploying creates instances (initially same name, renamable). Product site pulls agent data from admin/forge (single source of truth). Includes template->instance lifecycle for both Porter-internal and customer-deployed agents.
-**Requirements**: TBD
+**Goal**: Define proper data models, APIs, and registry for skills and tools — skills are capabilities (what agents CAN do), tools are integrations (what agents USE). Both get DB tables, CRUD APIs, template assignment via junction tables, visibility/enabled/featured toggles, and rich visual metadata. Agent templates are immutable components; deploying creates deep-cloned instances. Forge reads from junction tables instead of JSONB arrays.
 **Depends on:** Phase 13.05
-**Plans:** 0 plans
+**Requirements**: SKL-01, SKL-02, SKL-03, SKL-04, SKL-05, SKL-06, SKL-07
+**Success Criteria** (what must be TRUE):
+  1. `skills` and `tools` tables exist in PostgreSQL with proper schemas, indexes, and seed data — 37 skills from SKILL_CATALOG + 15 tools (6 system + 9 integration) seeded
+  2. `template_skills` and `template_tools` junction tables are populated from existing JSONB arrays on all 103 agent_templates — proper relational model replaces JSONB as source of truth
+  3. `GET /api/admin/skills` returns all skills from the DB with rich visual fields (icon, color, short_label, featured) and template/agent assignment counts — SKILL_CATALOG constant is gone
+  4. `GET /api/admin/tools` returns all tools from the DB with rich visual fields and template counts — environment_tools table is no longer queried
+  5. Full CRUD (create, read, update, delete) works on both skills and tools via admin API with Zod validation
+  6. Forge Station 2 (Trainer) and Station 3 (Outfitter) read from junction tables with JSONB fallback
+  7. Template instantiation writes `deployed_by` field and sources config from junction tables
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 15 to break down)
+- [ ] 15-01-PLAN.md — Schema migration (4 tables), Drizzle definitions, seed data, junction population, startup wiring (SKL-01, SKL-02, SKL-03)
+- [ ] 15-02-PLAN.md — Admin skills + tools CRUD APIs replacing SKILL_CATALOG and environment_tools (SKL-04, SKL-05)
+- [ ] 15-03-PLAN.md — Forge junction table reads + template instantiation deployed_by + junction-sourced config (SKL-06, SKL-07)
 
 ---
 
@@ -276,6 +286,7 @@ Plans:
 | 13.05. PostgreSQL Migration | 4/7 | Complete    | 2026-03-24 | - |
 | 13.1. Memory V3 State Engine | 3/3 | Complete    | 2026-03-24 | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
+| 15. Skills & Tools Architecture | v2.0 | 0/3 | Planning complete | - |
 | 15. Live Dashboard | v3.0 | 0/TBD | Not started | - |
 | 16. Agent Workspace | v3.0 | 0/TBD | Not started | - |
 | 17. Section Ownership | v3.0 | 0/TBD | Not started | - |
