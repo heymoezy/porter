@@ -1,5 +1,16 @@
 # Porter Release Notes
 
+## v2.0.1 (2026-03-24)
+
+**PostgreSQL Migration — Phase 13.05 execution**
+
+- Data migration script: `scripts/migrate-sqlite-to-pg.ts` (697 lines) — FK-safe table ordering, JSON→jsonb transforms, tsvector backfill, SERIAL sequence resets, spot-checks per table
+- FTS upgraded from `plainto_tsquery` to `websearch_to_tsquery` for multi-word query support (memory.ts, conversations.ts)
+- Health endpoint: added `porter_version` and top-level `db_engine: 'postgresql'` fields
+- All 12 service/plugin files verified: 142 `pool.query` calls, zero SQLite references
+- All 16 route files + seed-templates verified: zero `sqlite.`, `json_extract()`, `unixepoch()` calls
+- Old migration files (04-13) cleaned up, `better-sqlite3` moved to devDependencies only
+
 ## v2.0.0 (2026-03-23)
 
 **PostgreSQL Migration — Complete data layer rewrite**
