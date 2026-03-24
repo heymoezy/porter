@@ -6,6 +6,7 @@ import { ok, err } from '../../lib/envelope.js';
 import { config } from '../../config.js';
 import { z } from 'zod';
 import { selectStreamBackend } from '../../services/stream-service.js';
+import { buildMemoryContext } from '../../services/memory-injection.js';
 import type { ProjectRole } from '../../lib/roles.js';
 
 // --- Schemas ----------------------------------------------------------------
@@ -252,8 +253,22 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       identityPrefix = `[Collaborator: ${displayName}, Project Role: ${request.projectRole}]\n`;
     }
 
-    // Augmented message includes identity prefix for the agent; original is persisted to chat history
-    const augmentedMessage = identityPrefix ? identityPrefix + message : message;
+    // Memory V3: inject tiered memory context before streaming
+    const memoryContext = await buildMemoryContext({
+      agentId: agentId,
+      projectId: projectId,
+      searchQuery: message,
+    });
+
+    // Injection order: [identity prefix] → [memory context] → [user message]
+    // Only the original user message is persisted to chat history (not augmented content)
+    let augmentedMessage = message;
+    if (memoryContext) {
+      augmentedMessage = memoryContext + '\n\n---\n\n' + augmentedMessage;
+    }
+    if (identityPrefix) {
+      augmentedMessage = identityPrefix + augmentedMessage;
+    }
 
     // STRM-02: prefer strong model for user chat, fall back to ollama if unavailable
     const backend = selectStreamBackend(message, backendHint ?? 'auto');
