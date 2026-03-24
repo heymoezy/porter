@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 13.1-01-PLAN.md
-last_updated: "2026-03-24T09:04:46.699Z"
+stopped_at: Completed 13.1-02-PLAN.md
+last_updated: "2026-03-24T09:09:02.129Z"
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 29
-  completed_plans: 24
+  completed_plans: 25
 ---
 
 # Project State
@@ -97,6 +97,9 @@ Recent decisions affecting current work:
 - [Phase 13.05-postgresql-migration]: search_vector column (pre-built tsvector) used instead of inline to_tsvector() — avoids runtime computation on every FTS query
 - [Phase 13.1-memory-v3-state-engine]: pg_trgm enabled in memory_v3 migration — keeps extension co-located with the feature that needs it
 - [Phase 13.1-memory-v3-state-engine]: Agent scope migration uses template_id lookup (personas.template_id) — concepts.scope_id is a template_id not a persona_id
+- [Phase 13.1]: estimateTokens uses ceil(length/4) — simple approximation sufficient for budget clipping
+- [Phase 13.1]: Per-agent budget override in personas.config.memory_token_budget — agent-level control without schema change
+- [Phase 13.1]: try/catch wraps entire buildMemoryContext body — any DB error returns empty string, never crashes the streaming response
 
 ### Roadmap Evolution
 
@@ -117,6 +120,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T09:04:46.696Z
-Stopped at: Completed 13.1-01-PLAN.md
+Last session: 2026-03-24T09:09:02.125Z
+Stopped at: Completed 13.1-02-PLAN.md
 Resume file: None
