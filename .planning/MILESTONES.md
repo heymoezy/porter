@@ -1,5 +1,15 @@
 # Milestones: Porter
 
+## v2.0 Backend Ready (Shipped: 2026-03-24)
+
+**Phases completed:** 9 phases, 32 plans, 2 tasks
+
+**Key accomplishments:**
+
+- (none recorded)
+
+---
+
 ## v1.0 — Foundation + Core Platform (Complete)
 
 **Completed:** 2026-03-21
@@ -18,6 +28,7 @@
 | 7 | External Connections | Credential encryption, GitHub/email/calendar/WhatsApp integrations, OAuth flows, external dispatcher |
 
 ### Final Stats
+
 - **Last phase:** 7 (ended at Phase 7)
 - **Requirements:** 30/30 complete
 - **Tests:** 35 Playwright tests green throughout
