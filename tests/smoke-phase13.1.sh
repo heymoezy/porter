@@ -135,22 +135,188 @@ pass "migration idempotency check (migrated_to_v3 column populated)"
 # ── MEMV3-02: Injection API ───────────────────────────────────────────────────
 echo ""
 echo "=== MEMV3-02: Injection API ==="
-skip "MEMV3-02 injection endpoints — requires Plan 02"
+
+# Minimal smoke: POST /chat/stream returns SSE data events (proves injection is wired in)
+STREAM_RESP=$(curl -s --max-time 5 $AUTH_HEADER "$BASE_URL/chat/stream" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"message":"ping","agent_id":"porter"}' 2>/dev/null || true)
+
+if echo "$STREAM_RESP" | grep -q "data:"; then
+  pass "MEMV3-02: /chat/stream returns SSE data events with injection wired"
+else
+  # Non-fatal: server may not be running; log as info
+  echo "  INFO: /chat/stream response: $STREAM_RESP"
+  fail "MEMV3-02: /chat/stream SSE events (server may not be running)"
+fi
 
 # ── MEMV3-03: Consolidation ───────────────────────────────────────────────────
 echo ""
 echo "=== MEMV3-03: Consolidation ==="
-skip "MEMV3-03 consolidation (dedup/merge) — requires Plan 03"
+
+# Seed similar agent_notes for porter agent
+PORTER_ID=$(psql "$PGCONNSTR" -t -c "SELECT id FROM personas WHERE name ILIKE 'porter' LIMIT 1" 2>/dev/null | tr -d '[:space:]' || true)
+if [ -z "$PORTER_ID" ]; then
+  PORTER_ID="porter"
+fi
+
+psql "$PGCONNSTR" -c "
+  INSERT INTO agent_notes (id, agent_id, content, note_type, confidence_score, source_type, status, created_at, updated_at)
+  VALUES
+    ('smoke-c1', '$PORTER_ID', 'React hooks best practices for state management', 'learning', 60, 'learning', 'active', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW())),
+    ('smoke-c2', '$PORTER_ID', 'React hooks best practices for state mgmt', 'learning', 70, 'learning', 'active', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW())),
+    ('smoke-c3', '$PORTER_ID', 'React hooks best practice for state management', 'learning', 50, 'learning', 'active', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW())),
+    ('smoke-c4', '$PORTER_ID', 'Vue composition API patterns', 'learning', 60, 'learning', 'active', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW())),
+    ('smoke-c5', '$PORTER_ID', 'React hooks best practices state management tips', 'learning', 80, 'learning', 'active', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+  ON CONFLICT (id) DO NOTHING;
+" >/dev/null 2>&1
+
+# POST /memory/consolidate
+CONSOLIDATE_RESP=$(curl -s $AUTH_HEADER "$BASE_URL/memory/consolidate" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d "{\"agent_id\":\"$PORTER_ID\"}" 2>/dev/null || true)
+
+if echo "$CONSOLIDATE_RESP" | grep -q '"ok":true'; then
+  pass "MEMV3-03: POST /memory/consolidate returns ok:true"
+else
+  fail "MEMV3-03: POST /memory/consolidate returns ok:true — response: $CONSOLIDATE_RESP"
+fi
+
+# Check merged > 0
+MERGED=$(echo "$CONSOLIDATE_RESP" | grep -o '"merged":[0-9]*' | grep -o '[0-9]*' || echo "0")
+if [ "${MERGED:-0}" -gt 0 ]; then
+  pass "MEMV3-03: consolidation merged ${MERGED} near-duplicate notes"
+else
+  fail "MEMV3-03: consolidation merged > 0 notes (got ${MERGED:-0})"
+fi
+
+# Verify remaining active count is less than seeded (some were merged)
+REMAINING=$(psql "$PGCONNSTR" -t -c "SELECT COUNT(*) FROM agent_notes WHERE id LIKE 'smoke-c%' AND status = 'active'" 2>/dev/null | tr -d '[:space:]' || echo "5")
+if [ "${REMAINING:-5}" -lt 5 ]; then
+  pass "MEMV3-03: remaining active smoke notes (${REMAINING}) is less than seeded 5"
+else
+  fail "MEMV3-03: expected fewer than 5 remaining active smoke notes, got ${REMAINING:-5}"
+fi
+
+# Cleanup consolidation test data
+psql "$PGCONNSTR" -c "DELETE FROM agent_notes WHERE id LIKE 'smoke-c%';" >/dev/null 2>&1
 
 # ── MEMV3-04: Agent self-edit API ─────────────────────────────────────────────
 echo ""
 echo "=== MEMV3-04: Agent Self-Edit ==="
-skip "MEMV3-04 agent self-edit API — requires Plan 03"
+
+# Seed a test concept
+psql "$PGCONNSTR" -c "
+  INSERT INTO concepts (id, memory_kind, scope, scope_id, content, confidence_score, status, review_state, created_at, updated_at)
+  VALUES ('smoke-promote', 'concept', 'agent', '$PORTER_ID', 'Test concept for promotion smoke', 60, 'active', 'accepted', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+  ON CONFLICT (id) DO NOTHING;
+" >/dev/null 2>&1
+
+# POST /memory/self-edit — promote
+PROMOTE_RESP=$(curl -s $AUTH_HEADER "$BASE_URL/memory/self-edit" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d "{\"agent_id\":\"$PORTER_ID\",\"action\":\"promote\",\"concept_id\":\"smoke-promote\"}" 2>/dev/null || true)
+
+if echo "$PROMOTE_RESP" | grep -q '"ok":true'; then
+  pass "MEMV3-04: POST /memory/self-edit promote returns ok:true"
+else
+  fail "MEMV3-04: POST /memory/self-edit promote — response: $PROMOTE_RESP"
+fi
+
+# Verify concept is archived
+CONCEPT_STATUS=$(psql "$PGCONNSTR" -t -c "SELECT status FROM concepts WHERE id = 'smoke-promote'" 2>/dev/null | tr -d '[:space:]' || true)
+if [ "$CONCEPT_STATUS" = "archived" ]; then
+  pass "MEMV3-04: promoted concept is now archived"
+else
+  fail "MEMV3-04: expected concept status='archived', got '${CONCEPT_STATUS}'"
+fi
+
+# POST /memory/self-edit — create_directive
+DIRECTIVE_RESP=$(curl -s $AUTH_HEADER "$BASE_URL/memory/self-edit" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d "{\"agent_id\":\"$PORTER_ID\",\"action\":\"create_directive\",\"content\":\"Always use TypeScript smoke test directive\",\"note_type\":\"directive\"}" 2>/dev/null || true)
+
+if echo "$DIRECTIVE_RESP" | grep -q '"ok":true'; then
+  pass "MEMV3-04: POST /memory/self-edit create_directive returns ok:true"
+else
+  fail "MEMV3-04: POST /memory/self-edit create_directive — response: $DIRECTIVE_RESP"
+fi
+
+# Extract the new note id for dismiss test
+NEW_NOTE_ID=$(echo "$DIRECTIVE_RESP" | grep -o '"id":"[^"]*"' | head -1 | grep -o '"[^"]*"$' | tr -d '"' || true)
+
+# POST /memory/self-edit — dismiss the new directive
+if [ -n "$NEW_NOTE_ID" ]; then
+  DISMISS_RESP=$(curl -s $AUTH_HEADER "$BASE_URL/memory/self-edit" \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -d "{\"agent_id\":\"$PORTER_ID\",\"action\":\"dismiss\",\"concept_id\":\"$NEW_NOTE_ID\"}" 2>/dev/null || true)
+
+  if echo "$DISMISS_RESP" | grep -q '"ok":true'; then
+    pass "MEMV3-04: POST /memory/self-edit dismiss returns ok:true"
+  else
+    fail "MEMV3-04: POST /memory/self-edit dismiss — response: $DISMISS_RESP"
+  fi
+else
+  fail "MEMV3-04: could not extract new note id from create_directive response"
+fi
+
+# Cleanup
+psql "$PGCONNSTR" -c "
+  DELETE FROM agent_notes WHERE agent_id = '$PORTER_ID' AND (content LIKE '%Test concept for promotion%' OR content LIKE '%Always use TypeScript smoke test%');
+  DELETE FROM concepts WHERE id = 'smoke-promote';
+" >/dev/null 2>&1
 
 # ── MEMV3-05: Admin overview endpoint ────────────────────────────────────────
 echo ""
 echo "=== MEMV3-05: Admin Overview ==="
-skip "MEMV3-05 admin memory overview endpoint — requires Plan 03"
+
+OVERVIEW_RESP=$(curl -s $AUTH_HEADER "$BASE_URL/memory/admin/overview" 2>/dev/null || true)
+
+if echo "$OVERVIEW_RESP" | grep -q '"ok":true'; then
+  pass "MEMV3-05: GET /memory/admin/overview returns ok:true"
+else
+  fail "MEMV3-05: GET /memory/admin/overview — response: $OVERVIEW_RESP"
+fi
+
+if echo "$OVERVIEW_RESP" | grep -q '"agents"'; then
+  pass "MEMV3-05: response contains agents array"
+else
+  fail "MEMV3-05: response missing agents array"
+fi
+
+if echo "$OVERVIEW_RESP" | grep -q '"totals"'; then
+  pass "MEMV3-05: response contains totals object"
+else
+  fail "MEMV3-05: response missing totals object"
+fi
+
+if echo "$OVERVIEW_RESP" | grep -q '"health_score"'; then
+  pass "MEMV3-05: agent objects contain health_score"
+else
+  fail "MEMV3-05: agent objects missing health_score"
+fi
+
+if echo "$OVERVIEW_RESP" | grep -q '"agent_id"'; then
+  pass "MEMV3-05: agent objects contain agent_id"
+else
+  fail "MEMV3-05: agent objects missing agent_id"
+fi
+
+if echo "$OVERVIEW_RESP" | grep -q '"concept_count"'; then
+  pass "MEMV3-05: agent objects contain concept_count"
+else
+  fail "MEMV3-05: agent objects missing concept_count"
+fi
+
+if echo "$OVERVIEW_RESP" | grep -q '"pending_review_count"'; then
+  pass "MEMV3-05: agent objects contain pending_review_count"
+else
+  fail "MEMV3-05: agent objects missing pending_review_count"
+fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
