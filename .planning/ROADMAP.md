@@ -39,7 +39,8 @@
 - [x] **Phase 13: Autonomous Learning** - Agents search web/GitHub/Reddit, store GDPR-safe concepts in Memory V2 with source attribution and confidence scores (completed 2026-03-22)
 - [x] **Phase 13.05: PostgreSQL Migration** - Migrate from SQLite to PostgreSQL 16 + pgvector; port all Drizzle schemas, migrations, raw SQL queries, FTS5→tsvector; zero data loss (INSERTED) (completed 2026-03-24)
 - [x] **Phase 13.1: Memory V3 State Engine** - Project-first state engine with structured directives/notes tables, tiered injection, concept consolidation, agent self-edit API, admin overview (INSERTED) (completed 2026-03-24)
-- [ ] **Phase 14: Billing Enforcement** - Lemon Squeezy subscription management, usage metering, atomic plan limit enforcement on all resource-creating routes
+- [x] **Phase 15: Skills & Tools Architecture** - DB registry for skills/tools, CRUD APIs, junction tables, visibility controls, forge integration (INSERTED) (completed 2026-03-24)
+- [ ] ~~**Phase 14: Billing Enforcement** - Deferred — too early, focus on agent intelligence first~~
 
 ## Phase Details
 
@@ -286,7 +287,7 @@ Plans:
 | 13.05. PostgreSQL Migration | 4/7 | Complete    | 2026-03-24 | - |
 | 13.1. Memory V3 State Engine | 3/3 | Complete    | 2026-03-24 | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
-| 15. Skills & Tools Architecture | 3/3 | Complete   | 2026-03-24 | - |
+| 15. Skills & Tools Architecture | 3/3 | Complete    | 2026-03-24 | - |
 | 15. Live Dashboard | v3.0 | 0/TBD | Not started | - |
 | 16. Agent Workspace | v3.0 | 0/TBD | Not started | - |
 | 17. Section Ownership | v3.0 | 0/TBD | Not started | - |
