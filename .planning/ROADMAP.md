@@ -201,7 +201,7 @@ Plans:
   5. Full CRUD (create, read, update, delete) works on both skills and tools via admin API with Zod validation
   6. Forge Station 2 (Trainer) and Station 3 (Outfitter) read from junction tables with JSONB fallback
   7. Template instantiation writes `deployed_by` field and sources config from junction tables
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 15-01-PLAN.md — Schema migration (4 tables), Drizzle definitions, seed data, junction population, startup wiring (SKL-01, SKL-02, SKL-03)
@@ -286,7 +286,7 @@ Plans:
 | 13.05. PostgreSQL Migration | 4/7 | Complete    | 2026-03-24 | - |
 | 13.1. Memory V3 State Engine | 3/3 | Complete    | 2026-03-24 | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
-| 15. Skills & Tools Architecture | 2/3 | In Progress|  | - |
+| 15. Skills & Tools Architecture | 3/3 | Complete   | 2026-03-24 | - |
 | 15. Live Dashboard | v3.0 | 0/TBD | Not started | - |
 | 16. Agent Workspace | v3.0 | 0/TBD | Not started | - |
 | 17. Section Ownership | v3.0 | 0/TBD | Not started | - |

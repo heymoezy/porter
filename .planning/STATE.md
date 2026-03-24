@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 15-03-PLAN.md
-last_updated: "2026-03-24T10:13:00.000Z"
+stopped_at: Completed 15-02-PLAN.md
+last_updated: "2026-03-24T10:16:17.904Z"
 progress:
   total_phases: 10
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 32
   completed_plans: 29
 ---
@@ -107,6 +107,9 @@ Recent decisions affecting current work:
 - [Phase 15]: tmux appears as both skill ID and tool ID — separate tables, no conflict
 - [Phase 15-03]: JSONB fallback retained in forge stations and instantiation — safety net for pre-Phase 15 data or empty junction rows
 - [Phase 15-03]: deployed_by set to requesting username at instantiation time — same value as owner; enables provenance tracking
+- [Phase 15]: SKILL_CATALOG constant removed entirely — skills are now admin-controlled DB records
+- [Phase 15]: environment_tools queries replaced by tools table — tools registry is now DB-backed not runtime-detected
+- [Phase 15]: admin/ .gitignore requires git add -f for backend/src/routes/v1/admin/ route files (porter-admin is sibling repo, not same dir)
 
 ### Roadmap Evolution
 
@@ -127,6 +130,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T10:11:20.941Z
-Stopped at: Completed 15-01-PLAN.md
+Last session: 2026-03-24T10:16:17.897Z
+Stopped at: Completed 15-02-PLAN.md
 Resume file: None
