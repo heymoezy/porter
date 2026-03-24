@@ -80,7 +80,7 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 ### Memory V3
 
-- [ ] **MEMV3-01**: Structured state tables (directives, project_notes, agent_notes) with migration from concepts
+- [x] **MEMV3-01**: Structured state tables (directives, project_notes, agent_notes) with migration from concepts
 - [ ] **MEMV3-02**: Tiered injection pipeline reading structured state before archival search
 - [ ] **MEMV3-03**: Concept consolidation service merging similar concepts by content similarity
 - [ ] **MEMV3-04**: Agent self-edit memory API (promote/dismiss/edit concepts during runs)
@@ -146,7 +146,7 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 | PG-02 | Phase 13.05 | Complete |
 | PG-03 | Phase 13.05 | Complete |
 | PG-04 | Phase 13.05 | Pending |
-| MEMV3-01 | Phase 13.1 | Pending |
+| MEMV3-01 | Phase 13.1 | Complete |
 | MEMV3-02 | Phase 13.1 | Pending |
 | MEMV3-03 | Phase 13.1 | Pending |
 | MEMV3-04 | Phase 13.1 | Pending |

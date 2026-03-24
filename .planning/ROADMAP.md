@@ -170,7 +170,7 @@ Plans:
   3. Running consolidation on an agent with 50+ similar concepts reduces the count by at least 40% while preserving unique information — consolidated concepts link back to originals via `superseded_by_id`
   4. An agent can call `POST /api/v1/memory/self-edit` during a run to promote a signal to concept, dismiss a stale concept, or create a new directive — the change is reflected in subsequent injection within the same session
   5. `GET /api/v1/admin/memory/overview` returns per-agent concept counts, average confidence, pending review count, and memory health score — the response covers all agents in one call
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 13.1-01-PLAN.md — Schema migration, Drizzle definitions, pg_trgm extension, concept data migration, smoke test scaffold (MEMV3-01)
@@ -274,7 +274,7 @@ Plans:
 | 12. CRM Intelligence and Agent Templates | 4/4 | Complete    | 2026-03-22 | - |
 | 13. Autonomous Learning | 3/3 | Complete   | 2026-03-24 | - |
 | 13.05. PostgreSQL Migration | 4/7 | Complete    | 2026-03-24 | - |
-| 13.1. Memory V3 State Engine | v2.0 | 0/3 | Not started | - |
+| 13.1. Memory V3 State Engine | 1/3 | In Progress|  | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
 | 15. Live Dashboard | v3.0 | 0/TBD | Not started | - |
 | 16. Agent Workspace | v3.0 | 0/TBD | Not started | - |

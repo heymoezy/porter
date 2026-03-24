@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: "Checkpoint: 13.05-05 Task 2 — awaiting migration verification"
-last_updated: "2026-03-24T08:35:51.871Z"
+stopped_at: Completed 13.1-01-PLAN.md
+last_updated: "2026-03-24T09:04:46.699Z"
 progress:
   total_phases: 10
   completed_phases: 6
-  total_plans: 26
-  completed_plans: 23
+  total_plans: 29
+  completed_plans: 24
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input
-**Current focus:** Phase 13.05 — postgresql-migration
+**Current focus:** Phase 13.1 — memory-v3-state-engine
 
 ## Current Position
 
-Phase: 13.05 (postgresql-migration) — EXECUTING
-Plan: 5 of 7
+Phase: 13.1 (memory-v3-state-engine) — EXECUTING
+Plan: 1 of 3
 
 ## Performance Metrics
 
@@ -95,6 +95,8 @@ Recent decisions affecting current work:
 - [Phase 13.05-postgresql-migration]: Plan 02 services pre-converted — all 12 service/plugin files were already fully migrated by Plan 01's consolidated commit (e53ae59); Plan 02 was retrospective verification; 142 pool.query calls verified, 0 sqlite refs
 - [Phase 13.05-postgresql-migration]: websearch_to_tsquery used instead of plainto_tsquery for all user-facing FTS — handles multi-word queries safely
 - [Phase 13.05-postgresql-migration]: search_vector column (pre-built tsvector) used instead of inline to_tsvector() — avoids runtime computation on every FTS query
+- [Phase 13.1-memory-v3-state-engine]: pg_trgm enabled in memory_v3 migration — keeps extension co-located with the feature that needs it
+- [Phase 13.1-memory-v3-state-engine]: Agent scope migration uses template_id lookup (personas.template_id) — concepts.scope_id is a template_id not a persona_id
 
 ### Roadmap Evolution
 
@@ -115,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T08:09:04.856Z
-Stopped at: Checkpoint: 13.05-05 Task 2 — awaiting migration verification
+Last session: 2026-03-24T09:04:46.696Z
+Stopped at: Completed 13.1-01-PLAN.md
 Resume file: None
