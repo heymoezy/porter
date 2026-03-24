@@ -49,8 +49,8 @@ export default async function memoryV1Routes(fastify: FastifyInstance, _options:
     let rows: ConceptRow[];
 
     if (q && q.trim()) {
-      // Full-text search using ts_rank + plainto_tsquery
-      const conditions: string[] = ["to_tsvector('english', c.content) @@ plainto_tsquery('english', $1)", 'c.status = $2'];
+      // Full-text search using ts_rank + websearch_to_tsquery against pre-built search_vector
+      const conditions: string[] = ["c.search_vector @@ websearch_to_tsquery('english', $1)", 'c.status = $2'];
       const params: unknown[] = [q.trim(), status];
       let paramIdx = 3;
 
@@ -71,10 +71,11 @@ export default async function memoryV1Routes(fastify: FastifyInstance, _options:
         SELECT c.id, c.memory_kind, c.trust_tier, c.scope, c.scope_id, c.content,
                c.source_type, c.source_url, c.confidence_score, c.status,
                c.review_state, c.superseded_by_id, c.last_used_at, c.use_count,
-               c.session_id, c.created_at, c.updated_at
+               c.session_id, c.created_at, c.updated_at,
+               ts_rank(c.search_vector, websearch_to_tsquery('english', $1)) AS rank
         FROM concepts c
         WHERE ${conditions.join(' AND ')}
-        ORDER BY ts_rank(to_tsvector('english', c.content), plainto_tsquery('english', $1)) DESC
+        ORDER BY ts_rank(c.search_vector, websearch_to_tsquery('english', $1)) DESC
         LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
       `, params)).rows as ConceptRow[];
     } else {

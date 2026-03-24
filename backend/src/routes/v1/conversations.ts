@@ -70,9 +70,9 @@ export default async function conversationV1Routes(
       const results = (await pool.query(`
         SELECT m.id, m.conversation_id, m.content, m.sender_name, m.sender_type,
                m.channel_type, m.created_at,
-               ts_rank(to_tsvector('english', m.content), plainto_tsquery('english', $1)) as rank
+               ts_rank(m.search_vector, websearch_to_tsquery('english', $1)) as rank
         FROM messages m
-        WHERE to_tsvector('english', m.content) @@ plainto_tsquery('english', $1)
+        WHERE m.search_vector @@ websearch_to_tsquery('english', $1)
         ORDER BY rank DESC
         LIMIT $2 OFFSET $3
       `, [q, limit, offset])).rows as any[];
@@ -80,7 +80,7 @@ export default async function conversationV1Routes(
       const totalRow = (await pool.query(`
         SELECT COUNT(*) as total
         FROM messages m
-        WHERE to_tsvector('english', m.content) @@ plainto_tsquery('english', $1)
+        WHERE m.search_vector @@ websearch_to_tsquery('english', $1)
       `, [q])).rows[0] as { total: number } | undefined;
 
       return reply.send(ok({ results, total: totalRow?.total ?? 0 }));
@@ -109,7 +109,7 @@ export default async function conversationV1Routes(
           SELECT DISTINCT c.*
           FROM conversations c
           JOIN messages m ON m.conversation_id = c.id
-          WHERE to_tsvector('english', m.content) @@ plainto_tsquery('english', $1)
+          WHERE m.search_vector @@ websearch_to_tsquery('english', $1)
           ORDER BY c.updated_at DESC
           LIMIT $2 OFFSET $3
         `, [q, limit, offset])).rows as any[];
