@@ -16,6 +16,7 @@ import v1Routes from './routes/v1/index.js';
 import proxyPlugin from './plugins/proxy.js';
 import { migrateConsolidated } from './db/migrate-consolidated.js';
 import { migrateMemoryV3 } from './db/migrate-memv3.js';
+import { migrateSkillsTools } from './db/migrate-15.js';
 import * as scheduler from './services/scheduler.js';
 import { startImapIdle, stopImapIdle } from './services/email.js';
 import { pool } from './db/client.js';
@@ -119,6 +120,7 @@ const start = async () => {
   try {
     await migrateConsolidated(pool);
     await migrateMemoryV3(pool);
+    await migrateSkillsTools(pool);
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
     scheduler.start();

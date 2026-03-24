@@ -792,3 +792,61 @@ export const personaSkills = pgTable('persona_skills', {
   assignedAt: doublePrecision('assigned_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 // Note: Primary key (persona_id, skill_name) defined in migration DDL
+
+// ── Skills & Tools Registry (Phase 15) ──────────────────────────────────────
+
+export const skills = pgTable('skills', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').default(''),
+  category: text('category').notNull(),
+  source: text('source').default('porter-curated'),
+  enabled: integer('enabled').default(1),
+  visible: integer('visible').default(1),
+  featured: integer('featured').default(0),
+  icon: text('icon').default(''),
+  color: text('color').default(''),
+  coverImage: text('cover_image').default(''),
+  shortLabel: text('short_label').default(''),
+  sortOrder: integer('sort_order').default(50),
+  featuredOrder: integer('featured_order').default(0),
+  configSchema: jsonb('config_schema').default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const tools = pgTable('tools', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').default(''),
+  category: text('category').notNull(),
+  type: text('type').notNull().default('system'),
+  enabled: integer('enabled').default(1),
+  visible: integer('visible').default(1),
+  featured: integer('featured').default(0),
+  icon: text('icon').default(''),
+  color: text('color').default(''),
+  coverImage: text('cover_image').default(''),
+  shortLabel: text('short_label').default(''),
+  sortOrder: integer('sort_order').default(50),
+  featuredOrder: integer('featured_order').default(0),
+  configSchema: jsonb('config_schema').default(sql`'{}'::jsonb`),
+  requires: jsonb('requires').default(sql`'[]'::jsonb`),
+  version: text('version').default(''),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const templateSkills = pgTable('template_skills', {
+  templateId: text('template_id').notNull(),
+  skillId: text('skill_id').notNull(),
+  sortOrder: integer('sort_order').default(0),
+});
+// Note: Primary key (template_id, skill_id) defined in migration DDL
+
+export const templateTools = pgTable('template_tools', {
+  templateId: text('template_id').notNull(),
+  toolId: text('tool_id').notNull(),
+  sortOrder: integer('sort_order').default(0),
+});
+// Note: Primary key (template_id, tool_id) defined in migration DDL
