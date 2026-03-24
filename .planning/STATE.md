@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 15-01-PLAN.md
-last_updated: "2026-03-24T10:11:20.945Z"
+stopped_at: Completed 15-03-PLAN.md
+last_updated: "2026-03-24T10:13:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 32
-  completed_plans: 27
+  completed_plans: 29
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 ## Current Position
 
 Phase: 15 (skills-tools-architecture) — EXECUTING
-Plan: 1 of 3
+Plan: 3 of 3 (COMPLETE)
 
 ## Performance Metrics
 
@@ -105,6 +105,8 @@ Recent decisions affecting current work:
 - [Phase 13.1-memory-v3-state-engine]: Dismiss action tries agent_notes first then concepts — single endpoint for both table types
 - [Phase 15]: Seeded 37 skills: 30 from SKILL_CATALOG + 7 common additions to reach plan target
 - [Phase 15]: tmux appears as both skill ID and tool ID — separate tables, no conflict
+- [Phase 15-03]: JSONB fallback retained in forge stations and instantiation — safety net for pre-Phase 15 data or empty junction rows
+- [Phase 15-03]: deployed_by set to requesting username at instantiation time — same value as owner; enables provenance tracking
 
 ### Roadmap Evolution
 

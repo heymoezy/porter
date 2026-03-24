@@ -99,8 +99,8 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 - [x] **SKL-03**: template_skills and template_tools junction tables populated from existing agent_templates JSONB arrays, replacing JSONB as relational source of truth
 - [ ] **SKL-04**: Admin skills CRUD API (GET list/single/categories/featured, POST create, PUT update, DELETE) with Zod validation — SKILL_CATALOG constant removed
 - [ ] **SKL-05**: Admin tools CRUD API (GET list/single/categories/featured, POST create, PUT update, DELETE) with Zod validation — environment_tools replaced by tools table
-- [ ] **SKL-06**: Forge Station 2 (Trainer) and Station 3 (Outfitter) read from junction tables with JSONB fallback
-- [ ] **SKL-07**: Template instantiation writes deployed_by field on persona and sources skills/tools config from junction tables
+- [x] **SKL-06**: Forge Station 2 (Trainer) and Station 3 (Outfitter) read from junction tables with JSONB fallback
+- [x] **SKL-07**: Template instantiation writes deployed_by field on persona and sources skills/tools config from junction tables
 
 ### Observability
 
@@ -169,8 +169,8 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 | SKL-03 | Phase 15 | Complete |
 | SKL-04 | Phase 15 | Pending |
 | SKL-05 | Phase 15 | Pending |
-| SKL-06 | Phase 15 | Pending |
-| SKL-07 | Phase 15 | Pending |
+| SKL-06 | Phase 15 | Complete |
+| SKL-07 | Phase 15 | Complete |
 
 **Coverage:**
 - v2 requirements: 48 total
