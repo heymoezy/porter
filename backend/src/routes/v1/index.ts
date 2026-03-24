@@ -47,6 +47,6 @@ export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(contactV1Routes, { prefix: '/contacts' });
   fastify.register(conversationV1Routes, { prefix: '/conversations' });
   fastify.register(templateV1Routes, { prefix: '/templates' });
-  fastify.register(memoryV1Routes, { prefix: '/memory/concepts' });
+  fastify.register(memoryV1Routes, { prefix: '/memory' });
   // fastify.register(adminV1Routes, { prefix: '/admin' });
 }
