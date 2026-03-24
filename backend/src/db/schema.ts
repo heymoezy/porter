@@ -517,6 +517,7 @@ export const concepts = pgTable('concepts', {
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
   updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
   searchVector: tsvector('search_vector'),
+  migratedToV3: integer('migrated_to_v3').default(0),
 });
 
 export const learningSessions = pgTable('learning_sessions', {
@@ -728,6 +729,58 @@ export const agentMessages = pgTable('agent_messages', {
   chainId: text('chain_id'),
   stepNum: integer('step_num').default(0),
   injectedMemories: jsonb('injected_memories').default(sql`'[]'::jsonb`),
+});
+
+// ── Memory V3: Structured State Tables ───────────────────────────────────────
+
+// Workspace and project-scoped directives (operating rules injected into every prompt)
+// scope values: 'workspace' | 'project'
+// sourceType values: 'system' | 'human' | 'agent' | 'email' | 'file' | 'external'
+// status values: 'active' | 'archived'
+export const directives = pgTable('directives', {
+  id: text('id').primaryKey(),
+  scope: text('scope').notNull().default('workspace'),
+  scopeId: text('scope_id'),           // null for workspace scope; project_id for project scope
+  content: text('content').notNull(),
+  priority: integer('priority').notNull().default(50),  // lower = higher injection priority
+  sourceType: text('source_type').notNull().default('system'),
+  status: text('status').notNull().default('active'),
+  createdBy: text('created_by'),        // username or 'system'
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+// Project-scoped notes (state, decisions, constraints)
+// noteType values: 'state' | 'decision' | 'constraint'
+// sourceType values: 'agent' | 'human' | 'system' | 'email' | 'file' | 'external'
+export const projectNotes = pgTable('project_notes', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  content: text('content').notNull(),
+  noteType: text('note_type').notNull().default('state'),
+  confidenceScore: integer('confidence_score').notNull().default(70),
+  sourceType: text('source_type').notNull().default('agent'),
+  status: text('status').notNull().default('active'),
+  createdBy: text('created_by'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+// Agent-scoped notes (learnings, directives, constraints per persona)
+// noteType values: 'learning' | 'directive' | 'constraint'
+// sourceType values: 'learning' | 'self_edit' | 'human' | 'email' | 'file' | 'external'
+export const agentNotes = pgTable('agent_notes', {
+  id: text('id').primaryKey(),
+  agentId: text('agent_id').notNull(),  // references personas.id
+  content: text('content').notNull(),
+  noteType: text('note_type').notNull().default('learning'),
+  confidenceScore: integer('confidence_score').notNull().default(50),
+  sourceType: text('source_type').notNull().default('learning'),
+  status: text('status').notNull().default('active'),
+  supersededById: text('superseded_by_id'),  // for consolidation linkage
+  createdBy: text('created_by'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
 // ── Persona Skills (junction table, used by forge) ────────────────────────────
