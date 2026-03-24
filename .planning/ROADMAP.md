@@ -150,7 +150,7 @@ Plans:
   2. All existing data (users, projects, agents, concepts, learning_sessions, conversations, messages, contacts, files, collaborators, templates) exists in PostgreSQL with identical row counts to the SQLite source
   3. Full-text search queries via tsvector return equivalent results to FTS5 — `GET /api/v1/conversations?q=budget` and `GET /api/v1/memory/concepts?q=react` return matching records
   4. All 35 Playwright tests pass against the PostgreSQL-backed server with no test modifications beyond connection config
-**Plans:** 3/7 plans executed
+**Plans:** 4/7 plans executed
 
 Plans:
 - [ ] 13.05-01-PLAN.md — Schema rewrite (pgTable), client swap (pg Pool), consolidated migration DDL, infrastructure (PG-01)
@@ -262,7 +262,7 @@ Plans:
 | 11. Unified Chat and CRM Schema | 5/5 | Complete    | 2026-03-22 | - |
 | 12. CRM Intelligence and Agent Templates | 4/4 | Complete    | 2026-03-22 | - |
 | 13. Autonomous Learning | 3/3 | Complete   | 2026-03-24 | - |
-| 13.05. PostgreSQL Migration | 3/7 | In Progress|  | - |
+| 13.05. PostgreSQL Migration | 4/7 | In Progress|  | - |
 | 13.1. Memory V3 State Engine | v2.0 | 0/TBD | Not started | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
 | 15. Live Dashboard | v3.0 | 0/TBD | Not started | - |
