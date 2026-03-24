@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 13.1-03-PLAN.md
-last_updated: "2026-03-24T09:15:49.159Z"
+stopped_at: Completed 15-01-PLAN.md
+last_updated: "2026-03-24T10:11:20.945Z"
 progress:
   total_phases: 10
   completed_phases: 7
-  total_plans: 29
-  completed_plans: 26
+  total_plans: 32
+  completed_plans: 27
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input
-**Current focus:** Phase 13.1 — memory-v3-state-engine
+**Current focus:** Phase 15 — skills-tools-architecture
 
 ## Current Position
 
-Phase: 13.1 (memory-v3-state-engine) — COMPLETE
-Plan: 3 of 3 (all plans complete)
+Phase: 15 (skills-tools-architecture) — EXECUTING
+Plan: 1 of 3
 
 ## Performance Metrics
 
@@ -103,6 +103,8 @@ Recent decisions affecting current work:
 - [Phase 13.1-memory-v3-state-engine]: Route prefix changed from /memory/concepts to /memory; existing GET route preserved at /concepts sub-path — zero external URL breakage
 - [Phase 13.1-memory-v3-state-engine]: pg_trgm consolidation: similarity>0.6 threshold, higher confidence wins, alphabetically smaller id breaks ties, superseded-set prevents double-superseding in single transaction
 - [Phase 13.1-memory-v3-state-engine]: Dismiss action tries agent_notes first then concepts — single endpoint for both table types
+- [Phase 15]: Seeded 37 skills: 30 from SKILL_CATALOG + 7 common additions to reach plan target
+- [Phase 15]: tmux appears as both skill ID and tool ID — separate tables, no conflict
 
 ### Roadmap Evolution
 
@@ -123,6 +125,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T09:10:47.892Z
-Stopped at: Completed 13.1-03-PLAN.md
+Last session: 2026-03-24T10:11:20.941Z
+Stopped at: Completed 15-01-PLAN.md
 Resume file: None
