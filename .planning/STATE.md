@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 13.05-03-PLAN.md
-last_updated: "2026-03-24T08:03:16.144Z"
+stopped_at: "Checkpoint: 13.05-05 Task 2 — awaiting migration verification"
+last_updated: "2026-03-24T08:09:04.859Z"
 progress:
   total_phases: 9
   completed_phases: 6
@@ -100,6 +100,7 @@ Recent decisions affecting current work:
 
 - Phase 13.05 inserted after Phase 13: PostgreSQL Migration (URGENT) — migrate from SQLite to PostgreSQL 16 + pgvector before Memory V3
 - Phase 13.1 inserted after Phase 13.05: Memory V3 State Engine (URGENT) — project-first state engine replacing extraction-heavy memory with structured directives/notes, tiered injection, consolidation, agent self-edit API, admin overview
+- Phase 15 added: Skills & Tools Architecture — proper data model, APIs, and registry for skills and tools before any agent forging
 
 ### Pending Todos
 
@@ -114,6 +115,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T08:03:16.141Z
-Stopped at: Completed 13.05-03-PLAN.md
+Last session: 2026-03-24T08:09:04.856Z
+Stopped at: Checkpoint: 13.05-05 Task 2 — awaiting migration verification
 Resume file: None

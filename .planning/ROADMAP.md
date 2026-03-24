@@ -187,6 +187,16 @@ Plans:
   4. When the billing service is unreachable, resource-creating routes log the failure, allow the request through, and return 2xx — not 500
 **Plans**: TBD
 
+### Phase 15: Skills & Tools Architecture
+
+**Goal**: Define proper data models, APIs, and registry for skills and tools — skills are capabilities (what agents CAN do), tools are integrations (what agents USE). Both need schemas, CRUD APIs, template assignment, visibility/enabled toggles, and categories. No agent should be forged until skills and tools are properly modeled. Agent templates are immutable components; deploying creates instances (initially same name, renamable). Product site pulls agent data from admin/forge (single source of truth). Includes template→instance lifecycle for both Porter-internal and customer-deployed agents.
+**Requirements**: TBD
+**Depends on:** Phase 13.05
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 15 to break down)
+
 ---
 
 ### v3.0 Agent-First UI
