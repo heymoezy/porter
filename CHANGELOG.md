@@ -1,0 +1,53 @@
+## v2.0.1 (2026-03-24)
+
+- docs(13.1): create phase plan — 3 plans, 2 waves
+- docs(13.1): research memory v3 state engine phase
+- docs(13.1): smart discuss context — infrastructure phase
+- docs(phase-13.05): complete phase execution
+- chore(13.05): remove SQLite completely — delete migration script, uninstall better-sqlite3
+- docs(phase-15): add Skills & Tools Architecture phase to v2.0 roadmap
+- chore: bump to v2.0.1 — PG migration script, FTS upgrades, health version
+- feat(13.05-05): create SQLite to PostgreSQL data migration script
+- docs(13.05-03): complete critical FTS and boot sequence plan
+- docs(13.05-02): complete services postgresql migration plan
+- docs(13.05-04): complete remaining routes PG migration plan
+- feat(13.05-03): add db_engine field to health endpoint (PG-01 gate)
+- feat(13.05-03): replace plainto_tsquery with websearch_to_tsquery in FTS searches
+- docs(13.05-01): complete postgresql schema foundation plan
+- fix: version strings v2.0.0 in package.json, health endpoint, release notes
+- docs: v2.0.0 release notes — PostgreSQL migration
+- feat: PostgreSQL migration — SQLite → PG 16 + pgvector (Phase 13.05)
+- fix(13.05): revise plans based on checker feedback
+- docs(13.05): create phase plan — 4 plans, 3 waves for PostgreSQL migration
+- docs(phase-13.05): add validation strategy
+- docs(13.05): research postgresql migration phase
+- docs(state): record phase 13.05 context session
+- docs(13.05): capture phase context
+- docs(phase-13): evolve PROJECT.md after phase completion
+- docs(phase-13): complete phase execution
+- docs(13-03): complete scheduler-integration and API routes plan
+- fix(13-03): fix smoke-phase13 auth URL, response parsing, and DB path detection
+- feat(13-03): add memory/concepts API route and learning-sessions endpoint
+- feat(13-03): wire learning_session trigger, bootstrap, and cadence into scheduler
+- docs(13-02): complete learner.ts research engine plan
+- feat(13-02): create learner.ts autonomous learning engine
+- chore(13-02): install duck-duck-scrape 2.2.7 and robots-parser 3.0.1
+- docs(13-01): complete autonomous-learning DB foundation plan
+- feat(13-01): add Drizzle definitions, wire migration, create smoke test
+- feat(13-01): create migrate-13.ts with concepts + learning_sessions + FTS5
+- docs(phase-13): fix key_link misdeclaration in plan 03
+- docs(13): create phase plan — 3 plans, 3 waves
+- docs(phase-13): add validation strategy
+- docs(13): research phase autonomous-learning
+- remove 27k lines of inline HTML from porter.py
+- update frontend-v2 submodule to v0.1.6 (version fix)
+- update frontend-v2 submodule to v0.1.6
+- docs(state): record phase 13 context session
+- docs(13): capture phase context
+- update frontend-v2 submodule: dashboard overhaul
+- fix: seed accounts use unique emails, INSERT OR IGNORE
+- docs(phase-12): evolve PROJECT.md after phase completion
+- docs(phase-12): complete phase execution — verification passed
+- fix(12): correct smoke test port (8877→3001) and timeline response key (items→timeline)
+- docs(12-04): complete agent template catalog plan
+
