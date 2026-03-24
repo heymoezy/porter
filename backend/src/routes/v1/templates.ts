@@ -258,6 +258,20 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
       return reply.code(404).send(err('TEMPLATE_NOT_FOUND', 'Template not found'));
     }
 
+    // Read skills and tools from junction tables (Phase 15), fallback to JSONB
+    const junctionSkills = (await pool.query(
+      'SELECT skill_id FROM template_skills WHERE template_id = $1 ORDER BY sort_order',
+      [template.id]
+    )).rows.map((r: { skill_id: string }) => r.skill_id);
+
+    const junctionTools = (await pool.query(
+      'SELECT tool_id FROM template_tools WHERE template_id = $1 ORDER BY sort_order',
+      [template.id]
+    )).rows.map((r: { tool_id: string }) => r.tool_id);
+
+    const skillsList = junctionSkills.length > 0 ? junctionSkills : parseJsonField<string[]>(template.skills, []);
+    const toolsList = junctionTools.length > 0 ? junctionTools : parseJsonField<string[]>(template.tools, []);
+
     // Validate required backends
     const requiredBackends = parseJsonField<string[]>(template.required_backends, []);
     const missingBackends: string[] = [];
@@ -298,15 +312,15 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
 
     const cfg: ConfigBlob = {
       description: parsed.data.description || template.description || '',
-      skills: parseJsonField<string[]>(template.skills, []),
-      tools: parseJsonField<string[]>(template.tools, []),
+      skills: skillsList,
+      tools: toolsList,
       template_id: template.id,
       project_id: parsed.data.project_id || null,
     };
 
     await pool.query(`
-      INSERT INTO personas (id, name, role, config, created_at, status, owner, is_temporary, template_id)
-      VALUES ($1, $2, $3, $4, $5, 'idle', $6, 0, $7)
+      INSERT INTO personas (id, name, role, config, created_at, status, owner, is_temporary, template_id, deployed_by)
+      VALUES ($1, $2, $3, $4, $5, 'idle', $6, 0, $7, $8)
     `, [
       agentId,
       parsed.data.name || template.name,
@@ -315,6 +329,7 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
       now,
       request.sessionUser!.username,
       template.id,
+      request.sessionUser!.username,
     ]);
 
     // Write .md files to personas directory
