@@ -59,8 +59,9 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ Unified global chat (single conversation model — agents, projects, external channels) — v2.0 Phase 11
 - ✓ CRM backend (multi-email, multi-phone, social links, contact auto-creation from channels) — v2.0 Phase 11
 - ✓ File associations (registry with atomic upload, link to projects/contacts/conversations) — v2.0 Phase 11
-- [ ] Agent templates (100 templates with complete skills/tools/system prompts)
-- [ ] Autonomous learning (agents search web/social/GitHub, store as Memory V2 concepts)
+- ✓ Agent templates (100 templates with complete skills/tools/system prompts) — v2.0 Phase 12
+- ✓ Skills & tools architecture (DB registry, CRUD APIs, junction tables, visibility controls, forge integration) — v2.0 Phase 15
+- ✓ Autonomous learning (agents search web/social/GitHub, store as Memory V2 concepts) — v2.0 Phase 13
 - [ ] SaaS billing (Lemon Squeezy subscriptions, usage metering, plan limit enforcement)
 - ✓ Error capture (frontend error POST endpoint with stack traces, component context) — v2.0 Phase 8
 - [ ] Codebase migration (gradual — porter.py shrinks as features move to Fastify)
@@ -109,4 +110,4 @@ Porter has been in development since Feb 18, 2026. Current version is v0.34.23. 
 | porter.py gradual shrink | Don't spend v2 time on migration. Brain migrates naturally as features move. | — v2.0 |
 
 ---
-*Last updated: 2026-03-22 after Phase 13 (Autonomous Learning) completion*
+*Last updated: 2026-03-24 after Phase 15 (Skills & Tools Architecture) completion*
