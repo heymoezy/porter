@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
 status: unknown
-stopped_at: Completed 13.1-02-PLAN.md
-last_updated: "2026-03-24T09:09:02.129Z"
+stopped_at: Completed 13.1-03-PLAN.md
+last_updated: "2026-03-24T09:10:47.895Z"
 progress:
   total_phases: 10
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 29
-  completed_plans: 25
+  completed_plans: 26
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 
 ## Current Position
 
-Phase: 13.1 (memory-v3-state-engine) — EXECUTING
-Plan: 1 of 3
+Phase: 13.1 (memory-v3-state-engine) — COMPLETE
+Plan: 3 of 3 (all plans complete)
 
 ## Performance Metrics
 
@@ -100,6 +100,9 @@ Recent decisions affecting current work:
 - [Phase 13.1]: estimateTokens uses ceil(length/4) — simple approximation sufficient for budget clipping
 - [Phase 13.1]: Per-agent budget override in personas.config.memory_token_budget — agent-level control without schema change
 - [Phase 13.1]: try/catch wraps entire buildMemoryContext body — any DB error returns empty string, never crashes the streaming response
+- [Phase 13.1-memory-v3-state-engine]: Route prefix changed from /memory/concepts to /memory; existing GET route preserved at /concepts sub-path — zero external URL breakage
+- [Phase 13.1-memory-v3-state-engine]: pg_trgm consolidation: similarity>0.6 threshold, higher confidence wins, alphabetically smaller id breaks ties, superseded-set prevents double-superseding in single transaction
+- [Phase 13.1-memory-v3-state-engine]: Dismiss action tries agent_notes first then concepts — single endpoint for both table types
 
 ### Roadmap Evolution
 
@@ -120,6 +123,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T09:09:02.125Z
-Stopped at: Completed 13.1-02-PLAN.md
+Last session: 2026-03-24T09:10:47.892Z
+Stopped at: Completed 13.1-03-PLAN.md
 Resume file: None

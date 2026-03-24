@@ -38,7 +38,7 @@
 - [x] **Phase 12: CRM Intelligence and Agent Templates** - AI-powered contact analysis from interaction history, searchable 30+ agent template catalog with one-call instantiation (completed 2026-03-22)
 - [x] **Phase 13: Autonomous Learning** - Agents search web/GitHub/Reddit, store GDPR-safe concepts in Memory V2 with source attribution and confidence scores (completed 2026-03-22)
 - [x] **Phase 13.05: PostgreSQL Migration** - Migrate from SQLite to PostgreSQL 16 + pgvector; port all Drizzle schemas, migrations, raw SQL queries, FTS5→tsvector; zero data loss (INSERTED) (completed 2026-03-24)
-- [ ] **Phase 13.1: Memory V3 State Engine** - Project-first state engine with structured directives/notes tables, tiered injection, concept consolidation, agent self-edit API, admin overview (INSERTED)
+- [x] **Phase 13.1: Memory V3 State Engine** - Project-first state engine with structured directives/notes tables, tiered injection, concept consolidation, agent self-edit API, admin overview (INSERTED) (completed 2026-03-24)
 - [ ] **Phase 14: Billing Enforcement** - Lemon Squeezy subscription management, usage metering, atomic plan limit enforcement on all resource-creating routes
 
 ## Phase Details
@@ -170,7 +170,7 @@ Plans:
   3. Running consolidation on an agent with 50+ similar concepts reduces the count by at least 40% while preserving unique information — consolidated concepts link back to originals via `superseded_by_id`
   4. An agent can call `POST /api/v1/memory/self-edit` during a run to promote a signal to concept, dismiss a stale concept, or create a new directive — the change is reflected in subsequent injection within the same session
   5. `GET /api/v1/admin/memory/overview` returns per-agent concept counts, average confidence, pending review count, and memory health score — the response covers all agents in one call
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 13.1-01-PLAN.md — Schema migration, Drizzle definitions, pg_trgm extension, concept data migration, smoke test scaffold (MEMV3-01)
@@ -274,7 +274,7 @@ Plans:
 | 12. CRM Intelligence and Agent Templates | 4/4 | Complete    | 2026-03-22 | - |
 | 13. Autonomous Learning | 3/3 | Complete   | 2026-03-24 | - |
 | 13.05. PostgreSQL Migration | 4/7 | Complete    | 2026-03-24 | - |
-| 13.1. Memory V3 State Engine | 2/3 | In Progress|  | - |
+| 13.1. Memory V3 State Engine | 3/3 | Complete   | 2026-03-24 | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
 | 15. Live Dashboard | v3.0 | 0/TBD | Not started | - |
 | 16. Agent Workspace | v3.0 | 0/TBD | Not started | - |
