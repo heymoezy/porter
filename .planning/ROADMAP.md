@@ -161,20 +161,21 @@ Plans:
 
 ### Phase 13.1: Memory V3 State Engine (INSERTED)
 
-**Goal**: Replace extraction-heavy memory with a project-first state engine: explicit directives, project_notes, agent_notes tables; tiered injection reading identity→directives→project state→agent state→archival; concept consolidation service merging duplicates; agent self-edit API for promote/dismiss/create via tool calls; memory aggregation endpoints for admin; stop auto-extraction from chat responses
-**Depends on**: Phase 13
+**Goal**: Replace extraction-heavy memory with a project-first state engine: explicit directives, project_notes, agent_notes tables; tiered injection reading identity->directives->project state->agent state->archival; concept consolidation service merging duplicates; agent self-edit API for promote/dismiss/create via tool calls; memory aggregation endpoints for admin; stop auto-extraction from chat responses
+**Depends on**: Phase 13.05
 **Requirements**: MEMV3-01, MEMV3-02, MEMV3-03, MEMV3-04, MEMV3-05
 **Success Criteria** (what must be TRUE):
   1. `directives`, `project_notes`, and `agent_notes` tables exist with proper schemas; existing high-value concepts are migrated into the appropriate structured table — no data loss for active/accepted concepts
-  2. The injection pipeline reads identity → directives → project state → agent state → archival search in that order; structured state is always injected before retrieval memory; token budget respects tier priority
+  2. The injection pipeline reads identity -> directives -> project state -> agent state -> archival search in that order; structured state is always injected before retrieval memory; token budget respects tier priority
   3. Running consolidation on an agent with 50+ similar concepts reduces the count by at least 40% while preserving unique information — consolidated concepts link back to originals via `superseded_by_id`
   4. An agent can call `POST /api/v1/memory/self-edit` during a run to promote a signal to concept, dismiss a stale concept, or create a new directive — the change is reflected in subsequent injection within the same session
   5. `GET /api/v1/admin/memory/overview` returns per-agent concept counts, average confidence, pending review count, and memory health score — the response covers all agents in one call
-**Plans**: TBD
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 13.1 to break down)
+- [ ] 13.1-01-PLAN.md — Schema migration, Drizzle definitions, pg_trgm extension, concept data migration, smoke test scaffold (MEMV3-01)
+- [ ] 13.1-02-PLAN.md — Tiered injection pipeline service, chat.ts integration (MEMV3-02)
+- [ ] 13.1-03-PLAN.md — Consolidation service, self-edit API, admin memory overview, route prefix update (MEMV3-03, MEMV3-04, MEMV3-05)
 
 ### Phase 14: Billing Enforcement
 **Goal**: Lemon Squeezy subscriptions are created, updated, and cancelled via idempotent webhook handling; every resource-creating route meters usage atomically; plan limits are enforced under concurrent load with no bypass possible
@@ -189,7 +190,7 @@ Plans:
 
 ### Phase 15: Skills & Tools Architecture
 
-**Goal**: Define proper data models, APIs, and registry for skills and tools — skills are capabilities (what agents CAN do), tools are integrations (what agents USE). Both need schemas, CRUD APIs, template assignment, visibility/enabled toggles, and categories. No agent should be forged until skills and tools are properly modeled. Agent templates are immutable components; deploying creates instances (initially same name, renamable). Product site pulls agent data from admin/forge (single source of truth). Includes template→instance lifecycle for both Porter-internal and customer-deployed agents.
+**Goal**: Define proper data models, APIs, and registry for skills and tools — skills are capabilities (what agents CAN do), tools are integrations (what agents USE). Both need schemas, CRUD APIs, template assignment, visibility/enabled toggles, and categories. No agent should be forged until skills and tools are properly modeled. Agent templates are immutable components; deploying creates instances (initially same name, renamable). Product site pulls agent data from admin/forge (single source of truth). Includes template->instance lifecycle for both Porter-internal and customer-deployed agents.
 **Requirements**: TBD
 **Depends on:** Phase 13.05
 **Plans:** 0 plans
@@ -273,7 +274,7 @@ Plans:
 | 12. CRM Intelligence and Agent Templates | 4/4 | Complete    | 2026-03-22 | - |
 | 13. Autonomous Learning | 3/3 | Complete   | 2026-03-24 | - |
 | 13.05. PostgreSQL Migration | 4/7 | Complete    | 2026-03-24 | - |
-| 13.1. Memory V3 State Engine | v2.0 | 0/TBD | Not started | - |
+| 13.1. Memory V3 State Engine | v2.0 | 0/3 | Not started | - |
 | 14. Billing Enforcement | v2.0 | 0/TBD | Not started | - |
 | 15. Live Dashboard | v3.0 | 0/TBD | Not started | - |
 | 16. Agent Workspace | v3.0 | 0/TBD | Not started | - |
