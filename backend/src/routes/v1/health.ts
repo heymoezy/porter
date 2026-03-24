@@ -69,6 +69,8 @@ export default async function healthV1Routes(fastify: FastifyInstance) {
     }
 
     return reply.send(ok({
+      db_engine: 'postgresql',
+      db_connected: dbStatus === 'up',
       backends,
       database: { engine: 'postgresql', status: dbStatus, latencyMs: dbLatencyMs },
       tokenUsage,
