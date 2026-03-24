@@ -73,7 +73,7 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 
 ### PostgreSQL Migration
 
-- [ ] **PG-01**: All Drizzle schemas ported from SQLite to PostgreSQL (types, constraints, indexes)
+- [x] **PG-01**: All Drizzle schemas ported from SQLite to PostgreSQL (types, constraints, indexes)
 - [ ] **PG-02**: All raw SQL queries converted from SQLite dialect to PostgreSQL
 - [ ] **PG-03**: FTS5 virtual tables replaced with tsvector + GIN indexes
 - [ ] **PG-04**: Data migration script moves all existing SQLite data to PostgreSQL with zero loss
@@ -142,7 +142,7 @@ Requirements for Milestone v2.0: Backend Ready. All pure API — zero frontend. 
 | LEARN-01 | Phase 13 | Complete |
 | LEARN-02 | Phase 13 | Complete |
 | LEARN-03 | Phase 13 | Complete |
-| PG-01 | Phase 13.05 | Pending |
+| PG-01 | Phase 13.05 | Complete |
 | PG-02 | Phase 13.05 | Pending |
 | PG-03 | Phase 13.05 | Pending |
 | PG-04 | Phase 13.05 | Pending |

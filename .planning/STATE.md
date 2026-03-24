@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Backend Ready
-status: unknown
-stopped_at: Phase 13.05 context gathered
-last_updated: "2026-03-23T15:11:00.293Z"
+status: in_progress
+stopped_at: Completed 13.05-01-PLAN.md
+last_updated: "2026-03-24T07:59:03.455Z"
 progress:
   total_phases: 9
   completed_phases: 6
-  total_plans: 19
-  completed_plans: 19
+  total_plans: 26
+  completed_plans: 20
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input
-**Current focus:** Phase 13 — autonomous-learning
+**Current focus:** Phase 13.05 — postgresql-migration
 
 ## Current Position
 
-Phase: 13 (autonomous-learning) — COMPLETE
-Plan: 3 of 3
+Phase: 13.05 (postgresql-migration) — EXECUTING
+Plan: 2 of 7
 
 ## Performance Metrics
 
@@ -88,6 +88,9 @@ Recent decisions affecting current work:
 - [Phase 13-autonomous-learning]: robots.txt fetches excluded from 20-request session cap — politeness layer should not burn learning budget
 - [Phase 13-autonomous-learning]: Dynamic import('./learner.js') in executeJob — learner only loads when job runs, same lazy pattern as contact-analyzer.ts
 - [Phase 13-autonomous-learning]: memory.ts registered at prefix '/memory/concepts' so GET / maps to /api/v1/memory/concepts (no extra nesting)
+- [Phase 13.05-postgresql-migration]: doublePrecision (not timestamptz) for all timestamp columns — preserves Unix epoch arithmetic across 45+ files without query rewrites
+- [Phase 13.05-postgresql-migration]: migrate-consolidated.ts in single transaction — all-or-nothing DDL creation with idempotency guard (consolidated_pg_v1 key)
+- [Phase 13.05-postgresql-migration]: customType tsvector from drizzle-orm/pg-core — no native tsvector in Drizzle, customType is the correct pattern
 
 ### Roadmap Evolution
 
@@ -107,6 +110,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-23T15:11:00.288Z
-Stopped at: Phase 13.05 context gathered
-Resume file: .planning/phases/13.05-postgresql-migration/13.05-CONTEXT.md
+Last session: 2026-03-24T07:59:03.441Z
+Stopped at: Completed 13.05-01-PLAN.md
+Resume file: None
