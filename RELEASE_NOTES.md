@@ -1,5 +1,30 @@
 # Porter Release Notes
 
+## v3.0.0 (2026-03-25)
+
+**v3.0 MILESTONE COMPLETE: Porter Bridge — AI Gateway & Model Intelligence**
+
+Phase 23: Integration & Multi-Tenant — final phase of the Bridge milestone.
+
+- INT-01: Routing decisions emit Memory V3 learning signals — agents accumulate model preference knowledge
+- INT-02: GET /api/admin/bridge/agent-stats — per-agent dispatch aggregates (model, tokens, latency, cost)
+- INT-03: GET /api/v1/bridge/session/:chatId/routing — per-conversation session routing history
+- INT-04: Bridge gateway health included in Brain health dashboard
+- MT-01: Per-user API key storage (GET/POST /user-keys) with AES-256-GCM encryption
+- MT-02: Per-workspace gateway overrides (POST /workspace-config: list/set/remove)
+- MT-03: Usage attribution (GET /attribution) — costs by user, project, or agent
+- Bridge v5 migration: user_api_keys, workspace_gateway_overrides tables, username column on bridge_dispatch_log
+- Username propagation through RoutingContext → bridge_dispatch_log for cost attribution
+
+**v3.0 Bridge milestone delivered 8 phases (16-23) with:**
+- Gateway registry + 5 provider adapters (Ollama, OpenClaw, Codex CLI, Claude CLI, Gemini CLI)
+- Circuit breakers, health probes, retry, N-gateway fallback chains
+- Unified model catalog with capabilities, pricing, version tracking
+- DB-driven smart routing with rules, dispatch logging, session context
+- Zero-config first-run setup + guided wizard API
+- Full admin API surface (7 endpoints)
+- Memory V3 integration + multi-tenant API keys + usage attribution
+
 ## v2.6.0 (2026-03-25)
 
 **Phase 22: Bridge Admin Surface — Full admin API for Bridge management**

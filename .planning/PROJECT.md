@@ -66,6 +66,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ Model catalog (unified model registry, capabilities, pricing, version tracking, cost per dispatch) — v3.0 Phase 19
 - ✓ First-run setup (detection endpoint, zero-config Ollama, guided setup API, OpenClaw dual-role) — v3.0 Phase 21
 - ✓ Bridge admin surface (7 admin endpoints, gateway CRUD, routing rules, cost analytics, SSE events) — v3.0 Phase 22
+- ✓ Integration & multi-tenant (Memory V3 signals, per-agent stats, session history, user API keys, workspace overrides, usage attribution) — v3.0 Phase 23
 - ✓ Smart routing engine (DB-driven gateway selection, routing rules, dispatch logging, concurrency queuing, session context) — v3.0 Phase 20
 - [ ] SaaS billing (Lemon Squeezy subscriptions, usage metering, plan limit enforcement)
 - ✓ Error capture (frontend error POST endpoint with stack traces, component context) — v2.0 Phase 8
@@ -119,4 +120,4 @@ Porter has been in development since Feb 18, 2026. Current version is v2.2.0 (Fa
 | Bridge as major innovation | AI gateway management is Porter's differentiator — first-run detection, smart routing, cost tracking | — v3.0 scope |
 
 ---
-*Last updated: 2026-03-25 after Phase 22 Bridge Admin Surface complete — 7 admin endpoints, gateway CRUD, routing rules, cost analytics*
+*Last updated: 2026-03-25 after Phase 23 Integration & Multi-Tenant complete — v3.0 Porter Bridge milestone DONE*

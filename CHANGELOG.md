@@ -1,3 +1,13 @@
+## v3.0.0 (2026-03-25)
+
+- docs(phase-23): complete phase execution — v3.0 milestone complete
+- docs(23-02): complete multi-tenant bridge phase
+- feat(23-02): MT-01 user API key CRUD + MT-02 workspace overrides + MT-03 attribution
+- feat(23-02): bridge_v5 migration + username propagation
+- docs(23-01): complete integration-multi-tenant plan 01
+- feat(23-01): INT-02/INT-03 agent-stats + session routing history endpoints
+- feat(23-01): INT-01/INT-04 Memory V3 signal + bridge health dashboard
+
 ## v2.6.0 (2026-03-25)
 
 - docs(phase-22): complete phase execution
