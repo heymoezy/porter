@@ -1,363 +1,299 @@
 # Stack Research
 
-**Domain:** AI Orchestration SaaS Platform — v2.0 Backend Ready
-**Researched:** 2026-03-21
-**Confidence:** HIGH (versions npm-verified; integration points code-verified against backend/)
+**Domain:** AI Orchestration SaaS Platform — v3.0 Porter Bridge (AI Gateway & Model Intelligence)
+**Researched:** 2026-03-25
+**Confidence:** HIGH (versions npm-verified; existing code read directly from backend/)
 
 ---
 
 ## Scope: What This Document Covers
 
-This is the **v2.0 addendum** to the existing STACK.md. The prior STACK.md (2026-03-20) covered v1.0 features: scheduling, real-time SSE, GitHub/email/calendar connections, WhatsApp, and the strangler-fig migration. All of that still applies.
+This is the **v3.0 addendum** to the existing STACK.md chain. Prior versions covered:
+- v1.0 (2026-03-20): scheduling, SSE, GitHub/email/calendar, WhatsApp, strangler-fig migration
+- v2.0 (2026-03-21): streaming chat, OpenAPI, rate limiting, CRM, collaborative sessions, agent templates, autonomous learning, billing SDK
 
-This document covers only the **new additions** required for v2.0 features:
+**Do not re-research anything in those prior sections.** The existing confirmed working stack is:
 
-| Feature | New Need |
-|---------|----------|
-| Token-by-token SSE streaming | Native streaming from Ollama + OpenClaw without porter.py proxy |
-| Stream cancellation | AbortController propagation from HTTP disconnect to AI backend |
-| Collaborative sessions (COLLAB-01-04) | Project-level RBAC table; invitation email; per-resource permission checks |
-| Unified chat model (CHAT-01-04) | Schema additions: threaded messages, FTS5 search, external channel fan-in |
-| CRM backend (CRM-01-04) | Schema: multi-email, multi-phone, social links, activity timeline |
-| File associations (FILE-01-03) | Schema: file_associations pivot table; searchable metadata |
-| 100 agent templates (TMPL-01-03) | In-codebase JSON/TS data; no new library; category-indexed search |
-| Autonomous learning (LEARN-01-03) | Lightweight HTML scraper; source attribution in memory_concepts |
-| Lemon Squeezy billing (BILL-01-03) | Official SDK for checkout + webhooks; webhook signature verification |
-| Error capture (OBS-01-02) | Single POST endpoint; queryable error_reports table |
-| OpenAPI spec (API-01-03) | @fastify/swagger + fastify-type-provider-zod bridge |
-| Plan enforcement (BILL-03) | @fastify/rate-limit with per-user async max function |
+| Already Installed | Version | Status |
+|---|---|---|
+| fastify | 5.7.4 | Working |
+| drizzle-orm | 0.45.1 | Working |
+| pg | 8.20.0 | Working (SQLite fully eliminated) |
+| zod | 4.3.6 | Working |
+| @fastify/rate-limit | 10.3.0 | Working |
+| @fastify/swagger + swagger-ui | 9.7.0 / 5.2.5 | Working |
+| systeminformation | 5.31.1 | Working |
+| uuid | 13.0.0 | Working |
 
-**What is NOT re-researched (working, do not change):**
-- Fastify 5.7.4, Drizzle 0.45.1, better-sqlite3 12.6.2, Zod 4.3.6
-- @fastify/cookie, @fastify/cors, @fastify/multipart, @fastify/static, @fastify/oauth2
-- @fastify/websocket, nodemailer, imapflow, googleapis, octokit
-- Cookie-based session auth (authPlugin, requireAuth decorator)
-- Envelope pattern (lib/envelope.ts: ok(), err(), meta())
-- SSE hub at /api/events
+**This document covers only what is NEW for v3.0 Bridge capabilities:**
 
----
-
-## Core Technologies (existing — confirmed working)
-
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| Fastify | 5.7.4 | HTTP server |
-| Drizzle ORM | 0.45.1 | Type-safe SQLite queries |
-| better-sqlite3 | 12.6.2 | SQLite driver (synchronous) |
-| Zod | 4.3.6 | Runtime validation |
-| uuid | 13.0.0 | ID generation |
+| Bridge Feature | What's Needed |
+|---|---|
+| Gateway registry (detect, probe, persist gateways) | DB schema + circuit breaker library |
+| Model catalog (unified model list across backends) | No new lib — fetch + existing DB |
+| Smart routing (complexity + cost + availability) | p-queue for concurrency; opossum for circuit breakers |
+| Provider detection (binary, HTTP, auth probe) | `which` npm package for CLI binary detection |
+| Health monitoring (background probing, SSE alerts) | @fastify/schedule already in ecosystem; node-cron alternative |
+| Cost tracking (per-request USD, provider pricing table) | Static pricing table in code — no external lib |
+| Circuit breakers (open/half-open/closed per backend) | opossum |
+| Runtime orchestration (dispatch queue, concurrency limits) | p-queue |
+| Bridge admin API (gateways, models, health, routing log) | Schema additions + new route group |
+| First-run setup (auto-detect + guided config) | child_process (stdlib) + which |
 
 ---
 
 ## New Libraries Needed
 
-### Streaming Chat (STRM-01, STRM-02, STRM-03)
+### Circuit Breakers: `opossum`
 
-The current `/api/v1/chat/stream` route proxies to porter.py. v2.0 needs native Fastify streaming from Ollama and OpenClaw backends directly — no Python intermediary.
+**What the feature needs:** When an AI backend becomes unreliable (repeated timeouts or errors), the dispatcher must stop sending requests to it immediately (open circuit), wait a recovery period, then probe once (half-open), then resume (closed). This is non-negotiable for commercial quality — without it, every user request piles up waiting for a dead backend.
 
-**Problem:** Native `fetch()` in Node.js 18+ returns a ReadableStream. Ollama streams NDJSON. OpenClaw streams OpenAI-compatible SSE. Both need to be normalized to a single SSE event format before forwarding to the client.
+**Current state:** `ai-router.ts` has a `probeBackend()` function that does a single HEAD request on every dispatch. This is a probe, not a circuit breaker — it adds latency to every request and does not prevent thundering herd if a backend is partially degraded.
 
-**Solution:** Use `ollama` (official JS SDK) for Ollama streaming — it returns an AsyncGenerator with `{ done, response }` chunks. For OpenClaw (OpenAI-compatible), use raw `fetch` with a streaming reader and line-buffer parser — no extra library needed, Node.js 18+ fetch handles it.
+**Recommended library:** `opossum` — the Node.js standard for circuit breakers since 2016.
 
 | Library | Version | Purpose | Why |
 |---------|---------|---------|-----|
-| ollama | 0.6.3 | Official Ollama JS SDK | Returns AsyncIterable<ChatResponse> with `stream: true`; handles NDJSON line buffering internally; avoids manual chunk boundary parsing |
+| opossum | 9.0.0 | Circuit breaker per AI backend | 70K+ weekly downloads; battle-tested since 2016; supports timeout, errorThresholdPercentage, resetTimeout, halfOpen state; fires events (open, close, halfOpen, fallback) that feed SSE; TypeScript types via @types/opossum |
 
-**Cancellation pattern (STRM-03):**
+**Why opossum over a custom implementation:** A correct circuit breaker needs atomic state management across concurrent requests, half-open probing (not full close), event emission, and statistics tracking. Writing this correctly from scratch takes 2-3 days. Opossum is 4KB, well-tested, and has zero peer dependencies.
+
+**Integration pattern with ai-router.ts:**
 ```typescript
-// In the route handler:
-const ac = new AbortController();
-request.socket.on('close', () => ac.abort());
+import CircuitBreaker from 'opossum';
 
-// Pass to ollama:
-const stream = await ollama.chat({ model, messages, stream: true, signal: ac.signal });
+// One breaker per named backend
+const breakers = new Map<string, CircuitBreaker>();
 
-// Pass to OpenClaw fetch:
-const res = await fetch(openclawUrl, { signal: ac.signal, ... });
+function getBreakerFor(name: string, dispatchFn: Function): CircuitBreaker {
+  if (!breakers.has(name)) {
+    const breaker = new CircuitBreaker(dispatchFn, {
+      timeout: 30000,                  // 30s per request
+      errorThresholdPercentage: 50,    // open after 50% failure rate
+      resetTimeout: 60000,             // try half-open after 60s
+      volumeThreshold: 3,              // need 3 requests before evaluating
+    });
+    breaker.on('open', () => emitSSE('bridge:circuit_open', { backend: name }));
+    breaker.on('close', () => emitSSE('bridge:circuit_close', { backend: name }));
+    breakers.set(name, breaker);
+  }
+  return breakers.get(name)!;
+}
 ```
 
-No additional library is needed for cancellation — Node.js `AbortController` + socket close event covers it.
-
-**Why NOT langchain/openai SDK for Ollama:** ollama-js (npm: `ollama`) is the official Ollama SDK at 0.6.3. LangChain adds 40+ MB of transitive dependencies for no benefit here. The existing OpenClaw backend is OpenAI-wire-compatible, so `fetch` with raw streaming is sufficient.
+**TypeScript types:** Install `@types/opossum` as a dev dependency — opossum itself ships without bundled types.
 
 ---
 
-### OpenAPI Spec Generation (API-01, API-02, API-03)
+### Concurrency / Dispatch Queue: `p-queue`
 
-The existing routes use Zod schemas for validation but expose no OpenAPI spec. v2.0 requires auto-generated OpenAPI documentation from route definitions.
+**What the feature needs:** Multiple agents may dispatch to the same backend concurrently. Without concurrency limits, a spike of 10 simultaneous Claude CLI calls will saturate the 2 vCPU VPS. The dispatch layer needs a per-backend queue with configurable concurrency and rate limiting.
+
+**Recommended library:** `p-queue` by sindresorhus.
 
 | Library | Version | Purpose | Why |
 |---------|---------|---------|-----|
-| @fastify/swagger | 9.7.0 | OpenAPI 3.0/3.1 spec generation | Official Fastify plugin; reads route JSON schemas and emits spec at /api/v1/docs/json |
-| @fastify/swagger-ui | 5.2.5 | Swagger UI browser interface | Serves interactive docs at /api/v1/docs; paired with @fastify/swagger |
-| fastify-type-provider-zod | 6.1.0 | Zod → JSON Schema bridge for Fastify | Converts Zod v4 schemas used in route definitions into JSON Schema for Swagger to consume; requires Fastify ^5.5.0 and Zod >=4.1.5 |
+| p-queue | 9.1.0 | Per-backend dispatch queue with concurrency control | Supports concurrency + interval rate limiting; priority queuing; `.onIdle()` for draining; native ESM; TypeScript built-in; 2400+ dependents; lightweight (no Redis, no cluster state) |
+
+**Why p-queue over @fastify/rate-limit for this:** `@fastify/rate-limit` is for HTTP request limiting per user. `p-queue` is for internal dispatch concurrency — it controls how many simultaneous calls are made to each AI backend regardless of which user triggered them. They solve different problems and are both needed.
+
+**Why p-queue over BullMQ:** BullMQ requires Redis. A 2 vCPU/8GB VPS cannot afford Redis for this use case. p-queue is in-process, immediate, and sufficient for single-node Porter.
 
 **Integration pattern:**
 ```typescript
-// In index.ts, register BEFORE routes:
-await fastify.register(swagger, {
-  openapi: {
-    openapi: '3.0.3',
-    info: { title: 'Porter API', version: 'v2.0.0' },
-  },
-  transform: jsonSchemaTransform, // from fastify-type-provider-zod
-});
-await fastify.register(swaggerUi, { routePrefix: '/api/v1/docs' });
+import PQueue from 'p-queue';
 
-// Set type provider on fastify instance:
-const typedFastify = fastify.withTypeProvider<ZodTypeProvider>();
+// Per-backend queues
+const queues = new Map<string, PQueue>();
+
+function getQueueFor(backend: string): PQueue {
+  if (!queues.has(backend)) {
+    queues.set(backend, new PQueue({
+      concurrency: backend === 'ollama' ? 2 : 4,  // local is single-threaded
+      interval: 60_000,
+      intervalCap: backend === 'ollama' ? 30 : 100, // RPM soft cap
+    }));
+  }
+  return queues.get(backend)!;
+}
+
+// In dispatch():
+const queue = getQueueFor(backendName);
+return queue.add(() => getBreakerFor(backendName, actualDispatch).fire(req));
 ```
-
-**Why NOT zod-openapi or fastify-zod:** `fastify-type-provider-zod` at v6.1.0 is the most actively maintained bridge for Fastify 5 + Zod 4. It has explicit peer deps on Fastify ^5.5.0 and is updated monthly. The older `fastify-zod` is unmaintained.
 
 ---
 
-### Plan Enforcement + Rate Limiting (BILL-03)
+### CLI Binary Detection: `which`
 
-Per-user API rate limits based on subscription plan. Existing billing service (`services/billing.ts`) has `resolvePlan()` — this plugs into it.
+**What the feature needs:** First-run gateway detection must find whether `claude`, `codex`, `gemini`, `ollama` binaries exist on PATH. The current porter.py `_detect_environment_tools` scans 12+ tools by running each via subprocess. This needs a TypeScript equivalent that is fast, non-blocking, and handles missing binaries gracefully.
+
+**Recommended approach:** Use the `which` npm package (cross-platform binary locator).
 
 | Library | Version | Purpose | Why |
 |---------|---------|---------|-----|
-| @fastify/rate-limit | 10.3.0 | Per-route rate limiting with async max function | Fastify 5 compatible (v9+ supports Fastify 5); supports `async (request, key) => number` for `max` param, enabling per-plan limits without a store |
+| which | 4.0.0 | Async PATH binary detection | Cross-platform `which` equivalent; returns resolved path or throws if not found; async API with no shell spawn; 150M+ weekly downloads (it is a dependency of npm itself); TypeScript types bundled |
+
+**Why not `child_process.exec('which binary')`:** Spawning a shell to run `which` is slower, platform-dependent (Windows incompatible if Porter ever runs there), and throws unhandled promise rejections on missing binaries. The `which` npm package is async, throws cleanly on missing, and is a single-purpose tool. The project already avoids shell spawning for detection.
 
 **Integration pattern:**
 ```typescript
-// In v1 routes:
-fastify.register(rateLimit, {
-  global: false, // opt-in per route
-  keyGenerator: (req) => req.sessionUser?.username ?? req.ip,
-  max: async (req) => {
-    const plan = resolvePlan(req.sessionUser!.username);
-    return plan.plan === 'enterprise' ? 10000
-         : plan.plan === 'cloud_team' ? 5000
-         : plan.plan === 'cloud'      ? 1000
-         : 100; // free
-  },
-  timeWindow: '1 minute',
-  errorResponseBuilder: () => err('RATE_LIMITED', 'API limit reached for your plan'),
-});
+import which from 'which';
+
+async function detectBinary(name: string): Promise<string | null> {
+  try {
+    return await which(name);
+  } catch {
+    return null;  // not found — not an error
+  }
+}
 ```
-
-**Why NOT Redis-backed store:** The in-memory store is sufficient for a single-server deployment. SQLite WAL mode is already handling persistent data. Adding Redis for rate limiting on a 2 vCPU VPS is wasteful. If Porter becomes multi-instance, add Redis then.
-
----
-
-### Autonomous Learning — Web Scraping (LEARN-01, LEARN-02, LEARN-03)
-
-Agents need to fetch and extract knowledge from web pages, GitHub repos, and Reddit threads. This is a background service that stores results as Memory V2 concepts.
-
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| cheerio | 1.2.0 | HTML parsing and content extraction | Lightweight jQuery-like API for server-side HTML; no browser overhead; ~500KB; suitable for static content (MDN, GitHub READMEs, Reddit JSON API, blog posts) |
-
-**No Playwright or Puppeteer.** Running a headless Chromium instance on a 2 vCPU/8GB VPS alongside porter.py + Node.js + SQLite is not viable. Cheerio handles the 90% case — public web pages with server-rendered HTML.
-
-**For JavaScript-rendered pages:** Use the page's JSON API directly when available (Reddit exposes JSON at `?format=json` on any URL; GitHub has the REST API via octokit already installed). Do not run headless browsers.
-
-**External sources covered by existing libraries:**
-- GitHub: `octokit` (already installed) — REST API for repos, issues, READMEs
-- General web: `cheerio` + native `fetch` — HTML parsing for blog posts, documentation
-
-**Reddit:** Use the unofficial JSON endpoint (`https://reddit.com/r/{sub}.json`) — free tier, no SDK needed, handles rate limiting with exponential backoff in the service.
-
-**Twitter/X:** Do not implement. API costs $100/month minimum. Agents can be prompted to share X links in chat; human pastes content.
-
-**Learning pipeline (no new libraries):**
-```
-scheduler.ts → learningService.ts
-  → fetch(url) + cheerio.load(html)
-  → extract title, body text, metadata
-  → LLM summarization (via existing ai-router)
-  → db.insert(memory_concepts, { source_url, confidence, content })
-```
-
----
-
-### Lemon Squeezy Billing (BILL-01, BILL-02, BILL-03)
-
-The existing `services/billing.ts` already implements Lemon Squeezy API calls using raw `fetch`. The existing `subscriptions` and `billing_events` tables are already in schema. The existing `services/billing.ts` has `verifyWebhookSignature()`, `createCheckout()`, and `getCustomerPortalUrl()`.
-
-**What's new in v2.0:** The billing service exists but the webhook handler and plan limit enforcement need to be wired into actual routes. No new libraries are needed — the existing implementation uses `fetch` directly against the LS API.
-
-**However:** The official SDK exists and is worth adopting for cleaner TypeScript types:
-
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| @lemonsqueezy/lemonsqueezy.js | 4.0.0 | Official LS SDK — typed API client | Provides full TypeScript types for subscriptions, customers, checkouts; eliminates raw `fetch` boilerplate in billing.ts; webhook signature verification built-in |
-
-**Verdict:** This is a quality-of-life upgrade, not a requirement. The existing raw `fetch` approach in `billing.ts` works. Adopt the official SDK when refactoring `billing.ts` in the v2.0 billing phase — do not prioritize over other features.
-
-**Webhook signature verification (BILL-01):** Already implemented via `verifyWebhookSignature()` in billing.ts using Node.js `crypto.createHmac`. No additional library needed.
 
 ---
 
 ## Schema Additions (No New Libraries)
 
-These are pure Drizzle schema additions to `backend/src/db/schema.ts`. All use existing SQLite + Drizzle + better-sqlite3 infrastructure.
+These are pure Drizzle + PostgreSQL schema additions. All use the existing `pg` + Drizzle + PostgreSQL 16 infrastructure. All use `integer().generatedAlwaysAsIdentity()` per 2025 best practices (not `serial()`).
 
-### Collaborative Sessions (COLLAB-01-04)
+### Gateway Registry (`bridge_gateways`)
 
-New table: `project_collaborators`
+The central table for all discovered/configured AI backends.
+
 ```typescript
-export const projectCollaborators = sqliteTable('project_collaborators', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-  username: text('username').notNull(),
-  role: text('role').notNull().default('view'), // 'view' | 'chat' | 'edit' | 'admin'
-  invitedBy: text('invited_by').notNull(),
-  invitedAt: real('invited_at').default(sql`(unixepoch('now'))`),
-  acceptedAt: real('accepted_at'),
-  revokedAt: real('revoked_at'),
+export const bridgeGateways = pgTable('bridge_gateways', {
+  id: text('id').primaryKey(),                    // 'ollama', 'openclaw', 'claude', 'codex', 'gemini'
+  label: text('label').notNull(),                 // 'Ollama (local)', 'OpenClaw Gateway'
+  kind: text('kind').notNull(),                   // 'local_server' | 'cli' | 'api_gateway' | 'openai_compatible'
+  endpoint: text('endpoint'),                     // HTTP URL for server-type gateways; null for CLI
+  binaryPath: text('binary_path'),               // resolved PATH for CLI gateways; null for servers
+  authKind: text('auth_kind').default('none'),   // 'none' | 'bearer' | 'cli_auth'
+  // No auth tokens stored here — tokens stay in env vars; this records auth mechanism only
+  status: text('status').notNull().default('unknown'), // 'online' | 'degraded' | 'offline' | 'unknown'
+  circuitState: text('circuit_state').default('closed'), // 'closed' | 'open' | 'half_open'
+  lastProbedAt: doublePrecision('last_probed_at'),
+  lastOnlineAt: doublePrecision('last_online_at'),
+  lastErrorAt: doublePrecision('last_error_at'),
+  lastError: text('last_error'),
+  latencyP50Ms: integer('latency_p50_ms'),
+  latencyP99Ms: integer('latency_p99_ms'),
+  capabilities: jsonb('capabilities').default(sql`'{}'::jsonb`),
+  // { strengths: string[], costTier: 'free'|'standard'|'premium', agentic: boolean, maxContextK: number }
+  probeHistory: jsonb('probe_history').default(sql`'[]'::jsonb`),
+  // Last 10 probe results: [{ ts, ok, latencyMs }]
+  enabled: integer('enabled').notNull().default(1),
+  sortOrder: integer('sort_order').default(0),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 ```
 
-New table: `project_invites`
+**Design rationale:**
+- Auth tokens are never stored in DB — they live in env vars. The column records the auth mechanism (`bearer`, `cli_auth`) so the admin UI can show configuration instructions without ever touching the token value.
+- `capabilities` is JSONB so new fields (strengths, context window, agentic flag) can be added without migrations as the registry evolves.
+- `probeHistory` keeps last 10 results for sparkline display in the admin UI. Cap enforced in the update logic, not a separate table — avoids write amplification.
+
+### Model Catalog (`bridge_models`)
+
+One row per model, linked to its gateway.
+
 ```typescript
-export const projectInvites = sqliteTable('project_invites', {
-  token: text('token').primaryKey(),            // UUID, single-use
-  projectId: text('project_id').notNull(),
-  email: text('email').notNull(),
-  role: text('role').notNull().default('view'),
-  invitedBy: text('invited_by').notNull(),
-  expiresAt: real('expires_at').notNull(),       // 7 days
-  usedAt: real('used_at'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+export const bridgeModels = pgTable('bridge_models', {
+  id: text('id').primaryKey(),                    // 'ollama:qwen2.5-coder:1.5b', 'openclaw:gpt-5.4'
+  gatewayId: text('gateway_id').notNull(),        // references bridge_gateways.id
+  modelId: text('model_id').notNull(),            // raw model identifier as the backend knows it
+  displayName: text('display_name'),              // human-readable label
+  family: text('family'),                         // 'llama', 'qwen', 'gpt', 'claude', 'gemini'
+  parameterSize: text('parameter_size'),          // '1.5B', '7B', '70B', 'unknown'
+  contextWindowK: integer('context_window_k'),   // context window in thousands of tokens
+  inputCostPerMTokens: doublePrecision('input_cost_per_m_tokens').default(0),  // USD
+  outputCostPerMTokens: doublePrecision('output_cost_per_m_tokens').default(0), // USD
+  capabilities: jsonb('capabilities').default(sql`'[]'::jsonb`),
+  // ['code', 'chat', 'vision', 'reasoning', 'tools']
+  available: integer('available').notNull().default(1),
+  lastSeenAt: doublePrecision('last_seen_at'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 ```
 
-**Invite emails:** Use existing `nodemailer` (already installed) with a template. No new email library needed.
+**Why not embed models in `bridge_gateways`:** Model lists change independently of gateway configuration. Ollama models are installed and pulled separately. A separate table allows model-level cost tracking, per-model routing rules, and enables the "Model Scout" agent to update the catalog without touching gateway health data.
 
-### Unified Chat Model (CHAT-01-04)
+### Routing Rules (`bridge_routing_rules`)
 
-Schema additions to existing `chats` and `chat_messages` tables:
-
-```typescript
-// Add to chatMessages:
-parentMessageId: integer('parent_message_id'),   // for threading
-channelType: text('channel_type').default('agent'), // 'agent' | 'email' | 'whatsapp' | 'project'
-externalId: text('external_id'),                 // external message ID (WhatsApp, email)
-```
-
-FTS5 virtual table for CHAT-03 (full-text search) — created via raw SQL in a new migration, not Drizzle schema (Drizzle does not support CREATE VIRTUAL TABLE):
-```sql
-CREATE VIRTUAL TABLE IF NOT EXISTS chat_messages_fts USING fts5(
-  content,
-  content='chat_messages',
-  content_rowid='id'
-);
-```
-
-**Why raw SQL for FTS5:** Drizzle has an open feature request (#2046) for FTS5 support but it is not shipped as of v0.45.1. The standard pattern is a migration file with `sqlite.exec(sql)` using the existing `better-sqlite3` client.
-
-### CRM Backend (CRM-01-04)
-
-Extend existing `people` table (exists in porter.py DB, needs Fastify schema definition):
+Named routing policies the smart router can execute.
 
 ```typescript
-export const contacts = sqliteTable('contacts', {
+export const bridgeRoutingRules = pgTable('bridge_routing_rules', {
   id: text('id').primaryKey(),
-  workspaceId: text('workspace_id'),            // for future multi-tenant
-  firstName: text('first_name'),
-  lastName: text('last_name'),
-  company: text('company'),
-  notes: text('notes'),
-  aiAnalysis: text('ai_analysis'),              // CRM-03: LLM-generated summary
-  lastAnalyzedAt: real('last_analyzed_at'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
-  updatedAt: real('updated_at').default(sql`(unixepoch('now'))`),
+  name: text('name').notNull(),                   // 'cost_optimized', 'quality_first', 'local_only'
+  description: text('description'),
+  conditions: jsonb('conditions').notNull(),
+  // [{ field: 'message_length', op: 'gt', value: 200 }, { field: 'has_code', op: 'eq', value: true }]
+  targetGatewayId: text('target_gateway_id'),    // null = let smart router decide
+  targetModelId: text('target_model_id'),        // null = let smart router decide
+  priority: integer('priority').default(0),       // higher priority = evaluated first
+  enabled: integer('enabled').default(1),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
+```
 
-export const contactEmails = sqliteTable('contact_emails', {  // CRM-01
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  contactId: text('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
-  email: text('email').notNull(),
-  label: text('label').default('work'),          // 'work' | 'personal' | 'other'
-  isPrimary: integer('is_primary').default(0),
+### Bridge Agents (`bridge_agents_log`)
+
+Log of decisions made by Bridge Operator, Model Scout, Route Analyst agents. Separate from `decision_log` which covers general model selection. This table covers Bridge-specific agent actions.
+
+```typescript
+export const bridgeAgentsLog = pgTable('bridge_agents_log', {
+  id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
+  agentRole: text('agent_role').notNull(),        // 'bridge_operator' | 'model_scout' | 'route_analyst'
+  action: text('action').notNull(),               // 'probe_gateway' | 'discover_model' | 'analyze_route'
+  gatewayId: text('gateway_id'),
+  modelId: text('model_id'),
+  outcome: text('outcome').notNull(),             // 'success' | 'failure' | 'no_change'
+  detail: jsonb('detail').default(sql`'{}'::jsonb`),
+  durationMs: integer('duration_ms'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
+```
 
-export const contactPhones = sqliteTable('contact_phones', {  // CRM-01
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  contactId: text('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
-  phone: text('phone').notNull(),
-  countryCode: text('country_code').default('+1'),
-  label: text('label').default('mobile'),
-  isPrimary: integer('is_primary').default(0),
-});
+### Cost Tracking Enhancement (extension to `token_usage_daily`)
 
-export const contactSocialLinks = sqliteTable('contact_social_links', {  // CRM-02
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  contactId: text('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
-  platform: text('platform').notNull(),          // 'linkedin' | 'x' | 'github' | 'website'
-  url: text('url').notNull(),
-});
+The existing `token_usage_daily` table tracks tokens per model+date. For v3.0, add a companion table for per-request cost records (the daily table is aggregated; this enables per-project cost breakdown):
 
-export const contactActivity = sqliteTable('contact_activity', {  // CRM-04
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  contactId: text('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
-  activityType: text('activity_type').notNull(), // 'chat' | 'email' | 'whatsapp' | 'note' | 'meeting'
+```typescript
+export const bridgeCostRecords = pgTable('bridge_cost_records', {
+  id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
+  gatewayId: text('gateway_id').notNull(),
+  modelId: text('model_id').notNull(),
+  agentId: text('agent_id'),
   projectId: text('project_id'),
-  summary: text('summary'),
-  detail: text('detail'),
-  occurredAt: real('occurred_at').notNull(),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
+  inputTokens: integer('input_tokens').default(0),
+  outputTokens: integer('output_tokens').default(0),
+  estimatedCostUsd: doublePrecision('estimated_cost_usd').default(0),
+  routingReason: text('routing_reason'),
+  durationMs: integer('duration_ms'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 ```
 
-**No phone/country code validation library needed.** Store raw strings as entered. Country codes are user-supplied text ('+65', '+1', etc.). Validation can be added later if needed.
+**Why a separate table from `token_usage_daily`:** The daily table is an aggregate upsert — it cannot track per-project or per-agent breakdown. This table is append-only (one row per dispatch). Aggregate queries use `GROUP BY project_id` or `GROUP BY agent_id`. Retention policy: purge records older than 90 days to manage size.
 
-### File Associations (FILE-01-03)
+---
 
-New pivot table:
-```typescript
-export const fileAssociations = sqliteTable('file_associations', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  fileId: text('file_id').notNull(),             // references existing file uploads
-  entityType: text('entity_type').notNull(),     // 'project' | 'contact' | 'conversation'
-  entityId: text('entity_id').notNull(),
-  associatedBy: text('associated_by').notNull(),
-  associatedAt: real('associated_at').default(sql`(unixepoch('now'))`),
-});
-```
+## What the Existing Stack Already Handles (No Changes Needed)
 
-Existing `@fastify/multipart` handles file upload. Existing file serving infrastructure stays. This is metadata only.
+| Bridge Capability | Existing Solution | Where |
+|---|---|---|
+| Health probe HTTP | `fetch` with AbortSignal.timeout | models.ts already does this |
+| SSE event emission | `emitSSE()` | sse-hub.ts |
+| Decision logging | `decision_log` table | ai-router.ts |
+| Token tracking | `token_usage_daily` table | ai-router.ts |
+| Background scheduling | toad-scheduler via @fastify/schedule | scheduler.ts |
+| OpenClaw dispatch | `fetch` to /v1/chat/completions | ai-router.ts |
+| Ollama dispatch | `fetch` to /api/generate | ai-router.ts |
+| Streaming | stream-service.ts | Native fetch ReadableStream |
+| Config | config.ts with env vars | All values from env |
 
-### Agent Templates (TMPL-01-03)
-
-100 templates stored as TypeScript data in `src/data/agent-templates.ts` — no database table, no new library. Templates are loaded at startup and served via API. Indexed by category for filtering.
-
-```typescript
-export interface AgentTemplate {
-  id: string;
-  name: string;
-  category: string;      // 'engineering' | 'marketing' | 'research' | 'ops' | ...
-  role: string;
-  systemPrompt: string;
-  skills: string[];
-  tools: string[];       // from existing tool registry
-  preferredBackend: string;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
-}
-```
-
-**Why not a DB table:** Templates are static content, not user data. They ship with the codebase. Searching/filtering 100 records in-memory is faster than SQLite for this scale.
-
-### Error Capture (OBS-01-02)
-
-New table:
-```typescript
-export const errorReports = sqliteTable('error_reports', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  severity: text('severity').default('error'),   // 'warn' | 'error' | 'fatal'
-  component: text('component'),                  // React component name or route
-  message: text('message').notNull(),
-  stack: text('stack'),
-  userContext: text('user_context'),             // JSON: username, plan, page, UA
-  appVersion: text('app_version'),
-  createdAt: real('created_at').default(sql`(unixepoch('now'))`),
-});
-```
-
-Single POST route at `/api/v1/errors`. Admin query route with filters. No external error monitoring service — self-hosted, queryable via API.
+The existing `admin/models.ts` already has a `COST_PER_M` table and `estimateCost()` function. This moves from that file into `bridge_models.input_cost_per_m_tokens` in the DB, making it admin-editable without a deploy.
 
 ---
 
@@ -365,16 +301,15 @@ Single POST route at `/api/v1/errors`. Admin query route with filters. No extern
 
 | Avoid | Why | What to Use Instead |
 |-------|-----|---------------------|
-| Playwright / Puppeteer | Headless browser needs 300-500MB RAM; kills the 2 vCPU VPS under load | cheerio + fetch for static pages; octokit for GitHub; Reddit JSON API |
-| BullMQ / Redis | Redis adds 200MB+ RAM; existing toad-scheduler handles current load | toad-scheduler (already installed via @fastify/schedule) |
-| Socket.IO | Heavy abstraction; @fastify/websocket already installed and sufficient | @fastify/websocket (already installed) |
-| LangChain | 40MB+ of dependencies for AI routing Porter already handles | ollama (0.6.3, 180KB); raw fetch for OpenClaw |
-| Stripe | Lemon Squeezy is already the billing decision with existing schema | @lemonsqueezy/lemonsqueezy.js |
-| Sentry / DataDog | External service with cost; v2.0 is self-hosted error capture | Custom errorReports table + query endpoint |
-| libSQL / Turso | Adds network latency; better-sqlite3 is ~100x faster for this workload | better-sqlite3 (already installed) |
-| phone-number validation libs | Over-engineering; store as text, validate format server-side with regex | Zod .regex() in route schema |
-| prisma | Migration complexity; Drizzle is already installed | Drizzle ORM (already installed) |
-| Fastify WebSocket for chat streaming | WebSocket is bidirectional; SSE is simpler for AI token streaming | raw `reply.raw.write()` with SSE headers |
+| LiteLLM proxy | Python service, another network hop, 500MB+ RAM, separate process to manage | Build the gateway registry natively in the existing Fastify service |
+| Redis | Adds 200MB RAM and operational complexity; in-process queues sufficient for single-server | p-queue (in-process) |
+| OpenRouter / external AI gateway | Porter's moat IS that it orchestrates tools the user already owns; adding a paid middleware defeats the architecture | Bridge registry + native dispatch |
+| openai npm SDK | 50KB dependency for a single /v1/chat/completions POST; native fetch is sufficient for OpenAI-wire-compatible calls | Native fetch (already used in ai-router.ts) |
+| @anthropic-ai/sdk | Same problem — Porter calls Claude via Claude CLI binary, not direct API keys | child_process dispatch (already in porter.py, migrate to ai-router.ts) |
+| cockroach-style distributed scheduler | Single VPS, single process; toad-scheduler is sufficient | toad-scheduler (already installed) |
+| Prometheus / metrics exporters | Operational overhead not justified at current scale; structured event table is sufficient | `bridge_agents_log` + existing `decision_log` |
+| winston / pino logger | Fastify's built-in pino logger is already configured; a second logger creates duplicate log streams | Fastify's built-in logger (req.log) |
+| Zod v3 migration | Already on Zod 4; do not add Zod v3 compat layer | Zod 4.3.6 (already installed) |
 
 ---
 
@@ -383,54 +318,59 @@ Single POST route at `/api/v1/errors`. Admin query route with filters. No extern
 ```bash
 cd /home/lobster/documents/porter/backend
 
-# Streaming AI (replaces porter.py proxy for Ollama)
-npm install ollama
+# Circuit breakers (new)
+npm install opossum
 
-# OpenAPI spec + Swagger UI
-npm install @fastify/swagger @fastify/swagger-ui fastify-type-provider-zod
+# Dispatch concurrency queue (new)
+npm install p-queue
 
-# Plan-based rate limiting
-npm install @fastify/rate-limit
+# CLI binary detection for first-run setup (new)
+npm install which
 
-# Autonomous learning (HTML parsing)
-npm install cheerio
-
-# Optional: Official Lemon Squeezy SDK (adopt when refactoring billing.ts)
-npm install @lemonsqueezy/lemonsqueezy.js
+# TypeScript types for opossum (dev dep, no bundled types in opossum 9.x)
+npm install -D @types/opossum @types/which
 ```
 
-All other v2.0 features (collaboration, unified chat, CRM, file associations, templates, error capture) require **schema changes only** — no new npm packages.
+**Total new runtime dependencies: 3 packages.** opossum (~4KB), p-queue (~8KB), which (~8KB). No transitive dependency chains worth noting. All three are native ESM, matching the project's `"type": "module"` configuration.
+
+---
+
+## Alternatives Considered
+
+| Recommended | Alternative | Why Alternative Was Rejected |
+|-------------|-------------|-------------------------------|
+| opossum (circuit breaker) | cockatiel | cockatiel is newer and has TypeScript-native types, but opossum has 5x more production usage, is the Red Hat-sponsored Node.js standard, and integrates directly with Fastify examples in the ecosystem |
+| p-queue (dispatch queue) | bottleneck | bottleneck has not been updated since 2023; p-queue is actively maintained and ESM-native |
+| which (binary detection) | child_process.exec('which') | Shell-spawning approach is slower, non-portable, and has error handling edge cases; the `which` package is a tested abstraction already used by npm itself |
+| native DB cost table | tokencost (npm) | tokencost is Python-only; a static JSONB table in bridge_models is simpler, admin-editable, and has no external dependency |
+| native probe polling (toad-scheduler) | @fastify/schedule | @fastify/schedule wraps toad-scheduler; the base scheduler is already registered in scheduler.ts; adding a second scheduler plugin creates duplicate state |
 
 ---
 
 ## Version Compatibility
 
-| Package | Version | Peer Requirements | Notes |
-|---------|---------|-------------------|-------|
-| ollama | 0.6.3 | Node.js 18+ | Official Ollama JS SDK; uses native fetch + AsyncIterable |
-| @fastify/swagger | 9.7.0 | Fastify ^5.x | Must register before routes; exposes fastify.swagger() decorator |
-| @fastify/swagger-ui | 5.2.5 | Fastify ^5.x, @fastify/swagger ^9 | Register after @fastify/swagger |
-| fastify-type-provider-zod | 6.1.0 | Fastify ^5.5.0, Zod >=4.1.5 | Porter has Fastify 5.7.4 + Zod 4.3.6 — both satisfy requirements |
-| @fastify/rate-limit | 10.3.0 | Fastify ^5.x | In-memory store by default; async max function for per-plan limits |
-| cheerio | 1.2.0 | Node.js 18+ | No peer conflicts; types included |
-| @lemonsqueezy/lemonsqueezy.js | 4.0.0 | Node.js 18+ | TypeScript-native; replaces raw fetch in billing.ts |
+| Package | Version | Peer Requirements | Compatibility with Existing Stack |
+|---------|---------|-------------------|-----------------------------------|
+| opossum | 9.0.0 | Node.js 20+ | Porter runs Node.js 22 (confirmed via tsx 4.x); ESM-compatible |
+| @types/opossum | 8.1.9 | opossum ^8 | Typings are for v8 API which is stable and unchanged in v9; confirmed usable |
+| p-queue | 9.1.0 | Node.js 18+ | Native ESM; `"type": "module"` in backend/package.json — compatible |
+| which | 4.0.0 | Node.js 18+ | Native ESM; TypeScript types in @types/which |
+| @types/which | 3.0.6 | which ^4 | Standard DefinitelyTyped package |
 
 ---
 
 ## Integration Points with Existing Stack
 
-| New Feature | Attaches To | Integration Notes |
-|-------------|-------------|-------------------|
-| Ollama streaming | `routes/v1/chat.ts` | Replace the proxy-to-porter.py GET /stream with native ollama SDK call; reuse existing SSE header pattern from `reply.raw.write()` |
-| OpenAPI spec | `index.ts` (startup) | Register `@fastify/swagger` + `fastify-type-provider-zod` before `v1Routes`; all existing Zod schemas in v1 routes become documented automatically |
-| Rate limiting | `routes/v1/index.ts` | Register `@fastify/rate-limit` as global plugin with per-user async max; override per-route for public endpoints |
-| Collaboration RBAC | `plugins/auth.ts` | Extend `requireAuth` to accept optional `projectRole` check; collaborators resolved from `project_collaborators` table |
-| CRM contacts | New `routes/v1/contacts.ts` | New v1 route group; `services/crm.ts` for AI analysis trigger; reuse existing `nodemailer` for invite emails |
-| File associations | `routes/v1/files.ts` | Add `entity_type` + `entity_id` fields to existing upload endpoint; `fileAssociations` pivot written on upload |
-| Agent templates | New `routes/v1/templates.ts` | Static data from `data/agent-templates.ts`; in-memory filter by category; template instantiation calls existing persona creation logic |
-| Autonomous learning | `services/scheduler.ts` | New `learningJob` registered in existing scheduler; uses `cheerio` + existing `ai-router` for summarization; writes to `memory_concepts` |
-| Error capture | New `routes/v1/errors.ts` | Public POST (no auth required to capture errors); admin GET with filters requires auth |
-| Lemon Squeezy SDK | `services/billing.ts` | Refactor existing `lsApiFetch` helper to use SDK; webhook handler in `routes/v1/billing.ts` uses SDK's `webhookHasMeta` type guard |
+| New Capability | Attaches To | Integration Notes |
+|---|---|---|
+| Circuit breakers (opossum) | `services/ai-router.ts` | Replace bare `fetch` calls in `dispatch()` with `breaker.fire()`; one CircuitBreaker instance per gateway name, stored in a module-level Map |
+| Dispatch queue (p-queue) | `services/ai-router.ts` | Wrap `breaker.fire()` in `queue.add()`; queue concurrency per gateway comes from `bridge_gateways.capabilities.concurrency` |
+| Gateway probing (which + fetch) | New `services/bridge-detector.ts` | Called at startup + on demand by Bridge Operator agent; writes results to `bridge_gateways` via pool.query |
+| Cost records | `services/ai-router.ts` | After successful dispatch, insert into `bridge_cost_records` with same non-critical pattern as `trackTokenUsage()` |
+| Bridge admin routes | New `routes/v1/admin/bridge.ts` | CRUD for `bridge_gateways`, `bridge_models`, `bridge_routing_rules`; GET /health returns live circuit state from breakers Map |
+| Model catalog sync | New `services/model-scout.ts` | Background job registered in scheduler.ts; probes each enabled gateway's model list endpoint; upserts `bridge_models` |
+| SSE events | `services/sse-hub.ts` (existing) | Circuit breaker events (`bridge:circuit_open`, `bridge:circuit_close`, `bridge:gateway_status_change`) emitted via existing `emitSSE()` |
+| First-run detection | `routes/v1/wizard.ts` (existing) | `bridge-detector.ts` called from wizard setup step; returns detected gateways for the frontend onboarding surface |
 
 ---
 
@@ -438,33 +378,34 @@ All other v2.0 features (collaboration, unified chat, CRM, file associations, te
 
 | Area | Confidence | Basis |
 |------|------------|-------|
-| New library versions | HIGH | All versions verified via `npm show` against live registry |
-| Fastify 5 compatibility | HIGH | fastify-type-provider-zod@6.1.0 explicitly requires Fastify ^5.5.0; @fastify/swagger@9+ and @fastify/rate-limit@10+ are Fastify 5 compatible per official repos |
-| Ollama streaming via ollama-js | HIGH | Official Ollama SDK; AsyncIterable pattern confirmed in docs and DeepWiki |
-| Cheerio for web scraping | HIGH | Stable library (1.2.0); jQuery-like API; suitable for static HTML; limitation (JS-rendered pages) well-documented |
-| Schema design (CRM, collaboration) | MEDIUM | Standard relational patterns; no novel approach; FTS5 via raw SQL is established workaround for Drizzle limitation |
-| @lemonsqueezy/lemonsqueezy.js as optional | HIGH | Existing raw-fetch implementation already works; SDK is a quality upgrade, not a requirement |
-| AbortController cancellation | HIGH | Native Node.js 18+ feature; socket close event pattern is established |
-| FTS5 via raw SQL migration | HIGH | Drizzle issue #2046 confirms no native FTS5; raw SQL pattern confirmed working in astro-db-fts example |
-| Agent templates as static TS data | HIGH | 100 records in memory is negligible; no query complexity needed |
+| opossum version + TypeScript support | HIGH | npm registry confirmed v9.0.0 (June 2025); @types/opossum@8.1.9 (July 2025); nodeshift.dev/opossum documentation verified |
+| p-queue version + ESM compatibility | HIGH | npm registry confirmed v9.1.0; project is ESM-native ("type": "module"); sindresorhus package quality is consistent |
+| which package | HIGH | 150M+ weekly downloads; npm itself depends on it; v4.0.0 is ESM-native |
+| Schema design for gateway registry | HIGH | Follows existing schema patterns (JSONB for flexible metadata, doublePrecision epoch timestamps); PostgreSQL 16 confirmed as DB |
+| Integration with existing ai-router.ts | HIGH | ai-router.ts read directly; dispatch pattern confirmed; breaker.fire() wraps existing fetch calls cleanly |
+| No new libraries for model catalog | HIGH | Ollama /api/tags already probed in models.ts; OpenAI /v1/models is standard wire format; native fetch sufficient |
+| No Redis needed | HIGH | p-queue is in-process; single-server VPS deployment confirmed in PROJECT.md |
+| opossum @types/opossum v8 types with v9 | MEDIUM | opossum v9 is a minor version bump; API is stable per changelog; types@8.1.9 covers the same API surface; no breaking changes confirmed in v9 release notes |
 
 ---
 
 ## Sources
 
-- npm registry (live) — ollama@0.6.3, @fastify/swagger@9.7.0, @fastify/swagger-ui@5.2.5, fastify-type-provider-zod@6.1.0, @fastify/rate-limit@10.3.0, cheerio@1.2.0, @lemonsqueezy/lemonsqueezy.js@4.0.0 — HIGH confidence
-- [fastify-type-provider-zod GitHub](https://github.com/turkerdev/fastify-type-provider-zod) — Fastify ^5.5.0 + Zod >=4.1.5 peer deps confirmed — HIGH confidence
-- [Ollama JS streaming docs](https://github.com/ollama/ollama-js) — AsyncIterable with `stream: true` confirmed — HIGH confidence
-- [Drizzle FTS5 feature request #2046](https://github.com/drizzle-team/drizzle-orm/issues/2046) — confirms no native FTS5; raw SQL pattern required — HIGH confidence
-- [astro-db-fts](https://github.com/delucis/astro-db-fts) — working FTS5 pattern with Drizzle via raw sql\`\` — HIGH confidence
-- [Ollama streaming capabilities](https://docs.ollama.com/capabilities/streaming) — SSE + NDJSON both supported — HIGH confidence
-- [Cheerio official site](https://cheerio.js.org/) — version 1.2.0; static HTML only; no browser — HIGH confidence
-- [lemonsqueezy.js official SDK](https://github.com/lmsqueezy/lemonsqueezy.js) — official Lemon Squeezy SDK, TypeScript-native, v4.0.0 — HIGH confidence
-- [WebSearch] @fastify/rate-limit async max function — per-plan enforcement pattern — MEDIUM confidence (community documentation, consistent with official README)
-- backend/src/db/schema.ts — existing schema verified by code read — HIGH confidence
-- backend/src/services/billing.ts — existing billing implementation verified by code read — HIGH confidence
+- [opossum npm](https://www.npmjs.com/package/opossum) — v9.0.0, June 2025 — HIGH confidence
+- [opossum documentation](https://nodeshift.dev/opossum/) — API reference for CircuitBreaker options — HIGH confidence
+- [@types/opossum npm](https://www.npmjs.com/package/@types/opossum) — v8.1.9, July 2025 — HIGH confidence
+- [p-queue npm](https://www.npmjs.com/package/p-queue) — v9.1.0, current — HIGH confidence
+- [p-queue GitHub](https://github.com/sindresorhus/p-queue) — concurrency + interval options confirmed — HIGH confidence
+- [which npm](https://www.npmjs.com/package/which) — v4.0.0, ESM-native — HIGH confidence
+- [@fastify/rate-limit npm](https://www.npmjs.com/package/@fastify/rate-limit) — v10.3.0 confirmed installed — HIGH confidence
+- [Ollama /api/tags docs](https://docs.ollama.com/api/tags) — model listing endpoint verified — HIGH confidence
+- backend/src/services/ai-router.ts — dispatch pattern, probeBackend(), trackTokenUsage() — read directly — HIGH confidence
+- backend/src/routes/v1/admin/models.ts — COST_PER_M table, probe(), existing admin models API — read directly — HIGH confidence
+- backend/src/db/schema.ts — existing tables confirmed (decision_log, token_usage_daily, workspace_connections) — read directly — HIGH confidence
+- backend/package.json — confirmed existing deps (systeminformation, @fastify/schedule not yet installed) — read directly — HIGH confidence
+- research/cli-runtime-design-brief.md — gateway registry design, CLI tool capabilities — read directly — HIGH confidence
 
 ---
 
-*Stack research for: Porter v2.0 Backend Ready — new feature additions only*
-*Researched: 2026-03-21*
+*Stack research for: Porter v3.0 Bridge — AI Gateway & Model Intelligence (addendum to v2.0 STACK.md)*
+*Researched: 2026-03-25*

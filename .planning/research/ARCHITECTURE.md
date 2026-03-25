@@ -1,14 +1,717 @@
 # Architecture Research
 
-**Domain:** AI Orchestration Platform — Fastify/Drizzle/SQLite backend extension
+**Domain:** Porter Bridge — AI Gateway Layer (v3.0)
+**Researched:** 2026-03-25
+**Confidence:** HIGH (all findings from direct source-code inspection)
+
+---
+
+## v3.0 Bridge — Gateway Integration Architecture
+
+This section supersedes and extends the v2.0 architecture below. The Bridge layer
+integrates with — not replaces — the existing ai-router/stream-service/config stack.
+
+---
+
+### System Overview
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        API Layer  (:3001)                                     │
+│  ┌─────────────────┐  ┌───────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │ /api/v1/chat    │  │/api/v1/agents │  │/api/bridge/* │  │ /api/v1/sse  │  │
+│  │ (existing)      │  │ (existing)    │  │ (new)        │  │ (existing)   │  │
+│  └────────┬────────┘  └──────┬────────┘  └──────┬───────┘  └──────┬───────┘  │
+└───────────┼───────────────────┼────────────────────┼────────────────┼──────────┘
+            │                   │                    │                │
+┌───────────┼───────────────────┼────────────────────┼────────────────┼──────────┐
+│           ▼     BRIDGE LAYER  (new)                ▼                │          │
+│  ┌────────────────────────────────────────────────────┐             │          │
+│  │           bridge/bridge-router.ts                  │             │          │
+│  │  ┌─────────────────────┐  ┌─────────────────────┐  │             │          │
+│  │  │  GatewayRegistry    │  │   RoutingEngine      │  │             │          │
+│  │  │  (DB-backed, reads  │  │  (rules + heuristic) │  │             │          │
+│  │  │   gateways table)   │  │  delegates to        │  │             │          │
+│  │  └──────────┬──────────┘  │  shouldRouteCheap()  │  │             │          │
+│  │             │             │  for backward compat │  │             │          │
+│  │             │             └──────────┬───────────┘  │             │          │
+│  │             │                        │              │             │          │
+│  │  ┌──────────▼────────────────────────▼───────────┐  │             │          │
+│  │  │           BridgeDispatcher                    │  │             │          │
+│  │  │  select() → adapter.dispatch/stream()         │  │             │          │
+│  │  │  logBridgeDispatch() → bridge_dispatch_log    │  │             │          │
+│  │  │  emitSSE(bridge:*)                            │  │             │          │
+│  │  └──────────────────────────┬────────────────────┘  │             │          │
+│  └─────────────────────────────┼──────────────────────┘             │          │
+└────────────────────────────────┼────────────────────────────────────┼──────────┘
+                                 │                                     │
+┌────────────────────────────────┼─────────────────────────────────────┼──────────┐
+│                   ADAPTERS     │                                      │          │
+│  ┌──────────────┐  ┌───────────┴──────┐  ┌─────────────┐  ┌─────────┴────────┐  │
+│  │OllamaAdapter │  │OpenClawAdapter   │  │CodexCLIAdapt│  │ClaudeAdapter     │  │
+│  │wraps existing│  │wraps existing    │  │(new) spawn  │  │(new) spawn       │  │
+│  │stream-service│  │stream-service    │  │codex binary │  │claude binary     │  │
+│  └──────┬───────┘  └──────────┬───────┘  └──────┬──────┘  └────────┬─────────┘  │
+│         │                     │                  │                  │             │
+│  ┌──────┴─────────────────────┴──────────────────┴──────────────────┴──────────┐  │
+│  │         StreamNormalizer — unified AsyncIterable<string>                    │  │
+│  │   Ollama NDJSON | OpenAI SSE | Codex JSONL | Claude JSON                   │  │
+│  └──────────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                 │
+┌────────────────────────────────┼─────────────────────────────────────────────────┐
+│                   DATA LAYER (PostgreSQL 16)                                       │
+│  ┌───────────────┐  ┌────────────────┐  ┌──────────────────┐  ┌────────────────┐  │
+│  │  gateways     │  │   models       │  │  routing_rules   │  │bridge_dispatch │  │
+│  │  (new)        │  │  (new)         │  │  (new)           │  │  _log (new)    │  │
+│  └───────────────┘  └────────────────┘  └──────────────────┘  └────────────────┘  │
+│  ┌───────────────┐  ┌────────────────┐  ┌──────────────────┐                      │
+│  │ decision_log  │  │token_usage_    │  │ agent_jobs,      │                      │
+│  │ (existing)    │  │daily (existing)│  │ agent_activity   │                      │
+│  │               │  │                │  │ (existing)       │                      │
+│  └───────────────┘  └────────────────┘  └──────────────────┘                      │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Component Boundaries
+
+| Component | Responsibility | Communicates With |
+|-----------|---------------|-------------------|
+| `bridge/bridge-router.ts` | Top-level public API: `bridgeDispatch()`, `bridgeStream()` — replaces direct calls to `aiRouterDispatch()` in routes | GatewayRegistry, RoutingEngine, BridgeDispatcher |
+| `bridge/gateway-registry.ts` | Reads `gateways` table, maintains in-memory health cache (TTL 30s), exposes `getAvailable()` | PostgreSQL, adapters (for probing) |
+| `bridge/routing-engine.ts` | Evaluates `routing_rules` rows, delegates to `shouldRouteCheap()` for heuristic fallback, returns `{ gateway, model, reason, rule_matched }` | GatewayRegistry, models table |
+| `bridge/startup-detector.ts` | On Fastify boot: probe PATH + HTTP, upsert `gateways` + `models`, set `detected_by='startup'` | config.ts (seed URLs), PostgreSQL, adapters |
+| `bridge/adapters/ollama.ts` | Wraps `OllamaStreamBackend` and Ollama dispatch logic from ai-router | Existing stream-service.ts |
+| `bridge/adapters/openclaw.ts` | Wraps `OpenClawStreamBackend` and OpenClaw dispatch logic from ai-router | Existing stream-service.ts |
+| `bridge/adapters/codex-cli.ts` | Spawns `codex exec --json --ephemeral`, parses JSONL events | codex binary |
+| `bridge/adapters/claude-cli.ts` | Spawns `claude -p --output-format json`, parses JSON output | claude binary |
+| `bridge/stream-normalizer.ts` | Translates all adapter outputs to unified `AsyncIterable<string>` | All adapters |
+| `services/ai-router.ts` | UNCHANGED — remains as adapter internals | Not modified |
+| `services/stream-service.ts` | UNCHANGED — wrapped by adapters | Not modified |
+| `services/config.ts` | UNCHANGED — seeds startup detector, not the runtime registry | Not modified |
+
+**Critical constraint:** `ai-router.ts` and `stream-service.ts` are read-only during Bridge build.
+All 35 Playwright tests that rely on their exports continue to pass without modification.
+
+---
+
+### Recommended Project Structure
+
+```
+backend/src/
+├── services/
+│   ├── ai-router.ts              (existing — UNCHANGED, wrapped by adapters)
+│   ├── stream-service.ts         (existing — UNCHANGED, wrapped by adapters)
+│   ├── sse-hub.ts                (existing — UNCHANGED)
+│   ├── scheduler.ts              (existing — add one bridge health tick call)
+│   │
+│   └── bridge/                   (new directory — all Bridge code)
+│       ├── index.ts               (re-exports: bridgeDispatch, bridgeStream, getGatewayStatus)
+│       ├── bridge-router.ts       (select gateway + model, delegate to dispatcher)
+│       ├── gateway-registry.ts    (DB read + health cache)
+│       ├── routing-engine.ts      (rule eval + heuristic fallback)
+│       ├── startup-detector.ts    (boot-time probe + DB upsert)
+│       ├── adapters/
+│       │   ├── interface.ts       (GatewayAdapter interface definition)
+│       │   ├── ollama.ts          (wraps existing OllamaStreamBackend)
+│       │   ├── openclaw.ts        (wraps existing OpenClawStreamBackend)
+│       │   ├── codex-cli.ts       (new subprocess adapter)
+│       │   └── claude-cli.ts      (new subprocess adapter)
+│       └── stream-normalizer.ts   (unified AsyncIterable<string>)
+│
+├── db/
+│   ├── schema.ts                  (existing — add new table definitions here)
+│   └── migrate-bridge.ts          (new migration — Bridge tables)
+│
+└── routes/v1/
+    └── bridge.ts                  (new route file — gateway CRUD, models, rules, log)
+```
+
+---
+
+### New PostgreSQL Tables
+
+#### `gateways`
+
+Registry of all known AI backends. One row per configured gateway instance.
+
+```sql
+CREATE TABLE IF NOT EXISTS gateways (
+  id              TEXT PRIMARY KEY,
+  -- 'ollama-local', 'openclaw-main', 'codex-cli', 'claude-cli'
+  name            TEXT NOT NULL,
+  -- Human label: 'Ollama (Local)', 'OpenClaw Gateway'
+  provider        TEXT NOT NULL,
+  -- 'ollama' | 'openclaw' | 'codex' | 'claude' | 'gemini'
+  gateway_type    TEXT NOT NULL DEFAULT 'http',
+  -- 'http' | 'cli' | 'grpc'
+  base_url        TEXT,
+  -- http gateways: 'http://127.0.0.1:11434'. NULL for CLI gateways.
+  binary_path     TEXT,
+  -- CLI gateways: resolved binary path from PATH. NULL for HTTP.
+  auth_kind       TEXT NOT NULL DEFAULT 'none',
+  -- 'none' | 'bearer' | 'env_var' | 'cli_auth'
+  auth_ref        TEXT,
+  -- Name of the env var holding the token (e.g. 'OPENCLAW_TOKEN').
+  -- Never the token itself. Adapter reads process.env[auth_ref] at dispatch time.
+  status          TEXT NOT NULL DEFAULT 'unknown',
+  -- 'online' | 'offline' | 'degraded' | 'unknown'
+  last_probe_at   DOUBLE PRECISION,
+  last_probe_ms   INTEGER,
+  probe_error     TEXT,
+  priority        INTEGER NOT NULL DEFAULT 50,
+  -- Lower = preferred when capability is tied between gateways
+  enabled         INTEGER NOT NULL DEFAULT 1,
+  detected_by     TEXT NOT NULL DEFAULT 'manual',
+  -- 'startup' | 'manual' | 'api'
+  version_string  TEXT,
+  -- From --version probe (CLI) or /version endpoint (HTTP)
+  created_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
+  updated_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW())
+);
+```
+
+#### `models`
+
+Unified model catalog. Populated by adapters during gateway detection and health ticks.
+
+```sql
+CREATE TABLE IF NOT EXISTS models (
+  id              TEXT PRIMARY KEY,
+  -- Composite: 'ollama/qwen2.5-coder:1.5b', 'openclaw/gpt-5.4'
+  gateway_id      TEXT NOT NULL REFERENCES gateways(id) ON DELETE CASCADE,
+  model_name      TEXT NOT NULL,
+  -- Raw name: 'qwen2.5-coder:1.5b', 'gpt-5.4'
+  display_name    TEXT,
+  -- Human label: 'Qwen 2.5 Coder 1.5B'
+  provider_family TEXT,
+  -- 'openai' | 'anthropic' | 'google' | 'qwen' | 'unknown'
+  cost_tier       TEXT NOT NULL DEFAULT 'unknown',
+  -- 'free' | 'standard' | 'premium'
+  context_window  INTEGER,
+  -- Max context tokens
+  strengths       JSONB DEFAULT '[]',
+  -- ['coding', 'reasoning', 'analysis', 'multimodal']
+  capabilities    JSONB DEFAULT '{}',
+  -- {'streaming': true, 'tools': false, 'vision': false}
+  is_agentic      INTEGER DEFAULT 0,
+  -- 1 if model can use tools / read-write files
+  is_default      INTEGER DEFAULT 0,
+  -- 1 = default model for this gateway
+  enabled         INTEGER DEFAULT 1,
+  size_bytes      BIGINT,
+  -- Local models only (Ollama): disk size
+  benchmark_score INTEGER,
+  -- 0-100 composite; set by forge pipeline or manual entry
+  last_seen_at    DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
+  created_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW())
+);
+```
+
+#### `routing_rules`
+
+Operator-configurable rules that override the default complexity heuristic.
+Evaluated in `priority ASC` order; first match wins.
+
+```sql
+CREATE TABLE IF NOT EXISTS routing_rules (
+  id              SERIAL PRIMARY KEY,
+  name            TEXT NOT NULL,
+  rule_type       TEXT NOT NULL,
+  -- 'complexity'     — based on message length/keywords
+  -- 'cost_cap'       — route cheap when plan budget is near limit
+  -- 'capability'     — route to gateway with required capability
+  -- 'agent_affinity' — honour persona.preferred_backend
+  condition_json  JSONB NOT NULL DEFAULT '{}',
+  -- complexity:     { "max_length": 160, "keyword_patterns": [] }
+  -- cost_cap:       { "cost_tier": "free" }
+  -- capability:     { "required": ["tools", "vision"] }
+  -- agent_affinity: { "agent_id": "uuid" }
+  target_gateway  TEXT REFERENCES gateways(id),
+  target_model    TEXT REFERENCES models(id),
+  -- Either or both can be set; NULL means "best available"
+  priority        INTEGER NOT NULL DEFAULT 50,
+  enabled         INTEGER NOT NULL DEFAULT 1,
+  created_by      TEXT,
+  created_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
+  updated_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW())
+);
+```
+
+#### `bridge_dispatch_log`
+
+Per-request dispatch record. More granular than `decision_log`
+(which records abstract routing decisions). Feeds the cost and latency dashboards.
+
+```sql
+CREATE TABLE IF NOT EXISTS bridge_dispatch_log (
+  id                TEXT PRIMARY KEY,
+  -- UUID generated at dispatch start
+  gateway_id        TEXT REFERENCES gateways(id),
+  model_id          TEXT REFERENCES models(id),
+  agent_id          TEXT,
+  -- references personas.id — NULL for direct chat dispatches
+  project_id        TEXT,
+  job_id            TEXT,
+  -- references agent_jobs.id — NULL for interactive dispatches
+  chat_id           TEXT,
+  dispatch_type     TEXT NOT NULL DEFAULT 'chat',
+  -- 'chat' | 'stream' | 'agent_job' | 'forge'
+  status            TEXT NOT NULL DEFAULT 'pending',
+  -- 'pending' | 'completed' | 'failed' | 'cancelled'
+  routing_reason    TEXT,
+  -- Human-readable: 'cheap model selected (simple message)'
+  rule_matched      INTEGER,
+  -- routing_rules.id of the rule that fired; NULL = heuristic
+  prompt_tokens     INTEGER DEFAULT 0,
+  completion_tokens INTEGER DEFAULT 0,
+  total_tokens      INTEGER DEFAULT 0,
+  cost_usd          DOUBLE PRECISION DEFAULT 0,
+  duration_ms       INTEGER,
+  streamed          INTEGER DEFAULT 0,
+  -- 1 = was a streaming dispatch
+  error             TEXT,
+  started_at        DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
+  completed_at      DOUBLE PRECISION
+);
+
+CREATE INDEX IF NOT EXISTS idx_bridge_dispatch_started
+  ON bridge_dispatch_log(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bridge_dispatch_gateway
+  ON bridge_dispatch_log(gateway_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bridge_dispatch_agent
+  ON bridge_dispatch_log(agent_id, started_at DESC);
+```
+
+**Relationship to existing tables:**
+- `token_usage_daily` (existing) continues daily aggregation — Bridge writes to it via the
+  existing `trackTokenUsage()` function, unchanged
+- `bridge_dispatch_log` provides per-request detail for admin cost/latency views
+- `decision_log` (existing) continues recording abstract model-selection decisions —
+  Bridge calls `logDecision()` as before, just with richer context
+
+---
+
+### How Bridge Wraps ai-router.ts
+
+The integration follows a **delegation + wrapping** pattern. Bridge is the new external API.
+ai-router.ts becomes an internal implementation detail of two adapters.
+
+```
+BEFORE v3:
+  route handler → aiRouterDispatch(req) → Ollama or OpenClaw
+
+AFTER v3:
+  route handler → bridgeDispatch(req)
+                    → GatewayRegistry.getAvailable()
+                    → RoutingEngine.select()
+                    → OllamaAdapter.dispatch()  (wraps ai-router Ollama path)
+                    → OpenClawAdapter.dispatch() (wraps ai-router OpenClaw path)
+                    → CodexCLIAdapter.dispatch() (new)
+                    → ClaudeAdapter.dispatch()   (new)
+```
+
+Adapter wrapping example (ollama):
+
+```typescript
+// bridge/adapters/ollama.ts
+import { OllamaStreamBackend } from '../../stream-service.js';  // existing, not modified
+import { config } from '../../config.js';                        // existing, not modified
+
+export class OllamaAdapter implements GatewayAdapter {
+  readonly gatewayType = 'http' as const;
+
+  async dispatch(req: BridgeRequest): Promise<BridgeResult> {
+    // Exact same fetch logic as ai-router.dispatch() Ollama branch,
+    // but receives gateway URL from req.gateway.base_url (DB-sourced)
+    // rather than config.ollamaUrl (hardcoded env var)
+    const resp = await fetch(`${req.gateway.base_url}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: req.model.model_name, prompt: req.message, stream: false }),
+    });
+    const data = await resp.json() as { response: string; eval_count?: number };
+    return { response: data.response, tokensUsed: data.eval_count };
+  }
+
+  async *stream(req: BridgeRequest, signal: AbortSignal): AsyncIterable<string> {
+    // Delegates directly to existing OllamaStreamBackend — zero duplication
+    const backend = new OllamaStreamBackend();
+    yield* backend.stream(req.message, signal);
+  }
+
+  async probe(): Promise<ProbeResult> {
+    try {
+      const resp = await fetch(`${req.gateway.base_url}/api/tags`,
+        { signal: AbortSignal.timeout(2000) });
+      return { ok: resp.ok, latency_ms: /* measured */ };
+    } catch {
+      return { ok: false };
+    }
+  }
+
+  async listModels(): Promise<ModelDescriptor[]> {
+    const resp = await fetch(`${this.baseUrl}/api/tags`);
+    const data = await resp.json() as { models: { name: string; size: number }[] };
+    return data.models.map(m => ({
+      model_name: m.name,
+      cost_tier: 'free',
+      strengths: ['quick-tasks', 'privacy', 'offline'],
+      size_bytes: m.size,
+    }));
+  }
+}
+```
+
+**Migration path for routes:**
+
+| Step | What Changes |
+|------|-------------|
+| 1 | Add `bridge/` directory, implement adapters, no route changes |
+| 2 | Routes import `bridgeDispatch` from `bridge/index.ts` instead of `ai-router.ts` |
+| 3 | ai-router.ts remains in place; its exports still tested by Playwright suite |
+| 4 (later) | After tests updated to use Bridge, ai-router.ts becomes internal-only |
+
+---
+
+### Data Flow: Gateway Registration to Memory
+
+```
+──────────────────── STARTUP ────────────────────────────────────────────────────
+
+Fastify boot → StartupDetector.run()
+  ├── Read config.ollamaUrl, config.openclawUrl (existing env-var config)
+  ├── Probe HTTP: GET ollamaUrl/api/tags
+  │     → if 200: upsert gateways(id='ollama-local', status='online')
+  │                upsert models from response tags
+  ├── Probe HTTP: HEAD openclawUrl
+  │     → if 200/405: upsert gateways(id='openclaw-main', status='online')
+  │                    fetch /v1/models if available; upsert model rows
+  ├── Probe PATH: which(claude, codex, gemini)
+  │     → for each found: exec `--version`, capture version_string
+  │                        upsert gateways(id='claude-cli', gateway_type='cli', ...)
+  └── Emit SSE: bridge:gateway_detected { gateway_id, provider, status, model_count }
+
+──────────────────── ROUTING ─────────────────────────────────────────────────────
+
+bridgeDispatch(req: BridgeRequest)
+  │
+  ├── 1. GatewayRegistry.getAvailable()
+  │        SELECT * FROM gateways WHERE enabled=1 AND status IN ('online','degraded')
+  │        ORDER BY priority ASC
+  │        Returns ordered list; uses 30s in-memory cache to avoid per-request DB reads
+  │
+  ├── 2. RoutingEngine.select(req, available)
+  │        a. Iterate routing_rules ORDER BY priority ASC
+  │           - agent_affinity: req.agentId → personas.preferred_backend → match gateway
+  │           - complexity:     shouldRouteCheap(req.message) → map to cost_tier filter
+  │           - cost_cap:       featureFlags.billing → check token budget vs plan
+  │           - capability:     req.requiredCapabilities → filter models.capabilities
+  │        b. First matching rule returns { gateway, model, rule_matched }
+  │        c. No rule match → default: shouldRouteCheap() heuristic (backward compat)
+  │        Returns: { gateway, model, reason, rule_matched }
+  │
+  ├── 3. INSERT bridge_dispatch_log(status='pending', ...) — fire and forget
+  │
+  ├── 4. Emit SSE: bridge:dispatch_started { dispatch_id, gateway_id, model_id }
+  │
+  ├── 5. adapter.dispatch(req) OR adapter.stream(req, signal)
+  │        OllamaAdapter   → Ollama NDJSON  → StreamNormalizer → AsyncIterable<string>
+  │        OpenClawAdapter → OpenAI SSE     → StreamNormalizer → AsyncIterable<string>
+  │        CodexCLIAdapter → JSONL stdout   → StreamNormalizer → AsyncIterable<string>
+  │        ClaudeAdapter   → JSON stdout    → StreamNormalizer → AsyncIterable<string>
+  │
+  ├── 6. SUCCESS:
+  │        UPDATE bridge_dispatch_log SET status='completed', tokens, duration_ms
+  │        trackTokenUsage(model, input, output)   ← existing function, unchanged
+  │        logDecision(...)                        ← existing function, unchanged
+  │        Emit SSE: bridge:dispatch_completed { dispatch_id, tokens, duration_ms }
+  │
+  ├── 7. FAILURE:
+  │        UPDATE bridge_dispatch_log SET status='failed', error=...
+  │        Mark gateway degraded if probe also fails
+  │        Emit SSE: bridge:dispatch_failed { dispatch_id, error, fallback_used }
+  │        Retry with next available gateway (exclude degraded, re-enter step 2)
+  │
+  └── 8. logDecision() ← existing decision_log write, always preserved
+
+──────────────────── HEALTH TICK ─────────────────────────────────────────────────
+
+scheduler.ts tick (every 2s, existing) → every 15 ticks (30s):
+  BridgeHealthTick.run()
+    ├── SELECT * FROM gateways WHERE enabled=1
+    ├── For each: adapter.probe() → { ok, latency_ms }
+    ├── UPDATE gateways SET status, last_probe_at, last_probe_ms, probe_error
+    ├── Invalidate GatewayRegistry in-memory cache
+    └── Emit SSE: bridge:health_update { gateways: [{id, status, latency_ms}] }
+
+──────────────────── MEMORY INTEGRATION ──────────────────────────────────────────
+
+Phase 1 (this milestone): Bridge decisions feed decision_log (existing).
+  Every routing decision writes: decision_type='model_selection', chosen, reasoning.
+
+Phase 2 (Bridge agents, later):
+  Bridge Operator agent reads bridge_dispatch_log for patterns.
+  Route Analyst agent reads routing_rules + dispatch_log, suggests rule changes.
+  Model Scout agent reads models table, triggers listModels() on new gateways.
+  All three agents are personas with preferred_backend constraints, using Memory V3.
+```
+
+---
+
+### Integration Points with Existing Services
+
+#### scheduler.ts
+
+Add one health tick alongside the existing `DEADLINE_CHECK_INTERVAL` (15 ticks):
+
+```typescript
+const BRIDGE_HEALTH_INTERVAL = 15; // Every 30s — same as DEADLINE_CHECK_INTERVAL
+
+// In the existing tick handler:
+if (tickCount % BRIDGE_HEALTH_INTERVAL === 0) {
+  await runBridgeHealthCheck().catch(() => {}); // non-critical, swallow errors
+}
+```
+
+No structural changes to scheduler.ts. One line added in the tick body.
+
+#### sse-hub.ts
+
+Unchanged. Bridge emits via `emitSSE()` which calls `sse-hub.broadcast()` internally.
+New event namespace: `bridge:*`
+
+| SSE Event | Payload | When |
+|-----------|---------|------|
+| `bridge:gateway_detected` | `{ gateway_id, provider, status, model_count }` | Startup |
+| `bridge:gateway_status` | `{ gateway_id, status, latency_ms }` | Health tick |
+| `bridge:dispatch_started` | `{ dispatch_id, gateway_id, model_id, agent_id }` | Before adapter |
+| `bridge:dispatch_completed` | `{ dispatch_id, tokens, duration_ms, cost_usd }` | After success |
+| `bridge:dispatch_failed` | `{ dispatch_id, error, gateway_id, fallback_used }` | After failure |
+| `decision:made` | existing schema, unchanged | Still fires from logDecision() |
+
+#### config.ts
+
+Not modified. The env vars `OLLAMA_URL`, `OPENCLAW_URL`, `OLLAMA_MODEL`, `OPENCLAW_MODEL`,
+and `OPENCLAW_TOKEN` remain. StartupDetector reads them once on boot to seed the initial
+gateway rows. After startup, `gateways` table is authoritative — operators can override
+URLs, add gateways, change priorities via the admin API without touching env vars.
+
+#### stream-service.ts
+
+Not modified. `OllamaStreamBackend` and `OpenClawStreamBackend` are imported and delegated
+to from the corresponding adapters. `selectStreamBackend()` becomes an internal detail
+of bridge routing — external callers use `bridgeStream()` instead.
+
+#### Admin Backend (:5180)
+
+Admin backend reads from same PostgreSQL. Bridge tables are immediately available to admin
+SQL queries with no API changes to admin backend required. Suggested admin surfaces:
+
+| Admin Tab | Data | Query |
+|-----------|------|-------|
+| Bridge > Gateways | `gateways` | Full list with health status, last probe latency |
+| Bridge > Models | `models JOIN gateways` | Catalog with gateway, cost tier, capabilities |
+| Bridge > Activity | `bridge_dispatch_log` | Last N dispatches with latency, status |
+| Bridge > Cost | `bridge_dispatch_log` grouped by model, date | Rolling cost windows |
+| Bridge > Rules | `routing_rules` | CRUD — priority-ordered list |
+
+---
+
+### Architectural Patterns
+
+#### Pattern 1: Adapter Interface with Capability Flags
+
+Every gateway adapter implements a shared `GatewayAdapter` interface. The routing engine
+inspects capabilities from the `models` table, not hardcoded `if (backend === 'ollama')` branches.
+
+```typescript
+export interface GatewayAdapter {
+  readonly gatewayType: 'http' | 'cli';
+  dispatch(req: BridgeRequest): Promise<BridgeResult>;
+  stream(req: BridgeRequest, signal: AbortSignal): AsyncIterable<string>;
+  probe(): Promise<ProbeResult>;            // { ok, latency_ms, version? }
+  listModels(): Promise<ModelDescriptor[]>; // discovered models for this gateway
+}
+```
+
+Adding a new gateway = implement this interface + add a row to `gateways`. No changes
+to bridge-router.ts, scheduler.ts, or routes.
+
+#### Pattern 2: DB-Authoritative Gateway State
+
+Gateway health is persisted to `gateways.status`. SSE events are notifications, not state.
+Both Fastify (:3001) and Admin backend (:5180) read from the same PostgreSQL — they see
+the same ground truth without any cross-process messaging.
+
+Never maintain health in a module-level Map<string, Status>. It is lost on restart and
+invisible to the admin backend.
+
+#### Pattern 3: Non-Blocking Telemetry Writes
+
+All `bridge_dispatch_log` writes are fire-and-forget — consistent with the existing
+`logDecision()` and `trackTokenUsage()` pattern:
+
+```typescript
+// Correct: dispatch never waits for logging
+logBridgeDispatch({ id, gateway_id, ... }).catch(() => {});
+```
+
+Logging latency must not contribute to dispatch latency. The `bridge_dispatch_log.started_at`
+timestamp is captured before the adapter call; `completed_at` is set after.
+
+#### Pattern 4: Startup Seeding Then DB Authority
+
+On first boot, StartupDetector reads `config.*` env vars to seed initial gateway rows.
+On all subsequent boots, the DB rows are used directly — no re-detection by default.
+Operators can trigger re-detection via `POST /api/bridge/detect`.
+
+This avoids probing every gateway on every request (the current ai-router anti-pattern
+of calling `probeBackend()` inline with every dispatch).
+
+---
+
+### Anti-Patterns
+
+#### Anti-Pattern 1: Gateway Config in config.ts
+
+**What happens:** Add `config.codexBinaryPath`, `config.claudeToken`, etc. as the
+gateway registry grows to cover Codex, Claude, Gemini CLIs.
+
+**Why wrong:** config.ts becomes a second registry that diverges from the DB. Admin
+UI cannot manage gateways without a redeployment. Per-user gateway configurations
+(multi-tenant future) become impossible.
+
+**Do this instead:** Only `ollamaUrl` and `openclawUrl` remain in config.ts as
+bootstrap seeds for the StartupDetector. All runtime gateway state lives in `gateways`.
+
+#### Anti-Pattern 2: Modifying ai-router.ts During Bridge Build
+
+**What happens:** Refactor ai-router.ts internals while building bridge-router.ts.
+
+**Why wrong:** 35 Playwright tests directly import and test `shouldRouteCheap`,
+`compressContext`, `filterToolsForBackend`. Any signature change causes test failures.
+
+**Do this instead:** Bridge wraps ai-router with zero changes. ai-router.ts is
+read-only during the Bridge milestone. Cleanup is a separate, later commit after
+tests are updated.
+
+#### Anti-Pattern 3: Health Probe on Every Request
+
+**What happens:** Call `probeBackend()` inside `bridgeDispatch()` before selecting
+a gateway — the current ai-router.ts behavior (it fires a HEAD before every dispatch).
+
+**Why wrong:** Every AI call incurs an extra HTTP round-trip. At 50 concurrent users
+each streaming, that is 50 wasted HEAD requests per second.
+
+**Do this instead:** Health state is maintained by the scheduler health tick (30s cadence).
+`GatewayRegistry.getAvailable()` reads from DB cache, TTL 30s. Probes only run in the
+background, never inline with dispatch.
+
+#### Anti-Pattern 4: Hardcoding CLI Binary Paths
+
+**What happens:** `config.claudeBinaryPath = '/home/lobster/.npm-global/bin/claude'`
+
+**Why wrong:** Different on every user's machine. SaaS premise is "runs on your machine."
+Also wrong for remote deployments where the binary is in `/usr/local/bin/`.
+
+**Do this instead:** StartupDetector uses `which claude` (PATH resolution). Resolved path
+stored in `gateways.binary_path`. If binary relocates, `POST /api/bridge/detect` re-runs
+detection and updates the row.
+
+#### Anti-Pattern 5: Using bridge_dispatch_log as Decision Log
+
+**What happens:** Eliminate `decision_log` table, consolidate everything into
+`bridge_dispatch_log`.
+
+**Why wrong:** `decision_log` records abstract orchestration decisions (agent routing,
+task skips) that are not tied to a dispatch. Bridge dispatch log records concrete
+network calls. They serve different dashboards: transparency (decisions) vs cost/latency
+(dispatches). Conflating them makes both dashboards harder to build.
+
+**Do this instead:** Keep both. Bridge always calls `logDecision()` for model selection
+events AND writes to `bridge_dispatch_log` for dispatch telemetry.
+
+---
+
+### Build Order
+
+Sequencing is dictated by: schema before routes, adapters before router,
+router before route cutover.
+
+| Step | What to Build | Rationale |
+|------|--------------|-----------|
+| 1 | `migrate-bridge.ts` — create 4 new tables | Must exist before any reads/writes |
+| 2 | `startup-detector.ts` — probe + seed | Gives the system real data immediately; validates schema |
+| 3 | `bridge/adapters/interface.ts` — GatewayAdapter interface | Contract before implementations |
+| 4 | `bridge/adapters/ollama.ts` + `openclaw.ts` — wrap existing | Lowest risk: logic already proven in ai-router |
+| 5 | `gateway-registry.ts` + `routing-engine.ts` (non-streaming) | Core routing, no new adapter needed |
+| 6 | `bridge-router.ts` — `bridgeDispatch()` wiring all together | Integrates registry + engine + adapters |
+| 7 | `bridge_dispatch_log` writes + health tick in scheduler | Telemetry, non-blocking |
+| 8 | Route cutover: update `/api/v1/chat` + agent jobs to call `bridgeDispatch()` | Replace ai-router calls; run Playwright |
+| 9 | `bridge/adapters/codex-cli.ts` + `claude-cli.ts` — subprocess adapters | New capability; can land after existing tests pass |
+| 10 | `routes/v1/bridge.ts` — CRUD for gateways, models, rules, log viewer | Admin surface; needs all data to be present |
+
+**Test gate at step 8:** All 35 Playwright tests must pass before step 9 proceeds.
+This confirms the Bridge wrapping did not break existing behavior.
+
+---
+
+### Scaling Considerations
+
+| Scale | Architecture Adjustments |
+|-------|--------------------------|
+| 1-10 users | In-process; scheduler health tick; no queue needed |
+| 10-50 users | Add composite index on `bridge_dispatch_log(started_at DESC, gateway_id)` for admin queries |
+| 100+ users | CLI adapters spawn subprocesses — add per-gateway subprocess semaphore (max N concurrent codex/claude invocations); default N=3 |
+| Multi-tenant | Add `workspace_id` to `gateways` and `models`; per-tenant gateway registries; StartupDetector scopes detection per tenant |
+
+**First bottleneck:** CLI adapters (`codex`, `claude`) spawn child processes. At 10+
+concurrent dispatches to CLI gateways, process count explodes. Mitigation: a
+`ConcurrencyLimiter` in each CLI adapter (semaphore pattern, acquire before spawn, release on exit).
+
+**Second bottleneck:** `bridge_dispatch_log` on high-throughput workloads. Mitigation:
+batch inserts via a write buffer (flush every 100ms or 50 rows, whichever comes first).
+The table is append-only, so batching is safe.
+
+---
+
+### Sources
+
+- `backend/src/services/ai-router.ts` — direct code inspection (HIGH confidence)
+- `backend/src/services/stream-service.ts` — direct code inspection (HIGH confidence)
+- `backend/src/config.ts` — direct code inspection (HIGH confidence)
+- `backend/src/db/schema.ts` — complete table inventory, direct inspection (HIGH confidence)
+- `backend/src/services/sse-hub.ts` — direct code inspection (HIGH confidence)
+- `backend/src/services/scheduler.ts` — direct code inspection (HIGH confidence)
+- `research/cli-runtime-design-brief.md` — CLI_RUNTIME_REGISTRY spec, CLI tool capabilities (HIGH confidence)
+- `research/hermes-agent-patterns.md` — routing heuristics, tool schema rebuild pattern (HIGH confidence)
+- `research/runtime-logging-hardening-plan.md` — event schema, telemetry subsystem model (HIGH confidence)
+- `.planning/PROJECT.md` — v3.0 milestone goals and constraints (HIGH confidence)
+
+---
+
+*Architecture research for: Porter Bridge AI Gateway v3.0*
+*Researched: 2026-03-25*
+*Confidence: HIGH — all findings from direct codebase inspection, zero training-data inference*
+
+---
+---
+
+## v2.0 Baseline Architecture (reference — do not modify)
+
+The content below documents the v2.0 architecture established 2026-03-21. It remains
+accurate as context for understanding how Bridge integrates with the existing system.
+
+**Domain:** AI Orchestration Platform — Fastify/Drizzle/PostgreSQL backend extension
 **Researched:** 2026-03-21
 **Confidence:** HIGH (based on direct codebase inspection)
 
 ---
 
-## Existing Architecture (v1.0 Baseline)
-
-### System Overview
+### Existing Architecture (v1.0 Baseline)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -24,7 +727,7 @@
 │                        Fastify Server (:3001)                             │
 │  ┌──────────────┐  ┌────────────────────────────────────────────────┐    │
 │  │  Auth Plugin │  │  /api/v1/* (17 route groups, response envelope) │    │
-│  │  (requireAuth│  │  /api/* legacy routes (direct Drizzle, no env) │    │
+│  │  (requireAuth│  │  /api/* legacy routes                          │    │
 │  │  decorator)  │  │  /health — plain response                      │    │
 │  └──────────────┘  └───────────────────────┬────────────────────────┘    │
 │                                             │                             │
@@ -32,28 +735,17 @@
 │  │                     Services Layer                               │    │
 │  │  ai-router.ts  scheduler.ts  event-triggers.ts                   │    │
 │  │  billing.ts    email.ts      github.ts  calendar.ts              │    │
-│  │  whatsapp.ts   external-dispatcher.ts                            │    │
+│  │  whatsapp.ts   external-dispatcher.ts  sse-hub.ts                │    │
 │  └──────────────────────────────────────────┬───────────────────────┘    │
 │                                             │                             │
 │  ┌──────────────────────────────────────────▼───────────────────────┐    │
-│  │                   Drizzle ORM + better-sqlite3                   │    │
-│  │  WAL mode, single file, migrations 04-07                         │    │
-│  └──────────────────────────────────────────┬───────────────────────┘    │
-│                                             │                             │
-│  ┌──────────────────────────────────────────▼───────────────────────┐    │
-│  │          Proxy Plugin (LAST — fallback for unknown routes)       │    │
-│  └──────────────────────────────────────────┬───────────────────────┘    │
-└────────────────────────────────────────────┬─────────────────────────────┘
-                                             │
-                              ┌──────────────▼──────────────┐
-                              │   porter.py (:8877)          │
-                              │   Legacy Python monolith     │
-                              │   handles: memory injection, │
-                              │   chat dispatch, brain fns   │
-                              └─────────────────────────────┘
+│  │             Drizzle ORM + PostgreSQL 16                          │    │
+│  │  (SQLite fully eliminated as of 2026-03-25)                      │    │
+│  └──────────────────────────────────────────────────────────────────┘    │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Existing Component Inventory
+### Existing Component Inventory (v2.0)
 
 | Component | Location | Status | Notes |
 |-----------|----------|--------|-------|
@@ -61,571 +753,33 @@
 | v1 route index | `routes/v1/index.ts` | STABLE | 17 groups under `/api/v1/` |
 | Envelope lib | `lib/envelope.ts` | STABLE | `ok(data)` / `err(code, msg)` pattern |
 | AI router | `services/ai-router.ts` | STABLE | cheap/strong routing, context compression |
-| Scheduler | `services/scheduler.ts` | STABLE | 2s tick, `emitSSE` via porter.py |
-| Event triggers | `services/event-triggers.ts` | STABLE | file-created, message-received, deadline-approaching |
+| Scheduler | `services/scheduler.ts` | STABLE | 2s tick, 7 workflow types |
+| SSE hub | `services/sse-hub.ts` | STABLE | Native in-process broadcaster |
+| Stream service | `services/stream-service.ts` | STABLE | Ollama NDJSON + OpenClaw SSE |
+| Event triggers | `services/event-triggers.ts` | STABLE | deadline, file-created, message-received |
 | External dispatcher | `services/external-dispatcher.ts` | STABLE | GitHub, email, calendar, WhatsApp |
-| Billing service | `services/billing.ts` | PARTIAL | Lemon Squeezy wired, plan limits not enforced |
-| Migrations | `db/migrate-04..07.ts` | STABLE | Sequential, idempotent |
-| Proxy plugin | `plugins/proxy.ts` | STABLE | Must remain LAST in registration |
-| Chat (legacy) | `routes/chat.ts` | LEGACY | No envelope, will shrink |
-| Chat (v1) | `routes/v1/chat.ts` | PARTIAL | sessions + proxy to porter.py for streaming |
+| Billing service | `services/billing.ts` | PARTIAL | Lemon Squeezy wired, limits not enforced |
+| Memory injection | `services/memory-injection.ts` | STABLE | Memory V2/V3 injection |
 
-### Existing Schema Tables
+### Existing Schema Tables (as of 2026-03-25)
 
 ```
 users, sessions, tasks, chats, chat_messages, chat_attachments
-projects, personas, schema_migrations, agent_jobs, agent_activity
-decision_log, token_usage_daily, workspace_connections
-project_connections, calendar_events, subscriptions, billing_events
+projects, personas, persona_skills, schema_migrations
+agent_jobs, agent_activity, decision_log, token_usage_daily
+workspace_connections, project_connections, calendar_events
+subscriptions, auth_tokens, billing_events
+project_collaborators, collaboration_events
+companies, contacts, contact_emails, contact_phones, contact_social
+conversations, messages, files, file_projects, file_contacts, file_conversations
+contact_conversations, contact_projects
+contact_analyses, agent_templates, concepts, learning_sessions
+customer_events, customer_scores, admin_agent_tasks, error_log
+email_messages, workspace_settings
+forge_pipeline, forge_station_runs, forge_settings
+audit_log, invites, invite_uses, agent_messages
+directives, project_notes, agent_notes
 ```
 
-**Missing from schema for v2 features:** conversations, messages (unified), contacts, contact_emails, contact_phones, contact_socials, contact_touchpoints, file_associations, agent_templates, learning_sessions, error_captures, project_collaborators
-
----
-
-## v2.0 Integration Architecture
-
-### New Component Map
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     v2.0 Additions                                   │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  routes/v1/                                                          │
-│  ├── errors.ts          (NEW) OBS-01/02: error capture               │
-│  ├── collaborators.ts   (NEW) COLLAB-01..04: project collaborators   │
-│  ├── conversations.ts   (NEW) CHAT-01..04: unified conversation model│
-│  ├── contacts.ts        (NEW) CRM-01..04: full CRM backend           │
-│  ├── templates.ts       (NEW) TMPL-01..03: agent templates API       │
-│  ├── learning.ts        (NEW) LEARN-01..03: autonomous learning API  │
-│  ├── chat.ts            (MODIFY) STRM-01..03: native streaming       │
-│  ├── files.ts           (MODIFY) FILE-01..03: add associations       │
-│  ├── billing.ts         (MODIFY) BILL-03: add limit enforcement      │
-│  └── agents.ts          (MODIFY) TMPL-03: template instantiation     │
-│                                                                      │
-│  services/                                                           │
-│  ├── stream.ts          (NEW) token-by-token SSE from AI backends    │
-│  ├── learning.ts        (NEW) autonomous web/social/GitHub search    │
-│  └── billing.ts         (MODIFY) add per-request limit checks        │
-│                                                                      │
-│  db/                                                                 │
-│  ├── migrate-08.ts      (NEW) collab + unified chat schema           │
-│  ├── migrate-09.ts      (NEW) CRM V2 schema (multi-email, social)   │
-│  ├── migrate-10.ts      (NEW) file associations + agent templates    │
-│  ├── migrate-11.ts      (NEW) learning sessions + error captures     │
-│  └── schema.ts          (MODIFY) add new table definitions           │
-│                                                                      │
-│  plugins/                                                            │
-│  ├── auth.ts            (MODIFY) add collab role check decorator     │
-│  └── rate-limit.ts      (NEW) per-plan rate limiting middleware      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Feature-by-Feature Integration Points
-
-### 1. Streaming Chat (STRM-01..03)
-
-**Current state:** `routes/v1/chat.ts` proxies `GET /api/v1/chat/stream` to porter.py. The porter.py SSE stream is piped through as bytes. No native streaming in Fastify backend.
-
-**Integration approach:** Extend `services/ai-router.ts` with a `dispatchStream()` function that returns an `AsyncIterable<string>`. The route handler writes SSE chunks directly to `reply.raw` using the same piping pattern already proven in the existing proxy stream handler.
-
-**New route:** `POST /api/v1/chat/stream` — accepts `{agent_id, message, chat_id?, project_id?}`, saves user message to `chat_messages`, opens SSE stream, accumulates assistant tokens, saves final assembled message on `[DONE]`.
-
-**Cancellation (STRM-03):** Use `AbortController`. When client disconnects (`request.raw.on('close')`), call `controller.abort()` which cancels the fetch to the upstream AI backend. Both Ollama (`/api/generate`) and openclaw (`/v1/chat/completions`) respect `AbortSignal` on the fetch call.
-
-**Touches:** `services/ai-router.ts` (add `dispatchStream`), `routes/v1/chat.ts` (add stream POST), no schema changes needed.
-
-**Integration with existing services:**
-- `token_usage_daily` — track after stream completes (on `[DONE]`)
-- `decision_log` — log model selection before stream begins
-- `emitSSE('agent:activity')` — fire after stream completes
-
----
-
-### 2. Collaborative Sessions (COLLAB-01..04)
-
-**Current state:** Projects have a single `owner_id`. No multi-user access model in Fastify. The auth plugin provides `request.sessionUser` with `{username, role}` (workspace-level roles only).
-
-**New table needed:**
-```
-project_collaborators(id, project_id, username, role, invited_by,
-                      invite_token, invited_at, accepted_at)
-```
-Roles: `view` | `chat` | `edit` | `admin` (project-scoped, separate from workspace RBAC).
-
-**Auth plugin extension:** Add `requireProjectAccess(minRole)` decorator that checks both workspace role and `project_collaborators`. Owner always has `admin` access. The existing `requireAuth` becomes the baseline; `requireProjectAccess` layers on top.
-
-**Invitation flow:** `POST /api/v1/collaborators` — creates a `project_collaborators` row with a pending invite token, sends invite email via existing `services/email.ts`. Accept via `POST /api/v1/collaborators/accept` with the token.
-
-**Integration with existing routes:**
-- `routes/v1/projects.ts` — add `requireProjectAccess('view')` guard to GET project detail
-- `routes/v1/chat.ts` — collaborators can chat with agents (check project access before dispatch)
-- `routes/v1/agents.ts` — collaborators with `chat` role can direct agents
-
-Revoke is `DELETE /api/v1/collaborators/:id`. Cascading: cancel pending `agent_jobs` scoped to that user+project combination.
-
----
-
-### 3. Unified Chat (CHAT-01..04)
-
-**Current state:** `chats` + `chat_messages` covers direct chat sessions. WhatsApp/email messages live separately in porter.py. No threading. No external channel unification.
-
-**New schema:**
-```
-conversations(id, title, type, project_id, agent_id, username,
-              channel, channel_ref, created_at, updated_at)
-  type: 'direct' | 'project' | 'external'
-  channel: null | 'whatsapp' | 'email'
-  channel_ref: external message ID for dedup
-
-messages(id, conversation_id, role, content, parent_id,
-         sender_username, channel_metadata, created_at)
-  parent_id: enables threading (CHAT-02)
-  channel_metadata: JSON for external channel-specific data
-```
-
-**Migration strategy:** Migrate-08 creates new tables. Existing `chats`/`chat_messages` rows are NOT migrated automatically — keep old tables for read access. Legacy `routes/chat.ts` continues to serve old data. New `routes/v1/conversations.ts` serves the new unified model.
-
-**External channel integration:** Existing `services/whatsapp.ts` and `services/email.ts` handle inbound messages independently today. Add a call to `createConversationMessage(channel, channelRef, content)` inside their inbound handlers. This surfaces external messages in the unified stream with zero disruption to existing processing.
-
-**FTS5 search (CHAT-03):** Create a virtual `messages_fts(content)` table with triggers on `messages` insert. Query via `messages_fts MATCH ?`. SQLite FTS5 is already available in WAL mode.
-
----
-
-### 4. CRM Backend (CRM-01..04)
-
-**Current state:** The Fastify backend has NO CRM schema. CRM is currently in porter.py (people module). The existing `users` table is workspace membership only, not external contacts.
-
-**New tables needed:**
-```
-contacts(id, workspace_owner, display_name, company, notes,
-         ai_analysis, created_at, updated_at)
-contact_emails(id, contact_id, email, label, is_primary)
-contact_phones(id, contact_id, phone, country_code, label, is_primary)
-contact_socials(id, contact_id, platform, handle, url)
-contact_touchpoints(id, contact_id, project_id, conversation_id,
-                    event_type, summary, occurred_at)
-```
-
-**New route:** `routes/v1/contacts.ts` — full CRUD on contacts with nested email/phone/social arrays returned in a single GET response (assembled via JOIN or separate selects).
-
-**AI analysis (CRM-03):** `POST /api/v1/contacts/:id/analyze` — builds a prompt from the contact's touchpoints and dispatches via `ai-router.dispatch()`. Stores result in `contacts.ai_analysis`. Non-blocking — inserts an `agent_job` with `trigger_type = 'contact_analysis'` rather than blocking the HTTP request. Returns `202 Accepted` with job ID.
-
-**Activity timeline (CRM-04):** `contact_touchpoints` is written by:
-- Unified chat service when `conversation.type = 'external'` and a contact is matched
-- Project milestone events when a contact is linked to a project
-- Manual POST by user via API
-
-**Integration with billing:** Contact count is a plan limit dimension. Add a `checkContactLimit(username)` call in `services/billing.ts` and invoke it as a preHandler on `POST /api/v1/contacts`.
-
----
-
-### 5. File Associations (FILE-01..03)
-
-**Current state:** `routes/v1/files.ts` handles filesystem browsing and upload to disk. `chat_attachments` stores blob data for chat messages. No linking between filesystem files and Porter entities (projects, contacts, conversations).
-
-**New table:**
-```
-file_associations(id, file_path, root_id, project_id, contact_id,
-                  conversation_id, uploaded_by, size_bytes, mime_type, created_at)
-```
-
-This is a **metadata-only** index. Files still live on disk. The table links paths to entities.
-
-**Modify** `POST /api/v1/files/upload` to accept optional `project_id`, `contact_id`, `conversation_id` fields. After writing the file to disk, insert a row into `file_associations`.
-
-**New endpoints:**
-- `GET /api/v1/files/associations?project_id=X` — list files linked to an entity
-- `POST /api/v1/files/associations` — manually link an existing file to an entity
-- `DELETE /api/v1/files/associations/:id` — remove association (not the file itself)
-
-**Searchable (FILE-03):** Add indexes on `file_associations(project_id)`, `(contact_id)`, `(conversation_id)`, `(mime_type)`, `(created_at)`.
-
-**Event trigger hook:** When a file is uploaded with a `project_id`, call the existing `onFileCreated(projectId, filename)` from `services/event-triggers.ts`. This is already wired in the service — the upload route just needs to pass the project_id through.
-
----
-
-### 6. Agent Templates (TMPL-01..03)
-
-**Current state:** Templates exist as filesystem directories under `personas/` (UUID dirs with IDENTITY.md, SOUL.md, etc.). The wizard loads them via `loadAvailableTemplates()` — a directory scan returning bare `{templateId, name}` pairs. No structured catalog, no categories, no search capability.
-
-**Approach:** Create a DB-backed template registry alongside the filesystem representation.
-
-**New table:**
-```
-agent_templates(id, name, category, description, skills_json, tools_json,
-                system_prompt, appearance_spec, created_at, is_builtin)
-```
-
-**Migration-10** populates this table from seed data (100 templates defined inline or loaded from a JSON file at migration time). The `personas/` filesystem format continues to be the source of truth for deployed agent identities; the templates table is the searchable catalog for selection.
-
-**New route:** `routes/v1/templates.ts`
-- `GET /api/v1/templates` — list with `?category=X&search=Y` filter (TMPL-02)
-- `GET /api/v1/templates/:id` — full template detail
-- `POST /api/v1/templates/:id/instantiate` — creates a persona from template (TMPL-03)
-
-**Instantiation (TMPL-03):** Reads the template row, calls `db.insert(schema.personas)` with skills/tools/system_prompt pre-populated in the `config` JSON blob. Returns the new agent. Reuses the same persona insert path as `routes/v1/agents.ts` — no duplication.
-
-**Integration with wizard:** The wizard's `propose` step currently reads `AVAILABLE_TEMPLATES` from disk scan at module load time. After migrate-10, it queries `agent_templates` instead, enabling category-aware proposal logic.
-
----
-
-### 7. Autonomous Learning (LEARN-01..03)
-
-**Current state:** Agents execute jobs via `services/ai-router.ts`. No external search capability. Memory V2 concepts are written by porter.py brain functions only. Fastify has no memory write capability.
-
-**New service:** `services/learning.ts` — implements the search-store loop:
-1. Accept a domain query (e.g., "TypeScript best practices 2026")
-2. Search external sources via HTTP (Brave Search API if `BRAVE_API_KEY` configured, else DuckDuckGo JSON API as free fallback)
-3. Fetch and summarize top N results using `ai-router.dispatch()`
-4. Write result as a Memory V2 concept via porter.py's API (`POST /api/memory/concepts`)
-5. Insert a `learning_sessions` row with sources, confidence score, and concept count
-
-**New route:** `routes/v1/learning.ts`
-- `POST /api/v1/agents/:id/learn` — queues a learning job (returns 202 Accepted)
-- `GET /api/v1/agents/:id/learning` — list past learning sessions (LEARN-03)
-
-**New table:** `learning_sessions(id, agent_id, query, sources_json, concepts_created, confidence, created_at)`
-
-**Integration with scheduler:** Add `trigger_type = 'autonomous_learning'` to the scheduler's `executeJob()` switch. When the scheduler processes a learning job, it calls `services/learning.ts` instead of `ai-router.dispatch()`. This is a clean extension — add one `else if` branch to the existing conditional in `executeJob()`.
-
-**Integration with Memory V2:** The learning service writes concepts to porter.py via HTTP. Fastify never writes directly to porter.py's memory tables. The porter.py boundary is preserved.
-
-**Source rate limits:** Implement exponential backoff in the learning service. Learning jobs that hit rate limits are marked `status = 'blocked'` and auto-retried by the scheduler (same pattern as connection-blocked external_call jobs already in the scheduler).
-
----
-
-### 8. SaaS Billing (BILL-01..03)
-
-**Current state:** `services/billing.ts` and `routes/v1/billing.ts` are largely complete for BILL-01 (Lemon Squeezy subscription management). Webhook handler processes subscription events and updates `subscriptions` table. Plan limits are defined in `PLANS` but NOT enforced at any API boundary.
-
-**What remains for v2:** BILL-02 (storage and contact dimensions missing from usage rollup) and BILL-03 (limit enforcement at API level is entirely absent).
-
-**BILL-02 completion:** `token_usage_daily` is already written by ai-router. Add to `getUsageThisMonth()`: storage bytes (summed from `file_associations`), contact count, agent count. These are cheap COUNT/SUM queries.
-
-**BILL-03 enforcement:** Add `enforceLimit(username, dimension)` middleware that checks plan limits before resource creation. Applied as a `preHandler` on:
-- `POST /api/v1/agents` — check agent count limit
-- `POST /api/v1/projects` — check project count limit
-- `POST /api/v1/contacts` — check contact count limit
-- `POST /api/v1/files/upload` — check storage limit
-- `POST /api/v1/chat/stream` — check monthly token limit
-
-**New plugin:** `plugins/rate-limit.ts` — wraps limit enforcement as a Fastify plugin with a `fastify.enforceLimit(dimension)` decorator, consistent with existing `fastify.requireAuth` pattern.
-
----
-
-### 9. Error Capture (OBS-01..02)
-
-**Current state:** No frontend error logging API exists. Errors disappear silently in the browser.
-
-**New table:**
-```
-frontend_errors(id, username, severity, component, message, stack_trace,
-                url, user_agent, context_json, created_at)
-```
-
-**New route:** `routes/v1/errors.ts`
-- `POST /api/v1/errors` — accepts error reports. Auth optional (can be called before login). Rate-limited to prevent abuse.
-- `GET /api/v1/errors` — admin only, query by `?severity=X&component=Y&since=Z`
-
-**Integration point:** This route is fully standalone. No dependencies on other v2 features. It is the lowest-risk, highest-value item to ship first — it immediately surfaces problems in frontend-v2 as it rolls out.
-
----
-
-## Data Flow Changes
-
-### Chat Streaming Flow (new)
-
-```
-Client POST /api/v1/chat/stream
-    |
-    +-- requireAuth
-    +-- enforceLimit('tokens')  [BILL-03]
-    |
-    +-- Save user message to chat_messages
-    |
-    +-- services/stream.ts → dispatchStream(agentId, message)
-    |         |
-    |         +-- Select backend (cheap/strong heuristic)
-    |         +-- fetch(backend, {stream: true, signal: controller.signal})
-    |
-    +-- reply.raw.write("data: {token}\n\n")  per chunk
-    |
-    +-- On request close: controller.abort()  [STRM-03]
-    |
-    +-- On [DONE]:
-          Save assembled assistant message to chat_messages
-          Update token_usage_daily
-          emitSSE('agent:activity')
-```
-
-### Collaborator Access Flow (new)
-
-```
-Client GET /api/v1/projects/:id
-    |
-    +-- requireAuth  (existing — resolves sessionUser)
-    |
-    +-- requireProjectAccess('view')  (new decorator)
-          |
-          +-- project.owner_id === sessionUser.username  → allow
-          OR
-          +-- project_collaborators row: username + role >= 'view'  → allow
-          |
-          else: 403 FORBIDDEN
-```
-
-### Unified Message Routing (new)
-
-```
-Inbound WhatsApp → services/whatsapp.ts → existing handler
-                                         |
-                                         +-- createConversationMessage(
-                                               channel='whatsapp',
-                                               channelRef=msgId,
-                                               content=body)
-                                               [writes to conversations + messages]
-                                         |
-                                         +-- emitSSE('conversation:message')
-                                         |
-                              client receives real-time update via SSE
-```
-
-### Learning Job Flow (new)
-
-```
-POST /api/v1/agents/:id/learn {query}
-    |
-    +-- Insert agent_jobs(trigger_type='autonomous_learning', ...)
-    +-- Return 202 Accepted {job_id}
-
-[2 seconds later — scheduler tick]
-    |
-    +-- executeJob() → trigger_type === 'autonomous_learning'
-    |
-    +-- services/learning.ts → searchExternal(query)
-          |
-          +-- Brave API / DuckDuckGo → list of URLs + snippets
-          +-- For each URL: ai-router.dispatch(summarize prompt)
-          +-- POST /api/memory/concepts → porter.py  [memory write]
-          +-- Insert learning_sessions row
-          +-- emitSSE('agent:learned')
-```
-
----
-
-## Recommended Project Structure (additions only)
-
-```
-backend/src/
-├── routes/v1/
-│   ├── errors.ts           (new — Phase 1, OBS-01/02)
-│   ├── collaborators.ts    (new — Phase 3, COLLAB-*)
-│   ├── conversations.ts    (new — Phase 4, CHAT-*)
-│   ├── contacts.ts         (new — Phase 4, CRM-*)
-│   ├── templates.ts        (new — Phase 5, TMPL-*)
-│   ├── learning.ts         (new — Phase 6, LEARN-*)
-│   ├── chat.ts             (modify — Phase 2, STRM-*)
-│   ├── files.ts            (modify — Phase 4, FILE-*)
-│   ├── billing.ts          (modify — Phase 7, BILL-03)
-│   └── agents.ts           (modify — Phase 5, TMPL-03)
-├── services/
-│   ├── stream.ts           (new — Phase 2, streaming dispatch)
-│   └── learning.ts         (new — Phase 6, autonomous learning)
-├── plugins/
-│   └── rate-limit.ts       (new — Phase 7, billing enforcement)
-└── db/
-    ├── migrate-08.ts       (new — collab + unified chat)
-    ├── migrate-09.ts       (new — CRM V2)
-    ├── migrate-10.ts       (new — file_associations + agent_templates)
-    └── migrate-11.ts       (new — learning_sessions + frontend_errors)
-```
-
----
-
-## Recommended Build Order
-
-The build order is dictated by three dependency rules:
-1. Schema migrations must precede routes that use the new tables
-2. Auth extensions must precede routes that use them
-3. No v2 feature depends on another v2 feature except where noted
-
-| Phase | Feature Group | Rationale | Requires |
-|-------|--------------|-----------|----------|
-| **1** | Error capture (OBS) | Zero dependencies, highest immediate value, ships fast | Nothing |
-| **2** | Streaming chat (STRM) | Unblocks frontend-v2 chat experience, standalone service | Nothing |
-| **3** | API standardization (API) | Envelope already done, OpenAPI spec generation, error codes | Nothing |
-| **4** | Collaborators (COLLAB) | Auth plugin extension required before unified chat adds collab context | Auth plugin |
-| **5** | Unified chat (CHAT) | Needs collaborator roles wired, needs conversation schema | Phase 4 |
-| **6** | CRM backend (CRM) | Needs conversation model for touchpoints | Phase 5 |
-| **7** | File associations (FILE) | Needs contact + conversation IDs from CRM + unified chat | Phase 5-6 |
-| **8** | Agent templates (TMPL) | Self-contained catalog, only links to agents which are stable | Phase 3 |
-| **9** | Autonomous learning (LEARN) | Needs stable agent + job infrastructure + memory API | Phase 8 |
-| **10** | Billing enforcement (BILL) | Rate-limit plugin needs all other routes finalized to apply correctly | Phase 7+ |
-
----
-
-## Architectural Patterns
-
-### Pattern 1: Migration Discipline
-
-Every new table lives in its own migration file. Never add columns to existing tables inside existing migrations — create a new migration. The idempotency guard `SELECT 1 FROM schema_migrations WHERE id = ?` is the established pattern; follow it exactly.
-
-```typescript
-export function migrate08CollabAndChat() {
-  const id = 'phase08_collab_chat';
-  if (sqlite.prepare(`SELECT 1 FROM schema_migrations WHERE id = ?`).get(id)) return;
-  sqlite.exec(`
-    CREATE TABLE IF NOT EXISTS project_collaborators (...);
-    CREATE TABLE IF NOT EXISTS conversations (...);
-    CREATE TABLE IF NOT EXISTS messages (...);
-    INSERT INTO schema_migrations (id) VALUES ('phase08_collab_chat');
-  `);
-}
-```
-
-Register each migration in `index.ts` boot sequence alongside the existing migrate-04 through migrate-07 calls.
-
-### Pattern 2: Service Isolation
-
-New services (`stream.ts`, `learning.ts`) must NOT import from route files. Services import from `db/client.ts`, `config.ts`, and other services only. Routes import from services. This boundary is maintained throughout v1 — preserve it.
-
-### Pattern 3: Feature Flag Gating
-
-All new features get feature flags following the existing pattern in `config.ts`. New flags: `streamingChat`, `collaborativeSessions`, `unifiedChat`, `crmBackend`, `agentTemplates`, `autonomousLearning`, `errorCapture`. Routes check `featureFlags.X` before processing and return `503 FEATURE_DISABLED` if off. This enables staged rollout without redeployment.
-
-### Pattern 4: Envelope Consistency
-
-Every new route must use `ok(data)` and `err(code, message)` from `lib/envelope.ts`. Error codes must be SCREAMING_SNAKE_CASE strings. Never return a bare `{error: "string"}` — that is the legacy pattern in the old `routes/chat.ts` and `routes/auth.ts`, which are being superseded.
-
-### Pattern 5: SSE Emission for State Changes
-
-All significant state changes emit via `emitSSE()` from `services/scheduler.ts`. New features follow the same pattern:
-- `emitSSE('conversation:message', {...})` when a new message arrives
-- `emitSSE('collab:access-granted', {...})` when a collaborator accepts
-- `emitSSE('agent:learned', {...})` when a learning session completes
-
-The `emitSSE` function posts to porter.py's internal SSE hub. porter.py owns the SSE broadcast infrastructure in v1. Do not build a parallel SSE hub in Fastify for these coarse-grained events — only the streaming chat writes directly to `reply.raw`.
-
----
-
-## Anti-Patterns to Avoid
-
-### Anti-Pattern 1: Duplicating AI Routing Logic for Streaming
-
-**What people do:** Add streaming by fetching directly from Ollama or openclaw inside a route handler, rewriting the backend selection and fallback logic inline.
-
-**Why it's wrong:** The routing heuristic, fallback logic, token tracking, and decision logging all live in `ai-router.ts`. Duplicating them creates two divergent code paths that will drift.
-
-**Do this instead:** Extend `ai-router.ts` with a `dispatchStream(req: DispatchRequest): AsyncIterable<string>` function. The route handler calls this and pipes to `reply.raw`.
-
-### Anti-Pattern 2: Direct Memory V2 DB Writes from Fastify
-
-**What people do:** Write learning concepts directly to porter.py's SQLite memory tables from Node.js, opening a second connection to the same SQLite file.
-
-**Why it's wrong:** porter.py owns the Memory V2 schema and writes involve complex injection logic, signal promotion, and noise filtering. Direct writes skip all of that. Also: two processes sharing a WAL-mode SQLite is fine for reads but risks write conflicts.
-
-**Do this instead:** Always write concepts via `POST /api/memory/concepts` on porter.py. Fastify calls porter.py as a service for memory writes.
-
-### Anti-Pattern 3: Schema Sprawl in the CRM
-
-**What people do:** Add contact fields as new columns on the `contacts` table over time (`email2`, `email3`, `phone2`).
-
-**Why it's wrong:** Breaks CRM-01 requirement for arbitrary multiple emails/phones, creates migration debt, and can't be queried efficiently.
-
-**Do this instead:** Build `contact_emails` and `contact_phones` as separate tables from day one, returned as arrays in the contacts GET response.
-
-### Anti-Pattern 4: Routing Streaming Chat Tokens Through porter.py SSE Hub
-
-**What people do:** Route each streaming token through `emitSSE()` which POSTs to porter.py for broadcast.
-
-**Why it's wrong:** Chat streaming is high-frequency (dozens of chunks per second) and latency-sensitive. Each token would incur an HTTP round-trip to porter.py, doubling latency and creating a bottleneck.
-
-**Do this instead:** Chat streaming writes directly to `reply.raw` in the Fastify route handler. The SSE hub (porter.py) is only used for coarse-grained events (job complete, agent activity, collab events).
-
-### Anti-Pattern 5: Synchronous Learning Job Execution
-
-**What people do:** `POST /api/v1/agents/:id/learn` executes the full learning loop synchronously — searching, summarizing, storing — before returning the HTTP response.
-
-**Why it's wrong:** Learning sessions take 30-120 seconds. This blocks the request, times out clients, and holds up the Node.js event loop.
-
-**Do this instead:** The POST handler inserts an `agent_job` row with `trigger_type = 'autonomous_learning'` and immediately returns `202 Accepted` with the job ID. The scheduler picks it up within 2 seconds and executes it asynchronously.
-
----
-
-## Integration Points
-
-### External Services
-
-| Service | v2 Integration | Notes |
-|---------|---------------|-------|
-| Lemon Squeezy | Add per-request limit enforcement (BILL-03) | Webhook handler already complete |
-| Ollama | Add `stream: true` mode to ai-router | `/api/generate` supports streaming ndjson |
-| openclaw/codex | Add `stream: true` mode to ai-router | OpenAI-compatible SSE streaming |
-| porter.py | Memory concept writes, SSE hub | HTTP only — never share DB connections |
-| WhatsApp (Twilio) | Feed inbound to unified conversations table | Modify `services/whatsapp.ts` inbound handler |
-| Email (IMAP) | Feed inbound to unified conversations table | Modify `services/email.ts` inbound handler |
-| Brave Search API | Optional — learning service | Fall back to DuckDuckGo JSON if absent |
-
-### Internal Boundaries
-
-| Boundary | Communication | Constraint |
-|----------|---------------|------------|
-| `routes/v1` ↔ `services/` | Direct TypeScript import | Services never import from routes |
-| Fastify ↔ porter.py | HTTP only | Never open second SQLite connection to porter.db |
-| `scheduler.ts` ↔ `services/` | Direct import | scheduler imports ai-router, external-dispatcher, learning |
-| `services/stream.ts` ↔ `ai-router.ts` | Direct import | stream extends ai-router, never replaces |
-| `services/learning.ts` ↔ porter.py | HTTP POST | Memory V2 write boundary preserved |
-
-### Auth Plugin Extensions
-
-The auth plugin currently provides `request.sessionUser` and `fastify.requireAuth`. v2 adds:
-
-```typescript
-// New decorator — project-scoped access check
-fastify.decorate('requireProjectAccess',
-  (minRole: 'view' | 'chat' | 'edit' | 'admin') =>
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const { id: projectId } = request.params as { id: string };
-      const username = request.sessionUser!.username;
-      // check: project.owner_id === username  (always admin)
-      // OR: project_collaborators row with role >= minRole
-      // else: 403
-    }
-);
-```
-
-All access control lives in `plugins/auth.ts`, not scattered in individual routes.
-
----
-
-## Scaling Considerations
-
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| Current (few users) | SQLite WAL is fine, single process, single binary |
-| 100-500 users | SQLite WAL handles well under typical SaaS workload. Add indexes proactively on new tables. |
-| 500-5K users | First bottleneck: SQLite write throughput on concurrent chat streaming. Mitigation: batch message inserts, defer non-critical writes. Schema uses no SQLite-specific idioms except `unixepoch()` — designed for PostgreSQL migration. |
-| 5K+ users | Replace SQLite with PostgreSQL (Drizzle config change + dialect swap). SSE hub moves from porter.py to Redis pub/sub. porter.py fully retired. |
-
-**First bottleneck for v2:** Chat streaming concurrent writes. If 50 users stream simultaneously, each stream writes ~100 rows/min to `chat_messages`. At 5K rows/min total, WAL handles this comfortably. The actual bottleneck will be AI backend throughput (Ollama is single-threaded), not SQLite.
-
-**Second bottleneck:** Learning jobs + regular agent jobs competing for the 2s scheduler tick. Long-running learning sessions (30-120s) block the single-threaded scheduler. Mitigation: run learning jobs in a separate `learningScheduler` with its own `setInterval` that does not share the tick with the main job queue.
-
----
-
-## Sources
-
-- Direct codebase inspection: `/home/lobster/documents/porter/backend/src/` (all files read March 2026)
-- Schema: `backend/src/db/schema.ts` (complete table inventory)
-- Patterns: `routes/v1/chat.ts`, `plugins/auth.ts`, `services/scheduler.ts`, `services/ai-router.ts`
-- Requirements: `.planning/REQUIREMENTS.md` (v2 requirements, 32 items)
-- Project context: `.planning/PROJECT.md`
-
----
 *Architecture research for: Porter v2.0 Backend Ready*
 *Researched: 2026-03-21*
-*Confidence: HIGH — all findings based on direct codebase inspection, zero training-data inference*
