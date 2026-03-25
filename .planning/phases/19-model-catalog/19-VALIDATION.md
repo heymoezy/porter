@@ -20,7 +20,7 @@ created: 2026-03-25
 | **Framework** | node:test (built-in Node.js test runner) + tsx |
 | **Config file** | none — uses node:test directly |
 | **Quick run command** | `npx tsx --test backend/src/__tests__/model-catalog.test.ts` |
-| **Full suite command** | `npx tsx --test backend/src/__tests__/model-catalog.test.ts backend/src/__tests__/model-discovery.test.ts backend/src/__tests__/model-cost-tracking.test.ts` |
+| **Full suite command** | `npx tsx --test backend/src/__tests__/model-catalog.test.ts` |
 | **Estimated runtime** | ~5 seconds |
 
 ---
@@ -38,9 +38,9 @@ created: 2026-03-25
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 19-01-01 | 01 | 1 | MOD-01 | unit | `npx tsx --test backend/src/__tests__/model-catalog.test.ts` | ❌ W0 | ⬜ pending |
-| 19-02-01 | 02 | 2 | MOD-02, MOD-04 | unit | `npx tsx --test backend/src/__tests__/model-discovery.test.ts` | ❌ W0 | ⬜ pending |
-| 19-03-01 | 03 | 2 | MOD-03, MOD-05 | unit | `npx tsx --test backend/src/__tests__/model-cost-tracking.test.ts` | ❌ W0 | ⬜ pending |
+| 19-01-01 | 01 | 1 | MOD-01, MOD-02, MOD-04, MOD-05 | unit | `npx tsx --test backend/src/__tests__/model-catalog.test.ts` | ❌ W0 | ⬜ pending |
+| 19-02-01 | 02 | 2 | MOD-02, MOD-04 | unit | `npx tsx --test backend/src/__tests__/model-catalog.test.ts` | ❌ W0 | ⬜ pending |
+| 19-02-02 | 02 | 2 | MOD-03, MOD-05 | unit | `npx tsx --test backend/src/__tests__/model-catalog.test.ts` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -48,9 +48,7 @@ created: 2026-03-25
 
 ## Wave 0 Requirements
 
-- [ ] `backend/src/__tests__/model-catalog.test.ts` — stubs for MOD-01
-- [ ] `backend/src/__tests__/model-discovery.test.ts` — stubs for MOD-02, MOD-04
-- [ ] `backend/src/__tests__/model-cost-tracking.test.ts` — stubs for MOD-03, MOD-05
+- [ ] `backend/src/__tests__/model-catalog.test.ts` — stubs for MOD-01, MOD-02, MOD-03, MOD-04, MOD-05 (created in Plan 01, Task 1)
 
 ---
 
