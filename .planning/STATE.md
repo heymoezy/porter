@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 21-01-PLAN.md
-last_updated: "2026-03-25T11:28:36.697Z"
+stopped_at: Completed 21-02-PLAN.md
+last_updated: "2026-03-25T11:33:42.408Z"
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 15
-  completed_plans: 14
+  completed_plans: 15
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Current Position
 
-Phase: 21 (first-run-setup) — EXECUTING
-Plan: 1 of 2
+Phase: 21 (first-run-setup) — COMPLETE
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -72,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 19-02]: alternatives list uses original unfiltered candidates — preserves full gateway picture in dispatch logs for observability
 - [Phase 21]: detectAndUpsertGateways returns DetectionReport (not void) for setup wizard consumption; probeGateway never throws; zeroConfigReady = any gateway found && healthy
 - [Phase 21]: OpenClaw metadata always includes gateway_roles on every boot upsert via ON CONFLICT DO UPDATE
+- [Phase 21]: mapRawToGatewayRow duplicated in bridge.ts to avoid circular import with startup-detector.ts
+- [Phase 21]: setup/validate returns ok({valid:false}) for missing gateways — no 500, structured error per FRS pitfall #2
 
 ### Pending Todos
 
@@ -91,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T11:28:36.694Z
-Stopped at: Completed 21-01-PLAN.md
+Last session: 2026-03-25T11:33:42.405Z
+Stopped at: Completed 21-02-PLAN.md
 Resume file: None

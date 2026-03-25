@@ -55,7 +55,7 @@
 - [x] **Phase 18: Resilience Layer** — Background health probes, circuit breakers, retry/backoff, N-backend fallback (completed 2026-03-25)
 - [x] **Phase 19: Model Catalog** — Models table, auto-population, capability metadata, version tracking, cost tracking (completed 2026-03-25)
 - [x] **Phase 20: Smart Routing Engine** — DB-driven model selection, routing rules, decision logging, concurrency, session context (completed 2026-03-25)
-- [ ] **Phase 21: First-Run Setup** — Gateway detection endpoint, guided setup API, zero-config path, OpenClaw integration
+- [x] **Phase 21: First-Run Setup** — Gateway detection endpoint, guided setup API, zero-config path, OpenClaw integration (completed 2026-03-25)
 - [ ] **Phase 22: Bridge Admin Surface** — 7 admin API endpoints, SSE events, design system components, agent-ready layout
 - [ ] **Phase 23: Integration & Multi-Tenant** — Brain/Recall integration, per-user keys, workspace overrides, usage attribution
 
@@ -147,7 +147,7 @@ Plans:
   2. The guided setup API walks through steps: detect local runtimes, prompt for API keys for cloud providers, validate each connection, and persist to DB — each step is independently callable
   3. If Ollama is running locally when Porter starts, Bridge works immediately with no user configuration — zero-config path is the default, not an edge case
   4. OpenClaw gateway is detected and registered both as a multi-model fallback for AI dispatch and as a messaging gateway for WhatsApp/Telegram channels
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 21-01-PLAN.md — DetectionReport return type, GET /bridge/detect endpoint, OpenClaw gateway_roles metadata
 - [ ] 21-02-PLAN.md — Setup wizard API (4 POST endpoints: detect, configure, validate, save) + smoke test
@@ -189,7 +189,7 @@ Phases execute in numeric order: 16 through 23.
 | 18. Resilience Layer | 3/3 | Complete    | 2026-03-25 | - |
 | 19. Model Catalog | 2/2 | Complete    | 2026-03-25 | - |
 | 20. Smart Routing Engine | 2/2 | Complete    | 2026-03-25 | - |
-| 21. First-Run Setup | 1/2 | In Progress|  | - |
+| 21. First-Run Setup | 2/2 | Complete   | 2026-03-25 | - |
 | 22. Bridge Admin Surface | v3.0 Bridge | 0/TBD | Not started | - |
 | 23. Integration & Multi-Tenant | v3.0 Bridge | 0/TBD | Not started | - |
 
