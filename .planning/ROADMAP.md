@@ -118,7 +118,10 @@ Plans:
   3. Each model carries capability metadata (strengths) that the routing engine can use to match task type to model — not just cost tier
   4. Model versions are tracked: when a model updates, the old version is logged, and every dispatch record includes which model version was used
   5. Every dispatch logs input tokens, output tokens, cached tokens, and cost in USD to `bridge_dispatch_log` — cost is calculated from the model's pricing metadata
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 19-01-PLAN.md — Migration (models + model_versions tables), Drizzle schema, model-catalog.ts service
+- [ ] 19-02-PLAN.md — Wire into startup-detector, scheduler daily refresh, routing engine cost + capability filter
 
 ### Phase 20: Smart Routing Engine
 **Goal**: AI dispatch is driven by database rules and model capabilities instead of hardcoded heuristics — every routing decision is logged with reasoning, alternatives are visible, and concurrent dispatches are queued per-backend to prevent VPS saturation
@@ -181,7 +184,7 @@ Phases execute in numeric order: 16 through 23.
 | 16. Gateway Foundation | v3.0 Bridge | 3/3 | Complete | 2026-03-25 |
 | 17. Provider Adapters | 3/3 | Complete    | 2026-03-25 | - |
 | 18. Resilience Layer | 3/3 | Complete    | 2026-03-25 | - |
-| 19. Model Catalog | v3.0 Bridge | 0/TBD | Not started | - |
+| 19. Model Catalog | v3.0 Bridge | 0/2 | Planning | - |
 | 20. Smart Routing Engine | 2/2 | Complete    | 2026-03-25 | - |
 | 21. First-Run Setup | v3.0 Bridge | 0/TBD | Not started | - |
 | 22. Bridge Admin Surface | v3.0 Bridge | 0/TBD | Not started | - |
