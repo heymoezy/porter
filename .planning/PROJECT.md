@@ -8,21 +8,20 @@ Porter is an AI orchestration platform where non-technical users create projects
 
 Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input — the "GSD-like flow" applied to everything Porter does.
 
-## Current Milestone: v2.0 Backend Ready
+## Current Milestone: v3.0 Porter Bridge — AI Gateway & Model Intelligence
 
-**Goal:** Build a killer backend API layer — all features pure API, zero frontend. Frontend-v2 connects later.
+**Goal:** Build the unified AI gateway layer that manages all model providers, routing, capability detection, and runtime orchestration. Database-backed, commercially-quality system replacing the old hardcoded config approach.
 
 **Target features:**
-- API standardization (consistent envelopes, error codes, OpenAPI)
-- Token-by-token streaming chat across all AI backends
-- Collaborative sessions (invite, roles, shared agents)
-- Unified chat (single conversation model for agents/projects/external)
-- CRM backend (multi-email, multi-phone, social links, AI analysis)
-- File associations (projects, contacts, conversations)
-- 100 agent templates with complete specs
-- Autonomous agent learning (web/social/GitHub knowledge acquisition)
-- SaaS billing (Lemon Squeezy subscriptions, usage metering)
-- Error capture API (frontend error logging)
+- Gateway registry (detect, configure, manage all AI backends — Ollama, OpenClaw, Codex CLI, direct API keys)
+- Model catalog (unified view across all gateways — capabilities, context windows, pricing, benchmarks)
+- Smart routing (complexity-based, cost-aware, availability-aware with transparent decision logging)
+- Bridge admin surface (gateways, models, health, routing decisions, cost tracking)
+- First-run setup (guided gateway detection + configuration for new users)
+- OpenClaw for messaging (WhatsApp/Telegram), not just model access
+- Bridge agents (Bridge Operator for health, Model Scout for discovery, Route Analyst for optimization)
+- Memory/Recall integration (Bridge decisions feed into Memory V3, agents learn model preferences)
+- Commercial quality (circuit breakers, retry logic, rate limiting, graceful degradation)
 
 ## Requirements
 
@@ -94,7 +93,7 @@ Porter has been in development since Feb 18, 2026. Current version is v0.34.23. 
 - **Runtime**: Linux VPS, 8GB RAM, 2 vCPU, no GPU — must stay performant
 - **No pip installs**: Python backend is stdlib-only, new backend work goes to Node/TypeScript
 - **Backwards compatibility**: Existing 35 Playwright tests must keep passing
-- **Single DB**: SQLite with WAL mode, architecture should allow future PostgreSQL migration
+- **Single DB**: PostgreSQL 16 — single source of truth (SQLite fully eliminated)
 - **Coordination**: Another Claude session building frontend-v2 and admin analytics — avoid conflicts on shared files
 
 ## Key Decisions
@@ -109,5 +108,9 @@ Porter has been in development since Feb 18, 2026. Current version is v0.34.23. 
 | v2.0 is backend-only | Frontend-v2 being built separately. All v2 features are pure API. | — v2.0 |
 | porter.py gradual shrink | Don't spend v2 time on migration. Brain migrates naturally as features move. | — v2.0 |
 
+| porter.py fully deprecated | All AI routing, SSE, streaming now in Fastify. porter.py stopped+disabled. | ✓ Completed 2026-03-24 |
+| SQLite fully eliminated | Both Brain and Admin on PostgreSQL. better-sqlite3 removed. | ✓ Completed 2026-03-25 |
+| Bridge as major innovation | AI gateway management is Porter's differentiator — first-run detection, smart routing, cost tracking | — v3.0 scope |
+
 ---
-*Last updated: 2026-03-24 after Phase 15 (Skills & Tools Architecture) completion*
+*Last updated: 2026-03-25 after v3.0 Bridge milestone initialization*

@@ -36,9 +36,10 @@
 
 ---
 
-## v2.0 — Backend Ready (Active)
+## v2.0 — Backend Ready (Shipped: 2026-03-24)
 
 **Started:** 2026-03-21
-**Goal:** Killer backend API — all features pure API, zero frontend. Frontend-v2 connects later.
-**Requirements:** 32 (see REQUIREMENTS.md)
-**Phases:** Starting at Phase 8
+**Shipped:** 2026-03-24
+**Goal:** Killer backend API — all features pure API, zero frontend.
+**Phases:** 8-15 (9 phases, 32 plans)
+**Post-milestone:** porter.py fully deprecated, SQLite eliminated from Brain + Admin (2026-03-25)
