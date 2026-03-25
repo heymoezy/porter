@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 16-02-PLAN.md
-last_updated: "2026-03-25T06:01:36.077Z"
+stopped_at: Completed 16-03-PLAN.md
+last_updated: "2026-03-25T06:07:37.063Z"
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -49,6 +49,8 @@ Recent decisions affecting current work:
 - [Phase 16]: Raw SQL for startup detector — runs at boot before Drizzle initialized
 - [Phase 16]: detectAndUpsertGateways() runs after scheduler.start() — never blocks HTTP readiness
 - [Phase 16]: Deterministic SHA-256 credential ID for idempotent upserts across restarts
+- [Phase 16-gateway-foundation]: Bridge API uses requireAuth preHandler + sessionUser.role consistent with rest of codebase
+- [Phase 16-gateway-foundation]: maskRow mappers at route layer guarantee encrypted_value never reaches API responses (GW-07)
 
 ### Pending Todos
 
@@ -67,6 +69,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T06:01:36.074Z
-Stopped at: Completed 16-02-PLAN.md
-Resume file: .planning/phases/16-gateway-foundation/16-03-PLAN.md
+Last session: 2026-03-25T06:07:37.060Z
+Stopped at: Completed 16-03-PLAN.md
+Resume file: None

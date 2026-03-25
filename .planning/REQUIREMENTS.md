@@ -13,7 +13,7 @@
 - [ ] **GW-04**: Circuit breaker per gateway (opossum) with Closed/Open/Half-Open states, configurable thresholds, SSE events on trips
 - [ ] **GW-05**: Retry with exponential backoff for transient errors (429, 503), separate from circuit breaker logic
 - [ ] **GW-06**: Fallback chain — N gateways in priority order, not just binary cheap/strong
-- [ ] **GW-07**: API key masking — keys stored encrypted, never returned in full after initial save
+- [x] **GW-07**: API key masking — keys stored encrypted, never returned in full after initial save
 - [x] **GW-08**: Config migration — env vars (OLLAMA_URL etc.) bootstrap on first run, DB authoritative after that, env as fallback
 
 ### Model Catalog
@@ -105,7 +105,7 @@
 | GW-04 | Phase 18: Resilience Layer | Pending |
 | GW-05 | Phase 18: Resilience Layer | Pending |
 | GW-06 | Phase 18: Resilience Layer | Pending |
-| GW-07 | Phase 16: Gateway Foundation | Pending |
+| GW-07 | Phase 16: Gateway Foundation | Complete |
 | GW-08 | Phase 16: Gateway Foundation | Complete |
 | MOD-01 | Phase 19: Model Catalog | Pending |
 | MOD-02 | Phase 19: Model Catalog | Pending |
