@@ -2,16 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
-status: planning
-stopped_at: Phase 16 context gathered
-last_updated: "2026-03-25T05:26:51.800Z"
-last_activity: 2026-03-25 — Roadmap created for v3.0 Bridge milestone (8 phases, 46 requirements)
+status: executing
+stopped_at: "Completed 16-01-PLAN.md"
+last_updated: "2026-03-25T05:54:12Z"
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 3
+  completed_plans: 1
 ---
 
 # Project State
@@ -21,16 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every AI backend is visible, manageable, and intelligently routed — nothing hidden, everything in the database.
-**Current focus:** Phase 16 — Gateway Foundation
+**Current focus:** Phase 16 — gateway-foundation
 
 ## Current Position
 
-Phase: 16 of 23 (Gateway Foundation)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-03-25 — Roadmap created for v3.0 Bridge milestone (8 phases, 46 requirements)
-
-Progress: [░░░░░░░░░░] 0%
+Phase: 16 (gateway-foundation) — EXECUTING
+Plan: 2 of 3 (16-01 complete)
 
 ## Performance Metrics
 
@@ -57,6 +51,10 @@ Recent decisions affecting current work:
 
 None yet.
 
+### Completed Plans
+
+- [16-01]: gateways + gateway_credentials tables (migration + Drizzle), GatewayAdapter interface — 2026-03-25
+
 ### Blockers/Concerns
 
 - [Phase 17]: CLI adapter edge cases — Codex CLI and Claude CLI subprocess dispatch under error conditions needs a spike during planning
@@ -65,6 +63,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T05:26:51.798Z
-Stopped at: Phase 16 context gathered
-Resume file: .planning/phases/16-gateway-foundation/16-CONTEXT.md
+Last session: 2026-03-25T05:54:12Z
+Stopped at: Completed 16-01-PLAN.md (gateway foundation schema + types)
+Resume file: .planning/phases/16-gateway-foundation/16-02-PLAN.md

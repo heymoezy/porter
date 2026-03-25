@@ -7,7 +7,7 @@
 
 ### Gateway Registry
 
-- [ ] **GW-01**: Gateway table in PostgreSQL stores all AI backends with type, URL, auth method, health status, priority, and metadata
+- [x] **GW-01**: Gateway table in PostgreSQL stores all AI backends with type, URL, auth method, health status, priority, and metadata
 - [ ] **GW-02**: Background health probe runs every 30s via scheduler, updates gateway status in DB, emits SSE events on state changes
 - [ ] **GW-03**: Auto-detection on startup finds Ollama, OpenClaw, Codex CLI, Claude CLI, Gemini CLI from PATH and registers them
 - [ ] **GW-04**: Circuit breaker per gateway (opossum) with Closed/Open/Half-Open states, configurable thresholds, SSE events on trips
@@ -34,7 +34,7 @@
 
 ### CLI Adapters
 
-- [ ] **CLI-01**: GatewayAdapter interface — typed contract all backends implement (detect, health, dispatch, stream, listModels)
+- [x] **CLI-01**: GatewayAdapter interface — typed contract all backends implement (detect, health, dispatch, stream, listModels)
 - [ ] **CLI-02**: Ollama adapter — wraps existing native API calls, implements GatewayAdapter
 - [ ] **CLI-03**: OpenClaw adapter — wraps existing OpenAI-compatible calls, implements GatewayAdapter
 - [ ] **CLI-04**: Codex CLI adapter — subprocess dispatch with stdin/stdout streaming, error handling, timeout
@@ -99,7 +99,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GW-01 | Phase 16: Gateway Foundation | Pending |
+| GW-01 | Phase 16: Gateway Foundation | Complete |
 | GW-02 | Phase 18: Resilience Layer | Pending |
 | GW-03 | Phase 16: Gateway Foundation | Pending |
 | GW-04 | Phase 18: Resilience Layer | Pending |
@@ -117,7 +117,7 @@
 | RT-03 | Phase 20: Smart Routing Engine | Pending |
 | RT-04 | Phase 20: Smart Routing Engine | Pending |
 | RT-05 | Phase 20: Smart Routing Engine | Pending |
-| CLI-01 | Phase 16: Gateway Foundation | Pending |
+| CLI-01 | Phase 16: Gateway Foundation | Complete |
 | CLI-02 | Phase 17: Provider Adapters | Pending |
 | CLI-03 | Phase 17: Provider Adapters | Pending |
 | CLI-04 | Phase 17: Provider Adapters | Pending |
