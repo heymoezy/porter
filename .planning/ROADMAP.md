@@ -167,7 +167,7 @@ Phases execute in numeric order: 16 through 23.
 |-------|-----------|----------------|--------|-----------|
 | 1-7 | v1.0 | - | Complete | 2026-03-21 |
 | 8-15 | v2.0 | - | Complete | 2026-03-24 |
-| 16. Gateway Foundation | 3/3 | Complete   | 2026-03-25 | - |
+| 16. Gateway Foundation | 3/3 | Complete    | 2026-03-25 | - |
 | 17. Provider Adapters | v3.0 Bridge | 0/TBD | Not started | - |
 | 18. Resilience Layer | v3.0 Bridge | 0/TBD | Not started | - |
 | 19. Model Catalog | v3.0 Bridge | 0/TBD | Not started | - |
