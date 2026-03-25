@@ -1,5 +1,18 @@
 # Porter Release Notes
 
+## v2.3.0 (2026-03-25)
+
+**Phase 18: Resilience Layer — Circuit breakers, health probes, retry, fallback chains**
+
+- Circuit breaker registry: per-gateway opossum breakers with three-class error taxonomy (transient/persistent/configuration), SSE events on state transitions
+- Retry wrapper: exponential backoff (1s/2s/4s) for transient errors (429, 503) only — 401/403 fail immediately
+- Health probe: runs every 30s via scheduler tick loop, updates gateway status + circuit_state in DB, emits SSE `bridge:health` on state changes
+- N-gateway fallback chain: selectWithFallback() iterates priority-ordered gateways, skips open breakers, wraps each in retry + breaker + queue
+- ai-router.ts dispatch() now uses selectWithFallback() — all agent dispatches are resilient by default
+- stream-service.ts uses selectAllCandidates() for fallback-aware backend selection
+- Migration: circuit_state column added to gateways table
+- 42 new tests (15 circuit-breaker, 6 retry, 11 health-probe, 10 fallback-chain)
+
 ## v2.2.0 (2026-03-25)
 
 **Phase 20: Smart Routing Engine — DB-driven model selection replaces hardcoded heuristics**

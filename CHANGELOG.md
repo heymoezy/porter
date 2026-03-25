@@ -1,3 +1,17 @@
+## v2.3.0 (2026-03-25)
+
+- fix(18): wire migrate-bridge-v3 into boot sequence
+- docs(phase-18): complete phase execution
+- docs(18-03): complete fallback-chain plan — selectWithFallback, ai-router wired, 10 tests green
+- feat(18-03): wire selectWithFallback into ai-router and stream-service
+- feat(18-03): add selectAllCandidates() and selectWithFallback() to RoutingEngine
+- test(18-03): add fallback-chain.test.ts — TDD RED for selectWithFallback()
+- docs(18-02): complete health-probe plan — bridge:health SSE, DB status+circuit_state updates, 11 tests green
+- feat(18-02): implement health-probe.ts and wire into scheduler tick loop
+- test(18-02): add failing tests for health probe with dependency injection pattern
+- docs(18-01): complete circuit-breaker and retry primitives plan
+- feat(18-01): install opossum, circuit-breaker-registry, retry wrapper
+
 ## v2.2.0 (2026-03-25)
 
 - docs(phase-20): evolve PROJECT.md after phase completion
