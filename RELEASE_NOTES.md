@@ -1,5 +1,21 @@
 # Porter Release Notes
 
+## v2.6.0 (2026-03-25)
+
+**Phase 22: Bridge Admin Surface — Full admin API for Bridge management**
+
+- GET /api/admin/bridge — gateway dashboard cards with health, latency, uptime %, model count, circuit state, status_indicator, briefing_slot
+- GET /api/admin/bridge/models — unified model catalog with capability filters, pricing, benchmarks
+- GET /api/admin/bridge/dispatch-log — paginated routing decisions (page/limit/total/pages)
+- GET /api/admin/bridge/costs — spend aggregated by gateway, model, day with COALESCE
+- POST /api/admin/bridge/gateways — gateway CRUD (add/update/remove/validate) with credential encryption
+- POST /api/admin/bridge/routing-rules — routing rule CRUD (create/update/delete/list) with scope/action validation
+- GET /api/admin/bridge/sse-status — documents 3 SSE event types and emission sources
+- DS-01: Component-ready data contracts (card shapes, list shapes, pagination envelopes)
+- DS-02: Agent-ready fields (status_indicator, briefing_slot, summary objects)
+- DS-03: Follows admin shell patterns (inherited auth, ok/err envelopes)
+- 39 test stubs across 8 describe blocks
+
 ## v2.5.0 (2026-03-25)
 
 **Phase 21: First-Run Setup — Zero-config path, detection endpoint, guided setup API**

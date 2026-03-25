@@ -1,3 +1,11 @@
+## v2.6.0 (2026-03-25)
+
+- docs(phase-22): complete phase execution
+- docs(22-02): complete bridge admin surface plan — ADM-05, ADM-06, ADM-07
+- feat(22-02): add POST /gateways and POST /routing-rules to admin bridge surface
+- test(22-01): scaffold admin-bridge test stubs for ADM-01 through ADM-07 and DS-03
+- feat(22-01): create admin bridge route with 4 GET endpoints
+
 ## v2.5.0 (2026-03-25)
 
 - docs(phase-21): complete phase execution
