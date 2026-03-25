@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 21-02-PLAN.md
-last_updated: "2026-03-25T11:37:17.619Z"
+stopped_at: Completed 22-01-PLAN.md
+last_updated: "2026-03-25T11:53:35.000Z"
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 17
+  completed_plans: 16
 ---
 
 # Project State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every AI backend is visible, manageable, and intelligently routed — nothing hidden, everything in the database.
-**Current focus:** Phase 21 — first-run-setup
+**Current focus:** Phase 22 — bridge-admin-surface
 
 ## Current Position
 
-Phase: 21 (first-run-setup) — COMPLETE
+Phase: 22 (bridge-admin-surface) — EXECUTING
 Plan: 2 of 2
 
 ## Performance Metrics
@@ -74,6 +74,9 @@ Recent decisions affecting current work:
 - [Phase 21]: OpenClaw metadata always includes gateway_roles on every boot upsert via ON CONFLICT DO UPDATE
 - [Phase 21]: mapRawToGatewayRow duplicated in bridge.ts to avoid circular import with startup-detector.ts
 - [Phase 21]: setup/validate returns ok({valid:false}) for missing gateways — no 500, structured error per FRS pitfall #2
+- [Phase 22-01]: Local copies of maskGatewayRow/mapRawToGatewayRow in admin/bridge.ts to prevent circular imports
+- [Phase 22-01]: status_indicator derived at route layer — active=healthy, stale=degraded, unavailable=unavailable
+- [Phase 22-01]: briefing_slot always null for now — field reserved in response shape for DS-02 agent narratives in v4.0
 
 ### Pending Todos
 
@@ -93,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T11:33:42.405Z
-Stopped at: Completed 21-02-PLAN.md
+Last session: 2026-03-25T11:53:35.000Z
+Stopped at: Completed 22-01-PLAN.md
 Resume file: None

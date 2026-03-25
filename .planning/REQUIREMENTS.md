@@ -51,10 +51,10 @@
 
 ### Admin Surface (Backend APIs)
 
-- [ ] **ADM-01**: GET /api/admin/bridge — gateway cards with live health, latency, uptime, model count per gateway
-- [ ] **ADM-02**: GET /api/admin/bridge/models — unified model catalog across all gateways with capabilities and pricing
-- [ ] **ADM-03**: GET /api/admin/bridge/dispatch-log — paginated routing decision log with model, reason, cost, latency
-- [ ] **ADM-04**: GET /api/admin/bridge/costs — spend by gateway, by model, by day, with configurable date ranges
+- [x] **ADM-01**: GET /api/admin/bridge — gateway cards with live health, latency, uptime, model count per gateway
+- [x] **ADM-02**: GET /api/admin/bridge/models — unified model catalog across all gateways with capabilities and pricing
+- [x] **ADM-03**: GET /api/admin/bridge/dispatch-log — paginated routing decision log with model, reason, cost, latency
+- [x] **ADM-04**: GET /api/admin/bridge/costs — spend by gateway, by model, by day, with configurable date ranges
 - [ ] **ADM-05**: POST /api/admin/bridge/gateways — add/update/remove gateways, validate connections
 - [ ] **ADM-06**: POST /api/admin/bridge/routing-rules — create/update routing rule overrides
 - [ ] **ADM-07**: SSE events for bridge:health, bridge:dispatch, bridge:circuit-trip — real-time admin updates
@@ -68,9 +68,9 @@
 
 ### Design System Compliance
 
-- [ ] **DS-01**: All Bridge admin UI components created as design system components first, then consumed — no freestyle
-- [ ] **DS-02**: Agent-ready layout — activity feeds, status cards, briefing slots designed for future Bridge agents
-- [ ] **DS-03**: Bridge admin page follows existing admin shell, nav style, theme toggle — same patterns as forge/users/models pages
+- [x] **DS-01**: All Bridge admin UI components created as design system components first, then consumed — no freestyle
+- [x] **DS-02**: Agent-ready layout — activity feeds, status cards, briefing slots designed for future Bridge agents
+- [x] **DS-03**: Bridge admin page follows existing admin shell, nav style, theme toggle — same patterns as forge/users/models pages
 
 ### Multi-Tenant (SaaS)
 
@@ -128,16 +128,16 @@
 | FRS-02 | Phase 21: First-Run Setup | Complete |
 | FRS-03 | Phase 21: First-Run Setup | Complete |
 | FRS-04 | Phase 21: First-Run Setup | Complete |
-| ADM-01 | Phase 22: Bridge Admin Surface | Pending |
-| ADM-02 | Phase 22: Bridge Admin Surface | Pending |
-| ADM-03 | Phase 22: Bridge Admin Surface | Pending |
-| ADM-04 | Phase 22: Bridge Admin Surface | Pending |
+| ADM-01 | Phase 22: Bridge Admin Surface | Complete |
+| ADM-02 | Phase 22: Bridge Admin Surface | Complete |
+| ADM-03 | Phase 22: Bridge Admin Surface | Complete |
+| ADM-04 | Phase 22: Bridge Admin Surface | Complete |
 | ADM-05 | Phase 22: Bridge Admin Surface | Pending |
 | ADM-06 | Phase 22: Bridge Admin Surface | Pending |
 | ADM-07 | Phase 22: Bridge Admin Surface | Pending |
-| DS-01 | Phase 22: Bridge Admin Surface | Pending |
-| DS-02 | Phase 22: Bridge Admin Surface | Pending |
-| DS-03 | Phase 22: Bridge Admin Surface | Pending |
+| DS-01 | Phase 22: Bridge Admin Surface | Complete |
+| DS-02 | Phase 22: Bridge Admin Surface | Complete |
+| DS-03 | Phase 22: Bridge Admin Surface | Complete |
 | INT-01 | Phase 23: Integration & Multi-Tenant | Pending |
 | INT-02 | Phase 23: Integration & Multi-Tenant | Pending |
 | INT-03 | Phase 23: Integration & Multi-Tenant | Pending |
