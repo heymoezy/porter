@@ -1,6 +1,6 @@
 # Porter Brain — CLAUDE.md
 
-Porter Brain is the **API backend and database owner**. It runs the Fastify API, manages porter.db, handles AI routing, and owns all business logic.
+Porter Brain is the **API backend and database owner**. It runs the Fastify API, manages PostgreSQL, handles AI routing, and owns all business logic.
 
 ---
 
@@ -12,7 +12,7 @@ Porter Brain is the **API backend and database owner**. It runs the Fastify API,
 - **Service:** `systemctl --user start|stop|restart|status porter`
 - **Service file:** `~/.config/systemd/user/porter.service`
 - **Config:** `porter_config.json` (via `PORTER_DATA_DIR` env var)
-- **Database:** `porter.db` (SQLite WAL mode) — Brain owns this, siblings connect to it
+- **Database:** PostgreSQL (Drizzle ORM) — Brain owns this, siblings connect to it
 - **Tests:** `cd tests && npx playwright test` (35 tests)
 
 ## Sibling Repos
@@ -42,7 +42,7 @@ porter/
 │   ├── src/services/ <- AI router, scheduler, integrations
 │   └── src/db/       <- Schema, migrations
 ├── porter.py         <- Legacy monolith (being deprecated)
-├── porter.db         <- SQLite database (WAL mode)
+├── drizzle/          <- Drizzle migrations
 ├── memory/           <- Memory V2 data
 ├── personas/         <- Agent persona definitions
 ├── runtime/          <- Agent runtime

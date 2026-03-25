@@ -1,5 +1,18 @@
 # Porter Release Notes
 
+## v2.1.0 (2026-03-25)
+
+**Phase 17: Provider Adapters — All 5 backend adapters + StreamNormalizer**
+
+- OllamaAdapter: native `/api/chat` with NDJSON streaming, `eval_count`/`prompt_eval_count` token counting
+- OpenClawAdapter: OpenAI-compatible `/v1/chat/completions` with SSE, Bearer auth, two-part health check
+- CodexCLIAdapter: subprocess spawn, JSONL parsing, 120s timeout, `--ephemeral` mode
+- ClaudeCLIAdapter: subprocess spawn, stdin write, `content_block_delta` stream event extraction
+- GeminiCLIAdapter: subprocess spawn, `--yolo` mode, model detection from `init` event
+- StreamNormalizer: unified async iterator with error boundary and abort propagation
+- Barrel export: `ADAPTER_MAP` + `createAdapter()` factory for Phase 20 smart routing
+- CLAUDE.md updated: SQLite references removed, PostgreSQL documented as sole database
+
 ## v2.0.1 (2026-03-24)
 
 **PostgreSQL Migration — Phase 13.05 execution**

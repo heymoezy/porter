@@ -34,7 +34,6 @@ export default async function healthV1Routes(fastify: FastifyInstance) {
     const backends = await Promise.all([
       probeBackend('Ollama', config.ollamaUrl, config.ollamaModel),
       probeBackend('OpenClaw', config.openclawUrl, config.openclawModel),
-      probeBackend('Porter.py', config.porterPyUrl, 'bridge'),
     ]);
 
     // DB health — quick query
@@ -69,7 +68,7 @@ export default async function healthV1Routes(fastify: FastifyInstance) {
     }
 
     return reply.send(ok({
-      porter_version: '2.0.1',
+      porter_version: '2.1.0',
       db_engine: 'postgresql',
       db_connected: dbStatus === 'up',
       backends,
