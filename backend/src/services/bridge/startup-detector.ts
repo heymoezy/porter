@@ -13,6 +13,7 @@ import pg from 'pg';
 import crypto from 'node:crypto';
 import { config } from '../../config.js';
 import { encryptCredential, validatePorterSecret } from '../../lib/credential-crypto.js';
+import { refreshAllGateways } from './model-catalog.js';
 import type { GatewayType, GatewayAuthMethod } from './types.js';
 
 // ── CLI binary detection list ─────────────────────────────────────────────────
@@ -63,6 +64,11 @@ export async function detectAndUpsertGateways(pool: pg.Pool): Promise<void> {
     }
 
     console.log('[bridge] Gateway detection complete');
+
+    // Auto-populate model catalog for all detected gateways (fire-and-forget)
+    refreshAllGateways(pool).catch(err =>
+      console.error('[bridge] Model catalog population failed:', err instanceof Error ? err.message : err)
+    );
   } catch (err) {
     console.error('[bridge] Gateway detection failed:', err instanceof Error ? err.message : err);
   }

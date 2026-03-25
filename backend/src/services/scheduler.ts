@@ -5,6 +5,7 @@ import { checkDeadlineTriggers } from './event-triggers.js';
 import { syncCalendarEvents, checkCalendarDeadlines } from './calendar.js';
 import { dispatchExternalCall, checkConnectionHealth } from './external-dispatcher.js';
 import { runHealthProbe } from './bridge/health-probe.js';
+import { refreshAllGateways } from './bridge/model-catalog.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -12,6 +13,7 @@ const MAX_ATTEMPTS = 3;
 const DEADLINE_CHECK_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const CALENDAR_SYNC_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const HEALTH_PROBE_INTERVAL = 15; // 15 × 2000ms = 30s
+const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
 const WORKER_ID = crypto.randomUUID();
 const MAX_DRIP_COUNT = 20;
 let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -230,6 +232,11 @@ async function tick() {
     // Bridge health probe — every 30s (skip first interval to avoid startup thundering herd)
     if (tickCount > HEALTH_PROBE_INTERVAL && tickCount % HEALTH_PROBE_INTERVAL === 0) {
       runHealthProbe().catch(err => console.error('[scheduler] health probe error', err));
+    }
+
+    // Model catalog refresh -- every 24h
+    if (tickCount > 0 && tickCount % MODEL_REFRESH_INTERVAL === 0) {
+      refreshAllGateways(pool).catch(err => console.error('[scheduler] model refresh error', err));
     }
 
     if (tickCount % DEADLINE_CHECK_INTERVAL === 0) {
