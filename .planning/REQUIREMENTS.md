@@ -27,10 +27,10 @@
 ### Smart Routing
 
 - [ ] **RT-01**: Replace hardcoded getBackends() with DB-driven gateway+model selection
-- [ ] **RT-02**: Routing rules table — operator-configurable overrides (force model for agent, cap cost per project, etc.)
-- [ ] **RT-03**: Transparent decision logging — every routing decision logged with reason, alternatives considered, cost estimate
-- [ ] **RT-04**: Dispatch concurrency control — per-backend queue (p-queue) prevents VPS saturation under concurrent agent load
-- [ ] **RT-05**: Session routing context — which model handled which conversation, routing decisions per chat session tied to Brain
+- [x] **RT-02**: Routing rules table — operator-configurable overrides (force model for agent, cap cost per project, etc.)
+- [x] **RT-03**: Transparent decision logging — every routing decision logged with reason, alternatives considered, cost estimate
+- [x] **RT-04**: Dispatch concurrency control — per-backend queue (p-queue) prevents VPS saturation under concurrent agent load
+- [x] **RT-05**: Session routing context — which model handled which conversation, routing decisions per chat session tied to Brain
 
 ### CLI Adapters
 
@@ -113,10 +113,10 @@
 | MOD-04 | Phase 19: Model Catalog | Pending |
 | MOD-05 | Phase 19: Model Catalog | Pending |
 | RT-01 | Phase 20: Smart Routing Engine | Pending |
-| RT-02 | Phase 20: Smart Routing Engine | Pending |
-| RT-03 | Phase 20: Smart Routing Engine | Pending |
-| RT-04 | Phase 20: Smart Routing Engine | Pending |
-| RT-05 | Phase 20: Smart Routing Engine | Pending |
+| RT-02 | Phase 20: Smart Routing Engine | Complete |
+| RT-03 | Phase 20: Smart Routing Engine | Complete |
+| RT-04 | Phase 20: Smart Routing Engine | Complete |
+| RT-05 | Phase 20: Smart Routing Engine | Complete |
 | CLI-01 | Phase 16: Gateway Foundation | Complete |
 | CLI-02 | Phase 17: Provider Adapters | Complete |
 | CLI-03 | Phase 17: Provider Adapters | Complete |

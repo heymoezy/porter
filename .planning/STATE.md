@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 17-03-PLAN.md
-last_updated: "2026-03-25T08:21:31.255Z"
+stopped_at: Completed 20-01-PLAN.md
+last_updated: "2026-03-25T09:32:55.496Z"
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 8
+  completed_plans: 7
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every AI backend is visible, manageable, and intelligently routed — nothing hidden, everything in the database.
-**Current focus:** Phase 17 — provider-adapters
+**Current focus:** Phase 20 — live-dashboard
 
 ## Current Position
 
-Phase: 17 (provider-adapters) — EXECUTING
-Plan: 1 of 3
+Phase: 20 (live-dashboard) — EXECUTING
+Plan: 1 of 2
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Recent decisions affecting current work:
 - [Phase 17]: Prompt delivery varies by CLI: positional arg for Codex, stdin for Claude, -p flag for Gemini
 - [Phase 17]: Codex timeout 120s vs 60s for Claude/Gemini — Codex CLI is measurably slower
 - [Phase 17-provider-adapters]: StreamNormalizer is intentionally thin — no format conversion, only abort propagation and error boundary; ADAPTER_MAP keys use GatewayType strings matching DB values; createAdapter() returns null for unknown types
+- [Phase 20-live-dashboard]: p-queue v9.1.0 chosen (ESM-only, type=module compatible); CLI gateways concurrency=1, HTTP gateways concurrency=3; PQueue singleton map keyed by gateway type; Wave 0 test stubs use node:test + tsx
 
 ### Pending Todos
 
@@ -74,6 +75,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T08:15:07.198Z
-Stopped at: Completed 17-03-PLAN.md
+Last session: 2026-03-25T09:32:55.493Z
+Stopped at: Completed 20-01-PLAN.md
 Resume file: None
