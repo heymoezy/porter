@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
-status: executing
-stopped_at: "Completed 16-01-PLAN.md"
-last_updated: "2026-03-25T05:54:12Z"
+status: unknown
+stopped_at: Completed 16-02-PLAN.md
+last_updated: "2026-03-25T06:01:36.077Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 ## Current Position
 
 Phase: 16 (gateway-foundation) — EXECUTING
-Plan: 2 of 3 (16-01 complete)
+Plan: 3 of 3 (16-01, 16-02 complete)
 
 ## Performance Metrics
 
@@ -46,6 +46,9 @@ Recent decisions affecting current work:
 - [v3.0]: Three new npm packages only: opossum, p-queue, which
 - [v3.0]: Delegation pattern — services/bridge/ wraps existing ai-router.ts and stream-service.ts without modifying them
 - [v3.0]: Agent-First UI (formerly v3.0 phases 20-24) renumbered to v4.0 phases 24-28
+- [Phase 16]: Raw SQL for startup detector — runs at boot before Drizzle initialized
+- [Phase 16]: detectAndUpsertGateways() runs after scheduler.start() — never blocks HTTP readiness
+- [Phase 16]: Deterministic SHA-256 credential ID for idempotent upserts across restarts
 
 ### Pending Todos
 
@@ -54,6 +57,7 @@ None yet.
 ### Completed Plans
 
 - [16-01]: gateways + gateway_credentials tables (migration + Drizzle), GatewayAdapter interface — 2026-03-25
+- [16-02]: Startup detector — which-based PATH scan + env bootstrap + Fastify boot wiring — 2026-03-25
 
 ### Blockers/Concerns
 
@@ -63,6 +67,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T05:54:12Z
-Stopped at: Completed 16-01-PLAN.md (gateway foundation schema + types)
-Resume file: .planning/phases/16-gateway-foundation/16-02-PLAN.md
+Last session: 2026-03-25T06:01:36.074Z
+Stopped at: Completed 16-02-PLAN.md
+Resume file: .planning/phases/16-gateway-foundation/16-03-PLAN.md

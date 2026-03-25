@@ -71,7 +71,7 @@
   3. API key values stored in the `gateways` table are encrypted at rest and masked to last 4 characters in all API responses — full keys are never returned after initial save
   4. Existing env vars (OLLAMA_URL, etc.) bootstrap gateway rows on first run; after that the DB is authoritative, env is fallback only — system works whether env vars exist or not
   5. A `GatewayAdapter` TypeScript interface exists with typed methods (detect, health, dispatch, stream, listModels) that all provider adapters must implement
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 Plans:
 - [ ] 16-01-PLAN.md — Schema, Drizzle definitions, and GatewayAdapter interface contract
 - [ ] 16-02-PLAN.md — Startup detector, env-to-DB bootstrap, wire into Fastify boot
@@ -167,7 +167,7 @@ Phases execute in numeric order: 16 through 23.
 |-------|-----------|----------------|--------|-----------|
 | 1-7 | v1.0 | - | Complete | 2026-03-21 |
 | 8-15 | v2.0 | - | Complete | 2026-03-24 |
-| 16. Gateway Foundation | 1/3 | In Progress|  | - |
+| 16. Gateway Foundation | 2/3 | In Progress|  | - |
 | 17. Provider Adapters | v3.0 Bridge | 0/TBD | Not started | - |
 | 18. Resilience Layer | v3.0 Bridge | 0/TBD | Not started | - |
 | 19. Model Catalog | v3.0 Bridge | 0/TBD | Not started | - |
