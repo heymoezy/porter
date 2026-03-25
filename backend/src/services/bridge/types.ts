@@ -111,6 +111,7 @@ export interface RoutingContext {
   chatId?: string;
   messageSequence?: number;
   requiredCapabilities?: string[];
+  username?: string;
 }
 
 export interface RoutingDecision {

@@ -291,6 +291,35 @@ export class RoutingEngine {
             decision.matchedRuleId,
           ],
         );
+
+        // INT-01: Memory V3 signal — agent learns model preferences
+        if (ctx.agentId) {
+          try {
+            // Deduplication: skip if same agent+gateway_type+model note exists in last hour
+            const existing = await pool.query(
+              `SELECT 1 FROM agent_notes
+               WHERE agent_id = $1
+                 AND content LIKE $2
+                 AND created_at > EXTRACT(EPOCH FROM NOW()) - 3600
+                 AND status = 'active'
+               LIMIT 1`,
+              [ctx.agentId, `%${decision.gatewayRow.type}%${decision.modelName}%`]
+            );
+            if (!existing.rows.length) {
+              const perf = result.latencyMs < 3000 ? 'fast' : result.latencyMs < 8000 ? 'normal' : 'slow';
+              await pool.query(
+                `INSERT INTO agent_notes
+                   (id, agent_id, content, note_type, confidence_score, source_type, status, created_by, created_at, updated_at)
+                 VALUES ($1, $2, $3, 'learning', 40, 'learning', 'active', 'bridge', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))`,
+                [
+                  uuidv4(),
+                  ctx.agentId,
+                  `Routed via ${decision.gatewayRow.type} (${decision.modelName}) — ${perf} response (${result.latencyMs}ms). Reason: ${decision.reason}`,
+                ]
+              );
+            }
+          } catch { /* non-critical — never block dispatch */ }
+        }
       } catch {
         // Non-critical — never block dispatch
       }
