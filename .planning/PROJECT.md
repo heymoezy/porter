@@ -114,4 +114,4 @@ Porter has been in development since Feb 18, 2026. Current version is v0.34.23. 
 | Bridge as major innovation | AI gateway management is Porter's differentiator — first-run detection, smart routing, cost tracking | — v3.0 scope |
 
 ---
-*Last updated: 2026-03-25 after Phase 16 Gateway Foundation complete*
+*Last updated: 2026-03-25 after Phase 17 Provider Adapters complete — all 5 backend adapters (Ollama, OpenClaw, Codex CLI, Claude CLI, Gemini CLI) + StreamNormalizer + barrel export shipped*
