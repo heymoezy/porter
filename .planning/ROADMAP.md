@@ -189,7 +189,7 @@ Phases execute in numeric order: 16 through 23.
 | 18. Resilience Layer | 3/3 | Complete    | 2026-03-25 | - |
 | 19. Model Catalog | 2/2 | Complete    | 2026-03-25 | - |
 | 20. Smart Routing Engine | 2/2 | Complete    | 2026-03-25 | - |
-| 21. First-Run Setup | 2/2 | Complete   | 2026-03-25 | - |
+| 21. First-Run Setup | 2/2 | Complete    | 2026-03-25 | - |
 | 22. Bridge Admin Surface | v3.0 Bridge | 0/TBD | Not started | - |
 | 23. Integration & Multi-Tenant | v3.0 Bridge | 0/TBD | Not started | - |
 
