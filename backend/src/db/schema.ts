@@ -880,3 +880,48 @@ export const gatewayCredentials = pgTable('gateway_credentials', {
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
   rotatedAt: doublePrecision('rotated_at'),
 });
+
+// ── Bridge: Smart Routing Engine (Phase 20) ──────────────────────────────────
+
+export const routingRules = pgTable('routing_rules', {
+  id: text('id').primaryKey(),
+  scope: text('scope').notNull().default('global'),
+  scopeId: text('scope_id'),
+  action: text('action').notNull(),
+  actionValue: text('action_value'),
+  enabled: integer('enabled').notNull().default(1),
+  priority: integer('priority').notNull().default(50),
+  description: text('description'),
+  createdBy: text('created_by'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const bridgeDispatchLog = pgTable('bridge_dispatch_log', {
+  id: text('id').primaryKey(),
+  gatewayId: text('gateway_id'),
+  gatewayType: text('gateway_type').notNull(),
+  modelName: text('model_name').notNull(),
+  chosenReason: text('chosen_reason').notNull(),
+  alternatives: jsonb('alternatives').default(sql`'[]'::jsonb`),
+  estimatedCostUsd: doublePrecision('estimated_cost_usd'),
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
+  latencyMs: integer('latency_ms'),
+  agentId: text('agent_id'),
+  projectId: text('project_id'),
+  chatId: text('chat_id'),
+  ruleId: text('rule_id'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const sessionRoutingContext = pgTable('session_routing_context', {
+  id: text('id').primaryKey(),
+  chatId: text('chat_id').notNull(),
+  messageSequence: integer('message_sequence').notNull(),
+  gatewayId: text('gateway_id'),
+  gatewayType: text('gateway_type').notNull(),
+  modelName: text('model_name').notNull(),
+  dispatchLogId: text('dispatch_log_id'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});

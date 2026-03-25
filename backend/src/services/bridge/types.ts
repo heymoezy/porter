@@ -94,3 +94,69 @@ export interface GatewayCredentialRow {
   createdAt: number | null;
   rotatedAt: number | null;
 }
+
+// ── Routing Engine types (Phase 20) ──────────────────────────────────────────
+
+export type RoutingRuleScope = 'agent' | 'project' | 'gateway' | 'global';
+export type RoutingRuleAction = 'force_model' | 'block_gateway' | 'cap_cost_usd' | 'prefer_local';
+
+export interface RoutingContext {
+  message: string;
+  agentId?: string;
+  projectId?: string | null;
+  chatId?: string;
+  messageSequence?: number;
+  requiredCapabilities?: string[];
+}
+
+export interface RoutingDecision {
+  gatewayRow: GatewayRow;
+  adapter: GatewayAdapter;
+  modelName: string;
+  reason: string;
+  alternatives: Array<{ gatewayType: string; modelName: string; reasonSkipped: string }>;
+  matchedRuleId: string | null;
+}
+
+export interface RoutingRuleRow {
+  id: string;
+  scope: RoutingRuleScope;
+  scopeId: string | null;
+  action: RoutingRuleAction;
+  actionValue: string | null;
+  enabled: number;
+  priority: number;
+  description: string | null;
+  createdBy: string | null;
+  createdAt: number | null;
+  updatedAt: number | null;
+}
+
+export interface DispatchLogEntry {
+  id: string;
+  gatewayId: string | null;
+  gatewayType: string;
+  modelName: string;
+  chosenReason: string;
+  alternatives: Array<{ gatewayType: string; modelName: string; reasonSkipped: string }>;
+  estimatedCostUsd: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  latencyMs: number | null;
+  agentId: string | null;
+  projectId: string | null;
+  chatId: string | null;
+  ruleId: string | null;
+  createdAt: number | null;
+}
+
+export interface SessionRoutingRow {
+  id: string;
+  chatId: string;
+  messageSequence: number;
+  gatewayId: string | null;
+  gatewayType: string;
+  modelName: string;
+  dispatchLogId: string | null;
+  createdAt: number | null;
+}
