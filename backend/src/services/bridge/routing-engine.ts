@@ -10,6 +10,7 @@
 
 import { pool } from '../../db/client.js';
 import { createAdapter } from './adapters/index.js';
+import { calculateCostUsd } from './model-catalog.js';
 import { getQueue } from './dispatch-queues.js';
 import { getBreaker } from './circuit-breaker-registry.js';
 import { withRetry } from './retry.js';
@@ -108,8 +109,13 @@ export class RoutingEngine {
       throw new Error('No active gateways available');
     }
 
+    // MOD-03: Filter by model capabilities when requested
+    const filteredCandidates = ctx.requiredCapabilities?.length
+      ? await this.filterByCapabilities(candidates, ctx.requiredCapabilities)
+      : candidates;
+
     // 3. Evaluate routing rules — returns first matching rule or null
-    const matchedRule = await this.evaluateRules(ctx, candidates);
+    const matchedRule = await this.evaluateRules(ctx, filteredCandidates);
 
     let chosen: GatewayCandidate;
     let reason: string;
@@ -124,7 +130,7 @@ export class RoutingEngine {
           ? matchedRule.actionValue.split(':', 2)
           : [matchedRule.actionValue, null];
 
-        const forced = candidates.find(c => c.row.type === forceType);
+        const forced = filteredCandidates.find(c => c.row.type === forceType);
         if (forced) {
           chosen = forced;
           reason = `Rule: ${matchedRule.description ?? matchedRule.action} (${matchedRule.id})`;
@@ -137,37 +143,37 @@ export class RoutingEngine {
           }
         } else {
           // Forced gateway not available — fall through to heuristic
-          chosen = this.selectByHeuristic(ctx.message, candidates);
+          chosen = this.selectByHeuristic(ctx.message, filteredCandidates);
           reason = `Heuristic fallback (forced gateway ${forceType} unavailable)`;
           matchedRuleId = null;
         }
       } else if (matchedRule.action === 'block_gateway' && matchedRule.actionValue) {
         // block_gateway: remove matching gateway type from candidates
-        const filtered = candidates.filter(c => c.row.type !== matchedRule.actionValue);
-        if (filtered.length === 0) throw new Error('No active gateways after block_gateway rule');
-        chosen = this.selectByHeuristic(ctx.message, filtered);
+        const afterBlock = filteredCandidates.filter(c => c.row.type !== matchedRule.actionValue);
+        if (afterBlock.length === 0) throw new Error('No active gateways after block_gateway rule');
+        chosen = this.selectByHeuristic(ctx.message, afterBlock);
         reason = `Heuristic (blocked ${matchedRule.actionValue}) — Rule: ${matchedRule.id}`;
       } else if (matchedRule.action === 'prefer_local') {
         // prefer_local: re-sort to put local/CLI gateways first
         const LOCAL_TYPES = new Set(['ollama', 'codex_cli', 'claude_cli', 'gemini_cli']);
         const sorted = [
-          ...candidates.filter(c => LOCAL_TYPES.has(c.row.type)),
-          ...candidates.filter(c => !LOCAL_TYPES.has(c.row.type)),
+          ...filteredCandidates.filter(c => LOCAL_TYPES.has(c.row.type)),
+          ...filteredCandidates.filter(c => !LOCAL_TYPES.has(c.row.type)),
         ];
         chosen = sorted[0];
         reason = `Rule: prefer_local (${matchedRule.id})`;
       } else {
         // cap_cost_usd or unrecognised action — use heuristic
-        chosen = this.selectByHeuristic(ctx.message, candidates);
+        chosen = this.selectByHeuristic(ctx.message, filteredCandidates);
         reason = `Heuristic (rule ${matchedRule.id} action=${matchedRule.action})`;
       }
     } else {
       // No rules — pure heuristic
-      chosen = this.selectByHeuristic(ctx.message, candidates);
+      chosen = this.selectByHeuristic(ctx.message, filteredCandidates);
       reason = `Heuristic: ${isComplexMessage(ctx.message) ? 'complex' : 'simple'} message`;
     }
 
-    // 4. Build alternatives list (everything that was not chosen)
+    // 4. Build alternatives list (all candidates, not just filtered — shows full picture)
     const chosenId = chosen.row.id;
     const alternatives = candidates
       .filter(c => c.row.id !== chosenId)
@@ -232,12 +238,40 @@ export class RoutingEngine {
     // Fire-and-forget — pattern from existing logDecision() in ai-router.ts
     (async () => {
       try {
+        // MOD-05: Calculate estimated USD cost from model pricing metadata
+        const costUsd = await calculateCostUsd(
+          result.inputTokens ?? null,
+          result.outputTokens ?? null,
+          result.cachedTokens ?? null,
+          decision.modelName,
+          decision.gatewayRow.id,
+          pool,
+        );
+
+        // MOD-04: Resolve model_version_id — most recent version for this gateway+model
+        let modelVersionId: string | null = null;
+        try {
+          const { rows: vrows } = await pool.query<{ id: string }>(
+            `SELECT mv.id
+             FROM model_versions mv
+             JOIN models m ON mv.model_id = m.id
+             WHERE m.gateway_id = $1 AND m.model_name = $2
+             ORDER BY mv.detected_at DESC
+             LIMIT 1`,
+            [decision.gatewayRow.id, decision.modelName],
+          );
+          modelVersionId = vrows[0]?.id ?? null;
+        } catch {
+          // non-fatal — version lookup failure must not block dispatch logging
+        }
+
         await pool.query(
           `INSERT INTO bridge_dispatch_log
              (id, gateway_id, gateway_type, model_name, chosen_reason, alternatives,
-              estimated_cost_usd, input_tokens, output_tokens, latency_ms,
+              estimated_cost_usd, input_tokens, output_tokens, cached_tokens,
+              model_version_id, latency_ms,
               agent_id, project_id, chat_id, rule_id, created_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, EXTRACT(EPOCH FROM NOW()))`,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, EXTRACT(EPOCH FROM NOW()))`,
           [
             id,
             decision.gatewayRow.id,
@@ -245,9 +279,11 @@ export class RoutingEngine {
             decision.modelName,
             decision.reason,
             JSON.stringify(decision.alternatives),
-            null, // estimated_cost_usd — Phase 19 models table not yet available
+            costUsd,
             result.inputTokens ?? null,
             result.outputTokens ?? null,
+            result.cachedTokens ?? null,
+            modelVersionId,
             result.latencyMs,
             ctx.agentId ?? null,
             ctx.projectId ?? null,
@@ -385,6 +421,45 @@ export class RoutingEngine {
     }
 
     throw new Error(`All ${candidates.length} gateways failed: ${errors.join('; ')}`);
+  }
+
+  /**
+   * Filter candidates by model capabilities when requiredCapabilities is set.
+   * MOD-03: Route by model strengths, not just cost tier.
+   * Gracefully degrades — returns full candidate list if no models match.
+   */
+  private async filterByCapabilities(
+    candidates: GatewayCandidate[],
+    requiredCapabilities: string[],
+  ): Promise<GatewayCandidate[]> {
+    if (requiredCapabilities.length === 0) return candidates;
+
+    const gatewayIds = candidates.map(c => c.row.id);
+    if (gatewayIds.length === 0) return candidates;
+
+    const placeholders = gatewayIds.map((_, i) => `$${i + 1}`).join(',');
+    const { rows } = await pool.query<{ gateway_id: string; capabilities: unknown }>(
+      `SELECT gateway_id, capabilities
+       FROM models
+       WHERE gateway_id IN (${placeholders})
+         AND is_active = 1`,
+      gatewayIds,
+    );
+
+    // Build set of gateway IDs that have at least one model with all required capabilities
+    const capableGatewayIds = new Set<string>();
+    for (const row of rows) {
+      const caps: string[] = Array.isArray(row.capabilities)
+        ? (row.capabilities as string[])
+        : (typeof row.capabilities === 'string' ? JSON.parse(row.capabilities as string) : []);
+      const hasAll = requiredCapabilities.every(rc => caps.includes(rc));
+      if (hasAll) capableGatewayIds.add(row.gateway_id);
+    }
+
+    const filtered = candidates.filter(c => capableGatewayIds.has(c.row.id));
+
+    // Graceful degradation — return all candidates if none match capabilities
+    return filtered.length > 0 ? filtered : candidates;
   }
 
   /**
