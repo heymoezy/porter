@@ -224,11 +224,16 @@ export async function selectStreamBackend(
 ): Promise<StreamBackend> {
   if (backendHint === 'ollama') return new OllamaStreamBackend();
   if (backendHint === 'openclaw') return new OpenClawStreamBackend();
-  // 'auto' or undefined: delegate to routing engine for DB-driven selection
+  // 'auto' or undefined: delegate to routing engine for fallback-aware selection
   try {
-    const decision = await routingEngine.select({ message });
-    if (decision.gatewayRow.type === 'ollama') return new OllamaStreamBackend();
-    return new OpenClawStreamBackend();
+    const candidates = await routingEngine.selectAllCandidates();
+    // Find first candidate that maps to a known stream backend (in priority order)
+    const streamable = candidates.find(c =>
+      c.row.type === 'ollama' || c.row.type === 'openclaw'
+    );
+    if (streamable?.row.type === 'ollama') return new OllamaStreamBackend();
+    if (streamable?.row.type === 'openclaw') return new OpenClawStreamBackend();
+    return new OllamaStreamBackend(); // no streamable gateway found
   } catch {
     // Fallback to Ollama if routing engine fails (e.g., no gateways in DB)
     return new OllamaStreamBackend();

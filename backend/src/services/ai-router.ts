@@ -178,12 +178,12 @@ async function logDecision(
  * Throws on empty response — guarantees agent_jobs.result is non-empty on success.
  */
 export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
-  // 1. Route via DB-driven engine
-  const decision = await routingEngine.select({
+  // 1. Build routing context
+  const ctx = {
     message: req.message,
     agentId: req.agentId,
     projectId: req.projectId,
-  });
+  };
 
   // 2. Build adapter-level request
   const history = req.conversationHistory ? compressContext(req.conversationHistory) : [];
@@ -191,13 +191,10 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
     ...history.map(t => ({ role: t.role, content: t.content })),
     { role: 'user', content: req.message },
   ];
-  const bridgeReq: BridgeDispatchRequest = {
-    messages,
-    model: decision.modelName,
-  };
+  const bridgeReq: BridgeDispatchRequest = { messages };
 
-  // 3. Dispatch through per-gateway concurrency queue
-  const bridgeResult = await routingEngine.dispatchWithQueue(decision, bridgeReq);
+  // 3. Dispatch with N-gateway fallback chain (GW-06)
+  const { decision, result: bridgeResult } = await routingEngine.selectWithFallback(ctx, bridgeReq);
 
   // 4. Map to DispatchResult (callers expect this shape)
   const result: DispatchResult = {
