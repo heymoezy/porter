@@ -102,7 +102,11 @@ Plans:
   2. Each gateway has an independent circuit breaker (via opossum) with Closed/Open/Half-Open states — the breaker uses a three-class error taxonomy (transient/persistent/configuration) so rate limits do not trip the breaker the same way auth failures do
   3. Transient errors (429, 503) trigger retry with exponential backoff (separate from circuit breaker logic) — a 429 retries after delay, a 401 does not retry
   4. When a dispatch fails, the fallback chain tries the next gateway in priority order (N gateways deep, not binary cheap/strong) — the user's request succeeds as long as any gateway in the chain is healthy
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 18-01-PLAN.md — Circuit breaker registry (opossum), retry wrapper, error taxonomy, migration
+- [ ] 18-02-PLAN.md — Background health probe wired into scheduler
+- [ ] 18-03-PLAN.md — N-gateway fallback chain, wire into ai-router.ts and stream-service.ts
 
 ### Phase 19: Model Catalog
 **Goal**: Every model across all gateways is cataloged in one table with capabilities, pricing, and version history — Porter knows exactly what it can do, what it costs, and which version answered each question
@@ -176,7 +180,7 @@ Phases execute in numeric order: 16 through 23.
 | 8-15 | v2.0 | - | Complete | 2026-03-24 |
 | 16. Gateway Foundation | v3.0 Bridge | 3/3 | Complete | 2026-03-25 |
 | 17. Provider Adapters | 3/3 | Complete    | 2026-03-25 | - |
-| 18. Resilience Layer | v3.0 Bridge | 0/TBD | Not started | - |
+| 18. Resilience Layer | v3.0 Bridge | 0/3 | Not started | - |
 | 19. Model Catalog | v3.0 Bridge | 0/TBD | Not started | - |
 | 20. Smart Routing Engine | 2/2 | Complete    | 2026-03-25 | - |
 | 21. First-Run Setup | v3.0 Bridge | 0/TBD | Not started | - |
