@@ -19,6 +19,7 @@ export interface DispatchRequest {
   projectId?: string | null;
   conversationHistory?: ConversationTurn[];
   tools?: ToolDefinition[];
+  username?: string;
 }
 
 export interface DispatchResult {
@@ -183,6 +184,7 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
     message: req.message,
     agentId: req.agentId,
     projectId: req.projectId,
+    username: req.username,  // MT-03: usage attribution
   };
 
   // 2. Build adapter-level request
@@ -209,6 +211,7 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
     message: req.message,
     agentId: req.agentId,
     projectId: req.projectId,
+    username: req.username,
   }, bridgeResult);
 
   // 6. Record session routing context if chat context available (non-blocking)
@@ -216,6 +219,7 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
     message: req.message,
     agentId: req.agentId,
     projectId: req.projectId,
+    username: req.username,
   }, decision, logId);
 
   // 7. Track daily token usage (existing pattern — keep for aggregate view)

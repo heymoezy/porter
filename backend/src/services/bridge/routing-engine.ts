@@ -270,8 +270,8 @@ export class RoutingEngine {
              (id, gateway_id, gateway_type, model_name, chosen_reason, alternatives,
               estimated_cost_usd, input_tokens, output_tokens, cached_tokens,
               model_version_id, latency_ms,
-              agent_id, project_id, chat_id, rule_id, created_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, EXTRACT(EPOCH FROM NOW()))`,
+              agent_id, project_id, chat_id, rule_id, username, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, EXTRACT(EPOCH FROM NOW()))`,
           [
             id,
             decision.gatewayRow.id,
@@ -289,6 +289,7 @@ export class RoutingEngine {
             ctx.projectId ?? null,
             ctx.chatId ?? null,
             decision.matchedRuleId,
+            ctx.username ?? null,
           ],
         );
 
