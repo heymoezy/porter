@@ -1,16 +1,19 @@
 /**
- * Admin Bridge Surface — Read-only GET endpoints for Bridge subsystem
+ * Admin Bridge Surface — GET + POST endpoints for Bridge subsystem
  *
  * Exposes the full Bridge subsystem (phases 16-21) through clean admin API endpoints.
  * Auth is NOT added here — inherited from the parent admin/index.ts preHandler (platform_admin).
  *
- * Phase 22: Bridge Admin Surface (ADM-01 through ADM-04)
+ * Phase 22: Bridge Admin Surface (ADM-01 through ADM-07)
  */
 
+import crypto from 'node:crypto';
 import { FastifyInstance } from 'fastify';
 import { pool } from '../../../db/client.js';
-import { ok } from '../../../lib/envelope.js';
+import { ok, err } from '../../../lib/envelope.js';
 import { getBreakerState } from '../../../services/bridge/circuit-breaker-registry.js';
+import { createAdapter } from '../../../services/bridge/adapters/index.js';
+import { encryptCredential, validatePorterSecret } from '../../../lib/credential-crypto.js';
 import type { GatewayRow } from '../../../services/bridge/types.js';
 
 // ── Row mappers (local copies to avoid circular import with bridge.ts) ─────────
@@ -270,6 +273,280 @@ export default async function adminBridgeRoutes(fastify: FastifyInstance) {
       byDay: byDayRows,
       summary,
       range: { from, to },
+    }));
+  });
+
+  // ── POST /gateways — ADM-05: Gateway CRUD ────────────────────────────────────
+  fastify.post('/gateways', async (request, reply) => {
+    const body = request.body as Record<string, any>;
+    const { action, ...data } = body;
+
+    // ── action = 'remove' ────────────────────────────────────────────────────
+    if (action === 'remove') {
+      if (!data.id) {
+        return reply.send(err('MISSING_ID', 'id is required for action=remove'));
+      }
+      await pool.query('DELETE FROM gateways WHERE id = $1', [data.id]);
+      return reply.send(ok({ removed: true, id: data.id }));
+    }
+
+    // ── action = 'validate' ──────────────────────────────────────────────────
+    if (action === 'validate') {
+      if (!data.id) {
+        return reply.send(err('MISSING_ID', 'id is required for action=validate'));
+      }
+      const { rows } = await pool.query('SELECT * FROM gateways WHERE id = $1', [data.id]);
+      if (rows.length === 0) {
+        return reply.send(ok({ valid: false, error: 'NOT_FOUND' }));
+      }
+      const gatewayRow = mapRawToGatewayRow(rows[0]);
+      const adapter = createAdapter(gatewayRow);
+      if (!adapter) {
+        return reply.send(ok({ valid: false, error: 'NO_ADAPTER' }));
+      }
+      try {
+        const health = await adapter.health();
+        return reply.send(ok({ valid: health.healthy, latencyMs: health.latencyMs, error: health.error ?? null }));
+      } catch (e) {
+        return reply.send(ok({
+          valid: false,
+          error: 'HEALTH_CHECK_FAILED',
+          message: e instanceof Error ? e.message : String(e),
+        }));
+      }
+    }
+
+    // ── action = 'add' ───────────────────────────────────────────────────────
+    if (action === 'add') {
+      if (!data.type || !data.name) {
+        return reply.send(err('MISSING_FIELDS', 'type and name are required for action=add'));
+      }
+      if (!VALID_GATEWAY_TYPES.has(data.type)) {
+        return reply.send(err('INVALID_TYPE', 'type must be one of: ' + [...VALID_GATEWAY_TYPES].join(', ')));
+      }
+
+      const id = crypto.randomUUID();
+
+      await pool.query(
+        `INSERT INTO gateways (id, type, name, url, auth_method, status, source, priority, capabilities, metadata, enabled, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'unavailable', 'manual', $6, $7::jsonb, $8::jsonb, $9, EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))`,
+        [
+          id,
+          data.type,
+          data.name,
+          data.url ?? null,
+          data.auth_method ?? 'none',
+          data.priority ?? 50,
+          JSON.stringify(data.capabilities ?? []),
+          JSON.stringify(data.metadata ?? {}),
+          data.enabled ?? 1,
+        ]
+      );
+
+      if (data.api_key) {
+        if (!validatePorterSecret()) {
+          return reply.send(err('SECRET_MISSING', 'PORTER_SECRET not configured — cannot encrypt credentials'));
+        }
+        const credId = crypto.createHash('sha256').update(data.api_key).digest('hex').slice(0, 36);
+        const encrypted = encryptCredential(data.api_key);
+        const masked = '***' + data.api_key.slice(-4);
+        await pool.query(
+          `INSERT INTO gateway_credentials (id, gateway_id, label, encrypted_value, masked_display, created_at)
+           VALUES ($1, $2, 'primary', $3, $4, EXTRACT(EPOCH FROM NOW()))
+           ON CONFLICT (id) DO UPDATE SET
+             encrypted_value = EXCLUDED.encrypted_value,
+             masked_display  = EXCLUDED.masked_display`,
+          [credId, id, encrypted, masked]
+        );
+      }
+
+      return reply.send(ok({ created: true, id }));
+    }
+
+    // ── action = 'update' ────────────────────────────────────────────────────
+    if (action === 'update') {
+      if (!data.id) {
+        return reply.send(err('MISSING_ID', 'id is required for action=update'));
+      }
+
+      const allowedFields: Record<string, string> = {
+        name: 'name',
+        url: 'url',
+        auth_method: 'auth_method',
+        priority: 'priority',
+        capabilities: 'capabilities',
+        metadata: 'metadata',
+        enabled: 'enabled',
+      };
+
+      const setClauses: string[] = [];
+      const params: unknown[] = [];
+
+      for (const [key, col] of Object.entries(allowedFields)) {
+        if (data[key] !== undefined) {
+          params.push(data[key]);
+          if (key === 'capabilities' || key === 'metadata') {
+            setClauses.push(`${col} = $${params.length}::jsonb`);
+          } else {
+            setClauses.push(`${col} = $${params.length}`);
+          }
+        }
+      }
+
+      // Always update updated_at
+      setClauses.push(`updated_at = EXTRACT(EPOCH FROM NOW())`);
+
+      if (setClauses.length > 1) {
+        params.push(data.id);
+        await pool.query(
+          `UPDATE gateways SET ${setClauses.join(', ')} WHERE id = $${params.length}`,
+          params
+        );
+      }
+
+      if (data.api_key) {
+        if (!validatePorterSecret()) {
+          return reply.send(err('SECRET_MISSING', 'PORTER_SECRET not configured — cannot encrypt credentials'));
+        }
+        const credId = crypto.createHash('sha256').update(data.api_key).digest('hex').slice(0, 36);
+        const encrypted = encryptCredential(data.api_key);
+        const masked = '***' + data.api_key.slice(-4);
+        await pool.query(
+          `INSERT INTO gateway_credentials (id, gateway_id, label, encrypted_value, masked_display, created_at)
+           VALUES ($1, $2, 'primary', $3, $4, EXTRACT(EPOCH FROM NOW()))
+           ON CONFLICT (id) DO UPDATE SET
+             encrypted_value = EXCLUDED.encrypted_value,
+             masked_display  = EXCLUDED.masked_display`,
+          [credId, data.id, encrypted, masked]
+        );
+      }
+
+      return reply.send(ok({ updated: true, id: data.id }));
+    }
+
+    // ── Default: unknown action ──────────────────────────────────────────────
+    return reply.send(err('INVALID_ACTION', 'action must be one of: add, update, remove, validate'));
+  });
+
+  // ── POST /routing-rules — ADM-06: Routing rule management ────────────────────
+  fastify.post('/routing-rules', async (request, reply) => {
+    const body = request.body as Record<string, any>;
+    const { action, ...data } = body;
+
+    const VALID_SCOPES = new Set(['global', 'agent', 'project', 'gateway']);
+    const VALID_RULE_ACTIONS = new Set(['force_model', 'block_gateway', 'cap_cost_usd', 'prefer_local']);
+
+    // ── action = 'list' ──────────────────────────────────────────────────────
+    if (action === 'list') {
+      const { rows } = await pool.query(`
+        SELECT id, scope, scope_id, action, action_value, enabled, priority,
+               description, created_by, created_at, updated_at
+        FROM routing_rules
+        ORDER BY priority ASC, created_at ASC
+      `);
+      return reply.send(ok({ rules: rows }));
+    }
+
+    // ── action = 'create' ────────────────────────────────────────────────────
+    if (action === 'create') {
+      if (!VALID_SCOPES.has(data.scope)) {
+        return reply.send(err('INVALID_SCOPE', 'scope must be one of: ' + [...VALID_SCOPES].join(', ')));
+      }
+      if (!VALID_RULE_ACTIONS.has(data.action_type)) {
+        return reply.send(err('INVALID_ACTION_TYPE', 'action_type must be one of: ' + [...VALID_RULE_ACTIONS].join(', ')));
+      }
+      const id = crypto.randomUUID();
+      await pool.query(
+        `INSERT INTO routing_rules (id, scope, scope_id, action, action_value, enabled, priority, description, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))`,
+        [
+          id,
+          data.scope,
+          data.scope_id ?? null,
+          data.action_type,
+          data.action_value ?? null,
+          data.enabled ?? 1,
+          data.priority ?? 50,
+          data.description ?? null,
+          (request as any).sessionUser?.username ?? null,
+        ]
+      );
+      return reply.send(ok({ created: true, id }));
+    }
+
+    // ── action = 'update' ────────────────────────────────────────────────────
+    if (action === 'update') {
+      if (!data.id) {
+        return reply.send(err('MISSING_ID', 'id is required for action=update'));
+      }
+
+      if (data.scope !== undefined && !VALID_SCOPES.has(data.scope)) {
+        return reply.send(err('INVALID_SCOPE', 'scope must be one of: ' + [...VALID_SCOPES].join(', ')));
+      }
+      if (data.action_type !== undefined && !VALID_RULE_ACTIONS.has(data.action_type)) {
+        return reply.send(err('INVALID_ACTION_TYPE', 'action_type must be one of: ' + [...VALID_RULE_ACTIONS].join(', ')));
+      }
+
+      const allowedFields: Record<string, string> = {
+        scope: 'scope',
+        scope_id: 'scope_id',
+        action_type: 'action',
+        action_value: 'action_value',
+        enabled: 'enabled',
+        priority: 'priority',
+        description: 'description',
+      };
+
+      const setClauses: string[] = [];
+      const params: unknown[] = [];
+
+      for (const [key, col] of Object.entries(allowedFields)) {
+        if (data[key] !== undefined) {
+          params.push(data[key]);
+          setClauses.push(`${col} = $${params.length}`);
+        }
+      }
+
+      setClauses.push(`updated_at = EXTRACT(EPOCH FROM NOW())`);
+
+      if (setClauses.length > 1) {
+        params.push(data.id);
+        await pool.query(
+          `UPDATE routing_rules SET ${setClauses.join(', ')} WHERE id = $${params.length}`,
+          params
+        );
+      }
+
+      return reply.send(ok({ updated: true, id: data.id }));
+    }
+
+    // ── action = 'delete' ────────────────────────────────────────────────────
+    if (action === 'delete') {
+      if (!data.id) {
+        return reply.send(err('MISSING_ID', 'id is required for action=delete'));
+      }
+      await pool.query('DELETE FROM routing_rules WHERE id = $1', [data.id]);
+      return reply.send(ok({ deleted: true, id: data.id }));
+    }
+
+    // ── Default: unknown action ──────────────────────────────────────────────
+    return reply.send(err('INVALID_ACTION', 'action must be one of: create, update, delete, list'));
+  });
+
+  // ── GET /sse-status — ADM-07: SSE event type documentation ───────────────────
+  // Documents the 3 Bridge SSE event types that already flow through sse-hub.ts.
+  // Emission points (no new code needed — already wired in phases 18-20):
+  //   bridge:health       → health-probe.ts:126 (every 30s health probe cycle)
+  //   bridge:dispatch     → routing-engine.ts:298 (every AI dispatch)
+  //   bridge:circuit-trip → circuit-breaker-registry.ts:57/65/73 (on circuit state change)
+  fastify.get('/sse-status', async (_req, reply) => {
+    return reply.send(ok({
+      events: [
+        { type: 'bridge:health', source: 'health-probe.ts', frequency: 'every 30s health probe cycle' },
+        { type: 'bridge:dispatch', source: 'routing-engine.ts', frequency: 'every AI dispatch' },
+        { type: 'bridge:circuit-trip', source: 'circuit-breaker-registry.ts', frequency: 'on circuit state change' },
+      ],
+      note: 'Subscribe to GET /api/events SSE stream to receive these events in real-time',
     }));
   });
 }
