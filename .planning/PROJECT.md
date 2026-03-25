@@ -79,7 +79,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 
 ## Context
 
-Porter has been in development since Feb 18, 2026. Current version is v0.34.23. The codebase has two stacks:
+Porter has been in development since Feb 18, 2026. Current version is v2.2.0 (Fastify backend; legacy porter.py v0.34.23 deprecated). The codebase has two stacks:
 
 **Fastify backend** (`backend/src/`): TypeScript, Drizzle ORM, 17 v1 route groups, AI router, scheduler, event triggers, external connections. This is the active stack — all new work goes here.
 

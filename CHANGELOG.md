@@ -1,3 +1,15 @@
+## v2.2.0 (2026-03-25)
+
+- docs(phase-20): evolve PROJECT.md after phase completion
+- docs(phase-20): complete phase execution
+- docs(20-02): complete smart routing engine plan — routing-engine.ts, ai-router refactor, stream-service async
+- feat(20-02): wire routing engine into ai-router.ts + stream-service.ts, update callers
+- feat(20-02): create routing-engine.ts with DB-driven selection and dispatch logging
+- docs(20-01): complete smart routing engine foundation plan
+- feat(20-01): extend bridge types, add Drizzle schema exports, create dispatch-queues
+- feat(20-01): install p-queue, create bridge v2 migration with 3 tables
+- test(20-01): add Wave 0 test stubs for RT-01 through RT-05
+
 ## v2.1.0 (2026-03-25)
 
 - docs(phase-17): evolve PROJECT.md after phase completion

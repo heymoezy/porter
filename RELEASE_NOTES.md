@@ -1,5 +1,22 @@
 # Porter Release Notes
 
+## v2.2.0 (2026-03-25)
+
+**Phase 20: Smart Routing Engine — DB-driven model selection replaces hardcoded heuristics**
+
+- RoutingEngine class: DB-driven gateway selection from `gateways` table, ordered by priority
+- Rule evaluation: `routing_rules` table with scope-based matching (agent/project/gateway/global), 4 action types (force_model, block_gateway, cap_cost_usd, prefer_local)
+- Dispatch logging: every routing decision logged to `bridge_dispatch_log` with reason, alternatives (JSONB), tokens, latency — fire-and-forget, never blocks dispatch
+- Session context: per-turn routing records in `session_routing_context` linked to dispatch log
+- Concurrency control: per-gateway PQueue via `dispatch-queues.ts` (CLI=1, HTTP=3)
+- Migration: `migrate-bridge-v2.ts` creates 3 new tables with 6 indexes
+- ai-router.ts refactored: deleted shouldRouteCheap, getBackends, probeBackend, selectModel — dispatch() now uses routingEngine.select()
+- stream-service.ts: selectStreamBackend changed from sync to async, uses routing engine for auto mode
+- All callers (chat.ts, admin/chat.ts) updated for async selectStreamBackend
+- 24 test stubs across 3 files covering RT-01 through RT-05
+- Drizzle schema exports for all 3 new tables
+- 7 new TypeScript types (RoutingContext, RoutingDecision, RoutingRuleRow, DispatchLogEntry, SessionRoutingRow, RoutingRuleScope, RoutingRuleAction)
+
 ## v2.1.0 (2026-03-25)
 
 **Phase 17: Provider Adapters — All 5 backend adapters + StreamNormalizer**
