@@ -310,6 +310,112 @@ export default async function adminBridgeRoutes(fastify: FastifyInstance) {
     return reply.send(ok({ stats: rows, summary }));
   });
 
+  // ── POST /workspace-config — MT-02: Workspace gateway overrides ───────────
+  fastify.post('/workspace-config', async (request, reply) => {
+    const body = request.body as Record<string, any>;
+    const { action, ...data } = body;
+    const actor = (request as any).sessionUser?.username ?? 'admin';
+
+    // ── action = 'list' — list all overrides
+    if (action === 'list') {
+      const { rows } = await pool.query(`
+        SELECT wgo.id, wgo.gateway_id, wgo.enabled, wgo.reason, wgo.updated_by, wgo.updated_at,
+               g.type AS gateway_type, g.name AS gateway_name
+        FROM workspace_gateway_overrides wgo
+        JOIN gateways g ON g.id = wgo.gateway_id
+        ORDER BY g.priority ASC
+      `);
+      return reply.send(ok({ overrides: rows }));
+    }
+
+    // ── action = 'set' — enable or disable a gateway for the workspace
+    if (action === 'set') {
+      if (!data.gateway_id) {
+        return reply.send(err('MISSING_FIELD', 'gateway_id is required'));
+      }
+      const enabled = data.enabled !== undefined ? (data.enabled ? 1 : 0) : 1;
+      const id = crypto.createHash('sha256')
+        .update(`wgo:${data.gateway_id}`)
+        .digest('hex').slice(0, 36);
+
+      await pool.query(
+        `INSERT INTO workspace_gateway_overrides (id, gateway_id, enabled, reason, updated_by, updated_at)
+         VALUES ($1, $2, $3, $4, $5, EXTRACT(EPOCH FROM NOW()))
+         ON CONFLICT (gateway_id) DO UPDATE SET
+           enabled    = EXCLUDED.enabled,
+           reason     = EXCLUDED.reason,
+           updated_by = EXCLUDED.updated_by,
+           updated_at = EXTRACT(EPOCH FROM NOW())`,
+        [id, data.gateway_id, enabled, data.reason ?? null, actor]
+      );
+
+      return reply.send(ok({ set: true, gateway_id: data.gateway_id, enabled: !!enabled }));
+    }
+
+    // ── action = 'remove' — remove override (gateway returns to default behavior)
+    if (action === 'remove') {
+      if (!data.gateway_id) {
+        return reply.send(err('MISSING_FIELD', 'gateway_id is required'));
+      }
+      await pool.query(
+        'DELETE FROM workspace_gateway_overrides WHERE gateway_id = $1',
+        [data.gateway_id]
+      );
+      return reply.send(ok({ removed: true, gateway_id: data.gateway_id }));
+    }
+
+    return reply.send(err('INVALID_ACTION', 'action must be one of: list, set, remove'));
+  });
+
+  // ── GET /attribution — MT-03: Usage attribution by user/project/agent ─────
+  fastify.get('/attribution', async (request, reply) => {
+    const q = request.query as Record<string, string>;
+    const now = Math.floor(Date.now() / 1000);
+    const from = parseFloat(q.from || String(now - 30 * 86400));
+    const to = parseFloat(q.to || String(now));
+    const groupBy = q.group_by || 'user'; // user | project | agent
+
+    let groupCol: string;
+    let groupLabel: string;
+    if (groupBy === 'project') {
+      groupCol = 'project_id';
+      groupLabel = 'project_id';
+    } else if (groupBy === 'agent') {
+      groupCol = 'agent_id';
+      groupLabel = 'agent_id';
+    } else {
+      groupCol = 'username';
+      groupLabel = 'username';
+    }
+
+    const { rows } = await pool.query(`
+      SELECT
+        COALESCE(${groupCol}, 'unattributed') AS ${groupLabel},
+        COUNT(*)::int AS dispatch_count,
+        COALESCE(SUM(estimated_cost_usd), 0) AS total_cost_usd,
+        COALESCE(SUM(input_tokens), 0)::int AS total_input_tokens,
+        COALESCE(SUM(output_tokens), 0)::int AS total_output_tokens,
+        COALESCE(SUM(input_tokens + output_tokens), 0)::int AS total_tokens
+      FROM bridge_dispatch_log
+      WHERE created_at >= $1 AND created_at <= $2
+      GROUP BY ${groupCol}
+      ORDER BY total_cost_usd DESC
+    `, [from, to]);
+
+    const summary = {
+      group_by: groupBy,
+      total_dispatches: rows.reduce((s: number, r: any) => s + (r.dispatch_count || 0), 0),
+      total_cost_usd: rows.reduce((s: number, r: any) => s + parseFloat(r.total_cost_usd || 0), 0),
+      period_days: Math.ceil((to - from) / 86400),
+    };
+
+    return reply.send(ok({
+      attribution: rows,
+      summary,
+      range: { from, to },
+    }));
+  });
+
   // ── POST /gateways — ADM-05: Gateway CRUD ────────────────────────────────────
   fastify.post('/gateways', async (request, reply) => {
     const body = request.body as Record<string, any>;

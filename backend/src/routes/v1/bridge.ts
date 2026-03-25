@@ -312,6 +312,76 @@ export default async function bridgeV1Routes(
     }));
   });
 
+  // ── GET /user-keys — MT-01: List user's own API keys (masked) ─────────────
+  fastify.get('/user-keys', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const username = request.sessionUser!.username;
+    const { rows } = await pool.query(
+      `SELECT id, gateway_type, label, masked_display, created_at, rotated_at
+       FROM user_api_keys
+       WHERE username = $1
+       ORDER BY gateway_type ASC, label ASC`,
+      [username]
+    );
+    return reply.send(ok({ keys: rows }));
+  });
+
+  // ── POST /user-keys — MT-01: Store/rotate/delete user API key ─────────────
+  fastify.post('/user-keys', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const username = request.sessionUser!.username;
+    const body = request.body as Record<string, any>;
+    const { action } = body;
+
+    // ── action = 'store' — store or rotate an API key
+    if (action === 'store') {
+      const { gateway_type, api_key, label } = body;
+      if (!gateway_type || !api_key) {
+        return reply.send(err('MISSING_FIELDS', 'gateway_type and api_key are required'));
+      }
+      if (!validatePorterSecret()) {
+        return reply.send(err('CONFIG_ERROR', 'PORTER_SECRET not set — cannot store credentials securely'));
+      }
+
+      const encrypted = encryptCredential(api_key);
+      const masked = '***' + api_key.slice(-4);
+      const keyLabel = label || 'primary';
+      const id = crypto.createHash('sha256')
+        .update(`user:${username}:${gateway_type}:${keyLabel}`)
+        .digest('hex').slice(0, 36);
+
+      await pool.query(
+        `INSERT INTO user_api_keys (id, username, gateway_type, label, encrypted_value, masked_display, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, EXTRACT(EPOCH FROM NOW()))
+         ON CONFLICT (username, gateway_type, label) DO UPDATE SET
+           encrypted_value = EXCLUDED.encrypted_value,
+           masked_display  = EXCLUDED.masked_display,
+           rotated_at      = EXTRACT(EPOCH FROM NOW())`,
+        [id, username, gateway_type, keyLabel, encrypted, masked]
+      );
+
+      return reply.send(ok({ stored: true, gateway_type, label: keyLabel, masked_display: masked }));
+    }
+
+    // ── action = 'delete' — remove a user API key
+    if (action === 'delete') {
+      const { id: keyId } = body;
+      if (!keyId) {
+        return reply.send(err('MISSING_ID', 'id is required'));
+      }
+      // Only delete keys belonging to this user
+      await pool.query(
+        'DELETE FROM user_api_keys WHERE id = $1 AND username = $2',
+        [keyId, username]
+      );
+      return reply.send(ok({ deleted: true, id: keyId }));
+    }
+
+    return reply.send(err('INVALID_ACTION', 'action must be one of: store, delete'));
+  });
+
   // ── POST /setup/save — wizard step 4: enable or disable a gateway ────────────
   fastify.post('/setup/save', {
     preHandler: [fastify.requireAuth],
