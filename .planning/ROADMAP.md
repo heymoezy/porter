@@ -126,7 +126,10 @@ Plans:
   3. Every routing decision is logged to `bridge_dispatch_log` with: chosen model, reason for selection, alternatives considered, estimated cost — queryable via API
   4. Per-backend dispatch queues (via p-queue) enforce concurrency limits so multiple concurrent agent dispatches do not saturate the VPS
   5. Session routing context tracks which model handled which conversation turn — enabling context-aware re-routing and tied to Brain for memory continuity
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 20-01-PLAN.md — Migration (3 tables), types, p-queue install, dispatch queues
+- [ ] 20-02-PLAN.md — Routing engine service, wire into ai-router.ts + stream-service.ts
 
 ### Phase 21: First-Run Setup
 **Goal**: A new Porter installation discovers available AI backends automatically and guides the user through configuration — if Ollama is already running, everything works with zero user action
@@ -175,7 +178,7 @@ Phases execute in numeric order: 16 through 23.
 | 17. Provider Adapters | 3/3 | Complete    | 2026-03-25 | - |
 | 18. Resilience Layer | v3.0 Bridge | 0/TBD | Not started | - |
 | 19. Model Catalog | v3.0 Bridge | 0/TBD | Not started | - |
-| 20. Smart Routing Engine | v3.0 Bridge | 0/TBD | Not started | - |
+| 20. Smart Routing Engine | v3.0 Bridge | 0/2 | Planned | - |
 | 21. First-Run Setup | v3.0 Bridge | 0/TBD | Not started | - |
 | 22. Bridge Admin Surface | v3.0 Bridge | 0/TBD | Not started | - |
 | 23. Integration & Multi-Tenant | v3.0 Bridge | 0/TBD | Not started | - |
