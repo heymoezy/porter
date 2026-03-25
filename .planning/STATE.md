@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 18-01-PLAN.md
-last_updated: "2026-03-25T10:14:12.399Z"
+stopped_at: Completed 18-02-PLAN.md
+last_updated: "2026-03-25T10:19:37Z"
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 ## Current Position
 
 Phase: 18 (resilience-layer) — EXECUTING
-Plan: 1 of 3
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Recent decisions affecting current work:
 - [Phase 20-live-dashboard]: p-queue v9.1.0 chosen (ESM-only, type=module compatible); CLI gateways concurrency=1, HTTP gateways concurrency=3; PQueue singleton map keyed by gateway type; Wave 0 test stubs use node:test + tsx
 - [Phase 20-02]: RoutingEngine singleton class; fire-and-forget logging via async IIFE; selectStreamBackend() changed to async; gitignore false positive on admin/ directory resolved with git add -f
 - [Phase 18-01]: opossum loaded via createRequire (CJS in ESM project) — breakers keyed by gatewayId not gatewayType — errorFilter=isTransientError suppresses 429/503 — circuit_state column is observability-only
+- [Phase 18-02]: mock.module unavailable in Node v22.22.0 — used DI pattern (runHealthProbeWithDeps) instead — startup guard uses tickCount > HEALTH_PROBE_INTERVAL (strict) — circuit_state defaults to closed when getBreakerState is null
 
 ### Pending Todos
 

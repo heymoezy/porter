@@ -8,7 +8,7 @@
 ### Gateway Registry
 
 - [x] **GW-01**: Gateway table in PostgreSQL stores all AI backends with type, URL, auth method, health status, priority, and metadata
-- [ ] **GW-02**: Background health probe runs every 30s via scheduler, updates gateway status in DB, emits SSE events on state changes
+- [x] **GW-02**: Background health probe runs every 30s via scheduler, updates gateway status in DB, emits SSE events on state changes
 - [x] **GW-03**: Auto-detection on startup finds Ollama, OpenClaw, Codex CLI, Claude CLI, Gemini CLI from PATH and registers them
 - [x] **GW-04**: Circuit breaker per gateway (opossum) with Closed/Open/Half-Open states, configurable thresholds, SSE events on trips
 - [x] **GW-05**: Retry with exponential backoff for transient errors (429, 503), separate from circuit breaker logic
@@ -100,7 +100,7 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | GW-01 | Phase 16: Gateway Foundation | Complete |
-| GW-02 | Phase 18: Resilience Layer | Pending |
+| GW-02 | Phase 18: Resilience Layer | Complete |
 | GW-03 | Phase 16: Gateway Foundation | Complete |
 | GW-04 | Phase 18: Resilience Layer | Complete |
 | GW-05 | Phase 18: Resilience Layer | Complete |

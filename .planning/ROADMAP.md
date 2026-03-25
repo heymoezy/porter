@@ -102,7 +102,7 @@ Plans:
   2. Each gateway has an independent circuit breaker (via opossum) with Closed/Open/Half-Open states — the breaker uses a three-class error taxonomy (transient/persistent/configuration) so rate limits do not trip the breaker the same way auth failures do
   3. Transient errors (429, 503) trigger retry with exponential backoff (separate from circuit breaker logic) — a 429 retries after delay, a 401 does not retry
   4. When a dispatch fails, the fallback chain tries the next gateway in priority order (N gateways deep, not binary cheap/strong) — the user's request succeeds as long as any gateway in the chain is healthy
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 Plans:
 - [ ] 18-01-PLAN.md — Circuit breaker registry (opossum), retry wrapper, error taxonomy, migration
 - [ ] 18-02-PLAN.md — Background health probe wired into scheduler
@@ -180,7 +180,7 @@ Phases execute in numeric order: 16 through 23.
 | 8-15 | v2.0 | - | Complete | 2026-03-24 |
 | 16. Gateway Foundation | v3.0 Bridge | 3/3 | Complete | 2026-03-25 |
 | 17. Provider Adapters | 3/3 | Complete    | 2026-03-25 | - |
-| 18. Resilience Layer | 1/3 | In Progress|  | - |
+| 18. Resilience Layer | 2/3 | In Progress|  | - |
 | 19. Model Catalog | v3.0 Bridge | 0/TBD | Not started | - |
 | 20. Smart Routing Engine | 2/2 | Complete    | 2026-03-25 | - |
 | 21. First-Run Setup | v3.0 Bridge | 0/TBD | Not started | - |
