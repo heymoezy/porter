@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 16-03-PLAN.md
-last_updated: "2026-03-25T06:11:53.319Z"
+stopped_at: Completed 17-02-PLAN.md
+last_updated: "2026-03-25T08:08:28.622Z"
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 6
+  completed_plans: 5
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every AI backend is visible, manageable, and intelligently routed — nothing hidden, everything in the database.
-**Current focus:** Phase 16 — gateway-foundation
+**Current focus:** Phase 17 — provider-adapters
 
 ## Current Position
 
-Phase: 16 (gateway-foundation) — EXECUTING
-Plan: 3 of 3 (16-01, 16-02 complete)
+Phase: 17 (provider-adapters) — EXECUTING
+Plan: 1 of 3
 
 ## Performance Metrics
 
@@ -51,6 +51,10 @@ Recent decisions affecting current work:
 - [Phase 16]: Deterministic SHA-256 credential ID for idempotent upserts across restarts
 - [Phase 16-gateway-foundation]: Bridge API uses requireAuth preHandler + sessionUser.role consistent with rest of codebase
 - [Phase 16-gateway-foundation]: maskRow mappers at route layer guarantee encrypted_value never reaches API responses (GW-07)
+- [Phase 17-provider-adapters]: OllamaAdapter uses /api/chat (not /api/generate) — message.content field for token extraction
+- [Phase 17-provider-adapters]: OpenClawAdapter.health() two-part check: /health liveness then GET /v1/chat/completions (404=disabled, report config fix)
+- [Phase 17]: Prompt delivery varies by CLI: positional arg for Codex, stdin for Claude, -p flag for Gemini
+- [Phase 17]: Codex timeout 120s vs 60s for Claude/Gemini — Codex CLI is measurably slower
 
 ### Pending Todos
 
@@ -69,6 +73,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T06:07:37.060Z
-Stopped at: Completed 16-03-PLAN.md
+Last session: 2026-03-25T08:08:28.619Z
+Stopped at: Completed 17-02-PLAN.md
 Resume file: None
