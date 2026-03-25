@@ -14,7 +14,26 @@ import crypto from 'node:crypto';
 import { config } from '../../config.js';
 import { encryptCredential, validatePorterSecret } from '../../lib/credential-crypto.js';
 import { refreshAllGateways } from './model-catalog.js';
-import type { GatewayType, GatewayAuthMethod } from './types.js';
+import { createAdapter } from './adapters/index.js';
+import type { GatewayType, GatewayAuthMethod, GatewayRow } from './types.js';
+
+// ── Detection report types ────────────────────────────────────────────────────
+
+export interface GatewayDetectionResult {
+  type: GatewayType;
+  name: string;
+  found: boolean;
+  healthy: boolean;
+  latencyMs?: number;
+  models: string[];
+  error?: string;
+}
+
+export interface DetectionReport {
+  gateways: GatewayDetectionResult[];
+  detectedAt: number;
+  zeroConfigReady: boolean;
+}
 
 // ── CLI binary detection list ─────────────────────────────────────────────────
 
@@ -33,14 +52,77 @@ const CLI_BINARIES: Array<{
 // ── Main exported function ────────────────────────────────────────────────────
 
 /**
+ * Maps a raw PostgreSQL row to a typed GatewayRow (camelCase fields).
+ * Used after upserts to instantiate adapters for live probing.
+ */
+function mapRawToGatewayRow(raw: any): GatewayRow {
+  return {
+    id: raw.id,
+    type: raw.type,
+    name: raw.name,
+    url: raw.url,
+    authMethod: raw.auth_method,
+    status: raw.status,
+    source: raw.source,
+    priority: raw.priority,
+    capabilities: Array.isArray(raw.capabilities) ? raw.capabilities : [],
+    metadata: (typeof raw.metadata === 'object' && raw.metadata !== null ? raw.metadata : {}) as Record<string, unknown>,
+    enabled: raw.enabled,
+    maskedDisplay: raw.masked_display ?? '',
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+    lastHealthAt: raw.last_health_at,
+  };
+}
+
+/**
+ * Probes a gateway row's health and model list via its adapter.
+ * Never throws — errors are caught and surfaced in the result.
+ */
+async function probeGateway(row: GatewayRow): Promise<GatewayDetectionResult> {
+  const adapter = createAdapter(row);
+  if (!adapter) {
+    return { type: row.type, name: row.name, found: false, healthy: false, models: [], error: 'No adapter for gateway type' };
+  }
+
+  let healthy = false;
+  let latencyMs: number | undefined;
+  let probeError: string | undefined;
+  let models: string[] = [];
+
+  try {
+    const healthResult = await adapter.health();
+    healthy = healthResult.healthy;
+    latencyMs = healthResult.latencyMs;
+    if (healthResult.error) probeError = healthResult.error;
+  } catch (e) {
+    probeError = e instanceof Error ? e.message : String(e);
+  }
+
+  if (healthy) {
+    try {
+      models = await adapter.listModels();
+    } catch (_e) {
+      // Non-fatal — models stays empty
+    }
+  }
+
+  return { type: row.type, name: row.name, found: true, healthy, latencyMs, models, error: probeError };
+}
+
+/**
  * Detects available AI gateways and upserts rows into the DB.
  * Called on every Fastify boot after bridge migration.
  * Never throws — errors are logged but startup continues.
+ * Returns a DetectionReport with per-gateway health/models and zeroConfigReady.
  */
-export async function detectAndUpsertGateways(pool: pg.Pool): Promise<void> {
+export async function detectAndUpsertGateways(pool: pg.Pool): Promise<DetectionReport> {
   try {
+    const results: GatewayDetectionResult[] = [];
+
     // 1. Bootstrap from env vars first (Ollama always, OpenClaw if token present)
-    await bootstrapEnvGateways(pool);
+    const envResults = await bootstrapEnvGateways(pool);
+    results.push(...envResults);
 
     // 2. Scan PATH for CLI binaries
     for (const cli of CLI_BINARIES) {
@@ -58,25 +140,45 @@ export async function detectAndUpsertGateways(pool: pg.Pool): Promise<void> {
           metadata: { binary_path: binaryPath },
         });
         console.log(`[bridge] ✓ ${cli.binary} detected at ${binaryPath}`);
+
+        // Probe the freshly upserted CLI gateway
+        const { rows } = await pool.query(
+          `SELECT * FROM gateways WHERE type = $1 AND source = 'auto_detected'`,
+          [cli.type]
+        );
+        if (rows.length > 0) {
+          const probeResult = await probeGateway(mapRawToGatewayRow(rows[0]));
+          results.push(probeResult);
+        } else {
+          results.push({ type: cli.type, name: cli.name, found: true, healthy: false, models: [] });
+        }
       } else {
         await markStale(pool, cli.type, 'auto_detected');
+        results.push({ type: cli.type, name: cli.name, found: false, healthy: false, models: [] });
       }
     }
 
     console.log('[bridge] Gateway detection complete');
 
+    const zeroConfigReady = results.some(g => g.found && g.healthy);
+
     // Auto-populate model catalog for all detected gateways (fire-and-forget)
     refreshAllGateways(pool).catch(err =>
       console.error('[bridge] Model catalog population failed:', err instanceof Error ? err.message : err)
     );
+
+    return { gateways: results, detectedAt: Date.now(), zeroConfigReady };
   } catch (err) {
     console.error('[bridge] Gateway detection failed:', err instanceof Error ? err.message : err);
+    return { gateways: [], detectedAt: Date.now(), zeroConfigReady: false };
   }
 }
 
 // ── Bootstrap env vars → DB rows ──────────────────────────────────────────────
 
-async function bootstrapEnvGateways(pool: pg.Pool): Promise<void> {
+async function bootstrapEnvGateways(pool: pg.Pool): Promise<GatewayDetectionResult[]> {
+  const results: GatewayDetectionResult[] = [];
+
   // Ollama: always bootstrap since config.ollamaUrl has a default
   await upsertGateway(pool, {
     type: 'ollama',
@@ -89,6 +191,14 @@ async function bootstrapEnvGateways(pool: pg.Pool): Promise<void> {
     metadata: {},
   });
 
+  // Probe Ollama immediately after upsert
+  const { rows: ollamaRows } = await pool.query(
+    `SELECT * FROM gateways WHERE type = 'ollama' AND source = 'env_bootstrap'`
+  );
+  if (ollamaRows.length > 0) {
+    results.push(await probeGateway(mapRawToGatewayRow(ollamaRows[0])));
+  }
+
   // OpenClaw: only if token is configured
   if (config.openclawToken) {
     await upsertGateway(pool, {
@@ -99,7 +209,10 @@ async function bootstrapEnvGateways(pool: pg.Pool): Promise<void> {
       source: 'env_bootstrap',
       status: 'active',
       capabilities: ['chat', 'code', 'streaming'],
-      metadata: {},
+      metadata: {
+        gateway_roles: ['ai_dispatch', 'messaging_gateway'],
+        messaging_protocols: ['whatsapp', 'telegram'],
+      },
     });
 
     if (validatePorterSecret()) {
@@ -109,7 +222,17 @@ async function bootstrapEnvGateways(pool: pg.Pool): Promise<void> {
     } else {
       console.warn('[bridge] PORTER_SECRET not set, skipping OpenClaw credential encryption');
     }
+
+    // Probe OpenClaw immediately after upsert
+    const { rows: openclawRows } = await pool.query(
+      `SELECT * FROM gateways WHERE type = 'openclaw' AND source = 'env_bootstrap'`
+    );
+    if (openclawRows.length > 0) {
+      results.push(await probeGateway(mapRawToGatewayRow(openclawRows[0])));
+    }
   }
+
+  return results;
 }
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
