@@ -36,13 +36,13 @@ function makeGatewayRow(overrides: Partial<{
   };
 }
 
-function makeAdapter(dispatchFn: () => Promise<{ response: string; model: string; latencyMs: number; cached: boolean }>) {
+function makeAdapter(dispatchFn: (_req?: unknown) => Promise<{ response: string; model: string; latencyMs: number; cached: boolean }>) {
   return {
     name: 'test-adapter',
     gatewayType: 'ollama' as const,
     detect: async () => ({ found: true }),
     health: async () => ({ healthy: true }),
-    dispatch: dispatchFn,
+    dispatch: dispatchFn as unknown as (req: import('../services/bridge/types.js').BridgeDispatchRequest) => Promise<import('../services/bridge/types.js').BridgeDispatchResult>,
     stream: async function* () { /* noop */ },
     listModels: async () => [],
   };

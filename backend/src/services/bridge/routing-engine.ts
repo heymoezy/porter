@@ -11,6 +11,8 @@
 import { pool } from '../../db/client.js';
 import { createAdapter } from './adapters/index.js';
 import { getQueue } from './dispatch-queues.js';
+import { getBreaker } from './circuit-breaker-registry.js';
+import { withRetry } from './retry.js';
 import { emitSSE } from '../scheduler.js';
 import { v4 as uuidv4 } from 'uuid';
 import type {
@@ -68,6 +70,31 @@ interface RoutingRuleDbRow {
 
 export class RoutingEngine {
   /**
+   * Query all active+enabled gateway candidates ordered by priority.
+   * Includes 'stale' gateways (degraded but functional) — only 'unavailable' is excluded.
+   * Used by both select() and selectWithFallback().
+   * GW-06: Fallback chain iterates all candidates returned here.
+   */
+  async selectAllCandidates(): Promise<GatewayCandidate[]> {
+    const { rows: dbRows } = await pool.query<GatewayDbRow>(
+      `SELECT id, type, name, url, auth_method, status, source, priority,
+              capabilities, metadata, enabled, masked_display,
+              created_at, updated_at, last_health_at
+       FROM gateways
+       WHERE status IN ('active', 'stale') AND enabled = 1
+       ORDER BY priority ASC`,
+    );
+
+    const candidates: GatewayCandidate[] = [];
+    for (const raw of dbRows) {
+      const row = mapGatewayRow(raw);
+      const adapter = createAdapter(row);
+      if (adapter) candidates.push({ row, adapter });
+    }
+    return candidates;
+  }
+
+  /**
    * Select the best available gateway for the given routing context.
    *
    * RT-01: Queries gateways table for active+enabled candidates.
@@ -75,24 +102,7 @@ export class RoutingEngine {
    */
   async select(ctx: RoutingContext): Promise<RoutingDecision> {
     // 1. Query active, enabled gateways ordered by priority
-    const { rows: dbRows } = await pool.query<GatewayDbRow>(
-      `SELECT id, type, name, url, auth_method, status, source, priority,
-              capabilities, metadata, enabled, masked_display,
-              created_at, updated_at, last_health_at
-       FROM gateways
-       WHERE status = 'active' AND enabled = 1
-       ORDER BY priority ASC`,
-    );
-
-    // 2. Map DB rows to typed GatewayRow + adapter pairs
-    const candidates: GatewayCandidate[] = [];
-    for (const raw of dbRows) {
-      const row = mapGatewayRow(raw);
-      const adapter = createAdapter(row);
-      if (adapter) {
-        candidates.push({ row, adapter });
-      }
-    }
+    const candidates = await this.selectAllCandidates();
 
     if (candidates.length === 0) {
       throw new Error('No active gateways available');
@@ -305,6 +315,76 @@ export class RoutingEngine {
     return getQueue(decision.gatewayRow.type).add(
       () => decision.adapter.dispatch(req),
     ) as Promise<BridgeDispatchResult>;
+  }
+
+  /**
+   * Dispatch with N-gateway fallback chain.
+   * Iterates priority-ordered candidates. For each:
+   *   - Skip if circuit breaker is open
+   *   - Try dispatch wrapped in withRetry() + breaker.fire() + dispatch queue
+   *   - On failure, record error and try next candidate
+   * GW-06: Fallback chain — N gateways in priority order.
+   */
+  async selectWithFallback(
+    ctx: RoutingContext,
+    req: BridgeDispatchRequest,
+  ): Promise<{ decision: RoutingDecision; result: BridgeDispatchResult }> {
+    const candidates = await this.selectAllCandidates();
+    if (candidates.length === 0) {
+      throw new Error('No active gateways available');
+    }
+
+    // Evaluate rules to potentially inform future filtering (currently advisory)
+    const matchedRule = await this.evaluateRules(ctx, candidates);
+
+    const errors: string[] = [];
+
+    for (const candidate of candidates) {
+      const breaker = getBreaker(candidate.row.id, candidate.row.type);
+
+      // Skip gateways with open circuit breakers
+      if (breaker.opened) {
+        errors.push(`${candidate.row.type}(${candidate.row.id.slice(0, 8)}): circuit open`);
+        continue;
+      }
+
+      try {
+        const result = await withRetry(() =>
+          getQueue(candidate.row.type).add(() =>
+            breaker.fire(async () => candidate.adapter.dispatch(req))
+          ) as Promise<BridgeDispatchResult>,
+        );
+
+        // Build the routing decision for the gateway that succeeded
+        const chosenId = candidate.row.id;
+        const alternatives = candidates
+          .filter(c => c.row.id !== chosenId)
+          .map(c => ({
+            gatewayType: c.row.type,
+            modelName: resolveModelName(c.row),
+            reasonSkipped: errors.find(e => e.startsWith(c.row.type))
+              ?? `lower priority (priority=${c.row.priority})`,
+          }));
+
+        const decision: RoutingDecision = {
+          gatewayRow: candidate.row,
+          adapter: candidate.adapter,
+          modelName: resolveModelName(candidate.row),
+          reason: errors.length > 0
+            ? `Fallback: ${errors.length} gateway(s) failed before ${candidate.row.type}`
+            : `Primary: ${candidate.row.type} (priority=${candidate.row.priority})`,
+          alternatives,
+          matchedRuleId: matchedRule?.id ?? null,
+        };
+
+        return { decision, result };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`${candidate.row.type}(${candidate.row.id.slice(0, 8)}): ${msg}`);
+      }
+    }
+
+    throw new Error(`All ${candidates.length} gateways failed: ${errors.join('; ')}`);
   }
 
   /**
