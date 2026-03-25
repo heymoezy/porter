@@ -33,6 +33,7 @@
     "imapflow": "^1.2.16",
     "nodemailer": "^8.0.3",
     "octokit": "^5.0.5",
+    "p-queue": "^9.1.0",
     "pg": "^8.20.0",
     "robots-parser": "^3.0.1",
     "systeminformation": "^5.31.1",
