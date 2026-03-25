@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 20-01-PLAN.md
-last_updated: "2026-03-25T09:32:55.496Z"
+stopped_at: Completed 20-02-PLAN.md
+last_updated: "2026-03-25T09:40:25.000Z"
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Current Position
 
-Phase: 20 (live-dashboard) — EXECUTING
-Plan: 1 of 2
+Phase: 20 (live-dashboard) — COMPLETE
+Plan: 2 of 2 (COMPLETE)
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Recent decisions affecting current work:
 - [Phase 17]: Codex timeout 120s vs 60s for Claude/Gemini — Codex CLI is measurably slower
 - [Phase 17-provider-adapters]: StreamNormalizer is intentionally thin — no format conversion, only abort propagation and error boundary; ADAPTER_MAP keys use GatewayType strings matching DB values; createAdapter() returns null for unknown types
 - [Phase 20-live-dashboard]: p-queue v9.1.0 chosen (ESM-only, type=module compatible); CLI gateways concurrency=1, HTTP gateways concurrency=3; PQueue singleton map keyed by gateway type; Wave 0 test stubs use node:test + tsx
+- [Phase 20-02]: RoutingEngine singleton class; fire-and-forget logging via async IIFE; selectStreamBackend() changed to async; gitignore false positive on admin/ directory resolved with git add -f
 
 ### Pending Todos
 
@@ -75,6 +76,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T09:32:55.493Z
-Stopped at: Completed 20-01-PLAN.md
+Last session: 2026-03-25T09:40:25.000Z
+Stopped at: Completed 20-02-PLAN.md
 Resume file: None

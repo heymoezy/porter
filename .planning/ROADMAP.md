@@ -54,7 +54,7 @@
 - [x] **Phase 17: Provider Adapters** — Concrete adapters for all backends + unified stream normalizer (completed 2026-03-25)
 - [ ] **Phase 18: Resilience Layer** — Background health probes, circuit breakers, retry/backoff, N-backend fallback
 - [ ] **Phase 19: Model Catalog** — Models table, auto-population, capability metadata, version tracking, cost tracking
-- [ ] **Phase 20: Smart Routing Engine** — DB-driven model selection, routing rules, decision logging, concurrency, session context
+- [x] **Phase 20: Smart Routing Engine** — DB-driven model selection, routing rules, decision logging, concurrency, session context (completed 2026-03-25)
 - [ ] **Phase 21: First-Run Setup** — Gateway detection endpoint, guided setup API, zero-config path, OpenClaw integration
 - [ ] **Phase 22: Bridge Admin Surface** — 7 admin API endpoints, SSE events, design system components, agent-ready layout
 - [ ] **Phase 23: Integration & Multi-Tenant** — Brain/Recall integration, per-user keys, workspace overrides, usage attribution
@@ -126,7 +126,7 @@ Plans:
   3. Every routing decision is logged to `bridge_dispatch_log` with: chosen model, reason for selection, alternatives considered, estimated cost — queryable via API
   4. Per-backend dispatch queues (via p-queue) enforce concurrency limits so multiple concurrent agent dispatches do not saturate the VPS
   5. Session routing context tracks which model handled which conversation turn — enabling context-aware re-routing and tied to Brain for memory continuity
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 20-01-PLAN.md — Migration (3 tables), types, p-queue install, dispatch queues
 - [ ] 20-02-PLAN.md — Routing engine service, wire into ai-router.ts + stream-service.ts
@@ -178,7 +178,7 @@ Phases execute in numeric order: 16 through 23.
 | 17. Provider Adapters | 3/3 | Complete    | 2026-03-25 | - |
 | 18. Resilience Layer | v3.0 Bridge | 0/TBD | Not started | - |
 | 19. Model Catalog | v3.0 Bridge | 0/TBD | Not started | - |
-| 20. Smart Routing Engine | 1/2 | In Progress|  | - |
+| 20. Smart Routing Engine | 2/2 | Complete   | 2026-03-25 | - |
 | 21. First-Run Setup | v3.0 Bridge | 0/TBD | Not started | - |
 | 22. Bridge Admin Surface | v3.0 Bridge | 0/TBD | Not started | - |
 | 23. Integration & Multi-Tenant | v3.0 Bridge | 0/TBD | Not started | - |

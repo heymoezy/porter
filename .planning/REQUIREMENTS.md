@@ -26,7 +26,7 @@
 
 ### Smart Routing
 
-- [ ] **RT-01**: Replace hardcoded getBackends() with DB-driven gateway+model selection
+- [x] **RT-01**: Replace hardcoded getBackends() with DB-driven gateway+model selection
 - [x] **RT-02**: Routing rules table — operator-configurable overrides (force model for agent, cap cost per project, etc.)
 - [x] **RT-03**: Transparent decision logging — every routing decision logged with reason, alternatives considered, cost estimate
 - [x] **RT-04**: Dispatch concurrency control — per-backend queue (p-queue) prevents VPS saturation under concurrent agent load
@@ -112,7 +112,7 @@
 | MOD-03 | Phase 19: Model Catalog | Pending |
 | MOD-04 | Phase 19: Model Catalog | Pending |
 | MOD-05 | Phase 19: Model Catalog | Pending |
-| RT-01 | Phase 20: Smart Routing Engine | Pending |
+| RT-01 | Phase 20: Smart Routing Engine | Complete |
 | RT-02 | Phase 20: Smart Routing Engine | Complete |
 | RT-03 | Phase 20: Smart Routing Engine | Complete |
 | RT-04 | Phase 20: Smart Routing Engine | Complete |
