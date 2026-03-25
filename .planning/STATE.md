@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
-status: unknown
-stopped_at: Completed 22-01-PLAN.md
-last_updated: "2026-03-25T11:53:35.000Z"
+status: complete
+stopped_at: Completed 22-02-PLAN.md
+last_updated: "2026-03-25T12:06:00.000Z"
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 
 ## Current Position
 
-Phase: 22 (bridge-admin-surface) — EXECUTING
-Plan: 2 of 2
+Phase: 22 (bridge-admin-surface) — COMPLETE
+Plan: 2 of 2 (all complete)
 
 ## Performance Metrics
 
@@ -77,6 +77,9 @@ Recent decisions affecting current work:
 - [Phase 22-01]: Local copies of maskGatewayRow/mapRawToGatewayRow in admin/bridge.ts to prevent circular imports
 - [Phase 22-01]: status_indicator derived at route layer — active=healthy, stale=degraded, unavailable=unavailable
 - [Phase 22-01]: briefing_slot always null for now — field reserved in response shape for DS-02 agent narratives in v4.0
+- [Phase 22-02]: POST body action dispatch — single POST route with { action, ...data } body handles all mutations (add/update/remove/validate for gateways; create/update/delete/list for routing rules)
+- [Phase 22-02]: action_type field name in request body avoids shadowing the destructured action variable; stored as action column in DB
+- [Phase 22-02]: GET /sse-status is documentation-only — SSE emission already working in phases 18-20, no new code
 
 ### Pending Todos
 
@@ -87,6 +90,8 @@ None yet.
 - [16-01]: gateways + gateway_credentials tables (migration + Drizzle), GatewayAdapter interface — 2026-03-25
 - [16-02]: Startup detector — which-based PATH scan + env bootstrap + Fastify boot wiring — 2026-03-25
 - [19-01]: models + model_versions tables, Drizzle schema, model-catalog.ts service (refreshModelsForGateway, refreshAllGateways, calculateCostUsd) — 2026-03-25
+- [22-01]: admin/bridge.ts with 4 GET endpoints (gateway cards, models, dispatch-log, costs) — 2026-03-25
+- [22-02]: admin/bridge.ts POST /gateways (ADM-05) + POST /routing-rules (ADM-06) + GET /sse-status (ADM-07) — Phase 22 complete — 2026-03-25
 
 ### Blockers/Concerns
 
@@ -96,6 +101,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T11:53:35.000Z
-Stopped at: Completed 22-01-PLAN.md
+Last session: 2026-03-25T12:06:00.000Z
+Stopped at: Completed 22-02-PLAN.md
 Resume file: None

@@ -55,9 +55,9 @@
 - [x] **ADM-02**: GET /api/admin/bridge/models — unified model catalog across all gateways with capabilities and pricing
 - [x] **ADM-03**: GET /api/admin/bridge/dispatch-log — paginated routing decision log with model, reason, cost, latency
 - [x] **ADM-04**: GET /api/admin/bridge/costs — spend by gateway, by model, by day, with configurable date ranges
-- [ ] **ADM-05**: POST /api/admin/bridge/gateways — add/update/remove gateways, validate connections
-- [ ] **ADM-06**: POST /api/admin/bridge/routing-rules — create/update routing rule overrides
-- [ ] **ADM-07**: SSE events for bridge:health, bridge:dispatch, bridge:circuit-trip — real-time admin updates
+- [x] **ADM-05**: POST /api/admin/bridge/gateways — add/update/remove gateways, validate connections
+- [x] **ADM-06**: POST /api/admin/bridge/routing-rules — create/update routing rule overrides
+- [x] **ADM-07**: SSE events for bridge:health, bridge:dispatch, bridge:circuit-trip — real-time admin updates
 
 ### Brain & Recall Integration
 
@@ -132,9 +132,9 @@
 | ADM-02 | Phase 22: Bridge Admin Surface | Complete |
 | ADM-03 | Phase 22: Bridge Admin Surface | Complete |
 | ADM-04 | Phase 22: Bridge Admin Surface | Complete |
-| ADM-05 | Phase 22: Bridge Admin Surface | Pending |
-| ADM-06 | Phase 22: Bridge Admin Surface | Pending |
-| ADM-07 | Phase 22: Bridge Admin Surface | Pending |
+| ADM-05 | Phase 22: Bridge Admin Surface | Complete |
+| ADM-06 | Phase 22: Bridge Admin Surface | Complete |
+| ADM-07 | Phase 22: Bridge Admin Surface | Complete |
 | DS-01 | Phase 22: Bridge Admin Surface | Complete |
 | DS-02 | Phase 22: Bridge Admin Surface | Complete |
 | DS-03 | Phase 22: Bridge Admin Surface | Complete |

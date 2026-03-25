@@ -56,7 +56,7 @@
 - [x] **Phase 19: Model Catalog** — Models table, auto-population, capability metadata, version tracking, cost tracking (completed 2026-03-25)
 - [x] **Phase 20: Smart Routing Engine** — DB-driven model selection, routing rules, decision logging, concurrency, session context (completed 2026-03-25)
 - [x] **Phase 21: First-Run Setup** — Gateway detection endpoint, guided setup API, zero-config path, OpenClaw integration (completed 2026-03-25)
-- [ ] **Phase 22: Bridge Admin Surface** — 7 admin API endpoints, SSE events, design system components, agent-ready layout
+- [x] **Phase 22: Bridge Admin Surface** — 7 admin API endpoints, SSE events, design system components, agent-ready layout (completed 2026-03-25)
 - [ ] **Phase 23: Integration & Multi-Tenant** — Brain/Recall integration, per-user keys, workspace overrides, usage attribution
 
 ## Phase Details
@@ -162,7 +162,7 @@ Plans:
   3. `GET /api/admin/bridge/dispatch-log` returns paginated routing decisions with model used, routing reason, cost, and latency — `GET /api/admin/bridge/costs` returns spend aggregated by gateway, model, and day with configurable date ranges
   4. Gateway CRUD (`POST /api/admin/bridge/gateways`) and routing rule management (`POST /api/admin/bridge/routing-rules`) enable full operator control — add, update, remove, validate connections
   5. SSE events (`bridge:health`, `bridge:dispatch`, `bridge:circuit-trip`) stream real-time Bridge state changes to connected admin clients — the admin surface is never stale
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 22-01-PLAN.md — Read endpoints (GET /, /models, /dispatch-log, /costs), route registration, test stubs
 - [ ] 22-02-PLAN.md — Write endpoints (POST /gateways, /routing-rules), SSE verification
@@ -193,7 +193,7 @@ Phases execute in numeric order: 16 through 23.
 | 19. Model Catalog | 2/2 | Complete    | 2026-03-25 | - |
 | 20. Smart Routing Engine | 2/2 | Complete    | 2026-03-25 | - |
 | 21. First-Run Setup | 2/2 | Complete    | 2026-03-25 | - |
-| 22. Bridge Admin Surface | 1/2 | In Progress|  | - |
+| 22. Bridge Admin Surface | 2/2 | Complete   | 2026-03-25 | - |
 | 23. Integration & Multi-Tenant | v3.0 Bridge | 0/TBD | Not started | - |
 
 ---
