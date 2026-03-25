@@ -51,7 +51,7 @@
 **Milestone Goal:** Build the unified AI gateway layer that manages all model providers, routing, capability detection, and runtime orchestration. Database-backed, commercial-quality system replacing hardcoded config. Every AI backend is visible, manageable, and intelligently routed — nothing hidden, everything in the database.
 
 - [x] **Phase 16: Gateway Foundation** — DB schema, adapter interface, config migration, auto-detection, key masking (completed 2026-03-25)
-- [ ] **Phase 17: Provider Adapters** — Concrete adapters for all backends + unified stream normalizer
+- [x] **Phase 17: Provider Adapters** — Concrete adapters for all backends + unified stream normalizer (completed 2026-03-25)
 - [ ] **Phase 18: Resilience Layer** — Background health probes, circuit breakers, retry/backoff, N-backend fallback
 - [ ] **Phase 19: Model Catalog** — Models table, auto-population, capability metadata, version tracking, cost tracking
 - [ ] **Phase 20: Smart Routing Engine** — DB-driven model selection, routing rules, decision logging, concurrency, session context
@@ -87,7 +87,7 @@ Plans:
   3. CodexCLIAdapter and ClaudeCLIAdapter spawn subprocess calls with proper stdin/stdout streaming, timeout handling, and error parsing — output appears as streamed tokens, not dumped blocks
   4. GeminiCLIAdapter dispatches via subprocess with output parsing and model detection from the installed binary
   5. StreamNormalizer converts Ollama NDJSON, OpenAI SSE, Codex JSONL, and Claude JSON output formats into a single `AsyncIterable<string>` consumed by all downstream code
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 17-01-PLAN.md — OllamaAdapter and OpenClawAdapter (HTTP-based adapters)
 - [ ] 17-02-PLAN.md — CodexCLIAdapter, ClaudeCLIAdapter, GeminiCLIAdapter (subprocess adapters)
@@ -172,7 +172,7 @@ Phases execute in numeric order: 16 through 23.
 | 1-7 | v1.0 | - | Complete | 2026-03-21 |
 | 8-15 | v2.0 | - | Complete | 2026-03-24 |
 | 16. Gateway Foundation | v3.0 Bridge | 3/3 | Complete | 2026-03-25 |
-| 17. Provider Adapters | 2/3 | In Progress|  | - |
+| 17. Provider Adapters | 3/3 | Complete   | 2026-03-25 | - |
 | 18. Resilience Layer | v3.0 Bridge | 0/TBD | Not started | - |
 | 19. Model Catalog | v3.0 Bridge | 0/TBD | Not started | - |
 | 20. Smart Routing Engine | v3.0 Bridge | 0/TBD | Not started | - |

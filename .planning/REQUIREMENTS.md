@@ -40,7 +40,7 @@
 - [x] **CLI-04**: Codex CLI adapter — subprocess dispatch with stdin/stdout streaming, error handling, timeout
 - [x] **CLI-05**: Claude CLI adapter — subprocess dispatch with -p flag, streaming output parsing
 - [x] **CLI-06**: Gemini CLI adapter — subprocess dispatch, output parsing, model detection
-- [ ] **CLI-07**: Stream normalizer — converts all adapter output formats to unified AsyncIterable<string>
+- [x] **CLI-07**: Stream normalizer — converts all adapter output formats to unified AsyncIterable<string>
 
 ### First-Run Setup
 
@@ -123,7 +123,7 @@
 | CLI-04 | Phase 17: Provider Adapters | Complete |
 | CLI-05 | Phase 17: Provider Adapters | Complete |
 | CLI-06 | Phase 17: Provider Adapters | Complete |
-| CLI-07 | Phase 17: Provider Adapters | Pending |
+| CLI-07 | Phase 17: Provider Adapters | Complete |
 | FRS-01 | Phase 21: First-Run Setup | Pending |
 | FRS-02 | Phase 21: First-Run Setup | Pending |
 | FRS-03 | Phase 21: First-Run Setup | Pending |

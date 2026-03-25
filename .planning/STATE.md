@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 17-02-PLAN.md
-last_updated: "2026-03-25T08:08:28.622Z"
+stopped_at: Completed 17-03-PLAN.md
+last_updated: "2026-03-25T08:15:07.201Z"
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -55,6 +55,7 @@ Recent decisions affecting current work:
 - [Phase 17-provider-adapters]: OpenClawAdapter.health() two-part check: /health liveness then GET /v1/chat/completions (404=disabled, report config fix)
 - [Phase 17]: Prompt delivery varies by CLI: positional arg for Codex, stdin for Claude, -p flag for Gemini
 - [Phase 17]: Codex timeout 120s vs 60s for Claude/Gemini — Codex CLI is measurably slower
+- [Phase 17-provider-adapters]: StreamNormalizer is intentionally thin — no format conversion, only abort propagation and error boundary; ADAPTER_MAP keys use GatewayType strings matching DB values; createAdapter() returns null for unknown types
 
 ### Pending Todos
 
@@ -73,6 +74,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T08:08:28.619Z
-Stopped at: Completed 17-02-PLAN.md
+Last session: 2026-03-25T08:15:07.198Z
+Stopped at: Completed 17-03-PLAN.md
 Resume file: None
