@@ -271,7 +271,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     }
 
     // STRM-02: prefer strong model for user chat, fall back to ollama if unavailable
-    const backend = selectStreamBackend(message, backendHint ?? 'auto');
+    const backend = await selectStreamBackend(message, backendHint ?? 'auto');
     let fullResponse = '';
 
     try {

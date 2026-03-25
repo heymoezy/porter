@@ -4,7 +4,7 @@
  *
  * Provides a unified StreamBackend interface with two concrete implementations:
  *   - OllamaStreamBackend: parses NDJSON from Ollama /api/generate (stream: true)
- *   - OpenClawStreamBackend: word-chunks a blocking response from porter.py /api/dispatch
+ *   - OpenClawStreamBackend: streams from OpenClaw's OpenAI-compatible /v1/chat/completions
  *
  * Backend selection is handled by selectStreamBackend(), which re-uses
  * shouldRouteCheap() from ai-router.ts for routing decisions.
@@ -13,7 +13,7 @@
  */
 
 import { config } from '../config.js';
-import { shouldRouteCheap } from './ai-router.js';
+import { routingEngine } from './bridge/routing-engine.js';
 
 // ---------------------------------------------------------------------------
 // StreamBackend interface
@@ -123,22 +123,9 @@ export class OllamaStreamBackend implements StreamBackend {
 // OpenClawStreamBackend
 // ---------------------------------------------------------------------------
 
-/** Minimum accumulated chunk size before yielding (chars). */
-const OPENCLAW_CHUNK_SIZE = 25;
-
-/** Delay between chunks for typewriter pacing (ms). */
-const OPENCLAW_CHUNK_DELAY_MS = 15;
-
 /**
- * Fetches a full blocking response from porter.py's /api/dispatch and
- * word-chunks it to simulate streaming.
- *
- * Word-chunking strategy:
- *   - Split response on whitespace into words.
- *   - Accumulate words until >= OPENCLAW_CHUNK_SIZE chars, then yield.
- *   - Yield the final leftover chunk.
- *   - Between chunks: short delay for typewriter pacing.
- *   - Check signal.aborted before each yield.
+ * Streams tokens from OpenClaw's OpenAI-compatible /v1/chat/completions endpoint.
+ * Parses SSE lines: data: {"choices":[{"delta":{"content":"token"}}]}
  */
 export class OpenClawStreamBackend implements StreamBackend {
   readonly name = 'openclaw';
@@ -146,43 +133,76 @@ export class OpenClawStreamBackend implements StreamBackend {
   async *stream(prompt: string, signal: AbortSignal): AsyncIterable<string> {
     if (signal.aborted) return;
 
-    const resp = await fetch(`${config.porterPyUrl}/api/dispatch`, {
+    const resp = await fetch(`${config.openclawUrl}/v1/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ persona_id: 'porter', message: prompt }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.openclawToken}`,
+      },
+      body: JSON.stringify({
+        model: config.openclawModel,
+        messages: [
+          { role: 'system', content: PORTER_SYSTEM },
+          { role: 'user', content: prompt },
+        ],
+        stream: true,
+      }),
       signal,
     });
 
     if (!resp.ok) {
-      throw new Error(`porter.py /api/dispatch returned ${resp.status}`);
+      throw new Error(`OpenClaw /v1/chat/completions returned ${resp.status}`);
     }
 
-    const fullText = await resp.text();
-    if (!fullText) return;
+    if (!resp.body) {
+      throw new Error('OpenClaw response has no body');
+    }
 
-    if (signal.aborted) return;
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-    // Split into words (preserving space between them)
-    const words = fullText.split(/(\s+)/);
-
-    let current = '';
-
-    for (const word of words) {
-      if (signal.aborted) return;
-
-      current += word;
-
-      if (current.length >= OPENCLAW_CHUNK_SIZE) {
-        await new Promise<void>(resolve => setTimeout(resolve, OPENCLAW_CHUNK_DELAY_MS));
+    try {
+      while (true) {
         if (signal.aborted) return;
-        yield current;
-        current = '';
-      }
-    }
 
-    // Yield any remaining text
-    if (current && !signal.aborted) {
-      yield current;
+        let result: ReadableStreamReadResult<Uint8Array>;
+        try {
+          result = await reader.read();
+        } catch {
+          return;
+        }
+
+        if (result.done) break;
+
+        buffer += decoder.decode(result.value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+          const payload = trimmed.slice(6);
+          if (payload === '[DONE]') return;
+
+          try {
+            const chunk = JSON.parse(payload) as {
+              choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }>;
+            };
+            const content = chunk.choices?.[0]?.delta?.content;
+            if (content) {
+              yield content;
+            }
+            if (chunk.choices?.[0]?.finish_reason) return;
+          } catch {
+            // Malformed SSE line — skip
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
     }
   }
 }
@@ -194,16 +214,23 @@ export class OpenClawStreamBackend implements StreamBackend {
 /**
  * Select a streaming backend based on message complexity or an explicit hint.
  *
- * @param message     - The user's message (used by shouldRouteCheap for auto routing).
+ * @param message     - The user's message (used by routing engine for auto routing).
  * @param backendHint - Optional override: 'ollama' | 'openclaw' | 'auto' | undefined.
- *                      'auto' and undefined both delegate to shouldRouteCheap.
+ *                      'auto' and undefined both delegate to the DB-driven routing engine.
  */
-export function selectStreamBackend(
+export async function selectStreamBackend(
   message: string,
   backendHint?: 'ollama' | 'openclaw' | 'auto',
-): StreamBackend {
+): Promise<StreamBackend> {
   if (backendHint === 'ollama') return new OllamaStreamBackend();
   if (backendHint === 'openclaw') return new OpenClawStreamBackend();
-  // 'auto' or undefined: delegate to shouldRouteCheap from ai-router
-  return shouldRouteCheap(message) ? new OllamaStreamBackend() : new OpenClawStreamBackend();
+  // 'auto' or undefined: delegate to routing engine for DB-driven selection
+  try {
+    const decision = await routingEngine.select({ message });
+    if (decision.gatewayRow.type === 'ollama') return new OllamaStreamBackend();
+    return new OpenClawStreamBackend();
+  } catch {
+    // Fallback to Ollama if routing engine fails (e.g., no gateways in DB)
+    return new OllamaStreamBackend();
+  }
 }

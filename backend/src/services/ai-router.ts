@@ -1,12 +1,13 @@
 /**
  * AI Router Service
  * Smart model selection, dispatch, tool schema rebuild, and context compression.
- * All backend URLs and tokens come from config.ts — no hardcoded values in this file.
+ * Routing is DB-driven via routingEngine — no hardcoded model selection logic.
  */
 
-import { config } from '../config.js';
 import { pool } from '../db/client.js';
 import { emitSSE } from './scheduler.js';
+import { routingEngine } from './bridge/routing-engine.js';
+import type { BridgeDispatchRequest } from './bridge/types.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,84 +40,6 @@ export interface ToolDefinition {
   description: string;
   requiredBackend?: string;
   parameters?: unknown;
-}
-
-type ModelTier = 'cheap' | 'strong';
-
-// ---------------------------------------------------------------------------
-// Smart routing heuristic (exported for testing)
-// ---------------------------------------------------------------------------
-
-/**
- * Decide whether to route a message to the cheap (Ollama) model.
- * Returns false (strong model) if message is long, complex, contains code/URLs,
- * or uses technical keywords that indicate substantive work.
- */
-export function shouldRouteCheap(message: string): boolean {
-  // Messages over 160 chars or 28 words → strong
-  if (message.length > 160 || message.split(/\s+/).length > 28) return false;
-  // Code, URLs, technical keywords → strong
-  if (/```|`|https?:\/\/|debug|implement|refactor|test|tool|analyze|architecture/i.test(message)) return false;
-  // Everything else → cheap
-  return true;
-}
-
-// ---------------------------------------------------------------------------
-// Backend selection and availability probing
-// ---------------------------------------------------------------------------
-
-/**
- * Returns backend descriptors derived from config at runtime.
- * No hardcoded addresses — all values come from config.ts which reads env vars.
- */
-function getBackends() {
-  return {
-    cheap: { name: 'ollama', url: config.ollamaUrl, model: config.ollamaModel },
-    strong: { name: 'openclaw', url: config.openclawUrl, model: config.openclawModel },
-  } as const;
-}
-
-/**
- * Probe a backend with a 2s timeout HEAD request.
- * HEAD returning 405 is treated as "server is up" — some APIs disallow HEAD.
- */
-async function probeBackend(url: string): Promise<boolean> {
-  try {
-    const resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(2000) });
-    return resp.ok || resp.status === 405;
-  } catch {
-    return false;
-  }
-}
-
-async function selectModel(message: string): Promise<{
-  tier: ModelTier;
-  backend: { name: string; url: string; model: string };
-  reason: string;
-}> {
-  const BACKENDS = getBackends();
-  const preferCheap = shouldRouteCheap(message);
-  const tier: ModelTier = preferCheap ? 'cheap' : 'strong';
-  const backend = BACKENDS[tier];
-
-  const available = await probeBackend(backend.url);
-  if (available) {
-    return { tier, backend, reason: `${tier} model selected (${preferCheap ? 'simple' : 'complex'} message)` };
-  }
-
-  const fallbackTier: ModelTier = tier === 'cheap' ? 'strong' : 'cheap';
-  const fallback = BACKENDS[fallbackTier];
-  const fallbackAvailable = await probeBackend(fallback.url);
-  if (fallbackAvailable) {
-    return { tier: fallbackTier, backend: fallback, reason: `Fallback to ${fallbackTier} (${tier} unreachable)` };
-  }
-
-  // Last resort: proxy to porter.py
-  return {
-    tier: 'strong' as ModelTier,
-    backend: { name: 'porter-proxy', url: config.porterPyUrl, model: 'proxy' },
-    reason: 'All backends down, proxying to porter.py',
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -251,103 +174,71 @@ async function logDecision(
 
 /**
  * Dispatch an agent job to the best available model backend.
- * Routing: cheap (Ollama) for simple messages, strong (openclaw) for complex.
- * Fallback: preferred → other tier → porter.py proxy.
+ * Routing is DB-driven via RoutingEngine — no hardcoded model selection logic.
  * Throws on empty response — guarantees agent_jobs.result is non-empty on success.
- * Logs model selection decisions to decision_log when 2+ backends are available.
  */
 export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
-  const { tier, backend, reason } = await selectModel(req.message);
+  // 1. Route via DB-driven engine
+  const decision = await routingEngine.select({
+    message: req.message,
+    agentId: req.agentId,
+    projectId: req.projectId,
+  });
 
-  // If proxying to porter.py, use the existing dispatch endpoint
-  if (backend.name === 'porter-proxy') {
-    const resp = await fetch(`${config.porterPyUrl}/api/dispatch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        persona_id: req.agentId,
-        message: req.message,
-        project_id: req.projectId,
-      }),
-    });
-    const text = await resp.text();
-    if (!text) throw new Error('porter-proxy returned empty response');
-    return { response: text, model: 'porter-proxy', routingReason: reason };
-  }
-
-  // Direct dispatch to Ollama: POST /api/generate { model, prompt, stream: false }
-  if (backend.name === 'ollama') {
-    const resp = await fetch(`${backend.url}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: backend.model, prompt: req.message, stream: false }),
-    });
-    const data = await resp.json() as { response: string; eval_count?: number };
-    if (!data.response) throw new Error('ollama returned empty response field');
-
-    const result: DispatchResult = { response: data.response, model: backend.model, routingReason: reason };
-
-    // Log decision when routing was a real choice (not fallback due to outage)
-    // Probe the alternative backend to see if 2+ were available
-    const BACKENDS = getBackends();
-    const altTier: ModelTier = tier === 'cheap' ? 'strong' : 'cheap';
-    const altAvailable = await probeBackend(BACKENDS[altTier].url);
-    if (altAvailable) {
-      await logDecision('model_selection', `${backend.name} (${backend.model})`, reason,
-        [`${BACKENDS[altTier].name} (${BACKENDS[altTier].model})`],
-        { projectId: req.projectId, agentId: req.agentId });
-    }
-
-    // Track token usage (Ollama reports eval_count as output tokens)
-    if (data.eval_count && data.eval_count > 0) {
-      await trackTokenUsage(backend.model, 0, data.eval_count);
-      result.tokensUsed = data.eval_count;
-    }
-
-    return result;
-  }
-
-  // openclaw/codex via OpenAI-compatible API — token from config (no hardcoded value)
+  // 2. Build adapter-level request
   const history = req.conversationHistory ? compressContext(req.conversationHistory) : [];
-  const messages: { role: string; content: string }[] = [
+  const messages = [
     ...history.map(t => ({ role: t.role, content: t.content })),
     { role: 'user', content: req.message },
   ];
-
-  const resp = await fetch(`${backend.url}/v1/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      // Token read from config.openclawToken (set via OPENCLAW_TOKEN env var — no hardcoded fallback)
-      'Authorization': `Bearer ${config.openclawToken}`,
-    },
-    body: JSON.stringify({ model: backend.model, messages, stream: false }),
-  });
-  const data = await resp.json() as {
-    choices: { message: { content: string } }[];
-    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  const bridgeReq: BridgeDispatchRequest = {
+    messages,
+    model: decision.modelName,
   };
-  const content = data.choices?.[0]?.message?.content ?? '';
-  if (!content) throw new Error('openclaw returned empty content');
 
-  const result: DispatchResult = { response: content, model: backend.model, routingReason: reason };
+  // 3. Dispatch through per-gateway concurrency queue
+  const bridgeResult = await routingEngine.dispatchWithQueue(decision, bridgeReq);
 
-  // Log decision when routing was a real choice (not fallback due to outage)
-  const BACKENDS = getBackends();
-  const altTier: ModelTier = tier === 'cheap' ? 'strong' : 'cheap';
-  const altAvailable = await probeBackend(BACKENDS[altTier].url);
-  if (altAvailable) {
-    await logDecision('model_selection', `${backend.name} (${backend.model})`, reason,
-      [`${BACKENDS[altTier].name} (${BACKENDS[altTier].model})`],
-      { projectId: req.projectId, agentId: req.agentId });
+  // 4. Map to DispatchResult (callers expect this shape)
+  const result: DispatchResult = {
+    response: bridgeResult.response,
+    model: bridgeResult.model || decision.modelName,
+    tokensUsed: (bridgeResult.inputTokens ?? 0) + (bridgeResult.outputTokens ?? 0) || bridgeResult.tokensUsed,
+    routingReason: decision.reason,
+  };
+
+  // 5. Log dispatch decision (non-blocking)
+  const logId = await routingEngine.logDispatch(decision, {
+    message: req.message,
+    agentId: req.agentId,
+    projectId: req.projectId,
+  }, bridgeResult);
+
+  // 6. Record session routing context if chat context available (non-blocking)
+  await routingEngine.recordSessionTurn({
+    message: req.message,
+    agentId: req.agentId,
+    projectId: req.projectId,
+  }, decision, logId);
+
+  // 7. Track daily token usage (existing pattern — keep for aggregate view)
+  if (bridgeResult.inputTokens || bridgeResult.outputTokens) {
+    await trackTokenUsage(
+      decision.modelName,
+      bridgeResult.inputTokens ?? 0,
+      bridgeResult.outputTokens ?? 0,
+    );
   }
 
-  // Track token usage from OpenAI-compatible usage object
-  const inputTokens = data.usage?.prompt_tokens ?? 0;
-  const outputTokens = data.usage?.completion_tokens ?? 0;
-  if (inputTokens > 0 || outputTokens > 0) {
-    await trackTokenUsage(backend.model, inputTokens, outputTokens);
-    result.tokensUsed = inputTokens + outputTokens;
+  // 8. Log agent-level decision (kept separate from bridge_dispatch_log)
+  if (decision.alternatives.length > 0) {
+    await logDecision(
+      'model_selection',
+      `${decision.gatewayRow.type} (${decision.modelName})`,
+      decision.reason,
+      decision.alternatives.map(a => `${a.gatewayType} (${a.modelName})`),
+      { projectId: req.projectId, agentId: req.agentId },
+    );
   }
 
   return result;

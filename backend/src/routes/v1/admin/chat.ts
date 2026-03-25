@@ -39,7 +39,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       'X-Accel-Buffering': 'no',
     });
 
-    const backend = selectStreamBackend(fullMessage, body?.backend ?? 'auto');
+    const backend = await selectStreamBackend(fullMessage, body?.backend ?? 'auto');
     let fullResponse = '';
 
     try {
