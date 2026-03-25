@@ -850,3 +850,33 @@ export const templateTools = pgTable('template_tools', {
   sortOrder: integer('sort_order').default(0),
 });
 // Note: Primary key (template_id, tool_id) defined in migration DDL
+
+// ── Bridge: AI Gateway Registry (Phase 16) ──────────────────────────────────
+
+export const gateways = pgTable('gateways', {
+  id: text('id').primaryKey(),
+  type: text('type').notNull(),
+  name: text('name').notNull(),
+  url: text('url'),
+  authMethod: text('auth_method').notNull().default('none'),
+  status: text('status').notNull().default('active'),
+  source: text('source').notNull().default('manual'),
+  priority: integer('priority').notNull().default(10),
+  capabilities: jsonb('capabilities').default(sql`'[]'::jsonb`),
+  metadata: jsonb('metadata').default(sql`'{}'::jsonb`),
+  enabled: integer('enabled').notNull().default(1),
+  maskedDisplay: text('masked_display').default(''),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  lastHealthAt: doublePrecision('last_health_at'),
+});
+
+export const gatewayCredentials = pgTable('gateway_credentials', {
+  id: text('id').primaryKey(),
+  gatewayId: text('gateway_id').notNull().references(() => gateways.id, { onDelete: 'cascade' }),
+  label: text('label').notNull().default('primary'),
+  encryptedValue: text('encrypted_value').notNull(),
+  maskedDisplay: text('masked_display').notNull().default(''),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  rotatedAt: doublePrecision('rotated_at'),
+});
