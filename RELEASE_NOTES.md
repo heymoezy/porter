@@ -1,5 +1,17 @@
 # Porter Release Notes
 
+## v2.5.0 (2026-03-25)
+
+**Phase 21: First-Run Setup — Zero-config path, detection endpoint, guided setup API**
+
+- DetectionReport: startup-detector returns structured results (per-gateway found/healthy/latencyMs/models, zeroConfigReady flag)
+- GET /bridge/detect: admin endpoint returning full detection report with live health + available models
+- Zero-config: if Ollama is running, Bridge works immediately — no user action required
+- OpenClaw dual-role: gateway_roles metadata tags OpenClaw as both ai_dispatch and messaging_gateway
+- Setup wizard: 4 stateless POST endpoints (/setup/detect, /setup/configure, /setup/validate, /setup/save)
+- Credential encryption: /setup/configure uses encryptCredential() for API key storage
+- Smoke test: tests/smoke-phase21.sh covers FRS-01 through FRS-04 with pass/fail/skip
+
 ## v2.4.0 (2026-03-25)
 
 **Phase 19: Model Catalog — Unified model registry with capabilities, pricing, version tracking**

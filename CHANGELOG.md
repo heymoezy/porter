@@ -1,3 +1,13 @@
+## v2.5.0 (2026-03-25)
+
+- docs(phase-21): complete phase execution
+- docs(21-02): complete setup-wizard-endpoints plan
+- feat(21-02): add smoke-phase21.sh covering FRS-01 through FRS-04
+- feat(21-02): add 4 setup wizard POST endpoints to bridge.ts
+- docs(21-01): complete first-run-setup detection endpoint plan
+- feat(21-01): add GET /bridge/detect endpoint surfacing DetectionReport
+- feat(21-01): refactor startup-detector.ts to return DetectionReport
+
 ## v2.4.0 (2026-03-25)
 
 - docs(phase-19): complete phase execution
