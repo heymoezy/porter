@@ -57,7 +57,7 @@
 - [x] **Phase 20: Smart Routing Engine** — DB-driven model selection, routing rules, decision logging, concurrency, session context (completed 2026-03-25)
 - [x] **Phase 21: First-Run Setup** — Gateway detection endpoint, guided setup API, zero-config path, OpenClaw integration (completed 2026-03-25)
 - [x] **Phase 22: Bridge Admin Surface** — 7 admin API endpoints, SSE events, design system components, agent-ready layout (completed 2026-03-25)
-- [ ] **Phase 23: Integration & Multi-Tenant** — Brain/Recall integration, per-user keys, workspace overrides, usage attribution
+- [x] **Phase 23: Integration & Multi-Tenant** — Brain/Recall integration, per-user keys, workspace overrides, usage attribution (completed 2026-03-25)
 
 ## Phase Details
 
@@ -177,7 +177,7 @@ Plans:
   3. Per-conversation session routing history records which models handled which turns — enabling context-aware re-routing when a model goes down mid-conversation
   4. Bridge gateway health is exposed as part of the Brain health dashboard — system health includes AI backend availability
   5. Each user can store their own API keys for direct provider access; workspace admins can configure which gateways are available to their workspace; token costs are attributed to user/project/agent for future billing integration
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 23-01-PLAN.md — Brain integration: Memory V3 signals, per-agent stats, session history, health dashboard
 - [ ] 23-02-PLAN.md — Multi-tenant: migration, user API keys, workspace overrides, usage attribution
@@ -198,7 +198,7 @@ Phases execute in numeric order: 16 through 23.
 | 20. Smart Routing Engine | 2/2 | Complete    | 2026-03-25 | - |
 | 21. First-Run Setup | 2/2 | Complete    | 2026-03-25 | - |
 | 22. Bridge Admin Surface | 2/2 | Complete    | 2026-03-25 | - |
-| 23. Integration & Multi-Tenant | 1/2 | In Progress|  | - |
+| 23. Integration & Multi-Tenant | 2/2 | Complete   | 2026-03-25 | - |
 
 ---
 

@@ -61,10 +61,10 @@
 
 ### Brain & Recall Integration
 
-- [ ] **INT-01**: Routing decisions feed into Memory V3 — agents learn which models work best for which task types
-- [ ] **INT-02**: Bridge dispatch log queryable by agent_id — "what model did this agent use and how did it perform?"
-- [ ] **INT-03**: Session routing history — per-conversation record of which models were used, enabling context-aware re-routing
-- [ ] **INT-04**: Bridge status visible in Brain health dashboard — gateway health is part of system health
+- [x] **INT-01**: Routing decisions feed into Memory V3 — agents learn which models work best for which task types
+- [x] **INT-02**: Bridge dispatch log queryable by agent_id — "what model did this agent use and how did it perform?"
+- [x] **INT-03**: Session routing history — per-conversation record of which models were used, enabling context-aware re-routing
+- [x] **INT-04**: Bridge status visible in Brain health dashboard — gateway health is part of system health
 
 ### Design System Compliance
 
@@ -74,9 +74,9 @@
 
 ### Multi-Tenant (SaaS)
 
-- [ ] **MT-01**: Per-user API key storage — each user can bring their own keys for direct provider access
-- [ ] **MT-02**: Per-workspace gateway overrides — workspace admin can configure which gateways are available
-- [ ] **MT-03**: Usage attribution — token costs attributed to user/project/agent for billing integration
+- [x] **MT-01**: Per-user API key storage — each user can bring their own keys for direct provider access
+- [x] **MT-02**: Per-workspace gateway overrides — workspace admin can configure which gateways are available
+- [x] **MT-03**: Usage attribution — token costs attributed to user/project/agent for billing integration
 
 ## v4.0 Requirements (Deferred)
 
@@ -138,13 +138,13 @@
 | DS-01 | Phase 22: Bridge Admin Surface | Complete |
 | DS-02 | Phase 22: Bridge Admin Surface | Complete |
 | DS-03 | Phase 22: Bridge Admin Surface | Complete |
-| INT-01 | Phase 23: Integration & Multi-Tenant | Pending |
-| INT-02 | Phase 23: Integration & Multi-Tenant | Pending |
-| INT-03 | Phase 23: Integration & Multi-Tenant | Pending |
-| INT-04 | Phase 23: Integration & Multi-Tenant | Pending |
-| MT-01 | Phase 23: Integration & Multi-Tenant | Pending |
-| MT-02 | Phase 23: Integration & Multi-Tenant | Pending |
-| MT-03 | Phase 23: Integration & Multi-Tenant | Pending |
+| INT-01 | Phase 23: Integration & Multi-Tenant | Complete |
+| INT-02 | Phase 23: Integration & Multi-Tenant | Complete |
+| INT-03 | Phase 23: Integration & Multi-Tenant | Complete |
+| INT-04 | Phase 23: Integration & Multi-Tenant | Complete |
+| MT-01 | Phase 23: Integration & Multi-Tenant | Complete |
+| MT-02 | Phase 23: Integration & Multi-Tenant | Complete |
+| MT-03 | Phase 23: Integration & Multi-Tenant | Complete |
 
 **Coverage:**
 - v3.0 requirements: 46 total (8 GW + 5 MOD + 5 RT + 7 CLI + 4 FRS + 7 ADM + 4 INT + 3 DS + 3 MT)

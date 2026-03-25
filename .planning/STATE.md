@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 23-01-PLAN.md
-last_updated: "2026-03-25T12:25:19.573Z"
+stopped_at: Completed 23-02-PLAN.md
+last_updated: "2026-03-25T12:32:47.011Z"
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 19
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Project State
@@ -84,6 +84,9 @@ Recent decisions affecting current work:
 - [Phase 23-integration-multi-tenant]: Dedup uses LIKE '%gatewayType%modelName%' content match within 1-hour epoch window — no new tracking column needed
 - [Phase 23-integration-multi-tenant]: bridge_gateways health query returns [] on any error — safe for fresh installs before bridge migrations
 - [Phase 23-integration-multi-tenant]: RoutingContext.username reserved for Plan 02 MT-03 usage attribution — not yet wired to dispatch_log
+- [Phase 23-integration-multi-tenant]: MT-01 user API keys use deterministic SHA-256 ID from username+gateway_type+label — idempotent across restores
+- [Phase 23-integration-multi-tenant]: attribution groupCol selected from allow-list not user input — prevents SQL injection in dynamic GROUP BY
+- [Phase 23-integration-multi-tenant]: user_api_keys has no FK to users table — avoids hard dependency on users table existing in all installations
 
 ### Pending Todos
 
@@ -106,6 +109,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T12:25:19.570Z
-Stopped at: Completed 23-01-PLAN.md
+Last session: 2026-03-25T12:32:47.008Z
+Stopped at: Completed 23-02-PLAN.md
 Resume file: None
