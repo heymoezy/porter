@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 18-02-PLAN.md
-last_updated: "2026-03-25T10:19:37Z"
+stopped_at: Completed 18-03-PLAN.md
+last_updated: "2026-03-25T10:22:47.897Z"
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -60,6 +60,8 @@ Recent decisions affecting current work:
 - [Phase 20-02]: RoutingEngine singleton class; fire-and-forget logging via async IIFE; selectStreamBackend() changed to async; gitignore false positive on admin/ directory resolved with git add -f
 - [Phase 18-01]: opossum loaded via createRequire (CJS in ESM project) — breakers keyed by gatewayId not gatewayType — errorFilter=isTransientError suppresses 429/503 — circuit_state column is observability-only
 - [Phase 18-02]: mock.module unavailable in Node v22.22.0 — used DI pattern (runHealthProbeWithDeps) instead — startup guard uses tickCount > HEALTH_PROBE_INTERVAL (strict) — circuit_state defaults to closed when getBreakerState is null
+- [Phase 18-resilience-layer]: selectAllCandidates() includes stale gateways (status IN active,stale) — stale=degraded but functional, only unavailable excluded from fallback chain
+- [Phase 18-resilience-layer]: ai-router.ts removes model from BridgeDispatchRequest — each adapter resolves model internally; stream-service.ts uses selectAllCandidates() not selectWithFallback() for streaming backend class selection
 
 ### Pending Todos
 
@@ -78,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T10:14:12.396Z
-Stopped at: Completed 18-01-PLAN.md
+Last session: 2026-03-25T10:22:47.894Z
+Stopped at: Completed 18-03-PLAN.md
 Resume file: None
