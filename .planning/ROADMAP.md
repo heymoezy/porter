@@ -73,9 +73,9 @@
   5. A `GatewayAdapter` TypeScript interface exists with typed methods (detect, health, dispatch, stream, listModels) that all provider adapters must implement
 **Plans:** 3/3 plans complete
 Plans:
-- [ ] 16-01-PLAN.md — Schema, Drizzle definitions, and GatewayAdapter interface contract
-- [ ] 16-02-PLAN.md — Startup detector, env-to-DB bootstrap, wire into Fastify boot
-- [ ] 16-03-PLAN.md — Bridge API routes with credential masking and admin redetect
+- [x] 16-01-PLAN.md — Schema, Drizzle definitions, and GatewayAdapter interface contract
+- [x] 16-02-PLAN.md — Startup detector, env-to-DB bootstrap, wire into Fastify boot
+- [x] 16-03-PLAN.md — Bridge API routes with credential masking and admin redetect
 
 ### Phase 17: Provider Adapters
 **Goal**: Every supported AI backend has a concrete adapter implementing the GatewayAdapter interface, with a stream normalizer that converts all output formats into a single unified AsyncIterable
@@ -87,7 +87,11 @@ Plans:
   3. CodexCLIAdapter and ClaudeCLIAdapter spawn subprocess calls with proper stdin/stdout streaming, timeout handling, and error parsing — output appears as streamed tokens, not dumped blocks
   4. GeminiCLIAdapter dispatches via subprocess with output parsing and model detection from the installed binary
   5. StreamNormalizer converts Ollama NDJSON, OpenAI SSE, Codex JSONL, and Claude JSON output formats into a single `AsyncIterable<string>` consumed by all downstream code
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 17-01-PLAN.md — OllamaAdapter and OpenClawAdapter (HTTP-based adapters)
+- [ ] 17-02-PLAN.md — CodexCLIAdapter, ClaudeCLIAdapter, GeminiCLIAdapter (subprocess adapters)
+- [ ] 17-03-PLAN.md — StreamNormalizer, barrel export, adapter factory
 
 ### Phase 18: Resilience Layer
 **Goal**: The Bridge layer handles backend failures gracefully — unhealthy backends are detected in seconds, broken backends stop receiving traffic automatically, transient errors retry intelligently, and requests fall through a priority-ordered chain of alternatives
@@ -167,8 +171,8 @@ Phases execute in numeric order: 16 through 23.
 |-------|-----------|----------------|--------|-----------|
 | 1-7 | v1.0 | - | Complete | 2026-03-21 |
 | 8-15 | v2.0 | - | Complete | 2026-03-24 |
-| 16. Gateway Foundation | 3/3 | Complete    | 2026-03-25 | - |
-| 17. Provider Adapters | v3.0 Bridge | 0/TBD | Not started | - |
+| 16. Gateway Foundation | v3.0 Bridge | 3/3 | Complete | 2026-03-25 |
+| 17. Provider Adapters | v3.0 Bridge | 0/3 | Planning complete | - |
 | 18. Resilience Layer | v3.0 Bridge | 0/TBD | Not started | - |
 | 19. Model Catalog | v3.0 Bridge | 0/TBD | Not started | - |
 | 20. Smart Routing Engine | v3.0 Bridge | 0/TBD | Not started | - |
