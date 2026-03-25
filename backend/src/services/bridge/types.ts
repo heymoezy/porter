@@ -54,6 +54,7 @@ export interface BridgeDispatchResult {
   outputTokens?: number;
   latencyMs: number;
   cached: boolean;
+  cachedTokens?: number;
 }
 
 // ── GatewayAdapter interface (5 methods) ─────────────────────────────────────
@@ -162,4 +163,28 @@ export interface SessionRoutingRow {
   modelName: string;
   dispatchLogId: string | null;
   createdAt: number | null;
+}
+
+// ── Model Catalog types (Phase 19) ────────────────────────────────────────────
+
+export interface ModelRow {
+  id: string;
+  gatewayId: string;
+  modelName: string;
+  capabilities: string[];
+  contextWindow: number | null;
+  pricingInputPerM: number | null;
+  pricingOutputPerM: number | null;
+  benchmarkScores: Record<string, number>;
+  isActive: number;
+  createdAt: number | null;
+  updatedAt: number | null;
+}
+
+export interface ModelVersionRow {
+  id: string;
+  modelId: string;
+  versionLabel: string;
+  snapshot: Record<string, unknown>;
+  detectedAt: number | null;
 }

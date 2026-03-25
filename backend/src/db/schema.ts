@@ -925,3 +925,27 @@ export const sessionRoutingContext = pgTable('session_routing_context', {
   dispatchLogId: text('dispatch_log_id'),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
+
+// ── Model Catalog (Phase 19) ──────────────────────────────────────────────────
+
+export const models = pgTable('models', {
+  id: text('id').primaryKey(),
+  gatewayId: text('gateway_id').notNull(),
+  modelName: text('model_name').notNull(),
+  capabilities: jsonb('capabilities').default(sql`'[]'::jsonb`),
+  contextWindow: integer('context_window'),
+  pricingInputPerM: doublePrecision('pricing_input_per_m'),
+  pricingOutputPerM: doublePrecision('pricing_output_per_m'),
+  benchmarkScores: jsonb('benchmark_scores').default(sql`'{}'::jsonb`),
+  isActive: integer('is_active').notNull().default(1),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const modelVersions = pgTable('model_versions', {
+  id: text('id').primaryKey(),
+  modelId: text('model_id').notNull(),
+  versionLabel: text('version_label').notNull(),
+  snapshot: jsonb('snapshot').default(sql`'{}'::jsonb`),
+  detectedAt: doublePrecision('detected_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
