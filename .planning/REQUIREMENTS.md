@@ -44,10 +44,10 @@
 
 ### First-Run Setup
 
-- [ ] **FRS-01**: Detection endpoint returns all discovered gateways with connection status and available models
+- [x] **FRS-01**: Detection endpoint returns all discovered gateways with connection status and available models
 - [ ] **FRS-02**: Guided setup API — step-by-step: detect local → prompt for API keys → validate connections → save to DB
-- [ ] **FRS-03**: Zero-config path — if Ollama is running locally, Bridge works immediately with no user action
-- [ ] **FRS-04**: OpenClaw integration — detect OpenClaw gateway, use for messaging (WhatsApp/Telegram) and as multi-model fallback
+- [x] **FRS-03**: Zero-config path — if Ollama is running locally, Bridge works immediately with no user action
+- [x] **FRS-04**: OpenClaw integration — detect OpenClaw gateway, use for messaging (WhatsApp/Telegram) and as multi-model fallback
 
 ### Admin Surface (Backend APIs)
 
@@ -124,10 +124,10 @@
 | CLI-05 | Phase 17: Provider Adapters | Complete |
 | CLI-06 | Phase 17: Provider Adapters | Complete |
 | CLI-07 | Phase 17: Provider Adapters | Complete |
-| FRS-01 | Phase 21: First-Run Setup | Pending |
+| FRS-01 | Phase 21: First-Run Setup | Complete |
 | FRS-02 | Phase 21: First-Run Setup | Pending |
-| FRS-03 | Phase 21: First-Run Setup | Pending |
-| FRS-04 | Phase 21: First-Run Setup | Pending |
+| FRS-03 | Phase 21: First-Run Setup | Complete |
+| FRS-04 | Phase 21: First-Run Setup | Complete |
 | ADM-01 | Phase 22: Bridge Admin Surface | Pending |
 | ADM-02 | Phase 22: Bridge Admin Surface | Pending |
 | ADM-03 | Phase 22: Bridge Admin Surface | Pending |

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 19-02-PLAN.md
-last_updated: "2026-03-25T11:04:40.261Z"
+stopped_at: Completed 21-01-PLAN.md
+last_updated: "2026-03-25T11:28:36.697Z"
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 13
-  completed_plans: 13
+  total_plans: 15
+  completed_plans: 14
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every AI backend is visible, manageable, and intelligently routed — nothing hidden, everything in the database.
-**Current focus:** Phase 19 — model-catalog
+**Current focus:** Phase 21 — first-run-setup
 
 ## Current Position
 
-Phase: 19 (model-catalog) — EXECUTING
-Plan: 2 of 2
+Phase: 21 (first-run-setup) — EXECUTING
+Plan: 1 of 2
 
 ## Performance Metrics
 
@@ -70,6 +70,8 @@ Recent decisions affecting current work:
 - [Phase 19-02]: filterByCapabilities degrades gracefully to full candidate list when no models match required capabilities
 - [Phase 19-02]: model_version_id SELECT wrapped in inner try/catch — version lookup failure must not block dispatch logging
 - [Phase 19-02]: alternatives list uses original unfiltered candidates — preserves full gateway picture in dispatch logs for observability
+- [Phase 21]: detectAndUpsertGateways returns DetectionReport (not void) for setup wizard consumption; probeGateway never throws; zeroConfigReady = any gateway found && healthy
+- [Phase 21]: OpenClaw metadata always includes gateway_roles on every boot upsert via ON CONFLICT DO UPDATE
 
 ### Pending Todos
 
@@ -89,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T11:00:34.109Z
-Stopped at: Completed 19-02-PLAN.md
+Last session: 2026-03-25T11:28:36.694Z
+Stopped at: Completed 21-01-PLAN.md
 Resume file: None
