@@ -37,9 +37,9 @@
 - [x] **CLI-01**: GatewayAdapter interface — typed contract all backends implement (detect, health, dispatch, stream, listModels)
 - [x] **CLI-02**: Ollama adapter — wraps existing native API calls, implements GatewayAdapter
 - [x] **CLI-03**: OpenClaw adapter — wraps existing OpenAI-compatible calls, implements GatewayAdapter
-- [ ] **CLI-04**: Codex CLI adapter — subprocess dispatch with stdin/stdout streaming, error handling, timeout
-- [ ] **CLI-05**: Claude CLI adapter — subprocess dispatch with -p flag, streaming output parsing
-- [ ] **CLI-06**: Gemini CLI adapter — subprocess dispatch, output parsing, model detection
+- [x] **CLI-04**: Codex CLI adapter — subprocess dispatch with stdin/stdout streaming, error handling, timeout
+- [x] **CLI-05**: Claude CLI adapter — subprocess dispatch with -p flag, streaming output parsing
+- [x] **CLI-06**: Gemini CLI adapter — subprocess dispatch, output parsing, model detection
 - [ ] **CLI-07**: Stream normalizer — converts all adapter output formats to unified AsyncIterable<string>
 
 ### First-Run Setup
@@ -120,9 +120,9 @@
 | CLI-01 | Phase 16: Gateway Foundation | Complete |
 | CLI-02 | Phase 17: Provider Adapters | Complete |
 | CLI-03 | Phase 17: Provider Adapters | Complete |
-| CLI-04 | Phase 17: Provider Adapters | Pending |
-| CLI-05 | Phase 17: Provider Adapters | Pending |
-| CLI-06 | Phase 17: Provider Adapters | Pending |
+| CLI-04 | Phase 17: Provider Adapters | Complete |
+| CLI-05 | Phase 17: Provider Adapters | Complete |
+| CLI-06 | Phase 17: Provider Adapters | Complete |
 | CLI-07 | Phase 17: Provider Adapters | Pending |
 | FRS-01 | Phase 21: First-Run Setup | Pending |
 | FRS-02 | Phase 21: First-Run Setup | Pending |
