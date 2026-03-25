@@ -4,12 +4,14 @@ import { dispatch as aiRouterDispatch } from './ai-router.js';
 import { checkDeadlineTriggers } from './event-triggers.js';
 import { syncCalendarEvents, checkCalendarDeadlines } from './calendar.js';
 import { dispatchExternalCall, checkConnectionHealth } from './external-dispatcher.js';
+import { runHealthProbe } from './bridge/health-probe.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_ATTEMPTS = 3;
 const DEADLINE_CHECK_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const CALENDAR_SYNC_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
+const HEALTH_PROBE_INTERVAL = 15; // 15 × 2000ms = 30s
 const WORKER_ID = crypto.randomUUID();
 const MAX_DRIP_COUNT = 20;
 let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -224,6 +226,12 @@ async function tick() {
 
     // Check deadline triggers periodically (every 60s, not every 2s)
     tickCount++;
+
+    // Bridge health probe — every 30s (skip first interval to avoid startup thundering herd)
+    if (tickCount > HEALTH_PROBE_INTERVAL && tickCount % HEALTH_PROBE_INTERVAL === 0) {
+      runHealthProbe().catch(err => console.error('[scheduler] health probe error', err));
+    }
+
     if (tickCount % DEADLINE_CHECK_INTERVAL === 0) {
       await checkDeadlineTriggers();
     }
@@ -592,17 +600,8 @@ async function markJobFailed(jobId: string, error: string) {
 
 export async function emitSSE(eventType: string, data: Record<string, unknown>): Promise<void> {
   try {
-    const url = `${config.porterPyUrl}/api/events/emit`;
-    const body = JSON.stringify({ event: eventType, data });
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-      signal: AbortSignal.timeout(2000), // 2s timeout — never block scheduler
-    });
-    if (!resp.ok) {
-      console.debug('[scheduler] SSE emit %s: HTTP %d', eventType, resp.status);
-    }
+    const { broadcast } = await import('./sse-hub.js');
+    broadcast(eventType, data);
   } catch {
     // SSE emission is best-effort — never block the scheduler
   }
