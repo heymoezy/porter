@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 22-02-PLAN.md
-last_updated: "2026-03-25T12:03:27.839Z"
+stopped_at: Completed 23-01-PLAN.md
+last_updated: "2026-03-25T12:25:19.573Z"
 progress:
   total_phases: 8
   completed_phases: 7
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 19
+  completed_plans: 18
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every AI backend is visible, manageable, and intelligently routed — nothing hidden, everything in the database.
-**Current focus:** Phase 22 — bridge-admin-surface
+**Current focus:** Phase 23 — integration-multi-tenant
 
 ## Current Position
 
-Phase: 22 (bridge-admin-surface) — COMPLETE
-Plan: 2 of 2 (all complete)
+Phase: 23 (integration-multi-tenant) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -80,6 +80,10 @@ Recent decisions affecting current work:
 - [Phase 22-02]: POST body action dispatch — single POST route with { action, ...data } body handles all mutations (add/update/remove/validate for gateways; create/update/delete/list for routing rules)
 - [Phase 22-02]: action_type field name in request body avoids shadowing the destructured action variable; stored as action column in DB
 - [Phase 22-02]: GET /sse-status is documentation-only — SSE emission already working in phases 18-20, no new code
+- [Phase 23-integration-multi-tenant]: INT-01: agent_notes written with raw SQL inside existing async IIFE — fire-and-forget, no separate service file
+- [Phase 23-integration-multi-tenant]: Dedup uses LIKE '%gatewayType%modelName%' content match within 1-hour epoch window — no new tracking column needed
+- [Phase 23-integration-multi-tenant]: bridge_gateways health query returns [] on any error — safe for fresh installs before bridge migrations
+- [Phase 23-integration-multi-tenant]: RoutingContext.username reserved for Plan 02 MT-03 usage attribution — not yet wired to dispatch_log
 
 ### Pending Todos
 
@@ -92,6 +96,7 @@ None yet.
 - [19-01]: models + model_versions tables, Drizzle schema, model-catalog.ts service (refreshModelsForGateway, refreshAllGateways, calculateCostUsd) — 2026-03-25
 - [22-01]: admin/bridge.ts with 4 GET endpoints (gateway cards, models, dispatch-log, costs) — 2026-03-25
 - [22-02]: admin/bridge.ts POST /gateways (ADM-05) + POST /routing-rules (ADM-06) + GET /sse-status (ADM-07) — Phase 22 complete — 2026-03-25
+- [23-01]: Memory V3 learning signals + agent-stats endpoint + session routing history + bridge_gateways health dashboard (INT-01 through INT-04) — 2026-03-25
 
 ### Blockers/Concerns
 
@@ -101,6 +106,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T12:06:00.000Z
-Stopped at: Completed 22-02-PLAN.md
+Last session: 2026-03-25T12:25:19.570Z
+Stopped at: Completed 23-01-PLAN.md
 Resume file: None
