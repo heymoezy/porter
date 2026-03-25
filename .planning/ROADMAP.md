@@ -53,7 +53,7 @@
 - [x] **Phase 16: Gateway Foundation** — DB schema, adapter interface, config migration, auto-detection, key masking (completed 2026-03-25)
 - [x] **Phase 17: Provider Adapters** — Concrete adapters for all backends + unified stream normalizer (completed 2026-03-25)
 - [x] **Phase 18: Resilience Layer** — Background health probes, circuit breakers, retry/backoff, N-backend fallback (completed 2026-03-25)
-- [ ] **Phase 19: Model Catalog** — Models table, auto-population, capability metadata, version tracking, cost tracking
+- [x] **Phase 19: Model Catalog** — Models table, auto-population, capability metadata, version tracking, cost tracking (completed 2026-03-25)
 - [x] **Phase 20: Smart Routing Engine** — DB-driven model selection, routing rules, decision logging, concurrency, session context (completed 2026-03-25)
 - [ ] **Phase 21: First-Run Setup** — Gateway detection endpoint, guided setup API, zero-config path, OpenClaw integration
 - [ ] **Phase 22: Bridge Admin Surface** — 7 admin API endpoints, SSE events, design system components, agent-ready layout
@@ -118,7 +118,7 @@ Plans:
   3. Each model carries capability metadata (strengths) that the routing engine can use to match task type to model — not just cost tier
   4. Model versions are tracked: when a model updates, the old version is logged, and every dispatch record includes which model version was used
   5. Every dispatch logs input tokens, output tokens, cached tokens, and cost in USD to `bridge_dispatch_log` — cost is calculated from the model's pricing metadata
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 19-01-PLAN.md — Migration (models + model_versions tables), Drizzle schema, model-catalog.ts service
 - [ ] 19-02-PLAN.md — Wire into startup-detector, scheduler daily refresh, routing engine cost + capability filter
@@ -184,7 +184,7 @@ Phases execute in numeric order: 16 through 23.
 | 16. Gateway Foundation | v3.0 Bridge | 3/3 | Complete | 2026-03-25 |
 | 17. Provider Adapters | 3/3 | Complete    | 2026-03-25 | - |
 | 18. Resilience Layer | 3/3 | Complete    | 2026-03-25 | - |
-| 19. Model Catalog | 1/2 | In Progress|  | - |
+| 19. Model Catalog | 2/2 | Complete   | 2026-03-25 | - |
 | 20. Smart Routing Engine | 2/2 | Complete    | 2026-03-25 | - |
 | 21. First-Run Setup | v3.0 Bridge | 0/TBD | Not started | - |
 | 22. Bridge Admin Surface | v3.0 Bridge | 0/TBD | Not started | - |

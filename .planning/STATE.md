@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 19-01-PLAN.md
-last_updated: "2026-03-25T10:53:30Z"
+stopped_at: Completed 19-02-PLAN.md
+last_updated: "2026-03-25T11:00:34.111Z"
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 13
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # Project State
@@ -66,6 +66,10 @@ Recent decisions affecting current work:
 - [Phase 19-01]: refreshModelsForGateway accepts gatewayStatus param — only marks models inactive for 'active' gateways, not 'stale' (stale may have incomplete model lists)
 - [Phase 19-01]: calculateCostUsd uses pool parameter not singleton import — avoids circular dependency with startup-detector.ts context
 - [Phase 19-01]: Cached tokens billed at 10% of input price — standard prompt cache discount model
+- [Phase 19-02]: refreshAllGateways called once after all gateways detected (not per-gateway) to avoid interleaving model refresh with detection loop
+- [Phase 19-02]: filterByCapabilities degrades gracefully to full candidate list when no models match required capabilities
+- [Phase 19-02]: model_version_id SELECT wrapped in inner try/catch — version lookup failure must not block dispatch logging
+- [Phase 19-02]: alternatives list uses original unfiltered candidates — preserves full gateway picture in dispatch logs for observability
 
 ### Pending Todos
 
@@ -85,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T10:53:30Z
-Stopped at: Completed 19-01-PLAN.md
+Last session: 2026-03-25T11:00:34.109Z
+Stopped at: Completed 19-02-PLAN.md
 Resume file: None

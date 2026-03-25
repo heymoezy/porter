@@ -20,9 +20,9 @@
 
 - [x] **MOD-01**: Models table in PostgreSQL with gateway_id, model name, capabilities, context window, pricing (input/output per M tokens), benchmarks
 - [x] **MOD-02**: Auto-population — query each gateway for available models on detection and periodic refresh (daily)
-- [ ] **MOD-03**: Capability-based routing — route by model strengths (coding, writing, analysis, vision) not just cost tier
+- [x] **MOD-03**: Capability-based routing — route by model strengths (coding, writing, analysis, vision) not just cost tier
 - [x] **MOD-04**: Model version tracking — detect when models update, store version history, log which version was used per dispatch
-- [ ] **MOD-05**: Cost tracking per-dispatch — input tokens, output tokens, cached tokens, cost in USD logged per request to bridge_dispatch_log
+- [x] **MOD-05**: Cost tracking per-dispatch — input tokens, output tokens, cached tokens, cost in USD logged per request to bridge_dispatch_log
 
 ### Smart Routing
 
@@ -109,9 +109,9 @@
 | GW-08 | Phase 16: Gateway Foundation | Complete |
 | MOD-01 | Phase 19: Model Catalog | Complete |
 | MOD-02 | Phase 19: Model Catalog | Complete |
-| MOD-03 | Phase 19: Model Catalog | Pending |
+| MOD-03 | Phase 19: Model Catalog | Complete |
 | MOD-04 | Phase 19: Model Catalog | Complete |
-| MOD-05 | Phase 19: Model Catalog | Pending |
+| MOD-05 | Phase 19: Model Catalog | Complete |
 | RT-01 | Phase 20: Smart Routing Engine | Complete |
 | RT-02 | Phase 20: Smart Routing Engine | Complete |
 | RT-03 | Phase 20: Smart Routing Engine | Complete |
