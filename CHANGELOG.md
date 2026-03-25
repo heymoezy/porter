@@ -1,3 +1,14 @@
+## v2.4.0 (2026-03-25)
+
+- docs(phase-19): complete phase execution
+- docs(19-02): complete model-catalog plan 02 — startup/scheduler wiring, cost logging, capability routing
+- feat(19-02): wire cost calculation, model_version_id, and capability filtering into routing engine
+- feat(19-02): wire model refresh into startup-detector and scheduler
+- docs(19-01): complete model-catalog plan 01 — models table, model_versions, catalog service
+- feat(19-01): model-catalog.ts service with auto-population, version tracking, cost calculation
+- feat(19-01): bridge_v4 migration, Drizzle schema, types update
+- test(19-01): add failing test stubs for model-catalog (MOD-01, MOD-02, MOD-04, MOD-05)
+
 ## v2.3.0 (2026-03-25)
 
 - fix(18): wire migrate-bridge-v3 into boot sequence

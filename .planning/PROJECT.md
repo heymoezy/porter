@@ -63,6 +63,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ Autonomous learning (agents search web/social/GitHub, store as Memory V2 concepts) — v2.0 Phase 13
 - ✓ Gateway foundation (DB schema, adapter interface, startup detection, credential masking, Bridge API) — v3.0 Phase 16
 - ✓ Resilience layer (circuit breakers, health probes, retry with backoff, N-gateway fallback chains) — v3.0 Phase 18
+- ✓ Model catalog (unified model registry, capabilities, pricing, version tracking, cost per dispatch) — v3.0 Phase 19
 - ✓ Smart routing engine (DB-driven gateway selection, routing rules, dispatch logging, concurrency queuing, session context) — v3.0 Phase 20
 - [ ] SaaS billing (Lemon Squeezy subscriptions, usage metering, plan limit enforcement)
 - ✓ Error capture (frontend error POST endpoint with stack traces, component context) — v2.0 Phase 8
@@ -116,4 +117,4 @@ Porter has been in development since Feb 18, 2026. Current version is v2.2.0 (Fa
 | Bridge as major innovation | AI gateway management is Porter's differentiator — first-run detection, smart routing, cost tracking | — v3.0 scope |
 
 ---
-*Last updated: 2026-03-25 after Phase 18 Resilience Layer complete — circuit breakers, health probes, retry, N-gateway fallback chains*
+*Last updated: 2026-03-25 after Phase 19 Model Catalog complete — models table, auto-population, capability routing, cost tracking, version tracking*

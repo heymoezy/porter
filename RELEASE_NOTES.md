@@ -1,5 +1,18 @@
 # Porter Release Notes
 
+## v2.4.0 (2026-03-25)
+
+**Phase 19: Model Catalog — Unified model registry with capabilities, pricing, version tracking**
+
+- Models table: gateway_id FK, model name, capability tags (coding/writing/analysis/vision), context window, pricing per M tokens, benchmarks
+- Model versions table: tracks when model capabilities/pricing change, every dispatch linked to version ID
+- Auto-population: queries each adapter's listModels() on startup + daily scheduler refresh (24h interval)
+- MODEL_METADATA static map: 8 known models with capabilities + pricing for CLI adapters that can't self-report
+- Cost tracking: calculateCostUsd() in logDispatch replaces null placeholder, writes estimated_cost_usd + cached_tokens
+- Capability routing: filterByCapabilities() in routing engine uses requiredCapabilities on RoutingContext
+- model_version_id written to bridge_dispatch_log per dispatch (resolves most recent version)
+- Drizzle schema exports for models, modelVersions tables
+
 ## v2.3.0 (2026-03-25)
 
 **Phase 18: Resilience Layer — Circuit breakers, health probes, retry, fallback chains**
