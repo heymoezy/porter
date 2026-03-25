@@ -276,6 +276,40 @@ export default async function adminBridgeRoutes(fastify: FastifyInstance) {
     }));
   });
 
+  // ── GET /agent-stats — INT-02: Per-agent dispatch performance ──────────────
+  fastify.get('/agent-stats', async (request, reply) => {
+    const q = request.query as Record<string, string>;
+    const agentId = q.agent_id;
+
+    if (!agentId) {
+      return reply.send(err('MISSING_PARAM', 'agent_id query parameter is required'));
+    }
+
+    const { rows } = await pool.query(`
+      SELECT
+        model_name,
+        gateway_type,
+        COUNT(*)::int AS dispatch_count,
+        ROUND(AVG(latency_ms)::numeric, 1) AS avg_latency_ms,
+        COALESCE(SUM(estimated_cost_usd), 0) AS total_cost_usd,
+        COALESCE(SUM(input_tokens), 0)::int AS total_input_tokens,
+        COALESCE(SUM(output_tokens), 0)::int AS total_output_tokens
+      FROM bridge_dispatch_log
+      WHERE agent_id = $1
+      GROUP BY model_name, gateway_type
+      ORDER BY dispatch_count DESC
+    `, [agentId]);
+
+    const summary = {
+      agent_id: agentId,
+      total_dispatches: rows.reduce((s: number, r: any) => s + (r.dispatch_count || 0), 0),
+      total_cost_usd: rows.reduce((s: number, r: any) => s + parseFloat(r.total_cost_usd || 0), 0),
+      model_count: rows.length,
+    };
+
+    return reply.send(ok({ stats: rows, summary }));
+  });
+
   // ── POST /gateways — ADM-05: Gateway CRUD ────────────────────────────────────
   fastify.post('/gateways', async (request, reply) => {
     const body = request.body as Record<string, any>;

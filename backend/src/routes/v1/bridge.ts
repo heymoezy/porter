@@ -284,6 +284,34 @@ export default async function bridgeV1Routes(
     }
   });
 
+  // ── GET /session/:chatId/routing — INT-03: Session routing history ─────────
+  fastify.get('/session/:chatId/routing', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const { chatId } = request.params as { chatId: string };
+
+    if (!chatId) {
+      return reply.send(err('MISSING_PARAM', 'chatId path parameter is required'));
+    }
+
+    const { rows } = await pool.query(`
+      SELECT src.message_sequence, src.gateway_type, src.model_name,
+             src.created_at,
+             bdl.estimated_cost_usd, bdl.latency_ms,
+             bdl.input_tokens, bdl.output_tokens
+      FROM session_routing_context src
+      LEFT JOIN bridge_dispatch_log bdl ON bdl.id = src.dispatch_log_id
+      WHERE src.chat_id = $1
+      ORDER BY src.message_sequence ASC
+    `, [chatId]);
+
+    return reply.send(ok({
+      chat_id: chatId,
+      turns: rows,
+      turn_count: rows.length,
+    }));
+  });
+
   // ── POST /setup/save — wizard step 4: enable or disable a gateway ────────────
   fastify.post('/setup/save', {
     preHandler: [fastify.requireAuth],
