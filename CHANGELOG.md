@@ -1,3 +1,77 @@
+## v2.1.0 (2026-03-25)
+
+- docs(phase-17): evolve PROJECT.md after phase completion
+- docs(phase-17): complete phase execution
+- docs(17-03): complete StreamNormalizer and adapters barrel plan
+- feat(17-03): add adapters barrel export with ADAPTER_MAP and createAdapter factory
+- feat(17-03): add StreamNormalizer with error boundary and abort propagation
+- docs(17-02): complete CLI adapter plan — CodexCLI, ClaudeCLI, GeminiCLI
+- docs(17-01): complete OllamaAdapter + OpenClawAdapter plan
+- feat(17-02): implement GeminiCLIAdapter
+- feat(17-01): implement OpenClawAdapter for /v1/chat/completions with SSE streaming
+- feat(17-02): implement ClaudeCLIAdapter
+- feat(17-01): implement OllamaAdapter for /api/chat with NDJSON streaming
+- feat(17-02): implement CodexCLIAdapter
+- docs(17): create phase plan — 3 plans for provider adapters
+- docs(phase-17): add validation strategy
+- docs(17): research phase provider-adapters
+- docs(phase-16): evolve PROJECT.md after phase completion
+- docs(phase-16): complete phase execution
+- docs(16-03): complete Bridge API routes plan — gateway masking + redetect endpoint
+- feat(16-03): register bridge routes at /api/v1/bridge prefix
+- feat(16-03): create Bridge API routes with masked gateway credentials
+- docs(16-02): complete startup-detector plan — gateway PATH scan + env bootstrap
+- feat(16-02): wire bridge migration and gateway detector into Fastify boot
+- feat(16-02): install which package and create startup-detector.ts
+- docs(16-01): complete gateway-foundation schema and types plan
+- feat(16-01): add gateways + gateway_credentials migration and Drizzle schema
+- feat(16-01): add GatewayAdapter interface and bridge type definitions
+- docs(16-gateway-foundation): create phase plan
+- docs(16): add validation strategy
+- docs(16): research phase Gateway Foundation
+- docs(state): record phase 16 context session
+- docs(16): capture phase context
+- docs: create v3.0 Bridge roadmap (8 phases, 46 requirements)
+- docs: define v3.0 Bridge requirements (45 requirements across 9 categories)
+- docs: complete project research
+- docs: start milestone v3.0 Porter Bridge — AI Gateway & Model Intelligence
+- chore: remove last porter.py comment from admin chat route
+- docs: defer scale-proof todo - product first
+- docs: capture todo - Scale-proof Porter backend for concurrent agents
+- docs(20): UI design contract — Live Dashboard
+- fix: forge queue shows display name instead of DB slug
+- chore: complete v2.0 Backend Ready milestone
+- docs: v2.0 milestone audit — tech_debt status, 38/41 requirements, forge pipeline defects
+- docs: close v2.0 roadmap — Phase 15 complete, Phase 14 deferred
+- docs(phase-15): evolve PROJECT.md after phase completion
+- docs(15-02): complete skills+tools admin API rewrite plan
+- docs(15-03): complete forge junction table migration plan
+- feat(15-02): rewrite admin/tools.ts — full CRUD from tools DB table
+- feat(15-03): update template instantiation with junction-table sources and deployed_by
+- feat(15-02): rewrite admin/skills.ts — full CRUD from skills DB table
+- feat(15-03): update Forge Station 2 and 3 to read from junction tables
+- docs(15-01): complete skills/tools data foundation plan
+- feat(15-01): add Drizzle schema exports and wire migration to server startup
+- feat(15-01): add migrate-15.ts with skills/tools DDL, seed data, and junction population
+- docs(15): create phase plan — 3 plans in 2 waves for skills & tools architecture
+- docs(phase-15): add validation strategy
+- docs(15): research skills & tools architecture phase
+- docs(15): smart discuss context
+- docs(phase-13.1): complete phase execution — Memory V3 State Engine
+- docs(13.1-03): complete consolidation+self-edit+admin plan execution summary
+- docs(13.1-02): complete tiered memory injection plan execution summary
+- feat(13.1-03): complete smoke test scaffold with MEMV3-02..05 checks
+- feat(13.1-03): add consolidation service, self-edit API, admin overview
+- feat(13.1-02): wire memory injection into chat streaming endpoint
+- feat(13.1-02): create tiered memory injection service
+- docs(13.1-01): complete Memory V3 schema plan execution summary
+- feat(13.1-01): add smoke test scaffold for all MEMV3 requirements
+- feat(13.1-01): add Memory V3 schema tables and idempotent migration
+- chore: cleanup legacy files — keep porter.py for models tab extraction
+- chore: cleanup — archive stale tasks, delete legacy scripts
+- docs(13.1): add validation strategy + complete phase planning
+
+
 ## v2.0.1 (2026-03-24)
 
 - docs(13.1): create phase plan — 3 plans, 2 waves
@@ -50,4 +124,3 @@
 - docs(phase-12): complete phase execution — verification passed
 - fix(12): correct smoke test port (8877→3001) and timeline response key (items→timeline)
 - docs(12-04): complete agent template catalog plan
-
