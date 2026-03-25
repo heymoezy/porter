@@ -33,6 +33,7 @@
     "imapflow": "^1.2.16",
     "nodemailer": "^8.0.3",
     "octokit": "^5.0.5",
+    "opossum": "^9.0.0",
     "p-queue": "^9.1.0",
     "pg": "^8.20.0",
     "robots-parser": "^3.0.1",
@@ -44,6 +45,7 @@
   "devDependencies": {
     "@types/node": "^25.3.3",
     "@types/nodemailer": "^7.0.11",
+    "@types/opossum": "^8.1.9",
     "@types/pg": "^8.20.0",
     "@types/uuid": "^10.0.0",
     "@types/which": "^3.0.4",
