@@ -13,10 +13,13 @@ import { startBrainUI } from './routes/brain-ui.js';
 import authPlugin from './plugins/auth.js';
 import openapiPlugin from './plugins/openapi.js';
 import v1Routes from './routes/v1/index.js';
-import proxyPlugin from './plugins/proxy.js';
 import { migrateConsolidated } from './db/migrate-consolidated.js';
 import { migrateMemoryV3 } from './db/migrate-memv3.js';
 import { migrateSkillsTools } from './db/migrate-15.js';
+import { migrateTemplateColumns } from './db/migrate-templates.js';
+import { migrateBridgeV1 } from './db/migrate-bridge-v1.js';
+import { seedTemplates } from './db/seed-templates.js';
+import { detectAndUpsertGateways } from './services/bridge/startup-detector.js';
 import * as scheduler from './services/scheduler.js';
 import { startImapIdle, stopImapIdle } from './services/email.js';
 import { pool } from './db/client.js';
@@ -108,9 +111,6 @@ fastify.get('/v2/*', async (_request, reply) => {
   return reply.type('text/html').send(html);
 });
 
-// LAST: Proxy unknown routes to porter.py
-fastify.register(proxyPlugin);
-
 // Clean shutdown: stop IMAP IDLE when Fastify closes
 fastify.addHook('onClose', async () => {
   stopImapIdle();
@@ -121,9 +121,15 @@ const start = async () => {
     await migrateConsolidated(pool);
     await migrateMemoryV3(pool);
     await migrateSkillsTools(pool);
+    await migrateTemplateColumns(pool);
+    await migrateBridgeV1(pool);
+    await seedTemplates();
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
     scheduler.start();
+
+    // Auto-detect AI gateways and bootstrap from env vars
+    await detectAndUpsertGateways(pool);
 
     // Auto-start IMAP IDLE if a connected email connection exists
     try {
