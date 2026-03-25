@@ -162,7 +162,10 @@ Plans:
   3. `GET /api/admin/bridge/dispatch-log` returns paginated routing decisions with model used, routing reason, cost, and latency — `GET /api/admin/bridge/costs` returns spend aggregated by gateway, model, and day with configurable date ranges
   4. Gateway CRUD (`POST /api/admin/bridge/gateways`) and routing rule management (`POST /api/admin/bridge/routing-rules`) enable full operator control — add, update, remove, validate connections
   5. SSE events (`bridge:health`, `bridge:dispatch`, `bridge:circuit-trip`) stream real-time Bridge state changes to connected admin clients — the admin surface is never stale
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 22-01-PLAN.md — Read endpoints (GET /, /models, /dispatch-log, /costs), route registration, test stubs
+- [ ] 22-02-PLAN.md — Write endpoints (POST /gateways, /routing-rules), SSE verification
 
 ### Phase 23: Integration & Multi-Tenant
 **Goal**: Bridge routing decisions feed into Memory V3 so agents learn model preferences, dispatch history is queryable per agent, and each user/workspace can bring their own API keys and gateway configuration
@@ -190,7 +193,7 @@ Phases execute in numeric order: 16 through 23.
 | 19. Model Catalog | 2/2 | Complete    | 2026-03-25 | - |
 | 20. Smart Routing Engine | 2/2 | Complete    | 2026-03-25 | - |
 | 21. First-Run Setup | 2/2 | Complete    | 2026-03-25 | - |
-| 22. Bridge Admin Surface | v3.0 Bridge | 0/TBD | Not started | - |
+| 22. Bridge Admin Surface | v3.0 Bridge | 0/2 | Not started | - |
 | 23. Integration & Multi-Tenant | v3.0 Bridge | 0/TBD | Not started | - |
 
 ---
