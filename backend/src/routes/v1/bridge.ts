@@ -1,13 +1,13 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
-import { detectAndUpsertGateways } from '../../services/bridge/startup-detector.js';
+import { detectAndUpsertGateways, type DetectionReport } from '../../services/bridge/startup-detector.js';
 
 // ── Row mappers ───────────────────────────────────────────────────────────────
 
 /**
  * Strips raw DB row down to safe gateway fields.
- * encrypted_value is NEVER included — only masked_display is exposed.
+ * The raw encrypted credential column is never included in the output.
  */
 function maskGatewayRow(row: any) {
   return {
@@ -29,8 +29,8 @@ function maskGatewayRow(row: any) {
 }
 
 /**
- * Returns credential row WITHOUT encrypted_value.
- * Only masked_display is exposed — this is the core security guarantee of GW-07.
+ * Returns credential row with only masked_display — never the raw key value.
+ * This is the core security guarantee of GW-07.
  */
 function maskCredentialRow(row: any) {
   return {
@@ -49,6 +49,19 @@ export default async function bridgeV1Routes(
   fastify: FastifyInstance,
   _options: FastifyPluginOptions,
 ) {
+  // ── GET /detect — full gateway discovery with live health and models ─────────
+  fastify.get('/detect', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    // Admin-only: detection re-runs upserts and model catalog refresh
+    if (!['platform_admin', 'admin'].includes(request.sessionUser!.role ?? '')) {
+      return reply.code(403).send(err('FORBIDDEN', 'Admin required'));
+    }
+
+    const report: DetectionReport = await detectAndUpsertGateways(pool);
+    return reply.send(ok(report));
+  });
+
   // ── GET /gateways — list all gateways with masked credentials ────────────────
   fastify.get('/gateways', {
     preHandler: [fastify.requireAuth],
