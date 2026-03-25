@@ -120,3 +120,13 @@ None - no external service configuration required.
 ---
 *Phase: 19-model-catalog*
 *Completed: 2026-03-25*
+
+## Self-Check: PASSED
+
+All files present and commits verified:
+- FOUND: backend/src/services/bridge/startup-detector.ts
+- FOUND: backend/src/services/scheduler.ts
+- FOUND: backend/src/services/bridge/routing-engine.ts
+- FOUND: .planning/phases/19-model-catalog/19-02-SUMMARY.md
+- FOUND: commit 9bcd36b (startup-detector + scheduler wiring)
+- FOUND: commit 1764901 (routing-engine cost + model_version_id + capability filter)
