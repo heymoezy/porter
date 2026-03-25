@@ -99,20 +99,58 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GW-01 through GW-08 | TBD | Pending |
-| MOD-01 through MOD-05 | TBD | Pending |
-| RT-01 through RT-05 | TBD | Pending |
-| CLI-01 through CLI-07 | TBD | Pending |
-| FRS-01 through FRS-04 | TBD | Pending |
-| ADM-01 through ADM-07 | TBD | Pending |
-| INT-01 through INT-04 | TBD | Pending |
-| DS-01 through DS-03 | TBD | Pending |
-| MT-01 through MT-03 | TBD | Pending |
+| GW-01 | Phase 16: Gateway Foundation | Pending |
+| GW-02 | Phase 18: Resilience Layer | Pending |
+| GW-03 | Phase 16: Gateway Foundation | Pending |
+| GW-04 | Phase 18: Resilience Layer | Pending |
+| GW-05 | Phase 18: Resilience Layer | Pending |
+| GW-06 | Phase 18: Resilience Layer | Pending |
+| GW-07 | Phase 16: Gateway Foundation | Pending |
+| GW-08 | Phase 16: Gateway Foundation | Pending |
+| MOD-01 | Phase 19: Model Catalog | Pending |
+| MOD-02 | Phase 19: Model Catalog | Pending |
+| MOD-03 | Phase 19: Model Catalog | Pending |
+| MOD-04 | Phase 19: Model Catalog | Pending |
+| MOD-05 | Phase 19: Model Catalog | Pending |
+| RT-01 | Phase 20: Smart Routing Engine | Pending |
+| RT-02 | Phase 20: Smart Routing Engine | Pending |
+| RT-03 | Phase 20: Smart Routing Engine | Pending |
+| RT-04 | Phase 20: Smart Routing Engine | Pending |
+| RT-05 | Phase 20: Smart Routing Engine | Pending |
+| CLI-01 | Phase 16: Gateway Foundation | Pending |
+| CLI-02 | Phase 17: Provider Adapters | Pending |
+| CLI-03 | Phase 17: Provider Adapters | Pending |
+| CLI-04 | Phase 17: Provider Adapters | Pending |
+| CLI-05 | Phase 17: Provider Adapters | Pending |
+| CLI-06 | Phase 17: Provider Adapters | Pending |
+| CLI-07 | Phase 17: Provider Adapters | Pending |
+| FRS-01 | Phase 21: First-Run Setup | Pending |
+| FRS-02 | Phase 21: First-Run Setup | Pending |
+| FRS-03 | Phase 21: First-Run Setup | Pending |
+| FRS-04 | Phase 21: First-Run Setup | Pending |
+| ADM-01 | Phase 22: Bridge Admin Surface | Pending |
+| ADM-02 | Phase 22: Bridge Admin Surface | Pending |
+| ADM-03 | Phase 22: Bridge Admin Surface | Pending |
+| ADM-04 | Phase 22: Bridge Admin Surface | Pending |
+| ADM-05 | Phase 22: Bridge Admin Surface | Pending |
+| ADM-06 | Phase 22: Bridge Admin Surface | Pending |
+| ADM-07 | Phase 22: Bridge Admin Surface | Pending |
+| DS-01 | Phase 22: Bridge Admin Surface | Pending |
+| DS-02 | Phase 22: Bridge Admin Surface | Pending |
+| DS-03 | Phase 22: Bridge Admin Surface | Pending |
+| INT-01 | Phase 23: Integration & Multi-Tenant | Pending |
+| INT-02 | Phase 23: Integration & Multi-Tenant | Pending |
+| INT-03 | Phase 23: Integration & Multi-Tenant | Pending |
+| INT-04 | Phase 23: Integration & Multi-Tenant | Pending |
+| MT-01 | Phase 23: Integration & Multi-Tenant | Pending |
+| MT-02 | Phase 23: Integration & Multi-Tenant | Pending |
+| MT-03 | Phase 23: Integration & Multi-Tenant | Pending |
 
 **Coverage:**
-- v3.0 requirements: 45 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 45
+- v3.0 requirements: 46 total (8 GW + 5 MOD + 5 RT + 7 CLI + 4 FRS + 7 ADM + 4 INT + 3 DS + 3 MT)
+- Mapped to phases: 46/46
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-25*
+*Traceability updated: 2026-03-25 (roadmap phases 16-23)*

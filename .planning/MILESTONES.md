@@ -1,12 +1,31 @@
 # Milestones: Porter
 
-## v2.0 Backend Ready (Shipped: 2026-03-24)
+## v3.0 — Porter Bridge (Active)
 
-**Phases completed:** 9 phases, 32 plans, 2 tasks
+**Started:** 2026-03-25
+**Goal:** Unified AI gateway layer — database-backed gateway registry, multi-backend adapters, smart routing, cost tracking, admin APIs. Commercial quality with circuit breakers, retry, graceful degradation.
+**Phases:** 16-23 (8 phases, 46 requirements)
+**Key dependencies:** opossum (circuit breakers), p-queue (concurrency), which (CLI detection)
+
+---
+
+## v2.0 — Backend Ready (Shipped: 2026-03-24)
+
+**Started:** 2026-03-21
+**Shipped:** 2026-03-24
+**Goal:** Killer backend API — all features pure API, zero frontend.
+**Phases:** 8-15 (9 phases, 32 plans)
+**Post-milestone:** porter.py fully deprecated, SQLite eliminated from Brain + Admin (2026-03-25)
 
 **Key accomplishments:**
-
-- (none recorded)
+- API standardization (envelopes, error codes, trace IDs, OpenAPI)
+- Token-by-token streaming from all backends
+- Collaborative sessions with per-project RBAC
+- Unified chat + CRM + file associations
+- 103 agent templates with one-call instantiation
+- PostgreSQL migration (SQLite fully eliminated)
+- Memory V3 state engine
+- Skills & tools DB registry
 
 ---
 
@@ -33,13 +52,3 @@
 - **Requirements:** 30/30 complete
 - **Tests:** 35 Playwright tests green throughout
 - **Version:** v0.34.23
-
----
-
-## v2.0 — Backend Ready (Shipped: 2026-03-24)
-
-**Started:** 2026-03-21
-**Shipped:** 2026-03-24
-**Goal:** Killer backend API — all features pure API, zero frontend.
-**Phases:** 8-15 (9 phases, 32 plans)
-**Post-milestone:** porter.py fully deprecated, SQLite eliminated from Brain + Admin (2026-03-25)
