@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Porter Bridge
 status: unknown
-stopped_at: Completed 20-02-PLAN.md
-last_updated: "2026-03-25T09:45:06.755Z"
+stopped_at: Completed 18-01-PLAN.md
+last_updated: "2026-03-25T10:14:12.399Z"
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 11
+  completed_plans: 9
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every AI backend is visible, manageable, and intelligently routed — nothing hidden, everything in the database.
-**Current focus:** Phase 20 — live-dashboard
+**Current focus:** Phase 18 — resilience-layer
 
 ## Current Position
 
-Phase: 20 (live-dashboard) — COMPLETE
-Plan: 2 of 2 (COMPLETE)
+Phase: 18 (resilience-layer) — EXECUTING
+Plan: 1 of 3
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Recent decisions affecting current work:
 - [Phase 17-provider-adapters]: StreamNormalizer is intentionally thin — no format conversion, only abort propagation and error boundary; ADAPTER_MAP keys use GatewayType strings matching DB values; createAdapter() returns null for unknown types
 - [Phase 20-live-dashboard]: p-queue v9.1.0 chosen (ESM-only, type=module compatible); CLI gateways concurrency=1, HTTP gateways concurrency=3; PQueue singleton map keyed by gateway type; Wave 0 test stubs use node:test + tsx
 - [Phase 20-02]: RoutingEngine singleton class; fire-and-forget logging via async IIFE; selectStreamBackend() changed to async; gitignore false positive on admin/ directory resolved with git add -f
+- [Phase 18-01]: opossum loaded via createRequire (CJS in ESM project) — breakers keyed by gatewayId not gatewayType — errorFilter=isTransientError suppresses 429/503 — circuit_state column is observability-only
 
 ### Pending Todos
 
@@ -76,6 +77,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T09:40:25.000Z
-Stopped at: Completed 20-02-PLAN.md
+Last session: 2026-03-25T10:14:12.396Z
+Stopped at: Completed 18-01-PLAN.md
 Resume file: None
