@@ -61,6 +61,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ Agent templates (100 templates with complete skills/tools/system prompts) — v2.0 Phase 12
 - ✓ Skills & tools architecture (DB registry, CRUD APIs, junction tables, visibility controls, forge integration) — v2.0 Phase 15
 - ✓ Autonomous learning (agents search web/social/GitHub, store as Memory V2 concepts) — v2.0 Phase 13
+- ✓ Gateway foundation (DB schema, adapter interface, startup detection, credential masking, Bridge API) — v3.0 Phase 16
 - [ ] SaaS billing (Lemon Squeezy subscriptions, usage metering, plan limit enforcement)
 - ✓ Error capture (frontend error POST endpoint with stack traces, component context) — v2.0 Phase 8
 - [ ] Codebase migration (gradual — porter.py shrinks as features move to Fastify)
@@ -113,4 +114,4 @@ Porter has been in development since Feb 18, 2026. Current version is v0.34.23. 
 | Bridge as major innovation | AI gateway management is Porter's differentiator — first-run detection, smart routing, cost tracking | — v3.0 scope |
 
 ---
-*Last updated: 2026-03-25 after v3.0 Bridge milestone initialization*
+*Last updated: 2026-03-25 after Phase 16 Gateway Foundation complete*
