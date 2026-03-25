@@ -2,7 +2,7 @@
 phase: 20
 slug: smart-routing-engine
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-03-25
 ---
@@ -17,20 +17,20 @@ created: 2026-03-25
 
 | Property | Value |
 |----------|-------|
-| **Framework** | vitest |
-| **Config file** | `backend/vitest.config.ts` or "none — Wave 0 installs" |
-| **Quick run command** | `npx vitest run --reporter=verbose` |
-| **Full suite command** | `npx vitest run` |
-| **Estimated runtime** | ~15 seconds |
+| **Framework** | node:test (built-in Node.js test runner via tsx) |
+| **Config file** | None needed — uses `npx tsx --test` |
+| **Quick run command** | `npx tsx --test backend/src/__tests__/*.test.ts` |
+| **Full suite command** | `npx tsx --test backend/src/__tests__/*.test.ts backend/src/services/stream-service.test.ts` |
+| **Estimated runtime** | ~10 seconds |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run `npx vitest run`
-- **After every plan wave:** Run `npx vitest run`
+- **After every task commit:** Run `npx tsc --noEmit` + `npx tsx --test` on relevant test files
+- **After every plan wave:** Run `npx tsx --test` on all Phase 20 test files
 - **Before `/gsd:verify-work`:** Full suite must be green
-- **Max feedback latency:** 15 seconds
+- **Max feedback latency:** 10 seconds
 
 ---
 
@@ -38,23 +38,23 @@ created: 2026-03-25
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 20-01-01 | 01 | 1 | RT-01 | unit | `npx vitest run` | ❌ W0 | ⬜ pending |
-| 20-01-02 | 01 | 1 | RT-02 | unit | `npx vitest run` | ❌ W0 | ⬜ pending |
-| 20-01-03 | 01 | 1 | RT-03 | integration | `npx vitest run` | ❌ W0 | ⬜ pending |
-| 20-01-04 | 01 | 1 | RT-04 | unit | `npx vitest run` | ❌ W0 | ⬜ pending |
-| 20-01-05 | 01 | 1 | RT-05 | integration | `npx vitest run` | ❌ W0 | ⬜ pending |
+| 20-01-00 | 01 | 1 | RT-01..05 | stubs | `npx tsx --test backend/src/__tests__/*.test.ts` | Plan 01 Task 0 creates | ⬜ pending |
+| 20-01-01 | 01 | 1 | RT-02..05 | compilation | `npx tsc --noEmit` | N/A | ⬜ pending |
+| 20-01-02 | 01 | 1 | RT-02..05 | compilation | `npx tsc --noEmit` | N/A | ⬜ pending |
+| 20-02-01 | 02 | 2 | RT-01..05 | compilation | `npx tsc --noEmit` | N/A | ⬜ pending |
+| 20-02-02 | 02 | 2 | RT-01..05 | unit+compilation | `npx tsc --noEmit && npx tsx --test backend/src/services/stream-service.test.ts` | Exists | ⬜ pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: ⬜ pending / ✅ green / ❌ red / ⚠️ flaky*
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `backend/src/__tests__/routing-engine.test.ts` — stubs for RT-01, RT-02, RT-04
-- [ ] `backend/src/__tests__/dispatch-log.test.ts` — stubs for RT-03
-- [ ] `backend/src/__tests__/session-routing.test.ts` — stubs for RT-05
+- [ ] `backend/src/__tests__/routing-engine.test.ts` — stubs for RT-01, RT-02, RT-04 (created by Plan 01 Task 0)
+- [ ] `backend/src/__tests__/dispatch-log.test.ts` — stubs for RT-03 (created by Plan 01 Task 0)
+- [ ] `backend/src/__tests__/session-routing.test.ts` — stubs for RT-05 (created by Plan 01 Task 0)
 
-*Existing vitest infrastructure covers framework install.*
+*Wave 0 stubs use node:test (same framework as existing stream-service.test.ts). No vitest install needed.*
 
 ---
 
@@ -68,11 +68,11 @@ created: 2026-03-25
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 15s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (Plan 01 Task 0 creates stubs)
+- [x] No watch-mode flags
+- [x] Feedback latency < 15s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** pending execution
