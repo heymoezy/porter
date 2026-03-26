@@ -181,6 +181,8 @@ async function bootstrapEnvGateways(pool: pg.Pool): Promise<GatewayDetectionResu
   const results: GatewayDetectionResult[] = [];
 
   // Ollama: always bootstrap since config.ollamaUrl has a default
+  // Deduplicate: remove any stale auto_detected Ollama before env_bootstrap upsert
+  await pool.query(`DELETE FROM gateways WHERE type = 'ollama' AND source = 'auto_detected'`);
   await upsertGateway(pool, {
     type: 'ollama',
     name: 'Ollama (local)',
