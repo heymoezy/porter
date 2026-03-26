@@ -55,6 +55,10 @@ export class CodexCLIAdapter implements GatewayAdapter {
       // Drain stderr to prevent deadlock
       child.stderr.resume();
 
+      // Capture stdout to parse version string
+      const stdoutChunks: Buffer[] = [];
+      child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
+
       const timer = setTimeout(() => {
         child.kill('SIGTERM');
         resolve({ healthy: false, error: 'health check timed out' });
@@ -63,8 +67,10 @@ export class CodexCLIAdapter implements GatewayAdapter {
       child.on('close', (code) => {
         clearTimeout(timer);
         const latencyMs = Date.now() - start;
+        const raw = Buffer.concat(stdoutChunks).toString('utf8').trim();
+        const version = raw || undefined;
         if (code === 0) {
-          resolve({ healthy: true, latencyMs });
+          resolve({ healthy: true, latencyMs, version });
         } else {
           resolve({ healthy: false, error: `exited with code ${code}`, latencyMs });
         }

@@ -51,10 +51,25 @@ export class OllamaAdapter implements GatewayAdapter {
       const resp = await fetch(`${this.baseUrl}/api/tags`, {
         signal: AbortSignal.timeout(5000),
       });
-      if (resp.ok) {
-        return { healthy: true, latencyMs: Date.now() - start };
+      if (!resp.ok) {
+        return { healthy: false, error: `Ollama /api/tags returned ${resp.status}` };
       }
-      return { healthy: false, error: `Ollama /api/tags returned ${resp.status}` };
+
+      // Also fetch /api/version to capture the Ollama server version
+      let version: string | undefined;
+      try {
+        const versionResp = await fetch(`${this.baseUrl}/api/version`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (versionResp.ok) {
+          const data = (await versionResp.json()) as { version?: string };
+          version = data.version || undefined;
+        }
+      } catch {
+        // Version fetch is best-effort — don't fail health check
+      }
+
+      return { healthy: true, latencyMs: Date.now() - start, version };
     } catch (err) {
       return {
         healthy: false,

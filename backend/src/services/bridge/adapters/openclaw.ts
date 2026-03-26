@@ -70,6 +70,18 @@ export class OpenClawAdapter implements GatewayAdapter {
       return { healthy: false, error: 'OpenClaw gateway not responding' };
     }
 
+    // Extract version from /health response if available
+    let version: string | undefined;
+    try {
+      const healthData = (await healthResp.json()) as Record<string, unknown>;
+      const v = healthData.version ?? healthData.server_version ?? healthData.openclaw_version;
+      if (typeof v === 'string' && v) {
+        version = v;
+      }
+    } catch {
+      // JSON parse failed — response may not be JSON, ignore
+    }
+
     // Step 2: probe /v1/chat/completions endpoint availability
     // GET will return 404 if endpoint is disabled, 405 (Method Not Allowed) if enabled
     let completionsResp: Response;
@@ -94,7 +106,7 @@ export class OpenClawAdapter implements GatewayAdapter {
     }
 
     // Any other status (405, 200, 401, etc.) means the endpoint exists
-    return { healthy: true, latencyMs: Date.now() - start };
+    return { healthy: true, latencyMs: Date.now() - start, version };
   }
 
   // ── dispatch() ────────────────────────────────────────────────────────────

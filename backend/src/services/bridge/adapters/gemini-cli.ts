@@ -55,8 +55,10 @@ export class GeminiCLIAdapter implements GatewayAdapter {
 
       // Drain stderr — libsecret/keychain warnings
       child.stderr.resume();
-      // Drain stdout
-      child.stdout.resume();
+
+      // Capture stdout to parse version string
+      const stdoutChunks: Buffer[] = [];
+      child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
 
       const timer = setTimeout(() => {
         child.kill('SIGTERM');
@@ -66,8 +68,10 @@ export class GeminiCLIAdapter implements GatewayAdapter {
       child.on('close', (code) => {
         clearTimeout(timer);
         const latencyMs = Date.now() - start;
+        const raw = Buffer.concat(stdoutChunks).toString('utf8').trim();
+        const version = raw || undefined;
         if (code === 0) {
-          resolve({ healthy: true, latencyMs });
+          resolve({ healthy: true, latencyMs, version });
         } else {
           resolve({ healthy: false, error: `exited with code ${code}`, latencyMs });
         }

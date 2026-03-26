@@ -36,6 +36,7 @@ export interface HealthResult {
   healthy: boolean;
   latencyMs?: number;
   error?: string;
+  version?: string;
 }
 
 export interface BridgeDispatchRequest {

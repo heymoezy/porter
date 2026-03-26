@@ -689,4 +689,89 @@ export default async function adminBridgeRoutes(fastify: FastifyInstance) {
       note: 'Subscribe to GET /api/events SSE stream to receive these events in real-time',
     }));
   });
+
+  // ── POST /speed-test — Latency benchmark across one or all gateways ──────────
+  // Body: { gateway_id?: string }
+  // Tests each gateway by dispatching a minimal "Hi" message and measuring latency.
+  // Returns: { results: Array<{ gateway_id, gateway_name, gateway_type, ok, latency_ms, model, error? }> }
+  fastify.post('/speed-test', async (request, reply) => {
+    const body = request.body as Record<string, any>;
+    const gatewayIdFilter = body?.gateway_id as string | undefined;
+
+    // Build WHERE clause
+    const params: unknown[] = [1];
+    let whereClause = `WHERE g.enabled = $1`;
+    if (gatewayIdFilter) {
+      params.push(gatewayIdFilter);
+      whereClause += ` AND g.id = $${params.length}`;
+    }
+
+    const { rows } = await pool.query(`
+      SELECT id, type, name, url, auth_method, status, source, priority,
+             capabilities, metadata, enabled, masked_display,
+             created_at, updated_at, last_health_at
+      FROM gateways g
+      ${whereClause}
+      ORDER BY priority ASC
+    `, params);
+
+    if (rows.length === 0) {
+      return reply.send(ok({ results: [] }));
+    }
+
+    const TEST_MESSAGE = { role: 'user', content: 'Hi' };
+
+    // Run all gateways in parallel
+    const results = await Promise.all(
+      rows.map(async (raw: any): Promise<{
+        gateway_id: string;
+        gateway_name: string;
+        gateway_type: string;
+        ok: boolean;
+        latency_ms: number | null;
+        model: string | null;
+        error?: string;
+      }> => {
+        const gatewayRow = mapRawToGatewayRow(raw);
+        const adapter = createAdapter(gatewayRow);
+
+        if (!adapter) {
+          return {
+            gateway_id: raw.id,
+            gateway_name: raw.name,
+            gateway_type: raw.type,
+            ok: false,
+            latency_ms: null,
+            model: null,
+            error: 'No adapter available for this gateway type',
+          };
+        }
+
+        const start = Date.now();
+        try {
+          const result = await adapter.dispatch({ messages: [TEST_MESSAGE] });
+          return {
+            gateway_id: raw.id,
+            gateway_name: raw.name,
+            gateway_type: raw.type,
+            ok: true,
+            latency_ms: result.latencyMs ?? (Date.now() - start),
+            model: result.model,
+          };
+        } catch (e) {
+          return {
+            gateway_id: raw.id,
+            gateway_name: raw.name,
+            gateway_type: raw.type,
+            ok: false,
+            latency_ms: Date.now() - start,
+            model: null,
+            error: e instanceof Error ? e.message : String(e),
+          };
+        }
+      })
+    );
+
+    return reply.send(ok({ results }));
+  });
 }

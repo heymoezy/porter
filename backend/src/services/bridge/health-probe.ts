@@ -46,6 +46,7 @@ export interface HealthProbeDeps {
   createAdapter: (row: GatewayRow) => GatewayAdapter | null;
   getBreakerState: (gatewayId: string) => CircuitState | null;
   emitSSE: (eventType: string, data: Record<string, unknown>) => Promise<void>;
+  queryUpdateVersion?: (gatewayId: string, version: string) => Promise<void>;
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────
@@ -102,7 +103,7 @@ export async function runHealthProbeWithDeps(deps: HealthProbeDeps): Promise<voi
       // 3. Call adapter.health() with 10s timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10_000);
-      let health: { healthy: boolean; latencyMs?: number; error?: string };
+      let health: { healthy: boolean; latencyMs?: number; error?: string; version?: string };
       try {
         health = await adapter.health();
       } finally {
@@ -120,6 +121,18 @@ export async function runHealthProbeWithDeps(deps: HealthProbeDeps): Promise<voi
         `UPDATE gateways SET status = $1, circuit_state = $2, last_health_at = EXTRACT(EPOCH FROM NOW()) WHERE id = $3`,
         [newStatus, circuitState, row.id]
       );
+
+      // 6b. Persist version into metadata if returned by health check
+      if (health.version) {
+        if (deps.queryUpdateVersion) {
+          await deps.queryUpdateVersion(row.id, health.version);
+        } else {
+          await deps.queryUpdate(
+            `UPDATE gateways SET metadata = jsonb_set(COALESCE(metadata, '{}'), '{version}', to_jsonb($1::text)) WHERE id = $2`,
+            [health.version, row.id]
+          );
+        }
+      }
 
       // 7. Emit SSE only on status change
       if (oldStatus !== newStatus) {
@@ -150,6 +163,12 @@ const _productionDeps: HealthProbeDeps = {
   },
   queryUpdate: async (sql: string, params: unknown[]) => {
     await pool.query(sql, params);
+  },
+  queryUpdateVersion: async (gatewayId: string, version: string) => {
+    await pool.query(
+      `UPDATE gateways SET metadata = jsonb_set(COALESCE(metadata, '{}'), '{version}', to_jsonb($1::text)) WHERE id = $2`,
+      [version, gatewayId]
+    );
   },
   createAdapter,
   getBreakerState,
