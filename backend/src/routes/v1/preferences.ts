@@ -4,7 +4,7 @@ import { config } from '../../config.js';
 import fs from 'fs';
 import path from 'path';
 
-// Allowed preference keys — matches porter.py's whitelist exactly
+// Allowed preference keys
 const ALLOWED_KEYS = new Set([
   'onboarding_complete', 'default_location', 'checkpoint_interval',
   'lease_ttl', 'auto_resume', 'show_hidden', 'density', 'editor_font_size',

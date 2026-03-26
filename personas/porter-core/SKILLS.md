@@ -1,9 +1,6 @@
-# Porter - Skills
+# SKILLS.md - Porter
 
-**Role:** Master Orchestrator
-**Loadout Owner:** Porter-managed
-
-This file records the worker's current skill loadout for profile review and routing clarity.
+Porter carries orchestration-first skills only.
 
 ## Active Skills
 
@@ -24,8 +21,3 @@ This file records the worker's current skill loadout for profile review and rout
 - avatar-art-director
 - runtime-auditor
 - healthcheck
-
-## Notes
-
-- Keep this loadout narrow and role-specific.
-- Prefer Porter-managed curation unless a manual override is intentional.

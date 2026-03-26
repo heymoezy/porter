@@ -19,15 +19,15 @@ created: 2026-03-25
 |----------|-------|
 | **Framework** | node:test (built-in Node.js test runner) + tsx |
 | **Config file** | none — uses node:test directly |
-| **Quick run command** | `npx tsx --test backend/src/__tests__/resilience-*.test.ts` |
-| **Full suite command** | `npx tsx --test backend/src/__tests__/resilience-*.test.ts backend/src/__tests__/routing-engine.test.ts` |
+| **Quick run command** | `npx tsx --test backend/src/__tests__/circuit-breaker.test.ts backend/src/__tests__/retry.test.ts backend/src/__tests__/health-probe.test.ts backend/src/__tests__/fallback-chain.test.ts` |
+| **Full suite command** | `npx tsx --test backend/src/__tests__/circuit-breaker.test.ts backend/src/__tests__/retry.test.ts backend/src/__tests__/health-probe.test.ts backend/src/__tests__/fallback-chain.test.ts backend/src/__tests__/routing-engine.test.ts` |
 | **Estimated runtime** | ~5 seconds |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run `npx tsx --test backend/src/__tests__/resilience-*.test.ts`
+- **After every task commit:** Run quick run command
 - **After every plan wave:** Run full suite command
 - **Before `/gsd:verify-work`:** Full suite must be green
 - **Max feedback latency:** 5 seconds
@@ -38,10 +38,10 @@ created: 2026-03-25
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 18-01-01 | 01 | 1 | GW-02 | unit | `npx tsx --test backend/src/__tests__/resilience-health-probe.test.ts` | ❌ W0 | ⬜ pending |
-| 18-01-02 | 01 | 1 | GW-04 | unit | `npx tsx --test backend/src/__tests__/resilience-circuit-breaker.test.ts` | ❌ W0 | ⬜ pending |
-| 18-02-01 | 02 | 2 | GW-05 | unit | `npx tsx --test backend/src/__tests__/resilience-retry.test.ts` | ❌ W0 | ⬜ pending |
-| 18-02-02 | 02 | 2 | GW-06 | unit | `npx tsx --test backend/src/__tests__/resilience-fallback.test.ts` | ❌ W0 | ⬜ pending |
+| 18-01-01 | 01 | 1 | GW-04, GW-05 | unit | `npx tsx --test backend/src/__tests__/circuit-breaker.test.ts backend/src/__tests__/retry.test.ts` | ❌ W0 | ⬜ pending |
+| 18-02-01 | 02 | 2 | GW-02 | unit | `npx tsx --test backend/src/__tests__/health-probe.test.ts` | ❌ W0 | ⬜ pending |
+| 18-03-01 | 03 | 2 | GW-06 | unit | `npx tsx --test backend/src/__tests__/fallback-chain.test.ts` | ❌ W0 | ⬜ pending |
+| 18-03-02 | 03 | 2 | GW-06 | integration | `npx tsc --noEmit && npx tsx --test backend/src/__tests__/fallback-chain.test.ts` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,10 +49,10 @@ created: 2026-03-25
 
 ## Wave 0 Requirements
 
-- [ ] `backend/src/__tests__/resilience-health-probe.test.ts` — stubs for GW-02
-- [ ] `backend/src/__tests__/resilience-circuit-breaker.test.ts` — stubs for GW-04
-- [ ] `backend/src/__tests__/resilience-retry.test.ts` — stubs for GW-05
-- [ ] `backend/src/__tests__/resilience-fallback.test.ts` — stubs for GW-06
+- [ ] `backend/src/__tests__/circuit-breaker.test.ts` — stubs for GW-04
+- [ ] `backend/src/__tests__/retry.test.ts` — stubs for GW-05
+- [ ] `backend/src/__tests__/health-probe.test.ts` — stubs for GW-02
+- [ ] `backend/src/__tests__/fallback-chain.test.ts` — stubs for GW-06
 
 ---
 

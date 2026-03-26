@@ -5,7 +5,6 @@ import os from 'os';
 export const config = {
   port: parseInt(process.env.PORTER_BACKEND_PORT || '3001', 10),
   host: process.env.PORTER_BACKEND_HOST || '127.0.0.1',
-  porterPyUrl: process.env.PORTER_PY_URL || 'http://127.0.0.1:8877',
   databaseUrl: process.env.DATABASE_URL || 'postgresql://porter:porter@localhost:5432/porter',
   dataDir: process.env.PORTER_DATA_DIR || path.join(process.env.HOME || os.homedir(), '.porter'),
   logLevel: process.env.LOG_LEVEL || 'info',

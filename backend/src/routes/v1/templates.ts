@@ -35,6 +35,10 @@ interface TemplateRow {
   is_internal: number;
   sort_order: number | null;
   created_at: number | null;
+  archetype: string | null;
+  appearance_style: string | null;
+  appearance_spec: string | null;
+  communication_style: string | null;
 }
 
 interface PersonaRow {
@@ -97,6 +101,10 @@ function formatTemplate(row: TemplateRow) {
     is_internal: Boolean(row.is_internal),
     sort_order: row.sort_order ?? 50,
     created_at: row.created_at,
+    archetype: row.archetype ?? 'navigator',
+    appearance_style: row.appearance_style ?? 'minecraft',
+    appearance_spec: parseJsonField<Record<string, unknown>>(row.appearance_spec, {}),
+    communication_style: row.communication_style ?? '',
   };
 }
 

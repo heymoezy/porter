@@ -4,7 +4,7 @@ export function createRequestId(): string {
   return crypto.randomUUID();
 }
 
-// Log structured event (mirrors porter.py's mlog.emit pattern)
+// Log structured event
 export function logEvent(
   severity: string,
   domain: string,

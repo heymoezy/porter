@@ -1,3 +1,8 @@
+## v3.0.1 (2026-03-26)
+
+- feat(bridge): version detection in all 5 adapters + speed-test endpoint
+
+
 ## v3.0.0 (2026-03-25)
 
 - docs(phase-23): complete phase execution — v3.0 milestone complete

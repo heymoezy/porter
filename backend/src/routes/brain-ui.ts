@@ -72,7 +72,6 @@ export async function startBrainUI() {
         dataDir: config.dataDir,
         ollamaUrl: config.ollamaUrl,
         openclawUrl: config.openclawUrl,
-        porterPyUrl: config.porterPyUrl,
         features: Object.entries(featureFlags).filter(([,v]) => v).map(([k]) => k),
       },
       routes: routes.slice(0, 100),

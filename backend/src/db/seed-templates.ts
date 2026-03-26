@@ -9,13 +9,17 @@ async function insertTemplate(t: {
   system_prompt: string; soul_text: string; role_card_text: string;
   identity_text: string; skills_text: string;
   is_internal: number; sort_order: number;
+  archetype: string; appearance_style: string;
+  appearance_spec: { skin: string; hair: string; eyes: string; shirt: string; hair_style: string };
+  communication_style: string;
 }): Promise<void> {
   const q = _client || pool;
   await q.query(`
     INSERT INTO agent_templates
       (id, name, category, description, tags, skills, tools, required_backends, required_tools,
-       system_prompt, soul_text, role_card_text, identity_text, skills_text, is_internal, sort_order)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       system_prompt, soul_text, role_card_text, identity_text, skills_text, is_internal, sort_order,
+       archetype, appearance_style, appearance_spec, communication_style)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
     ON CONFLICT DO NOTHING
   `, [
     t.id, t.name, t.category, t.description,
@@ -23,6 +27,7 @@ async function insertTemplate(t: {
     JSON.stringify(t.required_backends), JSON.stringify(t.required_tools),
     t.system_prompt, t.soul_text, t.role_card_text, t.identity_text, t.skills_text,
     t.is_internal, t.sort_order,
+    t.archetype, t.appearance_style, JSON.stringify(t.appearance_spec), t.communication_style,
   ]);
 }
 
@@ -60,6 +65,9 @@ export async function seedTemplates(): Promise<void> {
 - Performance optimization (Core Web Vitals)
 - Testing (Vitest, Playwright)`,
       is_internal: 0, sort_order: 10,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#2C1810", "eyes": "#1A1A2E", "shirt": "#3B82F6", "hair_style": "short"},
+      communication_style: 'Precise technical language with code examples',
     });
 
     await insertTemplate({
@@ -86,6 +94,9 @@ export async function seedTemplates(): Promise<void> {
 - Rate limiting and caching strategies
 - Integration testing`,
       is_internal: 0, sort_order: 11,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#4A3728", "eyes": "#3B82F6", "shirt": "#14B8A6", "hair_style": "long"},
+      communication_style: 'Concise technical explanations with architecture diagrams',
     });
 
     await insertTemplate({
@@ -112,6 +123,9 @@ export async function seedTemplates(): Promise<void> {
 - CI/CD pipelines
 - End-to-end testing`,
       is_internal: 0, sort_order: 12,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#1A1A2E", "eyes": "#10B981", "shirt": "#0EA5E9", "hair_style": "mohawk"},
+      communication_style: 'Direct technical communication with pragmatic tradeoffs',
     });
 
     await insertTemplate({
@@ -138,6 +152,9 @@ export async function seedTemplates(): Promise<void> {
 - App Store / Play Store submission
 - Performance profiling`,
       is_internal: 0, sort_order: 13,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#8B4513", "eyes": "#8B5CF6", "shirt": "#06B6D4", "hair_style": "bald"},
+      communication_style: 'Systematic technical breakdowns with clear rationale',
     });
 
     await insertTemplate({
@@ -164,6 +181,9 @@ export async function seedTemplates(): Promise<void> {
 - Prometheus + Grafana monitoring
 - Linux system administration`,
       is_internal: 0, sort_order: 14,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#8D5524", "hair": "#D4A76A", "eyes": "#F59E0B", "shirt": "#2563EB", "hair_style": "parted"},
+      communication_style: 'Methodical technical analysis with measurable outcomes',
     });
 
     await insertTemplate({
@@ -190,6 +210,9 @@ export async function seedTemplates(): Promise<void> {
 - Connection pooling (PgBouncer)
 - Data modeling (3NF, denormalization tradeoffs)`,
       is_internal: 0, sort_order: 15,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#6B3A1F", "hair": "#292524", "eyes": "#0F172A", "shirt": "#0891B2", "hair_style": "buzz"},
+      communication_style: 'Structured technical prose with implementation detail',
     });
 
     await insertTemplate({
@@ -216,6 +239,9 @@ export async function seedTemplates(): Promise<void> {
 - Error response conventions
 - Developer documentation`,
       is_internal: 0, sort_order: 16,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#f1c27d", "hair": "#6B2D0A", "eyes": "#6366F1", "shirt": "#0284C7", "hair_style": "curly"},
+      communication_style: 'Clear technical writing with reproducible steps',
     });
 
     await insertTemplate({
@@ -242,6 +268,9 @@ export async function seedTemplates(): Promise<void> {
 - TLS configuration and certificate management
 - Threat modeling (STRIDE)`,
       is_internal: 0, sort_order: 17,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#c4956a", "hair": "#1a1a2e", "eyes": "#1A1A2E", "shirt": "#0D9488", "hair_style": "ponytail"},
+      communication_style: 'Rigorous technical communication with security context',
     });
 
     await insertTemplate({
@@ -268,6 +297,9 @@ export async function seedTemplates(): Promise<void> {
 - Core Web Vitals optimization
 - Memory leak detection`,
       is_internal: 0, sort_order: 18,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#3d2314", "eyes": "#3B82F6", "shirt": "#1D4ED8", "hair_style": "spiky"},
+      communication_style: 'Data-driven technical language with benchmark evidence',
     });
 
     await insertTemplate({
@@ -294,6 +326,9 @@ export async function seedTemplates(): Promise<void> {
 - Rust for embedded (no_std)
 - Debugging with JTAG/SWD`,
       is_internal: 0, sort_order: 19,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#2C1810", "eyes": "#10B981", "shirt": "#155E75", "hair_style": "flat"},
+      communication_style: 'Hardware-precise technical communication with timing constraints',
     });
 
     await insertTemplate({
@@ -320,6 +355,9 @@ export async function seedTemplates(): Promise<void> {
 - MLflow / Weights & Biases experiment tracking
 - REST API serving (FastAPI, TorchServe)`,
       is_internal: 0, sort_order: 20,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#4A3728", "eyes": "#8B5CF6", "shirt": "#0E7490", "hair_style": "short"},
+      communication_style: 'Experiment-driven technical language with model metrics',
     });
 
     await insertTemplate({
@@ -346,6 +384,9 @@ export async function seedTemplates(): Promise<void> {
 - Data quality frameworks (Great Expectations)
 - Python (Pandas, Polars, PySpark)`,
       is_internal: 0, sort_order: 21,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#1A1A2E", "eyes": "#F59E0B", "shirt": "#1E40AF", "hair_style": "long"},
+      communication_style: 'Pipeline-focused technical communication with data contracts',
     });
 
     await insertTemplate({
@@ -372,6 +413,9 @@ export async function seedTemplates(): Promise<void> {
 - Service mesh (Istio, Linkerd)
 - Developer CLI tools (Go, Bash)`,
       is_internal: 0, sort_order: 22,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#8D5524", "hair": "#8B4513", "eyes": "#0F172A", "shirt": "#0F766E", "hair_style": "mohawk"},
+      communication_style: 'Developer-centric technical writing with productivity focus',
     });
 
     await insertTemplate({
@@ -398,6 +442,9 @@ export async function seedTemplates(): Promise<void> {
 - Bug reporting and triage
 - CI integration and flake detection`,
       is_internal: 0, sort_order: 23,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#6B3A1F", "hair": "#D4A76A", "eyes": "#6366F1", "shirt": "#38BDF8", "hair_style": "bald"},
+      communication_style: 'Test-driven technical communication with coverage metrics',
     });
 
     await insertTemplate({
@@ -424,6 +471,9 @@ export async function seedTemplates(): Promise<void> {
 - Rollback procedure design
 - Stakeholder communication`,
       is_internal: 0, sort_order: 24,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#f1c27d", "hair": "#292524", "eyes": "#1A1A2E", "shirt": "#22D3EE", "hair_style": "parted"},
+      communication_style: 'Process-oriented technical communication with release clarity',
     });
 
     // ── DESIGN (10) ──────────────────────────────────────────────────────────
@@ -452,6 +502,9 @@ export async function seedTemplates(): Promise<void> {
 - Handoff annotation for developers
 - Icon and illustration systems`,
       is_internal: 0, sort_order: 30,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#2C1810", "eyes": "#1A1A2E", "shirt": "#D946EF", "hair_style": "short"},
+      communication_style: 'Visual thinking with mood and design system references',
     });
 
     await insertTemplate({
@@ -478,6 +531,9 @@ export async function seedTemplates(): Promise<void> {
 - Jobs-to-be-done framework
 - Research repository management`,
       is_internal: 0, sort_order: 31,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#4A3728", "eyes": "#3B82F6", "shirt": "#C026D3", "hair_style": "long"},
+      communication_style: 'Research-backed design communication with user evidence',
     });
 
     await insertTemplate({
@@ -504,6 +560,9 @@ export async function seedTemplates(): Promise<void> {
 - Brand guideline documentation
 - Print and digital asset production`,
       is_internal: 0, sort_order: 32,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#1A1A2E", "eyes": "#10B981", "shirt": "#A855F7", "hair_style": "mohawk"},
+      communication_style: 'Brand-driven visual communication with emotional intent',
     });
 
     await insertTemplate({
@@ -530,6 +589,9 @@ export async function seedTemplates(): Promise<void> {
 - Print production (bleeds, CMYK, prepress)
 - Brand-faithful execution`,
       is_internal: 0, sort_order: 33,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#8B4513", "eyes": "#8B5CF6", "shirt": "#E879F9", "hair_style": "bald"},
+      communication_style: 'Visual-first communication with quick concept sketches',
     });
 
     await insertTemplate({
@@ -556,6 +618,9 @@ export async function seedTemplates(): Promise<void> {
 - Storyboarding and animatics
 - Frame rate and performance optimization`,
       is_internal: 0, sort_order: 34,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#8D5524", "hair": "#D4A76A", "eyes": "#F59E0B", "shirt": "#9333EA", "hair_style": "parted"},
+      communication_style: 'Motion-focused communication with timing and easing precision',
     });
 
     await insertTemplate({
@@ -582,6 +647,9 @@ export async function seedTemplates(): Promise<void> {
 - Cross-functional collaboration
 - Design critique facilitation`,
       is_internal: 0, sort_order: 35,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#6B3A1F", "hair": "#292524", "eyes": "#0F172A", "shirt": "#7C3AED", "hair_style": "buzz"},
+      communication_style: 'Holistic design thinking across user needs and business goals',
     });
 
     await insertTemplate({
@@ -608,6 +676,9 @@ export async function seedTemplates(): Promise<void> {
 - Accessibility baked into components
 - Adoption tracking and governance`,
       is_internal: 0, sort_order: 36,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#f1c27d", "hair": "#6B2D0A", "eyes": "#6366F1", "shirt": "#A78BFA", "hair_style": "curly"},
+      communication_style: 'Systematic design language with token and component focus',
     });
 
     await insertTemplate({
@@ -634,6 +705,9 @@ export async function seedTemplates(): Promise<void> {
 - Keyboard navigation audit
 - Accessibility statement writing`,
       is_internal: 0, sort_order: 37,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#c4956a", "hair": "#1a1a2e", "eyes": "#1A1A2E", "shirt": "#F0ABFC", "hair_style": "ponytail"},
+      communication_style: 'Inclusive design communication grounded in user impact',
     });
 
     await insertTemplate({
@@ -660,6 +734,9 @@ export async function seedTemplates(): Promise<void> {
 - Touch gesture design
 - Handoff to motion designers`,
       is_internal: 0, sort_order: 38,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#3d2314", "eyes": "#3B82F6", "shirt": "#8B5CF6", "hair_style": "spiky"},
+      communication_style: 'Behavior-focused design language with state transitions',
     });
 
     await insertTemplate({
@@ -686,6 +763,9 @@ export async function seedTemplates(): Promise<void> {
 - Accessibility quick-checks (contrast, focus)
 - Visual regression tooling (Percy, Chromatic)`,
       is_internal: 0, sort_order: 39,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#2C1810", "eyes": "#10B981", "shirt": "#6D28D9", "hair_style": "flat"},
+      communication_style: 'Detail-oriented visual comparison with pixel precision',
     });
 
     // ── CONTENT (12) ────────────────────────────────────────────────────────
@@ -714,6 +794,9 @@ export async function seedTemplates(): Promise<void> {
 - Content editing and revision
 - Content brief interpretation`,
       is_internal: 0, sort_order: 40,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#2C1810", "eyes": "#1A1A2E", "shirt": "#EC4899", "hair_style": "short"},
+      communication_style: 'Engaging narrative voice with reader-first structure',
     });
 
     await insertTemplate({
@@ -740,6 +823,9 @@ export async function seedTemplates(): Promise<void> {
 - Information architecture for docs sites
 - Changelog and release note writing`,
       is_internal: 0, sort_order: 41,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#4A3728", "eyes": "#3B82F6", "shirt": "#F43F5E", "hair_style": "long"},
+      communication_style: 'Precise technical prose with tested code examples',
     });
 
     await insertTemplate({
@@ -766,6 +852,9 @@ export async function seedTemplates(): Promise<void> {
 - A/B test hypothesis writing
 - Value proposition development`,
       is_internal: 0, sort_order: 42,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#1A1A2E", "eyes": "#10B981", "shirt": "#E11D48", "hair_style": "mohawk"},
+      communication_style: 'Persuasive copy with conversion-focused clarity',
     });
 
     await insertTemplate({
@@ -792,6 +881,9 @@ export async function seedTemplates(): Promise<void> {
 - Headline and subhead editing
 - Content feedback and mentoring`,
       is_internal: 0, sort_order: 43,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#8B4513", "eyes": "#8B5CF6", "shirt": "#FB7185", "hair_style": "bald"},
+      communication_style: 'Constructive editorial feedback with actionable specifics',
     });
 
     await insertTemplate({
@@ -818,6 +910,9 @@ export async function seedTemplates(): Promise<void> {
 - Content gap and competitor analysis
 - Rank tracking and reporting`,
       is_internal: 0, sort_order: 44,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#8D5524", "hair": "#D4A76A", "eyes": "#F59E0B", "shirt": "#BE185D", "hair_style": "parted"},
+      communication_style: 'Data-informed content language with search intent focus',
     });
 
     await insertTemplate({
@@ -844,6 +939,9 @@ export async function seedTemplates(): Promise<void> {
 - Hashtag and trend research
 - Crisis communication`,
       is_internal: 0, sort_order: 45,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#6B3A1F", "hair": "#292524", "eyes": "#0F172A", "shirt": "#F472B6", "hair_style": "buzz"},
+      communication_style: 'Platform-native social voice with community awareness',
     });
 
     await insertTemplate({
@@ -870,6 +968,9 @@ export async function seedTemplates(): Promise<void> {
 - Deliverability best practices (SPF, DKIM)
 - Open rate / CTR analysis`,
       is_internal: 0, sort_order: 46,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#f1c27d", "hair": "#6B2D0A", "eyes": "#6366F1", "shirt": "#DB2777", "hair_style": "curly"},
+      communication_style: 'Segmented messaging with deliverability-conscious cadence',
     });
 
     await insertTemplate({
@@ -896,6 +997,9 @@ export async function seedTemplates(): Promise<void> {
 - Blog performance analytics
 - Content repurposing strategy`,
       is_internal: 0, sort_order: 47,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#c4956a", "hair": "#1a1a2e", "eyes": "#1A1A2E", "shirt": "#FDA4AF", "hair_style": "ponytail"},
+      communication_style: 'Editorial planning language with traffic funnel context',
     });
 
     await insertTemplate({
@@ -922,6 +1026,9 @@ export async function seedTemplates(): Promise<void> {
 - Version management for docs
 - Search optimization for docs`,
       is_internal: 0, sort_order: 48,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#3d2314", "eyes": "#3B82F6", "shirt": "#F9A8D4", "hair_style": "spiky"},
+      communication_style: 'Documentation-focused writing with findability obsession',
     });
 
     await insertTemplate({
@@ -948,6 +1055,9 @@ export async function seedTemplates(): Promise<void> {
 - Localization QA and review
 - i18n workflow integration`,
       is_internal: 0, sort_order: 49,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#2C1810", "eyes": "#10B981", "shirt": "#BE123C", "hair_style": "flat"},
+      communication_style: 'Culturally adaptive communication with locale sensitivity',
     });
 
     await insertTemplate({
@@ -974,6 +1084,9 @@ export async function seedTemplates(): Promise<void> {
 - Number and date formatting
 - Final publication checklist`,
       is_internal: 0, sort_order: 50,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#4A3728", "eyes": "#8B5CF6", "shirt": "#F87171", "hair_style": "short"},
+      communication_style: 'Meticulous correction notes with style guide precision',
     });
 
     await insertTemplate({
@@ -1000,6 +1113,9 @@ export async function seedTemplates(): Promise<void> {
 - Editorial governance and standards
 - Cross-functional content planning`,
       is_internal: 0, sort_order: 51,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#1A1A2E", "eyes": "#F59E0B", "shirt": "#9F1239", "hair_style": "long"},
+      communication_style: 'Strategic content planning with measurable business alignment',
     });
 
     // ── RESEARCH (10) ────────────────────────────────────────────────────────
@@ -1028,6 +1144,9 @@ export async function seedTemplates(): Promise<void> {
 - Confidence and uncertainty quantification
 - Research question framing`,
       is_internal: 0, sort_order: 60,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#2C1810", "eyes": "#1A1A2E", "shirt": "#10B981", "hair_style": "short"},
+      communication_style: 'Evidence-graded insights with calibrated confidence levels',
     });
 
     await insertTemplate({
@@ -1054,6 +1173,9 @@ export async function seedTemplates(): Promise<void> {
 - A/B test analysis
 - Reproducible research (Jupyter notebooks)`,
       is_internal: 0, sort_order: 61,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#4A3728", "eyes": "#3B82F6", "shirt": "#059669", "hair_style": "long"},
+      communication_style: 'Data-driven research communication with visual clarity',
     });
 
     await insertTemplate({
@@ -1080,6 +1202,9 @@ export async function seedTemplates(): Promise<void> {
 - Primary research (surveys, interviews)
 - Market entry barrier analysis`,
       is_internal: 0, sort_order: 62,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#1A1A2E", "eyes": "#10B981", "shirt": "#22C55E", "hair_style": "mohawk"},
+      communication_style: 'Framework-driven market analysis with quantified assumptions',
     });
 
     await insertTemplate({
@@ -1106,6 +1231,9 @@ export async function seedTemplates(): Promise<void> {
 - Review site analysis (G2, Capterra)
 - Strategic implications synthesis`,
       is_internal: 0, sort_order: 63,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#8B4513", "eyes": "#8B5CF6", "shirt": "#34D399", "hair_style": "bald"},
+      communication_style: 'Competitive intelligence translated into strategic implications',
     });
 
     await insertTemplate({
@@ -1132,6 +1260,9 @@ export async function seedTemplates(): Promise<void> {
 - Government and academic source navigation
 - Fact-check documentation`,
       is_internal: 0, sort_order: 64,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#8D5524", "hair": "#D4A76A", "eyes": "#F59E0B", "shirt": "#047857", "hair_style": "parted"},
+      communication_style: 'Verification-focused communication with source trail documentation',
     });
 
     await insertTemplate({
@@ -1158,6 +1289,9 @@ export async function seedTemplates(): Promise<void> {
 - Megatrend vs. micro-trend classification
 - Trend impact assessment`,
       is_internal: 0, sort_order: 65,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#6B3A1F", "hair": "#292524", "eyes": "#0F172A", "shirt": "#16A34A", "hair_style": "buzz"},
+      communication_style: 'Signal-based trend communication with time-horizon framing',
     });
 
     await insertTemplate({
@@ -1184,6 +1318,9 @@ export async function seedTemplates(): Promise<void> {
 - Meta-analysis interpretation
 - Academic-to-practitioner translation`,
       is_internal: 0, sort_order: 66,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#f1c27d", "hair": "#6B2D0A", "eyes": "#6366F1", "shirt": "#4ADE80", "hair_style": "curly"},
+      communication_style: 'Academic-rigorous communication with hedged confidence intervals',
     });
 
     await insertTemplate({
@@ -1210,6 +1347,9 @@ export async function seedTemplates(): Promise<void> {
 - Competitive IP landscape mapping
 - Patent classification (CPC, IPC)`,
       is_internal: 0, sort_order: 67,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#c4956a", "hair": "#1a1a2e", "eyes": "#1A1A2E", "shirt": "#6EE7B7", "hair_style": "ponytail"},
+      communication_style: 'Plain-language patent analysis with risk-flagged findings',
     });
 
     await insertTemplate({
@@ -1236,6 +1376,9 @@ export async function seedTemplates(): Promise<void> {
 - Persona and journey map creation
 - Jobs-to-be-done analysis`,
       is_internal: 0, sort_order: 68,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#3d2314", "eyes": "#3B82F6", "shirt": "#15803D", "hair_style": "spiky"},
+      communication_style: 'Empathetic user insight communication with behavioral evidence',
     });
 
     await insertTemplate({
@@ -1262,6 +1405,9 @@ export async function seedTemplates(): Promise<void> {
 - NPS and CSAT survey programs
 - Longitudinal survey design`,
       is_internal: 0, sort_order: 69,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#2C1810", "eyes": "#10B981", "shirt": "#065F46", "hair_style": "flat"},
+      communication_style: 'Survey-methodical communication with margin-of-error framing',
     });
 
     // ── BUSINESS (10) ────────────────────────────────────────────────────────
@@ -1290,6 +1436,9 @@ export async function seedTemplates(): Promise<void> {
 - Cross-functional alignment facilitation
 - Product metrics and KPI definition`,
       is_internal: 0, sort_order: 70,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#2C1810", "eyes": "#1A1A2E", "shirt": "#8B5CF6", "hair_style": "short"},
+      communication_style: 'Structured frameworks with clear prioritization',
     });
 
     await insertTemplate({
@@ -1316,6 +1465,9 @@ export async function seedTemplates(): Promise<void> {
 - Resource and capacity planning
 - Retrospective facilitation`,
       is_internal: 0, sort_order: 71,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#4A3728", "eyes": "#3B82F6", "shirt": "#A855F7", "hair_style": "long"},
+      communication_style: 'Status-driven project communication with RAG indicators',
     });
 
     await insertTemplate({
@@ -1342,6 +1494,9 @@ export async function seedTemplates(): Promise<void> {
 - Stakeholder interview facilitation
 - Requirements traceability`,
       is_internal: 0, sort_order: 72,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#1A1A2E", "eyes": "#10B981", "shirt": "#7C3AED", "hair_style": "mohawk"},
+      communication_style: 'Requirements-focused structured documentation',
     });
 
     await insertTemplate({
@@ -1368,6 +1523,9 @@ export async function seedTemplates(): Promise<void> {
 - Executive presentation design
 - Workshop facilitation`,
       is_internal: 0, sort_order: 73,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#8B4513", "eyes": "#8B5CF6", "shirt": "#9333EA", "hair_style": "bald"},
+      communication_style: 'MECE-structured strategic communication with pyramid principle',
     });
 
     await insertTemplate({
@@ -1394,6 +1552,9 @@ export async function seedTemplates(): Promise<void> {
 - Unit economics analysis (CAC, LTV, payback)
 - Management reporting and dashboards`,
       is_internal: 0, sort_order: 74,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#8D5524", "hair": "#D4A76A", "eyes": "#F59E0B", "shirt": "#6D28D9", "hair_style": "parted"},
+      communication_style: 'Numbers-with-narrative financial communication',
     });
 
     await insertTemplate({
@@ -1420,6 +1581,9 @@ export async function seedTemplates(): Promise<void> {
 - Team capacity planning
 - Vendor and tool evaluation`,
       is_internal: 0, sort_order: 75,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#6B3A1F", "hair": "#292524", "eyes": "#0F172A", "shirt": "#C084FC", "hair_style": "buzz"},
+      communication_style: 'Action-oriented process communication with clear accountability',
     });
 
     await insertTemplate({
@@ -1446,6 +1610,9 @@ export async function seedTemplates(): Promise<void> {
 - Regulatory compliance mapping
 - Risk reporting to leadership`,
       is_internal: 0, sort_order: 76,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#f1c27d", "hair": "#6B2D0A", "eyes": "#6366F1", "shirt": "#A78BFA", "hair_style": "curly"},
+      communication_style: 'Risk-calibrated communication with likelihood and impact framing',
     });
 
     await insertTemplate({
@@ -1472,6 +1639,9 @@ export async function seedTemplates(): Promise<void> {
 - Referral and viral loop design
 - Cohort analysis and retention modeling`,
       is_internal: 0, sort_order: 77,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#c4956a", "hair": "#1a1a2e", "eyes": "#1A1A2E", "shirt": "#DDD6FE", "hair_style": "ponytail"},
+      communication_style: 'Experiment-first growth communication with conversion metrics',
     });
 
     await insertTemplate({
@@ -1498,6 +1668,9 @@ export async function seedTemplates(): Promise<void> {
 - Competitive pricing analysis
 - Pricing page and communication design`,
       is_internal: 0, sort_order: 78,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#3d2314", "eyes": "#3B82F6", "shirt": "#5B21B6", "hair_style": "spiky"},
+      communication_style: 'Value-based pricing communication with willingness-to-pay data',
     });
 
     await insertTemplate({
@@ -1524,6 +1697,9 @@ export async function seedTemplates(): Promise<void> {
 - Risk assessment for vendor dependencies
 - Procurement process management`,
       is_internal: 0, sort_order: 79,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#2C1810", "eyes": "#10B981", "shirt": "#7E22CE", "hair_style": "flat"},
+      communication_style: 'SLA-precise vendor communication with performance accountability',
     });
 
     // ── CREATIVE (8) ─────────────────────────────────────────────────────────
@@ -1552,6 +1728,9 @@ export async function seedTemplates(): Promise<void> {
 - Story structure (hero's journey, etc.)
 - Audience emotional mapping`,
       is_internal: 0, sort_order: 80,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#2C1810", "eyes": "#1A1A2E", "shirt": "#D946EF", "hair_style": "short"},
+      communication_style: 'Narrative-driven communication with emotional arc awareness',
     });
 
     await insertTemplate({
@@ -1578,6 +1757,9 @@ export async function seedTemplates(): Promise<void> {
 - Game design documentation (GDD)
 - Playtesting facilitation and analysis`,
       is_internal: 0, sort_order: 81,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#4A3728", "eyes": "#3B82F6", "shirt": "#C026D3", "hair_style": "long"},
+      communication_style: 'Player-experience-focused design language with mechanics vocabulary',
     });
 
     await insertTemplate({
@@ -1604,6 +1786,9 @@ export async function seedTemplates(): Promise<void> {
 - Sync licensing requirements
 - Brief-to-track interpretation`,
       is_internal: 0, sort_order: 82,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#1A1A2E", "eyes": "#10B981", "shirt": "#A855F7", "hair_style": "mohawk"},
+      communication_style: 'Mood-driven audio communication with cinematic references',
     });
 
     await insertTemplate({
@@ -1630,6 +1815,9 @@ export async function seedTemplates(): Promise<void> {
 - Color grading and audio mixing
 - Platform-specific delivery specs`,
       is_internal: 0, sort_order: 83,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#8B4513", "eyes": "#8B5CF6", "shirt": "#E879F9", "hair_style": "bald"},
+      communication_style: 'Visual storytelling language with shot lists and sequences',
     });
 
     await insertTemplate({
@@ -1656,6 +1844,9 @@ export async function seedTemplates(): Promise<void> {
 - Distribution (Spotify, Apple Podcasts)
 - RSS feed and analytics management`,
       is_internal: 0, sort_order: 84,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#8D5524", "hair": "#D4A76A", "eyes": "#F59E0B", "shirt": "#9333EA", "hair_style": "parted"},
+      communication_style: 'Listener-centric audio communication with pacing awareness',
     });
 
     await insertTemplate({
@@ -1682,6 +1873,9 @@ export async function seedTemplates(): Promise<void> {
 - Multi-discipline creative team leadership
 - Campaign concepting`,
       is_internal: 0, sort_order: 85,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#6B3A1F", "hair": "#292524", "eyes": "#0F172A", "shirt": "#DB2777", "hair_style": "buzz"},
+      communication_style: 'Big-picture creative vision with inspirational specificity',
     });
 
     await insertTemplate({
@@ -1708,6 +1902,9 @@ export async function seedTemplates(): Promise<void> {
 - Print and digital format delivery
 - Sketch-to-final iteration`,
       is_internal: 0, sort_order: 86,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#f1c27d", "hair": "#6B2D0A", "eyes": "#6366F1", "shirt": "#F472B6", "hair_style": "curly"},
+      communication_style: 'Visual conceptual communication with reference-driven iteration',
     });
 
     await insertTemplate({
@@ -1734,6 +1931,9 @@ export async function seedTemplates(): Promise<void> {
 - Lip-sync animation
 - Export formats for web and broadcast`,
       is_internal: 0, sort_order: 87,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#c4956a", "hair": "#1a1a2e", "eyes": "#1A1A2E", "shirt": "#A78BFA", "hair_style": "ponytail"},
+      communication_style: 'Timing-precise animation language with frame-count detail',
     });
 
     // ── SUPPORT (8) ──────────────────────────────────────────────────────────
@@ -1762,6 +1962,9 @@ export async function seedTemplates(): Promise<void> {
 - Escalation protocol management
 - CSAT / NPS response handling`,
       is_internal: 0, sort_order: 88,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#2C1810", "eyes": "#1A1A2E", "shirt": "#14B8A6", "hair_style": "short"},
+      communication_style: 'Empathetic and solution-oriented with warm clarity',
     });
 
     await insertTemplate({
@@ -1788,6 +1991,9 @@ export async function seedTemplates(): Promise<void> {
 - Bug report creation for engineering
 - Developer API support`,
       is_internal: 0, sort_order: 89,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#4A3728", "eyes": "#3B82F6", "shirt": "#0D9488", "hair_style": "long"},
+      communication_style: 'Step-by-step technical guidance with patient verification',
     });
 
     await insertTemplate({
@@ -1814,6 +2020,9 @@ export async function seedTemplates(): Promise<void> {
 - Community health metrics
 - Product feedback synthesis from community`,
       is_internal: 0, sort_order: 90,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#1A1A2E", "eyes": "#10B981", "shirt": "#2DD4BF", "hair_style": "mohawk"},
+      communication_style: 'Warm community voice that sets norms by example',
     });
 
     await insertTemplate({
@@ -1840,6 +2049,9 @@ export async function seedTemplates(): Promise<void> {
 - Content audit and freshness management
 - Support deflection metric tracking`,
       is_internal: 0, sort_order: 91,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#8B4513", "eyes": "#8B5CF6", "shirt": "#5EEAD4", "hair_style": "bald"},
+      communication_style: 'User-intent-based self-service writing for frustrated users',
     });
 
     await insertTemplate({
@@ -1866,6 +2078,9 @@ export async function seedTemplates(): Promise<void> {
 - Knowledge check and assessment design
 - Training effectiveness measurement`,
       is_internal: 0, sort_order: 92,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#8D5524", "hair": "#D4A76A", "eyes": "#F59E0B", "shirt": "#0F766E", "hair_style": "parted"},
+      communication_style: 'Behavior-change-focused training with practical examples',
     });
 
     await insertTemplate({
@@ -1892,6 +2107,9 @@ export async function seedTemplates(): Promise<void> {
 - Activation metric definition and tracking
 - User check-in and success calls`,
       is_internal: 0, sort_order: 93,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#6B3A1F", "hair": "#292524", "eyes": "#0F172A", "shirt": "#99F6E4", "hair_style": "buzz"},
+      communication_style: 'Proactive onboarding communication celebrating user progress',
     });
 
     await insertTemplate({
@@ -1918,6 +2136,9 @@ export async function seedTemplates(): Promise<void> {
 - Support metrics and reporting
 - Shift handoff coordination`,
       is_internal: 0, sort_order: 94,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#f1c27d", "hair": "#6B2D0A", "eyes": "#6366F1", "shirt": "#115E59", "hair_style": "curly"},
+      communication_style: 'Clear priority-driven queue management with SLA awareness',
     });
 
     await insertTemplate({
@@ -1944,6 +2165,9 @@ export async function seedTemplates(): Promise<void> {
 - SLA breach management
 - Post-incident prevention recommendations`,
       is_internal: 0, sort_order: 95,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#c4956a", "hair": "#1a1a2e", "eyes": "#1A1A2E", "shirt": "#0891B2", "hair_style": "ponytail"},
+      communication_style: 'Ownership-focused escalation communication with honest timelines',
     });
 
     // ── LEGAL (6) ────────────────────────────────────────────────────────────
@@ -1972,6 +2196,9 @@ export async function seedTemplates(): Promise<void> {
 - Jurisdiction-specific compliance research
 - Plain-language legal summaries`,
       is_internal: 0, sort_order: 96,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#2C1810", "eyes": "#1A1A2E", "shirt": "#64748B", "hair_style": "short"},
+      communication_style: 'Plain-language legal analysis with appropriate caveats',
     });
 
     await insertTemplate({
@@ -1998,6 +2225,9 @@ export async function seedTemplates(): Promise<void> {
 - Training program development
 - Remediation plan development`,
       is_internal: 0, sort_order: 97,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#4A3728", "eyes": "#3B82F6", "shirt": "#475569", "hair_style": "long"},
+      communication_style: 'Regulatory-to-action translation with practical compliance focus',
     });
 
     await insertTemplate({
@@ -2024,6 +2254,9 @@ export async function seedTemplates(): Promise<void> {
 - Contract playbook creation
 - Executed contract management`,
       is_internal: 0, sort_order: 98,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#1A1A2E", "eyes": "#10B981", "shirt": "#6B7280", "hair_style": "mohawk"},
+      communication_style: 'Risk-classified contract commentary with balanced alternatives',
     });
 
     await insertTemplate({
@@ -2050,6 +2283,9 @@ export async function seedTemplates(): Promise<void> {
 - Privacy notice drafting
 - Breach notification protocol design`,
       is_internal: 0, sort_order: 99,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#8B4513", "eyes": "#8B5CF6", "shirt": "#94A3B8", "hair_style": "bald"},
+      communication_style: 'Privacy-by-design communication mapping law to engineering tasks',
     });
 
     await insertTemplate({
@@ -2076,6 +2312,9 @@ export async function seedTemplates(): Promise<void> {
 - Policy gap analysis
 - Document version management`,
       is_internal: 0, sort_order: 100,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#8D5524", "hair": "#D4A76A", "eyes": "#F59E0B", "shirt": "#4B5563", "hair_style": "parted"},
+      communication_style: 'Active-voice policy writing with specific enforceable obligations',
     });
 
     await insertTemplate({
@@ -2102,6 +2341,9 @@ export async function seedTemplates(): Promise<void> {
 - Post-approval change management
 - Regulatory intelligence monitoring`,
       is_internal: 0, sort_order: 101,
+      archetype: 'warden', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#6B3A1F", "hair": "#292524", "eyes": "#0F172A", "shirt": "#78716C", "hair_style": "buzz"},
+      communication_style: 'Agency-precise regulatory communication with submission rigor',
     });
 
     // ── DATA-AI (8) ──────────────────────────────────────────────────────────
@@ -2130,6 +2372,9 @@ export async function seedTemplates(): Promise<void> {
 - SQL for data access
 - Executive insight communication`,
       is_internal: 0, sort_order: 102,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#2C1810", "eyes": "#1A1A2E", "shirt": "#10B981", "hair_style": "short"},
+      communication_style: 'Data-driven insights with visual storytelling clarity',
     });
 
     await insertTemplate({
@@ -2156,6 +2401,9 @@ export async function seedTemplates(): Promise<void> {
 - A/B testing for model updates
 - MLflow model registry`,
       is_internal: 0, sort_order: 103,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#4A3728", "eyes": "#3B82F6", "shirt": "#059669", "hair_style": "long"},
+      communication_style: 'Infrastructure-as-code communication with monitoring-first design',
     });
 
     await insertTemplate({
@@ -2182,6 +2430,9 @@ export async function seedTemplates(): Promise<void> {
 - Model comparison and selection
 - RAG (retrieval-augmented generation) design`,
       is_internal: 0, sort_order: 104,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#1A1A2E", "eyes": "#10B981", "shirt": "#22C55E", "hair_style": "mohawk"},
+      communication_style: 'Prompt-versioned communication with specific failure mode examples',
     });
 
     await insertTemplate({
@@ -2208,6 +2459,9 @@ export async function seedTemplates(): Promise<void> {
 - Catastrophic forgetting mitigation
 - HuggingFace Transformers and PEFT`,
       is_internal: 0, sort_order: 105,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#8B4513", "eyes": "#8B5CF6", "shirt": "#34D399", "hair_style": "bald"},
+      communication_style: 'Eval-first training communication with data quality emphasis',
     });
 
     await insertTemplate({
@@ -2234,6 +2488,9 @@ export async function seedTemplates(): Promise<void> {
 - Annotator training and calibration
 - Annotation tool selection and configuration`,
       is_internal: 0, sort_order: 106,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#8D5524", "hair": "#D4A76A", "eyes": "#F59E0B", "shirt": "#047857", "hair_style": "parted"},
+      communication_style: 'Precise annotation guidelines with examples and counter-examples',
     });
 
     await insertTemplate({
@@ -2260,6 +2517,9 @@ export async function seedTemplates(): Promise<void> {
 - Human evaluation study design
 - Automated evaluation pipeline (LLM-as-judge)`,
       is_internal: 0, sort_order: 107,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#6B3A1F", "hair": "#292524", "eyes": "#0F172A", "shirt": "#16A34A", "hair_style": "buzz"},
+      communication_style: 'Test-case-driven evaluation communication with quantitative rigor',
     });
 
     await insertTemplate({
@@ -2286,6 +2546,9 @@ export async function seedTemplates(): Promise<void> {
 - Data quality validation (Great Expectations)
 - Pipeline monitoring and alerting`,
       is_internal: 0, sort_order: 108,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#f1c27d", "hair": "#6B2D0A", "eyes": "#6366F1", "shirt": "#4ADE80", "hair_style": "curly"},
+      communication_style: 'Pipeline-flow communication with idempotency and SLA focus',
     });
 
     await insertTemplate({
@@ -2312,6 +2575,9 @@ export async function seedTemplates(): Promise<void> {
 - Self-service analytics enablement
 - Dashboard performance optimization`,
       is_internal: 0, sort_order: 109,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#c4956a", "hair": "#1a1a2e", "eyes": "#1A1A2E", "shirt": "#6EE7B7", "hair_style": "ponytail"},
+      communication_style: 'Business-question-driven dashboard communication with metric clarity',
     });
 
     // ── DOMAIN (13) ──────────────────────────────────────────────────────────
@@ -2340,6 +2606,9 @@ export async function seedTemplates(): Promise<void> {
 - Crypto regulatory landscape
 - On-chain data analysis`,
       is_internal: 0, sort_order: 110,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#2C1810", "eyes": "#1A1A2E", "shirt": "#F97316", "hair_style": "short"},
+      communication_style: 'Technical-first crypto analysis cutting through hype',
     });
 
     await insertTemplate({
@@ -2366,6 +2635,9 @@ export async function seedTemplates(): Promise<void> {
 - Medical terminology and coding (ICD-10, CPT)
 - FDA digital health regulation`,
       is_internal: 0, sort_order: 111,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#4A3728", "eyes": "#3B82F6", "shirt": "#EA580C", "hair_style": "long"},
+      communication_style: 'Clinical-precise healthcare communication with safety implications',
     });
 
     await insertTemplate({
@@ -2392,6 +2664,9 @@ export async function seedTemplates(): Promise<void> {
 - Merchandising and product catalog management
 - E-commerce analytics (GA4, pixel tracking)`,
       is_internal: 0, sort_order: 112,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#1A1A2E", "eyes": "#10B981", "shirt": "#FB923C", "hair_style": "mohawk"},
+      communication_style: 'Conversion-rate-driven e-commerce analysis with shopper psychology',
     });
 
     await insertTemplate({
@@ -2418,6 +2693,9 @@ export async function seedTemplates(): Promise<void> {
 - Learning analytics and outcome measurement
 - Accessibility in educational content (WCAG)`,
       is_internal: 0, sort_order: 113,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#8B4513", "eyes": "#8B5CF6", "shirt": "#F59E0B", "hair_style": "bald"},
+      communication_style: 'Learning-science-grounded EdTech communication with outcome focus',
     });
 
     await insertTemplate({
@@ -2444,6 +2722,9 @@ export async function seedTemplates(): Promise<void> {
 - Real estate financial modeling
 - Market trend analysis`,
       is_internal: 0, sort_order: 114,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#8D5524", "hair": "#D4A76A", "eyes": "#F59E0B", "shirt": "#D97706", "hair_style": "parted"},
+      communication_style: 'Data-backed real estate analysis with local market context',
     });
 
     await insertTemplate({
@@ -2470,6 +2751,9 @@ export async function seedTemplates(): Promise<void> {
 - Supply chain risk assessment
 - S&OP process design`,
       is_internal: 0, sort_order: 115,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#6B3A1F", "hair": "#292524", "eyes": "#0F172A", "shirt": "#EAB308", "hair_style": "buzz"},
+      communication_style: 'Systems-thinking supply chain communication with risk hedging',
     });
 
     await insertTemplate({
@@ -2496,6 +2780,9 @@ export async function seedTemplates(): Promise<void> {
 - HR policy writing
 - Employee relations and conflict resolution`,
       is_internal: 0, sort_order: 116,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#f1c27d", "hair": "#6B2D0A", "eyes": "#6366F1", "shirt": "#FBBF24", "hair_style": "curly"},
+      communication_style: 'Human-centered HR communication with cultural sensitivity',
     });
 
     await insertTemplate({
@@ -2522,6 +2809,9 @@ export async function seedTemplates(): Promise<void> {
 - Marketing attribution modeling
 - Go-to-market planning`,
       is_internal: 0, sort_order: 117,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#c4956a", "hair": "#1a1a2e", "eyes": "#1A1A2E", "shirt": "#FDE047", "hair_style": "ponytail"},
+      communication_style: 'Integrated marketing communication connecting strategy to metrics',
     });
 
     await insertTemplate({
@@ -2548,6 +2838,9 @@ export async function seedTemplates(): Promise<void> {
 - Quota and territory modeling
 - Win/loss analysis`,
       is_internal: 0, sort_order: 118,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#3d2314", "eyes": "#3B82F6", "shirt": "#B45309", "hair_style": "spiky"},
+      communication_style: 'Pipeline-metric-driven sales ops communication with forecast rigor',
     });
 
     await insertTemplate({
@@ -2574,6 +2867,9 @@ export async function seedTemplates(): Promise<void> {
 - Conference presentation
 - Developer adoption metrics`,
       is_internal: 0, sort_order: 119,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#E8B88A", "hair": "#2C1810", "eyes": "#10B981", "shirt": "#C2410C", "hair_style": "flat"},
+      communication_style: 'Developer-empathetic advocacy with honest product representation',
     });
 
     await insertTemplate({
@@ -2600,6 +2896,9 @@ export async function seedTemplates(): Promise<void> {
 - Release and versioning management
 - Community health monitoring`,
       is_internal: 0, sort_order: 120,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#D4A574", "hair": "#4A3728", "eyes": "#8B5CF6", "shirt": "#A16207", "hair_style": "short"},
+      communication_style: 'Transparent community governance with kind but firm standards',
     });
 
     await insertTemplate({
@@ -2626,6 +2925,9 @@ export async function seedTemplates(): Promise<void> {
 - Materiality assessment
 - Supply chain emissions analysis (Scope 3)`,
       is_internal: 0, sort_order: 121,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#C68642", "hair": "#1A1A2E", "eyes": "#F59E0B", "shirt": "#92400E", "hair_style": "long"},
+      communication_style: 'Science-grounded sustainability communication with measurable impact',
     });
 
     await insertTemplate({
@@ -2652,6 +2954,9 @@ export async function seedTemplates(): Promise<void> {
 - Localization quality assurance
 - Post-launch linguistic review`,
       is_internal: 0, sort_order: 122,
+      archetype: 'navigator', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#8D5524", "hair": "#8B4513", "eyes": "#0F172A", "shirt": "#CA8A04", "hair_style": "mohawk"},
+      communication_style: 'Milestone-mapped localization coordination in business and technical language',
     });
 
     // ── INTERNAL SYSTEM TEMPLATES (is_internal=1) ────────────────────────────
@@ -2679,6 +2984,9 @@ export async function seedTemplates(): Promise<void> {
 - Data enrichment triggering
 - CRM data quality scoring`,
       is_internal: 1, sort_order: 200,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#c4956a", "hair": "#6B2D0A", "eyes": "#3B82F6", "shirt": "#3B82F6", "hair_style": "buzz"},
+      communication_style: 'Automated maintenance reporting with system health metrics',
     });
 
     await insertTemplate({
@@ -2704,6 +3012,9 @@ export async function seedTemplates(): Promise<void> {
 - Admin dashboard data provision
 - Privacy-preserving analytics`,
       is_internal: 1, sort_order: 201,
+      archetype: 'auditor', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#3d2314", "eyes": "#3B82F6", "shirt": "#10B981", "hair_style": "spiky"},
+      communication_style: 'Data-driven insights with visual storytelling clarity',
     });
 
     await insertTemplate({
@@ -2729,6 +3040,9 @@ export async function seedTemplates(): Promise<void> {
 - System health monitoring
 - Maintenance log writing`,
       is_internal: 1, sort_order: 202,
+      archetype: 'maker', appearance_style: 'minecraft',
+      appearance_spec: {"skin": "#F5D0A9", "hair": "#1a1a2e", "eyes": "#10B981", "shirt": "#14B8A6", "hair_style": "curly"},
+      communication_style: 'Background process logging with data quality scores',
     });
 
     await _client.query('COMMIT');

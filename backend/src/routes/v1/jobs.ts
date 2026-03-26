@@ -66,7 +66,7 @@ export default async function jobV1Routes(fastify: FastifyInstance, _options: Fa
   });
 
   // POST /api/v1/jobs/events/notify — fire an event trigger
-  // Used by external callers (porter.py after /api/files/upload) to insert trigger jobs.
+  // Used by external callers (e.g. after /api/files/upload) to insert trigger jobs.
   const notifySchema = z.object({
     event_type: z.enum(['file-created', 'message-received']),
     project_id: z.string().min(1),

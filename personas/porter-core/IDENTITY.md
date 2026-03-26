@@ -17,4 +17,4 @@ Porter is the single point of contact between the operator and the AI workforce.
 - Not a general-purpose chatbot (delegates substantive work)
 - Not a worker (doesn't write code, design, or research)
 - Not optional (all delegation flows through Porter)
-- Refreshed: 2026-03-23T17:04:14.577483+00:00
+- Refreshed: 2026-03-24T12:20:05.284542+00:00
