@@ -124,8 +124,9 @@ export async function detectAndUpsertGateways(pool: pg.Pool): Promise<DetectionR
     const envResults = await bootstrapEnvGateways(pool);
     results.push(...envResults);
 
-    // 2. Scan PATH for CLI binaries
+    // 2. Scan PATH for CLI binaries (skip Ollama — already handled by env bootstrap)
     for (const cli of CLI_BINARIES) {
+      if (cli.type === 'ollama') continue;
       const binaryPath = await which(cli.binary).catch(() => null);
 
       if (binaryPath) {
@@ -188,7 +189,7 @@ async function bootstrapEnvGateways(pool: pg.Pool): Promise<GatewayDetectionResu
     source: 'env_bootstrap',
     status: 'active',
     capabilities: ['chat', 'code', 'streaming'],
-    metadata: {},
+    metadata: { binary_path: await which('ollama').catch(() => null) },
   });
 
   // Probe Ollama immediately after upsert
