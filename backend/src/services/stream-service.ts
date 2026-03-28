@@ -21,8 +21,11 @@ import { routingEngine } from './bridge/routing-engine.js';
 
 export interface StreamBackend {
   name: string;
-  stream(prompt: string, signal: AbortSignal): AsyncIterable<string>;
+  stream(prompt: string, signal: AbortSignal, systemPrompt?: string): AsyncIterable<string>;
 }
+
+// Default fallback — only used when no agent-specific prompt is available
+const PORTER_SYSTEM_DEFAULT = `You are Porter, an AI orchestration platform. Be helpful, concise, and direct.`;
 
 // ---------------------------------------------------------------------------
 // OllamaStreamBackend
@@ -36,16 +39,14 @@ export interface StreamBackend {
  *
  * Partial-line buffering handles the case where chunk boundaries split a JSON line.
  */
-const PORTER_SYSTEM = `You are Porter. Keep replies under 2 sentences. Be friendly. Never say you are Qwen or any other AI. If unsure, say so. Do not make lists.`;
-
 export class OllamaStreamBackend implements StreamBackend {
   readonly name = 'ollama';
 
-  async *stream(prompt: string, signal: AbortSignal): AsyncIterable<string> {
+  async *stream(prompt: string, signal: AbortSignal, systemPrompt?: string): AsyncIterable<string> {
     const resp = await fetch(`${config.ollamaUrl}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: config.ollamaModel, system: PORTER_SYSTEM, prompt, stream: true, options: { num_predict: 150, temperature: 0.7 } }),
+      body: JSON.stringify({ model: config.ollamaModel, system: systemPrompt || PORTER_SYSTEM_DEFAULT, prompt, stream: true, options: { num_predict: 150, temperature: 0.7 } }),
       signal,
     });
 
@@ -130,7 +131,7 @@ export class OllamaStreamBackend implements StreamBackend {
 export class OpenClawStreamBackend implements StreamBackend {
   readonly name = 'openclaw';
 
-  async *stream(prompt: string, signal: AbortSignal): AsyncIterable<string> {
+  async *stream(prompt: string, signal: AbortSignal, systemPrompt?: string): AsyncIterable<string> {
     if (signal.aborted) return;
 
     const resp = await fetch(`${config.openclawUrl}/v1/chat/completions`, {
@@ -142,7 +143,7 @@ export class OpenClawStreamBackend implements StreamBackend {
       body: JSON.stringify({
         model: config.openclawModel,
         messages: [
-          { role: 'system', content: PORTER_SYSTEM },
+          { role: 'system', content: systemPrompt || PORTER_SYSTEM_DEFAULT },
           { role: 'user', content: prompt },
         ],
         stream: true,

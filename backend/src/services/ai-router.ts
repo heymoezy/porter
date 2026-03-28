@@ -187,13 +187,26 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
     username: req.username,  // MT-03: usage attribution
   };
 
-  // 2. Build adapter-level request
+  // 2. Build adapter-level request with system prompt from agent template
   const history = req.conversationHistory ? compressContext(req.conversationHistory) : [];
   const messages = [
     ...history.map(t => ({ role: t.role, content: t.content })),
     { role: 'user', content: req.message },
   ];
-  const bridgeReq: BridgeDispatchRequest = { messages };
+
+  // Look up agent's system prompt from template
+  let systemPrompt: string | undefined;
+  try {
+    const rows = await pool.query(
+      `SELECT at.system_prompt FROM personas p JOIN agent_templates at ON at.id = p.template_id WHERE p.id = $1 AND at.system_prompt IS NOT NULL AND at.system_prompt != '' LIMIT 1`,
+      [req.agentId]
+    );
+    if (rows.rows.length > 0) {
+      systemPrompt = rows.rows[0].system_prompt;
+    }
+  } catch { /* persona may not have template link — fall through */ }
+
+  const bridgeReq: BridgeDispatchRequest = { messages, systemPrompt };
 
   // 3. Dispatch with N-gateway fallback chain (GW-06)
   const { decision, result: bridgeResult } = await routingEngine.selectWithFallback(ctx, bridgeReq);

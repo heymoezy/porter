@@ -270,12 +270,24 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       augmentedMessage = identityPrefix + augmentedMessage;
     }
 
+    // Build dynamic system prompt from agent template (if available)
+    let systemPrompt: string | undefined;
+    if (agentId) {
+      try {
+        const tplRows = await pool.query(
+          `SELECT at.system_prompt FROM personas p JOIN agent_templates at ON at.id = p.template_id WHERE p.id = $1 AND at.system_prompt IS NOT NULL AND at.system_prompt != '' LIMIT 1`,
+          [agentId]
+        );
+        if (tplRows.rows.length > 0) systemPrompt = tplRows.rows[0].system_prompt;
+      } catch { /* fallback to default */ }
+    }
+
     // STRM-02: prefer strong model for user chat, fall back to ollama if unavailable
     const backend = await selectStreamBackend(message, backendHint ?? 'auto');
     let fullResponse = '';
 
     try {
-      for await (const token of backend.stream(augmentedMessage, ac.signal)) {
+      for await (const token of backend.stream(augmentedMessage, ac.signal, systemPrompt)) {
         if (ac.signal.aborted) break;
         fullResponse += token;
         reply.raw.write(`data: ${JSON.stringify({ token })}\n\n`);
