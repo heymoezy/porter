@@ -181,11 +181,6 @@ function UsageBlock({ label, requests, tokens }: { label: string; requests?: Usa
           <div className="h-full rounded-full bg-accent-porter/20" style={{ width: `${Math.min(primary.current > 0 ? 25 : 0, 100)}%` }} />
         )}
       </div>
-      {tokens && tokens.current > 0 && (
-        <div className="text-2xs text-text3">
-          <span className="font-mono">{fmtCompact(tokens.current)} tokens used</span>
-        </div>
-      )}
     </div>
   )
 }
