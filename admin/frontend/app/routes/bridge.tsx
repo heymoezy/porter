@@ -133,7 +133,16 @@ function fmtResetIn(resetAt: number | null): string | null {
   if (secsLeft <= 0) return "Resetting now"
   if (secsLeft < 60) return `Resets in ${secsLeft}s`
   if (secsLeft < 3600) return `Resets in ${Math.round(secsLeft / 60)}m`
-  return `Resets in ${(secsLeft / 3600).toFixed(1)}h`
+  if (secsLeft < 86400) {
+    const h = Math.floor(secsLeft / 3600)
+    const m = Math.round((secsLeft % 3600) / 60)
+    return `Resets in ${h}h ${m}m`
+  }
+  // More than 24h — show the day and time
+  const d = new Date(resetAt * 1000)
+  const day = d.toLocaleDateString("en-SG", { weekday: "short", timeZone: "Asia/Singapore" })
+  const time = d.toLocaleTimeString("en-SG", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Singapore" })
+  return `Resets ${day} ${time}`
 }
 
 function periodLabel(period: string): string {
@@ -147,6 +156,42 @@ function periodLabel(period: string): string {
 function limitLabel(lt: string, period: string): string {
   const type = lt === "requests" ? "Requests" : lt === "tokens" ? "Tokens" : lt === "input_tokens" ? "Input tokens" : "Output tokens"
   return `${type}${periodLabel(period)}`
+}
+
+function UsageBlock({ label, requests, tokens }: { label: string; requests?: UsageLimit; tokens?: UsageLimit }) {
+  const primary = requests || tokens
+  if (!primary) return null
+  const pctNum = primary.pct != null ? Math.round(primary.pct * 100) : null
+  const resetStr = fmtResetIn(primary.reset_at)
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-2xs font-medium text-text2">{label}</span>
+        <span className="text-2xs text-text3">{resetStr ?? 'Limit not published'}</span>
+      </div>
+      {/* Bar — based on requests if available, else tokens */}
+      <div className="h-1.5 rounded-full bg-border/30 overflow-hidden">
+        {pctNum != null ? (
+          <div className={`h-full rounded-full transition-all ${capacityBarColor(pctNum)}`} style={{ width: `${Math.min(pctNum, 100)}%` }} />
+        ) : (
+          <div className="h-full rounded-full bg-accent-porter/20" style={{ width: `${Math.min(primary.current > 0 ? 25 : 0, 100)}%` }} />
+        )}
+      </div>
+      {/* Stats row */}
+      <div className="flex items-center justify-between text-2xs text-text3">
+        <div className="flex items-center gap-2">
+          {pctNum != null && <span className="font-medium">{pctNum}% used</span>}
+          {requests && requests.current > 0 && (
+            <span>{fmtCompact(requests.current)} request{requests.current !== 1 ? 's' : ''}{requests.limit != null ? ` / ${fmtCompact(requests.limit)}` : ''}</span>
+          )}
+        </div>
+        {tokens && tokens.current > 0 && (
+          <span className="font-mono">{fmtCompact(tokens.current)} tokens</span>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function UsageMeter({ label, rl }: { label: string; rl: UsageLimit }) {
@@ -436,33 +481,40 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
         )}
       </div>
 
-      {/* Usage limits — 2 rows: Session/Daily quota + Weekly */}
+      {/* Usage limits — Session/Daily + Weekly, with token details */}
       {capacity && (() => {
         const allLimits = capacity.models.flatMap(m => m.limits)
         if (allLimits.length === 0) return null
 
-        // Find the primary quota — tightest short-term period
+        // Group limits by period
         const quotaOrder = ['5hour', 'hourly', 'daily', 'minute']
-        let quota: typeof allLimits[0] | null = null
-        for (const period of quotaOrder) {
-          const match = allLimits.find(l => l.period === period)
-          if (match) { quota = match; break }
+        let quotaPeriod: string | null = null
+        for (const p of quotaOrder) {
+          if (allLimits.some(l => l.period === p)) { quotaPeriod = p; break }
         }
 
-        // Find weekly
-        const weekly = allLimits.find(l => l.period === 'weekly') ?? null
+        const quotaLimits = quotaPeriod ? allLimits.filter(l => l.period === quotaPeriod) : []
+        const weeklyLimits = allLimits.filter(l => l.period === 'weekly')
 
-        if (!quota && !weekly) return null
+        if (quotaLimits.length === 0 && weeklyLimits.length === 0) return null
 
         const periodLabels: Record<string, string> = {
           '5hour': 'Current session', 'hourly': 'Hourly limit', 'daily': 'Daily limit', 'minute': 'Per minute'
         }
-        const quotaLabel = quota ? (periodLabels[quota.period] ?? 'Quota') : 'Quota'
+
+        const reqQuota = quotaLimits.find(l => l.limit_type === 'requests')
+        const tokQuota = quotaLimits.find(l => l.limit_type === 'tokens')
+        const reqWeekly = weeklyLimits.find(l => l.limit_type === 'requests')
+        const tokWeekly = weeklyLimits.find(l => l.limit_type === 'tokens')
 
         return (
           <div className="px-4 py-3 space-y-3 border-t border-border/30">
-            {quota && <UsageMeter label={quotaLabel} rl={quota} />}
-            {weekly && <UsageMeter label="Weekly limit" rl={weekly} />}
+            {quotaPeriod && (reqQuota || tokQuota) && (
+              <UsageBlock label={periodLabels[quotaPeriod] ?? 'Quota'} requests={reqQuota} tokens={tokQuota} />
+            )}
+            {(reqWeekly || tokWeekly) && (
+              <UsageBlock label="Weekly limit" requests={reqWeekly} tokens={tokWeekly} />
+            )}
           </div>
         )
       })()}
