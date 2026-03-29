@@ -6,6 +6,7 @@ import { syncCalendarEvents, checkCalendarDeadlines } from './calendar.js';
 import { dispatchExternalCall, checkConnectionHealth } from './external-dispatcher.js';
 import { runHealthProbe } from './bridge/health-probe.js';
 import { refreshAllGateways } from './bridge/model-catalog.js';
+import { computeEmpiricalRates } from './bridge/rate-limit-tracker.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -232,6 +233,7 @@ async function tick() {
     // Bridge health probe — every 30s (skip first interval to avoid startup thundering herd)
     if (tickCount > HEALTH_PROBE_INTERVAL && tickCount % HEALTH_PROBE_INTERVAL === 0) {
       runHealthProbe().catch(err => console.error('[scheduler] health probe error', err));
+      computeEmpiricalRates().catch(err => console.error('[scheduler] rate limit compute error', err));
     }
 
     // Model catalog refresh -- every 24h

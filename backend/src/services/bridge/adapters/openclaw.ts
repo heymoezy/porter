@@ -144,6 +144,12 @@ export class OpenClawAdapter implements GatewayAdapter {
       );
     }
 
+    // Capture response headers for rate limit tracking
+    const responseHeaders: Record<string, string> = {};
+    resp.headers.forEach((value, key) => {
+      responseHeaders[key] = value;
+    });
+
     const data = (await resp.json()) as {
       choices: Array<{ message: { content: string } }>;
       model: string;
@@ -162,6 +168,7 @@ export class OpenClawAdapter implements GatewayAdapter {
       tokensUsed: data.usage?.total_tokens,
       latencyMs: Date.now() - start,
       cached: false,
+      responseHeaders,
     };
   }
 

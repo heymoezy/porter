@@ -5,6 +5,7 @@ import { getCachedVersions, probeAllGateways } from '../../services/admin/gatewa
 import { postIntelligence, assessUpdateRisk } from '../../services/admin/agent-loop.js';
 import { buildAllGatewayPromptProfiles } from '../../services/admin/prompt-pipeline.js';
 import { emitAdminEvent } from '../../services/admin/admin-sse.js';
+import { getCapacitySnapshot } from '../../services/bridge/rate-limit-tracker.js';
 
 type UserApiKeyRow = {
   id: string;
@@ -977,5 +978,130 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
       const message = e instanceof Error ? e.message : 'Unknown error';
       return reply.send(ok({ ok: false, gateway_id, gateway_name: gw.name, latency_ms, error: message }));
     }
+  });
+
+  // GET /api/admin/bridge/capacity — rate limit snapshot for all gateways
+  fastify.get('/capacity', async (_req, reply) => {
+    const snapshot = await getCapacitySnapshot();
+    return reply.send(ok({ gateways: snapshot }));
+  });
+
+  // POST /api/admin/bridge/capacity — set manual rate limit for a gateway
+  fastify.post('/capacity', async (request, reply) => {
+    const body = request.body as Record<string, unknown>;
+    const gateway_id = body.gateway_id as string | undefined;
+    const limit_type = body.limit_type as string | undefined;
+    const limit_value = body.limit_value as number | undefined;
+
+    if (!gateway_id || !limit_type) {
+      return reply.send(err('MISSING_FIELDS', 'gateway_id and limit_type are required'));
+    }
+
+    const VALID_TYPES = new Set(['rpm', 'tpm', 'daily_tokens', 'daily_spend', 'concurrency']);
+    if (!VALID_TYPES.has(limit_type)) {
+      return reply.send(err('INVALID_TYPE', `limit_type must be one of: ${[...VALID_TYPES].join(', ')}`));
+    }
+
+    // Verify gateway exists
+    const gwRows = await queryAll<{ id: string }>('SELECT id FROM gateways WHERE id = $1', [gateway_id]);
+    if (gwRows.length === 0) {
+      return reply.send(err('NOT_FOUND', 'Gateway not found'));
+    }
+
+    const { randomUUID } = await import('node:crypto');
+    const id = randomUUID();
+    const now = Date.now() / 1000;
+
+    await execute(
+      `INSERT INTO gateway_rate_limits (id, gateway_id, limit_type, limit_value, current_value, source, updated_at)
+       VALUES ($1, $2, $3, $4, 0, 'configured', $5)
+       ON CONFLICT (gateway_id, limit_type) DO UPDATE SET
+         limit_value = EXCLUDED.limit_value,
+         source = 'configured',
+         updated_at = EXCLUDED.updated_at`,
+      [id, gateway_id, limit_type, limit_value ?? null, now]
+    );
+
+    return reply.send(ok({ saved: true, gateway_id, limit_type, limit_value }));
+  });
+
+  // GET /api/admin/bridge/metrics — per-gateway p95 latency, success %, 429 rate
+  fastify.get('/metrics', async (_req, reply) => {
+    const oneHourAgo = Date.now() / 1000 - 3600;
+
+    const rows = await queryAll<{
+      gateway_id: string;
+      gateway_type: string;
+      total_dispatches: number;
+      success_count: number;
+      error_429_count: number;
+      p95_latency_ms: number | null;
+      avg_latency_ms: number | null;
+      total_input_tokens: number;
+      total_output_tokens: number;
+      total_cost_usd: number;
+    }>(`
+      SELECT
+        gateway_id,
+        gateway_type,
+        COUNT(*)::int AS total_dispatches,
+        COUNT(*) FILTER (WHERE latency_ms IS NOT NULL AND latency_ms > 0)::int AS success_count,
+        0::int AS error_429_count,
+        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms) FILTER (WHERE latency_ms IS NOT NULL) AS p95_latency_ms,
+        ROUND(AVG(latency_ms) FILTER (WHERE latency_ms IS NOT NULL)::numeric, 1) AS avg_latency_ms,
+        COALESCE(SUM(input_tokens), 0)::int AS total_input_tokens,
+        COALESCE(SUM(output_tokens), 0)::int AS total_output_tokens,
+        COALESCE(SUM(estimated_cost_usd), 0) AS total_cost_usd
+      FROM bridge_dispatch_log
+      WHERE created_at >= $1 AND gateway_id IS NOT NULL
+      GROUP BY gateway_id, gateway_type
+      ORDER BY total_dispatches DESC
+    `, [oneHourAgo]);
+
+    // Fetch 429 counts from gateway_rate_limits (accumulated across all time)
+    const rateLimitRows = await queryAll<{
+      gateway_id: string;
+      total_429_count: number;
+      last_429_at: number | null;
+    }>(`
+      SELECT gateway_id,
+             MAX(total_429_count)::int AS total_429_count,
+             MAX(last_429_at) AS last_429_at
+      FROM gateway_rate_limits
+      GROUP BY gateway_id
+    `);
+
+    const rateLimitMap = new Map<string, { total_429_count: number; last_429_at: number | null }>();
+    for (const r of rateLimitRows) {
+      rateLimitMap.set(r.gateway_id, { total_429_count: r.total_429_count, last_429_at: r.last_429_at });
+    }
+
+    const metrics = rows.map(row => {
+      const rl = rateLimitMap.get(row.gateway_id);
+      const successRate = row.total_dispatches > 0
+        ? Math.round((row.success_count / row.total_dispatches) * 10000) / 100
+        : null;
+
+      return {
+        gateway_id: row.gateway_id,
+        gateway_type: row.gateway_type,
+        total_dispatches: row.total_dispatches,
+        success_count: row.success_count,
+        success_rate_pct: successRate,
+        error_429_count: rl?.total_429_count ?? 0,
+        last_429_at: rl?.last_429_at ?? null,
+        p95_latency_ms: row.p95_latency_ms ? Math.round(row.p95_latency_ms) : null,
+        avg_latency_ms: row.avg_latency_ms,
+        total_input_tokens: row.total_input_tokens,
+        total_output_tokens: row.total_output_tokens,
+        total_cost_usd: row.total_cost_usd,
+      };
+    });
+
+    return reply.send(ok({
+      period: 'last_hour',
+      from_ts: oneHourAgo,
+      metrics,
+    }));
   });
 }

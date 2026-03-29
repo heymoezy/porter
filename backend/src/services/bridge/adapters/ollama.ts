@@ -111,6 +111,12 @@ export class OllamaAdapter implements GatewayAdapter {
       throw new Error(`Ollama /api/chat returned ${resp.status}: ${await resp.text()}`);
     }
 
+    // Capture response headers for rate limit tracking
+    const responseHeaders: Record<string, string> = {};
+    resp.headers.forEach((value, key) => {
+      responseHeaders[key] = value;
+    });
+
     const data = (await resp.json()) as {
       message: { content: string };
       model: string;
@@ -126,6 +132,7 @@ export class OllamaAdapter implements GatewayAdapter {
       tokensUsed: (data.prompt_eval_count ?? 0) + (data.eval_count ?? 0),
       latencyMs: Date.now() - start,
       cached: false,
+      responseHeaders,
     };
   }
 

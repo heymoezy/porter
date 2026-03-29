@@ -15,6 +15,7 @@ import { getQueue } from './dispatch-queues.js';
 import { getBreaker } from './circuit-breaker-registry.js';
 import { withRetry } from './retry.js';
 import { emitSSE } from '../scheduler.js';
+import { parseRateLimitHeaders, record429, hasCapacity } from './rate-limit-tracker.js';
 import { v4 as uuidv4 } from 'uuid';
 import type {
   GatewayRow,
@@ -325,6 +326,13 @@ export class RoutingEngine {
         // Non-critical — never block dispatch
       }
 
+      // Parse rate limit headers from HTTP adapters (fire-and-forget)
+      if (result.responseHeaders) {
+        try {
+          parseRateLimitHeaders(result.responseHeaders, decision.gatewayRow.id);
+        } catch { /* non-critical */ }
+      }
+
       emitSSE('bridge:dispatch', {
         gateway_type: decision.gatewayRow.type,
         model_name: decision.modelName,
@@ -403,9 +411,18 @@ export class RoutingEngine {
     // Evaluate rules to potentially inform future filtering (currently advisory)
     const matchedRule = await this.evaluateRules(ctx, candidates);
 
+    // Sort candidates: prefer gateways with capacity headroom (soft preference)
+    // Gateways at 90%+ utilization are pushed to the end, not blocked.
+    const sorted = [...candidates].sort((a, b) => {
+      const aHas = hasCapacity(a.row.id) ? 0 : 1;
+      const bHas = hasCapacity(b.row.id) ? 0 : 1;
+      if (aHas !== bHas) return aHas - bHas;
+      return a.row.priority - b.row.priority; // preserve priority within same capacity tier
+    });
+
     const errors: string[] = [];
 
-    for (const candidate of candidates) {
+    for (const candidate of sorted) {
       const breaker = getBreaker(candidate.row.id, candidate.row.type);
 
       // Skip gateways with open circuit breakers
@@ -447,6 +464,11 @@ export class RoutingEngine {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         errors.push(`${candidate.row.type}(${candidate.row.id.slice(0, 8)}): ${msg}`);
+
+        // Record 429 events for rate limit tracking
+        if (/429|rate.?limit|too.?many/i.test(msg)) {
+          record429(candidate.row.id);
+        }
       }
     }
 
@@ -521,9 +543,18 @@ export class RoutingEngine {
     }
 
     const matchedRule = await this.evaluateRules(ctx, candidates);
+
+    // Sort candidates: prefer gateways with capacity headroom
+    const sorted = [...candidates].sort((a, b) => {
+      const aHas = hasCapacity(a.row.id) ? 0 : 1;
+      const bHas = hasCapacity(b.row.id) ? 0 : 1;
+      if (aHas !== bHas) return aHas - bHas;
+      return a.row.priority - b.row.priority;
+    });
+
     const errors: string[] = [];
 
-    for (const candidate of candidates) {
+    for (const candidate of sorted) {
       const breaker = getBreaker(candidate.row.id, candidate.row.type);
 
       if (breaker.opened) {
@@ -566,6 +597,11 @@ export class RoutingEngine {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         errors.push(`${candidate.row.type}: ${msg}`);
+
+        // Record 429 events for rate limit tracking
+        if (/429|rate.?limit|too.?many/i.test(msg)) {
+          record429(candidate.row.id);
+        }
       }
     }
 

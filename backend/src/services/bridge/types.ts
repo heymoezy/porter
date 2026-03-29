@@ -56,6 +56,8 @@ export interface BridgeDispatchResult {
   latencyMs: number;
   cached: boolean;
   cachedTokens?: number;
+  /** Raw response headers from HTTP-based adapters (for rate limit tracking) */
+  responseHeaders?: Record<string, string>;
 }
 
 // ── GatewayAdapter interface (5 methods) ─────────────────────────────────────

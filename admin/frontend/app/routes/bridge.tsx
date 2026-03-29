@@ -58,6 +58,107 @@ interface GatewayVersion {
   hooks?: { hooks_configured: boolean; hook_count: number }
 }
 
+interface RateLimit {
+  current: number; limit: number | null; pct: number | null; source: string
+}
+
+interface GatewayCapacity {
+  gateway_id: string
+  rpm: RateLimit; tpm: RateLimit; daily_tokens: RateLimit; concurrency: RateLimit
+  last_429_at: number | null; total_429_count: number
+}
+
+interface GatewayMetrics {
+  gateway_id: string
+  p95_latency_ms: number | null; success_rate: number | null
+  error_429_count: number; total_dispatches: number; period: string
+}
+
+type CompositeStatus = "online" | "busy" | "throttled" | "blocked" | "paused" | "offline"
+
+function deriveCompositeStatus(gw: BridgeGateway, cap?: GatewayCapacity): CompositeStatus {
+  if (!gw.enabled) return "paused"
+  if (gw.status !== "active") return "offline"
+  if (gw.circuit_state === "open") return "blocked"
+  if (!cap) return "online"
+  const maxPct = Math.max(
+    cap.rpm.pct ?? 0, cap.tpm.pct ?? 0,
+    cap.daily_tokens.pct ?? 0, cap.concurrency.pct ?? 0,
+  )
+  if (maxPct >= 100) return "blocked"
+  if (maxPct >= 90 || (cap.last_429_at && (Date.now() / 1000 - cap.last_429_at) < 300)) return "throttled"
+  if (maxPct >= 70) return "busy"
+  return "online"
+}
+
+const STATUS_STYLES: Record<CompositeStatus, { dot: string; label: string; text: string }> = {
+  online:    { dot: "bg-success",                     label: "online",    text: "text-success" },
+  busy:      { dot: "bg-warning",                     label: "busy",      text: "text-warning" },
+  throttled: { dot: "bg-orange-400",                  label: "throttled", text: "text-orange-400" },
+  blocked:   { dot: "bg-danger",                      label: "blocked",   text: "text-danger" },
+  paused:    { dot: "bg-text3",                       label: "paused",    text: "text-text3" },
+  offline:   { dot: "bg-danger animate-pulse",        label: "offline",   text: "text-danger" },
+}
+
+function fmtCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`
+  return String(n)
+}
+
+function capacityBarColor(pct: number | null): string {
+  if (pct == null) return "bg-text3/30"
+  if (pct >= 100) return "bg-danger"
+  if (pct >= 90) return "bg-orange-400"
+  if (pct >= 70) return "bg-warning"
+  return "bg-success"
+}
+
+function CapacityBar({ label, rl }: { label: string; rl: RateLimit }) {
+  const pct = rl.pct != null ? Math.min(rl.pct, 100) : null
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-2xs font-mono text-text3 w-7 shrink-0">{label}</span>
+      {pct != null ? (
+        <>
+          <div className="flex-1 h-1.5 rounded-full bg-border/40 overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${capacityBarColor(rl.pct)}`} style={{ width: `${pct}%` }} />
+          </div>
+          <span className="text-2xs font-mono text-text3 tabular-nums shrink-0 w-16 text-right">
+            {fmtCompact(rl.current)}/{fmtCompact(rl.limit!)}
+          </span>
+        </>
+      ) : (
+        <>
+          <div className="flex-1 h-1.5 rounded-full bg-border/20" />
+          <span className="text-2xs font-mono text-text3 tabular-nums shrink-0 w-16 text-right">~{fmtCompact(rl.current)}/min</span>
+        </>
+      )}
+    </div>
+  )
+}
+
+function MetricsRow({ metrics }: { metrics?: GatewayMetrics }) {
+  if (!metrics) return null
+  const latency = metrics.p95_latency_ms != null ? `p95 ${metrics.p95_latency_ms}ms` : null
+  const success = metrics.success_rate != null ? `${metrics.success_rate.toFixed(1)}% success` : null
+  const has429 = metrics.error_429_count > 0
+  const lowSuccess = metrics.success_rate != null && metrics.success_rate < 95
+
+  return (
+    <p className="text-2xs text-text3 px-4 pb-2">
+      {latency && <span>{latency}</span>}
+      {latency && success && <span className="mx-1">·</span>}
+      {success && <span className={lowSuccess ? "text-danger font-medium" : ""}>{success}</span>}
+      {(latency || success) && <span className="mx-1">·</span>}
+      <span className={has429 ? "text-danger font-medium" : ""}>
+        {metrics.error_429_count}× 429s
+      </span>
+      <span className="text-text3/50 ml-1">({metrics.period})</span>
+    </p>
+  )
+}
+
 // ── Helpers ──────────────────────────────────────────────
 
 function fmtRel(ts: number) {
@@ -99,8 +200,9 @@ function getOpEvents() { return opEvents }
 
 // ── Gateway Card (clean — no expandable panels) ───────
 
-function GatewayCard({ gw, models, versionInfo, onOpenEditor, tickLog }: {
+function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor, tickLog }: {
   gw: BridgeGateway; models: GatewayModel[]; versionInfo?: GatewayVersion
+  capacity?: GatewayCapacity; metrics?: GatewayMetrics
   onOpenEditor: (mode: "config" | "prompt") => void; tickLog?: () => void
 }) {
   const qc = useQueryClient()
@@ -110,6 +212,8 @@ function GatewayCard({ gw, models, versionInfo, onOpenEditor, tickLog }: {
   const lastSeen = gw.last_health_at ? fmtRel(gw.last_health_at) : null
   const version = gw.metadata?.version as string | undefined
   const protocols = gw.metadata?.messaging_protocols as string[] | undefined
+  const compositeStatus = deriveCompositeStatus(gw, capacity)
+  const statusStyle = STATUS_STYLES[compositeStatus]
 
   const toggle = useMutation({
     mutationFn: () => api("/api/admin/bridge/gateways", { method: "POST", json: { action: "update", id: gw.id, enabled: gw.enabled ? 0 : 1 } }),
@@ -147,10 +251,10 @@ function GatewayCard({ gw, models, versionInfo, onOpenEditor, tickLog }: {
   })
 
   return (
-    <div className={`rounded-xl border overflow-hidden ${isOnline && !circuitOpen ? "border-border bg-surface" : "border-danger/30 bg-danger/5"}`}>
+    <div className={`rounded-xl border overflow-hidden ${compositeStatus === "offline" || compositeStatus === "blocked" ? "border-danger/30 bg-danger/5" : "border-border bg-surface"}`}>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3">
-        <div className={`size-2.5 rounded-full shrink-0 ${isOnline ? "bg-success" : "bg-danger animate-pulse"}`} />
+        <div className={`size-2.5 rounded-full shrink-0 ${statusStyle.dot}`} />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-text leading-tight">{gw.name}</p>
           <div className="flex items-center gap-2">
@@ -205,11 +309,14 @@ function GatewayCard({ gw, models, versionInfo, onOpenEditor, tickLog }: {
 
       {/* Meta row */}
       <div className="flex items-center gap-2 px-4 pb-2.5 text-2xs text-text3 flex-wrap">
+        <span className={`font-medium ${statusStyle.text}`}>{statusStyle.label}</span>
         {circuitOpen && <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-danger" />circuit open</span>}
         {circuitHalf && <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-warning" />half-open</span>}
         <span className="flex items-center gap-1"><Server className="size-2.5" />{gw.model_count} {gw.model_count === 1 ? "model" : "models"}</span>
         {lastSeen && <span className="flex items-center gap-1"><Clock className="size-2.5" />{lastSeen}</span>}
-        {!gw.enabled && <Badge className="text-2xs bg-text3/15 text-text3 border-0">paused</Badge>}
+        {capacity && capacity.total_429_count > 0 && (
+          <span className="text-danger font-medium">{capacity.total_429_count}× 429s</span>
+        )}
         {protocols && protocols.map(p => (
           <Badge key={p} className="text-2xs bg-success/10 text-success border-0">{p}</Badge>
         ))}
@@ -219,6 +326,17 @@ function GatewayCard({ gw, models, versionInfo, onOpenEditor, tickLog }: {
           </span>
         )}
       </div>
+
+      {/* Capacity bars */}
+      {capacity && (capacity.rpm.current > 0 || capacity.tpm.current > 0 || capacity.rpm.limit != null || capacity.tpm.limit != null) && (
+        <div className="px-4 pb-2 space-y-1">
+          <CapacityBar label="RPM" rl={capacity.rpm} />
+          <CapacityBar label="TPM" rl={capacity.tpm} />
+        </div>
+      )}
+
+      {/* Metrics row */}
+      <MetricsRow metrics={metrics} />
 
       {/* Models */}
       {models.length > 0 && (
@@ -433,7 +551,21 @@ function GatewayGrid({ tickLog, onOpenEditor }: { tickLog?: () => void; onOpenEd
     queryFn: () => api<{ versions: GatewayVersion[] }>("/api/admin/bridge/versions"),
     staleTime: 60_000,
   })
+  const capacityQuery = useQuery({
+    queryKey: ["bridge", "capacity"],
+    queryFn: () => api<{ capacities: GatewayCapacity[] }>("/api/admin/bridge/capacity").catch(() => ({ capacities: [] as GatewayCapacity[] })),
+    staleTime: 30_000,
+    retry: false,
+  })
+  const metricsQuery = useQuery({
+    queryKey: ["bridge", "metrics"],
+    queryFn: () => api<{ metrics: GatewayMetrics[] }>("/api/admin/bridge/metrics").catch(() => ({ metrics: [] as GatewayMetrics[] })),
+    staleTime: 30_000,
+    retry: false,
+  })
   const versionMap = new Map((versionsQuery.data?.versions ?? []).map(v => [v.gateway_id, v]))
+  const capacityMap = new Map((capacityQuery.data?.capacities ?? []).map(c => [c.gateway_id, c]))
+  const metricsMap = new Map((metricsQuery.data?.metrics ?? []).map(m => [m.gateway_id, m]))
 
   if (isLoading) return (
     <div className="grid grid-cols-1 gap-2">
@@ -460,6 +592,8 @@ function GatewayGrid({ tickLog, onOpenEditor }: { tickLog?: () => void; onOpenEd
         <GatewayCard key={gw.id} gw={gw}
           models={(modelsQuery.data?.models ?? []).filter(m => m.gateway_id === gw.id)}
           versionInfo={versionMap.get(gw.id)}
+          capacity={capacityMap.get(gw.id)}
+          metrics={metricsMap.get(gw.id)}
           onOpenEditor={(mode) => onOpenEditor(gw.id, mode)}
           tickLog={tickLog} />
       ))}
@@ -494,10 +628,17 @@ function OperatorActivityLog() {
     queryFn: () => api<{ entries: IntelEntry[] }>("/api/admin/intelligence?limit=10&source_agent=bridge-operator"),
     staleTime: 30_000,
   })
+  const { data: capacityData } = useQuery({
+    queryKey: ["bridge", "capacity"],
+    queryFn: () => api<{ capacities: GatewayCapacity[] }>("/api/admin/bridge/capacity").catch(() => ({ capacities: [] as GatewayCapacity[] })),
+    staleTime: 30_000,
+    retry: false,
+  })
 
   const gateways = bridgeData?.gateways ?? []
   const versions = new Map((versionData?.versions ?? []).map(v => [v.gateway_id, v]))
   const intel = intelData?.entries ?? []
+  const capacities = new Map((capacityData?.capacities ?? []).map(c => [c.gateway_id, c]))
 
   let k = 0
   const lines: { text: string; color: string; _key: number }[] = []
@@ -507,10 +648,11 @@ function OperatorActivityLog() {
     lines.push({ text: e.text, color: e.color, _key: k++ })
   }
 
-  // Gateway status + version + circuit state
+  // Gateway status + version + circuit state + capacity alerts
   for (const gw of gateways) {
     const meta = gw.metadata ?? {}
     const ver = versions.get(gw.id)
+    const cap = capacities.get(gw.id)
     const ts = gw.last_health_at ? fmtTs(gw.last_health_at) : "--:--:--"
     const ok = gw.status === "active"
     const v = (meta.version as string) || ver?.version || ""
@@ -531,6 +673,30 @@ function OperatorActivityLog() {
       lines.push({ text: `${ts} [circuit] ⚡ ${gw.name} — OPEN (traffic blocked)`, color: "text-danger", _key: k++ })
     } else if (gw.circuit_state === "half-open") {
       lines.push({ text: `${ts} [circuit] ⚠ ${gw.name} — half-open (testing)`, color: "text-warning", _key: k++ })
+    }
+
+    // Rate limit / capacity alerts
+    if (cap) {
+      const rls: { label: string; rl: RateLimit }[] = [
+        { label: "RPM", rl: cap.rpm }, { label: "TPM", rl: cap.tpm },
+        { label: "Daily", rl: cap.daily_tokens }, { label: "Concurrency", rl: cap.concurrency },
+      ]
+      for (const { label, rl } of rls) {
+        if (rl.pct != null && rl.pct >= 90) {
+          lines.push({
+            text: `${ts} [throttle] ⚠ ${gw.name} at ${Math.round(rl.pct)}% ${label} (${fmtCompact(rl.current)}/${fmtCompact(rl.limit!)})`,
+            color: rl.pct >= 100 ? "text-danger" : "text-orange-400",
+            _key: k++,
+          })
+        }
+      }
+      if (cap.last_429_at && (Date.now() / 1000 - cap.last_429_at) < 300) {
+        lines.push({
+          text: `${fmtTs(cap.last_429_at)} [429] ✗ ${gw.name} rate limited (${cap.total_429_count} total)`,
+          color: "text-danger",
+          _key: k++,
+        })
+      }
     }
 
     // Update available
