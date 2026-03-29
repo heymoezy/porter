@@ -4,17 +4,15 @@ Porter CLI is the product. It's the AI orchestrator that runs on your machine �
 
 The web interface is the window into what Porter is doing. Gateway health, dispatch logs, costs, memory, agent activity — all visible in real-time at `/admin`. You monitor and control, but the CLI does the work.
 
-## Bridge
+## The 3 parts
 
-Routes every AI request to the right model. GPT-5.4 for complex reasoning, Ollama locally for fast cheap tasks, Claude for code, Gemini for research — Porter picks based on capability, cost, and health. When a provider goes down, traffic fails over automatically.
+**Bridge** — the hub. Every AI model plugs into Porter, and through Porter they can talk to each other. A smart router in the middle decides which model handles each request based on what it's good at, what it costs, and whether it's healthy. You don't pick models. Porter picks for you.
 
-## Memory
+**Forge** — the factory. You create AI agents, train them on your domain, and they evolve over time based on feedback. An agent starts as a template and becomes yours — it learns your codebase, your customers, your preferences.
 
-Makes models stateful. Directives (operating rules), concepts (project knowledge), and agent notes persist across sessions and get injected into every dispatch. Models don't start cold — they start informed.
+**Recall** — the shared brain. Every model and every agent reads from and writes to the same memory. Global rules that apply everywhere, agent-specific knowledge that makes each worker smarter, and project context that keeps everyone aligned. Nothing starts cold.
 
-## Hooks
-
-Auto-load project context the moment you open any CLI. Checkpoint, recent changes, active directives — before you type anything, the model knows where you are.
+Bridge connects the models. Forge creates the workers. Recall makes them all remember. Together, that's Porter.
 
 ## Pricing
 
