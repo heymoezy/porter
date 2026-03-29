@@ -5,6 +5,7 @@
  *   1. Claude — minimal Haiku API call, reads rate-limit headers (provider-level, highest trust)
  *   2. Codex CLI — SQLite state_5.sqlite threads table
  *   3. Gemini CLI — dispatch_log counts (no local usage files)
+ *   4. OpenClaw — sessions.json token sums (5hour + weekly windows)
  *
  * Called every 30 seconds by the scheduler alongside health probes.
  * Claude API call is rate-limited to once per 5 minutes (uses ~1 Haiku token = negligible cost).
@@ -21,6 +22,7 @@ import Database from 'better-sqlite3';
 const HOME = process.env.HOME || '/home/lobster';
 const CLAUDE_CREDENTIALS_PATH = path.join(HOME, '.claude', '.credentials.json');
 const CODEX_SQLITE_PATH = path.join(HOME, '.codex', 'state_5.sqlite');
+const OPENCLAW_SESSIONS_PATH = path.join(HOME, '.openclaw', 'agents', 'main', 'sessions', 'sessions.json');
 
 const CLAUDE_MESSAGES_API_URL = 'https://api.anthropic.com/v1/messages';
 const CLAUDE_API_MIN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -49,13 +51,13 @@ const claudeApiCache: ClaudeApiCache = {
 
 // ── Gateway ID cache ────────────────────────────────────────────────────────
 
-let gatewayIds: { claude: string; codex: string; gemini: string } | null = null;
+let gatewayIds: { claude: string; codex: string; gemini: string; openclaw?: string } | null = null;
 
 async function getGatewayIds(): Promise<typeof gatewayIds> {
   if (gatewayIds) return gatewayIds;
 
   const { rows } = await pool.query<{ id: string; type: string }>(
-    `SELECT id, type FROM gateways WHERE type IN ('claude_cli', 'codex_cli', 'gemini_cli')`,
+    `SELECT id, type FROM gateways WHERE type IN ('claude_cli', 'codex_cli', 'gemini_cli', 'openclaw')`,
   );
 
   const map: Record<string, string> = {};
@@ -69,6 +71,7 @@ async function getGatewayIds(): Promise<typeof gatewayIds> {
     claude: map.claude_cli,
     codex: map.codex_cli,
     gemini: map.gemini_cli,
+    openclaw: map.openclaw, // optional — may not exist yet
   };
   return gatewayIds;
 }
@@ -80,11 +83,13 @@ export async function collectLocalUsage(): Promise<void> {
     const ids = await getGatewayIds();
     if (!ids) return; // Gateways not configured yet
 
-    await Promise.allSettled([
+    const tasks = [
       collectClaudeUsage(ids.claude),
       collectCodexUsage(ids.codex),
       collectGeminiUsage(ids.gemini),
-    ]);
+    ];
+    if (ids.openclaw) tasks.push(collectOpenClawUsage(ids.openclaw));
+    await Promise.allSettled(tasks);
   } catch (err) {
     console.error('[usage-collector] error:', err instanceof Error ? err.message : err);
   }
@@ -324,6 +329,65 @@ async function collectGeminiUsage(gatewayId: string): Promise<void> {
     }
   } catch (err) {
     console.error('[usage-collector] gemini dispatch_log error:', err instanceof Error ? err.message : err);
+  }
+}
+
+// ── OpenClaw (GPT-5.4) ──────────────────────────────────────────────────────
+
+interface OpenClawSession {
+  updatedAt: number;      // ms timestamp
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  contextTokens?: number;
+  model?: string;
+}
+
+async function collectOpenClawUsage(gatewayId: string): Promise<void> {
+  if (!fs.existsSync(OPENCLAW_SESSIONS_PATH)) return;
+
+  const nowMs = Date.now();
+  const nowSec = nowMs / 1000;
+  const fiveHourCutoffMs = nowMs - FIVE_HOURS_SEC * 1000;
+  const weekCutoffMs = nowMs - SEVEN_DAYS_SEC * 1000;
+
+  try {
+    const raw = fs.readFileSync(OPENCLAW_SESSIONS_PATH, 'utf-8');
+    const sessions: Record<string, OpenClawSession> = JSON.parse(raw);
+
+    let fiveHourTokens = 0;
+    let fiveHourRequests = 0;
+    let weeklyTokens = 0;
+    let weeklyRequests = 0;
+
+    for (const session of Object.values(sessions)) {
+      const updatedAt = session.updatedAt ?? 0;
+      const tokens = session.totalTokens ?? 0;
+
+      if (updatedAt >= weekCutoffMs) {
+        weeklyTokens += tokens;
+        weeklyRequests += 1;
+      }
+      if (updatedAt >= fiveHourCutoffMs) {
+        fiveHourTokens += tokens;
+        fiveHourRequests += 1;
+      }
+    }
+
+    const fiveHourResetAt = nowSec + FIVE_HOURS_SEC;
+    const weeklyResetAt = getNextSaturdayMidnightUtc(nowSec);
+
+    await Promise.allSettled([
+      upsertUsage(gatewayId, 'tokens', '5hour', fiveHourTokens, null, fiveHourResetAt, nowSec),
+      upsertUsage(gatewayId, 'requests', '5hour', fiveHourRequests, null, fiveHourResetAt, nowSec),
+      upsertUsage(gatewayId, 'tokens', 'weekly', weeklyTokens, null, weeklyResetAt, nowSec),
+      upsertUsage(gatewayId, 'requests', 'weekly', weeklyRequests, null, weeklyResetAt, nowSec),
+    ]);
+
+    console.log('[usage-collector] OpenClaw usage: 5h=%d tokens/%d req, 7d=%d tokens/%d req',
+      fiveHourTokens, fiveHourRequests, weeklyTokens, weeklyRequests);
+  } catch (err) {
+    console.error('[usage-collector] openclaw sessions error:', err instanceof Error ? err.message : err);
   }
 }
 

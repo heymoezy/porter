@@ -14,7 +14,7 @@ import { UserKeyManager } from "~/components/bridge/user-key-manager"
 import { WorkspaceGatewayOverrides } from "~/components/bridge/workspace-gateway-overrides"
 import {
   Clock, Server, XCircle,
-  Pause, Play, Settings, RotateCcw, Save, FileText,
+  Pause, Play, Settings, RefreshCw, Save, FileText,
   ArrowLeft, ArrowUpCircle, Link2, Download,
 } from "lucide-react"
 
@@ -343,7 +343,7 @@ function pushOpEvent(text: string, color = "text-text3") {
 }
 function getOpEvents() { return opEvents }
 
-// ── Gateway Card (clean — no expandable panels) ───────
+// ── Gateway Card ──────────────────────────────────────
 
 function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor, tickLog }: {
   gw: BridgeGateway; models: GatewayModel[]; versionInfo?: GatewayVersion
@@ -351,6 +351,7 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
   onOpenEditor: (mode: "config" | "prompt") => void; tickLog?: () => void
 }) {
   const qc = useQueryClient()
+  const [showConfig, setShowConfig] = useState(false)
   const isOnline = gw.status === "active"
   const circuitOpen = gw.circuit_state === "open"
   const circuitHalf = gw.circuit_state === "half_open"
@@ -437,15 +438,16 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
             title={gw.enabled ? "Pause" : "Resume"}>
             {gw.enabled ? <Pause className="size-3" /> : <Play className="size-3" />}
           </Button>
-          <Button variant="ghost" size="icon-xs" onClick={() => restart.mutate()} disabled={restart.isPending}
-            title="Remount" className={restart.isPending ? "text-warning animate-spin" : "text-text3 hover:text-warning"}>
-            <RotateCcw className="size-3" />
+          <Button variant="ghost" size="icon-xs" onClick={() => { if (confirm(`Restart ${gw.name}? This will briefly interrupt traffic.`)) restart.mutate() }} disabled={restart.isPending}
+            title="Restart gateway" className={restart.isPending ? "text-warning animate-spin" : "text-text3 hover:text-warning"}>
+            <RefreshCw className="size-3" />
           </Button>
           <Button variant="ghost" size="icon-xs" onClick={() => onOpenEditor("prompt")} title="Files">
             <FileText className="size-3" />
           </Button>
           {(gw.url != null || gw.auth_method === "bearer_token") && (
-            <Button variant="ghost" size="icon-xs" onClick={() => onOpenEditor("config")} title="Connection">
+            <Button variant="ghost" size="icon-xs" onClick={() => setShowConfig(!showConfig)} title="Connection settings"
+              className={showConfig ? "text-accent-porter" : "text-text3 hover:text-text"}>
               <Settings className="size-3" />
             </Button>
           )}
@@ -506,12 +508,38 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
             {(reqWeekly || tokWeekly) && (
               <UsageBlock label="Weekly limit" requests={reqWeekly} tokens={tokWeekly} />
             )}
+            <button onClick={() => qc.invalidateQueries({ queryKey: ["bridge", "capacity"] })}
+              className="text-2xs text-text3 hover:text-accent-porter transition-colors flex items-center gap-1">
+              <RefreshCw className="size-2.5" /> Refresh usage
+            </button>
           </div>
         )
       })()}
 
       {/* Metrics row */}
       <MetricsRow metrics={metrics} />
+
+      {/* Inline config (gear toggle) */}
+      {showConfig && (
+        <div className="px-4 py-3 border-t border-border/30 space-y-2 bg-background/50">
+          {gw.url && (
+            <div>
+              <label className="text-2xs text-text3 block mb-1">URL</label>
+              <p className="text-2xs font-mono text-text2">{gw.url}</p>
+            </div>
+          )}
+          {gw.auth_method === "bearer_token" && gw.masked_display && (
+            <div>
+              <label className="text-2xs text-text3 block mb-1">Token</label>
+              <p className="text-2xs font-mono text-text2">{gw.masked_display}</p>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <span className="text-2xs text-text3">Priority: {gw.priority}</span>
+            <span className="text-2xs text-text3">· Auth: {gw.auth_method}</span>
+          </div>
+        </div>
+      )}
 
       {/* Models */}
       {models.length > 0 && (

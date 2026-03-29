@@ -17,12 +17,32 @@ declare module 'fastify' {
   }
 }
 
+const SERVICE_TOKEN = process.env.PORTER_SERVICE_TOKEN || 'porter-local-service-2026';
+const LOCALHOST_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
 async function authPlugin(fastify: FastifyInstance) {
   fastify.decorateRequest('sessionUser', null);
   fastify.decorateRequest('projectRole', null);
 
   fastify.addHook('preHandler', async (request: FastifyRequest) => {
-    // Try session cookie first
+    // 1. Check for service token (localhost machine-to-machine auth)
+    const serviceToken =
+      request.headers['x-porter-service-token'] as string | undefined
+      || extractBearerServiceToken(request.headers.authorization);
+
+    if (serviceToken && serviceToken === SERVICE_TOKEN) {
+      // Only accept from localhost
+      if (LOCALHOST_IPS.has(request.ip)) {
+        request.sessionUser = {
+          username: 'system',
+          role: 'platform_admin',
+          displayName: 'System',
+        };
+        return;
+      }
+    }
+
+    // 2. Try session cookie
     const token = request.cookies?.porter_session;
     if (!token) return;
 
@@ -87,6 +107,16 @@ async function authPlugin(fastify: FastifyInstance) {
       request.projectRole = collab.role;
     };
   });
+}
+
+/**
+ * Extract a service token from "Bearer <token>" authorization header.
+ * Only returns values that look like Porter service tokens (porter-* prefix).
+ */
+function extractBearerServiceToken(header: string | undefined): string | null {
+  if (!header) return null;
+  const match = header.match(/^Bearer\s+(porter-.+)$/i);
+  return match ? match[1] : null;
 }
 
 export default fp(authPlugin, { name: 'porter-auth' });
