@@ -24,6 +24,7 @@ export interface RateLimitMetric {
   limit: number | null;
   pct: number | null;
   source: string;
+  reset_at: number | null;
 }
 
 export interface GatewayCapacity {
@@ -443,7 +444,7 @@ function pickBestRow(rows: RateLimitRow[], limitType: string, _now: number): Rat
 
 function buildMetric(row: RateLimitRow | null): RateLimitMetric {
   if (!row) {
-    return { current: 0, limit: null, pct: null, source: 'none' };
+    return { current: 0, limit: null, pct: null, source: 'none', reset_at: null };
   }
   const pct = (row.limit_value !== null && row.limit_value > 0)
     ? Math.round((row.current_value / row.limit_value) * 100) / 100
@@ -453,5 +454,6 @@ function buildMetric(row: RateLimitRow | null): RateLimitMetric {
     limit: row.limit_value,
     pct,
     source: row.source,
+    reset_at: row.reset_at ?? null,
   };
 }

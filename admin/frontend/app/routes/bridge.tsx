@@ -59,7 +59,7 @@ interface GatewayVersion {
 }
 
 interface RateLimit {
-  current: number; limit: number | null; pct: number | null; source: string
+  current: number; limit: number | null; pct: number | null; source: string; reset_at: number | null
 }
 
 interface GatewayCapacity {
@@ -106,34 +106,48 @@ function fmtCompact(n: number): string {
   return String(n)
 }
 
-function capacityBarColor(pct: number | null): string {
-  if (pct == null) return "bg-text3/30"
+function capacityBarColor(pct: number): string {
   if (pct >= 100) return "bg-danger"
   if (pct >= 90) return "bg-orange-400"
   if (pct >= 70) return "bg-warning"
-  return "bg-success"
+  return "bg-accent-porter"
 }
 
-function CapacityBar({ label, rl }: { label: string; rl: RateLimit }) {
-  const pct = rl.pct != null ? Math.min(rl.pct, 100) : null
+function fmtResetIn(resetAt: number | null): string | null {
+  if (!resetAt) return null
+  const secsLeft = Math.max(0, Math.round(resetAt - Date.now() / 1000))
+  if (secsLeft <= 0) return "Resetting now"
+  if (secsLeft < 60) return `Resets in ${secsLeft}s`
+  if (secsLeft < 3600) return `Resets in ${Math.round(secsLeft / 60)}m`
+  return `Resets in ${(secsLeft / 3600).toFixed(1)}h`
+}
+
+function UsageMeter({ label, rl }: { label: string; rl: RateLimit }) {
+  if (rl.limit == null && rl.current === 0) return null
+  const pctNum = rl.pct != null ? Math.round(rl.pct * 100) : null
+  const resetStr = fmtResetIn(rl.reset_at)
+
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-2xs font-mono text-text3 w-7 shrink-0">{label}</span>
-      {pct != null ? (
-        <>
-          <div className="flex-1 h-1.5 rounded-full bg-border/40 overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${capacityBarColor(rl.pct)}`} style={{ width: `${pct}%` }} />
-          </div>
-          <span className="text-2xs font-mono text-text3 tabular-nums shrink-0 w-16 text-right">
-            {fmtCompact(rl.current)}/{fmtCompact(rl.limit!)}
-          </span>
-        </>
-      ) : (
-        <>
-          <div className="flex-1 h-1.5 rounded-full bg-border/20" />
-          <span className="text-2xs font-mono text-text3 tabular-nums shrink-0 w-16 text-right">~{fmtCompact(rl.current)}/min</span>
-        </>
-      )}
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-2xs font-medium text-text2">{label}</span>
+        {resetStr && <span className="text-2xs text-text3">{resetStr}</span>}
+      </div>
+      <div className="h-1.5 rounded-full bg-border/30 overflow-hidden">
+        {pctNum != null ? (
+          <div className={`h-full rounded-full transition-all ${capacityBarColor(pctNum)}`} style={{ width: `${Math.min(pctNum, 100)}%` }} />
+        ) : (
+          <div className="h-full rounded-full bg-text3/20" style={{ width: '15%' }} />
+        )}
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-2xs text-text3">
+          {pctNum != null ? `${pctNum}% used` : `~${fmtCompact(rl.current)}/min`}
+        </span>
+        {rl.limit != null && (
+          <span className="text-2xs text-text3 font-mono">{fmtCompact(rl.current)} / {fmtCompact(rl.limit)}</span>
+        )}
+      </div>
     </div>
   )
 }
@@ -342,9 +356,9 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
 
       {/* Capacity bars */}
       {capacity && (capacity.rpm.current > 0 || capacity.tpm.current > 0 || capacity.rpm.limit != null || capacity.tpm.limit != null) && (
-        <div className="px-4 pb-2 space-y-1">
-          <CapacityBar label="Requests/min" rl={capacity.rpm} />
-          <CapacityBar label="Tokens/min" rl={capacity.tpm} />
+        <div className="px-4 pb-3 space-y-3 border-t border-border/30 pt-3">
+          <UsageMeter label="Requests" rl={capacity.rpm} />
+          <UsageMeter label="Tokens" rl={capacity.tpm} />
         </div>
       )}
 
