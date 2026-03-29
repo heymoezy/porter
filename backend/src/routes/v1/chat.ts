@@ -328,7 +328,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
           // Insert assistant response
           await pool.query(
             'INSERT INTO chat_messages (chat_id, role, content, model_id, timestamp) VALUES ($1, $2, $3, $4, NOW())',
-            [chatId, 'assistant', fullResponse, backend.name]
+            [chatId, 'assistant', fullResponse, streamBackend.name]
           );
           // Update chat timestamp
           await pool.query('UPDATE chats SET updated_at = NOW() WHERE id = $1', [chatId]);
