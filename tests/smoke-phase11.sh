@@ -10,7 +10,7 @@ set -euo pipefail
 # Usage: ./tests/smoke-phase11.sh
 # Run from repo root.
 
-BASE_URL="http://127.0.0.1:8877/api/v1"
+BASE_URL="http://127.0.0.1:3001/api/v1"
 PASS=0
 FAIL=0
 

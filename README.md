@@ -1,28 +1,34 @@
-# Porter Brain
+# Porter
 
-API backend and database owner for Porter — the AI orchestration platform.
+AI orchestration platform. Single monorepo (`heymoezy/porter`).
 
-## Port Map
-| Service | Port | Repo |
-|---------|------|------|
-| Porter Brain | :8877 | `heymoezy/porter` |
-| Porter UI | :5174 | `heymoezy/porter-ui` |
-| Porter Admin | :5175 / :5180 | `heymoezy/porter-admin` |
+## Components
+
+| Component | Port | Path |
+|-----------|------|------|
+| Brain (Fastify API) | :3001 | `backend/` |
+| Admin (SaaS control plane) | :5175 | `admin/` |
+
+Business model: API metering. Any future UI/frontend is an API customer.
 
 ## Architecture
 ```
-Browser -> Porter UI (:5174) -> Porter Brain (:8877) -> SQLite (porter.db)
-                                     ^
-         Porter Admin (:5175) -------+
+API Consumers -> Porter Brain (:3001) -> PostgreSQL
+                      ^         |
+Porter Admin (:5175) -+    Bridge Layer
+                            |
+                  +---------+---------+
+                  |    |    |    |    |
+               OpenClaw Ollama Claude Codex Gemini
 ```
 
 ## Development
 ```bash
-cd backend && npm install && npm run dev   # Fastify API on :8877
+cd backend && npm install && npm run dev   # Fastify API on :3001
 ```
 
 ## Tech Stack
-Fastify 5 . TypeScript . Drizzle ORM . SQLite (WAL) . better-sqlite3
+Fastify 5 . TypeScript . Drizzle ORM . PostgreSQL 16
 
 ## Legacy
-`porter.py` — Original Python monolith (~900KB). Being deprecated via strangler fig pattern.
+`porter.py` — Original Python monolith (~900KB). Deprecated.

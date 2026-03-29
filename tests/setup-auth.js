@@ -14,7 +14,7 @@ const { chromium } = require('playwright');
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await page.goto('http://127.0.0.1:8877');
+  await page.goto('http://127.0.0.1:3001');
   await page.fill('#uname', 'moe');
   await page.fill('#pw', password);
   await page.click('.login-btn');

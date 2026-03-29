@@ -14,6 +14,7 @@
 
 import { config } from '../config.js';
 import { routingEngine } from './bridge/routing-engine.js';
+import { pool } from '../db/client.js';
 
 // ---------------------------------------------------------------------------
 // StreamBackend interface
@@ -24,8 +25,39 @@ export interface StreamBackend {
   stream(prompt: string, signal: AbortSignal, systemPrompt?: string): AsyncIterable<string>;
 }
 
-// Default fallback — only used when no agent-specific prompt is available
-const PORTER_SYSTEM_DEFAULT = `You are Porter, an AI orchestration platform. Be helpful, concise, and direct.`;
+// Static fallback — only used if DB query fails
+const PORTER_SYSTEM_FALLBACK = `You are a worker in Porter, an AI orchestration platform. Porter is the master orchestrator managing multiple AI models. Be helpful, concise, and direct. Address the user as Moe.`;
+
+// Cache for directive-based system prompt (refreshed every 5 minutes)
+let _cachedDirectivePrompt: string | null = null;
+let _cachedAt = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Build the default system prompt from Brain directives.
+ * Cached for 5 minutes to avoid DB hits on every stream request.
+ */
+async function getDefaultSystemPrompt(): Promise<string> {
+  const now = Date.now();
+  if (_cachedDirectivePrompt && (now - _cachedAt) < CACHE_TTL_MS) {
+    return _cachedDirectivePrompt;
+  }
+
+  try {
+    const res = await pool.query<{ content: string }>(
+      `SELECT content FROM directives WHERE status = 'active' AND scope = 'workspace' ORDER BY priority ASC`
+    );
+    if (res.rows.length > 0) {
+      _cachedDirectivePrompt = res.rows.map(r => r.content).join('\n');
+      _cachedAt = now;
+      return _cachedDirectivePrompt;
+    }
+  } catch {
+    // DB unavailable — fall through to static fallback
+  }
+
+  return PORTER_SYSTEM_FALLBACK;
+}
 
 // ---------------------------------------------------------------------------
 // OllamaStreamBackend
@@ -43,10 +75,11 @@ export class OllamaStreamBackend implements StreamBackend {
   readonly name = 'ollama';
 
   async *stream(prompt: string, signal: AbortSignal, systemPrompt?: string): AsyncIterable<string> {
+    const effectivePrompt = systemPrompt || await getDefaultSystemPrompt();
     const resp = await fetch(`${config.ollamaUrl}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: config.ollamaModel, system: systemPrompt || PORTER_SYSTEM_DEFAULT, prompt, stream: true, options: { num_predict: 150, temperature: 0.7 } }),
+      body: JSON.stringify({ model: config.ollamaModel, system: effectivePrompt, prompt, stream: true, options: { num_predict: 150, temperature: 0.7 } }),
       signal,
     });
 
@@ -134,6 +167,7 @@ export class OpenClawStreamBackend implements StreamBackend {
   async *stream(prompt: string, signal: AbortSignal, systemPrompt?: string): AsyncIterable<string> {
     if (signal.aborted) return;
 
+    const effectivePrompt = systemPrompt || await getDefaultSystemPrompt();
     const resp = await fetch(`${config.openclawUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
@@ -143,7 +177,7 @@ export class OpenClawStreamBackend implements StreamBackend {
       body: JSON.stringify({
         model: config.openclawModel,
         messages: [
-          { role: 'system', content: systemPrompt || PORTER_SYSTEM_DEFAULT },
+          { role: 'system', content: effectivePrompt },
           { role: 'user', content: prompt },
         ],
         stream: true,

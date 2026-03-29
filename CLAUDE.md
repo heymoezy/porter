@@ -1,27 +1,50 @@
 # Porter Brain — CLAUDE.md
 
-Porter Brain is the **API backend and database owner**. It runs the Fastify API, manages PostgreSQL, handles AI routing, and owns all business logic.
+Porter Brain is the **API backend and database owner**. Together with Porter Admin, this IS the product. Fastify API, PostgreSQL, AI routing, Bridge layer, Memory V3, all business logic.
 
 ---
 
 ## Project Facts
 
 - **Backend:** `backend/` — Fastify 5, TypeScript, Drizzle ORM
-- **Legacy:** `porter.py` (single file, stdlib only, ~900KB, being deprecated)
-- **Port:** `8877`, bound to `127.0.0.1` only
-- **Service:** `systemctl --user start|stop|restart|status porter`
-- **Service file:** `~/.config/systemd/user/porter.service`
+- **Legacy:** `porter.py` (deprecated, ~900KB, do not modify)
+- **Port:** `3001`, bound to `127.0.0.1`
+- **Service:** `systemctl --user start|stop|restart|status porter-fastify`
+- **Service file:** `~/.config/systemd/user/porter-fastify.service`
 - **Config:** `porter_config.json` (via `PORTER_DATA_DIR` env var)
-- **Database:** PostgreSQL (Drizzle ORM) — Brain owns this, siblings connect to it
+- **Database:** PostgreSQL (Drizzle ORM) — Brain owns this, Admin connects to it
 - **Tests:** `cd tests && npx playwright test` (35 tests)
+- **Version:** v3.2.0
 
-## Sibling Repos
+## Monorepo Structure
 
-| Repo | Port | Purpose |
-|------|------|---------|
-| **Porter UI** (`heymoezy/porter-ui`) | :5174 | User product frontend |
-| **Porter Admin** (`heymoezy/porter-admin`) | :5175 / :5180 | SaaS control plane + dev tools |
-| **Porter Brain** (`heymoezy/porter`) | :8877 | This repo — API, DB, AI router |
+Porter is a **single monorepo** (`heymoezy/porter`). Brain and Admin live side by side:
+
+| Component | Path | Port | Purpose |
+|-----------|------|------|---------|
+| **Brain** | `backend/` | :3001 | Fastify API, PostgreSQL, AI Router, Bridge, Memory V3 |
+| **Admin** | `admin/backend/` + `admin/frontend/` | :5175 | SaaS control plane, Bridge UI, Intelligence, CRM |
+
+Business model: API metering. Any future UI/frontend is just an API customer — a separate product.
+
+## Shared Memory System
+
+- **Canonical checkpoint:** `tasks/checkpoint.md` — all models read/update this
+- **Directives table:** operating rules injected into every AI dispatch
+- **Concepts table:** project state, searchable via FTS
+- **Memory injection:** `backend/src/services/memory-injection.ts` — tiered injection pipeline
+- **System prompt:** `backend/src/services/stream-service.ts` — reads directives from DB
+
+## Bridge Layer
+
+5 gateway adapters in `backend/src/services/bridge/adapters/`:
+- OpenClaw (GPT-5.4) — primary strong model, :18789
+- Ollama (Qwen 2.5 Coder 1.5B) — local cheap/fast, :11434
+- Claude CLI — subprocess
+- Codex CLI — subprocess
+- Gemini CLI — subprocess
+
+Routing engine, circuit breakers, fallback chains, dispatch logging.
 
 ## Architecture — Non-Negotiable Rules
 
@@ -37,13 +60,16 @@ Porter Brain is the **API backend and database owner**. It runs the Fastify API,
 
 ```
 porter/
-├── backend/          <- Fastify API (TypeScript)
+├── backend/          <- Brain Fastify API (:3001, TypeScript)
 │   ├── src/routes/   <- v1 API endpoints
-│   ├── src/services/ <- AI router, scheduler, integrations
+│   ├── src/services/ <- AI router, Bridge, scheduler, memory
 │   └── src/db/       <- Schema, migrations
-├── porter.py         <- Legacy monolith (being deprecated)
+├── admin/            <- Admin monorepo subfolder
+│   ├── backend/      <- Admin Fastify API (:5175, TypeScript)
+│   └── frontend/     <- Admin React frontend (Vite, shadcn/ui)
+├── porter.py         <- Legacy monolith (DEPRECATED)
 ├── drizzle/          <- Drizzle migrations
-├── memory/           <- Memory V2 data
+├── memory/           <- Memory data files
 ├── personas/         <- Agent persona definitions
 ├── runtime/          <- Agent runtime
 ├── tests/            <- 35 Playwright tests
@@ -51,25 +77,13 @@ porter/
 └── scripts/          <- Helper scripts
 ```
 
-## Dependencies
-
-### openclaw + Qwen Local Bridge
-- **Gateway:** `http://127.0.0.1:18789`, auth token `lobster-2026`
-- **Local Ollama:** `http://127.0.0.1:11434`, model `qwen2.5-coder:1.5b`
-
-## Release Governance
-
-1. No route handler changes without design review.
-2. 35-test regression pass required before commit.
-3. Version must match in all strings (docstring, badge, startup, SSE, health, changelog).
-4. Ship process: version bump -> git add + commit -> push -> restart -> verify health -> update projects.md.
-
 ## Common Commands
 
 ```bash
-systemctl --user status porter
-systemctl --user restart porter
+systemctl --user status porter-fastify
+systemctl --user restart porter-fastify
 cd backend && npm run dev                    # Fastify dev server
 cd tests && npx playwright test              # regression
-curl http://127.0.0.1:11434/api/tags         # list Ollama models
+curl http://127.0.0.1:3001/health            # health check
+psql -d porter                               # direct DB access
 ```

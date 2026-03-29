@@ -121,7 +121,7 @@ export class OpenClawAdapter implements GatewayAdapter {
     messages.push(...req.messages);
 
     const body = {
-      model: req.model ?? 'openai-codex/gpt-5.4',
+      model: req.model ?? 'openclaw',
       messages,
       stream: false,
       max_tokens: req.maxTokens ?? 2048,
@@ -177,7 +177,7 @@ export class OpenClawAdapter implements GatewayAdapter {
     messages.push(...req.messages);
 
     const body = {
-      model: req.model ?? 'openai-codex/gpt-5.4',
+      model: req.model ?? 'openclaw',
       messages,
       stream: true,
       max_tokens: req.maxTokens ?? 2048,
@@ -259,6 +259,6 @@ export class OpenClawAdapter implements GatewayAdapter {
 
   async listModels(): Promise<string[]> {
     // OpenClaw has no /v1/models endpoint — return the known available model
-    return ['openai-codex/gpt-5.4'];
+    return ['openclaw'];
   }
 }

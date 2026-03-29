@@ -9,7 +9,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-BASE = "http://127.0.0.1:8877"
+BASE = "http://127.0.0.1:3001"
 CREDENTIALS = {"username": "admin", "password": "porter"}
 
 # ── tiny HTTP client ───────────────────────────────────────────────────────

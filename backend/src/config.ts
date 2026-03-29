@@ -14,7 +14,7 @@ export const config = {
   ollamaUrl: process.env.OLLAMA_URL || 'http://127.0.0.1:11434',
   openclawUrl: process.env.OPENCLAW_URL || 'http://127.0.0.1:18789',
   ollamaModel: process.env.OLLAMA_MODEL || 'qwen2.5-coder:1.5b',
-  openclawModel: process.env.OPENCLAW_MODEL || 'openai-codex/gpt-5.4',
+  openclawModel: process.env.OPENCLAW_MODEL || 'openclaw',
 
   // Auth token for openclaw gateway. Must be set via OPENCLAW_TOKEN env var.
   // No hardcoded fallback — if unset, openclaw dispatch will fail with a clear error.

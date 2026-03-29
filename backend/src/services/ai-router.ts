@@ -7,6 +7,7 @@
 import { pool } from '../db/client.js';
 import { emitSSE } from './scheduler.js';
 import { routingEngine } from './bridge/routing-engine.js';
+import { buildMemoryContext } from './memory-injection.js';
 import type { BridgeDispatchRequest } from './bridge/types.js';
 
 // ---------------------------------------------------------------------------
@@ -187,11 +188,24 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
     username: req.username,  // MT-03: usage attribution
   };
 
-  // 2. Build adapter-level request with system prompt from agent template
+  // 2. Build adapter-level request with system prompt + memory context
   const history = req.conversationHistory ? compressContext(req.conversationHistory) : [];
+
+  // Memory V3: inject tiered memory context (directives, concepts, notes)
+  const memoryContext = await buildMemoryContext({
+    agentId: req.agentId,
+    projectId: req.projectId ?? undefined,
+    searchQuery: req.message,
+  });
+
+  // Augment user message with memory context (original message preserved in history)
+  const augmentedMessage = memoryContext
+    ? memoryContext + '\n\n---\n\n' + req.message
+    : req.message;
+
   const messages = [
     ...history.map(t => ({ role: t.role, content: t.content })),
-    { role: 'user', content: req.message },
+    { role: 'user', content: augmentedMessage },
   ];
 
   // Look up agent's system prompt from template

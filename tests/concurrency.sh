@@ -7,7 +7,7 @@
 # Exit 0 = PASS, Exit 1 = FAIL
 set -euo pipefail
 
-BASE_URL=${1:-http://127.0.0.1:8877}
+BASE_URL=${1:-http://127.0.0.1:3001}
 CONCURRENCY=10
 FAIL=0
 

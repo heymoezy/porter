@@ -1,3 +1,23 @@
+## v3.2.0 (2026-03-29)
+
+- **MONOREPO MERGE:** Porter Brain + Porter Admin merged into single repo
+- feat: system prompt pipeline — directives from Brain DB injected into every dispatch
+- feat: memory-injection wired into ai-router.ts (was missing for agent dispatches)
+- feat: porter-ctx CLI launcher — context banner, gateway status, project picker
+- feat: SessionStart hook auto-loads checkpoint, git log, directives for Claude Code
+- feat: hook visibility on Bridge gateway cards (detect per-gateway hook configs)
+- feat: update button on gateway cards with "Update" label
+- feat: operator activity log shows health, circuits, versions, intelligence feed
+- fix: OpenClaw model name (openclaw not openai-codex/gpt-5.4), auth token, chatCompletions enabled
+- fix: killed all :8877 references — Brain is :3001
+- fix: removed porter-ui as active product — Porter = Brain + Admin, API metering model
+- fix: Brain directives (15) + concepts (9) populated (were empty)
+- fix: all gateway workspace files (OpenClaw, Gemini, Codex) updated with correct architecture
+- fix: architecture page — removed porter-ui, added Bridge + Memory V3, removed planned agents
+- chore: nav reorder (Bridge → Recall → System), Brain renamed to System
+- chore: stale checkpoints deleted, one canonical checkpoint for all models
+- chore: deprecated .agent-collab/ mailbox — use Bridge API
+
 ## v3.0.1 (2026-03-26)
 
 - feat(bridge): version detection in all 5 adapters + speed-test endpoint

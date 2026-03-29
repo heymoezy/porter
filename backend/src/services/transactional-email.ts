@@ -131,7 +131,7 @@ export async function sendInviteEmail(opts: {
   token: string;
 }): Promise<boolean> {
   const { to, projectName, inviterName, role, token } = opts;
-  const publicUrl = config.publicUrl || 'http://localhost:5174';
+  const publicUrl = config.publicUrl || 'http://localhost:5175';
   const acceptUrl = `${publicUrl}/accept-invite?token=${token}`;
   const subject = `${inviterName} invited you to "${projectName}" on Porter`;
   const html = `
@@ -158,7 +158,7 @@ export async function sendDripReminder(opts: {
   dripCount: number;
 }): Promise<boolean> {
   const { to, projectName, inviterName, role, token, dripCount } = opts;
-  const publicUrl = config.publicUrl || 'http://localhost:5174';
+  const publicUrl = config.publicUrl || 'http://localhost:5175';
   const acceptUrl = `${publicUrl}/accept-invite?token=${token}`;
   const subject = `Reminder: You're invited to "${projectName}" on Porter`;
   const html = `

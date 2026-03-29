@@ -7,7 +7,7 @@ module.exports = defineConfig({
   timeout: 15000,
   retries: 0,
   use: {
-    baseURL: 'http://127.0.0.1:8877',
+    baseURL: 'http://127.0.0.1:3001',
     headless: true,
     screenshot: 'only-on-failure',
     viewport: { width: 1280, height: 800 },

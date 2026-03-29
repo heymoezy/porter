@@ -43,7 +43,7 @@ Non-negotiable constraints for every agent in the squad — regardless of role, 
   1. **Version bump** — increment in ALL 6 locations (docstring, HTML badge, SSE welcome, startup banner, /api/version, /api/admin/health). Use `/ship` command if available.
   2. **Changelog** — add entry to the JS changelog array in porter.py
   3. **Syntax check** — `python3 -c "import py_compile; py_compile.compile('porter.py', doraise=True)"`
-  4. **Restart** — `systemctl --user restart porter` then verify `curl http://127.0.0.1:8877/api/version`
+  4. **Restart** — `systemctl --user restart porter` then verify `curl http://127.0.0.1:3001/api/version`
   5. **Tests** — `cd tests && npx playwright test` — 38+ must pass
   6. **Git** — `git add porter.py && git commit -m "vX.Y.Z — Title" && git push`
   7. **projects.md** — update version, status, changelog in `/home/lobster/documents/projects.md`

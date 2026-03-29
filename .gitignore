@@ -39,8 +39,8 @@ frontend/
 backend/dist/
 backend/node_modules/
 
-# Admin (own repo: heymoezy/porter-admin)
-admin/
-
-# Frontend V2 (own repo: heymoezy/porter-ui)
-frontend-v2/
+# Admin build artifacts and dependencies (source is tracked)
+admin/backend/node_modules/
+admin/backend/dist/
+admin/frontend/node_modules/
+admin/frontend/build/
