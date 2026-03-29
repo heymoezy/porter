@@ -27,9 +27,15 @@ import { detectAndUpsertGateways } from './services/bridge/startup-detector.js';
 import * as scheduler from './services/scheduler.js';
 import { startImapIdle, stopImapIdle } from './services/email.js';
 import { pool } from './db/client.js';
+import adminAuthPlugin from './plugins/admin-auth.js';
+import adminRoutes from './routes/admin/index.js';
+import { addSSEClient } from './services/admin/admin-sse.js';
+import { probeAllGateways } from './services/admin/gateway-versions.js';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDist = path.resolve(__dirname, '../../frontend/dist');
+const adminFrontendDist = path.resolve(__dirname, '../../admin/frontend/build/client');
 
 const fastify = Fastify({
   logger: {
@@ -82,6 +88,25 @@ fastify.register(authPlugin);
 // V1 routes (Fastify-native, with response envelope)
 fastify.register(v1Routes, { prefix: '/api/v1' });
 
+// Admin auth plugin (adds requirePlatformAdmin, reads porter_admin_session cookie)
+fastify.register(adminAuthPlugin);
+
+// Admin API routes (absorbed from Porter Admin :5175)
+fastify.register(adminRoutes, { prefix: '/api/admin' });
+
+// Admin SSE endpoint — real-time updates for Admin-side changes
+fastify.get('/api/admin/events', async (request, reply) => {
+  reply.raw.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  reply.raw.write(`data: ${JSON.stringify({ type: 'connected', ts: Date.now() })}\n\n`);
+  addSSEClient(reply);
+  request.raw.on('close', () => {});
+});
+
 // SSE events proxy (still used by frontends)
 fastify.register(eventRoutes);
 
@@ -90,7 +115,7 @@ startBrainUI().catch(err => console.error('[brain-ui] Failed to start:', err));
 
 // Health check
 fastify.get('/health', async () => {
-  return { status: 'ok', engine: 'fastify', version: '3.2.0' };
+  return { status: 'ok', engine: 'fastify', version: '3.3.0' };
 });
 
 // Serve OpenAPI spec — public, no auth
@@ -115,6 +140,26 @@ fastify.get('/v2/*', async (_request, reply) => {
   return reply.type('text/html').send(html);
 });
 
+// Serve admin frontend static files at /admin/
+if (fs.existsSync(adminFrontendDist)) {
+  fastify.register(staticFiles, {
+    root: adminFrontendDist,
+    prefix: '/admin/',
+    wildcard: false,
+    decorateReply: false, // already decorated by the first static registration
+  });
+
+  // Admin SPA catch-all — serve index.html for client-side routing
+  fastify.get('/admin/*', async (_request, reply) => {
+    const indexPath = path.join(adminFrontendDist, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      const html = fs.readFileSync(indexPath, 'utf8');
+      return reply.type('text/html').send(html);
+    }
+    return reply.code(404).send({ error: 'Admin frontend not found' });
+  });
+}
+
 // Clean shutdown: stop IMAP IDLE when Fastify closes
 fastify.addHook('onClose', async () => {
   stopImapIdle();
@@ -138,6 +183,15 @@ const start = async () => {
 
     // Auto-detect AI gateways and bootstrap from env vars
     await detectAndUpsertGateways(pool);
+
+    // Probe all gateways at startup (versions + health, like admin server)
+    probeAllGateways().then(results => {
+      const detected = results.filter(r => r.version);
+      const outdated = results.filter(r => r.is_latest === false);
+      console.log(`Gateway probe: ${detected.length}/${results.length} versions detected${outdated.length ? `, ${outdated.length} outdated` : ''}`);
+    }).catch(err => {
+      console.error('Gateway probe failed:', err instanceof Error ? err.message : err);
+    });
 
     // Auto-start IMAP IDLE if a connected email connection exists
     try {

@@ -114,13 +114,9 @@ export default function ArchitecturePage() {
         <Section title="Platform Topology">
           <div className="rounded-xl border border-border bg-surface p-8 space-y-4">
             <div className="flex items-center justify-center gap-6 flex-wrap">
-              <Node icon={Server} label="Porter Brain" sub=":3001" color="border-success text-success bg-success/10" badge="BACKEND" />
+              <Node icon={Server} label="Porter" sub=":3001 — API + Admin + Bridge" color="border-success text-success bg-success/10" badge="SINGLE PROCESS" />
               <Arrow />
               <Node icon={Database} label="PostgreSQL 16" sub=":5432/porter" color="border-success text-success bg-success/10" badge="SSOT" />
-            </div>
-            <Arrow direction="down" />
-            <div className="flex items-center justify-center gap-6 flex-wrap">
-              <Node icon={Shield} label="Control Plane" sub=":5175" color="border-warning text-warning bg-warning/10" badge="ADMIN" />
             </div>
             <Arrow direction="down" />
             <div className="flex items-center justify-center gap-6 flex-wrap">
@@ -129,7 +125,7 @@ export default function ArchitecturePage() {
               <Node icon={Brain} label="Memory V3" sub="directives · concepts · notes" color="border-success text-success bg-success/10" />
               <Node icon={Globe} label="SSE Hub" sub="Real-time events" color="border-chart-2 text-chart-2 bg-chart-2/10" />
             </div>
-            <p className="text-center text-2xs text-text3 mt-2">Porter = Brain + Admin. One monorepo, one product. Any future UI is just an API customer.</p>
+            <p className="text-center text-2xs text-text3 mt-2">One process, one port (:3001), one database. API metering business model.</p>
           </div>
         </Section>
 
@@ -295,11 +291,11 @@ export default function ArchitecturePage() {
         <Section title="Monorepo">
           <div className="rounded-xl border border-success/30 bg-surface p-5 font-mono text-2xs leading-[1.8] text-text2">
             <p className="text-success font-bold mb-1">heymoezy/porter <span className="text-text3 font-normal">monorepo · v3.2.0</span></p>
-            <p className="ml-2">├── <span className="text-success">backend/</span> <span className="text-text3">Brain API :3001 — Fastify, routes, services, DB</span></p>
+            <p className="ml-2">├── <span className="text-success">backend/</span> <span className="text-text3">API + Admin routes, services, DB (:3001)</span></p>
             <p className="ml-2">│   ├── src/services/bridge/ <span className="text-text3">5 gateway adapters</span></p>
             <p className="ml-2">│   ├── src/services/memory-injection.ts <span className="text-text3">Memory V3 pipeline</span></p>
             <p className="ml-2">│   └── src/db/ <span className="text-text3">Drizzle ORM, PostgreSQL</span></p>
-            <p className="ml-2">├── <span className="text-warning">admin/</span> <span className="text-text3">Control Plane :5175</span></p>
+            <p className="ml-2">├── <span className="text-warning">admin/</span> <span className="text-text3">Control plane frontend (served at /admin/)</span></p>
             <p className="ml-2">│   ├── backend/src/routes/ <span className="text-text3">87 admin endpoints</span></p>
             <p className="ml-2">│   └── frontend/app/routes/ <span className="text-text3">18 pages (React 19)</span></p>
             <p className="ml-2">├── personas/ <span className="text-text3">Agent .md files</span></p>

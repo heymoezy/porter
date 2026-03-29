@@ -30,16 +30,7 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5176,
     proxy: {
-      // All API routes → admin backend on 5175
-      "/api/v1/auth": {
-        target: "http://127.0.0.1:5175",
-        changeOrigin: true,
-      },
-      "/api/admin": {
-        target: "http://127.0.0.1:5175",
-        changeOrigin: true,
-        configure: sseProxyConfig,
-      },
+      // All API routes → Brain on 3001 (admin absorbed into Brain)
       "/api": {
         target: "http://127.0.0.1:3001",
         changeOrigin: true,

@@ -1,3 +1,18 @@
+## v3.3.0 (2026-03-29)
+
+**PORT MERGE — one Fastify, one port.**
+
+- Brain (:3001) absorbs Admin (:5175) — single process, single port
+- Admin routes at /api/admin/*, Brain routes at /api/v1/*, admin frontend at /admin/*
+- Admin SSE endpoint merged into Brain
+- Gateway version probing runs from Brain startup
+- Admin auth plugin (porter_admin_session + porter_session cookies)
+- Killed porter-admin.service — one systemd unit (porter-fastify)
+- "Porter Admin" → "Porter" across all UI
+- Unified changelog (admin + brain merged into one file)
+- Install button on gateway cards for uninstalled gateways
+- Changelog parser handles prefixed versions (Admin v2.10.0, Brain v3.0.1)
+
 ## v3.2.0 (2026-03-29)
 
 - **MONOREPO MERGE:** Porter Brain + Porter Admin merged into single repo
