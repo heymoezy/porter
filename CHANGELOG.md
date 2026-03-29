@@ -1,3 +1,41 @@
+## v3.3.1 (2026-03-29)
+
+- feat: hooks badge clickable — opens file editor to view/edit hooks
+- feat: operator activity shows live CLI usage from all gateways
+- fix: gateway card UX — refresh icon, confirm restart, inline config, usage refresh
+- fix: remove token count from usage bars
+- feat: REAL Claude usage from Anthropic headers — 1 Haiku call, exact %
+- feat: Claude usage API (/api/oauth/usage) wired into collector
+- fix: pct used from requests or tokens, shows tracking when no limit
+- feat: anthropic-ratelimit-* header support + CLI rate limit detection
+- fix: show % used in label, tokens only below bar, drop request count
+- fix: usage blocks show requests + tokens together, human-readable reset times
+- feat: local CLI usage collector — real usage data from Claude JSONL + Codex SQLite
+- fix: real provider limits + proper period labels
+- fix: usage limits show exactly 2 rows — Quota + Weekly
+- feat: per-model rate limits with daily/weekly/hourly periods
+- feat: Claude-style usage meters — percentage, reset countdown, clean bars
+- fix: RPM → Requests/min, TPM → Tokens/min — plain English labels
+- fix: capacity bars + metrics — data key mismatch, latency formatting, 429 display
+- feat: rate limit tracking + capacity UI on Bridge gateway cards
+- feat: Bridge unification — all chat streams through routing engine
+- fix: center OrgConnector on architecture page
+- fix: Bridge green, Forge red, Recall blue + OrgConnector replaces arrows
+- fix: Forge color distinct from Bridge, bidirectional pulsing arrows
+- fix: "Pixel portrait identity" → "Unique avatar for each agent"
+- fix: move tagline to How it works section, add description
+- fix: remove all ports from architecture page, rename section to "What is Porter?"
+- fix: remove system stats from architecture top, rewrite intro
+- fix: architecture — Recall as shared memory layer, remove data layer, rename repo section
+- feat: architecture page rebuilt around Bridge, Forge, Recall pillars
+- docs: PRODUCT.md — Bridge, Forge, Recall as the 3 pillars
+- docs: add quick version to REVENUE.md
+- fix: admin frontend base path /admin/ so assets load on :3001
+- docs: REVENUE.md — plain English revenue model
+- fix: root route redirects to /admin/
+- feat: porter setup CLI + PRODUCT.md
+
+
 ## v3.3.0 (2026-03-29)
 
 **PORT MERGE — one Fastify, one port.**

@@ -229,33 +229,45 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
 
     try {
       const rl = createInterface({ input: child.stdout!, terminal: false });
+      let lastYieldedLength = 0;
 
       for await (const line of rl) {
         if (signal.aborted) return;
         if (!line.trim()) continue;
 
-        let event: Record<string, unknown>;
+        let event: Record<string, any>;
         try {
-          event = JSON.parse(line) as Record<string, unknown>;
+          event = JSON.parse(line) as Record<string, any>;
         } catch {
           continue;
         }
 
-        // Yield streaming tokens from content_block_delta events
+        // New schema: type: assistant with full content accumulator
+        if (event.type === 'assistant' && event.message?.content) {
+          const content = event.message.content as any[];
+          // Combine all text blocks
+          const fullText = content
+            .filter(c => c.type === 'text')
+            .map(c => c.text)
+            .join('');
+
+          if (fullText.length > lastYieldedLength) {
+            const delta = fullText.slice(lastYieldedLength);
+            yield delta;
+            lastYieldedLength = fullText.length;
+          }
+        }
+
+        // Legacy schema: type: stream_event with content_block_delta
         if (
           event.type === 'stream_event' &&
-          (event.event as Record<string, unknown>)?.type === 'content_block_delta'
+          event.event?.type === 'content_block_delta'
         ) {
-          const delta = (event.event as Record<string, unknown>).delta as
-            | Record<string, unknown>
-            | undefined;
-          const text = delta?.text as string | undefined;
+          const text = event.event.delta?.text as string | undefined;
           if (text) {
             yield text;
           }
         }
-
-        // Skip system, hook, assistant, result events — streaming only cares about deltas
       }
     } finally {
       clearTimeout(timer);

@@ -4,7 +4,7 @@
 # Updated by: whichever model last completed work. Always update after every change.
 
 project: porter
-version: v3.2.1
+version: v3.3.1
 updated: 2026-03-29
 updated_by: gemini-cli-adapter
 
@@ -12,7 +12,7 @@ updated_by: gemini-cli-adapter
 
 Porter is a single monorepo (`heymoezy/porter`). One repo, one product. Business model: API metering.
 - Brain (`backend/`) :3001 — Fastify API, PostgreSQL, Bridge, Memory V3
-- Admin (`admin/backend/` + `admin/frontend/`) :5175 — SaaS control plane, Bridge UI, Intelligence, CRM
+- Admin (`admin/`) :5175 — SaaS control plane, Bridge UI, Intelligence, CRM
 - Any future UI/frontend is just an API customer — separate product
 
 ## Milestones
@@ -22,6 +22,8 @@ Porter is a single monorepo (`heymoezy/porter`). One repo, one product. Business
 - v3.0 Porter Bridge: COMPLETE (2026-03-25)
 - v3.2.0 monorepo: porter-admin merged into porter/admin/ (2026-03-29)
 - v3.2.1 bridge unification: stream-service.ts unified into RoutingEngine (2026-03-29)
+- v3.3.0 monorepo cleanup: killed :8877, removed porter-ui, unified streaming (2026-03-29)
+- v3.3.1 Claude CLI fix: updated adapter to support new JSONL schema (2026-03-29)
 - v4.0 Agent-First UI: PLANNED
 
 ## Multi-Model Bridge
@@ -41,9 +43,9 @@ Bridge Unification (Phase 24):
 
 ## Active Work (2026-03-29)
 
-- Comprehensive cleanup: killed :8877 everywhere, removed porter-ui as active product
+- Claude CLI fix: updated adapter to support new JSONL schema (type: assistant with accumulator)
 - Unified Bridge Streaming: routing-engine.ts now handles all chat flows.
-- Populated Brain directives (15) + concepts (9) — were completely empty
+- Populated Brain directives (17) + concepts (9) — were completely empty
 - Fixed all gateway workspace files (OpenClaw, Gemini, Codex, Claude Code)
 - Fixed system prompt pipeline to read directives from Brain DB
 - Fixed ai-router.ts to inject memory context into agent dispatches

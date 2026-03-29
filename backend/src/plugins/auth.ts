@@ -63,7 +63,7 @@ async function authPlugin(fastify: FastifyInstance) {
 
   fastify.decorate('requireAuth', async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.sessionUser) {
-      reply.code(401).send(err('UNAUTHORIZED', 'Authentication required', request.id));
+      return reply.code(401).send(err('UNAUTHORIZED', 'Authentication required', request.id));
     }
   });
 
