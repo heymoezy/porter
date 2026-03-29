@@ -2,59 +2,50 @@
  * Usage Collector — reads actual usage from provider APIs and local CLI storage
  *
  * Populates gateway_rate_limits with real usage data from:
- *   1. Claude — Anthropic OAuth usage API (provider-level, highest trust)
- *              Fallback: JSONL session files in ~/.claude/projects/
+ *   1. Claude — minimal Haiku API call, reads rate-limit headers (provider-level, highest trust)
  *   2. Codex CLI — SQLite state_5.sqlite threads table
  *   3. Gemini CLI — dispatch_log counts (no local usage files)
  *
  * Called every 30 seconds by the scheduler alongside health probes.
- * Claude API is rate-limited to once per 5 minutes (429 = 1 hour backoff).
- * Uses file mtime to skip unchanged files (fast path for JSONL fallback).
+ * Claude API call is rate-limited to once per 5 minutes (uses ~1 Haiku token = negligible cost).
  */
 
 import { pool } from '../../db/client.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
 import Database from 'better-sqlite3';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const HOME = process.env.HOME || '/home/lobster';
-const CLAUDE_PROJECTS_DIR = path.join(HOME, '.claude', 'projects');
 const CLAUDE_CREDENTIALS_PATH = path.join(HOME, '.claude', '.credentials.json');
 const CODEX_SQLITE_PATH = path.join(HOME, '.codex', 'state_5.sqlite');
 
-const CLAUDE_USAGE_API_URL = 'https://api.anthropic.com/api/oauth/usage';
-const CLAUDE_API_MIN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes — NEVER call faster
+const CLAUDE_MESSAGES_API_URL = 'https://api.anthropic.com/v1/messages';
+const CLAUDE_API_MIN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 const FIVE_HOURS_SEC = 5 * 3600;
 const SEVEN_DAYS_SEC = 7 * 24 * 3600;
 const ONE_DAY_SEC = 24 * 3600;
 
-// ── Claude API usage cache ──────────────────────────────────────────────────
+// ── Claude API cache ─────────────────────────────────────────────────────────
 
 interface ClaudeApiCache {
   lastCallMs: number;
-  retryAfterMs: number; // If 429'd, don't call until Date.now() >= this
-  hasLoggedRawResponse: boolean;
+  lastResult: {
+    fiveHourUtilization: number;
+    fiveHourReset: number | null;
+    sevenDayUtilization: number;
+    sevenDayReset: number | null;
+    status: string;
+  } | null;
 }
 
 const claudeApiCache: ClaudeApiCache = {
   lastCallMs: 0,
-  retryAfterMs: 0,
-  hasLoggedRawResponse: false,
+  lastResult: null,
 };
-
-// ── Mtime cache — skip files we've already scanned ──────────────────────────
-
-interface ClaudeFileCache {
-  mtime: number;
-  messages: { timestamp: number; inputTokens: number; outputTokens: number }[];
-}
-
-const claudeFileCache = new Map<string, ClaudeFileCache>();
 
 // ── Gateway ID cache ────────────────────────────────────────────────────────
 
@@ -99,241 +90,140 @@ export async function collectLocalUsage(): Promise<void> {
   }
 }
 
-// ── Claude Usage API (provider-level, highest trust) ────────────────────────
+// ── Claude Usage (rate-limit headers from minimal Haiku call) ───────────────
 
 /**
- * Calls the Anthropic OAuth usage API to get real usage percentages.
- * Returns true if successful (data upserted), false if failed (caller should fallback).
+ * Makes a minimal API call to Anthropic (Haiku, max_tokens=1, message=".") and
+ * reads the rate-limit utilization headers. This gives us the real 5-hour and
+ * 7-day usage percentages directly from the provider.
  *
- * Rate limit rules:
- *  - Never call more than once per 5 minutes
- *  - If 429, respect Retry-After header (typically 3600s)
+ * Cost: ~1 Haiku token per call = fractions of a cent.
+ * Frequency: once per 5 minutes (cached).
  */
-async function collectClaudeUsageFromAPI(gatewayId: string): Promise<boolean> {
+async function collectClaudeUsage(gatewayId: string): Promise<void> {
   const now = Date.now();
 
-  // Enforce minimum interval
+  // Rate limit: max once per 5 minutes
   if (now < claudeApiCache.lastCallMs + CLAUDE_API_MIN_INTERVAL_MS) {
-    return false; // Too soon — let fallback handle it (cached DB data is still fresh)
+    // Use cached result if available
+    if (claudeApiCache.lastResult) {
+      await upsertClaudeFromCache(gatewayId, claudeApiCache.lastResult, now / 1000);
+    }
+    return;
   }
 
-  // Respect 429 Retry-After
-  if (now < claudeApiCache.retryAfterMs) {
-    return false;
-  }
-
-  // Read OAuth token
+  // Read and validate OAuth credentials
   let accessToken: string;
   try {
     const creds = JSON.parse(fs.readFileSync(CLAUDE_CREDENTIALS_PATH, 'utf-8'));
-    accessToken = creds?.claudeAiOauth?.accessToken;
-    if (!accessToken) {
-      console.warn('[usage-collector] No Claude OAuth access token found in credentials');
-      return false;
+    const oauth = creds?.claudeAiOauth;
+    if (!oauth?.accessToken) {
+      console.warn('[usage-collector] No Claude OAuth access token in credentials');
+      return;
     }
+
+    // Check token expiry (expiresAt is in milliseconds)
+    if (oauth.expiresAt && typeof oauth.expiresAt === 'number' && oauth.expiresAt < now) {
+      console.warn('[usage-collector] Claude OAuth token expired at %s — skipping',
+        new Date(oauth.expiresAt).toISOString());
+      return;
+    }
+
+    accessToken = oauth.accessToken;
   } catch {
-    return false; // Credentials file missing or unreadable
+    return; // Credentials file missing or unreadable
   }
 
   claudeApiCache.lastCallMs = now;
 
   try {
-    const resp = await fetch(CLAUDE_USAGE_API_URL, {
-      method: 'GET',
+    const resp = await fetch(CLAUDE_MESSAGES_API_URL, {
+      method: 'POST',
       headers: {
         'x-api-key': accessToken,
         'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
       },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: '.' }],
+      }),
       signal: AbortSignal.timeout(15000),
     });
 
-    if (resp.status === 429) {
-      const retryAfter = parseInt(resp.headers.get('retry-after') || '3600', 10);
-      claudeApiCache.retryAfterMs = now + retryAfter * 1000;
-      console.warn(`[usage-collector] Claude usage API 429 — retrying after ${retryAfter}s`);
-      return false;
+    // Parse rate-limit headers regardless of response status
+    // (headers are returned even on 4xx/5xx)
+    const fiveHourUtil = parseFloat(resp.headers.get('anthropic-ratelimit-unified-5h-utilization') || '');
+    const sevenDayUtil = parseFloat(resp.headers.get('anthropic-ratelimit-unified-7d-utilization') || '');
+    const fiveHourReset = parseInt(resp.headers.get('anthropic-ratelimit-unified-5h-reset') || '', 10);
+    const sevenDayReset = parseInt(resp.headers.get('anthropic-ratelimit-unified-7d-reset') || '', 10);
+    const status = resp.headers.get('anthropic-ratelimit-unified-status') || 'unknown';
+
+    // Validate we got real data
+    if (isNaN(fiveHourUtil) && isNaN(sevenDayUtil)) {
+      console.warn('[usage-collector] Claude API returned no rate-limit headers (status %d)', resp.status);
+      return;
     }
 
-    if (!resp.ok) {
-      console.warn(`[usage-collector] Claude usage API ${resp.status}: ${resp.statusText}`);
-      return false;
-    }
+    const result = {
+      fiveHourUtilization: isNaN(fiveHourUtil) ? 0 : fiveHourUtil,
+      fiveHourReset: isNaN(fiveHourReset) ? null : fiveHourReset,
+      sevenDayUtilization: isNaN(sevenDayUtil) ? 0 : sevenDayUtil,
+      sevenDayReset: isNaN(sevenDayReset) ? null : sevenDayReset,
+      status,
+    };
 
-    const data: unknown = await resp.json();
+    claudeApiCache.lastResult = result;
 
-    // Log raw response once so we can see the actual shape
-    if (!claudeApiCache.hasLoggedRawResponse) {
-      console.log('[usage-collector] Claude usage API raw response:', JSON.stringify(data));
-      claudeApiCache.hasLoggedRawResponse = true;
-    }
+    await upsertClaudeFromCache(gatewayId, result, now / 1000);
 
-    // Parse defensively — we don't know the exact shape
-    const limits = parseClaudeApiResponse(data);
-    if (limits.length === 0) {
-      console.warn('[usage-collector] Claude usage API returned data but no parseable limits');
-      return false;
-    }
-
-    const nowSec = now / 1000;
-    const upserts: Promise<void>[] = [];
-
-    for (const lim of limits) {
-      // Compute limit_value from percentage if we have it
-      let limitValue: number | null = null;
-      if (lim.usedPct !== null && lim.usedPct > 0 && lim.currentValue !== null) {
-        limitValue = Math.round(lim.currentValue / (lim.usedPct / 100));
-      } else if (lim.usedPct !== null && lim.limitValue !== null) {
-        limitValue = lim.limitValue;
-      }
-
-      upserts.push(upsertUsageProvider(
-        gatewayId,
-        lim.limitType,
-        lim.period,
-        lim.currentValue ?? (lim.usedPct !== null ? lim.usedPct : 0),
-        limitValue ?? (lim.usedPct !== null ? 100 : null), // If only pct, use 100 as limit (percentage scale)
-        lim.resetAt,
-        nowSec,
-      ));
-    }
-
-    await Promise.allSettled(upserts);
-    return true;
+    console.log('[usage-collector] Claude usage: 5h=%s%% 7d=%s%% status=%s',
+      (result.fiveHourUtilization * 100).toFixed(1),
+      (result.sevenDayUtilization * 100).toFixed(1),
+      result.status);
   } catch (err) {
-    console.warn('[usage-collector] Claude usage API error:', err instanceof Error ? err.message : err);
-    return false;
+    console.warn('[usage-collector] Claude API error:', err instanceof Error ? err.message : err);
   }
-}
-
-interface ParsedLimit {
-  limitType: string;   // 'usage_pct'
-  period: string;      // 'session' | 'weekly' | 'weekly_sonnet'
-  usedPct: number | null;
-  currentValue: number | null;
-  limitValue: number | null;
-  resetAt: number | null;
 }
 
 /**
- * Defensively parse the Claude usage API response.
- * Handles multiple possible shapes since we haven't seen the real response yet.
+ * Upsert the cached Claude rate-limit data into gateway_rate_limits.
+ *
+ * Strategy: set limit_value=100 and current_value=utilization*100 so that
+ * pct = current/limit = utilization. This makes the existing UI "X% used" work.
  */
-function parseClaudeApiResponse(data: unknown): ParsedLimit[] {
-  if (!data || typeof data !== 'object') return [];
-  const results: ParsedLimit[] = [];
-  const obj = data as Record<string, unknown>;
-
-  // ── Shape 1: { session: { used_pct, resets_at }, weekly: { ... }, weekly_sonnet: { ... } }
-  for (const [key, val] of Object.entries(obj)) {
-    if (val && typeof val === 'object' && !Array.isArray(val)) {
-      const sub = val as Record<string, unknown>;
-      const pct = extractPct(sub);
-      const resetAt = extractResetAt(sub);
-      if (pct !== null) {
-        results.push({
-          limitType: 'usage_pct',
-          period: normalizePeriod(key),
-          usedPct: pct,
-          currentValue: null,
-          limitValue: null,
-          resetAt,
-        });
-      }
-    }
-  }
-  if (results.length > 0) return results;
-
-  // ── Shape 2: { limits: [{ type, percentage_used, ... }] }
-  const limitsArr = obj.limits ?? obj.rate_limits ?? obj.usage_limits;
-  if (Array.isArray(limitsArr)) {
-    for (const item of limitsArr) {
-      if (!item || typeof item !== 'object') continue;
-      const entry = item as Record<string, unknown>;
-      const pct = extractPct(entry);
-      const periodKey = (entry.type ?? entry.period ?? entry.name ?? 'unknown') as string;
-      const resetAt = extractResetAt(entry);
-      if (pct !== null) {
-        results.push({
-          limitType: 'usage_pct',
-          period: normalizePeriod(String(periodKey)),
-          usedPct: pct,
-          currentValue: null,
-          limitValue: null,
-          resetAt,
-        });
-      }
-    }
-    if (results.length > 0) return results;
-  }
-
-  // ── Shape 3: { usage: { current_session: { percent }, ... } }
-  const usageObj = obj.usage;
-  if (usageObj && typeof usageObj === 'object' && !Array.isArray(usageObj)) {
-    for (const [key, val] of Object.entries(usageObj as Record<string, unknown>)) {
-      if (val && typeof val === 'object' && !Array.isArray(val)) {
-        const sub = val as Record<string, unknown>;
-        const pct = extractPct(sub);
-        const resetAt = extractResetAt(sub);
-        if (pct !== null) {
-          results.push({
-            limitType: 'usage_pct',
-            period: normalizePeriod(key),
-            usedPct: pct,
-            currentValue: null,
-            limitValue: null,
-            resetAt,
-          });
-        }
-      }
-    }
-  }
-
-  return results;
-}
-
-/** Extract a percentage value from an object, trying common key names */
-function extractPct(obj: Record<string, unknown>): number | null {
-  for (const key of ['used_pct', 'percentage_used', 'percent', 'pct', 'usage_percent', 'percentUsed', 'usage_pct']) {
-    const val = obj[key];
-    if (typeof val === 'number') return val;
-    if (typeof val === 'string') {
-      const n = parseFloat(val);
-      if (!isNaN(n)) return n;
-    }
-  }
-  return null;
-}
-
-/** Extract a reset timestamp from an object, trying common key names */
-function extractResetAt(obj: Record<string, unknown>): number | null {
-  for (const key of ['resets_at', 'reset_at', 'resetsAt', 'resetAt', 'expires_at', 'expiresAt', 'reset_time']) {
-    const val = obj[key];
-    if (typeof val === 'number') {
-      // Could be seconds or milliseconds — normalize to seconds
-      return val > 1e12 ? val / 1000 : val;
-    }
-    if (typeof val === 'string') {
-      const d = new Date(val);
-      if (!isNaN(d.getTime())) return d.getTime() / 1000;
-    }
-  }
-  return null;
-}
-
-/** Normalize period strings to our DB convention */
-function normalizePeriod(raw: string): string {
-  const lower = raw.toLowerCase().replace(/[^a-z0-9]/g, '_');
-  if (lower.includes('session') || lower.includes('5hour') || lower.includes('5_hour')) return 'session';
-  if (lower.includes('sonnet')) return 'weekly_sonnet';
-  if (lower.includes('week') || lower.includes('7day') || lower.includes('7_day')) return 'weekly';
-  if (lower.includes('daily') || lower.includes('day')) return 'daily';
-  if (lower.includes('month')) return 'monthly';
-  return lower;
+async function upsertClaudeFromCache(
+  gatewayId: string,
+  data: NonNullable<ClaudeApiCache['lastResult']>,
+  nowSec: number,
+): Promise<void> {
+  await Promise.allSettled([
+    // 5-hour session window
+    upsertUsageProvider(
+      gatewayId,
+      'requests',
+      '5hour',
+      Math.round(data.fiveHourUtilization * 10000) / 100, // e.g. 0.21 → 21.00
+      100,
+      data.fiveHourReset,
+      nowSec,
+    ),
+    // 7-day weekly window
+    upsertUsageProvider(
+      gatewayId,
+      'requests',
+      'weekly',
+      Math.round(data.sevenDayUtilization * 10000) / 100, // e.g. 0.14 → 14.00
+      100,
+      data.sevenDayReset,
+      nowSec,
+    ),
+  ]);
 }
 
 /**
  * Upsert with source='provider' — highest trust, always overwrites.
- * Separate from the collected upsert to ensure provider data wins.
  */
 async function upsertUsageProvider(
   gatewayId: string,
@@ -356,152 +246,6 @@ async function upsertUsageProvider(
        updated_at = EXCLUDED.updated_at`,
     [uuidv4(), gatewayId, limitType, period, limitValue, currentValue, resetAt, now],
   );
-}
-
-// ── Claude Code CLI (JSONL fallback) ────────────────────────────────────────
-
-async function collectClaudeUsage(gatewayId: string): Promise<void> {
-  // Try the provider API first (highest trust data)
-  await collectClaudeUsageFromAPI(gatewayId);
-
-  // Always run JSONL scan for token/request counts (the API gives percentages, JSONL gives absolutes)
-  // Provider-source percentage data won't be overwritten by collected-source (lower trust)
-  await collectClaudeUsageFromJSONL(gatewayId);
-}
-
-async function collectClaudeUsageFromJSONL(gatewayId: string): Promise<void> {
-  if (!fs.existsSync(CLAUDE_PROJECTS_DIR)) return;
-
-  const nowSec = Date.now() / 1000;
-  const fiveHourCutoff = nowSec - FIVE_HOURS_SEC;
-  const weekCutoff = nowSec - SEVEN_DAYS_SEC;
-
-  // Scan all project dirs for JSONL files
-  let projectDirs: string[];
-  try {
-    projectDirs = fs.readdirSync(CLAUDE_PROJECTS_DIR, { withFileTypes: true })
-      .filter(d => d.isDirectory())
-      .map(d => path.join(CLAUDE_PROJECTS_DIR, d.name));
-  } catch {
-    return;
-  }
-
-  // Gather all JSONL files with mtimes
-  const jsonlFiles: { path: string; mtime: number }[] = [];
-  for (const dir of projectDirs) {
-    try {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.name.endsWith('.jsonl')) continue;
-        const fullPath = path.join(dir, entry.name);
-        try {
-          const stat = fs.statSync(fullPath);
-          const mtimeSec = stat.mtimeMs / 1000;
-          // Skip files not modified in the last 7 days (irrelevant to both windows)
-          if (mtimeSec < weekCutoff) continue;
-          jsonlFiles.push({ path: fullPath, mtime: mtimeSec });
-        } catch {
-          // File disappeared between readdir and stat — skip
-        }
-      }
-    } catch {
-      // Project dir inaccessible — skip
-    }
-  }
-
-  // Parse files that have changed since last scan (or are new)
-  for (const file of jsonlFiles) {
-    const cached = claudeFileCache.get(file.path);
-    if (cached && cached.mtime >= file.mtime) continue; // Unchanged — skip
-
-    const messages = parseClaudeJsonl(file.path);
-    claudeFileCache.set(file.path, { mtime: file.mtime, messages });
-  }
-
-  // Prune stale cache entries (files deleted or older than 7 days)
-  const activePaths = new Set(jsonlFiles.map(f => f.path));
-  for (const key of claudeFileCache.keys()) {
-    if (!activePaths.has(key)) claudeFileCache.delete(key);
-  }
-
-  // Aggregate across all cached files
-  let fiveHourMessages = 0;
-  let fiveHourTokens = 0;
-  let weeklyMessages = 0;
-  let weeklyTokens = 0;
-  let oldestInFiveHour: number | null = null;
-  let oldestInWeek: number | null = null;
-
-  for (const cached of claudeFileCache.values()) {
-    for (const msg of cached.messages) {
-      if (msg.timestamp >= fiveHourCutoff) {
-        fiveHourMessages++;
-        fiveHourTokens += msg.inputTokens + msg.outputTokens;
-        if (oldestInFiveHour === null || msg.timestamp < oldestInFiveHour) {
-          oldestInFiveHour = msg.timestamp;
-        }
-      }
-      if (msg.timestamp >= weekCutoff) {
-        weeklyMessages++;
-        weeklyTokens += msg.inputTokens + msg.outputTokens;
-        if (oldestInWeek === null || msg.timestamp < oldestInWeek) {
-          oldestInWeek = msg.timestamp;
-        }
-      }
-    }
-  }
-
-  // Compute reset_at
-  const fiveHourResetAt = oldestInFiveHour !== null
-    ? oldestInFiveHour + FIVE_HOURS_SEC
-    : null;
-
-  // Weekly: next Saturday midnight UTC
-  const weeklyResetAt = getNextSaturdayMidnightUtc(nowSec);
-
-  // Upsert into DB
-  await Promise.allSettled([
-    upsertUsage(gatewayId, 'requests', '5hour', fiveHourMessages, null, fiveHourResetAt, nowSec),
-    upsertUsage(gatewayId, 'tokens', '5hour', fiveHourTokens, null, fiveHourResetAt, nowSec),
-    upsertUsage(gatewayId, 'requests', 'weekly', weeklyMessages, null, weeklyResetAt, nowSec),
-    upsertUsage(gatewayId, 'tokens', 'weekly', weeklyTokens, null, weeklyResetAt, nowSec),
-  ]);
-}
-
-function parseClaudeJsonl(filePath: string): ClaudeFileCache['messages'] {
-  const messages: ClaudeFileCache['messages'] = [];
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    for (const line of content.split('\n')) {
-      if (!line.trim()) continue;
-      try {
-        const obj = JSON.parse(line);
-        if (obj.type !== 'assistant') continue;
-        const msg = obj.message;
-        if (!msg || typeof msg !== 'object' || !msg.usage) continue;
-
-        const usage = msg.usage;
-        const inputTokens = (usage.input_tokens || 0)
-          + (usage.cache_creation_input_tokens || 0)
-          + (usage.cache_read_input_tokens || 0);
-        const outputTokens = usage.output_tokens || 0;
-
-        // Parse timestamp from the parent object (ISO 8601)
-        let timestamp = 0;
-        if (obj.timestamp) {
-          const d = new Date(obj.timestamp);
-          if (!isNaN(d.getTime())) timestamp = d.getTime() / 1000;
-        }
-
-        messages.push({ timestamp, inputTokens, outputTokens });
-      } catch {
-        // Malformed line — skip
-      }
-    }
-  } catch {
-    // File read error — return empty
-  }
-  return messages;
 }
 
 // ── Codex CLI ───────────────────────────────────────────────────────────────
