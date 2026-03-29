@@ -902,6 +902,32 @@ function OperatorActivityLog() {
       }
     }
 
+    // CLI activity from capacity data
+    if (cap) {
+      const allLimits = cap.models.flatMap(m => m.limits)
+      // Find the session-level usage (5hour or daily)
+      const session = allLimits.find(l => (l.period === '5hour' || l.period === 'daily') && l.limit_type === 'tokens' && l.current > 0)
+      const weekly = allLimits.find(l => l.period === 'weekly' && l.limit_type === 'tokens' && l.current > 0)
+      const sessionReq = allLimits.find(l => (l.period === '5hour' || l.period === 'daily') && l.limit_type === 'requests' && l.current > 0)
+
+      if (session || sessionReq) {
+        const pct = allLimits.find(l => (l.period === '5hour' || l.period === 'daily') && l.pct != null)
+        const pctStr = pct ? ` (${Math.round(pct.pct! * 100)}% used)` : ''
+        const tokStr = session ? `${fmtCompact(session.current)} tokens` : ''
+        const reqStr = sessionReq ? `${fmtCompact(sessionReq.current)} requests` : ''
+        const detail = [reqStr, tokStr].filter(Boolean).join(', ')
+        lines.push({ text: `${ts} [activity] ${gw.name} session: ${detail}${pctStr}`, color: "text-accent-porter", _key: k++ })
+      } else {
+        lines.push({ text: `${ts} [activity] ${gw.name} — idle`, color: "text-text3", _key: k++ })
+      }
+
+      if (weekly && weekly.current > 0) {
+        const weekPct = allLimits.find(l => l.period === 'weekly' && l.pct != null)
+        const pctStr = weekPct ? ` (${Math.round(weekPct.pct! * 100)}% of weekly)` : ''
+        lines.push({ text: `${ts} [weekly] ${gw.name}: ${fmtCompact(weekly.current)} tokens this week${pctStr}`, color: "text-text3", _key: k++ })
+      }
+    }
+
     // Update available
     if (ver?.is_latest === false && ver.latest) {
       lines.push({ text: `${ts} [update] ↑ ${gw.name} ${v} → ${ver.latest} available`, color: "text-warning", _key: k++ })
