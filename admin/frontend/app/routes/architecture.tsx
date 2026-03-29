@@ -121,12 +121,14 @@ export default function ArchitecturePage() {
               </div>
             </PillarCard>
           </div>
-          <p className="text-center text-2xs text-text3 mt-2">Bridge connects the models. Forge creates the workers. Recall makes them all remember.</p>
         </Section>
 
         {/* ── How it works ── */}
         <Section title="How it works">
-          <div className="rounded-xl border border-border bg-surface p-6 space-y-4">
+          <p className="text-xs text-text2 text-center max-w-2xl mx-auto">
+            Bridge connects the models. Forge creates the workers. Recall makes them all remember. Here's how they fit together.
+          </p>
+          <div className="rounded-xl border border-border bg-surface p-6 space-y-4 mt-4">
             {/* Top: what talks to Porter */}
             <div className="flex items-center justify-center gap-4 flex-wrap">
               {[
