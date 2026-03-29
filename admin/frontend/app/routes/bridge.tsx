@@ -167,10 +167,11 @@ function UsageBlock({ label, requests, tokens }: { label: string; requests?: Usa
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-2xs font-medium text-text2">{label}</span>
+        <span className="text-2xs font-medium text-text2">
+          {label}{pctNum != null ? ` (${pctNum}% used)` : ''}
+        </span>
         <span className="text-2xs text-text3">{resetStr ?? 'Limit not published'}</span>
       </div>
-      {/* Bar — based on requests if available, else tokens */}
       <div className="h-1.5 rounded-full bg-border/30 overflow-hidden">
         {pctNum != null ? (
           <div className={`h-full rounded-full transition-all ${capacityBarColor(pctNum)}`} style={{ width: `${Math.min(pctNum, 100)}%` }} />
@@ -178,18 +179,11 @@ function UsageBlock({ label, requests, tokens }: { label: string; requests?: Usa
           <div className="h-full rounded-full bg-accent-porter/20" style={{ width: `${Math.min(primary.current > 0 ? 25 : 0, 100)}%` }} />
         )}
       </div>
-      {/* Stats row */}
-      <div className="flex items-center justify-between text-2xs text-text3">
-        <div className="flex items-center gap-2">
-          {pctNum != null && <span className="font-medium">{pctNum}% used</span>}
-          {requests && requests.current > 0 && (
-            <span>{fmtCompact(requests.current)} request{requests.current !== 1 ? 's' : ''}{requests.limit != null ? ` / ${fmtCompact(requests.limit)}` : ''}</span>
-          )}
+      {tokens && tokens.current > 0 && (
+        <div className="text-2xs text-text3">
+          <span className="font-mono">{fmtCompact(tokens.current)} tokens used</span>
         </div>
-        {tokens && tokens.current > 0 && (
-          <span className="font-mono">{fmtCompact(tokens.current)} tokens</span>
-        )}
-      </div>
+      )}
     </div>
   )
 }
