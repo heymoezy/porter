@@ -991,15 +991,22 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
     const body = request.body as Record<string, unknown>;
     const gateway_id = body.gateway_id as string | undefined;
     const limit_type = body.limit_type as string | undefined;
+    const period = (body.period as string | undefined) ?? 'minute';
+    const model_name = (body.model_name as string | undefined) ?? null;
     const limit_value = body.limit_value as number | undefined;
 
     if (!gateway_id || !limit_type) {
       return reply.send(err('MISSING_FIELDS', 'gateway_id and limit_type are required'));
     }
 
-    const VALID_TYPES = new Set(['rpm', 'tpm', 'daily_tokens', 'daily_spend', 'concurrency']);
+    const VALID_TYPES = new Set(['requests', 'tokens', 'input_tokens', 'output_tokens']);
     if (!VALID_TYPES.has(limit_type)) {
       return reply.send(err('INVALID_TYPE', `limit_type must be one of: ${[...VALID_TYPES].join(', ')}`));
+    }
+
+    const VALID_PERIODS = new Set(['minute', 'daily', 'weekly', 'monthly']);
+    if (!VALID_PERIODS.has(period)) {
+      return reply.send(err('INVALID_PERIOD', `period must be one of: ${[...VALID_PERIODS].join(', ')}`));
     }
 
     // Verify gateway exists
@@ -1013,16 +1020,16 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
     const now = Date.now() / 1000;
 
     await execute(
-      `INSERT INTO gateway_rate_limits (id, gateway_id, limit_type, limit_value, current_value, source, updated_at)
-       VALUES ($1, $2, $3, $4, 0, 'configured', $5)
-       ON CONFLICT (gateway_id, limit_type) DO UPDATE SET
+      `INSERT INTO gateway_rate_limits (id, gateway_id, model_name, limit_type, period, limit_value, current_value, source, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 0, 'configured', $7)
+       ON CONFLICT (gateway_id, COALESCE(model_name, ''), limit_type, period) DO UPDATE SET
          limit_value = EXCLUDED.limit_value,
          source = 'configured',
          updated_at = EXCLUDED.updated_at`,
-      [id, gateway_id, limit_type, limit_value ?? null, now]
+      [id, gateway_id, model_name, limit_type, period, limit_value ?? null, now]
     );
 
-    return reply.send(ok({ saved: true, gateway_id, limit_type, limit_value }));
+    return reply.send(ok({ saved: true, gateway_id, model_name, limit_type, period, limit_value }));
   });
 
   // GET /api/admin/bridge/metrics — per-gateway p95 latency, success %, 429 rate

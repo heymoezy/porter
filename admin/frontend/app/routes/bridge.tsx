@@ -58,13 +58,24 @@ interface GatewayVersion {
   hooks?: { hooks_configured: boolean; hook_count: number }
 }
 
-interface RateLimit {
-  current: number; limit: number | null; pct: number | null; source: string; reset_at: number | null
+interface UsageLimit {
+  limit_type: string       // 'requests' | 'tokens' | 'input_tokens' | 'output_tokens'
+  period: string           // 'minute' | 'daily' | 'weekly' | 'monthly'
+  current: number
+  limit: number | null
+  pct: number | null       // 0-1
+  reset_at: number | null
+  source: string
+}
+
+interface ModelLimits {
+  model_name: string       // actual model name or '_gateway_' for gateway-level
+  limits: UsageLimit[]
 }
 
 interface GatewayCapacity {
   gateway_id: string
-  rpm: RateLimit; tpm: RateLimit; daily_tokens: RateLimit; concurrency: RateLimit
+  models: ModelLimits[]
   last_429_at: number | null; total_429_count: number
 }
 
@@ -81,13 +92,16 @@ function deriveCompositeStatus(gw: BridgeGateway, cap?: GatewayCapacity): Compos
   if (gw.status !== "active") return "offline"
   if (gw.circuit_state === "open") return "blocked"
   if (!cap) return "online"
-  const maxPct = Math.max(
-    cap.rpm.pct ?? 0, cap.tpm.pct ?? 0,
-    cap.daily_tokens.pct ?? 0, cap.concurrency.pct ?? 0,
-  )
-  if (maxPct >= 100) return "blocked"
-  if (maxPct >= 90 || (cap.last_429_at && (Date.now() / 1000 - cap.last_429_at) < 300)) return "throttled"
-  if (maxPct >= 70) return "busy"
+  // Check all limits across all models
+  let maxPct = 0
+  for (const m of cap.models) {
+    for (const l of m.limits) {
+      if (l.pct != null) maxPct = Math.max(maxPct, l.pct)
+    }
+  }
+  if (maxPct >= 1) return "blocked"
+  if (maxPct >= 0.9 || (cap.last_429_at && (Date.now() / 1000 - cap.last_429_at) < 300)) return "throttled"
+  if (maxPct >= 0.7) return "busy"
   return "online"
 }
 
@@ -122,7 +136,20 @@ function fmtResetIn(resetAt: number | null): string | null {
   return `Resets in ${(secsLeft / 3600).toFixed(1)}h`
 }
 
-function UsageMeter({ label, rl }: { label: string; rl: RateLimit }) {
+function periodLabel(period: string): string {
+  if (period === "minute") return "/min"
+  if (period === "daily") return " today"
+  if (period === "weekly") return " this week"
+  if (period === "monthly") return " this month"
+  return ""
+}
+
+function limitLabel(lt: string, period: string): string {
+  const type = lt === "requests" ? "Requests" : lt === "tokens" ? "Tokens" : lt === "input_tokens" ? "Input tokens" : "Output tokens"
+  return `${type}${periodLabel(period)}`
+}
+
+function UsageMeter({ label, rl }: { label: string; rl: UsageLimit }) {
   if (rl.limit == null && rl.current === 0) return null
   const pctNum = rl.pct != null ? Math.round(rl.pct * 100) : null
   const resetStr = fmtResetIn(rl.reset_at)
@@ -148,6 +175,57 @@ function UsageMeter({ label, rl }: { label: string; rl: RateLimit }) {
           <span className="text-2xs text-text3 font-mono">{fmtCompact(rl.current)} / {fmtCompact(rl.limit)}</span>
         )}
       </div>
+    </div>
+  )
+}
+
+/** Compact inline bar for per-model limits — one line each */
+function InlineUsageBar({ rl }: { rl: UsageLimit }) {
+  const pctNum = rl.pct != null ? Math.round(rl.pct * 100) : null
+  const label = limitLabel(rl.limit_type, rl.period)
+  return (
+    <div className="flex items-center gap-2 text-2xs">
+      <span className="text-text3 w-24 shrink-0 truncate">{label}</span>
+      <div className="flex-1 h-1 rounded-full bg-border/30 overflow-hidden">
+        {pctNum != null ? (
+          <div className={`h-full rounded-full ${capacityBarColor(pctNum)}`} style={{ width: `${Math.min(pctNum, 100)}%` }} />
+        ) : (
+          <div className="h-full rounded-full bg-text3/20" style={{ width: '10%' }} />
+        )}
+      </div>
+      <span className="text-text3 font-mono shrink-0 tabular-nums">
+        {pctNum != null ? `${pctNum}%` : "—"}
+        {rl.limit != null && <span className="ml-1">{fmtCompact(rl.current)}/{fmtCompact(rl.limit)}</span>}
+      </span>
+    </div>
+  )
+}
+
+function PerModelLimits({ models }: { models: ModelLimits[] }) {
+  const [expanded, setExpanded] = useState<string | null>(null)
+  return (
+    <div className="px-4 pb-2 space-y-0.5">
+      {models.map(m => (
+        <div key={m.model_name}>
+          <button
+            onClick={() => setExpanded(expanded === m.model_name ? null : m.model_name)}
+            className="flex items-center gap-1.5 w-full py-1 text-2xs text-text2 hover:text-text transition-colors"
+          >
+            <span className={`transition-transform ${expanded === m.model_name ? "rotate-90" : ""}`}>&#9654;</span>
+            <span className="font-medium truncate">{m.model_name}</span>
+            {m.limits.some(l => l.pct != null && l.pct >= 0.9) && (
+              <span className="size-1.5 rounded-full bg-orange-400 shrink-0" />
+            )}
+          </button>
+          {expanded === m.model_name && (
+            <div className="pl-4 pb-1.5 space-y-1">
+              {m.limits.map((l, i) => (
+                <InlineUsageBar key={i} rl={l} />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
@@ -355,12 +433,32 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
       </div>
 
       {/* Capacity bars */}
-      {capacity && (capacity.rpm.current > 0 || capacity.tpm.current > 0 || capacity.rpm.limit != null || capacity.tpm.limit != null) && (
-        <div className="px-4 pb-3 space-y-3 border-t border-border/30 pt-3">
-          <UsageMeter label="Requests" rl={capacity.rpm} />
-          <UsageMeter label="Tokens" rl={capacity.tpm} />
-        </div>
-      )}
+      {capacity && (() => {
+        const gwModel = capacity.models.find(m => m.model_name === "_gateway_")
+        const perModelModels = capacity.models.filter(m => m.model_name !== "_gateway_")
+        const hasGatewayLimits = gwModel && gwModel.limits.some(l => l.current > 0 || l.limit != null)
+        const hasModelLimits = perModelModels.length > 0
+
+        if (!hasGatewayLimits && !hasModelLimits) return null
+
+        return (
+          <div className="border-t border-border/30">
+            {/* Gateway-level limits */}
+            {hasGatewayLimits && gwModel && (
+              <div className="px-4 py-3 space-y-3">
+                {gwModel.limits.map((l, i) => (
+                  <UsageMeter key={i} label={limitLabel(l.limit_type, l.period)} rl={l} />
+                ))}
+              </div>
+            )}
+
+            {/* Per-model limits (collapsed by default) */}
+            {hasModelLimits && (
+              <PerModelLimits models={perModelModels} />
+            )}
+          </div>
+        )
+      })()}
 
       {/* Metrics row */}
       <MetricsRow metrics={metrics} />
@@ -704,22 +802,22 @@ function OperatorActivityLog() {
 
     // Rate limit / capacity alerts
     if (cap) {
-      const rls: { label: string; rl: RateLimit }[] = [
-        { label: "RPM", rl: cap.rpm }, { label: "TPM", rl: cap.tpm },
-        { label: "Daily", rl: cap.daily_tokens }, { label: "Concurrency", rl: cap.concurrency },
-      ]
-      for (const { label, rl } of rls) {
-        if (rl.pct != null && rl.pct >= 90) {
-          lines.push({
-            text: `${ts} [throttle] ⚠ ${gw.name} at ${Math.round(rl.pct)}% ${label} (${fmtCompact(rl.current)}/${fmtCompact(rl.limit!)})`,
-            color: rl.pct >= 100 ? "text-danger" : "text-orange-400",
-            _key: k++,
-          })
+      for (const m of cap.models) {
+        for (const rl of m.limits) {
+          if (rl.pct != null && rl.pct >= 0.9) {
+            const pctInt = Math.round(rl.pct * 100)
+            const label = `${rl.limit_type}/${rl.period}${m.model_name !== "_gateway_" ? ` (${m.model_name})` : ""}`
+            lines.push({
+              text: `${ts} [throttle] ${gw.name} at ${pctInt}% ${label} (${fmtCompact(rl.current)}/${fmtCompact(rl.limit!)})`,
+              color: pctInt >= 100 ? "text-danger" : "text-orange-400",
+              _key: k++,
+            })
+          }
         }
       }
       if (cap.last_429_at && (Date.now() / 1000 - cap.last_429_at) < 300) {
         lines.push({
-          text: `${fmtTs(cap.last_429_at)} [429] ✗ ${gw.name} rate limited (${cap.total_429_count} total)`,
+          text: `${fmtTs(cap.last_429_at)} [429] ${gw.name} rate limited (${cap.total_429_count} total)`,
           color: "text-danger",
           _key: k++,
         })
