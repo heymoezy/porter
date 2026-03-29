@@ -34,8 +34,14 @@ export function useAdminSSE() {
             break
 
           case "bridge:health":
-            // Gateway health changed — refresh gateway dashboard cards
+            // Gateway health changed — refresh gateway dashboard cards + capacity
             qc.invalidateQueries({ queryKey: ["bridge", "gateway-cards"] })
+            qc.invalidateQueries({ queryKey: ["bridge", "capacity"] })
+            break
+
+          case "bridge:usage":
+            // Usage collector ran — refresh capacity bars in real-time
+            qc.invalidateQueries({ queryKey: ["bridge", "capacity"] })
             break
 
           case "bridge:dispatch": {
@@ -56,9 +62,10 @@ export function useAdminSSE() {
             } else {
               qc.invalidateQueries({ queryKey: ["bridge", "dispatch-log"] })
             }
-            // Also refresh the agent-detail summary view
+            // Also refresh the agent-detail summary view + operator activity
             qc.invalidateQueries({ queryKey: ["bridge", "dispatch-log-summary"] })
             qc.invalidateQueries({ queryKey: ["bridge", "costs-summary"] })
+            qc.invalidateQueries({ queryKey: ["bridge", "intel-recent"] })
             break
           }
 

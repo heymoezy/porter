@@ -25,6 +25,7 @@ import type {
   RoutingRuleRow,
   BridgeDispatchRequest,
   BridgeDispatchResult,
+  AgentMessageLogContext,
 } from './types.js';
 
 // ── Internal helper types ─────────────────────────────────────────────────────
@@ -228,11 +229,14 @@ export class RoutingEngine {
    * Log a completed dispatch to bridge_dispatch_log.
    * Fire-and-forget — never blocks the caller.
    * RT-03: Transparent dispatch logging.
+   *
+   * @param agentMsgCtx — optional agent-message correlation fields (Bridge v1)
    */
   async logDispatch(
     decision: RoutingDecision,
     ctx: RoutingContext,
     result: BridgeDispatchResult,
+    agentMsgCtx?: AgentMessageLogContext,
   ): Promise<string> {
     const id = uuidv4();
 
@@ -271,8 +275,13 @@ export class RoutingEngine {
              (id, gateway_id, gateway_type, model_name, chosen_reason, alternatives,
               estimated_cost_usd, input_tokens, output_tokens, cached_tokens,
               model_version_id, latency_ms,
-              agent_id, project_id, chat_id, rule_id, username, created_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, EXTRACT(EPOCH FROM NOW()))`,
+              agent_id, project_id, chat_id, rule_id, username,
+              correlation_id, source_agent, source_gateway,
+              target_agent, target_gateway, intent, reply_to, is_agent_message,
+              created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
+                   $18,$19,$20,$21,$22,$23,$24,$25,
+                   EXTRACT(EPOCH FROM NOW()))`,
           [
             id,
             decision.gatewayRow.id,
@@ -291,6 +300,14 @@ export class RoutingEngine {
             ctx.chatId ?? null,
             decision.matchedRuleId,
             ctx.username ?? null,
+            agentMsgCtx?.correlationId ?? null,
+            agentMsgCtx?.sourceAgent ?? null,
+            agentMsgCtx?.sourceGateway ?? null,
+            agentMsgCtx?.targetAgent ?? null,
+            agentMsgCtx?.targetGateway ?? null,
+            agentMsgCtx?.intent ?? null,
+            agentMsgCtx?.replyTo ?? null,
+            agentMsgCtx ? 1 : null,
           ],
         );
 
@@ -408,17 +425,20 @@ export class RoutingEngine {
       throw new Error('No active gateways available');
     }
 
-    // Evaluate rules to potentially inform future filtering (currently advisory)
+    // Evaluate rules — apply them to fallback order just as select() does
     const matchedRule = await this.evaluateRules(ctx, candidates);
 
     // Sort candidates: prefer gateways with capacity headroom (soft preference)
     // Gateways at 90%+ utilization are pushed to the end, not blocked.
-    const sorted = [...candidates].sort((a, b) => {
+    const capacitySorted = [...candidates].sort((a, b) => {
       const aHas = hasCapacity(a.row.id) ? 0 : 1;
       const bHas = hasCapacity(b.row.id) ? 0 : 1;
       if (aHas !== bHas) return aHas - bHas;
       return a.row.priority - b.row.priority; // preserve priority within same capacity tier
     });
+
+    // Apply matched routing rule to fallback iteration order
+    const sorted = applyRuleToFallbackOrder(matchedRule, capacitySorted);
 
     const errors: string[] = [];
 
@@ -542,15 +562,19 @@ export class RoutingEngine {
       throw new Error('No active gateways available');
     }
 
+    // Evaluate rules — must be applied to streaming fallback order the same way as select()
     const matchedRule = await this.evaluateRules(ctx, candidates);
 
     // Sort candidates: prefer gateways with capacity headroom
-    const sorted = [...candidates].sort((a, b) => {
+    const capacitySorted = [...candidates].sort((a, b) => {
       const aHas = hasCapacity(a.row.id) ? 0 : 1;
       const bHas = hasCapacity(b.row.id) ? 0 : 1;
       if (aHas !== bHas) return aHas - bHas;
       return a.row.priority - b.row.priority;
     });
+
+    // Apply matched routing rule to fallback iteration order (fixes force_model/block_gateway/prefer_local)
+    const sorted = applyRuleToFallbackOrder(matchedRule, capacitySorted);
 
     const errors: string[] = [];
 
@@ -711,6 +735,65 @@ function mapGatewayRow(raw: GatewayDbRow): GatewayRow {
     updatedAt: raw.updated_at,
     lastHealthAt: raw.last_health_at,
   };
+}
+
+/**
+ * Apply a matched routing rule to a fallback candidate list.
+ * Used by both selectWithFallback() and selectStreamWithFallback() so that
+ * force_model / block_gateway / prefer_local are honored consistently with select().
+ *
+ * Unlike select() which picks exactly one gateway, fallback methods iterate the list,
+ * so rules are expressed as ordering/filtering rather than single-gateway selection:
+ *   - force_model: move forced gateway type to front (it is tried first, others remain as fallbacks)
+ *   - block_gateway: remove the blocked gateway type entirely
+ *   - prefer_local: reorder so local gateway types lead the list
+ *   - cap_cost_usd / unknown: no ordering change
+ */
+function applyRuleToFallbackOrder(
+  rule: RoutingRuleRow | null,
+  candidates: GatewayCandidate[],
+): GatewayCandidate[] {
+  if (!rule) return candidates;
+
+  if (rule.action === 'force_model' && rule.actionValue) {
+    const [forceType] = rule.actionValue.includes(':')
+      ? rule.actionValue.split(':', 2)
+      : [rule.actionValue];
+
+    // Move the forced gateway type to the front; keep the rest in order as fallbacks
+    const forced = candidates.filter(c => c.row.type === forceType);
+    const rest = candidates.filter(c => c.row.type !== forceType);
+
+    if (forced.length > 0) {
+      // If actionValue includes a model override, apply it to the forced candidate row
+      const [, forceModel] = rule.actionValue.includes(':')
+        ? rule.actionValue.split(':', 2)
+        : [rule.actionValue, null];
+      const mappedForced = forceModel
+        ? forced.map(c => ({
+            row: { ...c.row, metadata: { ...c.row.metadata, default_model: forceModel } },
+            adapter: c.adapter,
+          }))
+        : forced;
+      return [...mappedForced, ...rest];
+    }
+    return candidates; // forced type not available — keep original order
+  }
+
+  if (rule.action === 'block_gateway' && rule.actionValue) {
+    const after = candidates.filter(c => c.row.type !== rule.actionValue);
+    return after.length > 0 ? after : candidates; // graceful: never produce empty list
+  }
+
+  if (rule.action === 'prefer_local') {
+    const LOCAL_TYPES = new Set(['ollama', 'codex_cli', 'claude_cli', 'gemini_cli']);
+    return [
+      ...candidates.filter(c => LOCAL_TYPES.has(c.row.type)),
+      ...candidates.filter(c => !LOCAL_TYPES.has(c.row.type)),
+    ];
+  }
+
+  return candidates; // cap_cost_usd and unknown actions — no ordering change
 }
 
 function mapRuleRow(raw: RoutingRuleDbRow): RoutingRuleRow {

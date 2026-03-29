@@ -1,5 +1,8 @@
 # Porter Bridge — Hub & Spoke Contract
 
+Canonical location: repo root `/home/lobster/documents/porter/BRIDGE.md`.
+If you're working from `backend/`, this is still the source of truth.
+
 ## Endpoint
 ```
 POST http://127.0.0.1:3001/api/v1/chat/stream

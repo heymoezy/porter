@@ -18,6 +18,7 @@ interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
   notificationCount?: number
+  bridgeUpdateCount?: number
 }
 
 const groups = [
@@ -54,7 +55,7 @@ const groups = [
   ]},
 ]
 
-export function Sidebar({ collapsed, onToggle, notificationCount = 0 }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, notificationCount = 0, bridgeUpdateCount = 0 }: SidebarProps) {
   const location = useLocation()
   const user = useCurrentUser()
   const logout = useLogout()
@@ -97,6 +98,11 @@ export function Sidebar({ collapsed, onToggle, notificationCount = 0 }: SidebarP
                   {!collapsed && item.path === "/dashboard" && notificationCount > 0 && (
                     <Badge className="bg-danger text-white text-2xs px-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full">
                       {notificationCount}
+                    </Badge>
+                  )}
+                  {!collapsed && item.path === "/bridge" && bridgeUpdateCount > 0 && (
+                    <Badge className="bg-warning text-white text-2xs px-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full">
+                      {bridgeUpdateCount}
                     </Badge>
                   )}
                 </Link>

@@ -208,7 +208,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     const agentId = body?.agent_id;
     const chatId = body?.chat_id;
     const projectId = body?.project_id;
-    const backendHint = body?.backend;
+    const backend = body?.backend;
 
     // COLLAB-03: If a project context is provided, verify project access (chat role minimum)
     if (projectId) {
@@ -283,7 +283,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     }
 
     // STRM-02: prefer strong model for user chat, fall back to ollama if unavailable
-    const backend = await selectStreamBackend(message, backendHint ?? 'auto', {
+    const streamBackend = await selectStreamBackend(message, backend ?? 'auto', {
       agentId,
       chatId,
       projectId,
@@ -292,7 +292,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     let fullResponse = '';
 
     try {
-      for await (const token of backend.stream(augmentedMessage, ac.signal, systemPrompt)) {
+      for await (const token of streamBackend.stream(augmentedMessage, ac.signal, systemPrompt)) {
         if (ac.signal.aborted) break;
         fullResponse += token;
         reply.raw.write(`data: ${JSON.stringify({ token })}\n\n`);
@@ -303,7 +303,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       }
     } finally {
       // Always emit done event (prevents client EventSource reconnect loops)
-      const modelLabel = backend.name === 'ollama' ? `ollama/${config.ollamaModel}` : backend.name;
+      const modelLabel = streamBackend.name === 'ollama' ? `ollama/${config.ollamaModel}` : streamBackend.name;
       reply.raw.write(`data: ${JSON.stringify({ done: true, backend: modelLabel, full_response: fullResponse })}\n\n`);
       reply.raw.end();
 
@@ -317,7 +317,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
           if (!existingChat) {
             await pool.query(
               'INSERT INTO chats (id, title, model_id, username, project_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())',
-              [chatId, message.slice(0, 50), backend.name, user.username, projectId ?? null]
+              [chatId, message.slice(0, 50), streamBackend.name, user.username, projectId ?? null]
             );
           }
           // Insert user message (original, without identity prefix)

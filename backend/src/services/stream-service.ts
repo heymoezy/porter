@@ -44,13 +44,13 @@ export async function streamFromBridge(
  */
 export async function selectStreamBackend(
   message: string,
-  backendHint?: 'ollama' | 'openclaw' | 'auto',
+  backend?: 'ollama' | 'openclaw' | 'auto',
   ctxOverride?: Partial<RoutingContext>,
 ): Promise<StreamBackend> {
   // Return an object that satisfies the legacy StreamBackend interface
   // but internally uses the unified routing engine.
   return {
-    name: backendHint === 'ollama' ? 'ollama' : backendHint === 'openclaw' ? 'openclaw' : 'auto',
+    name: backend === 'ollama' ? 'ollama' : backend === 'openclaw' ? 'openclaw' : 'auto',
     async *stream(prompt: string, signal: AbortSignal, systemPrompt?: string): AsyncIterable<string> {
       const ctx: RoutingContext = {
         message: message, // Use initial message for routing

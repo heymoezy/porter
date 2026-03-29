@@ -52,10 +52,14 @@ interface GatewayPromptProfile {
   config_files: ConfigFile[]; porter_system_prompt: string
 }
 
+interface HookDetail {
+  event: string; matcher?: string; command: string; type: string
+}
+
 interface GatewayVersion {
   gateway_id: string; version: string | null; latest: string | null
   update_cmd: string | null; is_latest: boolean | null
-  hooks?: { hooks_configured: boolean; hook_count: number }
+  hooks?: { hooks_configured: boolean; hook_count: number; details?: HookDetail[] }
 }
 
 interface UsageLimit {
@@ -352,6 +356,7 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
 }) {
   const qc = useQueryClient()
   const [showConfig, setShowConfig] = useState(false)
+  const [showHooks, setShowHooks] = useState(false)
   const isOnline = gw.status === "active"
   const circuitOpen = gw.circuit_state === "open"
   const circuitHalf = gw.circuit_state === "half_open"
@@ -468,11 +473,26 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
           <Badge key={p} className="text-2xs bg-success/10 text-success border-0">{p}</Badge>
         ))}
         {versionInfo?.hooks?.hooks_configured && (
-          <button onClick={() => onOpenEditor("prompt")} className="flex items-center gap-1 text-accent-porter hover:text-foreground transition-colors" title={`${versionInfo.hooks.hook_count} hook${versionInfo.hooks.hook_count !== 1 ? "s" : ""} — click to view`}>
+          <button onClick={() => setShowHooks(!showHooks)} className="flex items-center gap-1 text-accent-porter hover:text-foreground transition-colors" title={`${versionInfo.hooks.hook_count} hook${versionInfo.hooks.hook_count !== 1 ? "s" : ""} — click to view`}>
             <Link2 className="size-2.5" />{versionInfo.hooks.hook_count} hook{versionInfo.hooks.hook_count !== 1 ? "s" : ""}
           </button>
         )}
       </div>
+
+      {/* Hook configurations */}
+      {showHooks && versionInfo?.hooks?.details && versionInfo.hooks.details.length > 0 && (
+        <div className="px-4 py-3 border-t border-border/30 space-y-2 bg-background/50">
+          <p className="text-2xs font-semibold text-text2 uppercase tracking-wider">Hooks</p>
+          {versionInfo.hooks.details.map((h, i) => (
+            <div key={i} className="flex items-start gap-2 text-2xs">
+              <Badge className="bg-accent-porter/15 text-accent-porter border-0 text-2xs shrink-0">{h.event}</Badge>
+              {h.matcher && <span className="text-text3 shrink-0">/{h.matcher}/</span>}
+              <code className="text-text2 font-mono truncate flex-1" title={h.command}>{h.command}</code>
+              <span className="text-text3 shrink-0">{h.type}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Usage limits — Session/Daily + Weekly, with token details */}
       {capacity && (() => {

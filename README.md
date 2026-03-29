@@ -1,6 +1,7 @@
 # Porter
 
 AI orchestration platform. Single monorepo (`heymoezy/porter`).
+Canonical Bridge contract: `BRIDGE.md` at repo root.
 
 ## Components
 

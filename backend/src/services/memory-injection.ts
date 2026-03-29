@@ -11,14 +11,15 @@ function estimateTokens(text: string): number {
  * Build a tiered memory context string for injection into the AI prompt.
  *
  * 5-tier pipeline (priority order):
- *   Tier 1: Agent identity    (~200 tokens)  — who is this agent
- *   Tier 2: Directives        (~300 tokens)  — workspace + project rules
- *   Tier 3: Project notes     (~400 tokens)  — project state/decisions
- *   Tier 4: Agent notes       (~400 tokens)  — agent learnings/constraints
- *   Tier 5: Archival FTS      (remaining)    — relevant concepts from memory
+ *   Tier 1: Agent identity    (target 200 tokens)  — who is this agent
+ *   Tier 2: Directives        (target 300 tokens)  — workspace + project rules
+ *   Tier 3: Project notes     (target 400 tokens)  — project state/decisions
+ *   Tier 4: Agent notes       (target 400 tokens)  — agent learnings/constraints
+ *   Tier 5: Archival FTS      (remaining)           — relevant concepts from memory
  *
- * Token budget prevents context overflow — tiers are clipped when budget is
- * consumed. Any DB error returns empty string (never crashes the caller).
+ * Token budget prevents context overflow. Tiers use a rolling budget: if a higher-priority
+ * tier uses less than its target, the remainder flows to lower-priority tiers.
+ * If a tier exceeds its target, it is clipped unless there is spare room from previous tiers.
  */
 export async function buildMemoryContext(opts: {
   agentId?: string;
@@ -27,13 +28,21 @@ export async function buildMemoryContext(opts: {
   searchQuery?: string;
 }): Promise<string> {
   const { agentId, projectId, searchQuery } = opts;
-  let remainingTokens = opts.tokenBudget ?? 2000;
+  let totalRemaining = opts.tokenBudget ?? 2000;
 
   const sections: string[] = [];
 
-  try {
+  // Tier target budgets (rolling)
+  const targets = {
+    tier1: 200,
+    tier2: 300,
+    tier3: 400,
+    tier4: 400,
+  };
 
-    // ── Tier 1: Agent Identity ────────────────────────────────────────────────
+  try {
+    // ── Tier 1: Agent Identity (Target: 200) ──────────────────────────────────
+    let tier1Spare = targets.tier1;
     if (agentId) {
       const res = await pool.query<{ name: string; role: string | null; config: Record<string, unknown> | null }>(
         'SELECT name, role, config FROM personas WHERE id = $1',
@@ -41,20 +50,22 @@ export async function buildMemoryContext(opts: {
       );
       if (res.rows.length > 0) {
         const { name, role, config } = res.rows[0];
-        // Override token budget if agent has a custom setting
+        // Override TOTAL token budget if agent has a custom setting
         if (config && typeof config.memory_token_budget === 'number') {
-          remainingTokens = config.memory_token_budget;
+          totalRemaining = config.memory_token_budget;
         }
         const section = `## Agent Identity\nName: ${name}\nRole: ${role ?? 'assistant'}\n`;
         const tokens = estimateTokens(section);
-        if (tokens <= remainingTokens) {
+        if (tokens <= totalRemaining) {
           sections.push(section);
-          remainingTokens -= tokens;
+          totalRemaining -= tokens;
+          tier1Spare = Math.max(0, targets.tier1 - tokens);
         }
       }
     }
 
-    // ── Tier 2: Directives ────────────────────────────────────────────────────
+    // ── Tier 2: Directives (Target: 300 + spare) ──────────────────────────────
+    const tier2Budget = targets.tier2 + tier1Spare;
     let directiveRows: Array<{ content: string; priority: number }> = [];
     if (projectId) {
       const res = await pool.query<{ content: string; priority: number }>(
@@ -74,24 +85,30 @@ export async function buildMemoryContext(opts: {
       directiveRows = res.rows;
     }
 
+    let tier2Used = 0;
     if (directiveRows.length > 0) {
       const header = '## Directives\n';
       let body = '';
       for (const row of directiveRows) {
         const line = row.content + '\n';
         const lineTokens = estimateTokens(line);
-        if (estimateTokens(header + body + line) > remainingTokens) break;
+        // Check both tier budget AND total remaining
+        if (estimateTokens(header + body + line) > tier2Budget) break;
+        if (estimateTokens(header + body + line) > totalRemaining) break;
         body += line;
       }
       if (body) {
         const section = header + body;
         const tokens = estimateTokens(section);
         sections.push(section);
-        remainingTokens -= tokens;
+        totalRemaining -= tokens;
+        tier2Used = tokens;
       }
     }
+    const tier2Spare = Math.max(0, tier2Budget - tier2Used);
 
-    // ── Tier 3: Project Notes ─────────────────────────────────────────────────
+    // ── Tier 3: Project Notes (Target: 400 + spare) ───────────────────────────
+    const tier3Budget = targets.tier3 + tier2Spare;
     if (projectId) {
       const res = await pool.query<{ content: string; note_type: string; confidence_score: number }>(
         `SELECT content, note_type, confidence_score
@@ -100,51 +117,60 @@ export async function buildMemoryContext(opts: {
          ORDER BY confidence_score DESC`,
         [projectId]
       );
+      let tier3Used = 0;
       if (res.rows.length > 0) {
         const header = '## Project State\n';
         let body = '';
         for (const row of res.rows) {
           const line = `[${row.note_type}] ${row.content}\n`;
-          if (estimateTokens(header + body + line) > remainingTokens) break;
+          if (estimateTokens(header + body + line) > tier3Budget) break;
+          if (estimateTokens(header + body + line) > totalRemaining) break;
           body += line;
         }
         if (body) {
           const section = header + body;
           const tokens = estimateTokens(section);
           sections.push(section);
-          remainingTokens -= tokens;
+          totalRemaining -= tokens;
+          tier3Used = tokens;
         }
+      }
+      const tier3Spare = Math.max(0, tier3Budget - tier3Used);
+
+      // ── Tier 4: Agent Notes (Target: 400 + spare) ─────────────────────────────
+      const tier4Budget = targets.tier4 + tier3Spare;
+      if (agentId) {
+        const res = await pool.query<{ content: string; note_type: string; confidence_score: number }>(
+          `SELECT content, note_type, confidence_score
+           FROM agent_notes
+           WHERE agent_id = $1 AND status = 'active'
+           ORDER BY confidence_score DESC`,
+          [agentId]
+        );
+        let tier4Used = 0;
+        if (res.rows.length > 0) {
+          const header = '## Agent Knowledge\n';
+          let body = '';
+          for (const row of res.rows) {
+            const line = `[${row.note_type}] ${row.content}\n`;
+            if (estimateTokens(header + body + line) > tier4Budget) break;
+            if (estimateTokens(header + body + line) > totalRemaining) break;
+            body += line;
+          }
+          if (body) {
+            const section = header + body;
+            const tokens = estimateTokens(section);
+            sections.push(section);
+            totalRemaining -= tokens;
+            tier4Used = tokens;
+          }
+        }
+        // Tier 5 gets whatever is left from totalRemaining
       }
     }
 
-    // ── Tier 4: Agent Notes ───────────────────────────────────────────────────
-    if (agentId) {
-      const res = await pool.query<{ content: string; note_type: string; confidence_score: number }>(
-        `SELECT content, note_type, confidence_score
-         FROM agent_notes
-         WHERE agent_id = $1 AND status = 'active'
-         ORDER BY confidence_score DESC`,
-        [agentId]
-      );
-      if (res.rows.length > 0) {
-        const header = '## Agent Knowledge\n';
-        let body = '';
-        for (const row of res.rows) {
-          const line = `[${row.note_type}] ${row.content}\n`;
-          if (estimateTokens(header + body + line) > remainingTokens) break;
-          body += line;
-        }
-        if (body) {
-          const section = header + body;
-          const tokens = estimateTokens(section);
-          sections.push(section);
-          remainingTokens -= tokens;
-        }
-      }
-    }
-
-    // ── Tier 5: Archival FTS Search ───────────────────────────────────────────
-    if (searchQuery && remainingTokens > 50) {
+    // ── Tier 5: Archival FTS Search (Remaining) ───────────────────────────────
+    if (searchQuery && totalRemaining > 50) {
       const res = await pool.query<{ content: string; confidence_score: number | null }>(
         `SELECT content, confidence_score
          FROM concepts
@@ -159,7 +185,7 @@ export async function buildMemoryContext(opts: {
         let body = '';
         for (const row of res.rows) {
           const line = row.content + '\n';
-          if (estimateTokens(header + body + line) > remainingTokens) break;
+          if (estimateTokens(header + body + line) > totalRemaining) break;
           body += line;
         }
         if (body) {
@@ -169,7 +195,7 @@ export async function buildMemoryContext(opts: {
     }
 
   } catch (e) {
-    console.error('[memory-injection] Error building memory context:', e);
+    console.error('[memory-injection] Error building memory context:', e)
     return '';
   }
 

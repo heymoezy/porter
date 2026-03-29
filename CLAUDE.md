@@ -14,7 +14,7 @@ Porter Brain is the **API backend and database owner**. Together with Porter Adm
 - **Config:** `porter_config.json` (via `PORTER_DATA_DIR` env var)
 - **Database:** PostgreSQL (Drizzle ORM) — Brain owns this, Admin connects to it
 - **Tests:** `cd tests && npx playwright test` (35 tests)
-- **Version:** v3.2.0
+- **Version:** v3.3.2
 
 ## Monorepo Structure
 
@@ -36,6 +36,8 @@ Business model: API metering. Any future UI/frontend is just an API customer —
 - **System prompt:** `backend/src/services/stream-service.ts` — reads directives from DB
 
 ## Bridge Layer
+
+Canonical hub/spoke contract: `/home/lobster/documents/porter/BRIDGE.md`
 
 5 gateway adapters in `backend/src/services/bridge/adapters/`:
 - OpenClaw (GPT-5.4) — primary strong model, :18789

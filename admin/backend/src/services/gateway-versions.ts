@@ -19,9 +19,17 @@ import { postIntelligence, assessUpdateRisk } from './agent-loop.js';
 
 // ── Types ─────────────────────────────────────────────
 
+export interface GatewayHookDetail {
+  event: string;
+  matcher?: string;
+  command: string;
+  type: string;
+}
+
 export interface GatewayHookInfo {
   hooks_configured: boolean;
   hook_count: number;
+  details: GatewayHookDetail[];
 }
 
 export interface GatewayVersionInfo {
@@ -115,56 +123,63 @@ async function githubLatestRelease(repo: string): Promise<string | null> {
 // ── Hook detection per gateway type ───────────────────
 
 function detectHooks(gwType: string): GatewayHookInfo {
-  const none: GatewayHookInfo = { hooks_configured: false, hook_count: 0 };
+  const none: GatewayHookInfo = { hooks_configured: false, hook_count: 0, details: [] };
   try {
-    if (gwType === 'claude_cli') {
-      const settingsPath = join(homedir(), '.claude', 'settings.json');
+    if (gwType === 'claude_cli' || gwType === 'gemini_cli') {
+      const dir = gwType === 'claude_cli' ? '.claude' : '.gemini';
+      const settingsPath = join(homedir(), dir, 'settings.json');
       const data = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
       const hooks = data.hooks as Record<string, unknown[]> | undefined;
       if (!hooks) return none;
-      let count = 0;
-      for (const eventHooks of Object.values(hooks)) {
+      const details: GatewayHookDetail[] = [];
+      for (const [event, eventHooks] of Object.entries(hooks)) {
         if (Array.isArray(eventHooks)) {
           for (const group of eventHooks) {
-            const g = group as { hooks?: unknown[] };
-            if (Array.isArray(g.hooks)) count += g.hooks.length;
+            const g = group as { matcher?: string; hooks?: Array<{ type?: string; command?: string }> };
+            if (Array.isArray(g.hooks)) {
+              for (const h of g.hooks) {
+                details.push({
+                  event,
+                  matcher: g.matcher,
+                  command: h.command || '(unknown)',
+                  type: h.type || 'command',
+                });
+              }
+            }
           }
         }
       }
-      return { hooks_configured: count > 0, hook_count: count };
+      return { hooks_configured: details.length > 0, hook_count: details.length, details };
     }
 
     if (gwType === 'codex_cli') {
       const configPath = join(homedir(), '.codex', 'config.toml');
       const content = readFileSync(configPath, 'utf8');
-      // Count [[hooks]] sections — each is one hook entry
-      const matches = content.match(/^\[\[hooks\]\]/gm);
-      const count = matches ? matches.length : 0;
-      return { hooks_configured: count > 0, hook_count: count };
+      const details: GatewayHookDetail[] = [];
+      // Parse [[hooks]] sections: event, pattern (matcher), command
+      const sections = content.split(/^\[\[hooks\]\]/gm).slice(1);
+      for (const section of sections) {
+        const eventMatch = section.match(/event\s*=\s*"([^"]+)"/);
+        const patternMatch = section.match(/pattern\s*=\s*"([^"]+)"/);
+        const cmdMatch = section.match(/command\s*=\s*"([^"]+)"/);
+        if (eventMatch || cmdMatch) {
+          details.push({
+            event: eventMatch?.[1] || 'unknown',
+            matcher: patternMatch?.[1],
+            command: cmdMatch?.[1] || '(unknown)',
+            type: 'command',
+          });
+        }
+      }
+      return { hooks_configured: details.length > 0, hook_count: details.length, details };
     }
 
     if (gwType === 'openclaw') {
-      // OpenClaw uses AGENTS.md as instructions-based hooks (not executable)
       const agentsPath = join(homedir(), '.openclaw', 'workspace', 'AGENTS.md');
       readFileSync(agentsPath, 'utf8'); // throws if missing
-      return { hooks_configured: true, hook_count: 1 };
-    }
-
-    if (gwType === 'gemini_cli') {
-      const settingsPath = join(homedir(), '.gemini', 'settings.json');
-      const data = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
-      const hooks = data.hooks as Record<string, unknown[]> | undefined;
-      if (!hooks) return none;
-      let count = 0;
-      for (const eventHooks of Object.values(hooks)) {
-        if (Array.isArray(eventHooks)) {
-          for (const group of eventHooks) {
-            const g = group as { hooks?: unknown[] };
-            if (Array.isArray(g.hooks)) count += g.hooks.length;
-          }
-        }
-      }
-      return { hooks_configured: count > 0, hook_count: count };
+      return { hooks_configured: true, hook_count: 1, details: [
+        { event: 'system', command: 'AGENTS.md', type: 'instruction' },
+      ]};
     }
 
     // ollama and unknown types — no hooks

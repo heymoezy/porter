@@ -1,3 +1,9 @@
+## v3.3.2 (2026-03-29)
+
+- docs: make `BRIDGE.md` canonical location explicit from repo root and backend workspace
+- fix: standardize stream request naming on `backend` instead of legacy `backendHint`
+- fix: align repo version markers (`package.json`, backend package, workspace docs)
+
 ## v3.3.1 (2026-03-29)
 
 - feat: hooks badge clickable — opens file editor to view/edit hooks

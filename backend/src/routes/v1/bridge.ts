@@ -5,7 +5,16 @@ import { ok, err } from '../../lib/envelope.js';
 import { detectAndUpsertGateways, type DetectionReport } from '../../services/bridge/startup-detector.js';
 import { createAdapter } from '../../services/bridge/adapters/index.js';
 import { encryptCredential, validatePorterSecret } from '../../lib/credential-crypto.js';
-import type { GatewayRow } from '../../services/bridge/types.js';
+import { routingEngine } from '../../services/bridge/routing-engine.js';
+import type {
+  GatewayRow,
+  AgentMessageRequest,
+  AgentMessageResponse,
+  RoutingContext,
+} from '../../services/bridge/types.js';
+
+/** Maximum Bridge hops before a request is rejected to prevent loops. */
+const MAX_AGENT_HOPS = 5;
 
 // ── Row mappers ───────────────────────────────────────────────────────────────
 

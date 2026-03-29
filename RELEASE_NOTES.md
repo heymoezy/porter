@@ -1,5 +1,14 @@
 # Porter Release Notes
 
+## v3.3.2 (2026-03-29)
+
+**Bridge UX improvements — badges, hooks, real-time activity**
+
+- Bridge nav badge: warning counter shows pending gateway updates/installs in sidebar
+- Hooks link: click to expand actual hook configurations (event, matcher, command) instead of opening file editor
+- Real-time operator activity: SSE events from usage collector + health probe invalidate capacity/intel queries live
+- Admin version fixed: lower nav now shows correct Porter version (was stuck at 2.5.0)
+
 ## v3.0.0 (2026-03-25)
 
 **v3.0 MILESTONE COMPLETE: Porter Bridge — AI Gateway & Model Intelligence**

@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import Database from 'better-sqlite3';
+import { emitSSE } from '../scheduler.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,9 @@ export async function collectLocalUsage(): Promise<void> {
     ];
     if (ids.openclaw) tasks.push(collectOpenClawUsage(ids.openclaw));
     await Promise.allSettled(tasks);
+
+    // Emit SSE so admin UI refreshes capacity in real-time
+    emitSSE('bridge:usage', { ts: Date.now() }).catch(() => {});
   } catch (err) {
     console.error('[usage-collector] error:', err instanceof Error ? err.message : err);
   }
