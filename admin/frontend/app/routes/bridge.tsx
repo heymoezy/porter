@@ -161,14 +161,16 @@ function limitLabel(lt: string, period: string): string {
 function UsageBlock({ label, requests, tokens }: { label: string; requests?: UsageLimit; tokens?: UsageLimit }) {
   const primary = requests || tokens
   if (!primary) return null
-  const pctNum = primary.pct != null ? Math.round(primary.pct * 100) : null
-  const resetStr = fmtResetIn(primary.reset_at)
+  // Try requests pct first, then tokens pct
+  const rawPct = requests?.pct ?? tokens?.pct
+  const pctNum = rawPct != null ? Math.round(rawPct * 100) : null
+  const resetStr = fmtResetIn(requests?.reset_at ?? tokens?.reset_at ?? null)
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <span className="text-2xs font-medium text-text2">
-          {label}{pctNum != null ? ` (${pctNum}% used)` : ''}
+          {label}{pctNum != null ? ` (${pctNum}% used)` : tokens && tokens.current > 0 ? ' (tracking)' : ''}
         </span>
         <span className="text-2xs text-text3">{resetStr ?? 'Limit not published'}</span>
       </div>
