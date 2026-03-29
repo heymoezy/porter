@@ -85,7 +85,7 @@ export default function ArchitecturePage() {
       <div className="mx-auto max-w-5xl px-6 py-6 space-y-10">
 
         {/* ── The 3 Pillars ── */}
-        <Section title="Porter">
+        <Section title="What is Porter?">
           <p className="text-xs text-text2 text-center max-w-2xl mx-auto">
             You plug in your AI models. Porter figures out which one to use, remembers what happened last time, and keeps everything running when things break. Three moving parts.
           </p>
@@ -145,7 +145,7 @@ export default function ArchitecturePage() {
             {/* Middle: Porter with Recall running through everything */}
             <div className="relative rounded-xl border-2 border-success bg-success/5 p-5">
               <div className="text-center mb-3">
-                <span className="text-xs font-bold text-success">Porter :3001</span>
+                <span className="text-xs font-bold text-success">Porter</span>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-lg border border-warning/30 bg-surface p-3 text-center">
@@ -190,7 +190,7 @@ export default function ArchitecturePage() {
             </div>
             <div className="flex items-center justify-center gap-2">
               <Database className="size-3 text-success" />
-              <span className="text-2xs text-text3">PostgreSQL :5432 — single source of truth for all 3 pillars</span>
+              <span className="text-2xs text-text3">PostgreSQL — single source of truth for all 3 pillars</span>
             </div>
           </div>
         </Section>
@@ -199,7 +199,7 @@ export default function ArchitecturePage() {
         <Section title="Repository">
           <div className="rounded-xl border border-border bg-surface p-5 font-mono text-2xs leading-[1.8] text-text2">
             <p className="text-success font-bold mb-1">heymoezy/porter <span className="text-text3 font-normal">v{health?.version ?? "..."}</span></p>
-            <p className="ml-2">├── <span className="text-warning">backend/</span> <span className="text-text3">Fastify API — Bridge + Forge + Recall + Admin (:3001)</span></p>
+            <p className="ml-2">├── <span className="text-warning">backend/</span> <span className="text-text3">Fastify API — Bridge + Forge + Recall + Admin</span></p>
             <p className="ml-2">│   ├── src/services/bridge/ <span className="text-text3">5 gateway adapters</span></p>
             <p className="ml-2">│   ├── src/services/memory-injection.ts <span className="text-text3">Recall pipeline</span></p>
             <p className="ml-2">│   ├── src/routes/v1/ <span className="text-text3">Brain API</span></p>
