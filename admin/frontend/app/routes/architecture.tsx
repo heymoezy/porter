@@ -6,29 +6,36 @@ import { useChatPanel } from "~/hooks/use-chat-panel"
 import { Badge } from "~/components/ui/badge"
 import {
   Database, Server, Globe,
-  ArrowRight, ArrowDown, Shield,
-  Brain, Zap, Route,
+  ArrowDown, ArrowRight,
+  Brain, Zap, Route, Flame, BookOpen,
   CheckCircle, XCircle,
+  Cpu, HardDrive, Shield, Cable,
 } from "lucide-react"
 
 // ── Shared Components ─────────────────────────────────
 
-function Node({ icon: Icon, label, sub, color, badge }: {
-  icon: typeof Server; label: string; sub: string; color: string; badge?: string
+function PillarCard({ icon: Icon, name, tagline, color, children }: {
+  icon: typeof Server; name: string; tagline: string; color: string; children: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col items-center gap-1.5">
-      <div className={`flex h-14 w-14 items-center justify-center rounded-xl border-2 ${color}`}>
-        <Icon className="h-6 w-6" />
+    <div className={`rounded-xl border-2 ${color} bg-surface overflow-hidden`}>
+      <div className="px-5 py-4 flex items-center gap-3">
+        <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${color} bg-opacity-10`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-foreground">{name}</h3>
+          <p className="text-2xs text-text3">{tagline}</p>
+        </div>
       </div>
-      <span className="text-xs font-bold text-foreground">{label}</span>
-      <span className="text-2xs text-text3">{sub}</span>
-      {badge && <Badge className="text-2xs px-1.5 py-0 bg-raised text-text3">{badge}</Badge>}
+      <div className="px-5 pb-4 text-2xs text-text2 space-y-2">
+        {children}
+      </div>
     </div>
   )
 }
 
-function Arrow({ direction = "right" }: { direction?: "right" | "down" }) {
+function Arrow({ direction = "down" }: { direction?: "right" | "down" }) {
   return direction === "down"
     ? <ArrowDown className="h-4 w-4 text-border2 mx-auto" />
     : <ArrowRight className="h-4 w-4 text-border2" />
@@ -43,17 +50,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
         <div className="h-px flex-1 bg-border" />
       </h2>
       {children}
-    </div>
-  )
-}
-
-function ApiGroup({ title, color, endpoints }: { title: string; color: string; endpoints: string[] }) {
-  return (
-    <div className="rounded-lg border border-border/50 bg-surface p-3">
-      <p className={`text-2xs font-semibold uppercase tracking-wide ${color} mb-2`}>{title}</p>
-      <div className="space-y-0.5">
-        {endpoints.map(e => <p key={e} className="font-mono text-2xs text-text2 leading-relaxed">{e}</p>)}
-      </div>
     </div>
   )
 }
@@ -95,7 +91,7 @@ export default function ArchitecturePage() {
               <div className="flex items-center gap-1.5">
                 {health.db === "connected" ? <CheckCircle className="size-3 text-success" /> : <XCircle className="size-3 text-danger" />}
                 <span className="font-bold text-foreground">v{health.version}</span>
-                <span className="text-text3">· {health.service} · DB {health.db}</span>
+                <span className="text-text3">· :3001 · DB {health.db}</span>
               </div>
             )}
             {sys && (
@@ -104,209 +100,150 @@ export default function ArchitecturePage() {
                 <span>MEM {sys.memory.pct}%</span>
                 <span>DSK {sys.disk.pct}%</span>
                 <span>Up {Math.floor(sys.uptime / 3600)}h</span>
-                <span>{sys.sessions.concurrent} online</span>
               </div>
             )}
           </div>
         )}
 
-        {/* ── Platform Topology ── */}
-        <Section title="Platform Topology">
-          <div className="rounded-xl border border-border bg-surface p-8 space-y-4">
-            <div className="flex items-center justify-center gap-6 flex-wrap">
-              <Node icon={Server} label="Porter" sub=":3001 — API + Admin + Bridge" color="border-success text-success bg-success/10" badge="SINGLE PROCESS" />
-              <Arrow />
-              <Node icon={Database} label="PostgreSQL 16" sub=":5432/porter" color="border-success text-success bg-success/10" badge="SSOT" />
-            </div>
-            <Arrow direction="down" />
-            <div className="flex items-center justify-center gap-6 flex-wrap">
-              <Node icon={Route} label="Bridge" sub="5 gateways · circuit breakers" color="border-warning text-warning bg-warning/10" />
-              <Node icon={Zap} label="AI Router" sub="DB-driven routing · prompt pipeline" color="border-accent-porter text-accent-porter bg-accent-porter/10" />
-              <Node icon={Brain} label="Memory V3" sub="directives · concepts · notes" color="border-success text-success bg-success/10" />
-              <Node icon={Globe} label="SSE Hub" sub="Real-time events" color="border-chart-2 text-chart-2 bg-chart-2/10" />
-            </div>
-            <p className="text-center text-2xs text-text3 mt-2">One process, one port (:3001), one database. API metering business model.</p>
+        {/* ── The 3 Pillars ── */}
+        <Section title="Porter">
+          <p className="text-xs text-text2 text-center max-w-2xl mx-auto">
+            Porter CLI is the product. It orchestrates AI models, creates agents, and gives them shared memory.
+            The web interface is the window — you monitor and control, but the CLI does the work.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <PillarCard icon={Route} name="Bridge" tagline="The hub" color="border-warning text-warning">
+              <p>Every AI model plugs into Porter. A smart router picks which model handles each request based on capability, cost, and health.</p>
+              <div className="space-y-1 mt-2 font-mono text-text3">
+                <p>5 gateway adapters</p>
+                <p>Circuit breakers + fallback chains</p>
+                <p>DB-driven routing rules</p>
+                <p>Dispatch logging + cost tracking</p>
+                <p>Session-aware re-routing</p>
+              </div>
+            </PillarCard>
+            <PillarCard icon={Flame} name="Forge" tagline="The factory" color="border-danger text-danger">
+              <p>Create agents from templates, train them on your domain, evolve them with feedback. An agent starts generic and becomes yours.</p>
+              <div className="space-y-1 mt-2 font-mono text-text3">
+                <p>103 agent templates</p>
+                <p>3-station assembly pipeline</p>
+                <p>Skills + tools registry</p>
+                <p>Pixel portrait identity</p>
+                <p>Feedback-driven evolution</p>
+              </div>
+            </PillarCard>
+            <PillarCard icon={BookOpen} name="Recall" tagline="The shared brain" color="border-accent-porter text-accent-porter">
+              <p>Every model and agent reads from and writes to the same memory. Global rules, agent knowledge, project context. Nothing starts cold.</p>
+              <div className="space-y-1 mt-2 font-mono text-text3">
+                <p>Directives — global operating rules</p>
+                <p>Concepts — durable project truths</p>
+                <p>Agent notes — per-worker knowledge</p>
+                <p>Project notes — per-project state</p>
+                <p>Tiered injection (token-budgeted)</p>
+              </div>
+            </PillarCard>
           </div>
+          <p className="text-center text-2xs text-text3 mt-2">Bridge connects the models. Forge creates the workers. Recall makes them all remember.</p>
         </Section>
 
-        {/* ── Admin API Surface — 87 endpoints ── */}
-        <Section title="Admin API Surface (87 endpoints)">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            <ApiGroup title="Health & System" color="text-success" endpoints={[
-              "GET /health",
-              "GET /health/version",
-              "GET /health/logs",
-              "GET /health/dashboard",
-              "GET /system",
-              "POST /diagnostics/report",
-              "GET /diagnostics",
-              "POST /diagnostics/:id/resolve",
-            ]} />
-            <ApiGroup title="Users & Customers" color="text-accent-porter" endpoints={[
-              "GET /users",
-              "GET /users/:username",
-              "PUT /users/:username/role",
-              "POST /users/:username/purge-sessions",
-              "PUT /users/:username/suspend",
-              "GET /customers/:u/notes | tasks | tags",
-              "POST /customers/:u/notes | tasks | tags",
-              "GET /customers/:u/timeline",
-              "GET /customers/segments",
-              "PATCH /customers/:u/stage",
-            ]} />
-            <ApiGroup title="Bridge & Gateways" color="text-warning" endpoints={[
-              "GET /bridge",
-              "GET /bridge/models",
-              "GET /bridge/dispatch-log",
-              "GET /bridge/costs",
-              "GET /bridge/attribution",
-              "GET /bridge/agent-stats",
-              "POST /bridge/gateways (CRUD)",
-              "POST /bridge/routing-rules (CRUD)",
-              "POST /bridge/speed-test",
-              "POST /bridge/workspace-config",
-              "GET /bridge/user-keys",
-            ]} />
-            <ApiGroup title="Forge Pipeline" color="text-danger" endpoints={[
-              "GET /forge",
-              "GET /forge/stats | wave-summary",
-              "GET /forge/events (SSE)",
-              "POST /forge/start | stop | reset",
-              "POST /forge/queue",
-              "POST /forge/approve-wave",
-              "POST /forge/:id/retry",
-              "PATCH /forge/settings",
-            ]} />
-            <ApiGroup title="Agents & Templates" color="text-chart-2" endpoints={[
-              "GET /agents",
-              "GET /agents/:id",
-              "PUT /agents/:id/files/:file",
-              "GET /agents/tasks",
-              "POST /agents/tasks/:id/execute",
-              "GET /templates",
-              "GET /templates/:id",
-              "GET /templates/stats",
-            ]} />
-            <ApiGroup title="Skills · Tools · Models" color="text-chart-3" endpoints={[
-              "GET /skills",
-              "PUT /skills/:persona/:skill/toggle",
-              "GET /tools",
-              "PUT /tools/:key/toggle",
-              "GET /tools/connections",
-              "GET /models",
-              "GET /models/usage",
-              "GET /models/config | flags",
-            ]} />
-            <ApiGroup title="Email & Billing" color="text-chart-4" endpoints={[
-              "GET /email/config",
-              "PUT /email/config",
-              "GET /email/messages",
-              "POST /email/messages",
-              "GET /billing/subscriptions",
-              "GET /billing/revenue",
-              "GET /billing/stats",
-            ]} />
-            <ApiGroup title="Activity & Settings" color="text-text2" endpoints={[
-              "GET /activity",
-              "GET /activity/learnings",
-              "GET /settings",
-              "PUT /settings/:category",
-              "POST /settings/test-connection/:p",
-              "POST /settings/force-logout",
-              "POST /porter/chat (SSE stream)",
-            ]} />
+        {/* ── How it connects ── */}
+        <Section title="How it works">
+          <div className="rounded-xl border border-border bg-surface p-6 space-y-3">
+            <div className="flex items-center justify-center gap-6 flex-wrap">
+              <div className="flex flex-col items-center gap-1">
+                <Server className="h-5 w-5 text-success" />
+                <span className="text-2xs font-bold">Porter :3001</span>
+              </div>
+              <Arrow direction="right" />
+              <div className="flex flex-col items-center gap-1">
+                <Database className="h-5 w-5 text-success" />
+                <span className="text-2xs font-bold">PostgreSQL :5432</span>
+              </div>
+            </div>
+            <Arrow />
+            <div className="flex items-center justify-center gap-4 flex-wrap">
+              {[
+                { name: "OpenClaw", sub: "GPT-5.4" },
+                { name: "Ollama", sub: "Qwen 1.5B" },
+                { name: "Claude CLI", sub: "Anthropic" },
+                { name: "Codex CLI", sub: "OpenAI" },
+                { name: "Gemini CLI", sub: "Google" },
+              ].map(gw => (
+                <div key={gw.name} className="rounded-lg border border-border bg-background px-3 py-2 text-center">
+                  <p className="text-2xs font-bold text-foreground">{gw.name}</p>
+                  <p className="text-2xs text-text3">{gw.sub}</p>
+                </div>
+              ))}
+            </div>
+            <Arrow />
+            <div className="flex items-center justify-center gap-4 flex-wrap">
+              {[
+                { name: "CLI Sessions", icon: Cpu },
+                { name: "API Consumers", icon: Cable },
+                { name: "Agents", icon: Flame },
+              ].map(c => (
+                <div key={c.name} className="flex items-center gap-1.5 text-2xs text-text3">
+                  <c.icon className="size-3" />
+                  <span>{c.name}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-center text-2xs text-text3">One process, one port, one database. Every dispatch metered.</p>
           </div>
         </Section>
 
         {/* ── Data Layer ── */}
         <Section title="Data Layer">
           <div className="rounded-xl border border-border bg-surface p-6">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <Database className="h-5 w-5 text-success" />
-              <span className="text-xs font-bold text-foreground">PostgreSQL 16</span>
-              <span className="text-2xs text-text3">localhost:5432/porter</span>
-              <Badge className="bg-success/15 text-success text-2xs px-1.5 py-0">Single Source of Truth</Badge>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="rounded-lg bg-warning/5 border border-warning/20 p-3 text-center">
+                <Route className="h-4 w-4 text-warning mx-auto mb-1" />
+                <p className="text-2xs font-bold text-foreground">Bridge</p>
+                <p className="text-2xs text-text3 font-mono mt-1">gateways · models · dispatch_log · routing_rules · dispatch_queues</p>
+              </div>
+              <div className="rounded-lg bg-danger/5 border border-danger/20 p-3 text-center">
+                <Flame className="h-4 w-4 text-danger mx-auto mb-1" />
+                <p className="text-2xs font-bold text-foreground">Forge</p>
+                <p className="text-2xs text-text3 font-mono mt-1">agent_templates · personas · skills · tools · forge_pipeline</p>
+              </div>
+              <div className="rounded-lg bg-accent-porter/5 border border-accent-porter/20 p-3 text-center">
+                <BookOpen className="h-4 w-4 text-accent-porter mx-auto mb-1" />
+                <p className="text-2xs font-bold text-foreground">Recall</p>
+                <p className="text-2xs text-text3 font-mono mt-1">directives · concepts · agent_notes · project_notes</p>
+              </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
-                { table: "users / sessions", desc: "Auth + RBAC" },
-                { table: "projects", desc: "Workspace registry" },
-                { table: "personas", desc: "Agent instances" },
-                { table: "agent_templates", desc: "103 blueprints" },
-                { table: "chats / messages", desc: "Conversations" },
-                { table: "contacts", desc: "CRM" },
-                { table: "customer_scores", desc: "Health + conversion" },
-                { table: "customer_notes / tasks", desc: "Annotations" },
-                { table: "concepts / directives", desc: "Memory V3" },
-                { table: "agent_notes / project_notes", desc: "Memory V3" },
-                { table: "forge_pipeline", desc: "Agent assembly" },
-                { table: "skills / agent_skills", desc: "Capabilities" },
-                { table: "environment_tools", desc: "Detected tools" },
-                { table: "workspace_connections", desc: "Integrations" },
-                { table: "bridge_gateways", desc: "AI backends" },
-                { table: "bridge_models", desc: "Model catalog" },
-                { table: "bridge_dispatch_log", desc: "Routing decisions" },
-                { table: "bridge_routing_rules", desc: "Custom rules" },
-                { table: "token_usage_daily", desc: "Cost tracking" },
-                { table: "error_log", desc: "Diagnostics" },
+                "users / sessions", "projects", "chats / messages", "contacts",
+                "customer_scores", "workspace_connections", "error_log", "intelligence_feed",
               ].map(t => (
-                <div key={t.table} className="rounded-lg bg-background p-2.5 border border-border/50">
-                  <p className="font-mono text-2xs font-bold text-foreground">{t.table}</p>
-                  <p className="text-2xs text-text3">{t.desc}</p>
+                <div key={t} className="rounded-lg bg-background p-2 border border-border/50">
+                  <p className="font-mono text-2xs text-text3">{t}</p>
                 </div>
               ))}
             </div>
+            <p className="text-center text-2xs text-text3 mt-3">PostgreSQL 16 · Drizzle ORM · Single source of truth</p>
           </div>
         </Section>
 
-        {/* ── Real-Time ── */}
-        <Section title="Real-Time (SSE)">
-          <div className="rounded-xl border border-border bg-surface p-6">
-            <div className="flex items-center justify-center gap-4 mb-4">
-              <Node icon={Zap} label="Brain SSE Hub" sub="/api/events" color="border-accent-porter text-accent-porter bg-accent-porter/10" />
-              <Arrow />
-              <Node icon={Globe} label="useAdminSSE" sub="React Query invalidation" color="border-success text-success bg-success/10" />
-            </div>
-            <p className="text-2xs font-semibold uppercase tracking-wide text-text3 mb-2 text-center">Events → Cache Invalidation</p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {[
-                { event: "bridge:health", target: "gateway cards" },
-                { event: "bridge:dispatch", target: "dispatch log (prepend)" },
-                { event: "bridge:circuit-trip", target: "gateways + alert" },
-                { event: "profile:updated", target: "customer detail" },
-                { event: "agent:activity", target: "customers list" },
-                { event: "agent:status", target: "customers list" },
-              ].map(e => (
-                <div key={e.event} className="flex items-center gap-1.5 rounded-lg bg-raised px-2 py-1">
-                  <span className="font-mono text-2xs text-accent-porter">{e.event}</span>
-                  <span className="text-2xs text-text3">→ {e.target}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Section>
-
-
-        {/* ── Project Structure ── */}
+        {/* ── Monorepo ── */}
         <Section title="Monorepo">
-          <div className="rounded-xl border border-success/30 bg-surface p-5 font-mono text-2xs leading-[1.8] text-text2">
-            <p className="text-success font-bold mb-1">heymoezy/porter <span className="text-text3 font-normal">monorepo · v3.2.0</span></p>
-            <p className="ml-2">├── <span className="text-success">backend/</span> <span className="text-text3">API + Admin routes, services, DB (:3001)</span></p>
+          <div className="rounded-xl border border-border bg-surface p-5 font-mono text-2xs leading-[1.8] text-text2">
+            <p className="text-success font-bold mb-1">heymoezy/porter <span className="text-text3 font-normal">v{health?.version ?? "..."}</span></p>
+            <p className="ml-2">├── <span className="text-warning">backend/</span> <span className="text-text3">Fastify API — Bridge + Forge + Recall + Admin (:3001)</span></p>
             <p className="ml-2">│   ├── src/services/bridge/ <span className="text-text3">5 gateway adapters</span></p>
-            <p className="ml-2">│   ├── src/services/memory-injection.ts <span className="text-text3">Memory V3 pipeline</span></p>
-            <p className="ml-2">│   └── src/db/ <span className="text-text3">Drizzle ORM, PostgreSQL</span></p>
-            <p className="ml-2">├── <span className="text-warning">admin/</span> <span className="text-text3">Control plane frontend (served at /admin/)</span></p>
-            <p className="ml-2">│   ├── backend/src/routes/ <span className="text-text3">87 admin endpoints</span></p>
-            <p className="ml-2">│   └── frontend/app/routes/ <span className="text-text3">18 pages (React 19)</span></p>
-            <p className="ml-2">├── personas/ <span className="text-text3">Agent .md files</span></p>
-            <p className="ml-2">├── tasks/checkpoint.md <span className="text-text3">Canonical checkpoint (all models)</span></p>
-            <p className="ml-2">└── drizzle/ <span className="text-text3">Migrations</span></p>
+            <p className="ml-2">│   ├── src/services/memory-injection.ts <span className="text-text3">Recall pipeline</span></p>
+            <p className="ml-2">│   ├── src/routes/v1/ <span className="text-text3">Brain API</span></p>
+            <p className="ml-2">│   └── src/routes/admin/ <span className="text-text3">Admin API (87 endpoints)</span></p>
+            <p className="ml-2">├── <span className="text-accent-porter">admin/frontend/</span> <span className="text-text3">React 19 control plane (served at /admin/)</span></p>
+            <p className="ml-2">├── personas/ <span className="text-text3">Agent definitions</span></p>
+            <p className="ml-2">├── src/cli/ <span className="text-text3">porter setup + session hooks</span></p>
+            <p className="ml-2">└── tasks/checkpoint.md <span className="text-text3">Shared state (all models)</span></p>
           </div>
-          <p className="text-center text-2xs text-text3">One monorepo, one product · Business model = API metering · Any future UI is a separate API customer</p>
         </Section>
 
         <div className="text-center text-2xs text-text3 pb-4">
-          Porter Platform · v{health?.version ?? "..."} · {new Date().toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" })}
+          Porter · v{health?.version ?? "..."} · {new Date().toLocaleDateString("en-SG", { timeZone: "Asia/Singapore" })}
         </div>
       </div>
       </div>}
@@ -314,9 +251,9 @@ export default function ArchitecturePage() {
         <ChatPanel
           streamEndpoint="/api/admin/porter/chat"
           context={{ scope: "architecture" }}
-          systemContext="You are Porter. Architecture: Brain (:3001) + Admin (:5175) = two repos, one product. No separate UI repo. PostgreSQL SSOT (52+ tables, Drizzle ORM). Bridge layer: 5 gateway adapters (OpenClaw/GPT-5.4, Ollama/Qwen, Claude CLI, Codex CLI, Gemini CLI), routing engine, circuit breakers, fallback chains, dispatch logging. AI Router: DB-driven routing, system prompt pipeline, memory context injection. Memory V3: directives, concepts, agent_notes, project_notes, tiered injection. 87 admin API endpoints. 4 Bridge agents (Operator/Scout/Analyst/Controller). SSE real-time. Business model = API metering."
+          systemContext="You are Porter. Architecture has 3 pillars: Bridge (hub — 5 gateway adapters, smart routing, circuit breakers, fallback chains, dispatch logging), Forge (factory — 103 templates, 3-station pipeline, skills/tools registry, feedback evolution), Recall (shared brain — directives, concepts, agent_notes, project_notes, tiered injection). Single monorepo (heymoezy/porter), one Fastify process on :3001, PostgreSQL SSOT. Business model = API metering. CLI is the product, web is the window."
           placeholder="Ask about the architecture..."
-          greeting="Porter = Brain + Admin. One monorepo, one product. What do you want to know?"
+          greeting="Bridge, Forge, Recall. What do you want to know?"
           storageKey="chat_arch"
           {...chat.chatProps}
         />
