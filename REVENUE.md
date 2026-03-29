@@ -1,5 +1,32 @@
 # Porter Revenue Model
 
+## Quick version
+
+You install Porter for free. You use local AI models (Ollama) for free. We don't charge for the CLI, hooks, or local routing. That costs us nothing — it runs on your machine.
+
+The moment you plug in a cloud API key (OpenAI, Anthropic, Google) and start routing real work through Porter, you're using our orchestration layer. That's what we charge for.
+
+You keep your API keys. We charge for the intelligence on top:
+- Picking the right model for each task (saves 40-60% on token costs)
+- Memory that makes models remember context across sessions
+- Automatic failover when a provider goes down
+- Full audit log of every AI decision
+- Coordinating multiple AI agents on the same project
+
+Tiers:
+- Free: 500 cloud dispatches/mo, 2 agents
+- Pro $29/mo: 25K dispatches, 10 agents, smart routing
+- Team $99/mo + $19/seat: 100K dispatches, workspaces, usage tracking
+- Enterprise: custom pricing, dedicated infra, SLA
+
+The math: ~95% gross margin. A dispatch costs us a database query and an HTTP redirect. We charge a fraction of a cent each. Volume is the game.
+
+The flywheel: free users try with Ollama → connect cloud key → hit limit → pay. Developers build products on Porter → their users generate dispatches → more revenue. It's AWS for AI orchestration.
+
+---
+
+## Detailed breakdown
+
 Porter is free to install and free to use with local AI models. The moment you connect a cloud model and start routing real work through Porter, that's when we make money.
 
 ## How it works
