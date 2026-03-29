@@ -36,7 +36,11 @@ function PillarCard({ icon: Icon, name, tagline, color, children }: {
 }
 
 function Connector({ vertical = true }: { vertical?: boolean }) {
-  return <OrgConnector direction={vertical ? "vertical" : "horizontal"} active length={vertical ? 20 : 32} team="product" />
+  return (
+    <div className="flex justify-center">
+      <OrgConnector direction={vertical ? "vertical" : "horizontal"} active length={vertical ? 20 : 32} team="product" />
+    </div>
+  )
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
