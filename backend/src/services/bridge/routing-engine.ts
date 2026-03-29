@@ -30,7 +30,7 @@ import type {
 
 // ── Internal helper types ─────────────────────────────────────────────────────
 
-interface GatewayCandidate {
+export interface GatewayCandidate {
   row: GatewayRow;
   adapter: GatewayAdapter;
 }
@@ -739,6 +739,8 @@ function mapGatewayRow(raw: GatewayDbRow): GatewayRow {
 
 /**
  * Apply a matched routing rule to a fallback candidate list.
+ * Exported for unit testing.
+ *
  * Used by both selectWithFallback() and selectStreamWithFallback() so that
  * force_model / block_gateway / prefer_local are honored consistently with select().
  *
@@ -749,7 +751,7 @@ function mapGatewayRow(raw: GatewayDbRow): GatewayRow {
  *   - prefer_local: reorder so local gateway types lead the list
  *   - cap_cost_usd / unknown: no ordering change
  */
-function applyRuleToFallbackOrder(
+export function applyRuleToFallbackOrder(
   rule: RoutingRuleRow | null,
   candidates: GatewayCandidate[],
 ): GatewayCandidate[] {

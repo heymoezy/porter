@@ -391,6 +391,111 @@ export default async function bridgeV1Routes(
     return reply.send(err('INVALID_ACTION', 'action must be one of: store, delete'));
   });
 
+  // ── POST /agent-message — Bridge v1: authenticated hub/spoke agent dispatch ──
+  //
+  // Accepts an AgentMessageRequest envelope, routes through the non-streaming
+  // routing engine (rules + fallback), dispatches to the chosen gateway, and
+  // returns a structured AgentMessageResponse.
+  //
+  // Auth: requireAuth — service token (X-Porter-Service-Token) grants platform_admin
+  //       access from localhost; human session cookies also work.
+  // Max-hops: hopCount >= MAX_AGENT_HOPS → 429 to prevent routing loops.
+  fastify.post('/agent-message', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const body = request.body as AgentMessageRequest;
+
+    // ── Validate envelope ──────────────────────────────────────────────────
+    if (!body?.message) {
+      return reply.code(400).send(err('MISSING_MESSAGE', 'body.message is required'));
+    }
+    const { message, hopCount = 0 } = body;
+
+    if (!message.messageId || typeof message.messageId !== 'string') {
+      return reply.code(400).send(err('MISSING_FIELD', 'message.messageId is required'));
+    }
+    if (!message.intent || !['request', 'response', 'ack', 'error'].includes(message.intent)) {
+      return reply.code(400).send(err('INVALID_INTENT', 'message.intent must be request | response | ack | error'));
+    }
+    if (!message.task || typeof message.task !== 'string') {
+      return reply.code(400).send(err('MISSING_FIELD', 'message.task is required'));
+    }
+
+    // ── Max-hops guard ─────────────────────────────────────────────────────
+    if (hopCount >= MAX_AGENT_HOPS) {
+      return reply.code(429).send(err(
+        'MAX_HOPS_EXCEEDED',
+        `Bridge hop limit reached (hopCount=${hopCount}, max=${MAX_AGENT_HOPS})`,
+      ));
+    }
+
+    // ── TTL check ──────────────────────────────────────────────────────────
+    if (message.ttlMs != null && message.createdAt != null) {
+      const age = Date.now() - message.createdAt;
+      if (age > message.ttlMs) {
+        return reply.code(408).send(err(
+          'MESSAGE_EXPIRED',
+          `Message TTL exceeded (age=${age}ms, ttl=${message.ttlMs}ms)`,
+        ));
+      }
+    }
+
+    // ── Build routing context ──────────────────────────────────────────────
+    // targetGateway (if set) acts as a force_model hint via routing context.
+    // We pass it as a routing context extension so operator rules still take
+    // precedence; targetGateway is only advisory.
+    const ctx: RoutingContext = {
+      message: message.task,
+      username: request.sessionUser?.username ?? 'system',
+    };
+
+    // ── Select gateway + dispatch ──────────────────────────────────────────
+    const dispatchReq = {
+      messages: [{ role: 'user', content: message.task }],
+      ...(message.context ? { systemPrompt: JSON.stringify(message.context) } : {}),
+      ...(message.constraints?.maxTokens != null
+        ? { maxTokens: message.constraints.maxTokens as number }
+        : {}),
+    };
+
+    let decision;
+    let result;
+    try {
+      decision = await routingEngine.select(ctx);
+      result = await routingEngine.dispatchWithQueue(decision, dispatchReq);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return reply.code(502).send(err('DISPATCH_FAILED', msg));
+    }
+
+    // ── Log dispatch with agent-message correlation fields ─────────────────
+    const dispatchLogId = await routingEngine.logDispatch(decision, ctx, result, {
+      correlationId: message.correlationId,
+      sourceAgent: message.sourceAgent,
+      sourceGateway: message.sourceGateway,
+      targetAgent: message.targetAgent,
+      targetGateway: message.targetGateway,
+      intent: message.intent,
+      replyTo: message.replyTo,
+    });
+
+    // ── Build response envelope ────────────────────────────────────────────
+    const response: AgentMessageResponse = {
+      messageId: message.messageId,
+      correlationId: message.correlationId,
+      intent: 'response',
+      dispatchLogId,
+      gatewayType: decision.gatewayRow.type,
+      modelName: decision.modelName,
+      response: result.response,
+      latencyMs: result.latencyMs,
+      hopCount: hopCount + 1,
+      createdAt: Date.now(),
+    };
+
+    return reply.send(ok(response));
+  });
+
   // ── POST /setup/save — wizard step 4: enable or disable a gateway ────────────
   fastify.post('/setup/save', {
     preHandler: [fastify.requireAuth],
