@@ -86,33 +86,37 @@ export function parseRateLimitHeaders(
 
   const now = Date.now() / 1000;
 
+  // Helper: check both x-ratelimit-* and anthropic-ratelimit-* prefixes
+  const rl = (suffix: string): string | undefined =>
+    h[`x-ratelimit-${suffix}`] ?? h[`anthropic-ratelimit-${suffix}`];
+
   // ── RPM (requests per minute) ─────────────────────────────────────────
-  const rpmLimit = parseNum(h['x-ratelimit-limit-requests'] ?? h['x-ratelimit-limit']);
-  const rpmRemaining = parseNum(h['x-ratelimit-remaining-requests']);
+  const rpmLimit = parseNum(rl('limit-requests') ?? rl('requests-limit') ?? h['x-ratelimit-limit']);
+  const rpmRemaining = parseNum(rl('remaining-requests') ?? rl('requests-remaining'));
   if (rpmLimit !== null || rpmRemaining !== null) {
     const current = (rpmLimit !== null && rpmRemaining !== null)
       ? rpmLimit - rpmRemaining
       : null;
-    const resetStr = h['x-ratelimit-reset-requests'] ?? h['x-ratelimit-reset'];
+    const resetStr = rl('reset-requests') ?? rl('requests-reset') ?? rl('reset');
     const resetAt = parseResetTimestamp(resetStr, now);
     upsertLimit(gatewayId, null, 'requests', 'minute', rpmLimit, current, resetAt, 'provider').catch(() => {});
   }
 
   // ── TPM (tokens per minute) ─────────────────────────────────────────
-  const tpmLimit = parseNum(h['x-ratelimit-limit-tokens']);
-  const tpmRemaining = parseNum(h['x-ratelimit-remaining-tokens']);
+  const tpmLimit = parseNum(rl('limit-tokens') ?? rl('tokens-limit'));
+  const tpmRemaining = parseNum(rl('remaining-tokens') ?? rl('tokens-remaining'));
   if (tpmLimit !== null || tpmRemaining !== null) {
     const current = (tpmLimit !== null && tpmRemaining !== null)
       ? tpmLimit - tpmRemaining
       : null;
-    const resetStr = h['x-ratelimit-reset-tokens'] ?? h['x-ratelimit-reset'];
+    const resetStr = rl('reset-tokens') ?? rl('tokens-reset') ?? rl('reset');
     const resetAt = parseResetTimestamp(resetStr, now);
     upsertLimit(gatewayId, null, 'tokens', 'minute', tpmLimit, current, resetAt, 'provider').catch(() => {});
   }
 
   // ── Daily token headers (if present) ──────────────────────────────────
-  const dailyLimit = parseNum(h['x-ratelimit-limit-tokens-day'] ?? h['x-ratelimit-limit-daily-tokens']);
-  const dailyRemaining = parseNum(h['x-ratelimit-remaining-tokens-day'] ?? h['x-ratelimit-remaining-daily-tokens']);
+  const dailyLimit = parseNum(rl('limit-tokens-day') ?? rl('limit-daily-tokens'));
+  const dailyRemaining = parseNum(rl('remaining-tokens-day') ?? rl('remaining-daily-tokens'));
   if (dailyLimit !== null || dailyRemaining !== null) {
     const current = (dailyLimit !== null && dailyRemaining !== null)
       ? dailyLimit - dailyRemaining
@@ -486,4 +490,27 @@ function sourceRank(source: string): number {
   if (source === 'provider') return 3;
   if (source === 'configured') return 2;
   return 1; // inferred
+}
+
+// ── CLI output rate limit detection ─────────────────────────────────────────
+
+const RATE_LIMIT_PATTERNS = [
+  /usage limit/i,
+  /rate limit/i,
+  /quota limit/i,
+  /limit reached/i,
+  /5-hour/i,
+  /weekly limit/i,
+  /daily.*quota/i,
+  /too many requests/i,
+  /try again later/i,
+  /API rate limit reached/i,
+];
+
+/**
+ * Check if CLI output contains rate limit signals.
+ * Call this after subprocess dispatch/stream to detect soft limits.
+ */
+export function detectRateLimitInOutput(output: string): boolean {
+  return RATE_LIMIT_PATTERNS.some(p => p.test(output));
 }
