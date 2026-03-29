@@ -84,32 +84,10 @@ export default function ArchitecturePage() {
       {!chat.expanded && <div className="flex-1 overflow-y-auto">
       <div className="mx-auto max-w-5xl px-6 py-6 space-y-10">
 
-        {/* ── Live Status ── */}
-        {(health || sys) && (
-          <div className="flex items-center gap-4 text-2xs">
-            {health && (
-              <div className="flex items-center gap-1.5">
-                {health.db === "connected" ? <CheckCircle className="size-3 text-success" /> : <XCircle className="size-3 text-danger" />}
-                <span className="font-bold text-foreground">v{health.version}</span>
-                <span className="text-text3">· :3001 · DB {health.db}</span>
-              </div>
-            )}
-            {sys && (
-              <div className="flex items-center gap-3 text-text3">
-                <span>CPU {Math.round(sys.cpu.load1m / sys.cpu.cores * 100)}%</span>
-                <span>MEM {sys.memory.pct}%</span>
-                <span>DSK {sys.disk.pct}%</span>
-                <span>Up {Math.floor(sys.uptime / 3600)}h</span>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* ── The 3 Pillars ── */}
         <Section title="Porter">
           <p className="text-xs text-text2 text-center max-w-2xl mx-auto">
-            Porter CLI is the product. It orchestrates AI models, creates agents, and gives them shared memory.
-            The web interface is the window — you monitor and control, but the CLI does the work.
+            You plug in your AI models. Porter figures out which one to use, remembers what happened last time, and keeps everything running when things break. Three moving parts.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
             <PillarCard icon={Route} name="Bridge" tagline="The hub" color="border-warning text-warning">
