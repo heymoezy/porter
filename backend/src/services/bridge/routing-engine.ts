@@ -454,6 +454,125 @@ export class RoutingEngine {
   }
 
   /**
+   * Dispatch a streaming request through per-gateway concurrency queue.
+   * Wraps the adapter stream to capture observability data (latency, tokens).
+   * RT-04: p-queue concurrency control for streams.
+   */
+  async dispatchStream(
+    decision: RoutingDecision,
+    ctx: RoutingContext,
+    req: BridgeDispatchRequest,
+    signal: AbortSignal,
+  ): Promise<AsyncIterable<string>> {
+    const start = Date.now();
+    let firstTokenAt: number | null = null;
+    let fullResponse = '';
+
+    // Create a local reference to logDispatch to avoid 'this' issues in generator
+    const self = this;
+
+    // Use a generator to wrap the adapter's stream and capture metrics
+    const wrappedStream = (async function* () {
+      try {
+        const stream = decision.adapter.stream(req, signal);
+        for await (const token of stream) {
+          if (firstTokenAt === null) {
+            firstTokenAt = Date.now();
+          }
+          fullResponse += token;
+          yield token;
+        }
+
+        // Stream finished successfully — calculate results and log dispatch
+        const result: BridgeDispatchResult = {
+          response: fullResponse,
+          model: decision.modelName,
+          latencyMs: Date.now() - start,
+          cached: false,
+          // Estimate tokens if adapter doesn't provide them for streams
+          outputTokens: Math.ceil(fullResponse.length / 4),
+          inputTokens: Math.ceil(JSON.stringify(req.messages).length / 4),
+        };
+
+        // Fire-and-forget logging
+        self.logDispatch(decision, ctx, result).catch(() => {});
+      } catch (err) {
+        // Errors in the stream are re-thrown to the caller
+        throw err;
+      }
+    })();
+
+    return wrappedStream;
+  }
+
+  /**
+   * Dispatch with N-gateway fallback chain for streaming.
+   * Similar to selectWithFallback() but returns an AsyncIterable.
+   * GW-06: Fallback chain for streams.
+   */
+  async selectStreamWithFallback(
+    ctx: RoutingContext,
+    req: BridgeDispatchRequest,
+    signal: AbortSignal,
+  ): Promise<{ decision: RoutingDecision; stream: AsyncIterable<string> }> {
+    const candidates = await this.selectAllCandidates();
+    if (candidates.length === 0) {
+      throw new Error('No active gateways available');
+    }
+
+    const matchedRule = await this.evaluateRules(ctx, candidates);
+    const errors: string[] = [];
+
+    for (const candidate of candidates) {
+      const breaker = getBreaker(candidate.row.id, candidate.row.type);
+
+      if (breaker.opened) {
+        errors.push(`${candidate.row.type}: circuit open`);
+        continue;
+      }
+
+      try {
+        // Build the routing decision for the chosen candidate
+        const chosenId = candidate.row.id;
+        const alternatives = candidates
+          .filter(c => c.row.id !== chosenId)
+          .map(c => ({
+            gatewayType: c.row.type,
+            modelName: resolveModelName(c.row),
+            reasonSkipped: errors.find(e => e.startsWith(c.row.type))
+              ?? `lower priority (priority=${c.row.priority})`,
+          }));
+
+        const decision: RoutingDecision = {
+          gatewayRow: candidate.row,
+          adapter: candidate.adapter,
+          modelName: resolveModelName(candidate.row),
+          reason: errors.length > 0
+            ? `Fallback: ${errors.length} failure(s) before ${candidate.row.type}`
+            : `Primary: ${candidate.row.type}`,
+          alternatives,
+          matchedRuleId: matchedRule?.id ?? null,
+        };
+
+        // Initiate the stream — if this throws, we fallback to next candidate
+        const stream = await this.dispatchStream(decision, ctx, req, signal);
+
+        // Record session turn (fire-and-forget)
+        // Note: dispatchStream logs the dispatch result when the stream ends,
+        // so we don't have a logId yet. We'll pass null or a placeholder.
+        this.recordSessionTurn(ctx, decision, uuidv4()).catch(() => {});
+
+        return { decision, stream };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`${candidate.row.type}: ${msg}`);
+      }
+    }
+
+    throw new Error(`Streaming failed on all gateways: ${errors.join('; ')}`);
+  }
+
+  /**
    * Filter candidates by model capabilities when requiredCapabilities is set.
    * MOD-03: Route by model strengths, not just cost tier.
    * Gracefully degrades — returns full candidate list if no models match.

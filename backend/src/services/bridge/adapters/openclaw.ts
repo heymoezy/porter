@@ -258,7 +258,8 @@ export class OpenClawAdapter implements GatewayAdapter {
   // ── listModels() ──────────────────────────────────────────────────────────
 
   async listModels(): Promise<string[]> {
-    // OpenClaw has no /v1/models endpoint — return the known available model
-    return ['openclaw'];
+    // OpenClaw has no /v1/models endpoint — return the known model
+    // API dispatch uses 'openclaw' as the model param, but the real model is GPT-5.4
+    return ['openai-codex/gpt-5.4'];
   }
 }
