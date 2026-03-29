@@ -15,6 +15,7 @@ import { pool } from '../../db/client.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import Database from 'better-sqlite3';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -334,60 +335,86 @@ async function collectGeminiUsage(gatewayId: string): Promise<void> {
 
 // ── OpenClaw (GPT-5.4) ──────────────────────────────────────────────────────
 
-interface OpenClawSession {
-  updatedAt: number;      // ms timestamp
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  contextTokens?: number;
-  model?: string;
+interface OpenClawStatusSession {
+  totalTokens: number;
+  contextTokens: number;
+  percentUsed: number;
+  age: number;  // ms since last update
+  model: string;
 }
 
 async function collectOpenClawUsage(gatewayId: string): Promise<void> {
-  if (!fs.existsSync(OPENCLAW_SESSIONS_PATH)) return;
-
-  const nowMs = Date.now();
-  const nowSec = nowMs / 1000;
-  const fiveHourCutoffMs = nowMs - FIVE_HOURS_SEC * 1000;
-  const weekCutoffMs = nowMs - SEVEN_DAYS_SEC * 1000;
+  const nowSec = Date.now() / 1000;
 
   try {
-    const raw = fs.readFileSync(OPENCLAW_SESSIONS_PATH, 'utf-8');
-    const sessions: Record<string, OpenClawSession> = JSON.parse(raw);
+    // Use `openclaw status --json` for live data (not stale file)
+    const raw = execSync('openclaw status --json 2>/dev/null', { encoding: 'utf-8', timeout: 10000 });
+    const data = JSON.parse(raw);
+    const recent: OpenClawStatusSession[] = data?.sessions?.recent ?? [];
+
+    if (recent.length === 0) return;
+
+    const fiveHourMs = FIVE_HOURS_SEC * 1000;
+    const weekMs = SEVEN_DAYS_SEC * 1000;
 
     let fiveHourTokens = 0;
-    let fiveHourRequests = 0;
+    let fiveHourSessions = 0;
     let weeklyTokens = 0;
-    let weeklyRequests = 0;
+    let weeklySessions = 0;
+    let totalContextWindow = 0;
+    let totalUsedInContext = 0;
 
-    for (const session of Object.values(sessions)) {
-      const updatedAt = session.updatedAt ?? 0;
-      const tokens = session.totalTokens ?? 0;
-
-      if (updatedAt >= weekCutoffMs) {
-        weeklyTokens += tokens;
-        weeklyRequests += 1;
+    for (const s of recent) {
+      const ageMs = s.age ?? Infinity;
+      if (ageMs < weekMs) {
+        weeklyTokens += s.totalTokens ?? 0;
+        weeklySessions += 1;
       }
-      if (updatedAt >= fiveHourCutoffMs) {
-        fiveHourTokens += tokens;
-        fiveHourRequests += 1;
+      if (ageMs < fiveHourMs) {
+        fiveHourTokens += s.totalTokens ?? 0;
+        fiveHourSessions += 1;
+        totalContextWindow += s.contextTokens ?? 0;
+        totalUsedInContext += s.totalTokens ?? 0;
       }
     }
+
+    // Context window utilization across active sessions
+    const contextPct = totalContextWindow > 0 ? totalUsedInContext / totalContextWindow : null;
 
     const fiveHourResetAt = nowSec + FIVE_HOURS_SEC;
     const weeklyResetAt = getNextSaturdayMidnightUtc(nowSec);
 
     await Promise.allSettled([
       upsertUsage(gatewayId, 'tokens', '5hour', fiveHourTokens, null, fiveHourResetAt, nowSec),
-      upsertUsage(gatewayId, 'requests', '5hour', fiveHourRequests, null, fiveHourResetAt, nowSec),
+      upsertUsage(gatewayId, 'requests', '5hour', fiveHourSessions, null, fiveHourResetAt, nowSec),
       upsertUsage(gatewayId, 'tokens', 'weekly', weeklyTokens, null, weeklyResetAt, nowSec),
-      upsertUsage(gatewayId, 'requests', 'weekly', weeklyRequests, null, weeklyResetAt, nowSec),
+      upsertUsage(gatewayId, 'requests', 'weekly', weeklySessions, null, weeklyResetAt, nowSec),
     ]);
 
-    console.log('[usage-collector] OpenClaw usage: 5h=%d tokens/%d req, 7d=%d tokens/%d req',
-      fiveHourTokens, fiveHourRequests, weeklyTokens, weeklyRequests);
+    console.log('[usage-collector] OpenClaw (live): %d sessions / %dk tokens (5h), %d sessions / %dk tokens (week), ctx %s%%',
+      fiveHourSessions, Math.round(fiveHourTokens / 1000),
+      weeklySessions, Math.round(weeklyTokens / 1000),
+      contextPct != null ? Math.round(contextPct * 100) : 'n/a');
   } catch (err) {
-    console.error('[usage-collector] openclaw sessions error:', err instanceof Error ? err.message : err);
+    // Fallback to sessions.json if openclaw command fails
+    try {
+      if (!fs.existsSync(OPENCLAW_SESSIONS_PATH)) return;
+      const raw = fs.readFileSync(OPENCLAW_SESSIONS_PATH, 'utf-8');
+      const sessions: Record<string, { updatedAt?: number; totalTokens?: number }> = JSON.parse(raw);
+      const nowMs = Date.now();
+      let fiveHourTokens = 0, weeklyTokens = 0, fiveH = 0, weekR = 0;
+      for (const s of Object.values(sessions)) {
+        const age = nowMs - (s.updatedAt ?? 0);
+        if (age < SEVEN_DAYS_SEC * 1000) { weeklyTokens += s.totalTokens ?? 0; weekR++; }
+        if (age < FIVE_HOURS_SEC * 1000) { fiveHourTokens += s.totalTokens ?? 0; fiveH++; }
+      }
+      await Promise.allSettled([
+        upsertUsage(gatewayId, 'tokens', '5hour', fiveHourTokens, null, nowSec + FIVE_HOURS_SEC, nowSec),
+        upsertUsage(gatewayId, 'requests', '5hour', fiveH, null, nowSec + FIVE_HOURS_SEC, nowSec),
+        upsertUsage(gatewayId, 'tokens', 'weekly', weeklyTokens, null, getNextSaturdayMidnightUtc(nowSec), nowSec),
+        upsertUsage(gatewayId, 'requests', 'weekly', weekR, null, getNextSaturdayMidnightUtc(nowSec), nowSec),
+      ]);
+    } catch { /* both methods failed, skip silently */ }
   }
 }
 
