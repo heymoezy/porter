@@ -1,0 +1,679 @@
+/**
+ * Agent Registry — single source of truth for all autonomous agents.
+ *
+ * Every agent that should appear on an admin surface is defined here.
+ * Status is "planned" (gray/ghost) until forged via Agent Forge.
+ *
+ * Surfaces map to route paths (without leading slash).
+ */
+
+export type AgentStatus = "planned" | "forging" | "active" | "paused" | "error"
+
+export interface AgentDef {
+  id: string
+  name: string
+  role: string
+  team: "brain" | "product" | "forge" | "admin" | "marketing" | "memory"
+  description: string
+  surfaces: string[]  // route paths where this agent appears
+  status: AgentStatus
+  avatar: {
+    skin: string
+    hair: string
+    eyes: string
+    shirt: string
+    hairStyle: "short" | "long" | "mohawk" | "bald" | "parted" | "buzz" | "curly" | "ponytail"
+  }
+  /** What this agent is currently doing (shown on surface) */
+  activity?: string
+  /** What this agent WOULD do once forged */
+  plannedCapabilities: string[]
+}
+
+// ── Porter — master orchestrator ────────────────────────
+
+const porterCore: AgentDef = {
+  id: "porter-core",
+  name: "Porter",
+  role: "Master Orchestrator",
+  team: "product",
+  description: "Routes all requests, manages all agents, owns the dispatch loop",
+  surfaces: ["dashboard", "forge", "org-chart"],
+  status: "active",
+  avatar: { skin: "#f1c27d", hair: "#1e293b", eyes: "#0f172a", shirt: "#1e3a5f", hairStyle: "short" },
+  plannedCapabilities: [
+    "Route all user requests to optimal agent",
+    "Manage agent lifecycle and health",
+    "Orchestrate multi-agent workflows",
+    "Learn from every interaction",
+  ],
+}
+
+// ── Brain Team — system nervous system ─────────────────
+
+const sentinel: AgentDef = {
+  id: "sentinel",
+  name: "Sentinel",
+  role: "Watchdog",
+  team: "brain",
+  description: "Monitors all services, detects anomalies, auto-restarts downed processes",
+  surfaces: ["brain", "system"],
+  status: "planned",
+  avatar: { skin: "#D4A574", hair: "#1A1A2E", eyes: "#1A1A2E", shirt: "#EF4444", hairStyle: "buzz" },
+  plannedCapabilities: [
+    "Monitor service health every 30s",
+    "Auto-restart downed services via systemctl",
+    "Escalate unrecoverable failures to Moe",
+    "Correlate service outages with resource spikes",
+  ],
+}
+
+const hygienist: AgentDef = {
+  id: "hygienist",
+  name: "Hygienist",
+  role: "Cleanup Crew",
+  team: "brain",
+  description: "DB maintenance, session pruning, log rotation, file archival",
+  surfaces: ["brain", "files"],
+  status: "planned",
+  avatar: { skin: "#F5D0A9", hair: "#8B4513", eyes: "#1A1A2E", shirt: "#22C55E", hairStyle: "short" },
+  plannedCapabilities: [
+    "Prune expired sessions daily",
+    "Vacuum SQLite DB weekly",
+    "Archive logs older than 30 days",
+    "Detect and flag orphaned files",
+    "Report disk usage trends",
+  ],
+}
+
+const diagnostician: AgentDef = {
+  id: "diagnostician",
+  name: "Diagnostician",
+  role: "Root Cause Analyst",
+  team: "brain",
+  description: "Traces error origins, correlates events, suggests fixes, learns from past incidents",
+  surfaces: ["brain", "diagnostics"],
+  status: "planned",
+  avatar: { skin: "#FDBCB4", hair: "#2C1810", eyes: "#1A1A2E", shirt: "#F59E0B", hairStyle: "parted" },
+  plannedCapabilities: [
+    "Auto-resolve known error patterns",
+    "Correlate error spikes with deployments",
+    "Group related errors into clusters",
+    "Suggest code fixes from past resolutions",
+    "Escalate critical errors immediately",
+  ],
+}
+
+const pulse: AgentDef = {
+  id: "pulse",
+  name: "Pulse",
+  role: "Trend Analyst",
+  team: "brain",
+  description: "Watches metrics over time, predicts resource exhaustion, detects anomalies",
+  surfaces: ["brain", "dashboard"],
+  status: "planned",
+  avatar: { skin: "#E0AC69", hair: "#4A3728", eyes: "#1A1A2E", shirt: "#6366F1", hairStyle: "curly" },
+  plannedCapabilities: [
+    "Track memory/CPU/disk trends daily",
+    "Predict resource exhaustion dates",
+    "Detect anomalies in request patterns",
+    "Generate daily system health summary",
+    "Alert on sudden metric changes",
+  ],
+}
+
+// ── Product Team — customer & business ops ─────────────
+
+const projectMgr: AgentDef = {
+  id: "project-mgr",
+  name: "Project Manager",
+  role: "Project Tracker",
+  team: "product",
+  description: "Tracks progress, assigns agents to projects, reports blockers",
+  surfaces: ["dashboard", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#f1c27d", hair: "#292524", eyes: "#1a1a2e", shirt: "#1d4ed8", hairStyle: "short" },
+  plannedCapabilities: [
+    "Auto-assign agents based on project needs",
+    "Track milestone completion rates",
+    "Flag stalled projects",
+    "Generate sprint summaries",
+  ],
+}
+
+const strategy: AgentDef = {
+  id: "product-strategy",
+  name: "Strategy",
+  role: "Market Analyst",
+  team: "product",
+  description: "Analyzes market trends, monitors competitors, identifies opportunities",
+  surfaces: ["org-chart"],
+  status: "planned",
+  avatar: { skin: "#d2946b", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#1e40af", hairStyle: "parted" },
+  plannedCapabilities: [
+    "Monitor competitor feature launches",
+    "Identify market gaps from user feedback",
+    "Generate quarterly strategy reports",
+    "Track industry trends from news and social",
+  ],
+}
+
+const crm: AgentDef = {
+  id: "product-crm",
+  name: "CRM",
+  role: "Relationship Manager",
+  team: "product",
+  description: "Manages customer relationships, tracks interactions, maintains contact profiles",
+  surfaces: ["users", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#c68642", hair: "#44403c", eyes: "#1a1a2e", shirt: "#1e3a8a", hairStyle: "long" },
+  plannedCapabilities: [
+    "Auto-enrich customer profiles from interactions",
+    "Track customer lifecycle stage",
+    "Flag high-value relationships for attention",
+    "Generate relationship health scores",
+  ],
+}
+
+const growth: AgentDef = {
+  id: "growth",
+  name: "Growth",
+  role: "Conversion Specialist",
+  team: "product",
+  description: "Identifies upgrade candidates, trial conversion signals, upsell opportunities",
+  surfaces: ["users", "billing", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#8d5524", hair: "#292524", eyes: "#0f172a", shirt: "#1e40af", hairStyle: "short" },
+  plannedCapabilities: [
+    "Score trial-to-paid conversion likelihood",
+    "Trigger upgrade prompts at optimal moments",
+    "A/B test pricing page variants",
+    "Identify high-value prospects from usage patterns",
+    "Generate personalized upgrade offers",
+  ],
+}
+
+const revenue: AgentDef = {
+  id: "revenue",
+  name: "Revenue",
+  role: "Money Ops",
+  team: "product",
+  description: "Dunning automation, payment recovery, MRR tracking, cost optimization",
+  surfaces: ["billing", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#f1c27d", hair: "#1c1917", eyes: "#0f172a", shirt: "#1e3a5f", hairStyle: "buzz" },
+  plannedCapabilities: [
+    "Auto-retry failed payments with backoff",
+    "Send dunning email sequences",
+    "Track MRR growth/contraction daily",
+    "Optimize model costs per customer tier",
+    "Generate monthly revenue reports",
+  ],
+}
+
+const ops: AgentDef = {
+  id: "ops",
+  name: "Operations",
+  role: "Activity Monitor",
+  team: "product",
+  description: "Monitors platform activity, detects suspicious patterns, daily summaries",
+  surfaces: ["dashboard", "activity", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#d2946b", hair: "#57534e", eyes: "#1a1a2e", shirt: "#1d4ed8", hairStyle: "curly" },
+  plannedCapabilities: [
+    "Detect suspicious login patterns",
+    "Summarize daily activity for admin",
+    "Flag unusual API usage spikes",
+    "Auto-tag audit events by category",
+    "Generate weekly ops report",
+  ],
+}
+
+const aiRouter: AgentDef = {
+  id: "ai-router",
+  name: "AI Router",
+  role: "Model Router",
+  team: "product",
+  description: "Selects optimal model per request, manages budgets, routes fallbacks",
+  surfaces: ["models", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#f1c27d", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#2563eb", hairStyle: "mohawk" },
+  plannedCapabilities: [
+    "Route queries to cost-optimal model",
+    "Enforce per-workspace token budgets",
+    "Auto-fallback on model outage",
+    "Track quality vs cost tradeoffs",
+  ],
+}
+
+const productContent: AgentDef = {
+  id: "product-content",
+  name: "Content",
+  role: "Docs Writer",
+  team: "product",
+  description: "Writes documentation, release notes, and help content",
+  surfaces: ["org-chart"],
+  status: "planned",
+  avatar: { skin: "#c68642", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#1e3a8a", hairStyle: "parted" },
+  plannedCapabilities: [
+    "Auto-generate release notes from commits",
+    "Keep help docs updated with feature changes",
+    "Write onboarding guides for new features",
+    "Maintain API documentation",
+  ],
+}
+
+const productQa: AgentDef = {
+  id: "product-qa",
+  name: "QA",
+  role: "Quality Assurance",
+  team: "product",
+  description: "Tests product quality, catches regressions, validates deployments",
+  surfaces: ["org-chart"],
+  status: "planned",
+  avatar: { skin: "#f1c27d", hair: "#292524", eyes: "#0f172a", shirt: "#1d4ed8", hairStyle: "short" },
+  plannedCapabilities: [
+    "Run automated test suites on deploy",
+    "Catch UI regressions via visual diff",
+    "Validate API contract changes",
+    "Report quality metrics weekly",
+  ],
+}
+
+const productSupport: AgentDef = {
+  id: "product-support",
+  name: "Support",
+  role: "Help Desk",
+  team: "product",
+  description: "Handles diagnostics, troubleshoots issues, assists users",
+  surfaces: ["org-chart"],
+  status: "planned",
+  avatar: { skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#2563eb", hairStyle: "buzz" },
+  plannedCapabilities: [
+    "Auto-diagnose common user issues",
+    "Escalate complex issues to human support",
+    "Track resolution times and satisfaction",
+    "Build knowledge base from resolved tickets",
+  ],
+}
+
+const retention: AgentDef = {
+  id: "retention",
+  name: "Retention",
+  role: "Anti-Churn Specialist",
+  team: "product",
+  description: "Detects churn signals, runs save protocols, re-engages dormant users",
+  surfaces: ["users"],
+  status: "planned",
+  avatar: { skin: "#FDBCB4", hair: "#8B4513", eyes: "#1A1A2E", shirt: "#EC4899", hairStyle: "long" },
+  plannedCapabilities: [
+    "Monitor login frequency decay",
+    "Auto-send re-engagement emails",
+    "Trigger save protocol for high-value churners",
+    "Analyze churn reasons from feedback",
+    "Schedule check-in calls for at-risk accounts",
+  ],
+}
+
+const customerSuccess: AgentDef = {
+  id: "customer-success",
+  name: "Customer Success",
+  role: "Churn Monitor",
+  team: "product",
+  description: "Monitors user behavior, flags churn signals, suggests interventions",
+  surfaces: ["dashboard"],
+  status: "planned",
+  avatar: { skin: "#F5D0A9", hair: "#8B4513", eyes: "#1A1A2E", shirt: "#EC4899", hairStyle: "long" },
+  plannedCapabilities: [
+    "Score customer health in real-time",
+    "Trigger onboarding nudges for new users",
+    "Detect feature adoption gaps",
+    "Schedule success check-ins",
+  ],
+}
+
+// ── Forge Team — agent factory ─────────────────────────
+
+const forgeMaster: AgentDef = {
+  id: "forge-master",
+  name: "Forge Master",
+  role: "Pipeline Orchestrator",
+  team: "forge",
+  description: "Auto-queues templates, schedules waves, pauses on errors, manages quality gate",
+  surfaces: ["forge", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#d2946b", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#b45309", hairStyle: "buzz" },
+  plannedCapabilities: [
+    "Auto-queue high-priority templates",
+    "Schedule forge waves based on resource availability",
+    "Pause pipeline if error rate >10%",
+    "Route templates to optimal specialist station",
+    "Track quality scores across waves",
+  ],
+}
+
+const forgeQueueMaster: AgentDef = {
+  id: "forge-queue-master",
+  name: "Queue Master",
+  role: "Queue Gatekeeper",
+  team: "forge",
+  description: "Triages incoming tasks, assigns priority, routes to correct worker, monitors SLA",
+  surfaces: ["forge"],
+  status: "planned",
+  avatar: { skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#dc2626", hairStyle: "ponytail" },
+  plannedCapabilities: [
+    "Triage all incoming forge requests by priority",
+    "Enforce queue ordering and SLA deadlines",
+    "Block duplicate or conflicting forge jobs",
+    "Escalate stalled queue items",
+  ],
+}
+
+const forgeScribe: AgentDef = {
+  id: "forge-scribe",
+  name: "The Scribe",
+  role: "Writer Station",
+  team: "forge",
+  description: "Station 1 — Writes .md files for each agent (SOUL, IDENTITY, ROLE_CARD, etc.)",
+  surfaces: ["forge", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#f1c27d", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#c2410c", hairStyle: "parted" },
+  plannedCapabilities: [
+    "Generate SOUL.md from template + persona",
+    "Write IDENTITY.md with unique voice and style",
+    "Create ROLE_CARD.md with responsibilities",
+    "Produce SKILLS.md and DELIVERABLES.md",
+  ],
+}
+
+const forgeMentor: AgentDef = {
+  id: "forge-mentor",
+  name: "The Mentor",
+  role: "Trainer Station",
+  team: "forge",
+  description: "Station 2 — Assigns skills based on role requirements and capability gaps",
+  surfaces: ["forge", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#a16207", hairStyle: "short" },
+  plannedCapabilities: [
+    "Map role to required skill set",
+    "Assign skills from catalog",
+    "Identify capability gaps and recommend new skills",
+    "Validate skill compatibility",
+  ],
+}
+
+const forgeArmorer: AgentDef = {
+  id: "forge-armorer",
+  name: "The Armorer",
+  role: "Outfitter Station",
+  team: "forge",
+  description: "Station 3 — Equips tools and connections needed for the agent's role",
+  surfaces: ["forge", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#c68642", hair: "#292524", eyes: "#1a1a2e", shirt: "#92400e", hairStyle: "mohawk" },
+  plannedCapabilities: [
+    "Assign tools from connection registry",
+    "Configure OAuth scopes per agent",
+    "Validate tool access permissions",
+    "Test tool connectivity before deployment",
+  ],
+}
+
+const forgeInspector: AgentDef = {
+  id: "forge-inspector",
+  name: "The Inspector",
+  role: "QA Inspector",
+  team: "forge",
+  description: "Cross-model QA grading — validates agent quality before deployment",
+  surfaces: ["forge", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#f1c27d", hair: "#57534e", eyes: "#0f172a", shirt: "#7c2d12", hairStyle: "curly" },
+  plannedCapabilities: [
+    "Grade agent files across multiple models",
+    "Validate consistency between SOUL and ROLE_CARD",
+    "Check skill-to-role alignment",
+    "Block deployment if quality score below threshold",
+  ],
+}
+
+// ── Admin Team — platform infrastructure ───────────────
+
+const modelScout: AgentDef = {
+  id: "model-scout",
+  name: "Model Scout",
+  role: "AI Gateway Manager",
+  team: "admin",
+  description: "Monitors AI backends, manages fallback routing, tracks token costs",
+  surfaces: ["models", "bridge"],
+  status: "planned",
+  avatar: { skin: "#E0AC69", hair: "#1A1A2E", eyes: "#1A1A2E", shirt: "#818CF8", hairStyle: "buzz" },
+  plannedCapabilities: [
+    "Auto-failover to backup model on primary down",
+    "Track cost-per-query by model",
+    "Alert when token budget nearing threshold",
+    "Benchmark model quality weekly",
+    "Recommend model deprecation for unused backends",
+  ],
+}
+
+const skillsCurator: AgentDef = {
+  id: "skills-curator",
+  name: "Skills Curator",
+  role: "Skill Manager",
+  team: "admin",
+  description: "Auto-provisions skills, monitors usage, recommends gaps",
+  surfaces: ["skills", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#f1c27d", hair: "#292524", eyes: "#0f172a", shirt: "#047857", hairStyle: "short" },
+  plannedCapabilities: [
+    "Auto-enable skills for new agents based on role",
+    "Detect unused skills and recommend archival",
+    "Suggest missing skills from capability gaps",
+    "Version-control skill definitions",
+    "Audit skill-to-agent assignments",
+  ],
+}
+
+const toolsmith: AgentDef = {
+  id: "toolsmith",
+  name: "Toolsmith",
+  role: "Tool Manager",
+  team: "admin",
+  description: "Monitors tool connections, auto-reconnects, detects new tools",
+  surfaces: ["tools", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#d2946b", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#065f46", hairStyle: "parted" },
+  plannedCapabilities: [
+    "Monitor connection health every 5m",
+    "Auto-reconnect on transient failures",
+    "Detect new CLI tools in PATH",
+    "Sync external connections on schedule",
+    "Revoke compromised tokens",
+  ],
+}
+
+const adminDesign: AgentDef = {
+  id: "admin-design",
+  name: "Design",
+  role: "Visual Consistency",
+  team: "admin",
+  description: "Maintains visual consistency across all surfaces, enforces design system",
+  surfaces: ["design-system", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#c68642", hair: "#57534e", eyes: "#1a1a2e", shirt: "#059669", hairStyle: "curly" },
+  plannedCapabilities: [
+    "Audit component usage for design drift",
+    "Flag inconsistent spacing/color/typography",
+    "Generate design system compliance reports",
+    "Suggest component improvements",
+  ],
+}
+
+const librarian: AgentDef = {
+  id: "librarian",
+  name: "Librarian",
+  role: "File Manager",
+  team: "admin",
+  description: "Organizes files, archives old content, scans for sensitive data",
+  surfaces: ["files"],
+  status: "planned",
+  avatar: { skin: "#D4A574", hair: "#4A3728", eyes: "#1A1A2E", shirt: "#64748B", hairStyle: "parted" },
+  plannedCapabilities: [
+    "Auto-archive files older than 6 months",
+    "Scan for credential/key leaks in uploads",
+    "Generate directory usage reports",
+    "Detect duplicate files",
+    "Monitor large uploads and flag anomalies",
+  ],
+}
+
+// ── Marketing Team — outbound ops ──────────────────────
+
+const marketingGrowth: AgentDef = {
+  id: "marketing-growth",
+  name: "Growth Hacker",
+  role: "Viral Loops",
+  team: "marketing",
+  description: "Designs viral loops, referral incentives, K-factor optimization",
+  surfaces: ["org-chart"],
+  status: "planned",
+  avatar: { skin: "#f1c27d", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#7c3aed", hairStyle: "mohawk" },
+  plannedCapabilities: [
+    "Design and A/B test referral programs",
+    "Track K-factor and viral coefficient",
+    "Optimize invite flow conversion",
+    "Identify organic growth channels",
+  ],
+}
+
+const comms: AgentDef = {
+  id: "comms",
+  name: "Email",
+  role: "Email Automation",
+  team: "marketing",
+  description: "Sends campaigns, manages sequences, personalizes messages, tracks deliverability",
+  surfaces: ["email", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#d2946b", hair: "#44403c", eyes: "#1a1a2e", shirt: "#6d28d9", hairStyle: "parted" },
+  plannedCapabilities: [
+    "Auto-send retention/upgrade emails by trigger",
+    "Manage drip sequences (onboarding, trial expiry)",
+    "Personalize email content per customer profile",
+    "Track open/click rates, optimize send times",
+    "Monitor bounce rates, auto-unsubscribe bad addresses",
+  ],
+}
+
+const marketingSocial: AgentDef = {
+  id: "marketing-social",
+  name: "Social",
+  role: "Community Manager",
+  team: "marketing",
+  description: "Manages X presence, community engagement, social listening",
+  surfaces: ["org-chart"],
+  status: "planned",
+  avatar: { skin: "#8d5524", hair: "#292524", eyes: "#0f172a", shirt: "#5b21b6", hairStyle: "curly" },
+  plannedCapabilities: [
+    "Schedule and publish social posts",
+    "Monitor brand mentions and sentiment",
+    "Engage with community questions",
+    "Track social growth metrics",
+  ],
+}
+
+const marketingCopy: AgentDef = {
+  id: "marketing-copy",
+  name: "Copywriter",
+  role: "SEO Writer",
+  team: "marketing",
+  description: "Writes blog posts, landing page copy, SEO-optimized content",
+  surfaces: ["org-chart"],
+  status: "planned",
+  avatar: { skin: "#c68642", hair: "#1c1917", eyes: "#1a1a2e", shirt: "#7e22ce", hairStyle: "long" },
+  plannedCapabilities: [
+    "Write SEO-optimized blog posts",
+    "Create landing page copy variants",
+    "Generate meta descriptions and titles",
+    "Track content performance metrics",
+  ],
+}
+
+// ── Memory Team — recall system ────────────────────────
+
+const memoryCurator: AgentDef = {
+  id: "memory-curator",
+  name: "Memory Curator",
+  role: "Knowledge Manager",
+  team: "memory",
+  description: "Distills durable directives, promotes signals to concepts, prunes stale memories",
+  surfaces: ["brain", "recall", "org-chart"],
+  status: "planned",
+  avatar: { skin: "#f1c27d", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#d97706", hairStyle: "parted" },
+  plannedCapabilities: [
+    "Auto-promote high-confidence signals to concepts",
+    "Dismiss noise signals after TTL",
+    "Detect contradicting directives",
+    "Summarize episode patterns into concepts",
+    "Rebuild agent identity on 5+ feedback signals",
+  ],
+}
+
+const directiveLibrarian: AgentDef = {
+  id: "directive-librarian",
+  name: "Directive Librarian",
+  role: "Rules Manager",
+  team: "memory",
+  description: "Manages rules, resolves disputes, maintains directive integrity",
+  surfaces: ["org-chart"],
+  status: "planned",
+  avatar: { skin: "#d2946b", hair: "#44403c", eyes: "#1a1a2e", shirt: "#b45309", hairStyle: "short" },
+  plannedCapabilities: [
+    "Detect conflicting directives",
+    "Resolve rule disputes via precedence",
+    "Archive deprecated directives",
+    "Audit directive coverage across agents",
+  ],
+}
+
+// ── Registry ───────────────────────────────────────────
+
+export const AGENT_REGISTRY: AgentDef[] = [
+  // Porter
+  porterCore,
+  // Brain
+  sentinel, hygienist, diagnostician, pulse,
+  // Product
+  projectMgr, strategy, crm, growth, revenue, ops, aiRouter,
+  productContent, productQa, productSupport, retention, customerSuccess,
+  // Forge
+  forgeMaster, forgeQueueMaster, forgeScribe, forgeMentor, forgeArmorer, forgeInspector,
+  // Admin
+  modelScout, skillsCurator, toolsmith, adminDesign, librarian,
+  // Marketing
+  marketingGrowth, comms, marketingSocial, marketingCopy,
+  // Memory
+  memoryCurator, directiveLibrarian,
+]
+
+/** Get all agents assigned to a specific surface (route path) */
+export function getAgentsForSurface(surface: string): AgentDef[] {
+  return AGENT_REGISTRY.filter(a => a.surfaces.includes(surface))
+}
+
+/** Get a single agent by ID */
+export function getAgent(id: string): AgentDef | undefined {
+  return AGENT_REGISTRY.find(a => a.id === id)
+}
+
+/** Get all agents in a team */
+export function getAgentsByTeam(team: AgentDef["team"]): AgentDef[] {
+  return AGENT_REGISTRY.filter(a => a.team === team)
+}
+
+/** Count agents by status */
+export function agentStatusCounts(): Record<AgentStatus, number> {
+  const counts: Record<AgentStatus, number> = { planned: 0, forging: 0, active: 0, paused: 0, error: 0 }
+  for (const a of AGENT_REGISTRY) counts[a.status]++
+  return counts
+}

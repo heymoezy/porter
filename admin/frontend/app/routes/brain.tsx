@@ -1,0 +1,463 @@
+import { useEffect, useRef } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { api } from "~/lib/api"
+import { Badge } from "~/components/ui/badge"
+import { Button } from "~/components/ui/button"
+import { PixelPortrait } from "~/components/pixel-portrait"
+import {
+  Brain, Activity, AlertTriangle, CheckCircle, Server,
+  Database, Cpu, HardDrive, Clock, Zap, MessageSquare,
+  Users, Bot, FolderOpen, Terminal, RefreshCw, ChevronRight,
+  Flame, Shield, Sparkles,
+} from "lucide-react"
+import { Link } from "react-router"
+import {
+  AGENT_REGISTRY, getAgentsByTeam, agentStatusCounts,
+  type AgentDef, type AgentStatus,
+} from "~/lib/agent-registry"
+
+// ── Types ──────────────────────────────────────────────
+
+interface SystemData {
+  memory: { total: number; used: number; free: number; pct: number }
+  cpu: { cores: number; model: string; load1m: number; load5m: number; load15m: number }
+  disk: { total: number; used: number; available: number; pct: number }
+  uptime: number
+  platform: { os: string; arch: string; hostname: string; nodeVersion: string }
+  db: { size: number; path: string }
+  sessions: { active: number; concurrent: number }
+  process: { rss: number; heapUsed: number; heapTotal: number }
+  runtimes: Array<{ name: string; url: string; status: string; latencyMs: number }>
+}
+
+interface DiagStats {
+  total: number; open: number; today: number
+  bySeverity: { critical: number; error: number; warning: number }
+  bySource: { client_js: number; server_api: number; agent_error: number }
+  topErrors: Array<{ message: string; source: string; severity: string; count: number; last_seen: number }>
+}
+
+interface DashboardData {
+  projects: { total: number; byStatus: Array<{ status: string; cnt: number }> }
+  agents: number; chats: number; messages: number; agentMessages: number
+  tasks: number; orchestrations: number; decisions: number
+  customers: number; sessions: number
+  tokens: { input: number; output: number; requests: number }
+  learnings: number; auditEvents: number; emails: number; skills: number
+  recentActivity: Array<{ ts: number; actor: string; action: string; target: string }>
+  version: string
+}
+
+interface LogEntry { ts: number; text: string; color: string }
+
+// ── Helpers ────────────────────────────────────────────
+
+function fmtBytes(b: number) {
+  if (!b) return "0 B"
+  const k = 1024, s = ["B", "KB", "MB", "GB", "TB"]
+  const i = Math.floor(Math.log(b) / Math.log(k))
+  return `${(b / Math.pow(k, i)).toFixed(1)} ${s[i]}`
+}
+
+function fmtUptime(s: number) {
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60)
+  return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
+function fmtNum(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return n.toString()
+}
+
+// ── Verdict ────────────────────────────────────────────
+
+type Verdict = "healthy" | "degraded" | "down"
+
+function deriveVerdict(system: SystemData | undefined, diagOpen: number): Verdict {
+  if (!system) return "down"
+  const anyDown = system.runtimes.some(r => r.status !== "healthy")
+  const criticalResource = system.memory.pct >= 95 || system.disk.pct >= 95
+  if (anyDown || criticalResource || diagOpen > 0) return "degraded"
+  return "healthy"
+}
+
+const verdictConfig: Record<Verdict, { label: string; color: string; bg: string; border: string; pulse: boolean }> = {
+  healthy:  { label: "All Systems Operational",  color: "text-success",  bg: "bg-success/8", border: "border-success/20", pulse: false },
+  degraded: { label: "Issues Detected",          color: "text-warning",  bg: "bg-warning/8", border: "border-warning/20", pulse: true },
+  down:     { label: "Systems Unreachable",       color: "text-danger",   bg: "bg-danger/8",  border: "border-danger/20",  pulse: true },
+}
+
+// ── Agent-attributed actions ───────────────────────────
+
+interface ActionItem {
+  agent: string
+  text: string
+  severity: "critical" | "warning" | "info"
+  link?: string
+}
+
+function deriveActions(sys: SystemData | undefined, diagStats: DiagStats | undefined): ActionItem[] {
+  const actions: ActionItem[] = []
+  if (!sys) {
+    actions.push({ agent: "Sentinel", text: "System metrics unreachable — backend down?", severity: "critical" })
+    return actions
+  }
+
+  for (const rt of sys.runtimes) {
+    if (rt.status !== "healthy") actions.push({ agent: "Sentinel", text: `${rt.name} is DOWN`, severity: "critical" })
+    else if (rt.latencyMs > 1000) actions.push({ agent: "Sentinel", text: `${rt.name} responding slowly (${rt.latencyMs}ms)`, severity: "warning" })
+  }
+
+  if (sys.memory.pct >= 90) actions.push({ agent: "Pulse", text: `Memory critical at ${sys.memory.pct}%`, severity: "critical" })
+  else if (sys.memory.pct >= 75) actions.push({ agent: "Pulse", text: `Memory elevated at ${sys.memory.pct}%`, severity: "warning" })
+
+  if (sys.disk.pct >= 90) actions.push({ agent: "Hygienist", text: `Disk at ${sys.disk.pct}% — cleanup needed`, severity: "critical" })
+  else if (sys.disk.pct >= 75) actions.push({ agent: "Hygienist", text: `Disk at ${sys.disk.pct}% — monitoring`, severity: "warning" })
+
+  if (diagStats) {
+    if (diagStats.bySeverity.critical > 0)
+      actions.push({ agent: "Diagnostician", text: `${diagStats.bySeverity.critical} critical errors need attention`, severity: "critical", link: "/diagnostics" })
+    if (diagStats.bySeverity.error > 0)
+      actions.push({ agent: "Diagnostician", text: `${diagStats.bySeverity.error} unresolved errors`, severity: "warning", link: "/diagnostics" })
+  }
+
+  if (actions.length === 0)
+    actions.push({ agent: "Sentinel", text: "All systems nominal — nothing to do", severity: "info" })
+
+  return actions
+}
+
+// ── Subcomponents ──────────────────────────────────────
+
+function ResourceBar({ pct }: { pct: number }) {
+  const color = pct >= 90 ? "bg-danger" : pct >= 70 ? "bg-warning" : "bg-accent-porter"
+  return (
+    <div className="h-1 rounded-full bg-border/50 overflow-hidden">
+      <div className={`h-full rounded-full transition-all duration-700 ease-out ${color}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+    </div>
+  )
+}
+
+function LiveTerminal({ logs }: { logs: LogEntry[] }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (ref.current) ref.current.scrollTop = 0 }, [logs])
+  return (
+    <div ref={ref} className="h-[180px] overflow-y-auto rounded-lg bg-[var(--terminal-bg)] p-3 font-mono text-2xs leading-relaxed scrollbar-thin">
+      {logs.length === 0 ? <span className="text-text3">No recent activity</span> : (
+        logs.map((log, i) => (
+          <div key={`${log.ts}-${i}`} className={`${log.color} ${i === 0 ? "animate-list-stagger-in" : ""}`}>{log.text}</div>
+        ))
+      )}
+    </div>
+  )
+}
+
+const statusDot: Record<AgentStatus, string> = {
+  planned: "bg-text3/40",
+  forging: "bg-warning animate-pulse-badge",
+  active: "bg-success animate-pulse-badge",
+  paused: "bg-text3/60",
+  error: "bg-danger animate-pulse-badge",
+}
+
+function BrainAgentCard({ agent, detail }: { agent: AgentDef; detail?: string }) {
+  const isGhost = agent.status === "planned"
+  return (
+    <Link to={`/agents/${agent.id}`} className={`block rounded-lg border px-3 py-2.5 transition-all hover:border-accent-porter/30 ${isGhost ? "border-border/40 bg-card" : "border-accent-porter/20 bg-accent-porter/3"}`}>
+      <div className="flex items-center gap-2.5">
+        <div className={isGhost ? "grayscale opacity-40" : ""}>
+          <PixelPortrait {...agent.avatar} size="xs" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <p className={`text-2xs font-bold ${isGhost ? "text-text2" : "text-text"}`}>{agent.name}</p>
+            <span className="text-2xs text-text3 font-mono">· {agent.role}</span>
+          </div>
+          <p className="text-2xs text-text3 truncate">{detail ?? agent.description}</p>
+        </div>
+        <span className="flex items-center gap-1 text-2xs font-mono shrink-0">
+          <span className={`size-1.5 rounded-full ${statusDot[agent.status]}`} />
+          <span className={isGhost ? "text-text3" : "text-success"}>{agent.status}</span>
+        </span>
+      </div>
+      {isGhost && agent.plannedCapabilities.length > 0 && (
+        <div className="mt-1.5 pl-8 flex flex-wrap gap-1">
+          {agent.plannedCapabilities.slice(0, 2).map((cap, i) => (
+            <span key={i} className="text-2xs text-text3 bg-raised/50 rounded px-1.5 py-0.5">{cap}</span>
+          ))}
+          {agent.plannedCapabilities.length > 2 && (
+            <span className="text-2xs text-text3">+{agent.plannedCapabilities.length - 2} more</span>
+          )}
+        </div>
+      )}
+    </Link>
+  )
+}
+
+// ── Main ───────────────────────────────────────────────
+
+function BrainContent() {
+  const system = useQuery({ queryKey: ["brain", "system"], queryFn: () => api<SystemData>("/api/admin/system"), refetchInterval: 30_000 })
+  const diag = useQuery({ queryKey: ["brain", "diagnostics"], queryFn: () => api<{ errors: unknown[]; stats: DiagStats }>("/api/admin/diagnostics"), refetchInterval: 30_000 })
+  const dashboard = useQuery({ queryKey: ["brain", "dashboard"], queryFn: () => api<DashboardData>("/api/admin/health/dashboard"), refetchInterval: 30_000 })
+  const logs = useQuery({ queryKey: ["brain", "logs"], queryFn: () => api<{ logs: LogEntry[] }>("/api/admin/health/logs?limit=30"), refetchInterval: 30_000 })
+
+  const s = system.data
+  const diagStats = diag.data?.stats
+  const diagOpen = diagStats?.open ?? 0
+  const d = dashboard.data
+  const logEntries = logs.data?.logs ?? []
+
+  const verdict = deriveVerdict(s, diagOpen)
+  const vc = verdictConfig[verdict]
+  const actions = deriveActions(s, diagStats)
+  const counts = agentStatusCounts()
+
+  const brainAgents = getAgentsByTeam("brain")
+  const memoryAgents = getAgentsByTeam("memory")
+  const allBrainAgents = [...brainAgents, ...memoryAgents]
+
+  if (system.isLoading && dashboard.isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <div className="size-8 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
+        <p className="text-xs text-text3">Connecting to brain...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3 animate-page-fade-slide">
+
+      {/* ── Verdict Banner ── */}
+      <div className={`flex items-center gap-3 rounded-xl border ${vc.border} ${vc.bg} px-4 py-3`}>
+        <div className="relative">
+          <Brain className={`size-5 ${vc.color}`} />
+          {vc.pulse && <span className={`absolute -top-0.5 -right-0.5 size-2 rounded-full ${verdict === "down" ? "bg-danger" : "bg-warning"} animate-pulse-badge`} />}
+        </div>
+        <div className="flex-1">
+          <p className={`text-sm font-semibold ${vc.color}`}>{vc.label}</p>
+          {s && <p className="text-2xs text-text3">{s.platform.hostname} · up {fmtUptime(s.uptime)} · {s.sessions.active} sessions</p>}
+        </div>
+
+        {/* Agent fleet summary */}
+        <div className="flex items-center gap-3 text-2xs">
+          <span className="flex items-center gap-1"><Bot className="size-3 text-text3" /><strong className="text-text">{AGENT_REGISTRY.length}</strong> agents</span>
+          <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-text3/40" />{counts.planned} planned</span>
+          {counts.active > 0 && <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-success" />{counts.active} active</span>}
+        </div>
+
+        {d && <Badge variant="outline" className="text-2xs text-text3">v{d.version}</Badge>}
+        <Button variant="ghost" size="icon-xs" onClick={() => { system.refetch(); diag.refetch(); dashboard.refetch(); logs.refetch() }} className={system.isFetching ? "animate-spin" : ""}>
+          <RefreshCw className="size-3" />
+        </Button>
+      </div>
+
+      {/* ── Brain Agents + Actions ── */}
+      <div className="grid grid-cols-12 gap-3">
+
+        {/* Brain Team */}
+        <div className="col-span-7 rounded-xl border border-border bg-surface p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <Shield className="size-3 text-accent-porter" />
+              <p className="text-2xs font-semibold uppercase tracking-wide text-text3">Brain Agents</p>
+            </div>
+            <Link to="/forge" className="flex items-center gap-1 text-2xs text-warning hover:text-warning/80 transition-colors">
+              <Flame className="size-3" /> Forge All
+            </Link>
+          </div>
+          <div className="space-y-1.5">
+            {allBrainAgents.map(a => {
+              // Generate dynamic detail from current system state
+              let detail: string | undefined
+              if (a.id === "sentinel" && s) {
+                const up = s.runtimes.filter(r => r.status === "healthy").length
+                detail = `${up}/${s.runtimes.length} services healthy · avg ${Math.round(s.runtimes.reduce((sum, r) => sum + r.latencyMs, 0) / (s.runtimes.length || 1))}ms latency`
+              } else if (a.id === "hygienist" && s) {
+                detail = `DB ${fmtBytes(s.db.size)} · disk ${s.disk.pct}% used · ${s.sessions.active} active sessions`
+              } else if (a.id === "diagnostician" && diagStats) {
+                detail = diagOpen > 0 ? `${diagOpen} open errors (${diagStats.bySeverity.critical} critical)` : "No open errors"
+              } else if (a.id === "pulse" && s) {
+                detail = `RAM ${s.memory.pct}% · CPU ${Math.round(s.cpu.load1m / s.cpu.cores * 100)}% · disk ${s.disk.pct}%`
+              } else if (a.id === "memory-curator" && d) {
+                detail = `${d.learnings} learnings · ${d.skills} skills active`
+              }
+              return <BrainAgentCard key={a.id} agent={a} detail={a.status !== "planned" ? detail : undefined} />
+            })}
+          </div>
+        </div>
+
+        {/* Agent-Attributed Actions */}
+        <div className="col-span-5 space-y-3">
+          <div className="rounded-xl border border-border bg-surface p-3">
+            <p className="text-2xs font-semibold uppercase tracking-wide text-text3 mb-2">
+              {actions[0]?.severity === "info" ? "Agent Status" : "Agent Recommendations"}
+            </p>
+            <div className="space-y-1.5">
+              {actions.map((a, i) => (
+                <div key={i} className={`flex items-center gap-2 rounded-md px-2.5 py-2 ${
+                  a.severity === "critical" ? "bg-danger/8 border border-danger/20" :
+                  a.severity === "warning" ? "bg-warning/8 border border-warning/20" :
+                  "bg-success/8 border border-success/20"
+                }`}>
+                  {a.severity === "critical" ? <AlertTriangle className="size-3 text-danger shrink-0" /> :
+                   a.severity === "warning" ? <AlertTriangle className="size-3 text-warning shrink-0" /> :
+                   <CheckCircle className="size-3 text-success shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    <Link to={`/agents/${a.agent.toLowerCase()}`} className={`text-2xs font-bold hover:underline ${
+                      a.severity === "critical" ? "text-danger" : a.severity === "warning" ? "text-warning" : "text-success"
+                    }`}>{a.agent}:</Link>
+                    <span className={`text-xs ml-1 ${
+                      a.severity === "critical" ? "text-danger" : a.severity === "warning" ? "text-warning" : "text-success"
+                    }`}>{a.text}</span>
+                  </div>
+                  {a.link && <Link to={a.link}><ChevronRight className="size-3 text-text3" /></Link>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Fleet Overview — all teams */}
+          <div className="rounded-xl border border-border bg-surface p-3">
+            <p className="text-2xs font-semibold uppercase tracking-wide text-text3 mb-2">Fleet Overview</p>
+            <div className="space-y-1">
+              {(["product", "forge", "admin", "marketing"] as const).map(team => {
+                const agents = getAgentsByTeam(team)
+                const active = agents.filter(a => a.status === "active").length
+                return (
+                  <div key={team} className="flex items-center gap-2 rounded-md px-2 py-1.5 bg-background/50">
+                    <span className="text-2xs font-bold text-text2 capitalize w-16">{team}</span>
+                    <div className="flex -space-x-1 flex-1">
+                      {agents.slice(0, 5).map(a => (
+                        <Link key={a.id} to={`/agents/${a.id}`} className={`hover:opacity-80 transition-opacity ${a.status === "planned" ? "grayscale opacity-30" : ""}`}>
+                          <PixelPortrait {...a.avatar} size="xs" />
+                        </Link>
+                      ))}
+                      {agents.length > 5 && <span className="flex size-5 items-center justify-center rounded-full bg-raised text-2xs font-bold text-text3">+{agents.length - 5}</span>}
+                    </div>
+                    <span className="text-2xs text-text3 font-mono tabular-nums">{active}/{agents.length}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Services + Resources ── */}
+      <div className="grid grid-cols-12 gap-3">
+        <div className="col-span-3 rounded-xl border border-border bg-surface p-3">
+          <p className="text-2xs font-semibold uppercase tracking-wide text-text3 mb-2">Services</p>
+          <div className="space-y-1.5">
+            {s?.runtimes.map(rt => (
+              <div key={rt.name} className="flex items-center gap-2 rounded-md px-2 py-1.5 bg-background/50">
+                <div className={`size-2 rounded-full ${rt.status === "healthy" ? "bg-success" : "bg-danger animate-pulse-badge"}`} />
+                <span className="text-xs font-medium text-text flex-1">{rt.name}</span>
+                <span className="text-2xs tabular-nums text-text3">{rt.latencyMs}ms</span>
+              </div>
+            )) ?? <p className="text-xs text-text3">Loading...</p>}
+          </div>
+        </div>
+
+        <div className="col-span-3 rounded-xl border border-border bg-surface p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5"><Server className="size-3 text-accent-porter" /><span className="text-2xs font-semibold uppercase tracking-wide text-text3">RAM</span></div>
+            <span className={`text-xs font-bold tabular-nums ${(s?.memory.pct ?? 0) >= 80 ? "text-danger" : "text-text"}`}>{s?.memory.pct ?? 0}%</span>
+          </div>
+          <ResourceBar pct={s?.memory.pct ?? 0} />
+          <div className="flex justify-between mt-2 text-2xs text-text3"><span>{fmtBytes(s?.memory.used ?? 0)}</span><span>{fmtBytes(s?.memory.total ?? 0)}</span></div>
+        </div>
+
+        <div className="col-span-3 rounded-xl border border-border bg-surface p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5"><Cpu className="size-3 text-accent-porter" /><span className="text-2xs font-semibold uppercase tracking-wide text-text3">CPU</span></div>
+            <span className="text-2xs text-text3">{s?.cpu.cores ?? 0}c</span>
+          </div>
+          <ResourceBar pct={s ? Math.round(s.cpu.load1m / s.cpu.cores * 100) : 0} />
+          <div className="flex gap-2 mt-2 text-2xs text-text3 tabular-nums"><span>1m: {s?.cpu.load1m.toFixed(2) ?? "-"}</span><span>5m: {s?.cpu.load5m.toFixed(2) ?? "-"}</span></div>
+        </div>
+
+        <div className="col-span-3 rounded-xl border border-border bg-surface p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5"><HardDrive className="size-3 text-accent-porter" /><span className="text-2xs font-semibold uppercase tracking-wide text-text3">Disk</span></div>
+            <span className={`text-xs font-bold tabular-nums ${(s?.disk.pct ?? 0) >= 80 ? "text-danger" : "text-text"}`}>{s?.disk.pct ?? 0}%</span>
+          </div>
+          <ResourceBar pct={s?.disk.pct ?? 0} />
+          <div className="flex justify-between mt-2 text-2xs text-text3"><span>{fmtBytes(s?.disk.used ?? 0)}</span><span>{fmtBytes(s?.disk.total ?? 0)}</span></div>
+        </div>
+      </div>
+
+      {/* ── Platform Pulse + Terminal ── */}
+      <div className="grid grid-cols-12 gap-3">
+        <div className="col-span-5 rounded-xl border border-border bg-surface p-3">
+          <p className="text-2xs font-semibold uppercase tracking-wide text-text3 mb-2">Platform Pulse</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { icon: FolderOpen, label: "Projects", value: d?.projects.total ?? 0 },
+              { icon: Bot, label: "Agents", value: d?.agents ?? 0 },
+              { icon: Users, label: "Customers", value: d?.customers ?? 0 },
+              { icon: MessageSquare, label: "Messages", value: fmtNum(d?.messages ?? 0) },
+              { icon: Activity, label: "Orchestrations", value: d?.orchestrations ?? 0 },
+              { icon: Zap, label: "Tokens", value: fmtNum((d?.tokens.input ?? 0) + (d?.tokens.output ?? 0)) },
+            ].map(m => (
+              <div key={m.label} className="flex items-center gap-2 rounded-md border border-border/50 bg-background/50 px-2.5 py-1.5">
+                <m.icon className="size-3 text-accent-porter" />
+                <div><p className="text-sm font-bold text-text tabular-nums">{m.value}</p><p className="text-2xs text-text3">{m.label}</p></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="col-span-7 rounded-xl border border-border bg-surface p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <Terminal className="size-3 text-accent-porter" />
+              <p className="text-2xs font-semibold uppercase tracking-wide text-text3">Live Feed</p>
+            </div>
+            <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-success animate-pulse-badge" /><span className="text-2xs text-text3">Live</span></span>
+          </div>
+          <LiveTerminal logs={logEntries} />
+        </div>
+      </div>
+
+      {/* ── DB + Process + Sessions ── */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-xl border border-border bg-surface p-3">
+          <div className="flex items-center gap-1.5 mb-2"><Database className="size-3 text-accent-porter" /><span className="text-2xs font-semibold uppercase tracking-wide text-text3">Database</span></div>
+          <div className="space-y-1 text-xs">
+            <div className="flex justify-between"><span className="text-text3">Size</span><span className="text-text2 tabular-nums">{fmtBytes(s?.db.size ?? 0)}</span></div>
+            <div className="flex justify-between"><span className="text-text3">Audit Events</span><span className="text-text2 tabular-nums">{fmtNum(d?.auditEvents ?? 0)}</span></div>
+            <div className="flex justify-between"><span className="text-text3">Learnings</span><span className="text-text2 tabular-nums">{d?.learnings ?? 0}</span></div>
+            <div className="flex justify-between"><span className="text-text3">Emails</span><span className="text-text2 tabular-nums">{d?.emails ?? 0}</span></div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-surface p-3">
+          <div className="flex items-center gap-1.5 mb-2"><Cpu className="size-3 text-accent-porter" /><span className="text-2xs font-semibold uppercase tracking-wide text-text3">Process</span></div>
+          <div className="space-y-1 text-xs">
+            <div className="flex justify-between"><span className="text-text3">RSS</span><span className="text-text2 tabular-nums">{fmtBytes(s?.process.rss ?? 0)}</span></div>
+            <div className="flex justify-between"><span className="text-text3">Heap</span><span className="text-text2 tabular-nums">{fmtBytes(s?.process.heapUsed ?? 0)} / {fmtBytes(s?.process.heapTotal ?? 0)}</span></div>
+            <div className="flex justify-between"><span className="text-text3">Node</span><span className="text-text2">{s?.platform.nodeVersion ?? "-"}</span></div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-surface p-3">
+          <div className="flex items-center gap-1.5 mb-2"><Clock className="size-3 text-accent-porter" /><span className="text-2xs font-semibold uppercase tracking-wide text-text3">Sessions</span></div>
+          <div className="space-y-1 text-xs">
+            <div className="flex justify-between"><span className="text-text3">Active</span><span className="text-text2 tabular-nums">{s?.sessions.active ?? 0}</span></div>
+            <div className="flex justify-between"><span className="text-text3">Concurrent</span><span className="text-text2 tabular-nums">{s?.sessions.concurrent ?? 0}</span></div>
+            <div className="flex justify-between"><span className="text-text3">Platform</span><span className="text-text2">{s?.platform.os ?? "-"}/{s?.platform.arch ?? "-"}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function BrainPage() {
+  return (
+      <div className="overflow-y-auto p-4 flex-1 scrollbar-thin">
+        <BrainContent />
+      </div>
+  )
+}

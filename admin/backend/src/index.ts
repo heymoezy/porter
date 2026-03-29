@@ -101,7 +101,7 @@ if (fs.existsSync(frontendDist)) {
 const start = async () => {
   try {
     await fastify.listen({ port: config.port, host: config.host });
-    console.log(`Porter Admin running at http://${config.host}:${config.port}`);
+    console.log(`Porter running at http://${config.host}:${config.port}`);
 
     // Probe all gateways at startup (versions + health, like porter.py)
     probeAllGateways().then(results => {

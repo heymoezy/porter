@@ -33,7 +33,7 @@ archive/
 /chat/
 diagrams/
 /docs/
-frontend/
+/frontend/
 
 # Backend build artifacts and dependencies (source is tracked)
 backend/dist/
