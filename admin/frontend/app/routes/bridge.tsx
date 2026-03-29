@@ -70,8 +70,8 @@ interface GatewayCapacity {
 
 interface GatewayMetrics {
   gateway_id: string
-  p95_latency_ms: number | null; success_rate: number | null
-  error_429_count: number; total_dispatches: number; period: string
+  p95_latency_ms: number | null; success_rate_pct: number | null
+  error_429_count: number; total_dispatches: number
 }
 
 type CompositeStatus = "online" | "busy" | "throttled" | "blocked" | "paused" | "offline"
@@ -138,23 +138,36 @@ function CapacityBar({ label, rl }: { label: string; rl: RateLimit }) {
   )
 }
 
+function fmtLatency(ms: number): string {
+  if (ms >= 60000) return `${(ms / 60000).toFixed(1)}m`
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
+  return `${Math.round(ms)}ms`
+}
+
 function MetricsRow({ metrics }: { metrics?: GatewayMetrics }) {
-  if (!metrics) return null
-  const latency = metrics.p95_latency_ms != null ? `p95 ${metrics.p95_latency_ms}ms` : null
-  const success = metrics.success_rate != null ? `${metrics.success_rate.toFixed(1)}% success` : null
-  const has429 = metrics.error_429_count > 0
-  const lowSuccess = metrics.success_rate != null && metrics.success_rate < 95
+  if (!metrics || metrics.total_dispatches === 0) return null
+  const parts: { text: string; danger?: boolean }[] = []
+
+  if (metrics.p95_latency_ms != null) {
+    parts.push({ text: `p95 ${fmtLatency(metrics.p95_latency_ms)}` })
+  }
+  if (metrics.success_rate_pct != null) {
+    parts.push({ text: `${metrics.success_rate_pct.toFixed(0)}% success`, danger: metrics.success_rate_pct < 95 })
+  }
+  if (metrics.error_429_count > 0) {
+    parts.push({ text: `${metrics.error_429_count}× rate limited`, danger: true })
+  }
+  parts.push({ text: `${metrics.total_dispatches} calls` })
 
   return (
     <p className="text-2xs text-text3 px-4 pb-2">
-      {latency && <span>{latency}</span>}
-      {latency && success && <span className="mx-1">·</span>}
-      {success && <span className={lowSuccess ? "text-danger font-medium" : ""}>{success}</span>}
-      {(latency || success) && <span className="mx-1">·</span>}
-      <span className={has429 ? "text-danger font-medium" : ""}>
-        {metrics.error_429_count}× 429s
-      </span>
-      <span className="text-text3/50 ml-1">({metrics.period})</span>
+      {parts.map((p, i) => (
+        <span key={i}>
+          {i > 0 && <span className="mx-1">·</span>}
+          <span className={p.danger ? "text-danger font-medium" : ""}>{p.text}</span>
+        </span>
+      ))}
+      <span className="text-text3/50 ml-1">(1h)</span>
     </p>
   )
 }
@@ -553,18 +566,18 @@ function GatewayGrid({ tickLog, onOpenEditor }: { tickLog?: () => void; onOpenEd
   })
   const capacityQuery = useQuery({
     queryKey: ["bridge", "capacity"],
-    queryFn: () => api<{ capacities: GatewayCapacity[] }>("/api/admin/bridge/capacity").catch(() => ({ capacities: [] as GatewayCapacity[] })),
+    queryFn: () => api<{ gateways: GatewayCapacity[] }>("/api/admin/bridge/capacity").catch(() => ({ gateways: [] as GatewayCapacity[] })),
     staleTime: 30_000,
     retry: false,
   })
   const metricsQuery = useQuery({
     queryKey: ["bridge", "metrics"],
-    queryFn: () => api<{ metrics: GatewayMetrics[] }>("/api/admin/bridge/metrics").catch(() => ({ metrics: [] as GatewayMetrics[] })),
+    queryFn: () => api<{ period: string; metrics: GatewayMetrics[] }>("/api/admin/bridge/metrics").catch(() => ({ period: "1h", metrics: [] as GatewayMetrics[] })),
     staleTime: 30_000,
     retry: false,
   })
   const versionMap = new Map((versionsQuery.data?.versions ?? []).map(v => [v.gateway_id, v]))
-  const capacityMap = new Map((capacityQuery.data?.capacities ?? []).map(c => [c.gateway_id, c]))
+  const capacityMap = new Map((capacityQuery.data?.gateways ?? []).map(c => [c.gateway_id, c]))
   const metricsMap = new Map((metricsQuery.data?.metrics ?? []).map(m => [m.gateway_id, m]))
 
   if (isLoading) return (
@@ -630,7 +643,7 @@ function OperatorActivityLog() {
   })
   const { data: capacityData } = useQuery({
     queryKey: ["bridge", "capacity"],
-    queryFn: () => api<{ capacities: GatewayCapacity[] }>("/api/admin/bridge/capacity").catch(() => ({ capacities: [] as GatewayCapacity[] })),
+    queryFn: () => api<{ gateways: GatewayCapacity[] }>("/api/admin/bridge/capacity").catch(() => ({ gateways: [] as GatewayCapacity[] })),
     staleTime: 30_000,
     retry: false,
   })
@@ -638,7 +651,7 @@ function OperatorActivityLog() {
   const gateways = bridgeData?.gateways ?? []
   const versions = new Map((versionData?.versions ?? []).map(v => [v.gateway_id, v]))
   const intel = intelData?.entries ?? []
-  const capacities = new Map((capacityData?.capacities ?? []).map(c => [c.gateway_id, c]))
+  const capacities = new Map((capacityData?.gateways ?? []).map(c => [c.gateway_id, c]))
 
   let k = 0
   const lines: { text: string; color: string; _key: number }[] = []
