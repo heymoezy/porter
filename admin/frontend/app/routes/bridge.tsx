@@ -343,8 +343,8 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
       {/* Capacity bars */}
       {capacity && (capacity.rpm.current > 0 || capacity.tpm.current > 0 || capacity.rpm.limit != null || capacity.tpm.limit != null) && (
         <div className="px-4 pb-2 space-y-1">
-          <CapacityBar label="RPM" rl={capacity.rpm} />
-          <CapacityBar label="TPM" rl={capacity.tpm} />
+          <CapacityBar label="Requests/min" rl={capacity.rpm} />
+          <CapacityBar label="Tokens/min" rl={capacity.tpm} />
         </div>
       )}
 
