@@ -150,29 +150,33 @@ function limitLabel(lt: string, period: string): string {
 }
 
 function UsageMeter({ label, rl }: { label: string; rl: UsageLimit }) {
-  if (rl.limit == null && rl.current === 0) return null
   const pctNum = rl.pct != null ? Math.round(rl.pct * 100) : null
   const resetStr = fmtResetIn(rl.reset_at)
+  const hasKnownLimit = rl.limit != null
 
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
         <span className="text-2xs font-medium text-text2">{label}</span>
-        {resetStr && <span className="text-2xs text-text3">{resetStr}</span>}
+        {resetStr ? (
+          <span className="text-2xs text-text3">{resetStr}</span>
+        ) : (
+          <span className="text-2xs text-text3">Limit not published</span>
+        )}
       </div>
       <div className="h-1.5 rounded-full bg-border/30 overflow-hidden">
         {pctNum != null ? (
           <div className={`h-full rounded-full transition-all ${capacityBarColor(pctNum)}`} style={{ width: `${Math.min(pctNum, 100)}%` }} />
         ) : (
-          <div className="h-full rounded-full bg-text3/20" style={{ width: '15%' }} />
+          <div className="h-full rounded-full bg-accent-porter/20" style={{ width: `${Math.min(rl.current > 0 ? 20 : 0, 100)}%` }} />
         )}
       </div>
       <div className="flex items-center justify-between">
         <span className="text-2xs text-text3">
-          {pctNum != null ? `${pctNum}% used` : `~${fmtCompact(rl.current)}/min`}
+          {pctNum != null ? `${pctNum}% used` : rl.current > 0 ? `${fmtCompact(rl.current)} used` : 'No usage yet'}
         </span>
-        {rl.limit != null && (
-          <span className="text-2xs text-text3 font-mono">{fmtCompact(rl.current)} / {fmtCompact(rl.limit)}</span>
+        {hasKnownLimit && (
+          <span className="text-2xs text-text3 font-mono">{fmtCompact(rl.current)} / {fmtCompact(rl.limit!)}</span>
         )}
       </div>
     </div>
@@ -432,31 +436,33 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
         )}
       </div>
 
-      {/* Usage limits — 2 rows max: Quota (tightest short-term) + Weekly */}
+      {/* Usage limits — 2 rows: Session/Daily quota + Weekly */}
       {capacity && (() => {
-        // Flatten all limits across all models
         const allLimits = capacity.models.flatMap(m => m.limits)
-        if (allLimits.length === 0 || allLimits.every(l => l.limit == null)) return null
+        if (allLimits.length === 0) return null
 
-        // Find the tightest short-term limit (hourly > daily > minute) with a known limit
-        const quotaOrder = ['hourly', 'daily', 'minute'] as const
+        // Find the primary quota — tightest short-term period
+        const quotaOrder = ['5hour', 'hourly', 'daily', 'minute']
         let quota: typeof allLimits[0] | null = null
         for (const period of quotaOrder) {
-          const match = allLimits.find(l => l.period === period && l.limit != null)
+          const match = allLimits.find(l => l.period === period)
           if (match) { quota = match; break }
         }
 
-        // Find the weekly limit
-        const weekly = allLimits.find(l => l.period === 'weekly' && l.limit != null) ?? null
+        // Find weekly
+        const weekly = allLimits.find(l => l.period === 'weekly') ?? null
 
         if (!quota && !weekly) return null
 
-        const quotaLabel = quota?.period === 'hourly' ? 'Quota (hourly)' : quota?.period === 'daily' ? 'Quota (24h)' : quota?.period === 'minute' ? 'Quota (per min)' : 'Quota'
+        const periodLabels: Record<string, string> = {
+          '5hour': 'Current session', 'hourly': 'Hourly limit', 'daily': 'Daily limit', 'minute': 'Per minute'
+        }
+        const quotaLabel = quota ? (periodLabels[quota.period] ?? 'Quota') : 'Quota'
 
         return (
           <div className="px-4 py-3 space-y-3 border-t border-border/30">
             {quota && <UsageMeter label={quotaLabel} rl={quota} />}
-            {weekly && <UsageMeter label="Weekly" rl={weekly} />}
+            {weekly && <UsageMeter label="Weekly limit" rl={weekly} />}
           </div>
         )
       })()}
