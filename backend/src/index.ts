@@ -85,6 +85,11 @@ fastify.register(openapiPlugin);
 // Auth plugin (session resolution)
 fastify.register(authPlugin);
 
+// Root redirect to admin UI
+fastify.get('/', async (_request, reply) => {
+  return reply.redirect('/admin/');
+});
+
 // V1 routes (Fastify-native, with response envelope)
 fastify.register(v1Routes, { prefix: '/api/v1' });
 
