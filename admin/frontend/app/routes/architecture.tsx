@@ -106,7 +106,7 @@ export default function ArchitecturePage() {
                 <p>103 agent templates</p>
                 <p>3-station assembly pipeline</p>
                 <p>Skills + tools registry</p>
-                <p>Pixel portrait identity</p>
+                <p>Unique avatar for each agent</p>
                 <p>Feedback-driven evolution</p>
               </div>
             </PillarCard>
