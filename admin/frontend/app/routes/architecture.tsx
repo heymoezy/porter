@@ -36,9 +36,22 @@ function PillarCard({ icon: Icon, name, tagline, color, children }: {
 }
 
 function Arrow({ direction = "down" }: { direction?: "right" | "down" }) {
-  return direction === "down"
-    ? <ArrowDown className="h-4 w-4 text-border2 mx-auto" />
-    : <ArrowRight className="h-4 w-4 text-border2" />
+  if (direction === "down") {
+    return (
+      <div className="flex flex-col items-center gap-0.5 animate-pulse">
+        <ArrowDown className="h-3 w-3 text-accent-porter/40" />
+        <div className="w-px h-2 bg-accent-porter/20" />
+        <ArrowDown className="h-3 w-3 text-accent-porter/40 rotate-180" />
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-center gap-0.5 animate-pulse">
+      <ArrowRight className="h-3 w-3 text-accent-porter/40 rotate-180" />
+      <div className="h-px w-2 bg-accent-porter/20" />
+      <ArrowRight className="h-3 w-3 text-accent-porter/40" />
+    </div>
+  )
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -100,7 +113,7 @@ export default function ArchitecturePage() {
                 <p>Session-aware re-routing</p>
               </div>
             </PillarCard>
-            <PillarCard icon={Flame} name="Forge" tagline="The factory" color="border-danger text-danger">
+            <PillarCard icon={Flame} name="Forge" tagline="The factory" color="border-chart-2 text-chart-2">
               <p>Create agents from templates, train them on your domain, evolve them with feedback. An agent starts generic and becomes yours.</p>
               <div className="space-y-1 mt-2 font-mono text-text3">
                 <p>103 agent templates</p>
@@ -160,7 +173,7 @@ export default function ArchitecturePage() {
                   <p className="text-2xs font-bold text-foreground">Recall</p>
                   <p className="text-2xs text-text3">Injects memory into every call</p>
                 </div>
-                <div className="rounded-lg border border-danger/30 bg-surface p-3 text-center">
+                <div className="rounded-lg border border-chart-2/30 bg-surface p-3 text-center">
                   <Flame className="h-4 w-4 text-danger mx-auto mb-1" />
                   <p className="text-2xs font-bold text-foreground">Forge</p>
                   <p className="text-2xs text-text3">Creates workers</p>
