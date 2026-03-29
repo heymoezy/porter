@@ -7,6 +7,7 @@ import { dispatchExternalCall, checkConnectionHealth } from './external-dispatch
 import { runHealthProbe } from './bridge/health-probe.js';
 import { refreshAllGateways } from './bridge/model-catalog.js';
 import { computeEmpiricalRates } from './bridge/rate-limit-tracker.js';
+import { collectLocalUsage } from './bridge/usage-collector.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -218,27 +219,30 @@ export function stop() {
 }
 
 async function tick() {
-  if (!featureFlags.agentScheduling) return;
   try {
-    const job = await claimNextJob();
-    if (job) {
-      await logActivity(job.agent_id, job.id, job.project_id, 'job_started',
-        `Job ${job.id.slice(0, 8)} started (trigger: ${job.trigger_type})`, '{}');
-      await executeJob(job);
-    }
-
-    // Check deadline triggers periodically (every 60s, not every 2s)
     tickCount++;
 
+    // ── Infrastructure probes — run regardless of agentScheduling flag ──────
     // Bridge health probe — every 30s (skip first interval to avoid startup thundering herd)
     if (tickCount > HEALTH_PROBE_INTERVAL && tickCount % HEALTH_PROBE_INTERVAL === 0) {
       runHealthProbe().catch(err => console.error('[scheduler] health probe error', err));
       computeEmpiricalRates().catch(err => console.error('[scheduler] rate limit compute error', err));
+      collectLocalUsage().catch(err => console.error('[scheduler] usage collector error', err));
     }
 
     // Model catalog refresh -- every 24h
     if (tickCount > 0 && tickCount % MODEL_REFRESH_INTERVAL === 0) {
       refreshAllGateways(pool).catch(err => console.error('[scheduler] model refresh error', err));
+    }
+
+    // ── Agent jobs — require agentScheduling flag ──────────────────────────
+    if (!featureFlags.agentScheduling) return;
+
+    const job = await claimNextJob();
+    if (job) {
+      await logActivity(job.agent_id, job.id, job.project_id, 'job_started',
+        `Job ${job.id.slice(0, 8)} started (trigger: ${job.trigger_type})`, '{}');
+      await executeJob(job);
     }
 
     if (tickCount % DEADLINE_CHECK_INTERVAL === 0) {
