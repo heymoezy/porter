@@ -468,7 +468,7 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
           <Badge key={p} className="text-2xs bg-success/10 text-success border-0">{p}</Badge>
         ))}
         {versionInfo?.hooks?.hooks_configured && (
-          <span className="flex items-center gap-1 text-accent-porter" title={`${versionInfo.hooks.hook_count} hook${versionInfo.hooks.hook_count !== 1 ? "s" : ""} configured`}>
+          <button onClick={() => onOpenEditor("prompt")} className="flex items-center gap-1 text-accent-porter hover:text-foreground transition-colors" title={`${versionInfo.hooks.hook_count} hook${versionInfo.hooks.hook_count !== 1 ? "s" : ""} — click to view`}>
             <Link2 className="size-2.5" />{versionInfo.hooks.hook_count} hook{versionInfo.hooks.hook_count !== 1 ? "s" : ""}
           </span>
         )}
