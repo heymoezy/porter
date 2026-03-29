@@ -146,28 +146,63 @@ export default function ArchitecturePage() {
           <p className="text-center text-2xs text-text3 mt-2">Bridge connects the models. Forge creates the workers. Recall makes them all remember.</p>
         </Section>
 
-        {/* ── How it connects ── */}
+        {/* ── How it works ── */}
         <Section title="How it works">
-          <div className="rounded-xl border border-border bg-surface p-6 space-y-3">
-            <div className="flex items-center justify-center gap-6 flex-wrap">
-              <div className="flex flex-col items-center gap-1">
-                <Server className="h-5 w-5 text-success" />
-                <span className="text-2xs font-bold">Porter :3001</span>
+          <div className="rounded-xl border border-border bg-surface p-6 space-y-4">
+            {/* Top: what talks to Porter */}
+            <div className="flex items-center justify-center gap-4 flex-wrap">
+              {[
+                { name: "CLI Sessions", icon: Cpu },
+                { name: "API Consumers", icon: Cable },
+                { name: "Agents", icon: Flame },
+              ].map(c => (
+                <div key={c.name} className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5">
+                  <c.icon className="size-3 text-text3" />
+                  <span className="text-2xs font-bold text-foreground">{c.name}</span>
+                </div>
+              ))}
+            </div>
+            <Arrow />
+
+            {/* Middle: Porter with Recall running through everything */}
+            <div className="relative rounded-xl border-2 border-success bg-success/5 p-5">
+              <div className="text-center mb-3">
+                <span className="text-xs font-bold text-success">Porter :3001</span>
               </div>
-              <Arrow direction="right" />
-              <div className="flex flex-col items-center gap-1">
-                <Database className="h-5 w-5 text-success" />
-                <span className="text-2xs font-bold">PostgreSQL :5432</span>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg border border-warning/30 bg-surface p-3 text-center">
+                  <Route className="h-4 w-4 text-warning mx-auto mb-1" />
+                  <p className="text-2xs font-bold text-foreground">Bridge</p>
+                  <p className="text-2xs text-text3">Routes dispatches</p>
+                </div>
+                <div className="rounded-lg border border-accent-porter/30 bg-surface p-3 text-center">
+                  <BookOpen className="h-4 w-4 text-accent-porter mx-auto mb-1" />
+                  <p className="text-2xs font-bold text-foreground">Recall</p>
+                  <p className="text-2xs text-text3">Injects memory into every call</p>
+                </div>
+                <div className="rounded-lg border border-danger/30 bg-surface p-3 text-center">
+                  <Flame className="h-4 w-4 text-danger mx-auto mb-1" />
+                  <p className="text-2xs font-bold text-foreground">Forge</p>
+                  <p className="text-2xs text-text3">Creates workers</p>
+                </div>
+              </div>
+              {/* Recall connecting line */}
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <div className="h-px flex-1 bg-accent-porter/30" />
+                <span className="text-2xs text-accent-porter font-mono">shared memory layer</span>
+                <div className="h-px flex-1 bg-accent-porter/30" />
               </div>
             </div>
             <Arrow />
-            <div className="flex items-center justify-center gap-4 flex-wrap">
+
+            {/* Bottom: gateways */}
+            <div className="flex items-center justify-center gap-3 flex-wrap">
               {[
                 { name: "OpenClaw", sub: "GPT-5.4" },
                 { name: "Ollama", sub: "Qwen 1.5B" },
-                { name: "Claude CLI", sub: "Anthropic" },
-                { name: "Codex CLI", sub: "OpenAI" },
-                { name: "Gemini CLI", sub: "Google" },
+                { name: "Claude", sub: "Anthropic" },
+                { name: "Codex", sub: "OpenAI" },
+                { name: "Gemini", sub: "Google" },
               ].map(gw => (
                 <div key={gw.name} className="rounded-lg border border-border bg-background px-3 py-2 text-center">
                   <p className="text-2xs font-bold text-foreground">{gw.name}</p>
@@ -175,59 +210,15 @@ export default function ArchitecturePage() {
                 </div>
               ))}
             </div>
-            <Arrow />
-            <div className="flex items-center justify-center gap-4 flex-wrap">
-              {[
-                { name: "CLI Sessions", icon: Cpu },
-                { name: "API Consumers", icon: Cable },
-                { name: "Agents", icon: Flame },
-              ].map(c => (
-                <div key={c.name} className="flex items-center gap-1.5 text-2xs text-text3">
-                  <c.icon className="size-3" />
-                  <span>{c.name}</span>
-                </div>
-              ))}
+            <div className="flex items-center justify-center gap-2">
+              <Database className="size-3 text-success" />
+              <span className="text-2xs text-text3">PostgreSQL :5432 — single source of truth for all 3 pillars</span>
             </div>
-            <p className="text-center text-2xs text-text3">One process, one port, one database. Every dispatch metered.</p>
-          </div>
-        </Section>
-
-        {/* ── Data Layer ── */}
-        <Section title="Data Layer">
-          <div className="rounded-xl border border-border bg-surface p-6">
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <div className="rounded-lg bg-warning/5 border border-warning/20 p-3 text-center">
-                <Route className="h-4 w-4 text-warning mx-auto mb-1" />
-                <p className="text-2xs font-bold text-foreground">Bridge</p>
-                <p className="text-2xs text-text3 font-mono mt-1">gateways · models · dispatch_log · routing_rules · dispatch_queues</p>
-              </div>
-              <div className="rounded-lg bg-danger/5 border border-danger/20 p-3 text-center">
-                <Flame className="h-4 w-4 text-danger mx-auto mb-1" />
-                <p className="text-2xs font-bold text-foreground">Forge</p>
-                <p className="text-2xs text-text3 font-mono mt-1">agent_templates · personas · skills · tools · forge_pipeline</p>
-              </div>
-              <div className="rounded-lg bg-accent-porter/5 border border-accent-porter/20 p-3 text-center">
-                <BookOpen className="h-4 w-4 text-accent-porter mx-auto mb-1" />
-                <p className="text-2xs font-bold text-foreground">Recall</p>
-                <p className="text-2xs text-text3 font-mono mt-1">directives · concepts · agent_notes · project_notes</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[
-                "users / sessions", "projects", "chats / messages", "contacts",
-                "customer_scores", "workspace_connections", "error_log", "intelligence_feed",
-              ].map(t => (
-                <div key={t} className="rounded-lg bg-background p-2 border border-border/50">
-                  <p className="font-mono text-2xs text-text3">{t}</p>
-                </div>
-              ))}
-            </div>
-            <p className="text-center text-2xs text-text3 mt-3">PostgreSQL 16 · Drizzle ORM · Single source of truth</p>
           </div>
         </Section>
 
         {/* ── Monorepo ── */}
-        <Section title="Monorepo">
+        <Section title="Repository">
           <div className="rounded-xl border border-border bg-surface p-5 font-mono text-2xs leading-[1.8] text-text2">
             <p className="text-success font-bold mb-1">heymoezy/porter <span className="text-text3 font-normal">v{health?.version ?? "..."}</span></p>
             <p className="ml-2">├── <span className="text-warning">backend/</span> <span className="text-text3">Fastify API — Bridge + Forge + Recall + Admin (:3001)</span></p>
