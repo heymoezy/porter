@@ -4,9 +4,9 @@ import { ChatPanel } from "~/components/chat-panel"
 import { PixelPortrait } from "~/components/pixel-portrait"
 import { useChatPanel } from "~/hooks/use-chat-panel"
 import { Badge } from "~/components/ui/badge"
+import { OrgConnector } from "~/components/forge"
 import {
   Database, Server, Globe,
-  ArrowDown, ArrowRight,
   Brain, Zap, Route, Flame, BookOpen,
   CheckCircle, XCircle,
   Cpu, HardDrive, Shield, Cable,
@@ -35,23 +35,8 @@ function PillarCard({ icon: Icon, name, tagline, color, children }: {
   )
 }
 
-function Arrow({ direction = "down" }: { direction?: "right" | "down" }) {
-  if (direction === "down") {
-    return (
-      <div className="flex flex-col items-center gap-0.5 animate-pulse">
-        <ArrowDown className="h-3 w-3 text-accent-porter/40" />
-        <div className="w-px h-2 bg-accent-porter/20" />
-        <ArrowDown className="h-3 w-3 text-accent-porter/40 rotate-180" />
-      </div>
-    )
-  }
-  return (
-    <div className="flex items-center gap-0.5 animate-pulse">
-      <ArrowRight className="h-3 w-3 text-accent-porter/40 rotate-180" />
-      <div className="h-px w-2 bg-accent-porter/20" />
-      <ArrowRight className="h-3 w-3 text-accent-porter/40" />
-    </div>
-  )
+function Connector({ vertical = true }: { vertical?: boolean }) {
+  return <OrgConnector direction={vertical ? "vertical" : "horizontal"} active length={vertical ? 20 : 32} team="product" />
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -103,7 +88,7 @@ export default function ArchitecturePage() {
             You plug in your AI models. Porter figures out which one to use, remembers what happened last time, and keeps everything running when things break. Three moving parts.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-            <PillarCard icon={Route} name="Bridge" tagline="The hub" color="border-warning text-warning">
+            <PillarCard icon={Route} name="Bridge" tagline="The hub" color="border-success text-success">
               <p>Every AI model plugs into Porter. A smart router picks which model handles each request based on capability, cost, and health.</p>
               <div className="space-y-1 mt-2 font-mono text-text3">
                 <p>5 gateway adapters</p>
@@ -113,7 +98,7 @@ export default function ArchitecturePage() {
                 <p>Session-aware re-routing</p>
               </div>
             </PillarCard>
-            <PillarCard icon={Flame} name="Forge" tagline="The factory" color="border-chart-2 text-chart-2">
+            <PillarCard icon={Flame} name="Forge" tagline="The factory" color="border-danger text-danger">
               <p>Create agents from templates, train them on your domain, evolve them with feedback. An agent starts generic and becomes yours.</p>
               <div className="space-y-1 mt-2 font-mono text-text3">
                 <p>103 agent templates</p>
@@ -155,7 +140,7 @@ export default function ArchitecturePage() {
                 </div>
               ))}
             </div>
-            <Arrow />
+            <Connector />
 
             {/* Middle: Porter with Recall running through everything */}
             <div className="relative rounded-xl border-2 border-success bg-success/5 p-5">
@@ -163,8 +148,8 @@ export default function ArchitecturePage() {
                 <span className="text-xs font-bold text-success">Porter</span>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-lg border border-warning/30 bg-surface p-3 text-center">
-                  <Route className="h-4 w-4 text-warning mx-auto mb-1" />
+                <div className="rounded-lg border border-success/30 bg-surface p-3 text-center">
+                  <Route className="h-4 w-4 text-success mx-auto mb-1" />
                   <p className="text-2xs font-bold text-foreground">Bridge</p>
                   <p className="text-2xs text-text3">Routes dispatches</p>
                 </div>
@@ -173,7 +158,7 @@ export default function ArchitecturePage() {
                   <p className="text-2xs font-bold text-foreground">Recall</p>
                   <p className="text-2xs text-text3">Injects memory into every call</p>
                 </div>
-                <div className="rounded-lg border border-chart-2/30 bg-surface p-3 text-center">
+                <div className="rounded-lg border border-danger/30 bg-surface p-3 text-center">
                   <Flame className="h-4 w-4 text-danger mx-auto mb-1" />
                   <p className="text-2xs font-bold text-foreground">Forge</p>
                   <p className="text-2xs text-text3">Creates workers</p>
@@ -186,7 +171,7 @@ export default function ArchitecturePage() {
                 <div className="h-px flex-1 bg-accent-porter/30" />
               </div>
             </div>
-            <Arrow />
+            <Connector />
 
             {/* Bottom: gateways */}
             <div className="flex items-center justify-center gap-3 flex-wrap">
