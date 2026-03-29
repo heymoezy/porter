@@ -470,7 +470,7 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
         {versionInfo?.hooks?.hooks_configured && (
           <button onClick={() => onOpenEditor("prompt")} className="flex items-center gap-1 text-accent-porter hover:text-foreground transition-colors" title={`${versionInfo.hooks.hook_count} hook${versionInfo.hooks.hook_count !== 1 ? "s" : ""} — click to view`}>
             <Link2 className="size-2.5" />{versionInfo.hooks.hook_count} hook{versionInfo.hooks.hook_count !== 1 ? "s" : ""}
-          </span>
+          </button>
         )}
       </div>
 
