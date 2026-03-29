@@ -19,11 +19,12 @@ function parseChangelog(raw: string): Release[] {
     const lines = section.trim().split("\n")
     const header = lines[0] || ""
 
-    const match = header.match(/^(v[\d.]+)\s*\((\d{4}-\d{2}-\d{2})\)/)
+    const match = header.match(/^(?:(Admin|Brain)\s+)?(v[\d.]+)\s*\((\d{4}-\d{2}-\d{2})\)/)
     if (!match) continue
 
-    const version = match[1]
-    const rawDate = match[2]
+    const prefix = match[1] ? `${match[1]} ` : ""
+    const version = prefix + match[2]
+    const rawDate = match[3]
     const d = new Date(rawDate + "T00:00:00")
     const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })
 
