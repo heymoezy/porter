@@ -432,30 +432,31 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
         )}
       </div>
 
-      {/* Capacity bars */}
+      {/* Usage limits — 2 rows max: Quota (tightest short-term) + Weekly */}
       {capacity && (() => {
-        const gwModel = capacity.models.find(m => m.model_name === "_gateway_")
-        const perModelModels = capacity.models.filter(m => m.model_name !== "_gateway_")
-        const hasGatewayLimits = gwModel && gwModel.limits.some(l => l.current > 0 || l.limit != null)
-        const hasModelLimits = perModelModels.length > 0
+        // Flatten all limits across all models
+        const allLimits = capacity.models.flatMap(m => m.limits)
+        if (allLimits.length === 0 || allLimits.every(l => l.limit == null)) return null
 
-        if (!hasGatewayLimits && !hasModelLimits) return null
+        // Find the tightest short-term limit (hourly > daily > minute) with a known limit
+        const quotaOrder = ['hourly', 'daily', 'minute'] as const
+        let quota: typeof allLimits[0] | null = null
+        for (const period of quotaOrder) {
+          const match = allLimits.find(l => l.period === period && l.limit != null)
+          if (match) { quota = match; break }
+        }
+
+        // Find the weekly limit
+        const weekly = allLimits.find(l => l.period === 'weekly' && l.limit != null) ?? null
+
+        if (!quota && !weekly) return null
+
+        const quotaLabel = quota?.period === 'hourly' ? 'Quota (hourly)' : quota?.period === 'daily' ? 'Quota (24h)' : quota?.period === 'minute' ? 'Quota (per min)' : 'Quota'
 
         return (
-          <div className="border-t border-border/30">
-            {/* Gateway-level limits */}
-            {hasGatewayLimits && gwModel && (
-              <div className="px-4 py-3 space-y-3">
-                {gwModel.limits.map((l, i) => (
-                  <UsageMeter key={i} label={limitLabel(l.limit_type, l.period)} rl={l} />
-                ))}
-              </div>
-            )}
-
-            {/* Per-model limits (collapsed by default) */}
-            {hasModelLimits && (
-              <PerModelLimits models={perModelModels} />
-            )}
+          <div className="px-4 py-3 space-y-3 border-t border-border/30">
+            {quota && <UsageMeter label={quotaLabel} rl={quota} />}
+            {weekly && <UsageMeter label="Weekly" rl={weekly} />}
           </div>
         )
       })()}
