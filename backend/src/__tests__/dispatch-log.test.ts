@@ -14,3 +14,14 @@ describe('RoutingEngine.logDispatch()', () => {
   it.todo('never blocks dispatch on logging failure');
   it.todo('emits bridge:dispatch SSE event');
 });
+
+// Bridge v1: agent-message correlation fields in dispatch log
+describe('RoutingEngine.logDispatch() — agent-message fields', () => {
+  it.todo('records correlation_id when agentMsgCtx.correlationId is provided');
+  it.todo('records source_agent and source_gateway from AgentMessageLogContext');
+  it.todo('records target_agent and target_gateway from AgentMessageLogContext');
+  it.todo('records intent from AgentMessageLogContext');
+  it.todo('records reply_to from AgentMessageLogContext');
+  it.todo('sets is_agent_message=1 when agentMsgCtx is present, null when absent');
+  it.todo('all agent-message fields are null when logDispatch is called without agentMsgCtx');
+});

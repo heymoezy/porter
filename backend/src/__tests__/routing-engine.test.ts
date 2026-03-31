@@ -30,3 +30,25 @@ describe('RoutingEngine.dispatchWithQueue()', () => {
   it.todo('CLI gateways enforce concurrency=1');
   it.todo('HTTP gateways enforce concurrency=3');
 });
+
+// applyRuleToFallbackOrder: rule application to streaming/fallback paths
+describe('applyRuleToFallbackOrder()', () => {
+  it.todo('force_model moves the forced gateway type to front, keeping rest as fallbacks');
+  it.todo('force_model with "type:model" format overrides default_model metadata on forced candidate');
+  it.todo('force_model preserves model names containing colons (e.g. "ollama:llama3.1:8b")');
+  it.todo('block_gateway removes the blocked gateway type from fallback list');
+  it.todo('block_gateway returns full list unchanged when blocked type is not present');
+  it.todo('prefer_local reorders so LOCAL_TYPES lead the list');
+  it.todo('returns candidates unchanged for cap_cost_usd action');
+  it.todo('returns candidates unchanged when rule is null');
+});
+
+// Bridge v1: /agent-message endpoint routing
+describe('POST /agent-message routing', () => {
+  it.todo('rejects request with hopCount >= MAX_AGENT_HOPS with 429');
+  it.todo('rejects expired message (age > ttlMs) with 408');
+  it.todo('rejects missing message.task with 400');
+  it.todo('rejects invalid intent value with 400');
+  it.todo('passes targetGateway hint through routing context');
+  it.todo('returns AgentMessageResponse with dispatchLogId, gatewayType, modelName');
+});

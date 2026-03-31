@@ -18,3 +18,5 @@ unknown","git_dirty":true,"last_commit":"0d6d330 docs(phase-16): evolve PROJECT.
 unknown","git_dirty":true,"last_commit":"ccd7761 fix: real provider limits + proper period labels","tool_calls":2}
 {"ts":"2026-03-29T12:47:10Z","session":"9fe790fe-0c97-411a-8b5d-5009bf0514c9","version":"unknown","service":"inactive
 unknown","git_dirty":true,"last_commit":"9bd8f2f fix: pct used from requests or tokens, shows tracking when no limit","tool_calls":0}
+{"ts":"2026-03-29T16:44:38Z","session":"76e1b6d3-199b-456f-bef6-11fce8e8d756","version":"unknown","service":"inactive
+unknown","git_dirty":true,"last_commit":"f3b964b fix: version strings in health endpoints — 3.3.0 → 3.3.2","tool_calls":33}

@@ -26,14 +26,18 @@ const CLAUDE_CREDENTIALS_PATH = path.join(HOME, '.claude', '.credentials.json');
 const CODEX_SQLITE_PATH = path.join(HOME, '.codex', 'state_5.sqlite');
 const CODEX_SESSIONS_DIR = path.join(HOME, '.codex', 'sessions');
 const OPENCLAW_SESSIONS_PATH = path.join(HOME, '.openclaw', 'agents', 'main', 'sessions', 'sessions.json');
+const GEMINI_OAUTH_PATH = path.join(HOME, '.gemini', 'oauth_creds.json');
 
 const CLAUDE_MESSAGES_API_URL = 'https://api.anthropic.com/v1/messages';
 const CLAUDE_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
 const CLAUDE_CLIENT_ID = '22422756-60c9-4084-8eb7-27705fd5cf9a';
+const GEMINI_QUOTA_URL = 'https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota';
+
 const CLAUDE_API_MIN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // refresh 5 min before expiry
 
 const FIVE_HOURS_SEC = 5 * 3600;
+const ONE_HOUR_SEC = 3600;
 const SEVEN_DAYS_SEC = 7 * 24 * 3600;
 const ONE_DAY_SEC = 24 * 3600;
 
@@ -587,33 +591,59 @@ async function collectOllamaUsage(gatewayId: string): Promise<void> {
 
 async function collectGeminiUsage(gatewayId: string): Promise<void> {
   const nowSec = Date.now() / 1000;
-  const dayCutoff = nowSec - ONE_DAY_SEC;
-  const minuteCutoff = nowSec - 60;
+  const hourCutoff = nowSec - ONE_HOUR_SEC;
 
   try {
-    // Count dispatches to this gateway from bridge_dispatch_log
-    const { rows } = await pool.query<{ period: string; cnt: string }>(`
-      SELECT 'daily' AS period, COUNT(*)::text AS cnt
+    // 1. Hourly % — Calculate from Porter's own dispatch log
+    // We assume 50 requests/hour for the free-tier as a stable baseline
+    const { rows } = await pool.query<{ cnt: string }>(`
+      SELECT COUNT(*)::text AS cnt
       FROM bridge_dispatch_log
       WHERE gateway_id = $1 AND created_at >= $2
-      UNION ALL
-      SELECT 'minute' AS period, COUNT(*)::text AS cnt
-      FROM bridge_dispatch_log
-      WHERE gateway_id = $1 AND created_at >= $3
-    `, [gatewayId, dayCutoff, minuteCutoff]);
+    `, [gatewayId, hourCutoff]);
 
-    const dailyResetAt = getNextMidnightUtc(nowSec);
+    const hourCount = parseInt(rows[0]?.cnt || '0', 10);
+    const hourLimit = 50; // Stable baseline for free-tier
+    const hourResetAt = Math.floor(nowSec / 3600) * 3600 + 3600;
 
-    for (const row of rows) {
-      const count = parseInt(row.cnt, 10);
-      if (row.period === 'daily') {
-        await upsertUsage(gatewayId, 'requests', 'daily', count, 1000, dailyResetAt, nowSec);
-      } else if (row.period === 'minute') {
-        await upsertUsage(gatewayId, 'requests', 'minute', count, 60, null, nowSec);
+    // Map Hourly to 'session' period for UI
+    await upsertUsage(gatewayId, 'requests', 'session', hourCount, hourLimit, hourResetAt, nowSec);
+
+    // 2. Daily % — Fetch real quota from Google API
+    if (fs.existsSync(GEMINI_OAUTH_PATH)) {
+      const oauth = JSON.parse(fs.readFileSync(GEMINI_OAUTH_PATH, 'utf-8'));
+      const accessToken = oauth.access_token;
+
+      if (accessToken) {
+        const resp = await fetch(GEMINI_QUOTA_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ project: 'cloudaicompanion-project-id' }),
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (resp.ok) {
+          const data = await resp.json() as { buckets?: any[] };
+          // Find the bucket for our active model (Flash or Pro)
+          const bucket = data.buckets?.find(b => b.modelId === 'gemini-2.5-flash' || b.modelId === 'gemini-2.5-pro' || b.modelId === 'gemini-3-flash-preview');
+
+          if (bucket && bucket.remainingFraction != null) {
+            const usedPct = Math.round((1 - bucket.remainingFraction) * 10000) / 100;
+            const resetAt = bucket.resetTime ? Math.floor(new Date(bucket.resetTime).getTime() / 1000) : null;
+
+            await upsertUsageProvider(gatewayId, 'requests', 'daily', usedPct, 100, resetAt, nowSec);
+
+            console.log('[usage-collector] Gemini usage: session(hourly)=%d/%d daily=%s%%',
+              hourCount, hourLimit, usedPct.toFixed(1));
+          }
+        }
       }
     }
   } catch (err) {
-    console.error('[usage-collector] gemini dispatch_log error:', err instanceof Error ? err.message : err);
+    console.error('[usage-collector] gemini quota error:', err instanceof Error ? err.message : err);
   }
 }
 

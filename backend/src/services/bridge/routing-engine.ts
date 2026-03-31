@@ -128,9 +128,8 @@ export class RoutingEngine {
 
       if (matchedRule.action === 'force_model' && matchedRule.actionValue) {
         // force_model: find gateway matching actionValue (gatewayType or "type:model" format)
-        const [forceType, forceModel] = matchedRule.actionValue.includes(':')
-          ? matchedRule.actionValue.split(':', 2)
-          : [matchedRule.actionValue, null];
+        // Use indexOf instead of split(':',2) to preserve model names that contain colons (e.g. llama3.1:8b)
+        const [forceType, forceModel] = splitOnFirstColon(matchedRule.actionValue);
 
         const forced = filteredCandidates.find(c => c.row.type === forceType);
         if (forced) {
@@ -701,6 +700,16 @@ export const routingEngine = new RoutingEngine();
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
+/**
+ * Split a "type:model" string on the first colon only.
+ * Preserves model names that themselves contain colons (e.g. "ollama:llama3.1:8b").
+ */
+function splitOnFirstColon(s: string): [string, string | null] {
+  const idx = s.indexOf(':');
+  if (idx === -1) return [s, null];
+  return [s.slice(0, idx), s.slice(idx + 1)];
+}
+
 function isComplexMessage(message: string): boolean {
   return (
     message.length > 160 ||
@@ -767,10 +776,8 @@ export function applyRuleToFallbackOrder(
     const rest = candidates.filter(c => c.row.type !== forceType);
 
     if (forced.length > 0) {
-      // If actionValue includes a model override, apply it to the forced candidate row
-      const [, forceModel] = rule.actionValue.includes(':')
-        ? rule.actionValue.split(':', 2)
-        : [rule.actionValue, null];
+      // Use indexOf-based split to preserve model names with colons (e.g. llama3.1:8b)
+      const [, forceModel] = splitOnFirstColon(rule.actionValue);
       const mappedForced = forceModel
         ? forced.map(c => ({
             row: { ...c.row, metadata: { ...c.row.metadata, default_model: forceModel } },

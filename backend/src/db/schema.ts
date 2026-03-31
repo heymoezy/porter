@@ -907,11 +907,26 @@ export const bridgeDispatchLog = pgTable('bridge_dispatch_log', {
   estimatedCostUsd: doublePrecision('estimated_cost_usd'),
   inputTokens: integer('input_tokens'),
   outputTokens: integer('output_tokens'),
+  // cached_tokens: prompt-cache hit token count (added bridge_v4)
+  cachedTokens: integer('cached_tokens'),
+  // model_version_id: FK to model_versions for cost attribution (added bridge_v4)
+  modelVersionId: text('model_version_id'),
   latencyMs: integer('latency_ms'),
   agentId: text('agent_id'),
   projectId: text('project_id'),
   chatId: text('chat_id'),
   ruleId: text('rule_id'),
+  // username: caller identity for per-user metering (added bridge_v5)
+  username: text('username'),
+  // Agent-message correlation fields (added bridge_v6)
+  correlationId: text('correlation_id'),
+  sourceAgent: text('source_agent'),
+  sourceGateway: text('source_gateway'),
+  targetAgent: text('target_agent'),
+  targetGateway: text('target_gateway'),
+  intent: text('intent'),
+  replyTo: text('reply_to'),
+  isAgentMessage: integer('is_agent_message'),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
