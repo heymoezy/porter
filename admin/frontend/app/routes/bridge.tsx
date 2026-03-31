@@ -999,7 +999,7 @@ function OperatorActivityLog() {
     lines.push({ text: "--:--:-- [operator] waiting: No gateways detected", color: "text-text3", _key: 0 })
   }
 
-  return <LLMTerminal lines={lines} title="Operator Activity" className="!h-auto [&>div:last-child]:!flex-none [&>div:last-child]:max-h-[200px]" />
+  return <LLMTerminal lines={lines} title="Operator Activity" className="!h-full" />
 }
 
 // ── Tab Content ───────────────────────────────────────
@@ -1052,7 +1052,7 @@ export default function BridgePage() {
         <div className="flex-1 min-h-0 overflow-y-auto pb-4">
           <GatewayGrid tickLog={tickLog} onOpenEditor={(id, mode) => setEditingGw({ id, mode })} />
         </div>
-        <div className="shrink-0 h-44 overflow-hidden pb-1">
+        <div className="shrink-0 h-44">
           <OperatorActivityLog />
         </div>
       </>
