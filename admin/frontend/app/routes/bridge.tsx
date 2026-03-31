@@ -333,9 +333,9 @@ function fmtNow() {
 // ── Bridge Agent Team ────────────────────────────────
 
 const BRIDGE_TEAM = [
-  { id: "sys-bridge-operator", tab: "operator", name: "Vigil", specialist: "Bridge Operator", role: "Health & Sessions", skin: "#c68642", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#059669", hairStyle: "short" as const },
-  { id: "sys-route-optimizer", tab: "routing", name: "Atlas", specialist: "Route Optimizer", role: "Models · Dispatch · Rules", skin: "#8d5524", hair: "#292524", eyes: "#1a1a2e", shirt: "#2563eb", hairStyle: "mohawk" as const },
-  { id: "sys-cost-controller", tab: "controller", name: "Ledger", specialist: "Cost Controller", role: "Tokens · Limits · Costs", skin: "#e0ac69", hair: "#2C1810", eyes: "#1a1a2e", shirt: "#d97706", hairStyle: "short" as const },
+  { id: "bridge-operator", tab: "operator", name: "Vigil", specialist: "Bridge Operator", role: "Health & Sessions", skin: "#c68642", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#059669", hairStyle: "short" as const },
+  { id: "route-optimizer", tab: "routing", name: "Atlas", specialist: "Route Optimizer", role: "Models · Dispatch · Rules", skin: "#8d5524", hair: "#292524", eyes: "#1a1a2e", shirt: "#2563eb", hairStyle: "mohawk" as const },
+  { id: "cost-controller", tab: "controller", name: "Ledger", specialist: "Cost Controller", role: "Tokens · Limits · Costs", skin: "#e0ac69", hair: "#2C1810", eyes: "#1a1a2e", shirt: "#d97706", hairStyle: "short" as const },
 ]
 
 // ── Operator Event Log ────────────────────────────────

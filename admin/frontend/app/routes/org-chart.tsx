@@ -45,10 +45,9 @@ const TEAMS: Record<string, TeamDef> = {
     color: "text-[var(--accent-porter)]",
     dotColor: "bg-[var(--accent-porter)]",
     agents: [
-      { id: "sys-bridge-operator", name: "Bridge Operator", role: "LEAD — Health & failover",         template: "The Watcher",   team: "admin", appearance: { skin: "#c68642", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#059669", hairStyle: "short" } },
-      { id: "sys-model-scout",     name: "Model Scout",     role: "Discovery & capabilities",         template: "The Seeker",    team: "admin", appearance: { skin: "#f1c27d", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#7c3aed", hairStyle: "parted" } },
-      { id: "sys-route-analyst",   name: "Route Analyst",   role: "Dispatch optimization",            template: "The Optimizer", team: "admin", appearance: { skin: "#8d5524", hair: "#292524", eyes: "#1a1a2e", shirt: "#2563eb", hairStyle: "mohawk" } },
-      { id: "sys-cost-controller", name: "Cost Controller", role: "Spend monitoring & attribution",   template: "The Auditor",   team: "admin", appearance: { skin: "#e0ac69", hair: "#2C1810", eyes: "#1a1a2e", shirt: "#d97706", hairStyle: "short" } },
+      { id: "bridge-operator",  name: "Vigil",  role: "LEAD — Health & Sessions",        template: "Bridge Operator",  team: "admin", appearance: { skin: "#c68642", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#059669", hairStyle: "short" } },
+      { id: "route-optimizer",  name: "Atlas",  role: "Models · Dispatch · Rules",      template: "Route Optimizer",  team: "admin", appearance: { skin: "#8d5524", hair: "#292524", eyes: "#1a1a2e", shirt: "#2563eb", hairStyle: "mohawk" } },
+      { id: "cost-controller",  name: "Ledger", role: "Tokens · Limits · Costs",        template: "Cost Controller",  team: "admin", appearance: { skin: "#e0ac69", hair: "#2C1810", eyes: "#1a1a2e", shirt: "#d97706", hairStyle: "short" } },
     ],
   },
   admin: {

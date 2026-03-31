@@ -2962,7 +2962,7 @@ export async function seedTemplates(): Promise<void> {
     // ── INTERNAL SYSTEM TEMPLATES (is_internal=1) ────────────────────────────
 
     await insertTemplate({
-      id: 'sys-crm-sweeper', name: 'CRM Sweep Agent', category: 'engineering',
+      id: 'crm-sweeper', name: 'CRM Sweep Agent', category: 'engineering',
       description: 'Internal agent that runs background contact analysis and enrichment sweeps.',
       tags: ['internal', 'crm', 'automation', 'analysis'],
       skills: ['crm', 'data-analysis', 'background-processing'],
@@ -2990,7 +2990,7 @@ export async function seedTemplates(): Promise<void> {
     });
 
     await insertTemplate({
-      id: 'sys-analytics-agent', name: 'Analytics Collector', category: 'data-ai',
+      id: 'analytics-collector', name: 'Analytics Collector', category: 'data-ai',
       description: 'Internal agent that aggregates workspace activity and produces usage analytics.',
       tags: ['internal', 'analytics', 'usage', 'metrics'],
       skills: ['analytics', 'aggregation', 'reporting'],
@@ -3018,7 +3018,7 @@ export async function seedTemplates(): Promise<void> {
     });
 
     await insertTemplate({
-      id: 'sys-maintenance', name: 'System Maintenance Agent', category: 'engineering',
+      id: 'system-maintenance', name: 'System Maintenance Agent', category: 'engineering',
       description: 'Internal agent that performs scheduled maintenance tasks on the workspace.',
       tags: ['internal', 'maintenance', 'cleanup', 'system'],
       skills: ['system-maintenance', 'cleanup', 'health-monitoring'],

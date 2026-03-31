@@ -179,9 +179,6 @@ function AgentDetailContent() {
                 {isBorn && (
                   <Badge className="text-2xs bg-success/15 text-success border-0">born</Badge>
                 )}
-                {!isBorn && (
-                  <Badge className="text-2xs bg-text3/15 text-text3 border-0">planned</Badge>
-                )}
                 {category ? <Badge className="text-2xs bg-muted text-text3 border-0">{category}</Badge> : null}
               </div>
               <p className="text-sm text-text2 leading-none">{displayDesc}</p>
