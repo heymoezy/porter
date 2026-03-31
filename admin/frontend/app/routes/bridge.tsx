@@ -175,9 +175,9 @@ function UsageBlock({ label, requests, tokens }: { label: string; requests?: Usa
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <span className="text-2xs font-medium text-text2">
-          {label}{pctNum != null ? ` (${pctNum}% used)` : tokens && tokens.current > 0 ? ' (tracking)' : ''}
+          {label}{pctNum != null ? ` (${pctNum}% used)` : primary.limit == null && primary.current === 0 ? '' : tokens && tokens.current > 0 ? ' (tracking)' : ''}
         </span>
-        <span className="text-2xs text-text3">{resetStr ?? 'Limit not published'}</span>
+        <span className="text-2xs text-text3">{resetStr ?? (primary.limit == null && primary.current === 0 ? '∞ No limit' : 'Limit not published')}</span>
       </div>
       <div className="h-1.5 rounded-full bg-border/30 overflow-hidden">
         {pctNum != null ? (

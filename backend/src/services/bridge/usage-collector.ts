@@ -122,13 +122,13 @@ function fmtTokens(n: number): string {
 
 // ── Gateway ID cache ────────────────────────────────────────────────────────
 
-let gatewayIds: { claude: string; codex: string; gemini: string; openclaw?: string } | null = null;
+let gatewayIds: { claude: string; codex: string; gemini: string; openclaw?: string; ollama?: string } | null = null;
 
 async function getGatewayIds(): Promise<typeof gatewayIds> {
   if (gatewayIds) return gatewayIds;
 
   const { rows } = await pool.query<{ id: string; type: string }>(
-    `SELECT id, type FROM gateways WHERE type IN ('claude_cli', 'codex_cli', 'gemini_cli', 'openclaw')`,
+    `SELECT id, type FROM gateways WHERE type IN ('claude_cli', 'codex_cli', 'gemini_cli', 'openclaw', 'ollama')`,
   );
 
   const map: Record<string, string> = {};
@@ -142,7 +142,8 @@ async function getGatewayIds(): Promise<typeof gatewayIds> {
     claude: map.claude_cli,
     codex: map.codex_cli,
     gemini: map.gemini_cli,
-    openclaw: map.openclaw, // optional — may not exist yet
+    openclaw: map.openclaw,
+    ollama: map.ollama,
   };
   return gatewayIds;
 }
@@ -164,6 +165,7 @@ export async function collectLocalUsage(options: CollectLocalUsageOptions = {}):
       collectGeminiUsage(ids.gemini),
     ];
     if (ids.openclaw) tasks.push(collectOpenClawUsage(ids.openclaw));
+    if (ids.ollama) tasks.push(collectOllamaUsage(ids.ollama));
     await Promise.allSettled(tasks);
 
     // Emit SSE so admin UI refreshes capacity in real-time
@@ -568,6 +570,17 @@ function getLatestCodexRateLimits(): CodexRateLimits | null {
   }
 
   return latest;
+}
+
+// ── Ollama (local, unlimited) ─────────────────────────────────────────────
+
+async function collectOllamaUsage(gatewayId: string): Promise<void> {
+  const nowSec = Date.now() / 1000;
+  // Local model — no provider limits. Store 0/0 so UI shows "0% · No limit".
+  await Promise.allSettled([
+    upsertUsageProvider(gatewayId, 'requests', '5hour', 0, null, null, nowSec),
+    upsertUsageProvider(gatewayId, 'requests', 'weekly', 0, null, null, nowSec),
+  ]);
 }
 
 // ── Gemini CLI ──────────────────────────────────────────────────────────────
