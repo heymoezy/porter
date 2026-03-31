@@ -27,7 +27,10 @@ const CODEX_SQLITE_PATH = path.join(HOME, '.codex', 'state_5.sqlite');
 const OPENCLAW_SESSIONS_PATH = path.join(HOME, '.openclaw', 'agents', 'main', 'sessions', 'sessions.json');
 
 const CLAUDE_MESSAGES_API_URL = 'https://api.anthropic.com/v1/messages';
+const CLAUDE_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
+const CLAUDE_CLIENT_ID = '22422756-60c9-4084-8eb7-27705fd5cf9a';
 const CLAUDE_API_MIN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // refresh 5 min before expiry
 
 const FIVE_HOURS_SEC = 5 * 3600;
 const SEVEN_DAYS_SEC = 7 * 24 * 3600;
@@ -100,6 +103,60 @@ export async function collectLocalUsage(): Promise<void> {
   }
 }
 
+// ── Claude OAuth Token Refresh ────────────────────────────────────────────────
+
+/**
+ * Refresh the Claude OAuth token using the refresh_token grant.
+ * Writes updated credentials back to .credentials.json so Claude Code
+ * and Porter both see the fresh token.
+ *
+ * Returns the new access token on success, null on failure.
+ */
+async function refreshClaudeOAuthToken(refreshToken: string): Promise<string | null> {
+  try {
+    const resp = await fetch(CLAUDE_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: CLAUDE_CLIENT_ID,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!resp.ok) {
+      console.warn('[usage-collector] Claude token refresh failed: HTTP %d', resp.status);
+      return null;
+    }
+
+    const data = await resp.json() as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+    };
+
+    if (!data.access_token) {
+      console.warn('[usage-collector] Claude token refresh: no access_token in response');
+      return null;
+    }
+
+    // Write refreshed credentials back to disk
+    const credsRaw = fs.readFileSync(CLAUDE_CREDENTIALS_PATH, 'utf-8');
+    const creds = JSON.parse(credsRaw);
+    creds.claudeAiOauth.accessToken = data.access_token;
+    if (data.refresh_token) creds.claudeAiOauth.refreshToken = data.refresh_token;
+    creds.claudeAiOauth.expiresAt = Date.now() + data.expires_in * 1000;
+    fs.writeFileSync(CLAUDE_CREDENTIALS_PATH, JSON.stringify(creds));
+
+    console.log('[usage-collector] Claude OAuth token refreshed — expires in %ds', data.expires_in);
+    return data.access_token;
+  } catch (err) {
+    console.warn('[usage-collector] Claude token refresh error:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 // ── Claude Usage (rate-limit headers from minimal Haiku call) ───────────────
 
 /**
@@ -122,7 +179,7 @@ async function collectClaudeUsage(gatewayId: string): Promise<void> {
     return;
   }
 
-  // Read and validate OAuth credentials
+  // Read OAuth credentials, auto-refresh if expired or expiring soon
   let accessToken: string;
   try {
     const creds = JSON.parse(fs.readFileSync(CLAUDE_CREDENTIALS_PATH, 'utf-8'));
@@ -132,14 +189,18 @@ async function collectClaudeUsage(gatewayId: string): Promise<void> {
       return;
     }
 
-    // Check token expiry (expiresAt is in milliseconds)
-    if (oauth.expiresAt && typeof oauth.expiresAt === 'number' && oauth.expiresAt < now) {
-      console.warn('[usage-collector] Claude OAuth token expired at %s — skipping',
-        new Date(oauth.expiresAt).toISOString());
-      return;
+    // Auto-refresh if expired or expiring within 5 minutes
+    if (oauth.expiresAt && typeof oauth.expiresAt === 'number' && oauth.expiresAt < now + TOKEN_REFRESH_BUFFER_MS) {
+      if (!oauth.refreshToken) {
+        console.warn('[usage-collector] Claude OAuth token expired, no refresh token available');
+        return;
+      }
+      const refreshed = await refreshClaudeOAuthToken(oauth.refreshToken);
+      if (!refreshed) return;
+      accessToken = refreshed;
+    } else {
+      accessToken = oauth.accessToken;
     }
-
-    accessToken = oauth.accessToken;
   } catch {
     return; // Credentials file missing or unreadable
   }
