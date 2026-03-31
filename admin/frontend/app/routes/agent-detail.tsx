@@ -28,7 +28,7 @@ interface AgentApiData {
 }
 
 interface TemplateApiData {
-  id: string; name: string; cat: string; desc: string
+  id: string; name: string; category: string; description: string
   soul: string[]; mission: string; inputs: string[]; outputs: string[]
   authority: string[]; tags: string[]; archetype: string
   appearance_spec: Record<string, string>; communication_style: string
@@ -146,8 +146,8 @@ function AgentDetailContent() {
   const hairStyle = (HAIR_STYLES.includes(spec.hair_style) ? spec.hair_style : "short") as HairStyle
 
   const displayName = hasApi ? String(p.name ?? "") : (tmplData?.name ?? reg?.name ?? "")
-  const displayDesc = hasApi ? String(p.role ?? "") : (tmplData?.desc ?? reg?.description ?? "")
-  const category = hasApi ? String(p.cat ?? p.agent_group ?? "") : (tmplData?.cat ?? reg?.team ?? "")
+  const displayDesc = hasApi ? String(p.role ?? "") : (tmplData?.description ?? reg?.description ?? "")
+  const category = hasApi ? String(p.cat ?? p.agent_group ?? "") : (tmplData?.category ?? reg?.team ?? "")
 
   const defaultAvatar = { hair: "#2c1b18", skin: "#f1c27d", eyes: "#1a1a2e", shirt: "#64748b", hairStyle: "short" as HairStyle }
   const avatarProps = spec.hair
