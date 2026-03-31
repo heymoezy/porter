@@ -334,8 +334,7 @@ function fmtNow() {
 
 const BRIDGE_TEAM = [
   { id: "sys-bridge-operator", tab: "operator", name: "Bridge Operator", specialist: "The Watcher", role: "Health & Control", skin: "#c68642", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#059669", hairStyle: "short" as const },
-  { id: "sys-model-scout", tab: "scout", name: "Model Scout", specialist: "The Seeker", role: "Discovery", skin: "#f1c27d", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#7c3aed", hairStyle: "parted" as const },
-  { id: "sys-route-analyst", tab: "analyst", name: "Route Analyst", specialist: "The Optimizer", role: "Routing", skin: "#8d5524", hair: "#292524", eyes: "#1a1a2e", shirt: "#2563eb", hairStyle: "mohawk" as const },
+  { id: "sys-route-analyst", tab: "routing", name: "Models & Routing", specialist: "The Optimizer", role: "Models · Dispatch · Rules", skin: "#8d5524", hair: "#292524", eyes: "#1a1a2e", shirt: "#2563eb", hairStyle: "mohawk" as const },
   { id: "sys-cost-controller", tab: "controller", name: "Cost Controller", specialist: "The Auditor", role: "Costs", skin: "#e0ac69", hair: "#2C1810", eyes: "#1a1a2e", shirt: "#d97706", hairStyle: "short" as const },
 ]
 
@@ -1117,8 +1116,7 @@ export default function BridgePage() {
       {/* ── Content ── */}
       <div className={`flex-1 min-h-0 px-5 py-4 ${activeTab === "operator" ? "flex flex-col" : "overflow-y-auto"}`}>
         {activeTab === "operator" && renderOperatorTab()}
-        {activeTab === "scout" && <ModelCatalog />}
-        {activeTab === "analyst" && <div className="space-y-6"><DispatchLog /><RoutingRules /></div>}
+        {activeTab === "routing" && <div className="space-y-6"><ModelCatalog /><DispatchLog /><RoutingRules /></div>}
         {activeTab === "controller" && <div className="space-y-6"><CostAnalytics /><UserKeyManager /><WorkspaceGatewayOverrides /></div>}
       </div>
     </div>
