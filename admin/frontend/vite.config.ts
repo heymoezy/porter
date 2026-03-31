@@ -16,7 +16,7 @@ function sseProxyConfig(proxy: any) {
 }
 
 export default defineConfig({
-  base: "/admin/",
+  base: "/",
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
   build: {
     // Single bundle — no code splitting. 1.9MB total is fine for an admin panel.

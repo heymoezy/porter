@@ -87,10 +87,7 @@ fastify.register(openapiPlugin);
 // Auth plugin (session resolution)
 fastify.register(authPlugin);
 
-// Root redirect to admin UI
-fastify.get('/', async (_request, reply) => {
-  return reply.redirect('/admin/');
-});
+// Root — served by SPA catch-all below
 
 // V1 routes (Fastify-native, with response envelope)
 fastify.register(v1Routes, { prefix: '/api/v1' });
@@ -147,23 +144,27 @@ fastify.get('/v2/*', async (_request, reply) => {
   return reply.type('text/html').send(html);
 });
 
-// Serve admin frontend static files at /admin/
+// Serve admin frontend static files at root
 if (fs.existsSync(adminFrontendDist)) {
   fastify.register(staticFiles, {
     root: adminFrontendDist,
-    prefix: '/admin/',
+    prefix: '/',
     wildcard: false,
     decorateReply: false, // already decorated by the first static registration
   });
 
-  // Admin SPA catch-all — serve index.html for client-side routing
-  fastify.get('/admin/*', async (_request, reply) => {
-    const indexPath = path.join(adminFrontendDist, 'index.html');
-    if (fs.existsSync(indexPath)) {
-      const html = fs.readFileSync(indexPath, 'utf8');
-      return reply.type('text/html').send(html);
+  // SPA catch-all — serve index.html for client-side routing
+  // API routes, /health, /v2/* are registered above and take priority
+  fastify.setNotFoundHandler(async (request, reply) => {
+    // Only serve SPA for non-API, non-asset GET requests
+    if (request.method === 'GET' && !request.url.startsWith('/api/') && !request.url.startsWith('/v2/')) {
+      const indexPath = path.join(adminFrontendDist, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        const html = fs.readFileSync(indexPath, 'utf8');
+        return reply.type('text/html').send(html);
+      }
     }
-    return reply.code(404).send({ error: 'Admin frontend not found' });
+    return reply.code(404).send({ error: 'Not found' });
   });
 }
 
