@@ -11,7 +11,7 @@ import { PixelPortrait } from "~/components/pixel-portrait"
 import { getAgent, type AgentDef } from "~/lib/agent-registry"
 import {
   Shield, Save, Sparkles, FolderKanban,
-  FileText, Eye, X, Flame, Users,
+  FileText, Eye, X, Flame, Users, Wrench, HeartPulse,
 } from "lucide-react"
 
 // ── Types ────────────────────────────────────────────────
@@ -32,6 +32,7 @@ interface TemplateApiData {
   soul: string[]; mission: string; inputs: string[]; outputs: string[]
   authority: string[]; tags: string[]; archetype: string
   appearance_spec: Record<string, string>; communication_style: string
+  lifecycle: string; heartbeat_interval: number | null
   files: Record<string, string | null>
 }
 
@@ -44,12 +45,19 @@ interface InstanceRow {
 type HairStyle = "short" | "long" | "mohawk" | "bald" | "parted" | "buzz" | "curly" | "ponytail"
 const HAIR_STYLES: string[] = ["short", "long", "mohawk", "bald", "parted", "buzz", "curly", "ponytail"]
 
-const FILE_TABS = [
+const CORE_TABS = [
   { id: "SOUL.md", label: "SOUL", icon: Shield },
   { id: "IDENTITY.md", label: "IDENTITY", icon: FileText },
   { id: "ROLE_CARD.md", label: "ROLE", icon: FileText },
   { id: "SKILLS.md", label: "SKILLS", icon: Sparkles },
 ]
+
+function buildFileTabs(lifecycle: string | undefined, hasTools: boolean) {
+  const tabs = [...CORE_TABS]
+  if (hasTools) tabs.push({ id: "TOOLS.md", label: "TOOLS", icon: Wrench })
+  if (lifecycle === "persistent") tabs.push({ id: "HEARTBEAT.md", label: "HEARTBEAT", icon: HeartPulse })
+  return tabs
+}
 
 function parseSpec(raw: unknown): Record<string, string> {
   if (!raw || typeof raw !== "object") return {}
@@ -112,6 +120,12 @@ function AgentDetailContent() {
   const projects = apiData?.projects ?? []
   const instances = instancesData?.instances ?? []
 
+  // Build file tabs based on template capabilities
+  const lifecycle = tmplData?.lifecycle
+  const heartbeatInterval = tmplData?.heartbeat_interval
+  const hasTools = skills.length > 0 || (tmplData?.tags ?? []).some((t: string) => t === "tools")
+  const fileTabs = buildFileTabs(lifecycle, hasTools)
+
   // Born = has been through Forge (exists as a persona instance)
   const isBorn = hasApi && p.created_at
   const birthDate = isBorn ? fmtDate(String(p.created_at)) : null
@@ -155,7 +169,7 @@ function AgentDetailContent() {
     : reg?.avatar ? { ...reg.avatar } : defaultAvatar
 
   const currentContent = editContent ?? files[activeTab] ?? ""
-  const isFileTab = FILE_TABS.some(t => t.id === activeTab)
+  const isFileTab = fileTabs.some(t => t.id === activeTab)
 
   // ── Soul traits / tags ──
   const soul: string[] = Array.isArray(p.soul) ? p.soul.map(String) : (tmplData?.soul ?? [])
@@ -180,6 +194,14 @@ function AgentDetailContent() {
                   <Badge className="text-2xs bg-success/15 text-success border-0">born</Badge>
                 )}
                 {category ? <Badge className="text-2xs bg-muted text-text3 border-0">{category}</Badge> : null}
+                {lifecycle === "persistent" && (
+                  <Badge className="text-2xs bg-accent-porter/15 text-accent-porter border-0 gap-1">
+                    <HeartPulse className="size-2.5" /> {heartbeatInterval}s
+                  </Badge>
+                )}
+                {lifecycle === "event-driven" && (
+                  <Badge className="text-2xs bg-warning/15 text-warning border-0">event-driven</Badge>
+                )}
               </div>
               <p className="text-sm text-text2 leading-none">{displayDesc}</p>
               {birthDate && (
@@ -265,7 +287,7 @@ function AgentDetailContent() {
         <Tabs value={activeTab} onValueChange={v => { setActiveTab(v); setEditContent(null) }} className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center gap-2 shrink-0">
             <TabsList variant="file">
-              {FILE_TABS.map(tab => (
+              {fileTabs.map(tab => (
                 <TabsTrigger key={tab.id} value={tab.id} className="gap-1">
                   <tab.icon className="size-2.5" />
                   {tab.label}
@@ -303,7 +325,7 @@ function AgentDetailContent() {
             )}
           </div>
 
-          {FILE_TABS.map(tab => (
+          {fileTabs.map(tab => (
             <TabsContent key={tab.id} value={tab.id} className="flex-1 min-h-0 mt-2">
               <Card className="h-full flex flex-col">
                 <div className="flex items-center px-3 py-1.5 border-b border-border bg-muted/50 shrink-0">

@@ -5,7 +5,7 @@ import { queryAll, queryOne } from '../db/pg.js';
 import fs from 'fs';
 import path from 'path';
 
-const TEMPLATE_FILES = ['SOUL.md', 'IDENTITY.md', 'ROLE_CARD.md', 'SKILLS.md', 'DELIVERABLES.md', 'MISSION.md'];
+const TEMPLATE_FILES = ['SOUL.md', 'IDENTITY.md', 'ROLE_CARD.md', 'SKILLS.md', 'TOOLS.md', 'HEARTBEAT.md'];
 
 function templateDir(id: string) { return path.join(config.personasDir, '..', 'templates', id); }
 
@@ -38,6 +38,8 @@ interface TemplateRow {
   communication_style: string | null;
   is_internal: number;
   sort_order: number | null;
+  lifecycle: string | null;
+  heartbeat_interval: number | null;
 }
 
 function formatTemplate(row: TemplateRow) {
@@ -52,6 +54,8 @@ function formatTemplate(row: TemplateRow) {
     appearance_spec: parseJson<Record<string, unknown>>(row.appearance_spec, {}),
     communication_style: row.communication_style ?? '',
     is_internal: Boolean(row.is_internal),
+    lifecycle: row.lifecycle ?? 'one-shot',
+    heartbeat_interval: row.heartbeat_interval ?? null,
   };
 }
 
