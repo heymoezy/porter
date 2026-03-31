@@ -63,7 +63,7 @@ export class GeminiCLIAdapter implements GatewayAdapter {
       const timer = setTimeout(() => {
         child.kill('SIGTERM');
         resolve({ healthy: false, error: 'health check timed out' });
-      }, 5_000);
+      }, 10_000);
 
       child.on('close', (code) => {
         clearTimeout(timer);
