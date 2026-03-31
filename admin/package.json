@@ -1,6 +1,6 @@
 {
   "name": "porter-admin",
-  "version": "3.4.0",
+  "version": "3.4.1",
   "private": true,
   "description": "Porter Admin \u2014 SaaS control plane + dev tools",
   "scripts": {

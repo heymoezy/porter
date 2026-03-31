@@ -1,3 +1,14 @@
+## v3.4.1 (2026-03-31)
+
+**Bridge UX polish**
+
+- refactor: merged Model Scout + Route Analyst into single "Models & Routing" tab (3 tabs instead of 4)
+- fix: admin UI served at root / instead of /admin/ prefix
+- fix: operator activity card height — proper border, no overlap with gateway cards
+- fix: Ollama shows 0% used with ∞ No limit (local model, no provider limits)
+- fix: OpenClaw usage from `openclaw status --usage` — real provider quota, not session context
+- fix: day parsing in OpenClaw reset countdown ("3d 0h" was returning null)
+
 ## v3.4.0 (2026-03-31)
 
 **Multi-model session: usage collection overhaul + gateway sniffer**
