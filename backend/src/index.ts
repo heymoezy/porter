@@ -22,6 +22,7 @@ import { migrateBridgeV2 } from './db/migrate-bridge-v2.js';
 import { migrateBridgeV3 } from './db/migrate-bridge-v3.js';
 import { migrateBridgeV4 } from './db/migrate-bridge-v4.js';
 import { migrateBridgeV5 } from './db/migrate-bridge-v5.js';
+import { migrateBridgeV6 } from './db/migrate-bridge-v6.js';
 import { migrateRateLimits } from './db/migrate-rate-limits.js';
 import { seedTemplates } from './db/seed-templates.js';
 import { detectAndUpsertGateways } from './services/bridge/startup-detector.js';
@@ -121,7 +122,7 @@ startBrainUI().catch(err => console.error('[brain-ui] Failed to start:', err));
 
 // Health check
 fastify.get('/health', async () => {
-  return { status: 'ok', engine: 'fastify', version: '3.3.2' };
+  return { status: 'ok', engine: 'fastify', version: '3.4.0' };
 });
 
 // Serve OpenAPI spec — public, no auth
@@ -182,6 +183,7 @@ const start = async () => {
     await migrateBridgeV3(pool);
     await migrateBridgeV4(pool);
     await migrateBridgeV5(pool);
+    await migrateBridgeV6(pool);
     await migrateRateLimits(pool);
     await seedTemplates();
     await fastify.listen({ port: config.port, host: config.host });

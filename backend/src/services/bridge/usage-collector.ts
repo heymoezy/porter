@@ -24,6 +24,7 @@ import { emitSSE } from '../scheduler.js';
 const HOME = process.env.HOME || '/home/lobster';
 const CLAUDE_CREDENTIALS_PATH = path.join(HOME, '.claude', '.credentials.json');
 const CODEX_SQLITE_PATH = path.join(HOME, '.codex', 'state_5.sqlite');
+const CODEX_SESSIONS_DIR = path.join(HOME, '.codex', 'sessions');
 const OPENCLAW_SESSIONS_PATH = path.join(HOME, '.openclaw', 'agents', 'main', 'sessions', 'sessions.json');
 
 const CLAUDE_MESSAGES_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -148,13 +149,17 @@ async function getGatewayIds(): Promise<typeof gatewayIds> {
 
 // ── Main entry point ────────────────────────────────────────────────────────
 
-export async function collectLocalUsage(): Promise<void> {
+type CollectLocalUsageOptions = {
+  forceAuthRefresh?: boolean;
+};
+
+export async function collectLocalUsage(options: CollectLocalUsageOptions = {}): Promise<void> {
   try {
     const ids = await getGatewayIds();
     if (!ids) return; // Gateways not configured yet
 
     const tasks = [
-      collectClaudeUsage(ids.claude),
+      collectClaudeUsage(ids.claude, options),
       collectCodexUsage(ids.codex),
       collectGeminiUsage(ids.gemini),
     ];
@@ -232,11 +237,14 @@ async function refreshClaudeOAuthToken(refreshToken: string): Promise<string | n
  * Cost: ~1 Haiku token per call = fractions of a cent.
  * Frequency: once per 5 minutes (cached).
  */
-async function collectClaudeUsage(gatewayId: string): Promise<void> {
+async function collectClaudeUsage(
+  gatewayId: string,
+  options: CollectLocalUsageOptions = {},
+): Promise<void> {
   const now = Date.now();
 
   // Rate limit: max once per 5 minutes
-  if (now < claudeApiCache.lastCallMs + CLAUDE_API_MIN_INTERVAL_MS) {
+  if (!options.forceAuthRefresh && now < claudeApiCache.lastCallMs + CLAUDE_API_MIN_INTERVAL_MS) {
     // Use cached result if available
     if (claudeApiCache.lastResult) {
       await upsertClaudeFromCache(gatewayId, claudeApiCache.lastResult, now / 1000);
@@ -254,12 +262,14 @@ async function collectClaudeUsage(gatewayId: string): Promise<void> {
       return;
     }
 
-    // Auto-refresh if expired or expiring within 5 minutes
-    if (oauth.expiresAt && typeof oauth.expiresAt === 'number' && oauth.expiresAt < now + TOKEN_REFRESH_BUFFER_MS) {
-      if (!oauth.refreshToken) {
-        console.warn('[usage-collector] Claude OAuth token expired, no refresh token available');
-        return;
-      }
+    const shouldRefreshToken = Boolean(
+      oauth.refreshToken && (
+        options.forceAuthRefresh ||
+        (oauth.expiresAt && typeof oauth.expiresAt === 'number' && oauth.expiresAt < now + TOKEN_REFRESH_BUFFER_MS)
+      ),
+    );
+
+    if (shouldRefreshToken) {
       const refreshed = await refreshClaudeOAuthToken(oauth.refreshToken);
       if (!refreshed) return;
       accessToken = refreshed;
@@ -391,46 +401,173 @@ async function upsertUsageProvider(
 // ── Codex CLI ───────────────────────────────────────────────────────────────
 
 async function collectCodexUsage(gatewayId: string): Promise<void> {
-  if (!fs.existsSync(CODEX_SQLITE_PATH)) return;
-
   const nowSec = Date.now() / 1000;
   const fiveHourCutoff = nowSec - FIVE_HOURS_SEC;
   const weekCutoff = nowSec - SEVEN_DAYS_SEC;
 
   try {
-    // Open read-only to avoid WAL lock conflicts with running Codex
-    const db = new Database(CODEX_SQLITE_PATH, { readonly: true, fileMustExist: true });
+    const usageTasks: Promise<unknown>[] = [];
 
-    try {
-      // 5-hour window
-      const fiveHourRow = db.prepare(
-        `SELECT COUNT(*) as cnt, COALESCE(SUM(tokens_used), 0) as tokens, MIN(updated_at) as oldest
-         FROM threads WHERE updated_at >= ?`,
-      ).get(fiveHourCutoff) as { cnt: number; tokens: number; oldest: number | null };
-
-      // Weekly window
-      const weekRow = db.prepare(
-        `SELECT COUNT(*) as cnt, COALESCE(SUM(tokens_used), 0) as tokens, MIN(updated_at) as oldest
-         FROM threads WHERE updated_at >= ?`,
-      ).get(weekCutoff) as { cnt: number; tokens: number; oldest: number | null };
-
-      const fiveHourResetAt = fiveHourRow.oldest !== null
-        ? fiveHourRow.oldest + FIVE_HOURS_SEC
-        : null;
-      const weeklyResetAt = getNextSaturdayMidnightUtc(nowSec);
-
-      await Promise.allSettled([
-        upsertUsage(gatewayId, 'requests', '5hour', fiveHourRow.cnt, null, fiveHourResetAt, nowSec),
-        upsertUsage(gatewayId, 'tokens', '5hour', fiveHourRow.tokens, null, fiveHourResetAt, nowSec),
-        upsertUsage(gatewayId, 'requests', 'weekly', weekRow.cnt, null, weeklyResetAt, nowSec),
-        upsertUsage(gatewayId, 'tokens', 'weekly', weekRow.tokens, null, weeklyResetAt, nowSec),
-      ]);
-    } finally {
-      db.close();
+    // Prefer Codex's own token_count rate-limit events for session/weekly %
+    // so Bridge shows the same percentage semantics as Claude.
+    const rateLimits = getLatestCodexRateLimits();
+    if (rateLimits) {
+      usageTasks.push(
+        upsertUsageProvider(
+          gatewayId,
+          'requests',
+          '5hour',
+          rateLimits.primary.usedPercent,
+          100,
+          rateLimits.primary.resetAt,
+          nowSec,
+        ),
+        upsertUsageProvider(
+          gatewayId,
+          'requests',
+          'weekly',
+          rateLimits.secondary.usedPercent,
+          100,
+          rateLimits.secondary.resetAt,
+          nowSec,
+        ),
+      );
     }
+
+    if (fs.existsSync(CODEX_SQLITE_PATH)) {
+      // Open read-only to avoid WAL lock conflicts with running Codex
+      const db = new Database(CODEX_SQLITE_PATH, { readonly: true, fileMustExist: true });
+
+      try {
+        // 5-hour window
+        const fiveHourRow = db.prepare(
+          `SELECT COUNT(*) as cnt, COALESCE(SUM(tokens_used), 0) as tokens, MIN(updated_at) as oldest
+           FROM threads WHERE updated_at >= ?`,
+        ).get(fiveHourCutoff) as { cnt: number; tokens: number; oldest: number | null };
+
+        // Weekly window
+        const weekRow = db.prepare(
+          `SELECT COUNT(*) as cnt, COALESCE(SUM(tokens_used), 0) as tokens, MIN(updated_at) as oldest
+           FROM threads WHERE updated_at >= ?`,
+        ).get(weekCutoff) as { cnt: number; tokens: number; oldest: number | null };
+
+        const fiveHourResetAt = rateLimits?.primary.resetAt ?? (
+          fiveHourRow.oldest !== null ? fiveHourRow.oldest + FIVE_HOURS_SEC : null
+        );
+        const weeklyResetAt = rateLimits?.secondary.resetAt ?? getNextSaturdayMidnightUtc(nowSec);
+
+        // Keep token totals as collected tracking data. Requests are provider
+        // percentages when available, otherwise fall back to raw counts.
+        if (!rateLimits) {
+          usageTasks.push(
+            upsertUsageFallback(gatewayId, 'requests', '5hour', fiveHourRow.cnt, null, fiveHourResetAt, nowSec),
+            upsertUsageFallback(gatewayId, 'requests', 'weekly', weekRow.cnt, null, weeklyResetAt, nowSec),
+          );
+        }
+        usageTasks.push(
+          upsertUsage(gatewayId, 'tokens', '5hour', fiveHourRow.tokens, null, fiveHourResetAt, nowSec),
+          upsertUsage(gatewayId, 'tokens', 'weekly', weekRow.tokens, null, weeklyResetAt, nowSec),
+        );
+      } finally {
+        db.close();
+      }
+    } else if (!rateLimits) {
+      return;
+    }
+
+    await Promise.allSettled(usageTasks);
   } catch (err) {
     console.error('[usage-collector] codex sqlite error:', err instanceof Error ? err.message : err);
   }
+}
+
+type CodexRateWindow = {
+  usedPercent: number;
+  resetAt: number | null;
+};
+
+type CodexRateLimits = {
+  timestamp: string;
+  primary: CodexRateWindow;
+  secondary: CodexRateWindow;
+};
+
+type CodexTokenCountEvent = {
+  timestamp?: string;
+  type?: string;
+  payload?: {
+    type?: string;
+    rate_limits?: {
+      primary?: { used_percent?: number; resets_at?: number };
+      secondary?: { used_percent?: number; resets_at?: number };
+    };
+  };
+};
+
+export function extractCodexRateLimitsFromJsonl(text: string): CodexRateLimits | null {
+  const lines = text.split('\n');
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i]?.trim();
+    if (!line || !line.includes('"type":"token_count"') || !line.includes('used_percent')) continue;
+
+    try {
+      const evt = JSON.parse(line) as CodexTokenCountEvent;
+      const payload = evt.payload;
+      const primary = payload?.rate_limits?.primary;
+      const secondary = payload?.rate_limits?.secondary;
+      if (!payload || payload.type !== 'token_count' || primary?.used_percent == null || secondary?.used_percent == null) {
+        continue;
+      }
+      return {
+        timestamp: typeof evt.timestamp === 'string' ? evt.timestamp : new Date(0).toISOString(),
+        primary: {
+          usedPercent: primary.used_percent,
+          resetAt: typeof primary.resets_at === 'number' ? primary.resets_at : null,
+        },
+        secondary: {
+          usedPercent: secondary.used_percent,
+          resetAt: typeof secondary.resets_at === 'number' ? secondary.resets_at : null,
+        },
+      };
+    } catch {
+      // ignore malformed session lines and continue scanning older entries
+    }
+  }
+  return null;
+}
+
+function getLatestCodexRateLimits(): CodexRateLimits | null {
+  if (!fs.existsSync(CODEX_SESSIONS_DIR)) return null;
+
+  let latest: CodexRateLimits | null = null;
+  const stack = [CODEX_SESSIONS_DIR];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+      } else if (entry.isFile() && fullPath.endsWith('.jsonl')) {
+        try {
+          const raw = fs.readFileSync(fullPath, 'utf-8');
+          const parsed = extractCodexRateLimitsFromJsonl(raw);
+          if (parsed && (!latest || parsed.timestamp > latest.timestamp)) {
+            latest = parsed;
+          }
+        } catch {
+          // ignore unreadable session files
+        }
+      }
+    }
+  }
+
+  return latest;
 }
 
 // ── Gemini CLI ──────────────────────────────────────────────────────────────
@@ -573,6 +710,38 @@ async function upsertUsage(
      ON CONFLICT (gateway_id, COALESCE(model_name, ''), limit_type, period) DO UPDATE SET
        current_value = EXCLUDED.current_value,
        reset_at = COALESCE(EXCLUDED.reset_at, gateway_rate_limits.reset_at),
+       limit_value = COALESCE(EXCLUDED.limit_value, gateway_rate_limits.limit_value),
+       source = CASE
+         WHEN gateway_rate_limits.source IN ('provider', 'configured') THEN gateway_rate_limits.source
+         ELSE EXCLUDED.source
+       END,
+       updated_at = EXCLUDED.updated_at`,
+    [uuidv4(), gatewayId, limitType, period, limitValue, currentValue, resetAt, now],
+  );
+}
+
+async function upsertUsageFallback(
+  gatewayId: string,
+  limitType: string,
+  period: string,
+  currentValue: number,
+  limitValue: number | null,
+  resetAt: number | null,
+  now: number,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO gateway_rate_limits
+       (id, gateway_id, model_name, limit_type, period, limit_value, current_value, reset_at, source, updated_at)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, 'collected', $8)
+     ON CONFLICT (gateway_id, COALESCE(model_name, ''), limit_type, period) DO UPDATE SET
+       current_value = CASE
+         WHEN gateway_rate_limits.source IN ('provider', 'configured') THEN gateway_rate_limits.current_value
+         ELSE EXCLUDED.current_value
+       END,
+       reset_at = CASE
+         WHEN gateway_rate_limits.source IN ('provider', 'configured') THEN gateway_rate_limits.reset_at
+         ELSE COALESCE(EXCLUDED.reset_at, gateway_rate_limits.reset_at)
+       END,
        limit_value = COALESCE(EXCLUDED.limit_value, gateway_rate_limits.limit_value),
        source = CASE
          WHEN gateway_rate_limits.source IN ('provider', 'configured') THEN gateway_rate_limits.source

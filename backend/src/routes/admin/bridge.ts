@@ -6,6 +6,7 @@ import { postIntelligence, assessUpdateRisk } from '../../services/admin/agent-l
 import { buildAllGatewayPromptProfiles } from '../../services/admin/prompt-pipeline.js';
 import { emitAdminEvent } from '../../services/admin/admin-sse.js';
 import { getCapacitySnapshot } from '../../services/bridge/rate-limit-tracker.js';
+import { collectLocalUsage } from '../../services/bridge/usage-collector.js';
 
 type UserApiKeyRow = {
   id: string;
@@ -984,6 +985,13 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
   fastify.get('/capacity', async (_req, reply) => {
     const snapshot = await getCapacitySnapshot();
     return reply.send(ok({ gateways: snapshot }));
+  });
+
+  // POST /api/admin/bridge/capacity/refresh — force fresh usage collection
+  fastify.post('/capacity/refresh', async (_req, reply) => {
+    await collectLocalUsage({ forceAuthRefresh: true });
+    const snapshot = await getCapacitySnapshot();
+    return reply.send(ok({ gateways: snapshot, refreshed: true }));
   });
 
   // POST /api/admin/bridge/capacity — set manual rate limit for a gateway

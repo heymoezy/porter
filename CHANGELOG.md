@@ -1,3 +1,19 @@
+## v3.4.0 (2026-03-31)
+
+**Multi-model session: usage collection overhaul + gateway sniffer**
+
+- feat: Codex JSONL rate-limit parsing — reads `token_count` events for real % (Codex CLI)
+- feat: `upsertUsageFallback` prevents raw SQLite counts from overwriting provider percentages
+- feat: `POST /api/admin/bridge/capacity/refresh` — force fresh collection with token refresh
+- feat: Refresh Usage button on gateway cards calls backend instead of just invalidating cache
+- feat: gateway activity sniffer — detects session transitions, emits `bridge:activity` SSE
+- feat: Claude OAuth auto-refresh — collector refreshes expired tokens via refresh_token grant
+- feat: Bridge nav badge — warning counter for pending updates/installs
+- feat: hooks detail view — click to expand actual hook configurations inline
+- fix: admin version in lower nav — was reading wrong package.json (3 levels up vs 2)
+- fix: changelog page back button
+- test: `extractCodexRateLimitsFromJsonl` unit tests (Codex CLI)
+
 ## v3.3.2 (2026-03-29)
 
 - docs: make `BRIDGE.md` canonical location explicit from repo root and backend workspace

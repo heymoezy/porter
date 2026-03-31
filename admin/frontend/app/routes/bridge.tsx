@@ -401,6 +401,15 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
     },
   })
 
+  const refreshUsage = useMutation({
+    mutationFn: () => api<{ gateways: GatewayCapacity[]; refreshed: boolean }>("/api/admin/bridge/capacity/refresh", { method: "POST" }),
+    onSuccess: () => {
+      pushOpEvent(`${fmtNow()} [manual] usage refresh: ${gw.name}`, "text-accent-porter")
+      tickLog?.()
+      qc.invalidateQueries({ queryKey: ["bridge", "capacity"] })
+    },
+  })
+
   return (
     <div className={`rounded-xl border overflow-hidden ${compositeStatus === "offline" || compositeStatus === "blocked" ? "border-danger/30 bg-danger/5" : "border-border bg-surface"}`}>
       {/* Header */}
@@ -528,9 +537,11 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
             {(reqWeekly || tokWeekly) && (
               <UsageBlock label="Weekly limit" requests={reqWeekly} tokens={tokWeekly} />
             )}
-            <button onClick={() => qc.invalidateQueries({ queryKey: ["bridge", "capacity"] })}
+            <button onClick={() => refreshUsage.mutate()}
+              disabled={refreshUsage.isPending}
               className="text-2xs text-text3 hover:text-accent-porter transition-colors flex items-center gap-1">
-              <RefreshCw className="size-2.5" /> Refresh usage
+              <RefreshCw className={`size-2.5 ${refreshUsage.isPending ? "animate-spin" : ""}`} />
+              {refreshUsage.isPending ? "Refreshing…" : "Refresh usage"}
             </button>
           </div>
         )

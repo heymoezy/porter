@@ -1,13 +1,21 @@
 # Porter Release Notes
 
+## v3.4.0 (2026-03-31)
+
+**Multi-model session: usage collection overhaul + gateway sniffer**
+
+3-model collaboration (Claude Opus, Codex CLI, Gemini CLI) — each contributed to this release.
+
+- Codex JSONL rate-limit parsing: reads `token_count` events from session logs for real usage % and reset times, replacing stale SQLite-derived counts
+- `upsertUsageFallback`: raw SQLite counts no longer overwrite provider-derived percentages
+- Manual refresh endpoint: `POST /api/admin/bridge/capacity/refresh` forces fresh collection with token refresh
+- Gateway activity sniffer: detects session start/stop/token growth transitions per gateway, pushes live events via SSE to operator activity log
+- Claude OAuth auto-refresh: collector auto-refreshes expired tokens using refresh_token grant — no more stale data after token expiry
+- Bridge nav badge, hooks detail view, changelog back button, version display fix
+
 ## v3.3.2 (2026-03-29)
 
 **Bridge UX improvements — badges, hooks, real-time activity**
-
-- Bridge nav badge: warning counter shows pending gateway updates/installs in sidebar
-- Hooks link: click to expand actual hook configurations (event, matcher, command) instead of opening file editor
-- Real-time operator activity: SSE events from usage collector + health probe invalidate capacity/intel queries live
-- Admin version fixed: lower nav now shows correct Porter version (was stuck at 2.5.0)
 
 ## v3.0.0 (2026-03-25)
 
