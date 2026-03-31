@@ -1,3 +1,13 @@
+## v3.4.2 (2026-03-31)
+
+**Gemini usage collection overhaul**
+
+- feat: real Gemini quota collection — hits private Google Cloud Code API (`retrieveUserQuota`)
+- feat: Daily usage % for Gemini now uses `remainingFraction` (highest trust provider source)
+- feat: Hourly usage % for Gemini — log-based estimation against 50 req/hour baseline
+- fix: corrected versioning mistake (reverted from accidental v4.0.1 jump)
+- fix: admin version in lower nav synced to 3.4.2
+
 ## v3.4.1 (2026-03-31)
 
 **Bridge UX polish**

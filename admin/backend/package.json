@@ -1,7 +1,7 @@
 {
   "name": "porter-admin",
-  "version": "3.4.1",
-  "description": "Porter SaaS Admin \u2014 platform control plane",
+  "version": "3.4.2",
+  "description": "Porter SaaS Admin — platform control plane",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
