@@ -1053,7 +1053,7 @@ export default function BridgePage() {
         <div className="flex-1 min-h-0 overflow-y-auto pb-4">
           <GatewayGrid tickLog={tickLog} onOpenEditor={(id, mode) => setEditingGw({ id, mode })} />
         </div>
-        <div className="shrink-0 h-44 border-t border-border/30 overflow-hidden">
+        <div className="shrink-0 h-44 overflow-hidden pb-1">
           <OperatorActivityLog />
         </div>
       </>
