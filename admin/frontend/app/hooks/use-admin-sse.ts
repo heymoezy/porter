@@ -44,6 +44,12 @@ export function useAdminSSE() {
             qc.invalidateQueries({ queryKey: ["bridge", "capacity"] })
             break
 
+          case "bridge:activity":
+            // Gateway activity sniffer — session transitions, token growth
+            qc.invalidateQueries({ queryKey: ["bridge", "capacity"] })
+            window.dispatchEvent(new CustomEvent("bridge:activity", { detail: payload.data ?? payload }))
+            break
+
           case "bridge:dispatch": {
             // Prepend new dispatch entry to the first page of the dispatch log cache
             const entry = payload.data?.entry ?? payload.entry

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useNavigate } from "react-router"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
@@ -836,6 +836,23 @@ function fmtTs(epoch: number): string {
 }
 
 function OperatorActivityLog() {
+  const [, setSnifferTick] = useState(0)
+
+  // Listen for real-time sniffer events from Bridge
+  useEffect(() => {
+    function onActivity(e: Event) {
+      const detail = (e as CustomEvent).detail
+      if (!detail?.text) return
+      const color = detail.event === "session_end" ? "text-text3"
+        : detail.event === "session_start" ? "text-success"
+        : "text-accent-porter"
+      pushOpEvent(`${fmtNow()} [sniffer] ${detail.text}`, color)
+      setSnifferTick(t => t + 1)
+    }
+    window.addEventListener("bridge:activity", onActivity)
+    return () => window.removeEventListener("bridge:activity", onActivity)
+  }, [])
+
   const { data: bridgeData } = useQuery({
     queryKey: ["bridge", "gateway-cards"],
     queryFn: () => api<{ gateways: Array<{ id: string; name: string; type: string; status: string; enabled: boolean; circuit_state: string; last_health_at: number | null; model_count: number; metadata: Record<string, unknown> }> }>("/api/admin/bridge"),

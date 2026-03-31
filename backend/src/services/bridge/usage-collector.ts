@@ -54,6 +54,71 @@ const claudeApiCache: ClaudeApiCache = {
   lastResult: null,
 };
 
+// ── Gateway Activity Sniffer — detects session transitions per gateway ────────
+
+interface GatewaySnifferState {
+  activeSessions: number;
+  totalTokens: number;
+  wasActive: boolean;
+}
+
+const snifferState = new Map<string, GatewaySnifferState>();
+
+function sniffActivity(
+  gatewayType: string,
+  gatewayName: string,
+  sessions: number,
+  tokens: number,
+) {
+  const prev = snifferState.get(gatewayType);
+  const nowActive = sessions > 0;
+  const wasActive = prev?.wasActive ?? false;
+
+  // Detect transitions
+  if (!wasActive && nowActive) {
+    // idle → active
+    const tokStr = tokens > 0 ? ` · ${fmtTokens(tokens)} tokens` : '';
+    emitSSE('bridge:activity', {
+      gateway: gatewayName,
+      type: gatewayType,
+      event: 'session_start',
+      text: `${gatewayName} active — ${sessions} session${sessions > 1 ? 's' : ''}${tokStr}`,
+    }).catch(() => {});
+    console.log('[sniffer] %s: idle → active (%d sessions)', gatewayName, sessions);
+  } else if (wasActive && !nowActive) {
+    // active → idle
+    const tokStr = prev?.totalTokens ? ` · ${fmtTokens(prev.totalTokens)} tokens used` : '';
+    emitSSE('bridge:activity', {
+      gateway: gatewayName,
+      type: gatewayType,
+      event: 'session_end',
+      text: `${gatewayName} idle${tokStr}`,
+    }).catch(() => {});
+    console.log('[sniffer] %s: active → idle', gatewayName);
+  } else if (nowActive && prev) {
+    // still active — check for significant token growth (>5k since last check)
+    const tokenDelta = tokens - prev.totalTokens;
+    if (tokenDelta > 5000) {
+      emitSSE('bridge:activity', {
+        gateway: gatewayName,
+        type: gatewayType,
+        event: 'token_growth',
+        text: `${gatewayName} working — ${fmtTokens(tokens)} tokens (+${fmtTokens(tokenDelta)})`,
+        sessions,
+        tokens,
+      }).catch(() => {});
+    }
+  }
+
+  snifferState.set(gatewayType, { activeSessions: sessions, totalTokens: tokens, wasActive: nowActive });
+}
+
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
 // ── Gateway ID cache ────────────────────────────────────────────────────────
 
 let gatewayIds: { claude: string; codex: string; gemini: string; openclaw?: string } | null = null;
@@ -248,6 +313,10 @@ async function collectClaudeUsage(gatewayId: string): Promise<void> {
     claudeApiCache.lastResult = result;
 
     await upsertClaudeFromCache(gatewayId, result, now / 1000);
+
+    // Sniff for utilization changes (active if >0%)
+    const activeSessions = result.fiveHourUtilization > 0 ? 1 : 0;
+    sniffActivity('claude_cli', 'Claude CLI', activeSessions, Math.round(result.fiveHourUtilization * 100));
 
     console.log('[usage-collector] Claude usage: 5h=%s%% 7d=%s%% status=%s',
       (result.fiveHourUtilization * 100).toFixed(1),
@@ -455,6 +524,9 @@ async function collectOpenClawUsage(gatewayId: string): Promise<void> {
       upsertUsage(gatewayId, 'tokens', 'weekly', weeklyTokens, null, weeklyResetAt, nowSec),
       upsertUsage(gatewayId, 'requests', 'weekly', weeklySessions, null, weeklyResetAt, nowSec),
     ]);
+
+    // Sniff for activity transitions
+    sniffActivity('openclaw', 'OpenClaw', fiveHourSessions, fiveHourTokens);
 
     console.log('[usage-collector] OpenClaw (live): %d sessions / %dk tokens (5h), %d sessions / %dk tokens (week), ctx %s%%',
       fiveHourSessions, Math.round(fiveHourTokens / 1000),
