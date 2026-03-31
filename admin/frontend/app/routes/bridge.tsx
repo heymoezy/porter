@@ -150,6 +150,7 @@ function fmtResetIn(resetAt: number | null): string | null {
 }
 
 function periodLabel(period: string): string {
+  if (period === "session") return " this session"
   if (period === "minute") return "/min"
   if (period === "daily") return " today"
   if (period === "weekly") return " this week"
@@ -521,7 +522,7 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
         if (quotaLimits.length === 0 && weeklyLimits.length === 0) return null
 
         const periodLabels: Record<string, string> = {
-          '5hour': 'Current session', 'hourly': 'Hourly limit', 'daily': 'Daily limit', 'minute': 'Per minute'
+          'session': 'Latest session', '5hour': 'Current session', 'hourly': 'Hourly limit', 'daily': 'Daily limit', 'minute': 'Per minute'
         }
 
         const reqQuota = quotaLimits.find(l => l.limit_type === 'requests')

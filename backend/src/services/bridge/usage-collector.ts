@@ -607,23 +607,80 @@ async function collectGeminiUsage(gatewayId: string): Promise<void> {
 // ── OpenClaw (GPT-5.4) ──────────────────────────────────────────────────────
 
 interface OpenClawStatusSession {
-  totalTokens: number;
-  contextTokens: number;
-  percentUsed: number;
+  totalTokens: number | null;
+  contextTokens: number | null;
+  percentUsed: number | null;
   age: number;  // ms since last update
+  updatedAt?: number;
   model: string;
+  totalTokensFresh?: boolean;
+  remainingTokens?: number | null;
+  systemSent?: boolean;
+  flags?: string[];
+}
+
+interface OpenClawProviderUsageWindow {
+  usedPercent: number;
+  resetAt: number | null;
+}
+
+interface OpenClawProviderUsage {
+  providerLabel: string;
+  fiveHour: OpenClawProviderUsageWindow;
+  weekly: OpenClawProviderUsageWindow;
+}
+
+function parseOpenClawDurationToResetAt(text: string, nowSec: number): number | null {
+  const days = /(\d+)d/.exec(text)?.[1];
+  const hours = /(\d+)h/.exec(text)?.[1];
+  const minutes = /(\d+)m/.exec(text)?.[1];
+  const seconds = /(\d+)s/.exec(text)?.[1];
+  const totalSec =
+    (days ? parseInt(days, 10) * 86400 : 0) +
+    (hours ? parseInt(hours, 10) * 3600 : 0) +
+    (minutes ? parseInt(minutes, 10) * 60 : 0) +
+    (seconds ? parseInt(seconds, 10) : 0);
+  return totalSec > 0 ? nowSec + totalSec : null;
+}
+
+export function extractOpenClawProviderUsage(text: string, nowSec: number): OpenClawProviderUsage | null {
+  const providerMatch = text.match(/Usage:\s*[\s\S]*?^\s{2}([^\n]+)\n\s{4}5h:\s*(\d+)% left · resets ([^\n]+)\n\s{4}Week:\s*(\d+)% left · resets ([^\n]+)/m);
+  if (!providerMatch) return null;
+
+  const providerLabel = providerMatch[1].trim();
+  const fiveHourLeft = parseInt(providerMatch[2], 10);
+  const fiveHourResetText = providerMatch[3].trim();
+  const weeklyLeft = parseInt(providerMatch[4], 10);
+  const weeklyResetText = providerMatch[5].trim();
+
+  if ([fiveHourLeft, weeklyLeft].some(n => Number.isNaN(n))) return null;
+
+  return {
+    providerLabel,
+    fiveHour: {
+      usedPercent: Math.max(0, Math.min(100, 100 - fiveHourLeft)),
+      resetAt: parseOpenClawDurationToResetAt(fiveHourResetText, nowSec),
+    },
+    weekly: {
+      usedPercent: Math.max(0, Math.min(100, 100 - weeklyLeft)),
+      resetAt: parseOpenClawDurationToResetAt(weeklyResetText, nowSec),
+    },
+  };
 }
 
 async function collectOpenClawUsage(gatewayId: string): Promise<void> {
   const nowSec = Date.now() / 1000;
 
   try {
-    // Use `openclaw status --json` for live data (not stale file)
+    const usageText = execSync('openclaw status --usage 2>/dev/null', { encoding: 'utf-8', timeout: 10000 });
+    const providerUsage = extractOpenClawProviderUsage(usageText, nowSec);
+
+    // Use `openclaw status --json` for live session/context tracking data.
     const raw = execSync('openclaw status --json 2>/dev/null', { encoding: 'utf-8', timeout: 10000 });
     const data = JSON.parse(raw);
     const recent: OpenClawStatusSession[] = data?.sessions?.recent ?? [];
 
-    if (recent.length === 0) return;
+    if (recent.length === 0 && !providerUsage) return;
 
     const fiveHourMs = FIVE_HOURS_SEC * 1000;
     const weekMs = SEVEN_DAYS_SEC * 1000;
@@ -634,41 +691,89 @@ async function collectOpenClawUsage(gatewayId: string): Promise<void> {
     let weeklySessions = 0;
     let totalContextWindow = 0;
     let totalUsedInContext = 0;
+    let latestUsableSession: OpenClawStatusSession | null = null;
 
     for (const s of recent) {
       const ageMs = s.age ?? Infinity;
+      const totalTokens = typeof s.totalTokens === 'number' && Number.isFinite(s.totalTokens) ? s.totalTokens : null;
+      const contextTokens = typeof s.contextTokens === 'number' && Number.isFinite(s.contextTokens) ? s.contextTokens : null;
+      const hasUsableSessionUsage = totalTokens !== null && contextTokens !== null && contextTokens > 0;
+
+      if (hasUsableSessionUsage && (!latestUsableSession || (s.updatedAt ?? 0) > (latestUsableSession.updatedAt ?? 0))) {
+        latestUsableSession = s;
+      }
       if (ageMs < weekMs) {
-        weeklyTokens += s.totalTokens ?? 0;
         weeklySessions += 1;
+        weeklyTokens += totalTokens ?? 0;
       }
       if (ageMs < fiveHourMs) {
-        fiveHourTokens += s.totalTokens ?? 0;
         fiveHourSessions += 1;
-        totalContextWindow += s.contextTokens ?? 0;
-        totalUsedInContext += s.totalTokens ?? 0;
+        fiveHourTokens += totalTokens ?? 0;
+        if (hasUsableSessionUsage) {
+          totalContextWindow += contextTokens;
+          totalUsedInContext += totalTokens;
+        }
       }
     }
 
-    // Context window utilization across active sessions
+    // Context window utilization across usable recent sessions only.
     const contextPct = totalContextWindow > 0 ? totalUsedInContext / totalContextWindow : null;
 
-    const fiveHourResetAt = nowSec + FIVE_HOURS_SEC;
-    const weeklyResetAt = getNextSaturdayMidnightUtc(nowSec);
+    const fiveHourResetAt = providerUsage?.fiveHour.resetAt ?? (nowSec + FIVE_HOURS_SEC);
+    const weeklyResetAt = providerUsage?.weekly.resetAt ?? getNextSaturdayMidnightUtc(nowSec);
 
-    await Promise.allSettled([
-      upsertUsage(gatewayId, 'tokens', '5hour', fiveHourTokens, null, fiveHourResetAt, nowSec),
-      upsertUsage(gatewayId, 'requests', '5hour', fiveHourSessions, null, fiveHourResetAt, nowSec),
-      upsertUsage(gatewayId, 'tokens', 'weekly', weeklyTokens, null, weeklyResetAt, nowSec),
-      upsertUsage(gatewayId, 'requests', 'weekly', weeklySessions, null, weeklyResetAt, nowSec),
-    ]);
+    const usageTasks: Promise<unknown>[] = [
+      upsertUsageFallback(gatewayId, 'tokens', '5hour', fiveHourTokens, null, fiveHourResetAt, nowSec),
+      providerUsage
+        ? upsertUsageProvider(gatewayId, 'requests', '5hour', providerUsage.fiveHour.usedPercent, 100, providerUsage.fiveHour.resetAt, nowSec)
+        : upsertUsageFallback(gatewayId, 'requests', '5hour', fiveHourSessions, null, fiveHourResetAt, nowSec),
+      upsertUsageFallback(gatewayId, 'tokens', 'weekly', weeklyTokens, null, weeklyResetAt, nowSec),
+      providerUsage
+        ? upsertUsageProvider(gatewayId, 'requests', 'weekly', providerUsage.weekly.usedPercent, 100, providerUsage.weekly.resetAt, nowSec)
+        : upsertUsageFallback(gatewayId, 'requests', 'weekly', weeklySessions, null, weeklyResetAt, nowSec),
+    ];
+
+    if (latestUsableSession) {
+      const latestTotalTokens = latestUsableSession.totalTokens as number;
+      const latestContextTokens = latestUsableSession.contextTokens as number;
+      const latestPercentUsed = typeof latestUsableSession.percentUsed === 'number' && Number.isFinite(latestUsableSession.percentUsed)
+        ? latestUsableSession.percentUsed
+        : Math.round((latestTotalTokens / latestContextTokens) * 100);
+
+      usageTasks.push(
+        upsertUsage(
+          gatewayId,
+          'requests',
+          'session',
+          latestPercentUsed,
+          100,
+          null,
+          nowSec,
+        ),
+        upsertUsage(
+          gatewayId,
+          'tokens',
+          'session',
+          latestTotalTokens,
+          latestContextTokens,
+          null,
+          nowSec,
+        ),
+      );
+    }
+
+    await Promise.allSettled(usageTasks);
 
     // Sniff for activity transitions
     sniffActivity('openclaw', 'OpenClaw', fiveHourSessions, fiveHourTokens);
 
-    console.log('[usage-collector] OpenClaw (live): %d sessions / %dk tokens (5h), %d sessions / %dk tokens (week), ctx %s%%',
+    console.log('[usage-collector] OpenClaw (live): %d sessions / %dk tokens (5h), %d sessions / %dk tokens (week), ctx %s%%, provider %s 5h=%s%% week=%s%%',
       fiveHourSessions, Math.round(fiveHourTokens / 1000),
       weeklySessions, Math.round(weeklyTokens / 1000),
-      contextPct != null ? Math.round(contextPct * 100) : 'n/a');
+      contextPct != null ? Math.round(contextPct * 100) : 'n/a',
+      providerUsage?.providerLabel ?? 'n/a',
+      providerUsage?.fiveHour.usedPercent ?? 'n/a',
+      providerUsage?.weekly.usedPercent ?? 'n/a');
   } catch (err) {
     // Fallback to sessions.json if openclaw command fails
     try {
