@@ -858,10 +858,10 @@ export default function ForgePage() {
                             />
                             <div className="min-w-0 flex-1">
                               <p className="text-2xs font-bold text-text truncate">{t.name}</p>
-                              <p className="text-2xs text-text3 truncate">{t.category}</p>
+                              <p className="text-2xs text-text3 truncate line-clamp-1">{t.description}</p>
                             </div>
+                            <Badge className="text-2xs bg-muted text-text3 border-0 shrink-0">{t.category}</Badge>
                           </div>
-                          <p className="text-2xs text-text2 mt-1.5 line-clamp-2 leading-relaxed">{t.description}</p>
                         </Link>
                         <div className="mt-2 flex items-center gap-1.5">
                           {inPipeline ? (
