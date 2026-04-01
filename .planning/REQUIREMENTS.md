@@ -27,18 +27,18 @@
 
 ### Vitals (Live Status)
 
-- [ ] **VIT-01**: Tokens bar — remaining daily/session budget
-- [ ] **VIT-02**: Health bar — error rate over last 10 dispatches
-- [ ] **VIT-03**: Focus bar — context window pressure
+- [x] **VIT-01**: Tokens bar — remaining daily/session budget
+- [x] **VIT-02**: Health bar — error rate over last 10 dispatches
+- [x] **VIT-03**: Focus bar — context window pressure
 
 ### Character Sheet UI
 
 - [x] **UI-01**: Full character card: Shell, Intelligence, Skills, Supports, Equipment, Passive Tree, Vitals, Level, Stats, Rarity
 - [x] **UI-02**: Stat pentagon (5 stats) using recharts
-- [ ] **UI-03**: Vitals as 3 color-coded bars with real-time updates
+- [x] **UI-03**: Vitals as 3 color-coded bars with real-time updates
 - [x] **UI-04**: Rarity borders: gray/blue glow/purple pulse/gold animated/red particles
 - [x] **UI-05**: Star display (1-5★) with progress to next
-- [ ] **UI-06**: Passive tree visual — compact node graph
+- [x] **UI-06**: Passive tree visual — compact node graph
 
 ### Skills & Supports
 
@@ -153,13 +153,13 @@
 | SKL-05 | Phase 26 | Complete |
 | UI-01 | Phase 27 | Complete |
 | UI-02 | Phase 27 | Complete |
-| UI-03 | Phase 27 | Pending |
+| UI-03 | Phase 27 | Complete |
 | UI-04 | Phase 27 | Complete |
 | UI-05 | Phase 27 | Complete |
-| UI-06 | Phase 27 | Pending |
-| VIT-01 | Phase 27 | Pending |
-| VIT-02 | Phase 27 | Pending |
-| VIT-03 | Phase 27 | Pending |
+| UI-06 | Phase 27 | Complete |
+| VIT-01 | Phase 27 | Complete |
+| VIT-02 | Phase 27 | Complete |
+| VIT-03 | Phase 27 | Complete |
 | BTL-01 | Phase 28 | Pending |
 | BTL-02 | Phase 28 | Pending |
 | BTL-03 | Phase 28 | Pending |

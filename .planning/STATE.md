@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
 status: unknown
-stopped_at: Completed 27-01-PLAN.md — CharacterCard component with stat pentagon, rarity borders, star display
-last_updated: "2026-04-01T08:04:11.355Z"
+stopped_at: Completed 27-02-PLAN.md — VitalsBar and PassiveTreeView components built
+last_updated: "2026-04-01T08:05:13.725Z"
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -48,6 +48,7 @@ Plan: 1 of 3
 | Phase 26-forge-unification P02 | 6 | 4 tasks | 5 files |
 | Phase 26-forge-unification P03 | 7 | 3 tasks | 3 files |
 | Phase 27-character-sheet-ui P01 | 220 | 2 tasks | 3 files |
+| Phase 27-character-sheet-ui P02 | 231s | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,9 @@ Plan: 1 of 3
 - [Phase 26-forge-unification]: WorkshopContent gates on selectedTemplate state — Queue button sets template + switches tab atomically
 - [Phase 27-character-sheet-ui]: Progress component lacks indicatorClassName — used custom div with xp-bar-fill class for XP bar gradient
 - [Phase 27-character-sheet-ui]: recharts@3.8.1 (^3.x) accepted — both v2 and v3 export RadarChart
+- [Phase 27-02]: VitalsBar templateId prefixed with _ to preserve Phase 29 API contract without TS unused-var warning
+- [Phase 27-02]: Focus vital uses dispatchCount%50 proxy — Phase 29 session registry replaces with real context window pressure
+- [Phase 27-02]: PassiveTreeView skips unknown node_ids silently — NODE_DEFS is canonical list, not props.nodes
 
 ### Pending Todos
 
@@ -92,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T08:04:11.351Z
-Stopped at: Completed 27-01-PLAN.md — CharacterCard component with stat pentagon, rarity borders, star display
+Last session: 2026-04-01T08:05:13.722Z
+Stopped at: Completed 27-02-PLAN.md — VitalsBar and PassiveTreeView components built
 Resume file: None
