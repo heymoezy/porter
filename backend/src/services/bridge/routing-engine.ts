@@ -17,6 +17,7 @@ import { withRetry } from './retry.js';
 import { emitSSE } from '../scheduler.js';
 import { parseRateLimitHeaders, record429, hasCapacity } from './rate-limit-tracker.js';
 import { v4 as uuidv4 } from 'uuid';
+import { awardXP } from '../rpg-engine.js';
 import type {
   GatewayRow,
   GatewayAdapter,
@@ -115,6 +116,43 @@ export class RoutingEngine {
     const filteredCandidates = ctx.requiredCapabilities?.length
       ? await this.filterByCapabilities(candidates, ctx.requiredCapabilities)
       : candidates;
+
+    if (ctx.forceGatewayType) {
+      const forced = filteredCandidates.find(c => c.row.type === ctx.forceGatewayType)
+        ?? candidates.find(c => c.row.type === ctx.forceGatewayType);
+
+      if (!forced) {
+        throw new Error(`Forced gateway ${ctx.forceGatewayType} is not available`);
+      }
+
+      const chosen = ctx.forceModelName
+        ? {
+            row: {
+              ...forced.row,
+              metadata: { ...forced.row.metadata, default_model: ctx.forceModelName },
+            },
+            adapter: forced.adapter,
+          }
+        : forced;
+
+      const chosenId = chosen.row.id;
+      const alternatives = candidates
+        .filter(c => c.row.id !== chosenId)
+        .map(c => ({
+          gatewayType: c.row.type,
+          modelName: resolveModelName(c.row),
+          reasonSkipped: `forced to ${ctx.forceGatewayType}`,
+        }));
+
+      return {
+        gatewayRow: chosen.row,
+        adapter: chosen.adapter,
+        modelName: resolveModelName(chosen.row),
+        reason: `Forced target gateway: ${ctx.forceGatewayType}`,
+        alternatives,
+        matchedRuleId: null,
+      };
+    }
 
     // 3. Evaluate routing rules — returns first matching rule or null
     const matchedRule = await this.evaluateRules(ctx, filteredCandidates);
@@ -309,6 +347,12 @@ export class RoutingEngine {
             agentMsgCtx ? 1 : null,
           ],
         );
+
+        // RPG: award XP for this dispatch (fire-and-forget, never blocks)
+        // logDispatch is only reached on success — errors throw before reaching here
+        if (ctx.agentId) {
+          awardXP(ctx.agentId, 'dispatch').catch(() => {});
+        }
 
         // INT-01: Memory V3 signal — agent learns model preferences
         if (ctx.agentId) {
