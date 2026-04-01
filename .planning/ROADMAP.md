@@ -133,7 +133,11 @@ Plans:
   3. The three vitals bars (Tokens, Health, Focus) are color-coded and update live via SSE — a new dispatch visibly changes the Health bar within 5 seconds
   4. Rarity border animations render correctly for all 5 tiers: Common (gray), Rare (blue glow), Epic (purple pulse), Legendary (gold animated), Mythic (red particles)
   5. Star display shows current stars filled, the next star unfilled with a progress arc, and the exact dispatch/battle count needed to unlock the next tier
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 27-01-PLAN.md — recharts install + rarity CSS keyframes + CharacterCard component (pentagon, stars, rarity border, shell/intelligence/skills/supports/equipment sections)
+- [ ] 27-02-PLAN.md — VitalsBar component (Tokens/Health/Focus with real data) + PassiveTreeView (8-node grid)
+- [ ] 27-03-PLAN.md — Wire into agent-detail.tsx SHEET tab + build + ship + human verify
 
 ### Phase 28: Battle Arena
 **Goal**: Any two agents can fight head-to-head on the same prompt, judged blindly by an ensemble of 3 models, with Elo ratings that mean something because judge bias is structurally prevented from day one
@@ -183,7 +187,7 @@ Phases execute in numeric order: 24 → 25 → 26 (parallel with 25) → 27 → 
 | 24. Schema Migration | v4.0 | 2/2 | Complete | 2026-04-01 |
 | 25. RPG Engine | 3/3 | Complete   | 2026-04-01 | - |
 | 26. Forge Unification | 3/3 | Complete   | 2026-04-01 | - |
-| 27. Character Sheet UI | v4.0 | 0/TBD | Not started | - |
+| 27. Character Sheet UI | v4.0 | 0/3 | Not started | - |
 | 28. Battle Arena | v4.0 | 0/TBD | Not started | - |
 | 29. Session Registry + Message Bus | v4.0 | 0/TBD | Not started | - |
 | 30. Intelligence Loop + Bridge Operator | v4.0 | 0/TBD | Not started | - |
