@@ -80,8 +80,8 @@
 
 ### Intelligence Loop
 
-- [ ] **INT-01**: Dispatch pattern extraction (latency trends, model strengths, failures)
-- [ ] **INT-02**: Write patterns to Recall as concepts
+- [x] **INT-01**: Dispatch pattern extraction (latency trends, model strengths, failures)
+- [x] **INT-02**: Write patterns to Recall as concepts
 - [ ] **INT-03**: Routing reads Recall for learned preferences
 - [ ] **INT-04**: Intelligence surfaces on Bridge operator tab
 
@@ -174,8 +174,8 @@
 | SES-03 | Phase 29 | Complete |
 | MSG-01 | Phase 29 | Complete |
 | MSG-02 | Phase 29 | Complete |
-| INT-01 | Phase 30 | Pending |
-| INT-02 | Phase 30 | Pending |
+| INT-01 | Phase 30 | Complete |
+| INT-02 | Phase 30 | Complete |
 | INT-03 | Phase 30 | Pending |
 | INT-04 | Phase 30 | Pending |
 | BRG-01 | Phase 30 | Pending |
