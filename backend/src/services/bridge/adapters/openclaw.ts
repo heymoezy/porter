@@ -32,6 +32,7 @@ export class OpenClawAdapter implements GatewayAdapter {
   private get authToken(): string {
     return (
       (this.row.metadata as Record<string, string>).token ??
+      process.env.OPENCLAW_TOKEN ??
       process.env.OPENCLAW_GATEWAY_TOKEN ??
       'lobster-2026'
     );
