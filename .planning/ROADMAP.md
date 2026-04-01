@@ -161,7 +161,11 @@ Plans:
   2. When a session crosses 80% context pressure, an event fires within one scheduler tick (2 seconds) — the event is visible in the admin Bridge operator view
   3. Session rotation creates a Recall summary of the outgoing session and carries it into the new session context — conversation continuity survives the rotation
   4. Inter-gateway messages are written to `msg_bus_events` with a structured envelope (type, source gateway, target gateway, correlation ID, payload) — cross-model handoffs are traceable by correlation ID
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 29-01-PLAN.md — session-registry.ts service + logDispatch hook (SES-01, SES-03)
+- [ ] 29-02-PLAN.md — msg-bus.ts service + /agent-message route wiring (MSG-01, MSG-02)
+- [ ] 29-03-PLAN.md — scheduler context pressure probe + build + ship (SES-02)
 
 ### Phase 30: Intelligence Loop + Bridge Operator
 **Goal**: Battle and dispatch patterns feed back into routing decisions through Memory V2 concepts, and Vigil sees all of it live — the system gets measurably smarter with every battle and session
@@ -189,5 +193,5 @@ Phases execute in numeric order: 24 → 25 → 26 (parallel with 25) → 27 → 
 | 26. Forge Unification | 3/3 | Complete   | 2026-04-01 | - |
 | 27. Character Sheet UI | 3/3 | Complete   | 2026-04-01 | - |
 | 28. Battle Arena | v4.0 | 0/TBD | Not started | - |
-| 29. Session Registry + Message Bus | v4.0 | 0/TBD | Not started | - |
+| 29. Session Registry + Message Bus | v4.0 | 0/3 | Not started | - |
 | 30. Intelligence Loop + Bridge Operator | v4.0 | 0/TBD | Not started | - |
