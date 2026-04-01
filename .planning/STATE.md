@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
 status: unknown
-stopped_at: Completed 29-01-PLAN.md — session-registry.ts created and hooked into logDispatch
-last_updated: "2026-04-01T08:27:53.895Z"
+stopped_at: Completed 29-03-PLAN.md — context pressure probe in scheduler, Phase 29 complete
+last_updated: "2026-04-01T08:32:52.048Z"
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 14
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -52,6 +52,7 @@ Plan: 1 of 3
 | Phase 27-character-sheet-ui P03 | 218s | 3 tasks | 1 files |
 | Phase 29 P02 | 240 | 2 tasks | 2 files |
 | Phase 29-session-registry-message-bus P01 | 274s | 2 tasks | 2 files |
+| Phase 29 P03 | 8min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,7 @@ Plan: 1 of 3
 - [Phase 29]: logMsgBusEvent returns UUID so caller can backfill after dispatch — not fire-and-forget internally
 - [Phase 29]: updateMsgBusEvent on success/fail paths uses .catch(() => {}) — never blocks response to caller
 - [Phase 29-01]: message_text does not exist in bridge_dispatch_log — rotateSession uses COALESCE(NULLIF(intent,''), LEFT(chosen_reason,80)) for session summary snippets
+- [Phase 29]: CONTEXT_PRESSURE_THRESHOLD = 0.8, CONTEXT_ROTATION_THRESHOLD = 0.95 as named constants in scheduler
 
 ### Pending Todos
 
@@ -103,6 +105,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T08:27:53.891Z
-Stopped at: Completed 29-01-PLAN.md — session-registry.ts created and hooked into logDispatch
+Last session: 2026-04-01T08:32:52.045Z
+Stopped at: Completed 29-03-PLAN.md — context pressure probe in scheduler, Phase 29 complete
 Resume file: None

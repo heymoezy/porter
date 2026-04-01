@@ -71,7 +71,7 @@
 - [x] **Phase 26: Forge Unification** — Nav merge, 4-tab shell, skills/supports system with live success rates (completed 2026-04-01)
 - [x] **Phase 27: Character Sheet UI** — Pentagon stat chart, rarity borders, vitals bars, passive tree, gear display (completed 2026-04-01)
 - [ ] **Phase 28: Battle Arena** — Head-to-head battles, ensemble judge, Elo ratings, pre-launch calibration
-- [ ] **Phase 29: Session Registry + Message Bus** — Per-session token accounting, context pressure detection, envelope protocol
+- [x] **Phase 29: Session Registry + Message Bus** — Per-session token accounting, context pressure detection, envelope protocol (completed 2026-04-01)
 - [ ] **Phase 30: Intelligence Loop + Bridge Operator** — Pattern extraction, Recall promotion, Vigil live surfaces
 
 ## Phase Details
@@ -193,5 +193,5 @@ Phases execute in numeric order: 24 → 25 → 26 (parallel with 25) → 27 → 
 | 26. Forge Unification | 3/3 | Complete   | 2026-04-01 | - |
 | 27. Character Sheet UI | 3/3 | Complete   | 2026-04-01 | - |
 | 28. Battle Arena | v4.0 | 0/TBD | Not started | - |
-| 29. Session Registry + Message Bus | 2/3 | In Progress|  | - |
+| 29. Session Registry + Message Bus | 3/3 | Complete   | 2026-04-01 | - |
 | 30. Intelligence Loop + Bridge Operator | v4.0 | 0/TBD | Not started | - |
