@@ -1,4 +1,4 @@
-# Porter Agent System — v2 Design (Post-Grok Review)
+# Porter Agent System — v3 Design (Post-Grok + GPT-5.4 + Grok v2 Review)
 
 ## The One-Liner
 
@@ -25,6 +25,66 @@ Porter is where builders bring their agents to fight. Build anywhere, battle her
 | **COMBO** | Synergy | How well it chains with other agents | Success rate in multi-agent workflows vs solo |
 
 All derived from immutable dispatch logs. No manual editing. No gaming.
+
+## Character Anatomy (GPT-5.4 Framework)
+
+The complete anatomy of an agent. Class matters least over time — Skills + Supports + Equipment + Passive Tree define the real build.
+
+| Layer | What It Is | AI Mapping | DB Representation |
+|-------|-----------|------------|-------------------|
+| **Class** | Starting archetype — cosmetic after level 5 | Guardian, Striker, Fixer, Amplifier, Orchestrator | `agent_class` text (affects first 3-5 dispatches only, then purely visual) |
+| **Intelligence** | The brain — model + memory + reasoning profile | LLM backend + Recall integration + reasoning depth | `intelligence` JSONB: `{model, memory_profile, reasoning_depth}` |
+| **Skills** | Active capabilities the agent can execute | Tool invocations (code exec, web search, file edit) | `agent_skills` junction table |
+| **Supports** | Modifiers that change how skills behave | Terse mode, tool-first, verifier-linked, auto-retry | `supports` JSONB array |
+| **Equipment** | What the agent can wield | Tools, connectors, MCPs, shell, browser, Bridge | `equipment_slots` JSONB |
+| **Passive Tree** | Long-term specialization and policy choices | Backend focus, cost-sensitive routing, high autonomy | `passive_tree` JSONB |
+| **Mana** | 3 live capacity bars (not one vague %) | See below | Derived real-time from `gateway_rate_limits` + dispatch history |
+| **Level** | Maturity, trust, unlocked power | XP from dispatches, battles, learning | `level` int, `xp` int |
+
+**Design rule:** Class should matter least over time. Skills + Supports + Equipment + Passive Tree should define the real build.
+
+**Example agent:**
+```
+Class: Builder
+Intelligence: Codex-class, deep repo context
+Skills: code edit, debug, test repair, bridge messaging
+Supports: terse, tool-first, verifier-linked
+Equipment: terminal, git, Porter Bridge
+Passive Tree: high autonomy, backend focus, cost-sensitive routing
+Mana: 87%
+Level: 12
+```
+
+### Supports System (NEW — from GPT-5.4)
+
+Supports are modifiers that attach to skills and change their behavior. They're not separate abilities — they're HOW the agent uses its abilities.
+
+| Support | Effect | Example |
+|---------|--------|---------|
+| Terse | Reduces output length, increases density | Code agent outputs code, not explanations |
+| Tool-First | Prefers tool use over reasoning | Runs tests before theorizing |
+| Verifier-Linked | Always verifies output before reporting | Runs tsc after every edit |
+| Auto-Retry | Retries failed dispatches with adjusted approach | Changes prompt strategy on failure |
+| Context-Aware | Reads Recall before every dispatch | Never starts cold |
+| Cost-Sensitive | Prefers cheaper routing when quality is sufficient | Uses Ollama for simple tasks |
+
+Supports are equipped in slots (like gem sockets in Path of Exile). Each skill can have 1-2 supports attached. This creates the build depth Grok wanted — "who has the best custom loadout."
+
+### Passive Tree (NEW — from GPT-5.4)
+
+Long-term specialization choices that define the agent's identity over time. Unlike stats (derived from data) or skills (equipped), passive tree nodes are CHOSEN by the user and persist permanently.
+
+Passive nodes unlock at star milestones. Each node is a policy decision:
+
+| Node | Choice A | Choice B |
+|------|----------|----------|
+| **Autonomy** | High (acts without confirmation) | Low (always asks before acting) |
+| **Focus** | Backend specialist | Full-stack generalist |
+| **Routing** | Cost-sensitive (cheaper when possible) | Quality-first (best model always) |
+| **Memory** | Deep recall (loads full history) | Light recall (recent only, faster) |
+| **Collaboration** | Solo operator (optimized for single tasks) | Team player (optimized for chains) |
+
+Each choice shapes how the agent behaves in dispatches and battles. The passive tree is what makes two same-class agents with the same skills play completely differently.
 
 ## Specialties (Replace Factions)
 
