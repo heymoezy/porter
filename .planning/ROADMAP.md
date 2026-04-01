@@ -88,8 +88,8 @@
   5. Drizzle migration runs cleanly on the live database with zero downtime and all 35 Playwright tests still pass
 **Plans**: 2 plans
 Plans:
-- [ ] 24-01-PLAN.md — Raw SQL migration (migrate-rpg-v1.ts) + index.ts wiring
-- [ ] 24-02-PLAN.md — Drizzle schema.ts type definitions for all new tables
+- [x] 24-01-PLAN.md — Raw SQL migration (migrate-rpg-v1.ts) + index.ts wiring
+- [x] 24-02-PLAN.md — Drizzle schema.ts type definitions for all new tables
 
 ### Phase 25: RPG Engine
 **Goal**: Agent stats are live, accurate, and permanently tied to real dispatch history — every agent has a computable level, star rating, rarity class, and 5-stat profile derived from immutable logs, and progression events trigger automatic .md file regeneration
@@ -98,10 +98,14 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Calling the RPG engine for an agent with dispatch history returns a populated `agent_rpg_stats` cache row with all 5 stats (QTY/SPD/EFF/REL/COMBO) derived from `bridge_dispatch_log` — no manual values exist anywhere in the codebase
   2. An agent that completes 50 dispatches advances from level 1 toward level 5 with XP accumulating at the correct per-event rates (dispatch +10, feedback +25, specialty +50, battle won +100)
-  3. Star progression gates work: reaching 2-star requires 50 dispatches, 3-star requires 200 dispatches AND avg reliability ≥ 85% — attempting to force star-up via direct DB write has no effect because stats are recomputed from logs
+  3. Star progression gates work: reaching 2-star requires 50 dispatches, 3-star requires 200 dispatches AND avg reliability >= 85% — attempting to force star-up via direct DB write has no effect because stats are recomputed from logs
   4. When an agent levels up or gains a star, SOUL.md, IDENTITY.md, SKILLS.md, and TOOLS.md are overwritten from DB state within the same transaction — .md files always reflect current DB truth
   5. The stat cache is rebuilt asynchronously via the existing scheduler — character card API reads cache only, never performs live log aggregation
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 25-01-PLAN.md — rpg-engine.ts core service: stat calculation SQL, XP/level/star/rarity/specialty logic
+- [ ] 25-02-PLAN.md — regenerateMdFiles() + admin API routes (GET/POST rpg-stats endpoints)
+- [ ] 25-03-PLAN.md — routing-engine.ts logDispatch hook + scheduler background recalculation job
 
 ### Phase 26: Forge Unification
 **Goal**: Skills, Tools, and Forge are one nav item with four coherent tabs — users build, equip, and configure agents in a single place instead of navigating three separate sections
@@ -157,7 +161,7 @@ Plans:
 **Requirements**: INT-01, INT-02, INT-03, INT-04, BRG-01, BRG-02, BRG-03, BRG-04
 **Success Criteria** (what must be TRUE):
   1. The intelligence background job (runs every 6 hours) extracts at least 4 pattern types from dispatch + battle data: latency trends, model strength by task type, failure clusters, and combo chain wins
-  2. High-confidence patterns (confidence score ≥ 0.8) are automatically promoted to Memory V2 `concepts` table — a routing decision made after promotion references the learned concept in its reasoning log
+  2. High-confidence patterns (confidence score >= 0.8) are automatically promoted to Memory V2 `concepts` table — a routing decision made after promotion references the learned concept in its reasoning log
   3. The routing engine reads learned gateway preferences from concepts — an agent that has won 10 battles using Claude produces routing decisions that prefer Claude for that agent's specialty task type
   4. Vigil's admin tab shows live session state, message bus activity, and intelligence patterns as a single unified feed — no page refresh needed to see new events
 **Plans**: TBD
@@ -172,8 +176,8 @@ Phases execute in numeric order: 24 → 25 → 26 (parallel with 25) → 27 → 
 | 1-7 | v1.0 | - | Complete | 2026-03-21 |
 | 8-15 | v2.0 | - | Complete | 2026-03-24 |
 | 16-23 | v3.0 | - | Complete | 2026-03-25 |
-| 24. Schema Migration | 2/2 | Complete   | 2026-04-01 | - |
-| 25. RPG Engine | v4.0 | 0/TBD | Not started | - |
+| 24. Schema Migration | v4.0 | 2/2 | Complete | 2026-04-01 |
+| 25. RPG Engine | v4.0 | 0/3 | Not started | - |
 | 26. Forge Unification | v4.0 | 0/TBD | Not started | - |
 | 27. Character Sheet UI | v4.0 | 0/TBD | Not started | - |
 | 28. Battle Arena | v4.0 | 0/TBD | Not started | - |
