@@ -1,128 +1,183 @@
 import { FastifyInstance } from 'fastify';
-import { ok } from '../lib/envelope.js';
-import { queryAll, queryOne, execute } from '../db/pg.js';
-import { config } from '../config.js';
+import { ok, err } from '../lib/envelope.js';
+import { execute, queryOne } from '../db/pg.js';
+import {
+  ensureSkillPack,
+  getResearchNotes,
+  getSkillDetail,
+  getSkillLibrary,
+  getSkillPackText,
+  type SkillBuilderBlueprint,
+} from '../services/skill-library.js';
 
-// Full skill catalog with descriptions — merged from Porter's sources
-const SKILL_CATALOG: Record<string, { name: string; description: string; category: string; source: string }> = {
-  'chat-orchestrator': { name: 'Chat Orchestrator', description: 'Keeps conversations lean, turns chat into orchestration moves', category: 'Orchestration', source: 'porter-core' },
-  'prompt-architect': { name: 'Prompt Architect', description: 'Repairs weak prompts, sharpens worker briefs before delegation', category: 'Orchestration', source: 'porter-core' },
-  'delegation-governor': { name: 'Delegation Governor', description: 'Decides what to delegate vs handle directly', category: 'Orchestration', source: 'porter-core' },
-  'project-architect': { name: 'Project Architect', description: 'Shapes new projects, scope boundaries, execution lanes', category: 'Orchestration', source: 'porter-core' },
-  'project-lineage': { name: 'Project Lineage', description: 'Keeps context attached to the right project lane over time', category: 'Orchestration', source: 'porter-core' },
-  'worker-architect': { name: 'Worker Architect', description: 'Designs the right worker role and loadout for tasks', category: 'Orchestration', source: 'porter-core' },
-  'handoff-director': { name: 'Handoff Director', description: 'Manages handoffs between workers without dropped context', category: 'Orchestration', source: 'porter-core' },
-  'approval-governor': { name: 'Approval Governor', description: 'Applies approval gates before roster/structure changes', category: 'Orchestration', source: 'porter-core' },
-  'roster-curator': { name: 'Roster Curator', description: 'Keeps worker roster clean — reuse over sprawl', category: 'Orchestration', source: 'porter-core' },
-  'directive-librarian': { name: 'Directive Librarian', description: 'Turns memory into reviewed directives, tracks disputed guidance', category: 'Memory', source: 'porter-core' },
-  'runtime-selector': { name: 'Runtime Selector', description: 'Chooses the right runtime for each job', category: 'Infrastructure', source: 'porter-core' },
-  'memory-curator': { name: 'Memory Curator', description: 'Distills durable directives and learned truths', category: 'Memory', source: 'porter-core' },
-  'runtime-auditor': { name: 'Runtime Auditor', description: 'Inspects runtime state, routing pressure, failures', category: 'Infrastructure', source: 'porter-internal' },
-  'avatar-art-director': { name: 'Avatar Art Director', description: 'Turns agent role into pixel identity direction', category: 'Creative', source: 'porter-internal' },
-  'skill-creator': { name: 'Skill Creator', description: 'Creates specialist worker skills when roster lacks coverage', category: 'Orchestration', source: 'porter-internal' },
-  'healthcheck': { name: 'Healthcheck', description: 'Runtime, service, and environment verification', category: 'Infrastructure', source: 'porter-internal' },
-  'tmux': { name: 'Tmux', description: 'Multi-session supervision across worker terminals', category: 'Infrastructure', source: 'porter-internal' },
-  'humor-writer': { name: 'Humor Writer', description: 'Writes short, high-hit-rate jokes matched to tone and audience', category: 'Writing', source: 'porter-curated' },
-  'project-operator': { name: 'Project Operator', description: 'Keeps worker aligned to assigned tasks and timing', category: 'Operations', source: 'porter-curated' },
-  'content-writer': { name: 'Content Writer', description: 'Drafts concise written output matched to brief and audience', category: 'Writing', source: 'porter-curated' },
-  'research-analyst': { name: 'Research Analyst', description: 'Reduces uncertainty quickly with decision-useful findings', category: 'Research', source: 'porter-curated' },
-  'design-critic': { name: 'Design Critic', description: 'Reviews visual work for clarity and consistency', category: 'Design', source: 'porter-curated' },
-  'quality-reviewer': { name: 'Quality Reviewer', description: 'Checks work for regressions and defects before signoff', category: 'Quality', source: 'porter-curated' },
-  'code-implementer': { name: 'Code Implementer', description: 'Turns requirements into working code changes', category: 'Development', source: 'porter-curated' },
-  'coding-agent': { name: 'Coding Agent', description: 'Delegated implementation lane for real code execution', category: 'Development', source: 'runtime' },
-  'github': { name: 'GitHub', description: 'Repository, branch, and pull request coordination', category: 'Development', source: 'runtime' },
-  'gh-issues': { name: 'GitHub Issues', description: 'Issue intake, triage, and queue shaping', category: 'Development', source: 'runtime' },
-  'gemini': { name: 'Gemini', description: 'Deep research and long-context investigation', category: 'AI & LLM', source: 'runtime' },
-  'gog': { name: 'GoG', description: 'Fast retrieval and structured lookup for docs and assets', category: 'Research', source: 'runtime' },
-  'weather': { name: 'Weather', description: 'External environment signal (example skill)', category: 'Other', source: 'runtime' },
-};
+function toIntFlag(value: unknown, fallback: number) {
+  if (value == null) return fallback;
+  return value ? 1 : 0;
+}
 
 export default async function skillsRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', fastify.requirePlatformAdmin);
 
-  // GET /api/admin/skills — full skill catalog with assignments, descriptions, categories
   fastify.get('/', async () => {
-    try {
-      const rows = await queryAll<{
-        skill_name: string;
-        enabled: number;
-        persona_id: string;
-        persona_name: string | null;
-        persona_role: string | null;
-      }>(`
-        SELECT ps.skill_name, ps.enabled, ps.persona_id, p.name as persona_name, p.role as persona_role
-        FROM persona_skills ps
-        LEFT JOIN personas p ON p.id = ps.persona_id
-        ORDER BY ps.skill_name, p.name
-      `);
-
-      // Group by skill with catalog enrichment
-      const skillMap = new Map<string, {
-        id: string;
-        name: string;
-        description: string;
-        category: string;
-        source: string;
-        agents: Array<{ id: string; name: string; role: string; enabled: boolean }>;
-      }>();
-
-      // First, seed from catalog (includes unassigned skills)
-      for (const [id, meta] of Object.entries(SKILL_CATALOG)) {
-        skillMap.set(id, { id, ...meta, agents: [] });
-      }
-
-      // Then overlay assignments
-      for (const r of rows) {
-        if (!skillMap.has(r.skill_name)) {
-          skillMap.set(r.skill_name, {
-            id: r.skill_name,
-            name: r.skill_name,
-            description: '',
-            category: 'Unknown',
-            source: 'detected',
-            agents: [],
-          });
-        }
-        skillMap.get(r.skill_name)!.agents.push({
-          id: r.persona_id,
-          name: r.persona_name || r.persona_id,
-          role: r.persona_role || '',
-          enabled: !!r.enabled,
-        });
-      }
-
-      const skills = Array.from(skillMap.values()).sort((a, b) =>
-        a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
-      );
-
-      // Category summary
-      const categories: Record<string, number> = {};
-      for (const s of skills) categories[s.category] = (categories[s.category] || 0) + 1;
-
-      // Source summary
-      const sources: Record<string, number> = {};
-      for (const s of skills) sources[s.source] = (sources[s.source] || 0) + 1;
-
-      return ok({
-        skills,
-        totalSkills: skills.length,
-        totalAssignments: rows.length,
-        assignedSkills: new Set(rows.map(r => r.skill_name)).size,
-        categories,
-        sources,
-      });
-    } catch {
-      return ok({ skills: [], totalSkills: 0, totalAssignments: 0, assignedSkills: 0, categories: {}, sources: {} });
-    }
+    const { skills, summary } = await getSkillLibrary();
+    return ok({ skills, ...summary });
   });
 
-  // PUT /api/admin/skills/:personaId/:skillName/toggle
-  fastify.put('/:personaId/:skillName/toggle', async (req) => {
+  fastify.get('/research', async () => {
+    return ok({ notes: getResearchNotes() });
+  });
+
+  fastify.get('/:id/files/:path(*)', async (req, reply) => {
+    const { id, path: relativePath } = req.params as { id: string; path: string };
+    const text = getSkillPackText(id, relativePath);
+    if (text == null) {
+      reply.status(404);
+      return err('NOT_FOUND', 'File not found');
+    }
+    return ok({ text });
+  });
+
+  fastify.get('/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const skill = await getSkillDetail(id);
+    if (!skill) {
+      reply.status(404);
+      return err('NOT_FOUND', 'Skill not found');
+    }
+    return ok({ skill });
+  });
+
+  fastify.put('/:personaId/:skillName/toggle', async (req, reply) => {
     const { personaId, skillName } = req.params as { personaId: string; skillName: string };
     const row = await queryOne<{ enabled: number }>('SELECT enabled FROM persona_skills WHERE persona_id = $1 AND skill_name = $2', [personaId, skillName]);
-    if (!row) return ok({ error: 'not_found' });
+    if (!row) {
+      reply.status(404);
+      return err('NOT_FOUND', 'Assignment not found');
+    }
     const newEnabled = row.enabled ? 0 : 1;
     await execute('UPDATE persona_skills SET enabled = $1 WHERE persona_id = $2 AND skill_name = $3', [newEnabled, personaId, skillName]);
     return ok({ personaId, skillName, enabled: !!newEnabled });
+  });
+
+  fastify.put('/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    const exists = await queryOne<{ id: string }>('SELECT id FROM skills WHERE id = $1', [id]);
+    if (!exists) {
+      reply.status(404);
+      return err('NOT_FOUND', 'Skill not found');
+    }
+
+    const next = {
+      name: String(body.name ?? ''),
+      description: String(body.description ?? ''),
+      category: String(body.category ?? ''),
+      source: String(body.source ?? 'porter-curated'),
+      icon: String(body.icon ?? ''),
+      color: String(body.color ?? ''),
+      short_label: String(body.short_label ?? ''),
+      enabled: toIntFlag(body.enabled, 1),
+      visible: toIntFlag(body.visible, 1),
+      featured: toIntFlag(body.featured, 0),
+      sort_order: Number(body.sort_order ?? 50),
+      featured_order: Number(body.featured_order ?? 0),
+      config_schema: body.config_schema && typeof body.config_schema === 'object' ? body.config_schema : {},
+    };
+
+    await execute(`
+      UPDATE skills
+      SET name = $2,
+          description = $3,
+          category = $4,
+          source = $5,
+          icon = $6,
+          color = $7,
+          short_label = $8,
+          enabled = $9,
+          visible = $10,
+          featured = $11,
+          sort_order = $12,
+          featured_order = $13,
+          config_schema = $14,
+          updated_at = EXTRACT(EPOCH FROM NOW())
+      WHERE id = $1
+    `, [
+      id,
+      next.name,
+      next.description,
+      next.category,
+      next.source,
+      next.icon,
+      next.color,
+      next.short_label,
+      next.enabled,
+      next.visible,
+      next.featured,
+      next.sort_order,
+      next.featured_order,
+      JSON.stringify(next.config_schema),
+    ]);
+
+    const skill = await getSkillDetail(id);
+    return ok({ skill });
+  });
+
+  fastify.post('/builder/generate', async (req, reply) => {
+    const body = (req.body ?? {}) as Partial<SkillBuilderBlueprint> & { upsertDb?: boolean };
+    if (!body.id || !body.name || !body.description || !body.category) {
+      reply.status(400);
+      return err('INVALID_INPUT', 'id, name, description, and category are required');
+    }
+
+    const blueprint: SkillBuilderBlueprint = {
+      id: body.id,
+      name: body.name,
+      description: body.description,
+      category: body.category,
+      source: body.source || 'porter-curated',
+      prompt: body.prompt || `Operate as ${body.name}. Produce artifacts, not generic advice.`,
+      triggers: body.triggers || [],
+      inputs: body.inputs || [],
+      outputs: body.outputs || [],
+      checks: body.checks || [],
+      examples: body.examples || [],
+      tools: body.tools || [],
+      related_repositories: body.related_repositories || [],
+    };
+
+    const pack = ensureSkillPack(blueprint);
+
+    if (body.upsertDb !== false) {
+      await execute(`
+        INSERT INTO skills (id, name, description, category, source, enabled, visible, featured, icon, color, short_label, sort_order, featured_order, config_schema)
+        VALUES ($1, $2, $3, $4, $5, 1, 1, 0, '', '', '', 50, 0, $6)
+        ON CONFLICT (id)
+        DO UPDATE SET
+          name = EXCLUDED.name,
+          description = EXCLUDED.description,
+          category = EXCLUDED.category,
+          source = EXCLUDED.source,
+          config_schema = EXCLUDED.config_schema,
+          updated_at = EXTRACT(EPOCH FROM NOW())
+      `, [
+        blueprint.id,
+        blueprint.name,
+        blueprint.description,
+        blueprint.category,
+        blueprint.source,
+        JSON.stringify({
+          prompt: blueprint.prompt,
+          triggers: blueprint.triggers,
+          inputs: blueprint.inputs,
+          outputs: blueprint.outputs,
+          checks: blueprint.checks,
+          tools: blueprint.tools,
+          related_repositories: blueprint.related_repositories,
+        }),
+      ]);
+    }
+
+    return ok({ generated: true, dir: pack.dir, files: pack.files });
   });
 }
