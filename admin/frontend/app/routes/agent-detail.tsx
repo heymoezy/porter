@@ -19,7 +19,7 @@ import { PassiveTreeView } from "~/components/passive-tree-view"
 
 // ── Types ────────────────────────────────────────────────
 
-interface Skill { name: string; enabled: boolean; assignedAt: number }
+interface Skill { name: string; enabled: boolean; assignedAt: number; description?: string; category?: string; source?: string }
 interface Project { project_id: string; project_name: string; role: string }
 
 interface AgentApiData {
@@ -384,14 +384,23 @@ function AgentDetailContent() {
                       <thead>
                         <tr className="border-b border-border/50 bg-muted/50 text-left">
                           <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Skill</th>
+                          <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Category</th>
+                          <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Source</th>
                           <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 text-right">Enabled</th>
                         </tr>
                       </thead>
                       <tbody>
                         {skills.map(s => (
                           <tr key={s.name} className="border-b border-border/20 last:border-0">
-                            <td className="px-3 py-1 text-xs font-medium text-foreground">{s.name}</td>
-                            <td className="px-3 py-1 text-right">
+                            <td className="px-3 py-1.5">
+                              <p className="text-xs font-medium text-foreground">{s.name}</p>
+                              {s.description && <p className="text-2xs text-text3 truncate max-w-[280px]">{s.description}</p>}
+                            </td>
+                            <td className="px-3 py-1.5 text-2xs text-text3">{s.category || "—"}</td>
+                            <td className="px-3 py-1.5">
+                              <Badge className="text-2xs border-0 bg-text3/15 text-text3">{s.source || "detected"}</Badge>
+                            </td>
+                            <td className="px-3 py-1.5 text-right">
                               <Switch checked={s.enabled} onCheckedChange={() => toggleSkill.mutate(s.name)} className="scale-75" />
                             </td>
                           </tr>

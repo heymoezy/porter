@@ -93,11 +93,18 @@ export default async function agentsRoutes(fastify: FastifyInstance) {
       files[file] = readPersonaFile(id, file);
     }
 
-    // Skills
+    // Skills — join with skills table for rich data
     const skills = await queryAll(
-      'SELECT skill_name, enabled, assigned_at FROM persona_skills WHERE persona_id = $1',
+      `SELECT ps.skill_name AS name, ps.enabled, ps.assigned_at,
+              COALESCE(s.description, '') AS description,
+              COALESCE(s.category, 'Unknown') AS category,
+              COALESCE(s.source, 'detected') AS source
+       FROM persona_skills ps
+       LEFT JOIN skills s ON s.id = ps.skill_name
+       WHERE ps.persona_id = $1
+       ORDER BY COALESCE(s.sort_order, 50), ps.skill_name`,
       [id]
-    ) as Array<{ skill_name: string; enabled: number; assigned_at: number }>;
+    ) as Array<{ name: string; enabled: number; assigned_at: number; description: string; category: string; source: string }>;
 
     // Project deployments — PG has no persona_id or access_mode columns in project_collaborators
     const projects: Array<{ project_id: string; project_name: string; role: string }> = [];
@@ -118,7 +125,7 @@ export default async function agentsRoutes(fastify: FastifyInstance) {
     return ok({
       persona,
       files,
-      skills: skills.map(s => ({ name: s.skill_name, enabled: !!s.enabled, assignedAt: s.assigned_at })),
+      skills: skills.map(s => ({ name: s.name, enabled: !!s.enabled, assignedAt: s.assigned_at, description: s.description, category: s.category, source: s.source })),
       projects,
       metrics: { recentMessages, signalCount },
     });
