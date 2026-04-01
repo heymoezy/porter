@@ -3,7 +3,7 @@
 # Location: /home/lobster/documents/porter/tasks/checkpoint.md
 
 project: porter
-version: v3.4.2
+version: v4.0.0
 updated: 2026-04-01
 updated_by: claude-opus-4.6
 

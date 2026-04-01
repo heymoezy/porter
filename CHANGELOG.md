@@ -1,3 +1,79 @@
+## v4.0.0 (2026-04-01)
+
+- docs(30-03): complete intelligence-loop-bridge-operator plan 03
+- feat(30-03): enhance OperatorActivityLog with sessions, patterns, msgbus feeds
+- feat(30-03): add SSE handlers for bridge:context-pressure, bridge:intelligence, bridge:msg-bus
+- docs(30-02): complete concept-aware-routing + admin-api plan
+- feat(30-02): add sessions/patterns/msgbus admin API endpoints
+- feat(30-02): concept-aware routing in selectWithFallback()
+- docs(30-01): complete intelligence-loop plan — pattern extraction + concept promotion
+- feat(30-01): wire intelligence extraction into scheduler — every 6h
+- feat(30-01): create intelligence-loop.ts — pattern extraction + concept promotion
+- docs(30-intelligence-loop-bridge-operator): create phase 30 plan
+- docs(29-03): complete context pressure probe plan — Phase 29 done
+- feat(29-03): add context pressure probe to scheduler
+- docs(29-01): complete session-registry plan
+- feat(29-01): hook upsertSession into logDispatch fire-and-forget block
+- docs(29-02): complete message-bus plan
+- feat(29-01): create session-registry.ts service
+- feat(29-02): wire msg-bus into POST /agent-message route
+- feat(29-02): create msg-bus service with logMsgBusEvent and updateMsgBusEvent
+- docs(29): create phase 29 plan — session registry + message bus
+- docs(27-03): complete character-sheet-ui plan 03 — SHEET tab wired and shipped
+- feat(27-03): add SHEET tab to agent-detail with CharacterCard + VitalsBar + PassiveTreeView
+- docs(27-02): complete VitalsBar + PassiveTreeView plan
+- docs(27-01): complete character-sheet-ui plan 01 — CharacterCard + rarity CSS
+- feat(27-02): build PassiveTreeView component with 8-node grid
+- feat(27-01): build CharacterCard component with stat pentagon and rarity border
+- feat(27-02): build VitalsBar component with 3 live bars
+- chore(27-01): install recharts and add rarity border CSS keyframes
+- docs(27-character-sheet-ui): create phase 27 plan — CharacterCard, VitalsBar, PassiveTreeView
+- docs(26-03): complete forge-unification plan 03 — Workshop + birth animation
+- feat(26-03): implement WorkshopContent and wire Queue button to Workshop tab
+- feat(26-03): enhance birth animation with grayscale-to-color reveal and particle effects
+- docs(26-02): complete forge-unification nav merge + 4-tab shell plan
+- chore(26-02): frontend build verified + services restarted
+- feat(26-02): remove /skills + /tools routes, add redirects to /forge
+- feat(26-02): restructure forge.tsx into 4-tab page with Armory absorption
+- docs(26-01): complete workshop endpoint plan
+- feat(26-01): add GET /api/admin/templates/:id/workshop endpoint
+- feat(26-02): sidebar nav merge — remove Skills + Tools, rename to Forge
+- docs(26-forge-unification): create phase plan — 3 plans in 2 waves
+- docs(25-03): complete RPG engine wiring plan
+- feat(25-03): add background RPG recalculation sweep to scheduler
+- feat(25-03): hook awardXP into logDispatch for attributed dispatches
+- docs(25-rpg-engine): complete 25-02 plan — regenerateMdFiles + rpg-stats/rpg-recalculate endpoints
+- feat(25-rpg-engine): add GET rpg-stats and POST rpg-recalculate admin endpoints
+- feat(25-rpg-engine): add regenerateMdFiles() to rpg-engine.ts
+- docs(25-rpg-engine): complete 25-01 plan — rpg-engine.ts implemented, 49 tests pass, RPG-01 through RPG-07 complete
+- feat(25-rpg-engine): implement rpg-engine.ts — sole writer to agent_rpg_stats
+- test(25-rpg-engine): add failing tests for rpg-engine stat formulas and XP awards
+- docs(25-rpg-engine): create phase plan — 3 plans, 3 waves
+- docs(24-schema-migration): complete 24-02 plan — Drizzle schema extensions for RPG/Arena tables
+- feat(24-schema-migration): add Drizzle exports for all 8 new RPG/Arena tables
+- feat(24-schema-migration): extend agentTemplates + templateSkills with RPG columns
+- docs(24-schema-migration): complete 24-01 plan — RPG schema migration
+- feat(24-schema-migration): wire migrateRpgV1 into startup sequence
+- feat(24-schema-migration): add migrate-rpg-v1.ts with all RPG DDL
+- docs(24-schema-migration): create phase 24 plans — RPG schema migration
+- docs: create v4.0 roadmap (7 phases, 62 requirements)
+- docs: define v4.0 requirements (52 requirements)
+- docs: agent RPG design v3 FINAL — Grok v2 + GPT-5.4 approved
+- docs: complete project research
+- docs: start milestone v4.0 The Arena
+- docs: mechanical overrides + ship process in CLAUDE.md
+- fix: OpenClaw adapter reads OPENCLAW_TOKEN env for auth
+- docs: agent RPG v2 — skills system + Forge unification
+- docs: agent RPG design v2 — post-Grok review
+- fix: Bridge dispatches bypass session hooks — no more token burn
+- feat: agent lifecycle + TOOLS.md + HEARTBEAT.md tabs
+- fix: template detail — category tag + description now visible
+- refactor: clean template IDs — drop sys- prefix, plain slugs
+- refactor: rebuild agent template detail page
+- fix: CLI health probe timeout 5s → 10s — prevents false offline
+- feat: Bridge agents born — Vigil, Atlas, Ledger
+
+
 ## v3.4.2 (2026-03-31)
 
 **Gemini usage collection overhaul**
