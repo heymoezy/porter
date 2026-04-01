@@ -10,6 +10,7 @@ import { computeEmpiricalRates } from './bridge/rate-limit-tracker.js';
 import { collectLocalUsage } from './bridge/usage-collector.js';
 import { recalculateStats } from './rpg-engine.js';
 import { getActiveSessions, rotateSession } from './session-registry.js';
+import { extractIntelligencePatterns } from './intelligence-loop.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -19,6 +20,7 @@ const CALENDAR_SYNC_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const HEALTH_PROBE_INTERVAL = 15; // 15 × 2000ms = 30s
 const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
 const RPG_RECALC_INTERVAL = 150; // 150 ticks × 2s = 300s = 5 minutes
+const INTEL_EXTRACTION_INTERVAL = 10800; // 10800 ticks × 2s = 6h
 const CONTEXT_PRESSURE_THRESHOLD = 0.8;
 const CONTEXT_ROTATION_THRESHOLD = 0.95;
 const WORKER_ID = crypto.randomUUID();
@@ -313,6 +315,11 @@ async function tick() {
     // RPG stats background refresh — every 5 minutes
     if (tickCount > 0 && tickCount % RPG_RECALC_INTERVAL === 0) {
       runRpgRecalculation().catch(err => console.error('[scheduler:rpg] batch error:', err));
+    }
+
+    // Intelligence pattern extraction — every 6h
+    if (tickCount > 0 && tickCount % INTEL_EXTRACTION_INTERVAL === 0) {
+      extractIntelligencePatterns().catch(err => console.error('[scheduler:intel] extraction error:', err));
     }
 
     // ── Agent jobs — require agentScheduling flag ──────────────────────────
