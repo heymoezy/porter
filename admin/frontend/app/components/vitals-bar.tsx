@@ -1,16 +1,22 @@
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 
-interface GatewayLimit {
-  limit_type: "tokens" | "requests" | "input_tokens" | "output_tokens"
-  period: "minute" | "daily" | "weekly" | "monthly"
-  limit_value: number
-  current_value: number
+interface UsageLimit {
+  limit_type: string
+  period: string
+  current: number
+  limit: number | null
+  pct: number | null
+}
+
+interface ModelLimits {
+  model_name: string
+  limits: UsageLimit[]
 }
 
 interface GatewayCapacity {
   gateway_id: string
-  limits: GatewayLimit[]
+  models: ModelLimits[]
 }
 
 export interface VitalsProps {
@@ -20,19 +26,19 @@ export interface VitalsProps {
 }
 
 function deriveTokenPct(gateways: GatewayCapacity[]): number {
-  let totalUsed = 0
-  let totalLimit = 0
+  let maxPct = 0
   for (const gw of gateways) {
-    for (const lim of gw.limits) {
-      if (lim.limit_type === "tokens" && lim.period === "daily" && lim.limit_value > 0) {
-        totalUsed += lim.current_value
-        totalLimit += lim.limit_value
+    for (const m of gw.models ?? []) {
+      for (const lim of m.limits ?? []) {
+        if (lim.pct != null && (lim.period === "5hour" || lim.period === "daily")) {
+          maxPct = Math.max(maxPct, lim.pct)
+        }
       }
     }
   }
-  if (totalLimit === 0) return 85 // no capacity data — default
-  const pct = 100 - (totalUsed / totalLimit) * 100
-  return Math.max(0, Math.min(100, pct))
+  if (maxPct === 0) return 85 // no capacity data — default to healthy
+  // pct is 0-1 usage fraction, convert to "remaining" percentage
+  return Math.max(0, Math.min(100, Math.round((1 - maxPct) * 100)))
 }
 
 function tokenColor(pct: number): string {

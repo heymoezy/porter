@@ -460,20 +460,30 @@ function AgentDetailContent() {
           <TabsContent value="sheet-tab" className="flex-1 min-h-0 mt-2">
             <div className="h-full overflow-y-auto">
               <div className="max-w-2xl mx-auto p-2 flex flex-col gap-4">
-                <CharacterCard
-                  rpg={rpgStats}
-                  workshop={workshop}
-                  agentName={displayName}
-                />
-                <VitalsBar
-                  templateId={id ?? ''}
-                  reliability={rpgStats?.reliability ?? 100}
-                  dispatchCount={rpgStats?.dispatchCount ?? 0}
-                />
-                <PassiveTreeView
-                  nodes={workshop?.passive_tree ?? []}
-                  agentLevel={rpgStats?.level ?? 1}
-                />
+                {rpgStats || workshop ? (
+                  <>
+                    <CharacterCard
+                      rpg={rpgStats}
+                      workshop={workshop}
+                      agentName={displayName}
+                    />
+                    <VitalsBar
+                      templateId={id ?? ''}
+                      reliability={rpgStats?.reliability ?? 100}
+                      dispatchCount={rpgStats?.dispatchCount ?? 0}
+                    />
+                    <PassiveTreeView
+                      nodes={workshop?.passive_tree ?? []}
+                      agentLevel={rpgStats?.level ?? 1}
+                    />
+                  </>
+                ) : (
+                  <Card>
+                    <CardContent className="py-8 text-center">
+                      <p className="text-xs text-text3">Forge this agent to unlock its character sheet</p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </div>
           </TabsContent>
