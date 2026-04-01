@@ -83,6 +83,24 @@ export function useAdminSSE() {
             window.dispatchEvent(new CustomEvent("bridge:circuit-trip", { detail: payload.data ?? payload }))
             break
 
+          case "bridge:context-pressure":
+            // Session context pressure — refresh sessions list and push event to OperatorActivityLog
+            qc.invalidateQueries({ queryKey: ["bridge", "sessions"] })
+            window.dispatchEvent(new CustomEvent("bridge:context-pressure", { detail: payload.data ?? payload }))
+            break
+
+          case "bridge:intelligence":
+            // New pattern extracted or promoted — refresh patterns list
+            qc.invalidateQueries({ queryKey: ["bridge", "patterns"] })
+            window.dispatchEvent(new CustomEvent("bridge:intelligence", { detail: payload.data ?? payload }))
+            break
+
+          case "bridge:msg-bus":
+            // Message bus event — refresh msgbus feed
+            qc.invalidateQueries({ queryKey: ["bridge", "msgbus"] })
+            window.dispatchEvent(new CustomEvent("bridge:msg-bus", { detail: payload.data ?? payload }))
+            break
+
           // connection:status and decision:made intentionally ignored — no admin action needed
         }
       } catch {
