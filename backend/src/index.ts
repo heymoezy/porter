@@ -24,6 +24,7 @@ import { migrateBridgeV4 } from './db/migrate-bridge-v4.js';
 import { migrateBridgeV5 } from './db/migrate-bridge-v5.js';
 import { migrateBridgeV6 } from './db/migrate-bridge-v6.js';
 import { migrateRateLimits } from './db/migrate-rate-limits.js';
+import { migrateRpgV1 } from './db/migrate-rpg-v1.js';
 import { seedTemplates } from './db/seed-templates.js';
 import { detectAndUpsertGateways } from './services/bridge/startup-detector.js';
 import * as scheduler from './services/scheduler.js';
@@ -186,6 +187,7 @@ const start = async () => {
     await migrateBridgeV5(pool);
     await migrateBridgeV6(pool);
     await migrateRateLimits(pool);
+    await migrateRpgV1(pool);
     await seedTemplates();
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
