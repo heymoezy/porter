@@ -72,6 +72,8 @@ export function useAdminSSE() {
             qc.invalidateQueries({ queryKey: ["bridge", "dispatch-log-summary"] })
             qc.invalidateQueries({ queryKey: ["bridge", "costs-summary"] })
             qc.invalidateQueries({ queryKey: ["bridge", "intel-recent"] })
+            // Vitals update — bridge dispatch changes Health bar
+            qc.invalidateQueries({ queryKey: ["bridge", "capacity"] })
             break
           }
 
