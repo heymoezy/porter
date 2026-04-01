@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
 status: unknown
-stopped_at: Completed 30-01-PLAN.md — intelligence-loop.ts + scheduler hook, Plan 1 of 3
-last_updated: "2026-04-01T08:50:12.059Z"
+stopped_at: Completed 30-02-PLAN.md — concept-aware routing + admin API endpoints, Plan 2 of 3
+last_updated: "2026-04-01T08:54:45.953Z"
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -54,6 +54,7 @@ Plan: 1 of 3
 | Phase 29-session-registry-message-bus P01 | 274s | 2 tasks | 2 files |
 | Phase 29 P03 | 8min | 1 tasks | 1 files |
 | Phase 30 P01 | 138 | 2 tasks | 2 files |
+| Phase 30 P02 | 143 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,8 @@ Plan: 1 of 3
 - [Phase 29]: CONTEXT_PRESSURE_THRESHOLD = 0.8, CONTEXT_ROTATION_THRESHOLD = 0.95 as named constants in scheduler
 - [Phase 30]: Intelligence extraction runs as infrastructure probe (outside agentScheduling gate) — same pattern as RPG recalculation
 - [Phase 30]: Deduplication window is 6h (21600s) — matches extraction interval to prevent duplicate patterns
+- [Phase 30]: [Phase 30-02]: Concept lookup uses try/catch — DB failure never blocks routing
+- [Phase 30]: [Phase 30-02]: Concept preference is highest sort tier: concept > capacity > priority
 
 ### Pending Todos
 
@@ -108,6 +111,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T08:50:12.056Z
-Stopped at: Completed 30-01-PLAN.md — intelligence-loop.ts + scheduler hook, Plan 1 of 3
+Last session: 2026-04-01T08:54:45.951Z
+Stopped at: Completed 30-02-PLAN.md — concept-aware routing + admin API endpoints, Plan 2 of 3
 Resume file: None

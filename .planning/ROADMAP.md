@@ -198,4 +198,4 @@ Phases execute in numeric order: 24 → 25 → 26 (parallel with 25) → 27 → 
 | 27. Character Sheet UI | 3/3 | Complete   | 2026-04-01 | - |
 | 28. Battle Arena | v4.0 | 0/TBD | Not started | - |
 | 29. Session Registry + Message Bus | 3/3 | Complete   | 2026-04-01 | - |
-| 30. Intelligence Loop + Bridge Operator | 1/3 | In Progress|  | - |
+| 30. Intelligence Loop + Bridge Operator | 2/3 | In Progress|  | - |
