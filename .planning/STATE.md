@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
 status: unknown
-stopped_at: Completed 30-02-PLAN.md — concept-aware routing + admin API endpoints, Plan 2 of 3
-last_updated: "2026-04-01T08:54:45.953Z"
+stopped_at: Completed 30-03-PLAN.md — frontend SSE handlers + OperatorActivityLog feeds + build + ship, Plan 3 of 3 (Phase 30 complete)
+last_updated: "2026-04-01T09:00:09.372Z"
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 # Project State
@@ -55,6 +55,7 @@ Plan: 1 of 3
 | Phase 29 P03 | 8min | 1 tasks | 1 files |
 | Phase 30 P01 | 138 | 2 tasks | 2 files |
 | Phase 30 P02 | 143 | 2 tasks | 2 files |
+| Phase 30-intelligence-loop-bridge-operator P03 | 8min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,8 @@ Plan: 1 of 3
 - [Phase 30]: Deduplication window is 6h (21600s) — matches extraction interval to prevent duplicate patterns
 - [Phase 30]: [Phase 30-02]: Concept lookup uses try/catch — DB failure never blocks routing
 - [Phase 30]: [Phase 30-02]: Concept preference is highest sort tier: concept > capacity > priority
+- [Phase 30-03]: Context pressure SSE handler invalidates sessions query so OperatorActivityLog re-fetches on pressure events
+- [Phase 30-03]: Sessions/msgbus/patterns sections appended after existing intel feed — preserves existing log content order
 
 ### Pending Todos
 
@@ -111,6 +114,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T08:54:45.951Z
-Stopped at: Completed 30-02-PLAN.md — concept-aware routing + admin API endpoints, Plan 2 of 3
+Last session: 2026-04-01T09:00:09.369Z
+Stopped at: Completed 30-03-PLAN.md — frontend SSE handlers + OperatorActivityLog feeds + build + ship, Plan 3 of 3 (Phase 30 complete)
 Resume file: None

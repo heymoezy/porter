@@ -83,7 +83,7 @@
 - [x] **INT-01**: Dispatch pattern extraction (latency trends, model strengths, failures)
 - [x] **INT-02**: Write patterns to Recall as concepts
 - [x] **INT-03**: Routing reads Recall for learned preferences
-- [ ] **INT-04**: Intelligence surfaces on Bridge operator tab
+- [x] **INT-04**: Intelligence surfaces on Bridge operator tab
 
 ### .md File Regeneration
 
@@ -98,7 +98,7 @@
 - [x] **BRG-01**: Vigil sees live session state
 - [x] **BRG-02**: Vigil sees message bus activity
 - [x] **BRG-03**: Vigil sees intelligence patterns
-- [ ] **BRG-04**: Operator activity shows session + message + intelligence events
+- [x] **BRG-04**: Operator activity shows session + message + intelligence events
 
 ## Future (v4.1+)
 
@@ -177,11 +177,11 @@
 | INT-01 | Phase 30 | Complete |
 | INT-02 | Phase 30 | Complete |
 | INT-03 | Phase 30 | Complete |
-| INT-04 | Phase 30 | Pending |
+| INT-04 | Phase 30 | Complete |
 | BRG-01 | Phase 30 | Complete |
 | BRG-02 | Phase 30 | Complete |
 | BRG-03 | Phase 30 | Complete |
-| BRG-04 | Phase 30 | Pending |
+| BRG-04 | Phase 30 | Complete |
 
 **Coverage:** 62/62 requirements mapped (100%)
 
