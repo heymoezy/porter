@@ -9,6 +9,7 @@ import { refreshAllGateways } from './bridge/model-catalog.js';
 import { computeEmpiricalRates } from './bridge/rate-limit-tracker.js';
 import { collectLocalUsage } from './bridge/usage-collector.js';
 import { recalculateStats } from './rpg-engine.js';
+import { getActiveSessions, rotateSession } from './session-registry.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -18,6 +19,8 @@ const CALENDAR_SYNC_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const HEALTH_PROBE_INTERVAL = 15; // 15 × 2000ms = 30s
 const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
 const RPG_RECALC_INTERVAL = 150; // 150 ticks × 2s = 300s = 5 minutes
+const CONTEXT_PRESSURE_THRESHOLD = 0.8;
+const CONTEXT_ROTATION_THRESHOLD = 0.95;
 const WORKER_ID = crypto.randomUUID();
 const MAX_DRIP_COUNT = 20;
 let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -232,6 +235,49 @@ async function runRpgRecalculation(): Promise<void> {
   }
 }
 
+// ── Context pressure check — SES-02 ──────────────────────────────────────────
+
+async function runContextPressureCheck(): Promise<void> {
+  try {
+    const sessions = await getActiveSessions();
+    for (const session of sessions) {
+      const contextPct = session.context_pct;
+      if (contextPct <= 0) continue;
+
+      if (contextPct >= CONTEXT_ROTATION_THRESHOLD) {
+        // SES-03: Auto-rotate at 95% — creates Recall concept, opens new session
+        const newSessionId = await rotateSession(session.id).catch(() => null);
+        emitSSE('bridge:context-pressure', {
+          session_id: session.id,
+          new_session_id: newSessionId,
+          agent_id: session.agent_id,
+          username: session.username,
+          gateway_type: session.gateway_type,
+          model_name: session.model_name,
+          context_pct: contextPct,
+          action: 'rotated',
+        }).catch(() => {});
+        console.log(`[scheduler:session] rotated session ${session.id.slice(0, 8)} (${Math.round(contextPct * 100)}% context)`);
+
+      } else if (contextPct >= CONTEXT_PRESSURE_THRESHOLD) {
+        // SES-02: Warn at 80%
+        emitSSE('bridge:context-pressure', {
+          session_id: session.id,
+          agent_id: session.agent_id,
+          username: session.username,
+          gateway_type: session.gateway_type,
+          model_name: session.model_name,
+          context_pct: contextPct,
+          action: 'warning',
+        }).catch(() => {});
+        console.log(`[scheduler:session] context pressure warning session ${session.id.slice(0, 8)} (${Math.round(contextPct * 100)}%)`);
+      }
+    }
+  } catch (e) {
+    console.error('[scheduler:session] context pressure check error:', e instanceof Error ? e.message : e);
+  }
+}
+
 export async function start() {
   if (intervalId) return;
   console.log('[scheduler] started — polling every %dms, worker=%s', POLL_INTERVAL_MS, WORKER_ID.slice(0, 8));
@@ -256,6 +302,7 @@ async function tick() {
       runHealthProbe().catch(err => console.error('[scheduler] health probe error', err));
       computeEmpiricalRates().catch(err => console.error('[scheduler] rate limit compute error', err));
       collectLocalUsage().catch(err => console.error('[scheduler] usage collector error', err));
+      runContextPressureCheck().catch(err => console.error('[scheduler] context pressure error', err));
     }
 
     // Model catalog refresh -- every 24h
