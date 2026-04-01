@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
 status: in_progress
-stopped_at: Completed 24-01-PLAN.md — RPG schema migration applied, all 8 tables + 17 columns exist in PostgreSQL
-last_updated: "2026-04-01T06:39:00Z"
+stopped_at: Completed 24-02-PLAN.md — Drizzle schema extensions for all RPG/Arena tables, 74 exports, build clean
+last_updated: "2026-04-01T06:47:08.915Z"
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Porter is where builders bring their agents to fight. Build anywhere, battle here, prove your shit works.
-**Current focus:** Phase 24 — schema-migration
+**Current focus:** Phase 25 — rpg-engine
 
 ## Current Position
 
-Phase: 24 (schema-migration) — EXECUTING
-Plan: 2 of 2 (plan 1 complete)
+Phase: 24 (schema-migration) — COMPLETE
+Plan: 2 of 2 (both complete)
 
 ## Performance Metrics
 
@@ -38,7 +38,7 @@ Plan: 2 of 2 (plan 1 complete)
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 24-schema-migration | 1 | 19min | 19min |
+| 24-schema-migration | 2 | 23min | ~11.5min |
 
 *Updated after each plan completion*
 
@@ -56,6 +56,8 @@ Plan: 2 of 2 (plan 1 complete)
 - [24-01]: Migration transaction is atomic all-or-nothing — single transaction wraps all 10 DDL statements
 - [24-01]: agent_rpg_stats/battle child tables use CASCADE DELETE from parent — no orphan rows
 - [24-01]: Playwright browser tests hang in this environment (pre-existing Chromium constraint) — API-level verification used instead
+- [Phase 24]: Appended new table exports to end of schema.ts — preserves all existing exports and avoids merge conflicts
+- [Phase 24]: agentTemplates RPG columns match exact SQL column names from migrate-rpg-v1.ts — zero drift possible
 
 ### Pending Todos
 
@@ -69,6 +71,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01
-Stopped at: Completed 24-01-PLAN.md — RPG schema migration applied, all 8 tables + 17 columns exist in PostgreSQL
+Last session: 2026-04-01T06:47:08.913Z
+Stopped at: Completed 24-02-PLAN.md — Drizzle schema extensions for all RPG/Arena tables, 74 exports, build clean
 Resume file: None
