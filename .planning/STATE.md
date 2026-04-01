@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
 status: unknown
-stopped_at: "Completed 26-01-PLAN.md — GET /api/admin/templates/:id/workshop endpoint added and verified live"
-last_updated: "2026-04-01T07:35:37.344Z"
+stopped_at: Completed 26-02-PLAN.md — 4-tab Forge shell live, Armory absorbs skills+tools, /skills+/tools redirect to /forge
+last_updated: "2026-04-01T07:39:05.112Z"
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -45,6 +45,7 @@ Plan: 2 of 3
 | Phase 25-rpg-engine P02 | 5 | 2 tasks | 2 files |
 | Phase 25-rpg-engine P03 | 8 | 2 tasks | 2 files |
 | Phase 26-forge-unification P01 | 111s | 2 tasks | 1 files |
+| Phase 26-forge-unification P02 | 6 | 4 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,8 @@ Plan: 2 of 3
 - [25-03]: RPG recalculation placed before agentScheduling gate in tick() — runs as infrastructure probe, not agent job
 - [Phase 26-01]: Workshop endpoint registered before /:id to avoid Fastify route shadowing
 - [Phase 26-01]: skill_slots = max(4, 4 + star_level - 1) ensures minimum 4 slots regardless of star_level
+- [Phase 26-forge-unification]: Skills and Tools absorbed inline into forge.tsx Armory tab — keeps page self-contained, no cross-route imports
+- [Phase 26-forge-unification]: AgentPresenceSummary omitted from Armory tab — page-level concern, not needed inside a tab
 
 ### Pending Todos
 
@@ -83,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T07:35:37.342Z
-Stopped at: Completed 26-01-PLAN.md — GET /api/admin/templates/:id/workshop endpoint added and verified live
+Last session: 2026-04-01T07:39:05.110Z
+Stopped at: Completed 26-02-PLAN.md — 4-tab Forge shell live, Armory absorbs skills+tools, /skills+/tools redirect to /forge
 Resume file: None

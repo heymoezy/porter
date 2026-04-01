@@ -50,13 +50,13 @@
 
 ### Forge Unification
 
-- [ ] **FRG-01**: Skills + Tools + Forge merged into single "Forge" nav item
-- [ ] **FRG-02**: 4 tabs: Templates, Armory, Workshop, Arena
-- [ ] **FRG-03**: Templates tab — browse/create templates
-- [ ] **FRG-04**: Armory tab — tools, skills, supports inventory
+- [x] **FRG-01**: Skills + Tools + Forge merged into single "Forge" nav item
+- [x] **FRG-02**: 4 tabs: Templates, Armory, Workshop, Arena
+- [x] **FRG-03**: Templates tab — browse/create templates
+- [x] **FRG-04**: Armory tab — tools, skills, supports inventory
 - [x] **FRG-05**: Workshop tab — configure builds pre-forge
 - [ ] **FRG-06**: Birth animation — grayscale to color with particles
-- [ ] **FRG-07**: Flow: template → configure → equip → passive nodes → forge → deploy
+- [x] **FRG-07**: Flow: template → configure → equip → passive nodes → forge → deploy
 
 ### Battle Arena
 
@@ -139,13 +139,13 @@
 | MD-03 | Phase 25 | Complete |
 | MD-04 | Phase 25 | Complete |
 | MD-05 | Phase 25 | Complete |
-| FRG-01 | Phase 26 | Pending |
-| FRG-02 | Phase 26 | Pending |
-| FRG-03 | Phase 26 | Pending |
-| FRG-04 | Phase 26 | Pending |
+| FRG-01 | Phase 26 | Complete |
+| FRG-02 | Phase 26 | Complete |
+| FRG-03 | Phase 26 | Complete |
+| FRG-04 | Phase 26 | Complete |
 | FRG-05 | Phase 26 | Complete |
 | FRG-06 | Phase 26 | Pending |
-| FRG-07 | Phase 26 | Pending |
+| FRG-07 | Phase 26 | Complete |
 | SKL-01 | Phase 26 | Complete |
 | SKL-02 | Phase 26 | Complete |
 | SKL-03 | Phase 26 | Complete |
