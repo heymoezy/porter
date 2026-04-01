@@ -176,7 +176,11 @@ Plans:
   2. High-confidence patterns (confidence score >= 0.8) are automatically promoted to Memory V2 `concepts` table — a routing decision made after promotion references the learned concept in its reasoning log
   3. The routing engine reads learned gateway preferences from concepts — an agent that has won 10 battles using Claude produces routing decisions that prefer Claude for that agent's specialty task type
   4. Vigil's admin tab shows live session state, message bus activity, and intelligence patterns as a single unified feed — no page refresh needed to see new events
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 30-01-PLAN.md — intelligence-loop.ts service: 4-type pattern extraction + concept promotion
+- [ ] 30-02-PLAN.md — concept-aware routing engine + admin API (/sessions, /patterns, /msgbus)
+- [ ] 30-03-PLAN.md — Frontend SSE handlers + OperatorActivityLog feeds + build + ship
 
 ## Progress
 
