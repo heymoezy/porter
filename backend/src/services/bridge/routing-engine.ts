@@ -497,9 +497,40 @@ export class RoutingEngine {
     // Evaluate rules — apply them to fallback order just as select() does
     const matchedRule = await this.evaluateRules(ctx, candidates);
 
+    // INT-03: Check concepts table for learned gateway preference for this agent
+    let conceptPreferredType: string | null = null;
+    if (ctx.agentId) {
+      try {
+        const { rows: conceptRows } = await pool.query<{ content: string; scope_id: string }>(
+          `SELECT content, scope_id FROM concepts
+           WHERE source_type = 'intelligence_loop'
+             AND status = 'active'
+             AND memory_kind = 'concept'
+             AND (scope_id = $1 OR scope_id IS NULL)
+             AND (content LIKE '%model_strength%' OR content LIKE '%routed to%')
+           ORDER BY created_at DESC
+           LIMIT 5`,
+          [ctx.agentId],
+        );
+        // Extract preferred gateway_type from concept content
+        // Content format: "Agent {id} routed to {gateway_type}/{model} N times..."
+        for (const row of conceptRows) {
+          const match = row.content.match(/routed to (\w+)\//);
+          if (match) {
+            conceptPreferredType = match[1];
+            break;
+          }
+        }
+      } catch { /* non-critical — concept lookup never blocks routing */ }
+    }
+
     // Sort candidates: prefer gateways with capacity headroom (soft preference)
     // Gateways at 90%+ utilization are pushed to the end, not blocked.
+    // INT-03: Learned concept preference wins over capacity + priority
     const capacitySorted = [...candidates].sort((a, b) => {
+      const aConceptPreferred = conceptPreferredType && a.row.type === conceptPreferredType ? 0 : 1;
+      const bConceptPreferred = conceptPreferredType && b.row.type === conceptPreferredType ? 0 : 1;
+      if (aConceptPreferred !== bConceptPreferred) return aConceptPreferred - bConceptPreferred;
       const aHas = hasCapacity(a.row.id) ? 0 : 1;
       const bHas = hasCapacity(b.row.id) ? 0 : 1;
       if (aHas !== bHas) return aHas - bHas;
@@ -538,13 +569,20 @@ export class RoutingEngine {
               ?? `lower priority (priority=${c.row.priority})`,
           }));
 
+        const baseReason = errors.length > 0
+          ? `Fallback: ${errors.length} gateway(s) failed before ${candidate.row.type}`
+          : `Primary: ${candidate.row.type} (priority=${candidate.row.priority})`;
+
+        // INT-03: Annotate reason when concept preference was applied and matched
+        const finalReason = (conceptPreferredType && candidate.row.type === conceptPreferredType)
+          ? `${baseReason} [learned: preferred ${conceptPreferredType} for agent ${ctx.agentId?.slice(0, 8)}]`
+          : baseReason;
+
         const decision: RoutingDecision = {
           gatewayRow: candidate.row,
           adapter: candidate.adapter,
           modelName: resolveModelName(candidate.row),
-          reason: errors.length > 0
-            ? `Fallback: ${errors.length} gateway(s) failed before ${candidate.row.type}`
-            : `Primary: ${candidate.row.type} (priority=${candidate.row.priority})`,
+          reason: finalReason,
           alternatives,
           matchedRuleId: matchedRule?.id ?? null,
         };
