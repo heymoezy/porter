@@ -55,7 +55,7 @@
 - [x] **FRG-03**: Templates tab — browse/create templates
 - [x] **FRG-04**: Armory tab — tools, skills, supports inventory
 - [x] **FRG-05**: Workshop tab — configure builds pre-forge
-- [ ] **FRG-06**: Birth animation — grayscale to color with particles
+- [x] **FRG-06**: Birth animation — grayscale to color with particles
 - [x] **FRG-07**: Flow: template → configure → equip → passive nodes → forge → deploy
 
 ### Battle Arena
@@ -144,7 +144,7 @@
 | FRG-03 | Phase 26 | Complete |
 | FRG-04 | Phase 26 | Complete |
 | FRG-05 | Phase 26 | Complete |
-| FRG-06 | Phase 26 | Pending |
+| FRG-06 | Phase 26 | Complete |
 | FRG-07 | Phase 26 | Complete |
 | SKL-01 | Phase 26 | Complete |
 | SKL-02 | Phase 26 | Complete |

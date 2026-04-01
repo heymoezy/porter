@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
 status: unknown
-stopped_at: Completed 26-02-PLAN.md — 4-tab Forge shell live, Armory absorbs skills+tools, /skills+/tools redirect to /forge
-last_updated: "2026-04-01T07:39:05.112Z"
+stopped_at: Completed 26-03-PLAN.md — Workshop tab live with skills/supports, birth animation upgraded, Queue button navigates to Workshop
+last_updated: "2026-04-01T07:48:54.429Z"
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -46,6 +46,7 @@ Plan: 2 of 3
 | Phase 25-rpg-engine P03 | 8 | 2 tasks | 2 files |
 | Phase 26-forge-unification P01 | 111s | 2 tasks | 1 files |
 | Phase 26-forge-unification P02 | 6 | 4 tasks | 5 files |
+| Phase 26-forge-unification P03 | 7 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,8 @@ Plan: 2 of 3
 - [Phase 26-01]: skill_slots = max(4, 4 + star_level - 1) ensures minimum 4 slots regardless of star_level
 - [Phase 26-forge-unification]: Skills and Tools absorbed inline into forge.tsx Armory tab — keeps page self-contained, no cross-route imports
 - [Phase 26-forge-unification]: AgentPresenceSummary omitted from Armory tab — page-level concern, not needed inside a tab
+- [Phase 26-forge-unification]: BirthAnimation replaced flash-burst with ring+spark+grayscale-reveal — more dramatic, CSS-only, no npm
+- [Phase 26-forge-unification]: WorkshopContent gates on selectedTemplate state — Queue button sets template + switches tab atomically
 
 ### Pending Todos
 
@@ -86,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T07:39:05.110Z
-Stopped at: Completed 26-02-PLAN.md — 4-tab Forge shell live, Armory absorbs skills+tools, /skills+/tools redirect to /forge
+Last session: 2026-04-01T07:48:54.427Z
+Stopped at: Completed 26-03-PLAN.md — Workshop tab live with skills/supports, birth animation upgraded, Queue button navigates to Workshop
 Resume file: None
