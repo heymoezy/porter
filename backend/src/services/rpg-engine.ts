@@ -10,6 +10,9 @@
 import { pool } from '../db/client.js';
 import { v4 as uuidv4 } from 'uuid';
 import { emitSSE } from './scheduler.js';
+import fs from 'fs';
+import path from 'path';
+import { config } from '../config.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -641,5 +644,242 @@ export async function getRpgStats(templateId: string): Promise<RpgStats | null> 
   } catch (err) {
     console.error('[rpg-engine] getRpgStats error:', err);
     return null;
+  }
+}
+
+/**
+ * regenerateMdFiles — Writes SOUL.md, IDENTITY.md, SKILLS.md, and/or TOOLS.md
+ * for the given agent template from current DB state.
+ *
+ * trigger controls which files are written:
+ *   'star_up'          → SOUL.md
+ *   'level_milestone'  → IDENTITY.md (only at level multiples of 10)
+ *   'skill_change'     → SKILLS.md
+ *   'equipment_change' → TOOLS.md
+ *   'full'             → all four files
+ *
+ * Fire-safe: catches all errors and never throws.
+ */
+export async function regenerateMdFiles(
+  templateId: string,
+  trigger: 'star_up' | 'level_milestone' | 'skill_change' | 'equipment_change' | 'full',
+): Promise<void> {
+  try {
+    // ── 1. Fetch agent data ───────────────────────────────────────────────────
+    const { rows: agentRows } = await pool.query<{
+      id: string;
+      name: string;
+      role: string;
+      description: string | null;
+      shell: string | null;
+      shell_icon: string | null;
+      shell_color: string | null;
+      intelligence: string | null;
+      supports: string | null;
+      equipment_slots: string | null;
+      passive_tree: string | null;
+      specialties: string | null;
+      level: number;
+      xp: number;
+      star_level: number;
+      rarity: string;
+      elo_rating: number;
+      quality: number | null;
+      speed: number | null;
+      efficiency: number | null;
+      reliability: number | null;
+      combo: number | null;
+      dispatch_count: number | null;
+      battle_count: number | null;
+    }>(
+      `SELECT
+         at.id, at.name, at.role, at.description,
+         at.shell, at.shell_icon, at.shell_color,
+         at.intelligence, at.supports, at.equipment_slots,
+         at.passive_tree, at.specialties, at.level, at.xp,
+         at.star_level, at.rarity, at.elo_rating,
+         ars.quality, ars.speed, ars.efficiency, ars.reliability, ars.combo,
+         ars.dispatch_count, ars.battle_count
+       FROM agent_templates at
+       LEFT JOIN agent_rpg_stats ars ON ars.template_id = at.id
+       WHERE at.id = $1`,
+      [templateId],
+    );
+
+    if (agentRows.length === 0) {
+      console.warn('[rpg-engine:md] regenerateMdFiles — template not found:', templateId);
+      return;
+    }
+
+    const agent = agentRows[0];
+
+    // ── 2. Fetch active skills ────────────────────────────────────────────────
+    const { rows: skillRows } = await pool.query<{
+      skill_name: string;
+      success_rate_30d: number | null;
+      total_uses: number | null;
+    }>(
+      `SELECT skill_name, success_rate_30d, total_uses
+       FROM template_skills
+       WHERE template_id = $1
+       ORDER BY total_uses DESC NULLS LAST`,
+      [templateId],
+    );
+
+    // ── 3. Resolve persona directory ──────────────────────────────────────────
+    const personaDir = path.join(config.personasDir, templateId);
+    if (!fs.existsSync(personaDir)) fs.mkdirSync(personaDir, { recursive: true });
+
+    const now = new Date().toISOString();
+
+    // ── 4. SOUL.md — star_up or full ──────────────────────────────────────────
+    if (trigger === 'star_up' || trigger === 'full') {
+      let specialtyLines = '- None yet — earn through battles and dispatches';
+      try {
+        const specs = JSON.parse(agent.specialties || '[]') as Array<{ label: string }>;
+        if (specs.length > 0) {
+          specialtyLines = specs.map((s) => `- ${s.label}`).join('\n');
+        }
+      } catch {}
+
+      const soulContent = `# SOUL — ${agent.name}
+
+**Shell:** ${agent.shell ?? 'unknown'} ${agent.shell_icon ?? ''}
+**Rarity:** ${agent.rarity} | **Stars:** ${'★'.repeat(agent.star_level)}
+**Born from:** ${agent.description ?? 'unknown origins'}
+
+## Identity
+
+${agent.role}
+
+## Core Drive
+
+This agent was forged from ${agent.dispatch_count ?? 0} real dispatches.
+Every stat reflects actual performance — no designer fiat.
+
+## Specialties
+
+${specialtyLines}
+
+_Last regenerated: ${now}_
+`;
+      fs.writeFileSync(path.join(personaDir, 'SOUL.md'), soulContent, 'utf-8');
+    }
+
+    // ── 5. IDENTITY.md — level_milestone (multiples of 10) or full ───────────
+    const shouldWriteIdentity =
+      trigger === 'full' ||
+      (trigger === 'level_milestone' && agent.level > 0 && agent.level % 10 === 0);
+
+    if (shouldWriteIdentity) {
+      const identityContent = `# IDENTITY — ${agent.name}
+
+**Level:** ${agent.level} | **XP:** ${agent.xp}
+**Elo:** ${agent.elo_rating}
+
+## Stats
+
+| Stat | Value |
+|------|-------|
+| Quality (QTY) | ${(agent.quality ?? 0).toFixed(1)} |
+| Speed (SPD) | ${(agent.speed ?? 0).toFixed(1)} |
+| Efficiency (EFF) | ${(agent.efficiency ?? 0).toFixed(1)} |
+| Reliability (REL) | ${(agent.reliability ?? 0).toFixed(1)} |
+| Synergy (COMBO) | ${(agent.combo ?? 0).toFixed(1)} |
+
+## Battle Record
+
+${agent.battle_count ?? 0} battles | ${agent.dispatch_count ?? 0} dispatches
+
+_Last regenerated: ${now}_
+`;
+      fs.writeFileSync(path.join(personaDir, 'IDENTITY.md'), identityContent, 'utf-8');
+    }
+
+    // ── 6. SKILLS.md — skill_change or full ──────────────────────────────────
+    if (trigger === 'skill_change' || trigger === 'full') {
+      let skillsSection = '_(no skills equipped)_';
+      if (skillRows.length > 0) {
+        skillsSection = skillRows
+          .map(
+            (s) =>
+              `### ${s.skill_name}\n- Success rate (30d): ${s.success_rate_30d != null ? s.success_rate_30d.toFixed(1) : 'N/A'}%\n- Total uses: ${s.total_uses ?? 0}`,
+          )
+          .join('\n\n');
+      }
+
+      let supportsSection = '_(no supports equipped)_';
+      try {
+        const supports = JSON.parse(agent.supports || '[]') as Array<{
+          id: string;
+          target_skill: string;
+          measured_impact: string;
+        }>;
+        if (supports.length > 0) {
+          supportsSection = supports
+            .map((s) => `- **${s.id}** → ${s.target_skill}: ${s.measured_impact}`)
+            .join('\n');
+        }
+      } catch {}
+
+      const skillsContent = `# SKILLS — ${agent.name}
+
+## Active Skills (${skillRows.length})
+
+${skillsSection}
+
+## Supports
+
+${supportsSection}
+
+_Last regenerated: ${now}_
+`;
+      fs.writeFileSync(path.join(personaDir, 'SKILLS.md'), skillsContent, 'utf-8');
+    }
+
+    // ── 7. TOOLS.md — equipment_change or full ────────────────────────────────
+    if (trigger === 'equipment_change' || trigger === 'full') {
+      let equipmentSection = '_(no equipment)_';
+      try {
+        const slots = JSON.parse(agent.equipment_slots || '[]') as Array<{
+          name: string;
+          tool: string;
+        }>;
+        if (slots.length > 0) {
+          equipmentSection = slots.map((slot) => `- **${slot.name}:** ${slot.tool}`).join('\n');
+        }
+      } catch {}
+
+      let passiveSection = '_(no passive nodes unlocked)_';
+      try {
+        const passiveTree = JSON.parse(agent.passive_tree || '[]') as Array<{
+          node_id: string;
+          unlocked: boolean;
+          active: boolean;
+        }>;
+        const unlocked = passiveTree.filter((n) => n.unlocked);
+        if (unlocked.length > 0) {
+          passiveSection = unlocked
+            .map((n) => `- ${n.node_id}${n.active ? ' [ACTIVE]' : ''}`)
+            .join('\n');
+        }
+      } catch {}
+
+      const toolsContent = `# TOOLS — ${agent.name}
+
+## Equipment Slots
+
+${equipmentSection}
+
+## Passive Tree
+
+${passiveSection}
+
+_Last regenerated: ${now}_
+`;
+      fs.writeFileSync(path.join(personaDir, 'TOOLS.md'), toolsContent, 'utf-8');
+    }
+  } catch (err) {
+    console.error('[rpg-engine:md] regenerateMdFiles error:', err);
   }
 }
