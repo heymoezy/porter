@@ -8,6 +8,7 @@ import { runHealthProbe } from './bridge/health-probe.js';
 import { refreshAllGateways } from './bridge/model-catalog.js';
 import { computeEmpiricalRates } from './bridge/rate-limit-tracker.js';
 import { collectLocalUsage } from './bridge/usage-collector.js';
+import { recalculateStats } from './rpg-engine.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -16,6 +17,7 @@ const DEADLINE_CHECK_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const CALENDAR_SYNC_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const HEALTH_PROBE_INTERVAL = 15; // 15 × 2000ms = 30s
 const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
+const RPG_RECALC_INTERVAL = 150; // 150 ticks × 2s = 300s = 5 minutes
 const WORKER_ID = crypto.randomUUID();
 const MAX_DRIP_COUNT = 20;
 let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -204,6 +206,32 @@ function logFeatureFlagState() {
     featureFlags.agentScheduling, featureFlags.eventTriggers, featureFlags.ephemeralAgents);
 }
 
+// ── RPG Stats Background Refresh ──────────────────────────────────────────────
+
+/**
+ * Recalculate RPG stats for all rpg-enabled agent templates.
+ * Runs every 5 minutes. Sequential to avoid DB overload.
+ */
+async function runRpgRecalculation(): Promise<void> {
+  try {
+    const { rows } = await pool.query<{ id: string }>(
+      `SELECT id FROM agent_templates WHERE rpg_enabled = 1`
+    );
+    for (const row of rows) {
+      try {
+        await recalculateStats(row.id);
+      } catch (e) {
+        console.error('[scheduler:rpg] failed for', row.id, e instanceof Error ? e.message : e);
+      }
+    }
+    if (rows.length > 0) {
+      console.log(`[scheduler:rpg] recalculated stats for ${rows.length} agents`);
+    }
+  } catch (e) {
+    console.error('[scheduler:rpg] batch error:', e instanceof Error ? e.message : e);
+  }
+}
+
 export async function start() {
   if (intervalId) return;
   console.log('[scheduler] started — polling every %dms, worker=%s', POLL_INTERVAL_MS, WORKER_ID.slice(0, 8));
@@ -233,6 +261,11 @@ async function tick() {
     // Model catalog refresh -- every 24h
     if (tickCount > 0 && tickCount % MODEL_REFRESH_INTERVAL === 0) {
       refreshAllGateways(pool).catch(err => console.error('[scheduler] model refresh error', err));
+    }
+
+    // RPG stats background refresh — every 5 minutes
+    if (tickCount > 0 && tickCount % RPG_RECALC_INTERVAL === 0) {
+      runRpgRecalculation().catch(err => console.error('[scheduler:rpg] batch error:', err));
     }
 
     // ── Agent jobs — require agentScheduling flag ──────────────────────────
