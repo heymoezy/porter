@@ -11,8 +11,11 @@ import { PixelPortrait } from "~/components/pixel-portrait"
 import { getAgent, type AgentDef } from "~/lib/agent-registry"
 import {
   Shield, Save, Sparkles, FolderKanban,
-  FileText, Eye, X, Flame, Users, Wrench, HeartPulse,
+  FileText, Eye, X, Flame, Users, Wrench, HeartPulse, Swords,
 } from "lucide-react"
+import { CharacterCard, type RpgStats, type WorkshopData } from "~/components/character-card"
+import { VitalsBar } from "~/components/vitals-bar"
+import { PassiveTreeView } from "~/components/passive-tree-view"
 
 // ── Types ────────────────────────────────────────────────
 
@@ -113,6 +116,27 @@ function AgentDetailContent() {
     retry: false,
   })
 
+  // RPG stats — null if agent has no dispatches
+  const { data: rpgData } = useQuery({
+    queryKey: ["admin", "agents", id, "rpg-stats"],
+    queryFn: () => api<{ stats: RpgStats | null }>(`/api/admin/agents/${id}/rpg-stats`),
+    enabled: !!id,
+    retry: false,
+    staleTime: 30_000,
+  })
+
+  // Workshop data — skills, supports, equipment, passive tree
+  const { data: workshopData } = useQuery({
+    queryKey: ["admin", "templates", id, "workshop"],
+    queryFn: () => api<WorkshopData>(`/api/admin/templates/${id}/workshop`),
+    enabled: !!id,
+    retry: false,
+    staleTime: 60_000,
+  })
+
+  const rpgStats = rpgData?.stats ?? null
+  const workshop = workshopData ?? null
+
   const hasApi = !agentError && !!apiData
   const p = apiData?.persona ?? {}
   const files = hasApi ? (apiData?.files ?? {}) : (tmplData?.files ?? {})
@@ -127,7 +151,7 @@ function AgentDetailContent() {
   const fileTabs = buildFileTabs(lifecycle, hasTools)
 
   // Born = has been through Forge (exists as a persona instance)
-  const isBorn = hasApi && p.created_at
+  const isBorn = hasApi && !!p.created_at
   const birthDate = isBorn ? fmtDate(String(p.created_at)) : null
 
   const saveMutation = useMutation({
@@ -305,6 +329,10 @@ function AgentDetailContent() {
                   </TabsTrigger>
                 </>
               )}
+              {/* Sheet tab — character sheet with RPG stats */}
+              <TabsTrigger value="sheet-tab" className="gap-1">
+                <Swords className="size-2.5" /> SHEET
+              </TabsTrigger>
               {/* Instances tab — always visible on templates */}
               <TabsTrigger value="instances-tab" className="gap-1">
                 <Users className="size-2.5" /> INSTANCES
@@ -426,6 +454,28 @@ function AgentDetailContent() {
                 </div>
               )}
             </Card>
+          </TabsContent>
+
+          {/* Sheet tab — character sheet with RPG stats */}
+          <TabsContent value="sheet-tab" className="flex-1 min-h-0 mt-2">
+            <div className="h-full overflow-y-auto">
+              <div className="max-w-2xl mx-auto p-2 flex flex-col gap-4">
+                <CharacterCard
+                  rpg={rpgStats}
+                  workshop={workshop}
+                  agentName={displayName}
+                />
+                <VitalsBar
+                  templateId={id ?? ''}
+                  reliability={rpgStats?.reliability ?? 100}
+                  dispatchCount={rpgStats?.dispatchCount ?? 0}
+                />
+                <PassiveTreeView
+                  nodes={workshop?.passive_tree ?? []}
+                  agentLevel={rpgStats?.level ?? 1}
+                />
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
