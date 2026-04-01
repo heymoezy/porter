@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
 status: unknown
-stopped_at: Completed 25-02-PLAN.md — regenerateMdFiles() added to rpg-engine.ts, rpg-stats + rpg-recalculate admin endpoints live
-last_updated: "2026-04-01T07:13:38.575Z"
+stopped_at: Completed 25-03-PLAN.md — awardXP wired into logDispatch + background RPG recalculation sweep in scheduler
+last_updated: "2026-03-29T00:08:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 25 (rpg-engine) — EXECUTING
-Plan: 2 of 3 (plan 1 complete)
+Plan: 3 of 3 complete — Phase 25 DONE
 
 ## Performance Metrics
 
@@ -39,10 +39,11 @@ Plan: 2 of 3 (plan 1 complete)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 24-schema-migration | 2 | 23min | ~11.5min |
-| 25-rpg-engine | 1/3 | 4min | ~4min |
+| 25-rpg-engine | 3/3 | ~20min | ~6.6min |
 
 *Updated after each plan completion*
 | Phase 25-rpg-engine P02 | 5 | 2 tasks | 2 files |
+| Phase 25-rpg-engine P03 | 8 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,8 @@ Plan: 2 of 3 (plan 1 complete)
 - [25-01]: SELECT-then-INSERT/UPDATE used (not ON CONFLICT) because migration creates INDEX not UNIQUE constraint on template_id
 - [Phase 25-rpg-engine]: regenerateMdFiles uses trigger-based routing — star_up writes SOUL.md, level_milestone writes IDENTITY.md only at multiples of 10, skill_change writes SKILLS.md, equipment_change writes TOOLS.md, full writes all four
 - [Phase 25-rpg-engine]: RPG admin endpoints applied to routes/admin/agents.ts not v1/admin/agents.ts — v1/admin is not mounted in the live app
+- [25-03]: logDispatch only called on success paths — 'failed' XP event never needed, 'dispatch' is always correct
+- [25-03]: RPG recalculation placed before agentScheduling gate in tick() — runs as infrastructure probe, not agent job
 
 ### Pending Todos
 
@@ -77,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T07:13:38.572Z
-Stopped at: Completed 25-02-PLAN.md — regenerateMdFiles() added to rpg-engine.ts, rpg-stats + rpg-recalculate admin endpoints live
+Last session: 2026-03-29T00:08:00.000Z
+Stopped at: Completed 25-03-PLAN.md — awardXP wired into logDispatch + background RPG recalculation sweep in scheduler
 Resume file: None
