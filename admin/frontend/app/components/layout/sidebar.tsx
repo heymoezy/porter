@@ -5,9 +5,9 @@ import { PixelPortrait } from "~/components/pixel-portrait"
 import { Badge } from "~/components/ui/badge"
 import { Separator } from "~/components/ui/separator"
 import {
-  Users, Mail, CreditCard, LayoutDashboard, Bug,
+  Users, Mail, CreditCard, LayoutDashboard,
   ChevronLeft, ChevronRight, Settings, LogOut,
-  Activity, Monitor,
+  Monitor,
   Route, BookOpen,
   Code2, Palette, HardDrive, Network, Flame, Lightbulb,
 } from "lucide-react"
@@ -38,9 +38,7 @@ const groups = [
     { icon: Route, label: "Bridge", path: "/bridge" },
     { icon: BookOpen, label: "Recall", path: "/recall" },
     { icon: Lightbulb, label: "Intelligence", path: "/intelligence" },
-    { icon: Monitor, label: "System", path: "/brain" },
-    { icon: Activity, label: "Activity", path: "/activity" },
-    { icon: Bug, label: "Diagnostics", path: "/diagnostics" },
+    { icon: Monitor, label: "System", path: "/system" },
   ]},
   { label: "Files", items: [
     { icon: HardDrive, label: "Files", path: "/files" },

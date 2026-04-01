@@ -1,14 +1,20 @@
-import { useEffect, useRef } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useState, useEffect, useRef } from "react"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
+import { Card, CardContent } from "~/components/ui/card"
+import { Input } from "~/components/ui/input"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/tabs"
 import { PixelPortrait } from "~/components/pixel-portrait"
+import { AgentPresenceSummary } from "~/components/agent-presence"
 import {
   Brain, Activity, AlertTriangle, CheckCircle, Server,
   Database, Cpu, HardDrive, Clock, Zap, MessageSquare,
   Users, Bot, FolderOpen, Terminal, RefreshCw, ChevronRight,
   Flame, Shield, Sparkles,
+  Monitor, Bug, Globe, X, Search, Filter,
+  BookOpen,
 } from "lucide-react"
 import { Link } from "react-router"
 import {
@@ -16,7 +22,7 @@ import {
   type AgentDef, type AgentStatus,
 } from "~/lib/agent-registry"
 
-// ── Types ──────────────────────────────────────────────
+// ── Shared Types ────────────────────────────────────────
 
 interface SystemData {
   memory: { total: number; used: number; free: number; pct: number }
@@ -50,7 +56,38 @@ interface DashboardData {
 
 interface LogEntry { ts: number; text: string; color: string }
 
-// ── Helpers ────────────────────────────────────────────
+interface AuditEntry {
+  id: number
+  ts: number
+  ts_iso: string
+  actor: string
+  actor_type: string
+  action: string
+  target: string
+  details: string
+  project_id: string | null
+}
+
+interface Learning {
+  sessionId: string
+  source: string
+  text: string
+  backend: string | null
+  extractedAt: number
+}
+
+interface ErrorEntry {
+  id: number
+  source: string
+  severity: string
+  message: string
+  stack: string | null
+  url: string | null
+  username: string | null
+  created_at: number
+}
+
+// ── Shared Helpers ─────────────────────────────────────
 
 function fmtBytes(b: number) {
   if (!b) return "0 B"
@@ -70,7 +107,15 @@ function fmtNum(n: number) {
   return n.toString()
 }
 
-// ── Verdict ────────────────────────────────────────────
+function fmtRel(ts: number) {
+  const d = Date.now() / 1000 - ts
+  if (d < 60) return "just now"
+  if (d < 3600) return `${Math.floor(d / 60)}m ago`
+  if (d < 86400) return `${Math.floor(d / 3600)}h ago`
+  return `${Math.floor(d / 86400)}d ago`
+}
+
+// ── Monitor: Verdict ─────────────────────────────────────
 
 type Verdict = "healthy" | "degraded" | "down"
 
@@ -88,7 +133,7 @@ const verdictConfig: Record<Verdict, { label: string; color: string; bg: string;
   down:     { label: "Systems Unreachable",       color: "text-danger",   bg: "bg-danger/8",  border: "border-danger/20",  pulse: true },
 }
 
-// ── Agent-attributed actions ───────────────────────────
+// ── Monitor: Agent-attributed actions ────────────────────
 
 interface ActionItem {
   agent: string
@@ -128,7 +173,7 @@ function deriveActions(sys: SystemData | undefined, diagStats: DiagStats | undef
   return actions
 }
 
-// ── Subcomponents ──────────────────────────────────────
+// ── Monitor: Subcomponents ───────────────────────────────
 
 function ResourceBar({ pct }: { pct: number }) {
   const color = pct >= 90 ? "bg-danger" : pct >= 70 ? "bg-warning" : "bg-accent-porter"
@@ -195,9 +240,11 @@ function BrainAgentCard({ agent, detail }: { agent: AgentDef; detail?: string })
   )
 }
 
-// ── Main ───────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+// TAB 1: Monitor (from brain.tsx)
+// ══════════════════════════════════════════════════════════
 
-function BrainContent() {
+function MonitorTab() {
   const system = useQuery({ queryKey: ["brain", "system"], queryFn: () => api<SystemData>("/api/admin/system"), refetchInterval: 30_000 })
   const diag = useQuery({ queryKey: ["brain", "diagnostics"], queryFn: () => api<{ errors: unknown[]; stats: DiagStats }>("/api/admin/diagnostics"), refetchInterval: 30_000 })
   const dashboard = useQuery({ queryKey: ["brain", "dashboard"], queryFn: () => api<DashboardData>("/api/admin/health/dashboard"), refetchInterval: 30_000 })
@@ -454,10 +501,367 @@ function BrainContent() {
   )
 }
 
-export default function BrainPage() {
-  return (
-      <div className="overflow-y-auto p-4 flex-1 scrollbar-thin">
-        <BrainContent />
+// ══════════════════════════════════════════════════════════
+// TAB 2: Activity (from activity.tsx)
+// ══════════════════════════════════════════════════════════
+
+const actionColors: Record<string, string> = {
+  "auth.login.ok": "bg-success/15 text-success",
+  "auth.logout": "bg-text3/15 text-text3",
+  "auth.login.fail": "bg-danger/15 text-danger",
+  "project.create": "bg-accent-porter/15 text-accent-porter",
+  "project.update": "bg-accent-porter/15 text-accent-porter",
+  "persona.create": "bg-purple-500/15 text-purple-400",
+  "chat.message": "bg-blue-500/15 text-blue-400",
+}
+
+function ActivityTab() {
+  const [subtab, setSubtab] = useState<"feed" | "learnings">("feed")
+  const [actionFilter, setActionFilter] = useState("")
+
+  const { data: feedData, isLoading: feedLoading } = useQuery({
+    queryKey: ["admin", "activity", actionFilter],
+    queryFn: () => {
+      const params = actionFilter ? `?action=${actionFilter}&limit=100` : "?limit=100"
+      return api<{ entries: AuditEntry[]; actionCounts: Array<{ action: string; cnt: number }>; total: number }>(`/api/admin/activity${params}`)
+    },
+  })
+
+  const { data: learnData, isLoading: learnLoading } = useQuery({
+    queryKey: ["admin", "activity", "learnings"],
+    queryFn: () => api<{ learnings: Learning[]; count: number }>("/api/admin/activity/learnings"),
+    enabled: subtab === "learnings",
+  })
+
+  const isLoading = subtab === "feed" ? feedLoading : learnLoading
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="size-6 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
       </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Tabs + filter */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setSubtab("feed")}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+            subtab === "feed" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2"
+          }`}
+        >
+          <Activity className="size-3" /> Feed
+        </button>
+        <button
+          onClick={() => setSubtab("learnings")}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+            subtab === "learnings" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2"
+          }`}
+        >
+          <Brain className="size-3" /> Learnings ({learnData?.count ?? "..."})
+        </button>
+
+        {subtab === "feed" && (
+          <div className="ml-auto flex items-center gap-1.5">
+            {actionFilter && (
+              <Badge className="text-2xs bg-accent-porter/15 text-accent-porter border-0 cursor-pointer" onClick={() => setActionFilter("")}>
+                {actionFilter} ×
+              </Badge>
+            )}
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 size-3 -translate-y-1/2 text-text3" />
+              <Input
+                value={actionFilter}
+                onChange={e => setActionFilter(e.target.value)}
+                placeholder="Filter actions..."
+                className="h-7 w-[160px] bg-raised border-border pl-7 text-xs"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {subtab === "feed" ? (
+        <>
+          {/* Action type chips */}
+          {feedData?.actionCounts && feedData.actionCounts.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {feedData.actionCounts.slice(0, 12).map(ac => (
+                <button
+                  key={ac.action}
+                  onClick={() => setActionFilter(ac.action === actionFilter ? "" : ac.action)}
+                  className={`rounded-md px-2 py-0.5 text-2xs transition-colors ${
+                    ac.action === actionFilter
+                      ? "bg-accent-porter/15 text-accent-porter"
+                      : "bg-raised text-text3 hover:text-text2"
+                  }`}
+                >
+                  {ac.action} ({ac.cnt})
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Activity table */}
+          <div className="rounded-xl border border-border overflow-hidden">
+            {!feedData?.entries?.length ? (
+              <div className="px-3 py-6 text-center text-xs text-text3">No activity</div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border/50 text-left">
+                    <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Time</th>
+                    <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Actor</th>
+                    <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Action</th>
+                    <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Target</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {feedData.entries.map(e => (
+                    <tr key={e.id} className="border-b border-border/20 last:border-0">
+                      <td className="px-3 py-1 text-2xs text-text3 whitespace-nowrap">{fmtRel(e.ts)}</td>
+                      <td className="px-3 py-1 text-xs font-medium text-text">{e.actor}</td>
+                      <td className="px-3 py-1">
+                        <Badge className={`text-2xs border-0 ${actionColors[e.action] || "bg-text3/15 text-text3"}`}>
+                          {e.action}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-1 text-xs text-text2 truncate max-w-[200px]">{e.target}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      ) : (
+        /* Learnings */
+        <div className="rounded-xl border border-border overflow-hidden">
+          {!learnData?.learnings?.length ? (
+            <div className="px-3 py-6 text-center text-xs text-text3">No learnings extracted yet</div>
+          ) : (
+            <div className="divide-y divide-border/30">
+              {learnData.learnings.map(l => (
+                <div key={l.sessionId} className="px-3 py-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge className="text-2xs bg-accent-porter/15 text-accent-porter border-0">{l.source}</Badge>
+                    <span className="text-2xs text-text3">{fmtRel(l.extractedAt)}</span>
+                  </div>
+                  <p className="text-xs text-text2 leading-relaxed whitespace-pre-wrap">{l.text}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════
+// TAB 3: Diagnostics (from diagnostics.tsx)
+// ══════════════════════════════════════════════════════════
+
+const sourceIcon: Record<string, React.ElementType> = {
+  client_js: Globe,
+  server_api: Server,
+  agent_error: Bot,
+  server_unhandled: Bug,
+}
+
+const severityColor: Record<string, string> = {
+  critical: "bg-danger/15 text-danger",
+  error: "bg-warning/15 text-warning",
+  warning: "bg-text3/15 text-text3",
+}
+
+function DiagnosticsTab() {
+  const qc = useQueryClient()
+  const [expanded, setExpanded] = useState<number | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "diagnostics"],
+    queryFn: () => api<{ errors: ErrorEntry[]; stats: DiagStats }>("/api/admin/diagnostics"),
+
+  })
+
+  const resolve = useMutation({
+    mutationFn: (id: number) => api(`/api/admin/diagnostics/${id}/resolve`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "diagnostics"] }),
+  })
+
+  const resolveAll = useMutation({
+    mutationFn: (body: { source?: string; message?: string }) =>
+      api("/api/admin/diagnostics/resolve-all", { method: "POST", json: body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "diagnostics"] }),
+  })
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="size-6 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
+      </div>
+    )
+  }
+
+  const stats = data?.stats ?? { total: 0, open: 0, today: 0, bySeverity: { critical: 0, error: 0, warning: 0 }, bySource: { client_js: 0, server_api: 0, agent_error: 0 }, topErrors: [] }
+  const errors = data?.errors ?? []
+
+  return (
+    <div className="space-y-3">
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-2">
+        <Card className="border-border bg-surface">
+          <CardContent className="flex items-center gap-2 p-3">
+            <div className="flex size-6 items-center justify-center rounded-lg bg-danger/15">
+              <Bug className="size-3 text-danger" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-text">{stats.open}</p>
+              <p className="text-2xs text-text3">Open errors</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border bg-surface">
+          <CardContent className="flex items-center gap-2 p-3">
+            <div className="flex size-6 items-center justify-center rounded-lg bg-warning/15">
+              <AlertTriangle className="size-3 text-warning" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-text">{stats.today}</p>
+              <p className="text-2xs text-text3">Last 24h</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border bg-surface">
+          <CardContent className="p-3">
+            <p className="text-2xs font-semibold uppercase tracking-wide text-text3 mb-2">By Severity</p>
+            <div className="flex gap-2">
+              {stats.bySeverity.critical > 0 && <Badge className="bg-danger/15 text-danger border-0 text-2xs">{stats.bySeverity.critical} critical</Badge>}
+              {stats.bySeverity.error > 0 && <Badge className="bg-warning/15 text-warning border-0 text-2xs">{stats.bySeverity.error} error</Badge>}
+              {stats.bySeverity.warning > 0 && <Badge variant="outline" className="text-2xs">{stats.bySeverity.warning} warn</Badge>}
+              {stats.bySeverity.critical === 0 && stats.bySeverity.error === 0 && stats.bySeverity.warning === 0 && (
+                <span className="text-xs text-success">All clear</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border bg-surface">
+          <CardContent className="p-3">
+            <p className="text-2xs font-semibold uppercase tracking-wide text-text3 mb-2">By Source</p>
+            <div className="flex gap-2">
+              {stats.bySource.client_js > 0 && <Badge variant="outline" className="text-2xs">{stats.bySource.client_js} frontend</Badge>}
+              {stats.bySource.server_api > 0 && <Badge variant="outline" className="text-2xs">{stats.bySource.server_api} API</Badge>}
+              {stats.bySource.agent_error > 0 && <Badge variant="outline" className="text-2xs">{stats.bySource.agent_error} agent</Badge>}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Top recurring errors */}
+      {stats.topErrors.length > 0 && (
+        <Card className="border-border bg-surface">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-2xs font-semibold uppercase tracking-wide text-text3">Recurring Errors</h3>
+              <Button variant="outline" size="xs" onClick={() => resolveAll.mutate({})}>Resolve All</Button>
+            </div>
+            <div className="space-y-1.5">
+              {stats.topErrors.map((e, i) => (
+                <div key={i} className="flex items-center gap-2 rounded-lg bg-background px-3 py-2">
+                  <Badge className={`text-2xs ${severityColor[e.severity] ?? "bg-text3/15 text-text3"} border-0`}>
+                    {e.severity}
+                  </Badge>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-text truncate">{e.message}</p>
+                    <p className="text-2xs text-text3">{e.source} · {fmtRel(e.last_seen)}</p>
+                  </div>
+                  <Badge variant="outline" className="text-2xs shrink-0">{e.count}x</Badge>
+                  <Button variant="ghost" size="icon-xs" onClick={() => resolveAll.mutate({ message: e.message })}>
+                    <CheckCircle className="size-3 text-success" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error list */}
+      <Card className="border-border bg-surface">
+        <CardContent className="p-3">
+          <h3 className="text-2xs font-semibold uppercase tracking-wide text-text3 mb-2">Error Log</h3>
+          {errors.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-success">
+              <CheckCircle className="size-4" /> No open errors
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {errors.map((e) => {
+                const Icon = sourceIcon[e.source] ?? Bug
+                const isExpanded = expanded === e.id
+                return (
+                  <div key={e.id}>
+                    <div
+                      className="flex items-center gap-2 rounded-lg bg-background px-3 py-2 cursor-pointer hover:bg-raised transition-colors"
+                      onClick={() => setExpanded(isExpanded ? null : e.id)}
+                    >
+                      <Icon className="size-3.5 text-text3 shrink-0" />
+                      <Badge className={`text-2xs ${severityColor[e.severity] ?? ""} border-0 shrink-0`}>
+                        {e.severity}
+                      </Badge>
+                      <p className="text-xs text-text flex-1 min-w-0 truncate">{e.message}</p>
+                      {e.username && <span className="text-2xs text-text3 shrink-0">@{e.username}</span>}
+                      <span className="text-2xs text-text3 shrink-0">{fmtRel(e.created_at)}</span>
+                      <Button variant="ghost" size="icon-xs" onClick={(ev) => { ev.stopPropagation(); resolve.mutate(e.id) }}>
+                        <X className="size-3" />
+                      </Button>
+                    </div>
+                    {isExpanded && e.stack && (
+                      <pre className="mx-3 mt-1 mb-2 overflow-x-auto rounded-md bg-background p-3 text-2xs text-text3 font-mono leading-relaxed">
+                        {e.stack}
+                      </pre>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════
+// Page: System (3-tab container)
+// ══════════════════════════════════════════════════════════
+
+export default function SystemPage() {
+  return (
+    <div className="overflow-y-auto p-4 flex-1 scrollbar-thin">
+      <Tabs defaultValue="monitor" className="gap-3">
+        <TabsList variant="page">
+          <TabsTrigger value="monitor"><Monitor className="size-3.5" /> Monitor</TabsTrigger>
+          <TabsTrigger value="activity"><Activity className="size-3.5" /> Activity</TabsTrigger>
+          <TabsTrigger value="diagnostics"><Bug className="size-3.5" /> Diagnostics</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="monitor">
+          <MonitorTab />
+        </TabsContent>
+
+        <TabsContent value="activity">
+          <ActivityTab />
+        </TabsContent>
+
+        <TabsContent value="diagnostics">
+          <DiagnosticsTab />
+        </TabsContent>
+      </Tabs>
+    </div>
   )
 }

@@ -90,6 +90,14 @@ None - plan executed exactly as written.
 - Both components accept the same RpgStats shape established by Plan 27-01
 - No blockers
 
+## Self-Check: PASSED
+
+- vitals-bar.tsx: FOUND
+- passive-tree-view.tsx: FOUND
+- 27-02-SUMMARY.md: FOUND
+- Task commits 01b5a73 and c0f0f3e: FOUND in git log
+- Zero TS errors in new files (pre-existing error in agent-detail.tsx is out of scope)
+
 ---
 *Phase: 27-character-sheet-ui*
 *Completed: 2026-04-01*
