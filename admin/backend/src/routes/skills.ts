@@ -27,8 +27,8 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     return ok({ notes: getResearchNotes() });
   });
 
-  fastify.get('/:id/files/:path(*)', async (req, reply) => {
-    const { id, path: relativePath } = req.params as { id: string; path: string };
+  fastify.get('/:id/files/*', async (req, reply) => {
+    const { id, '*': relativePath } = req.params as { id: string; '*': string };
     const text = getSkillPackText(id, relativePath);
     if (text == null) {
       reply.status(404);
