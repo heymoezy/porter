@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
 status: unknown
-stopped_at: Completed 25-03-PLAN.md — awardXP wired into logDispatch + background RPG recalculation sweep in scheduler
-last_updated: "2026-03-29T00:08:00.000Z"
+stopped_at: "Completed 26-01-PLAN.md — GET /api/admin/templates/:id/workshop endpoint added and verified live"
+last_updated: "2026-04-01T07:35:37.344Z"
 progress:
   total_phases: 7
-  completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
+  completed_phases: 2
+  total_plans: 8
+  completed_plans: 6
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Porter is where builders bring their agents to fight. Build anywhere, battle here, prove your shit works.
-**Current focus:** Phase 25 — rpg-engine
+**Current focus:** Phase 26 — forge-unification
 
 ## Current Position
 
-Phase: 25 (rpg-engine) — EXECUTING
-Plan: 3 of 3 complete — Phase 25 DONE
+Phase: 26 (forge-unification) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -44,6 +44,7 @@ Plan: 3 of 3 complete — Phase 25 DONE
 *Updated after each plan completion*
 | Phase 25-rpg-engine P02 | 5 | 2 tasks | 2 files |
 | Phase 25-rpg-engine P03 | 8 | 2 tasks | 2 files |
+| Phase 26-forge-unification P01 | 111s | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,8 @@ Plan: 3 of 3 complete — Phase 25 DONE
 - [Phase 25-rpg-engine]: RPG admin endpoints applied to routes/admin/agents.ts not v1/admin/agents.ts — v1/admin is not mounted in the live app
 - [25-03]: logDispatch only called on success paths — 'failed' XP event never needed, 'dispatch' is always correct
 - [25-03]: RPG recalculation placed before agentScheduling gate in tick() — runs as infrastructure probe, not agent job
+- [Phase 26-01]: Workshop endpoint registered before /:id to avoid Fastify route shadowing
+- [Phase 26-01]: skill_slots = max(4, 4 + star_level - 1) ensures minimum 4 slots regardless of star_level
 
 ### Pending Todos
 
@@ -80,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-29T00:08:00.000Z
-Stopped at: Completed 25-03-PLAN.md — awardXP wired into logDispatch + background RPG recalculation sweep in scheduler
+Last session: 2026-04-01T07:35:37.342Z
+Stopped at: Completed 26-01-PLAN.md — GET /api/admin/templates/:id/workshop endpoint added and verified live
 Resume file: None

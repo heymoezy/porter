@@ -42,11 +42,11 @@
 
 ### Skills & Supports
 
-- [ ] **SKL-01**: Active skills with live success rate from last 30 runs
-- [ ] **SKL-02**: Skill slots increase with level (4 base, +1 per star)
-- [ ] **SKL-03**: Supports as mechanical modifiers with exact prompt diff shown
-- [ ] **SKL-04**: Each Support shows measurable battle impact
-- [ ] **SKL-05**: Support slots on skills (1-2 per skill)
+- [x] **SKL-01**: Active skills with live success rate from last 30 runs
+- [x] **SKL-02**: Skill slots increase with level (4 base, +1 per star)
+- [x] **SKL-03**: Supports as mechanical modifiers with exact prompt diff shown
+- [x] **SKL-04**: Each Support shows measurable battle impact
+- [x] **SKL-05**: Support slots on skills (1-2 per skill)
 
 ### Forge Unification
 
@@ -54,7 +54,7 @@
 - [ ] **FRG-02**: 4 tabs: Templates, Armory, Workshop, Arena
 - [ ] **FRG-03**: Templates tab — browse/create templates
 - [ ] **FRG-04**: Armory tab — tools, skills, supports inventory
-- [ ] **FRG-05**: Workshop tab — configure builds pre-forge
+- [x] **FRG-05**: Workshop tab — configure builds pre-forge
 - [ ] **FRG-06**: Birth animation — grayscale to color with particles
 - [ ] **FRG-07**: Flow: template → configure → equip → passive nodes → forge → deploy
 
@@ -143,14 +143,14 @@
 | FRG-02 | Phase 26 | Pending |
 | FRG-03 | Phase 26 | Pending |
 | FRG-04 | Phase 26 | Pending |
-| FRG-05 | Phase 26 | Pending |
+| FRG-05 | Phase 26 | Complete |
 | FRG-06 | Phase 26 | Pending |
 | FRG-07 | Phase 26 | Pending |
-| SKL-01 | Phase 26 | Pending |
-| SKL-02 | Phase 26 | Pending |
-| SKL-03 | Phase 26 | Pending |
-| SKL-04 | Phase 26 | Pending |
-| SKL-05 | Phase 26 | Pending |
+| SKL-01 | Phase 26 | Complete |
+| SKL-02 | Phase 26 | Complete |
+| SKL-03 | Phase 26 | Complete |
+| SKL-04 | Phase 26 | Complete |
+| SKL-05 | Phase 26 | Complete |
 | UI-01 | Phase 27 | Pending |
 | UI-02 | Phase 27 | Pending |
 | UI-03 | Phase 27 | Pending |
