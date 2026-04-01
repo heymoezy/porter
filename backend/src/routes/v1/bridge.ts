@@ -12,6 +12,7 @@ import type {
   AgentMessageResponse,
   RoutingContext,
 } from '../../services/bridge/types.js';
+import { logMsgBusEvent, updateMsgBusEvent } from '../../services/msg-bus.js';
 
 /** Maximum Bridge hops before a request is rejected to prevent loops. */
 const MAX_AGENT_HOPS = 5;
@@ -466,6 +467,21 @@ export default async function bridgeV1Routes(
     const runId = message.messageId;
     const chainId = message.correlationId ?? message.messageId;
 
+    // MSG-01: Log structured inter-gateway message envelope before dispatch
+    let msgBusId: string | null = null;
+    try {
+      msgBusId = await logMsgBusEvent({
+        correlationId: message.correlationId,
+        sourceAgent: message.sourceAgent,
+        sourceGateway: message.sourceGateway,
+        targetAgent: message.targetAgent,
+        targetGateway: message.targetGateway,
+        intent: message.intent,
+        payload: { task: message.task, context: message.context ?? null },
+        hopCount,
+      });
+    } catch { /* non-critical — never block dispatch */ }
+
     const created = await pool.query<{ id: number }>(
       `INSERT INTO agent_messages
          (run_id, from_agent, to_agent, message, status, chain_id, step_num, created_at)
@@ -506,6 +522,10 @@ export default async function bridgeV1Routes(
           [agentMessageId, msg],
         );
       }
+      // MSG-01: Mark msg_bus event as failed
+      if (msgBusId) {
+        updateMsgBusEvent(msgBusId, { status: 'failed' }).catch(() => {});
+      }
       return reply.code(502).send(err('DISPATCH_FAILED', msg));
     }
 
@@ -519,6 +539,16 @@ export default async function bridgeV1Routes(
       intent: message.intent,
       replyTo: message.replyTo,
     });
+
+    // MSG-01: Backfill dispatch log id + mark delivered
+    if (msgBusId) {
+      updateMsgBusEvent(msgBusId, {
+        status: 'delivered',
+        dispatchLogId,
+        latencyMs: result.latencyMs,
+        responsePayload: { response: result.response?.slice(0, 500) },
+      }).catch(() => {});
+    }
 
     // ── Build response envelope ────────────────────────────────────────────
     const response: AgentMessageResponse = {
