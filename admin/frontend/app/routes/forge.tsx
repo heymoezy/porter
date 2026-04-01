@@ -823,8 +823,8 @@ export default function ForgePage() {
 
                 {/* Template grid */}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {/* Porter — always first */}
-                  <Link to="/agents/porter-core"
+                  {/* Porter — only in "all" view */}
+                  {templateCat === "all" && <Link to="/agents/porter-core"
                     className="rounded-lg border-2 border-accent-porter/30 bg-surface p-2.5 transition-all block hover:border-accent-porter/50"
                   >
                     <div className="flex items-center gap-2">
@@ -837,7 +837,7 @@ export default function ForgePage() {
                     </div>
                     <p className="text-2xs text-text2 mt-1.5 leading-relaxed">The brain. Routes all requests, manages workers, owns the product.</p>
                     <p className="text-2xs text-text3 mt-1">Born Feb 18, 2026</p>
-                  </Link>
+                  </Link>}
 
                   {filteredTemplates.map((t, i) => {
                     const spec = parseSpec(t.appearance_spec as any)
