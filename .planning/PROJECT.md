@@ -8,20 +8,24 @@ Porter is an AI orchestration platform where non-technical users create projects
 
 Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input — the "GSD-like flow" applied to everything Porter does.
 
-## Current Milestone: v3.0 Porter Bridge — AI Gateway & Model Intelligence
+## Current Milestone: v4.0 The Arena — Agent RPG System, Battle Arena, Forge Unification
 
-**Goal:** Build the unified AI gateway layer that manages all model providers, routing, capability detection, and runtime orchestration. Database-backed, commercially-quality system replacing the old hardcoded config approach.
+**Goal:** Transform Porter's agent system into an RPG character framework where agents have real stats derived from dispatch data, level up through usage, equip tools like gear, and battle each other head-to-head. Unify Forge + Skills + Tools into one page. Connect Bridge intelligence loop (Bridge → Intelligence → Recall → routing).
 
 **Target features:**
-- Gateway registry (detect, configure, manage all AI backends — Ollama, OpenClaw, Codex CLI, direct API keys)
-- Model catalog (unified view across all gateways — capabilities, context windows, pricing, benchmarks)
-- Smart routing (complexity-based, cost-aware, availability-aware with transparent decision logging)
-- Bridge admin surface (gateways, models, health, routing decisions, cost tracking)
-- First-run setup (guided gateway detection + configuration for new users)
-- OpenClaw for messaging (WhatsApp/Telegram), not just model access
-- Bridge agents (Bridge Operator for health, Model Scout for discovery, Route Analyst for optimization)
-- Memory/Recall integration (Bridge decisions feed into Memory V3, agents learn model preferences)
-- Commercial quality (circuit breakers, retry logic, rate limiting, graceful degradation)
+- Agent RPG schema (5 stats: Quality/Speed/Efficiency/Reliability/Combo, rarity, stars, XP/level, classes, gear slots)
+- Forge unification (Skills + Tools + Forge → one page with Templates/Armory/Workshop/Arena tabs)
+- Skills overhaul (active skills with cooldowns, passive skills at 3★, ultimate skills at 4★)
+- Character card UI (stat pentagon, rarity borders, gear display, star progression)
+- Stat calculation engine (immutable dispatch logs → derived stats, anti-gaming)
+- Battle Arena MVP (same prompt, blind judge, Elo rating, spectator mode)
+- Session registry (Porter owns sessions, per-session token/context tracking)
+- Message bus (structured envelope for inter-gateway communication, cross-model handoffs)
+- Intelligence loop (dispatch patterns → Recall concepts → smarter routing)
+- Bridge operator enhancements (Vigil sees sessions, messages, intelligence in real-time)
+- .md file regeneration (SOUL/IDENTITY/SKILLS auto-rebuild on progression events)
+- Agent import (external frameworks: LangGraph, CrewAI, JSON spec)
+- Design system integration (all new components from design system, no freestyle)
 
 ## Requirements
 
