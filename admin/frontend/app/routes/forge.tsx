@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react"
+import { Fragment, useState, useEffect } from "react"
 import { Link } from "react-router"
 import { ChatPanel } from "~/components/chat-panel"
 import { Badge } from "~/components/ui/badge"
@@ -8,7 +8,7 @@ import { Switch } from "~/components/ui/switch"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/tabs"
 import { PixelPortrait } from "~/components/pixel-portrait"
 import {
-  StationCard, ConveyorLine,
+  StationCard, ConveyorLine, BirthAnimation,
 } from "~/components/forge"
 import { useForgeSSE, useForgeState, useForgeStart, useForgeStop, useForgeQueue, useForgeRemove } from "~/hooks/use-forge"
 import { useChatPanel } from "~/hooks/use-chat-panel"
@@ -411,7 +411,162 @@ function ArmoryContent() {
   )
 }
 
-// ── Workshop placeholder (Plan 03 fills this) ─────────────
+// ── Workshop ──────────────────────────────────────────────
+
+interface WorkshopSkill {
+  skill_id: string; sort_order: number
+  success_rate_30d: number; total_uses: number; last_used: number | null
+}
+interface WorkshopSupport {
+  id: string; target_skill?: string; prompt_diff?: string; measured_impact?: string
+}
+interface WorkshopData {
+  id: string; name: string; star_level: number; level: number; rarity: string
+  shell: string; elo_rating: number; skill_slots: number
+  intelligence: Record<string, unknown>
+  skills: WorkshopSkill[]; supports: WorkshopSupport[]
+}
+
+function successRateColor(rate: number): string {
+  if (rate >= 80) return "text-success"
+  if (rate >= 50) return "text-warning"
+  return "text-danger"
+}
+
+function WorkshopContent({ templateId }: { templateId: string }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["forge", "workshop", templateId],
+    queryFn: () => api<{ data: WorkshopData }>(`/api/admin/templates/${templateId}/workshop`),
+    enabled: !!templateId,
+  })
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="size-5 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (isError || !data?.data) {
+    return <p className="text-xs text-text3 py-8 text-center">Failed to load workshop data.</p>
+  }
+
+  const w = data.data
+  const filledSlots = w.skills.length
+  const totalSlots = w.skill_slots
+
+  return (
+    <div className="space-y-5 max-w-2xl">
+      {/* Header */}
+      <div className="flex items-center gap-3 pb-2 border-b border-border">
+        <div>
+          <p className="text-sm font-bold text-text">{w.name}</p>
+          <p className="text-2xs text-text3">Level {w.level} · {w.rarity} · Elo {w.elo_rating}</p>
+        </div>
+        <Badge className="ml-auto capitalize text-2xs border-0 bg-raised text-text2">{w.shell}</Badge>
+      </div>
+
+      {/* Intelligence */}
+      {w.intelligence && Object.keys(w.intelligence).length > 0 && (
+        <div>
+          <p className="text-2xs font-semibold uppercase tracking-wider text-text3 mb-2">Intelligence</p>
+          <div className="rounded-lg border border-border bg-surface p-3 space-y-1">
+            {Object.entries(w.intelligence).map(([k, v]) => (
+              <div key={k} className="flex items-center gap-2">
+                <span className="text-2xs text-text3 w-32 shrink-0">{k.replace(/_/g, ' ')}</span>
+                <span className="text-2xs text-text truncate">{String(v)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Skill Slots */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <p className="text-2xs font-semibold uppercase tracking-wider text-text3">Skill Slots</p>
+          <span className="text-2xs text-text3">({filledSlots}/{totalSlots} equipped)</span>
+          {w.star_level >= 2 && (
+            <Badge className="text-2xs border-0 bg-[var(--forge-ember)]/10 text-[var(--forge-flame)]">
+              {w.star_level}★ +{w.star_level - 1} bonus {w.star_level - 1 === 1 ? "slot" : "slots"}
+            </Badge>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {Array.from({ length: totalSlots }).map((_, i) => {
+            const skill = w.skills[i]
+            return (
+              <div
+                key={i}
+                className={`rounded-lg border p-2.5 ${
+                  skill
+                    ? "border-border bg-surface"
+                    : "border-dashed border-border/40 bg-transparent"
+                }`}
+              >
+                {skill ? (
+                  <>
+                    <p className="text-xs font-medium text-text truncate">{skill.skill_id.replace(/-/g, ' ')}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className={`text-2xs font-bold tabular-nums ${successRateColor(skill.success_rate_30d)}`}>
+                        {skill.success_rate_30d.toFixed(0)}%
+                      </span>
+                      <span className="text-2xs text-text3">30d</span>
+                    </div>
+                    {skill.total_uses > 0 && (
+                      <p className="text-2xs text-text3 mt-0.5">{skill.total_uses} uses</p>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-10 gap-1">
+                    <span className="size-4 rounded border border-dashed border-border/40" />
+                    <p className="text-2xs text-text3/40">Empty</p>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Supports */}
+      {w.supports.length > 0 && (
+        <div>
+          <p className="text-2xs font-semibold uppercase tracking-wider text-text3 mb-2">Supports</p>
+          <div className="space-y-2">
+            {w.supports.map((s, i) => (
+              <div key={s.id || i} className="rounded-lg border border-border bg-surface p-3">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-text">{s.id}</p>
+                    {s.target_skill && (
+                      <p className="text-2xs text-text3 mt-0.5">→ {s.target_skill}</p>
+                    )}
+                    {s.measured_impact && (
+                      <p className="text-2xs text-success mt-1">{s.measured_impact}</p>
+                    )}
+                    {s.prompt_diff && (
+                      <pre className="mt-2 text-2xs text-text2 bg-raised rounded p-2 whitespace-pre-wrap font-mono overflow-x-auto">
+                        {s.prompt_diff}
+                      </pre>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {w.supports.length === 0 && (
+        <p className="text-2xs text-text3 italic">No supports equipped. Reach ★★★ (200 dispatches + 85% reliability) to unlock.</p>
+      )}
+    </div>
+  )
+}
+
+// ── Workshop placeholder ───────────────────────────────────
 
 function WorkshopPlaceholder() {
   return (
@@ -448,6 +603,8 @@ export default function ForgePage() {
   const [templateSearch, setTemplateSearch] = useState("")
   const [templateCat, setTemplateCat] = useState("all")
   const [activeTab, setActiveTab] = useState("templates")
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
+  const [birthItem, setBirthItem] = useState<{ template_name: string | null; template_id: string; appearance_spec?: unknown } | null>(null)
 
   // Templates query — fetch all, filter client-side
   const { data: tmplData } = useQuery({
@@ -463,6 +620,16 @@ export default function ForgePage() {
   const queued = items.filter(i => i.status === "queued")
   const active = items.filter(i => i.status === "claimed")
   const complete = items.filter(i => i.status === "complete")
+
+  // Birth animation — trigger on new complete items
+  useEffect(() => {
+    if (complete.length > 0) {
+      const latest = complete[complete.length - 1]
+      setBirthItem(latest)
+      const t = setTimeout(() => setBirthItem(null), 4000)
+      return () => clearTimeout(t)
+    }
+  }, [complete.length])
 
   const allTemplates = (tmplData?.templates ?? [])
     .sort((a, b) => {
@@ -701,7 +868,11 @@ export default function ForgePage() {
                             <Badge className="text-2xs border-0 bg-[var(--forge-ember)]/10 text-[var(--forge-flame)]">Queued</Badge>
                           ) : (
                             <Button size="sm" variant="outline" className="h-5 text-2xs px-2 gap-1 border-border text-text3 hover:text-[var(--forge-ember)] hover:border-[var(--forge-ember)]/30"
-                              onClick={() => queueMut.mutate({ template_id: t.id })}
+                              onClick={() => {
+                                queueMut.mutate({ template_id: t.id })
+                                setSelectedTemplate(t.id)
+                                setActiveTab("workshop")
+                              }}
                             >
                               <Flame className="size-2.5" /> Queue
                             </Button>
@@ -720,9 +891,12 @@ export default function ForgePage() {
               <ArmoryContent />
             </TabsContent>
 
-            {/* Workshop — configure build (placeholder, Plan 03 fills this) */}
+            {/* Workshop — live build configurator */}
             <TabsContent value="workshop" className="flex-1 overflow-y-auto p-4 mt-0">
-              <WorkshopPlaceholder />
+              {selectedTemplate
+                ? <WorkshopContent templateId={selectedTemplate} />
+                : <WorkshopPlaceholder />
+              }
             </TabsContent>
 
             {/* Arena — coming soon */}
@@ -732,6 +906,28 @@ export default function ForgePage() {
           </Tabs>
         </div>
       )}
+
+      {/* Birth animation overlay — fires when a forge item transitions to complete */}
+      {birthItem && (() => {
+        const spec = parseSpec((birthItem as any).appearance_spec || {})
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+            <div className="bg-background/80 backdrop-blur-sm rounded-2xl border border-[var(--forge-ember)]/30 p-8">
+              <BirthAnimation
+                name={birthItem.template_name || birthItem.template_id}
+                appearance={{
+                  skin: spec.skin || "#f1c27d",
+                  hair: spec.hair || "#2c1b18",
+                  eyes: spec.eyes || "#1a1a2e",
+                  shirt: spec.shirt || "#64748b",
+                  hairStyle: (["short","long","mohawk","bald","parted","buzz","curly","ponytail"].includes(spec.hair_style ?? "") ? spec.hair_style : "short") as any,
+                }}
+                bornAt={new Date().toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Singapore" })}
+              />
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Chat */}
       {chat.open ? (
