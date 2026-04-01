@@ -841,6 +841,20 @@ interface IntelEntry {
   id: string; source_agent: string; entry_type: string
   title: string; body: string; status: string; created_at: number
 }
+interface SessionEntry {
+  id: string; chat_id: string | null; agent_id: string | null
+  username: string | null; gateway_type: string | null; model_name: string | null
+  tokens_used: number; token_budget: number; context_pct: number
+  status: string; last_active_at: number
+}
+interface PatternEntry {
+  id: string; pattern_type: string; gateway_type: string | null; agent_id: string | null
+  summary: string; confidence: number; status: string; created_at: number
+}
+interface MsgBusEntry {
+  id: string; source_gateway: string | null; target_gateway: string | null
+  intent: string; status: string; latency_ms: number | null; created_at: number
+}
 
 function fmtTs(epoch: number): string {
   return new Date(epoch * 1000).toLocaleTimeString("en-SG", { timeZone: "Asia/Singapore", hour12: false })
@@ -864,6 +878,34 @@ function OperatorActivityLog() {
     return () => window.removeEventListener("bridge:activity", onActivity)
   }, [])
 
+  useEffect(() => {
+    function onContextPressure(e: Event) {
+      const detail = (e as CustomEvent).detail
+      if (!detail) return
+      const pct = typeof detail.context_pct === 'number' ? Math.round(detail.context_pct * 100) : 0
+      const color = pct >= 95 ? "text-danger" : "text-warning"
+      const action = detail.action === 'rotated' ? '↻ rotated' : '⚠ pressure'
+      const gw = detail.gateway_type ?? '?'
+      const agent = detail.agent_id ? detail.agent_id.slice(0, 8) : detail.username ?? '?'
+      pushOpEvent(`${fmtNow()} [session] ${action} ${agent}@${gw} ${pct}% context`, color)
+      setSnifferTick(t => t + 1)
+    }
+    function onIntelligence(e: Event) {
+      const detail = (e as CustomEvent).detail
+      if (!detail) return
+      const promoted = detail.promoted ? ' → promoted to Recall' : ''
+      const conf = detail.confidence ?? 0
+      pushOpEvent(`${fmtNow()} [intel] ${detail.pattern_type}: ${(detail.summary ?? '').slice(0, 80)} (${conf}% conf${promoted})`, "text-chart-2")
+      setSnifferTick(t => t + 1)
+    }
+    window.addEventListener("bridge:context-pressure", onContextPressure)
+    window.addEventListener("bridge:intelligence", onIntelligence)
+    return () => {
+      window.removeEventListener("bridge:context-pressure", onContextPressure)
+      window.removeEventListener("bridge:intelligence", onIntelligence)
+    }
+  }, [])
+
   const { data: bridgeData } = useQuery({
     queryKey: ["bridge", "gateway-cards"],
     queryFn: () => api<{ gateways: Array<{ id: string; name: string; type: string; status: string; enabled: boolean; circuit_state: string; last_health_at: number | null; model_count: number; metadata: Record<string, unknown> }> }>("/api/admin/bridge"),
@@ -883,6 +925,24 @@ function OperatorActivityLog() {
     queryKey: ["bridge", "capacity"],
     queryFn: () => api<{ gateways: GatewayCapacity[] }>("/api/admin/bridge/capacity").catch(() => ({ gateways: [] as GatewayCapacity[] })),
     staleTime: 30_000,
+    retry: false,
+  })
+  const { data: sessionsData } = useQuery({
+    queryKey: ["bridge", "sessions"],
+    queryFn: () => api<{ sessions: SessionEntry[] }>("/api/admin/bridge/sessions?limit=10").catch(() => ({ sessions: [] as SessionEntry[] })),
+    staleTime: 15_000,
+    retry: false,
+  })
+  const { data: patternsData } = useQuery({
+    queryKey: ["bridge", "patterns"],
+    queryFn: () => api<{ patterns: PatternEntry[] }>("/api/admin/bridge/patterns?limit=10").catch(() => ({ patterns: [] as PatternEntry[] })),
+    staleTime: 60_000,
+    retry: false,
+  })
+  const { data: msgbusData } = useQuery({
+    queryKey: ["bridge", "msgbus"],
+    queryFn: () => api<{ events: MsgBusEntry[] }>("/api/admin/bridge/msgbus?limit=10").catch(() => ({ events: [] as MsgBusEntry[] })),
+    staleTime: 15_000,
     retry: false,
   })
 
@@ -992,6 +1052,47 @@ function OperatorActivityLog() {
         : entry.entry_type === "capability" ? "text-chart-2"
         : "text-text3"
       lines.push({ text: `${ts} [intel] ${entry.title}`, color, _key: k++ })
+    }
+  }
+
+  // Active session state (BRG-01)
+  const sessions = sessionsData?.sessions ?? []
+  if (sessions.length > 0) {
+    lines.push({ text: "", color: "text-text3", _key: k++ })
+    for (const s of sessions) {
+      const ts = fmtTs(s.last_active_at)
+      const pct = s.context_pct
+      const color = pct >= 95 ? "text-danger" : pct >= 80 ? "text-warning" : "text-accent-porter"
+      const agent = s.agent_id ? s.agent_id.slice(0, 8) : s.username ?? s.chat_id?.slice(0, 8) ?? '?'
+      const gw = s.gateway_type ?? '?'
+      lines.push({ text: `${ts} [session] ${agent}@${gw} — ${pct.toFixed(1)}% context`, color, _key: k++ })
+    }
+  }
+
+  // Message bus activity (BRG-02)
+  const msgbusEvents = msgbusData?.events ?? []
+  if (msgbusEvents.length > 0) {
+    lines.push({ text: "", color: "text-text3", _key: k++ })
+    for (const ev of msgbusEvents) {
+      const ts = fmtTs(ev.created_at)
+      const src = ev.source_gateway ?? '?'
+      const tgt = ev.target_gateway ?? '?'
+      const latency = ev.latency_ms ? ` ${ev.latency_ms}ms` : ''
+      const color = ev.status === 'failed' ? "text-danger" : "text-text2"
+      lines.push({ text: `${ts} [msgbus] ${src}→${tgt} ${ev.intent}${latency}`, color, _key: k++ })
+    }
+  }
+
+  // Intelligence patterns (BRG-03)
+  const patterns = patternsData?.patterns ?? []
+  if (patterns.length > 0) {
+    lines.push({ text: "", color: "text-text3", _key: k++ })
+    for (const p of patterns) {
+      const ts = fmtTs(p.created_at)
+      const promoted = p.status === 'promoted' ? ' ✓' : ''
+      const conf = p.confidence
+      const color = p.status === 'promoted' ? "text-success" : conf >= 80 ? "text-chart-2" : "text-text3"
+      lines.push({ text: `${ts} [pattern] ${p.pattern_type}: ${p.summary.slice(0, 70)} (${conf}%${promoted})`, color, _key: k++ })
     }
   }
 
