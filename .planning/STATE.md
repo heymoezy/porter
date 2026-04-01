@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
 status: unknown
-stopped_at: Completed 27-02-PLAN.md — VitalsBar and PassiveTreeView components built
-last_updated: "2026-04-01T08:05:13.725Z"
+stopped_at: Completed 27-03-PLAN.md — SHEET tab wired and shipped
+last_updated: "2026-04-01T08:11:35.492Z"
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -49,6 +49,7 @@ Plan: 1 of 3
 | Phase 26-forge-unification P03 | 7 | 3 tasks | 3 files |
 | Phase 27-character-sheet-ui P01 | 220 | 2 tasks | 3 files |
 | Phase 27-character-sheet-ui P02 | 231s | 2 tasks | 3 files |
+| Phase 27-character-sheet-ui P03 | 218s | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,7 @@ Plan: 1 of 3
 - [Phase 27-02]: VitalsBar templateId prefixed with _ to preserve Phase 29 API contract without TS unused-var warning
 - [Phase 27-02]: Focus vital uses dispatchCount%50 proxy — Phase 29 session registry replaces with real context window pressure
 - [Phase 27-02]: PassiveTreeView skips unknown node_ids silently — NODE_DEFS is canonical list, not props.nodes
+- [Phase 27-character-sheet-ui]: SHEET tab inserted before INSTANCES — RPG content grouped logically, workshop query is template-scoped (same id as agent), VitalsBar dispatchCount defaults to 0 for fresh agents
 
 ### Pending Todos
 
@@ -96,6 +98,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T08:05:13.722Z
-Stopped at: Completed 27-02-PLAN.md — VitalsBar and PassiveTreeView components built
+Last session: 2026-04-01T08:11:35.490Z
+Stopped at: Completed 27-03-PLAN.md — SHEET tab wired and shipped
 Resume file: None

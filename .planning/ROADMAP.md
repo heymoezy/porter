@@ -69,7 +69,7 @@
 - [x] **Phase 24: Schema Migration** — 7 new tables + 2 ALTERs for the entire RPG + Arena data model (completed 2026-04-01)
 - [x] **Phase 25: RPG Engine** — Stat calculation from dispatch logs, XP/level/star/rarity progression, .md regeneration (completed 2026-04-01)
 - [x] **Phase 26: Forge Unification** — Nav merge, 4-tab shell, skills/supports system with live success rates (completed 2026-04-01)
-- [ ] **Phase 27: Character Sheet UI** — Pentagon stat chart, rarity borders, vitals bars, passive tree, gear display
+- [x] **Phase 27: Character Sheet UI** — Pentagon stat chart, rarity borders, vitals bars, passive tree, gear display (completed 2026-04-01)
 - [ ] **Phase 28: Battle Arena** — Head-to-head battles, ensemble judge, Elo ratings, pre-launch calibration
 - [ ] **Phase 29: Session Registry + Message Bus** — Per-session token accounting, context pressure detection, envelope protocol
 - [ ] **Phase 30: Intelligence Loop + Bridge Operator** — Pattern extraction, Recall promotion, Vigil live surfaces
@@ -187,7 +187,7 @@ Phases execute in numeric order: 24 → 25 → 26 (parallel with 25) → 27 → 
 | 24. Schema Migration | v4.0 | 2/2 | Complete | 2026-04-01 |
 | 25. RPG Engine | 3/3 | Complete   | 2026-04-01 | - |
 | 26. Forge Unification | 3/3 | Complete   | 2026-04-01 | - |
-| 27. Character Sheet UI | 2/3 | In Progress|  | - |
+| 27. Character Sheet UI | 3/3 | Complete   | 2026-04-01 | - |
 | 28. Battle Arena | v4.0 | 0/TBD | Not started | - |
 | 29. Session Registry + Message Bus | v4.0 | 0/TBD | Not started | - |
 | 30. Intelligence Loop + Bridge Operator | v4.0 | 0/TBD | Not started | - |
