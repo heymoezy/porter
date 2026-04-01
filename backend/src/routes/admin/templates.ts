@@ -115,6 +115,58 @@ export default async function templatesRoutes(fastify: FastifyInstance) {
     return ok({ total, categories: catCounts, archetypes: archetypeCounts });
   });
 
+  // GET /api/admin/templates/:id/workshop — RPG build data for the Workshop tab
+  interface SupportEntry { id: string; target_skill?: string; prompt_diff?: string; measured_impact?: string }
+  interface TemplateSkillRow { skill_id: string; sort_order: number | null; success_rate_30d: number | null; total_uses: number | null; last_used: number | null }
+  interface WorkshopTemplateRow { id: string; name: string; star_level: number | null; level: number | null; xp: number | null; rarity: string | null; shell: string | null; elo_rating: number | null; intelligence: unknown; supports: unknown; equipment_slots: unknown; passive_tree: unknown }
+  fastify.get('/:id/workshop', async (req, reply) => {
+    const { id } = req.params as { id: string };
+
+    const row = await queryOne<WorkshopTemplateRow>(
+      `SELECT id, name, star_level, level, xp, rarity, shell, elo_rating, intelligence, supports, equipment_slots, passive_tree
+       FROM agent_templates WHERE id = $1`,
+      [id]
+    );
+
+    if (!row) {
+      reply.status(404);
+      return err('NOT_FOUND', `Template ${id} not found`);
+    }
+
+    const skills = await queryAll<TemplateSkillRow>(
+      `SELECT ts.skill_id, ts.sort_order, ts.success_rate_30d, ts.total_uses, ts.last_used
+       FROM template_skills ts
+       WHERE ts.template_id = $1
+       ORDER BY ts.sort_order ASC, ts.skill_id ASC`,
+      [id]
+    );
+
+    const starLevel = row.star_level ?? 1;
+
+    return ok({
+      id: row.id,
+      name: row.name,
+      star_level: starLevel,
+      level: row.level ?? 1,
+      xp: row.xp ?? 0,
+      rarity: row.rarity ?? 'common',
+      shell: row.shell ?? 'builder',
+      elo_rating: row.elo_rating ?? 1200,
+      intelligence: parseJson(row.intelligence, {}),
+      supports: parseJson<SupportEntry[]>(row.supports, []),
+      equipment_slots: parseJson(row.equipment_slots, []),
+      passive_tree: parseJson(row.passive_tree, []),
+      skill_slots: Math.max(4, 4 + (starLevel - 1)),
+      skills: skills.map(s => ({
+        skill_id: s.skill_id,
+        sort_order: s.sort_order ?? 0,
+        success_rate_30d: s.success_rate_30d ?? 0,
+        total_uses: s.total_uses ?? 0,
+        last_used: s.last_used ?? null,
+      })),
+    });
+  });
+
   // GET /api/admin/templates/:id — single template with .md files
   fastify.get('/:id', async (req) => {
     const { id } = req.params as { id: string };
