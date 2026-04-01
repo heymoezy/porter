@@ -117,7 +117,11 @@ Plans:
   3. Workshop tab displays an agent's active skills with live 30-day success rate next to each skill name, and skill slot count increases visibly as agent level rises
   4. Supports display an exact prompt diff and a measured battle impact score — not placeholder text
   5. Forging a new agent from a template shows the birth animation sequence (grayscale → color → particle burst) and ends with the agent appearing in the agent list
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 26-01-PLAN.md — Backend: GET /api/admin/templates/:id/workshop endpoint with skills + success_rate_30d + supports JSONB
+- [ ] 26-02-PLAN.md — Frontend: Sidebar nav merge (3 items → 1) + 4-tab Forge shell + Armory tab absorbs skills/tools
+- [ ] 26-03-PLAN.md — Frontend: Full Workshop tab with live skill rates + supports diff + birth animation grayscale-to-color
 
 ### Phase 27: Character Sheet UI
 **Goal**: Every agent has a full character sheet users can read like a game card — stats, gear, vitals, passive tree, rarity, and star level are visible, accurate, and update in real time
@@ -178,7 +182,7 @@ Phases execute in numeric order: 24 → 25 → 26 (parallel with 25) → 27 → 
 | 16-23 | v3.0 | - | Complete | 2026-03-25 |
 | 24. Schema Migration | v4.0 | 2/2 | Complete | 2026-04-01 |
 | 25. RPG Engine | 3/3 | Complete   | 2026-04-01 | - |
-| 26. Forge Unification | v4.0 | 0/TBD | Not started | - |
+| 26. Forge Unification | v4.0 | 0/3 | Not started | - |
 | 27. Character Sheet UI | v4.0 | 0/TBD | Not started | - |
 | 28. Battle Arena | v4.0 | 0/TBD | Not started | - |
 | 29. Session Registry + Message Bus | v4.0 | 0/TBD | Not started | - |
