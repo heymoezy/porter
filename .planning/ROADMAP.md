@@ -193,5 +193,5 @@ Phases execute in numeric order: 24 → 25 → 26 (parallel with 25) → 27 → 
 | 26. Forge Unification | 3/3 | Complete   | 2026-04-01 | - |
 | 27. Character Sheet UI | 3/3 | Complete   | 2026-04-01 | - |
 | 28. Battle Arena | v4.0 | 0/TBD | Not started | - |
-| 29. Session Registry + Message Bus | 1/3 | In Progress|  | - |
+| 29. Session Registry + Message Bus | 2/3 | In Progress|  | - |
 | 30. Intelligence Loop + Bridge Operator | v4.0 | 0/TBD | Not started | - |

@@ -72,9 +72,9 @@
 
 ### Session Registry & Message Bus
 
-- [ ] **SES-01**: Per-session token count, context %, age tracking
+- [x] **SES-01**: Per-session token count, context %, age tracking
 - [ ] **SES-02**: Context pressure detection at 80%
-- [ ] **SES-03**: Session rotation with Recall summary carry
+- [x] **SES-03**: Session rotation with Recall summary carry
 - [x] **MSG-01**: Structured message envelope for inter-gateway communication
 - [x] **MSG-02**: Cross-model handoffs
 
@@ -169,9 +169,9 @@
 | BTL-07 | Phase 28 | Pending |
 | BTL-08 | Phase 28 | Pending |
 | BTL-09 | Phase 28 | Pending |
-| SES-01 | Phase 29 | Pending |
+| SES-01 | Phase 29 | Complete |
 | SES-02 | Phase 29 | Pending |
-| SES-03 | Phase 29 | Pending |
+| SES-03 | Phase 29 | Complete |
 | MSG-01 | Phase 29 | Complete |
 | MSG-02 | Phase 29 | Complete |
 | INT-01 | Phase 30 | Pending |
