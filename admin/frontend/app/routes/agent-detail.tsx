@@ -116,10 +116,10 @@ function AgentDetailContent() {
     retry: false,
   })
 
-  // RPG stats — null if agent has no dispatches
+  // RPG stats — null if agent has no dispatches or isn't born yet
   const { data: rpgData } = useQuery({
     queryKey: ["admin", "agents", id, "rpg-stats"],
-    queryFn: () => api<{ stats: RpgStats | null }>(`/api/admin/agents/${id}/rpg-stats`),
+    queryFn: () => api<{ stats: RpgStats | null }>(`/api/admin/agents/${id}/rpg-stats`).catch(() => ({ stats: null })),
     enabled: !!id,
     retry: false,
     staleTime: 30_000,
@@ -128,7 +128,7 @@ function AgentDetailContent() {
   // Workshop data — skills, supports, equipment, passive tree
   const { data: workshopData } = useQuery({
     queryKey: ["admin", "templates", id, "workshop"],
-    queryFn: () => api<WorkshopData>(`/api/admin/templates/${id}/workshop`),
+    queryFn: () => api<WorkshopData>(`/api/admin/templates/${id}/workshop`).catch(() => null),
     enabled: !!id,
     retry: false,
     staleTime: 60_000,
