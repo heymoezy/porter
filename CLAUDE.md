@@ -89,3 +89,23 @@ cd tests && npx playwright test              # regression
 curl http://127.0.0.1:3001/health            # health check
 psql -d porter                               # direct DB access
 ```
+
+## Ship Process — Porter Specific
+
+Every change follows this atomic sequence. Never skip steps:
+1. Frontend build: `cd admin/frontend && npx react-router build`
+2. Backend build: `cd backend && npm run build`
+3. Kill stale processes: `pkill -9 -f "porter/backend"`
+4. Wait: `sleep 4`
+5. Start: `systemctl --user start porter-fastify`
+6. Wait: `sleep 8`
+7. Verify: `curl -s http://127.0.0.1:3001/health`
+
+**CRITICAL:** Backend serves frontend static files. If you rebuild frontend without restarting backend, assets 404 and the page goes blank. Always restart after frontend build.
+
+## Verification Checklist — Before Claiming "Done"
+
+- [ ] `npx tsc --noEmit` in backend (or `npm run build`) — zero type errors
+- [ ] `npx react-router build` in admin/frontend — builds clean
+- [ ] Service restarted and health returns current version
+- [ ] Tested the actual change (curl, browser, psql) — not just "it compiled"
