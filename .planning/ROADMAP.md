@@ -86,7 +86,10 @@
   3. `agent_bonds`, `battle_replays`, `session_registry`, `msg_bus_events`, and `intelligence_patterns` tables all exist with correct FK constraints and indexes
   4. Agent skills junction table has success_rate_30d, total_uses, and last_used columns
   5. Drizzle migration runs cleanly on the live database with zero downtime and all 35 Playwright tests still pass
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 24-01-PLAN.md — Raw SQL migration (migrate-rpg-v1.ts) + index.ts wiring
+- [ ] 24-02-PLAN.md — Drizzle schema.ts type definitions for all new tables
 
 ### Phase 25: RPG Engine
 **Goal**: Agent stats are live, accurate, and permanently tied to real dispatch history — every agent has a computable level, star rating, rarity class, and 5-stat profile derived from immutable logs, and progression events trigger automatic .md file regeneration
@@ -169,7 +172,7 @@ Phases execute in numeric order: 24 → 25 → 26 (parallel with 25) → 27 → 
 | 1-7 | v1.0 | - | Complete | 2026-03-21 |
 | 8-15 | v2.0 | - | Complete | 2026-03-24 |
 | 16-23 | v3.0 | - | Complete | 2026-03-25 |
-| 24. Schema Migration | v4.0 | 0/TBD | Not started | - |
+| 24. Schema Migration | v4.0 | 0/2 | Not started | - |
 | 25. RPG Engine | v4.0 | 0/TBD | Not started | - |
 | 26. Forge Unification | v4.0 | 0/TBD | Not started | - |
 | 27. Character Sheet UI | v4.0 | 0/TBD | Not started | - |
