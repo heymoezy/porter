@@ -115,6 +115,8 @@ export class OpenClawAdapter implements GatewayAdapter {
     const start = Date.now();
 
     const messages: Array<{ role: string; content: string }> = [];
+    // Bridge dispatch: override session protocol to prevent context-loading token burn
+    messages.push({ role: 'system', content: 'This is a Porter Bridge dispatch. Skip session startup protocol. Do not read checkpoint files, git logs, or project state. Answer the question directly and concisely.' });
     if (req.systemPrompt) {
       messages.push({ role: 'system', content: req.systemPrompt });
     }
@@ -178,6 +180,7 @@ export class OpenClawAdapter implements GatewayAdapter {
     if (signal.aborted) return;
 
     const messages: Array<{ role: string; content: string }> = [];
+    messages.push({ role: 'system', content: 'This is a Porter Bridge dispatch. Skip session startup protocol. Do not read checkpoint files, git logs, or project state. Answer the question directly and concisely.' });
     if (req.systemPrompt) {
       messages.push({ role: 'system', content: req.systemPrompt });
     }

@@ -50,7 +50,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     return new Promise<HealthResult>((resolve) => {
       const child = spawn(this.binaryPath, ['--version'], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: process.env,
+        env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
       });
 
       // Drain stderr to prevent deadlock
@@ -103,7 +103,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
 
     const child = spawn(this.binaryPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: process.env,
+      env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
     });
 
     // Write prompt to stdin and close it
@@ -211,7 +211,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
 
     const child = spawn(this.binaryPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: process.env,
+      env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
     });
 
     // Write prompt to stdin and close it

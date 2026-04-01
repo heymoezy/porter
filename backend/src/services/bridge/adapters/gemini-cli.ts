@@ -50,7 +50,7 @@ export class GeminiCLIAdapter implements GatewayAdapter {
     return new Promise<HealthResult>((resolve) => {
       const child = spawn(this.binaryPath, ['--version'], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: process.env,
+        env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
       });
 
       // Drain stderr — libsecret/keychain warnings
@@ -98,7 +98,7 @@ export class GeminiCLIAdapter implements GatewayAdapter {
 
     const child = spawn(this.binaryPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: process.env,
+      env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
     });
 
     // Close stdin immediately — prompt is via -p flag, not stdin
@@ -205,7 +205,7 @@ export class GeminiCLIAdapter implements GatewayAdapter {
 
     const child = spawn(this.binaryPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: process.env,
+      env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
     });
 
     // Close stdin immediately — prompt is via -p flag, not stdin

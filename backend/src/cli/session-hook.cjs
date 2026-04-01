@@ -11,6 +11,12 @@ const PORTER_DIR = path.resolve(__dirname, '..', '..', '..');
 const CHECKPOINT = path.join(PORTER_DIR, 'tasks', 'checkpoint.md');
 const PROJECTS = '/home/lobster/documents/projects.md';
 
+// Skip heavy context when called from Bridge dispatch (one-shot questions)
+if (process.env.PORTER_BRIDGE_DISPATCH) {
+  process.stdout.write('Answer the question directly. Do not read files or load context. Be concise.');
+  process.exit(0);
+}
+
 const lines = [];
 
 // Detect which CLI is calling us (env hint or fallback to cwd heuristic)
