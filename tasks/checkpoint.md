@@ -4,8 +4,8 @@
 
 project: porter
 version: v3.4.2
-updated: 2026-03-31
-updated_by: gemini-cli-adapter
+updated: 2026-04-01
+updated_by: claude-opus-4.6
 
 ## Architecture
 

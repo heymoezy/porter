@@ -115,6 +115,8 @@ export interface RoutingContext {
   messageSequence?: number;
   requiredCapabilities?: string[];
   username?: string;
+  forceGatewayType?: string;
+  forceModelName?: string;
 }
 
 export interface RoutingDecision {

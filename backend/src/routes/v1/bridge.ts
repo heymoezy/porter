@@ -85,6 +85,16 @@ function mapRawToGatewayRow(raw: any): GatewayRow {
   };
 }
 
+function splitTargetGateway(value?: string): { gatewayType?: string; modelName?: string } {
+  if (!value) return {};
+  const idx = value.indexOf(':');
+  if (idx === -1) return { gatewayType: value };
+  return {
+    gatewayType: value.slice(0, idx),
+    modelName: value.slice(idx + 1) || undefined,
+  };
+}
+
 // ── Plugin ────────────────────────────────────────────────────────────────────
 
 export default async function bridgeV1Routes(
@@ -444,10 +454,33 @@ export default async function bridgeV1Routes(
     // targetGateway (if set) acts as a force_model hint via routing context.
     // We pass it as a routing context extension so operator rules still take
     // precedence; targetGateway is only advisory.
+    const { gatewayType: forceGatewayType, modelName: forceModelName } = splitTargetGateway(message.targetGateway);
+
     const ctx: RoutingContext = {
       message: message.task,
       username: request.sessionUser?.username ?? 'system',
+      forceGatewayType,
+      forceModelName,
     };
+
+    const runId = message.messageId;
+    const chainId = message.correlationId ?? message.messageId;
+
+    const created = await pool.query<{ id: number }>(
+      `INSERT INTO agent_messages
+         (run_id, from_agent, to_agent, message, status, chain_id, step_num, created_at)
+       VALUES ($1, $2, $3, $4, 'pending', $5, $6, EXTRACT(EPOCH FROM NOW()))
+       RETURNING id`,
+      [
+        runId,
+        message.sourceAgent ?? message.sourceGateway ?? 'porter',
+        message.targetAgent ?? message.targetGateway ?? 'unknown',
+        message.task,
+        chainId,
+        hopCount,
+      ],
+    );
+    const agentMessageId = created.rows[0]?.id ?? null;
 
     // ── Select gateway + dispatch ──────────────────────────────────────────
     const dispatchReq = {
@@ -465,6 +498,14 @@ export default async function bridgeV1Routes(
       result = await routingEngine.dispatchWithQueue(decision, dispatchReq);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      if (agentMessageId != null) {
+        await pool.query(
+          `UPDATE agent_messages
+           SET status = 'failed', error = $2, completed_at = EXTRACT(EPOCH FROM NOW())
+           WHERE id = $1`,
+          [agentMessageId, msg],
+        );
+      }
       return reply.code(502).send(err('DISPATCH_FAILED', msg));
     }
 
@@ -493,7 +534,61 @@ export default async function bridgeV1Routes(
       createdAt: Date.now(),
     };
 
+    if (agentMessageId != null) {
+      await pool.query(
+        `UPDATE agent_messages
+         SET status = 'complete',
+             response = $2,
+             model = $3,
+             tokens_total = $4,
+             duration_ms = $5,
+             completed_at = EXTRACT(EPOCH FROM NOW())
+         WHERE id = $1`,
+        [
+          agentMessageId,
+          result.response,
+          decision.modelName,
+          (result.inputTokens ?? 0) + (result.outputTokens ?? 0),
+          result.latencyMs,
+        ],
+      );
+    }
+
     return reply.send(ok(response));
+  });
+
+  // ── GET /agent-message/inbox — retrieve persisted agent-message rows ──────
+  fastify.get('/agent-message/inbox', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const query = request.query as Record<string, string | undefined>;
+    const agent = query.agent?.trim();
+    const status = query.status?.trim() ?? 'complete';
+    const limit = Math.min(Math.max(parseInt(query.limit ?? '20', 10) || 20, 1), 100);
+    const sinceId = query.since_id ? parseInt(query.since_id, 10) : null;
+
+    if (!agent) {
+      return reply.code(400).send(err('MISSING_AGENT', 'query.agent is required'));
+    }
+
+    const params: unknown[] = [agent, status, limit];
+    let sql = `
+      SELECT id, run_id, from_agent, to_agent, message, response, status, model,
+             tokens_total, duration_ms, error, created_at, completed_at, chain_id, step_num
+      FROM agent_messages
+      WHERE to_agent = $1 AND status = $2
+    `;
+
+    if (sinceId != null && Number.isFinite(sinceId)) {
+      params.splice(2, 0, sinceId);
+      sql += ` AND id > $3`;
+      sql += ` ORDER BY id ASC LIMIT $4`;
+    } else {
+      sql += ` ORDER BY id ASC LIMIT $3`;
+    }
+
+    const { rows } = await pool.query(sql, params);
+    return reply.send(ok({ messages: rows }));
   });
 
   // ── POST /setup/save — wizard step 4: enable or disable a gateway ────────────
