@@ -18,6 +18,7 @@ import { emitSSE } from '../scheduler.js';
 import { parseRateLimitHeaders, record429, hasCapacity } from './rate-limit-tracker.js';
 import { v4 as uuidv4 } from 'uuid';
 import { awardXP } from '../rpg-engine.js';
+import { upsertSession } from '../session-registry.js';
 import type {
   GatewayRow,
   GatewayAdapter,
@@ -353,6 +354,31 @@ export class RoutingEngine {
         if (ctx.agentId) {
           awardXP(ctx.agentId, 'dispatch').catch(() => {});
         }
+
+        // SES-01: Track per-session token usage
+        try {
+          const totalTokens = (result.inputTokens ?? 0) + (result.outputTokens ?? 0);
+          if (totalTokens > 0 && (ctx.chatId || ctx.agentId)) {
+            // Resolve context_window from models table for this gateway+model
+            let tokenBudget = 0;
+            try {
+              const { rows: mrows } = await pool.query<{ context_window: number }>(
+                `SELECT context_window FROM models WHERE gateway_id = $1 AND model_name = $2 LIMIT 1`,
+                [decision.gatewayRow.id, decision.modelName],
+              );
+              tokenBudget = mrows[0]?.context_window ?? 0;
+            } catch { /* non-fatal */ }
+
+            await upsertSession(
+              ctx.chatId ?? null,
+              ctx.agentId ?? null,
+              totalTokens,
+              decision.gatewayRow.type,
+              decision.modelName,
+              tokenBudget,
+            );
+          }
+        } catch { /* non-critical — never block dispatch */ }
 
         // INT-01: Memory V3 signal — agent learns model preferences
         if (ctx.agentId) {
