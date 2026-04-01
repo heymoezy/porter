@@ -178,16 +178,96 @@ RPG progression is the retention layer. You come for the orchestration, you stay
 - Howler.js for sound (battle hits, level chimes, forge hammer)
 - Pixel portraits with rarity-colored animated borders
 
+## Skills System (Ability Tree)
+
+3 skill types, each with real mechanical impact:
+
+### Active Skills (Combat Moves)
+Tools the agent deliberately invokes. Each has a cooldown (rate limit) and token cost.
+
+Examples:
+- Code Execution — run code, return output
+- Web Search — query the web, synthesize results
+- File System — read/write/edit files
+- API Call — hit external endpoints
+- Image Generation — create visuals
+- Database Query — direct DB access
+
+Equipped from available tools. Limited by skill slots (4 base, +1 per star).
+
+### Passive Skills (Character Perks)
+Always-on behaviors that fire automatically. Unlock at 3★.
+
+Examples:
+- Auto-Recall — reads Recall memory before every dispatch
+- Context Compression — summarizes long conversations mid-session
+- Error Retry — automatically retries on failure with adjusted approach
+- Citation — always includes sources in output
+- Guard Rails — self-censors off-topic responses
+
+### Ultimate Skill (Signature Move)
+One unique ability per agent. Unlocks at 4★. Long cooldown, massive impact.
+
+Examples:
+- Vigil: "Full Bridge diagnostic sweep" — probes all gateways + sessions in one pass
+- A coding agent: "Zero-shot architecture from a single sentence"
+- A research agent: "Deep synthesis across 50+ sources with confidence scoring"
+
+### Skill ↔ Gear Interaction
+- Weapon (model) determines which skills CAN be equipped (Claude can do 200k analysis, Ollama can't)
+- Armor (system prompt) determines how WELL skills execute (prompt tuned for code review makes that skill hit harder)
+- In battles, judge scores OUTPUT not loadout — skill choices are hidden strategy
+
+### Skill ↔ Routing Interaction
+Atlas matches task requirements to agent skill loadouts. "This task needs web search" → only agents with that active skill are candidates.
+
+## Tools vs Skills vs Forge — Unified Under Forge
+
+### The Problem
+Currently 3 separate nav items (Forge, Skills, Tools) for what should be one flow. A user building an agent visits 3 pages.
+
+### The Taxonomy
+- **Tools** = fixed capabilities that exist in the world (the weapon shop inventory). Code execution, web search, DB query. Discovered and registered.
+- **Skills** = how an agent uses tools + learned behaviors. Crafted from tools + experience. A skill is a tool with intent.
+- **Forge** = where you build, equip, and birth agents. The one place.
+
+### The Merge
+| Before (3 nav items) | After (1 nav item) |
+|---|---|
+| Agent Forge | **Forge** |
+| Skills | *(folded in as skill tree)* |
+| Tools | *(folded in as armory)* |
+
+### Forge Tabs (Internal)
+| Tab | Purpose |
+|---|---|
+| **Templates** | Browse/create agent templates (character select screen) |
+| **Armory** | All available tools + skills (the shop) |
+| **Workshop** | Active builds in progress (agents being configured pre-forge) |
+| **Arena** | Battles (future) |
+
+### Forge Flow
+1. Pick a template (or create from scratch)
+2. Open Workshop — customize soul, identity, role, skills
+3. Visit Armory — equip tools into active skill slots
+4. Configure gear — pick model (weapon), tune prompt (armor), attach memory (accessory)
+5. Forge — gacha reveal animation, agent is born
+6. Deploy — assign to projects, enter arena
+
 ## Build Order
 
-1. **Schema** — add RPG fields to agent_templates + new tables (battles, bonds, specialties)
-2. **Character card component** — the visual character sheet with stat pentagon
-3. **Stat calculation engine** — dispatch data → real stats (immutable, derived)
-4. **Forge overhaul** — question-driven creation → gacha reveal animation
-5. **Battle Arena MVP** — same prompt, blind judge, Elo rating
-6. **Spectator mode** — live streaming, replays, share
-7. **Agent import** — pull from external frameworks
-8. **Marketplace** — sell/buy templates and loadouts
+1. **Schema overhaul** — RPG fields on agent_templates, new tables (battles, bonds, specialties, skill_tree)
+2. **Forge unification** — merge Skills + Tools + Forge into one nav item with Templates/Armory/Workshop tabs
+3. **Character card component** — visual character sheet with stat pentagon, rarity border, gear slots
+4. **Stat calculation engine** — dispatch data → real stats (immutable, derived)
+5. **Skill tree UI** — active/passive/ultimate skill management inside Forge Workshop
+6. **Session registry + message bus** — Porter owns sessions, structured gateway communication
+7. **Intelligence loop** — Bridge → pattern extraction → Recall → smarter routing
+8. **Forge birth animation** — question-driven creation → gacha reveal
+9. **Battle Arena MVP** — same prompt, blind judge, Elo rating
+10. **Spectator mode + tournaments** — live streaming, replays, share
+11. **Agent import** — pull from LangGraph, CrewAI, AutoGen, JSON spec
+12. **Marketplace** — sell/buy templates and loadouts
 
 ## Reference Games to Study
 
@@ -200,10 +280,14 @@ RPG progression is the retention layer. You come for the orchestration, you stay
 
 1. Turn-based or simultaneous battles?
 2. Team battles (3v3, 5v5)?
-3. How deep is the skill tree? Linear unlock or branching?
+3. How deep is the skill tree? Linear unlock or branching paths?
 4. Seasonal resets or permanent progression?
 5. How do we handle model deprecation (agent's weapon disappears)?
-6. Agent permadeath mode? (lose a battle = agent resets to level 1)
+6. Agent permadeath mode? (lose = reset to level 1)
+7. Should the Armory be global (all users share tools) or per-workspace?
+8. Can users create custom tools or only use registered ones?
+9. How does skill cooldown work in non-battle dispatches?
+10. Admin nav: does Forge absorb the entire Agents section? (Forge, Org Chart, Email → becomes Forge, Arena, Org Chart?)
 
 ---
 
