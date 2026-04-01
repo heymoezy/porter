@@ -3,6 +3,7 @@ import { ok, err } from '../../lib/admin-envelope.js';
 import { queryOne, queryAll, execute } from '../../db/pg-helpers.js';
 import { config } from '../../config.js';
 import { getAgentTasks, getAgentTaskStats } from '../../services/admin/customer-intel.js';
+import { getRpgStats, recalculateStats } from '../../services/rpg-engine.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -175,5 +176,30 @@ export default async function agentsRoutes(fastify: FastifyInstance) {
       [taskId]
     );
     return ok({ skipped: taskId });
+  });
+
+  // ── RPG Stats ────────────────────────────────────────────────────────────
+
+  // GET /api/admin/agents/:id/rpg-stats — return cached RPG stats for a template
+  fastify.get('/:id/rpg-stats', async (req) => {
+    const { id } = req.params as { id: string };
+    try {
+      const stats = await getRpgStats(id);
+      if (!stats) return ok({ stats: null, message: 'No RPG stats yet — agent has no dispatches' });
+      return ok({ stats });
+    } catch (e) {
+      return err('INTERNAL_ERROR', 'Failed to fetch RPG stats');
+    }
+  });
+
+  // POST /api/admin/agents/:id/rpg-recalculate — trigger recalculateStats() on demand
+  fastify.post('/:id/rpg-recalculate', async (req) => {
+    const { id } = req.params as { id: string };
+    try {
+      const stats = await recalculateStats(id);
+      return ok({ stats, recalculated: true });
+    } catch (e) {
+      return err('INTERNAL_ERROR', 'Recalculation failed');
+    }
   });
 }
