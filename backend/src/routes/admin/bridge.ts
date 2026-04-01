@@ -1119,4 +1119,103 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
       metrics,
     }));
   });
+
+  // GET /api/admin/bridge/sessions — active session registry for Vigil BRG-01
+  fastify.get('/sessions', async (request, reply) => {
+    const query = request.query as { limit?: string; status?: string };
+    const limit = Math.min(parseInt(query.limit ?? '50', 10), 200);
+    const status = query.status ?? 'active';
+
+    const rows = await queryAll<{
+      id: string;
+      chat_id: string | null;
+      agent_id: string | null;
+      username: string | null;
+      gateway_type: string | null;
+      model_name: string | null;
+      tokens_used: number;
+      token_budget: number;
+      context_msgs: number;
+      status: string;
+      created_at: number;
+      last_active_at: number;
+    }>(
+      `SELECT id, chat_id, agent_id, username, gateway_type, model_name,
+              tokens_used, token_budget, context_msgs, status, created_at, last_active_at
+       FROM session_registry
+       WHERE status = $1
+       ORDER BY last_active_at DESC
+       LIMIT $2`,
+      [status, limit],
+    );
+
+    const sessions = rows.map(r => ({
+      ...r,
+      context_pct: r.token_budget > 0
+        ? Math.round((r.tokens_used / r.token_budget) * 1000) / 10
+        : 0,
+    }));
+
+    return reply.send(ok({ sessions, count: sessions.length }));
+  });
+
+  // GET /api/admin/bridge/patterns — intelligence patterns for Vigil BRG-03
+  fastify.get('/patterns', async (request, reply) => {
+    const query = request.query as { limit?: string; status?: string };
+    const limit = Math.min(parseInt(query.limit ?? '20', 10), 100);
+    const status = query.status ?? null;
+
+    const rows = await queryAll<{
+      id: string;
+      pattern_type: string;
+      gateway_type: string | null;
+      agent_id: string | null;
+      summary: string;
+      confidence: number;
+      status: string;
+      promoted_to_concept_id: string | null;
+      created_at: number;
+    }>(
+      `SELECT id, pattern_type, gateway_type, agent_id, summary,
+              confidence, status, promoted_to_concept_id, created_at
+       FROM intelligence_patterns
+       ${status ? 'WHERE status = $2' : ''}
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      status ? [limit, status] : [limit],
+    );
+
+    return reply.send(ok({ patterns: rows, count: rows.length }));
+  });
+
+  // GET /api/admin/bridge/msgbus — message bus events for Vigil BRG-02
+  fastify.get('/msgbus', async (request, reply) => {
+    const query = request.query as { limit?: string; since?: string };
+    const limit = Math.min(parseInt(query.limit ?? '30', 10), 100);
+    const since = query.since ? parseFloat(query.since) : null;
+
+    const rows = await queryAll<{
+      id: string;
+      correlation_id: string | null;
+      source_agent: string | null;
+      source_gateway: string | null;
+      target_agent: string | null;
+      target_gateway: string | null;
+      intent: string;
+      status: string;
+      created_at: number;
+      delivered_at: number | null;
+      latency_ms: number | null;
+    }>(
+      `SELECT id, correlation_id, source_agent, source_gateway,
+              target_agent, target_gateway, intent, status, created_at, delivered_at, latency_ms
+       FROM msg_bus_events
+       ${since ? 'WHERE created_at > $2' : ''}
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      since ? [limit, since] : [limit],
+    );
+
+    return reply.send(ok({ events: rows, count: rows.length }));
+  });
 }
