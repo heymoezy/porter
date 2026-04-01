@@ -11,7 +11,7 @@ import { PixelPortrait } from "~/components/pixel-portrait"
 import { getAgent, type AgentDef } from "~/lib/agent-registry"
 import {
   Shield, Save, Sparkles, FolderKanban,
-  FileText, Eye, X, Flame, Users, Wrench, HeartPulse, Swords,
+  FileText, Eye, X, Flame, Users, Wrench, HeartPulse,
 } from "lucide-react"
 import { CharacterCard, type RpgStats, type WorkshopData } from "~/components/character-card"
 import { VitalsBar } from "~/components/vitals-bar"
@@ -329,9 +329,9 @@ function AgentDetailContent() {
                   </TabsTrigger>
                 </>
               )}
-              {/* Sheet tab — character sheet with RPG stats */}
-              <TabsTrigger value="sheet-tab" className="gap-1">
-                <Swords className="size-2.5" /> SHEET
+              {/* Build tab — agent build with RPG stats */}
+              <TabsTrigger value="build-tab" className="gap-1">
+                <Wrench className="size-2.5" /> BUILD
               </TabsTrigger>
               {/* Instances tab — always visible on templates */}
               <TabsTrigger value="instances-tab" className="gap-1">
@@ -456,8 +456,8 @@ function AgentDetailContent() {
             </Card>
           </TabsContent>
 
-          {/* Sheet tab — character sheet with RPG stats */}
-          <TabsContent value="sheet-tab" className="flex-1 min-h-0 mt-2">
+          {/* Build tab — agent build with RPG stats */}
+          <TabsContent value="build-tab" className="flex-1 min-h-0 mt-2">
             <div className="h-full overflow-y-auto">
               <div className="max-w-2xl mx-auto p-2 flex flex-col gap-4">
                 {rpgStats || workshop ? (
@@ -480,7 +480,7 @@ function AgentDetailContent() {
                 ) : (
                   <Card>
                     <CardContent className="py-8 text-center">
-                      <p className="text-xs text-text3">Forge this agent to unlock its character sheet</p>
+                      <p className="text-xs text-text3">Forge this agent to unlock its agent build</p>
                     </CardContent>
                   </Card>
                 )}

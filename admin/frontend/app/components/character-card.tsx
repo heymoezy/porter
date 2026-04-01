@@ -141,7 +141,7 @@ function StarDisplay({
         </div>
       </div>
 
-      <span className="text-[10px] text-[var(--text3)]">
+      <span className="text-xs text-[var(--text3)]">
         {dispatchCount} dispatches
       </span>
     </div>
@@ -161,7 +161,7 @@ function XpBar({ xp, level }: { xp: number; level: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-[10px] text-[var(--text3)]">
+      <span className="text-xs text-[var(--text3)]">
         {currentLevelXp} / {xpPerLevel} XP
       </span>
     </div>
@@ -205,7 +205,7 @@ function ShellIntelSection({ workshop }: { workshop: WorkshopData | null }) {
   return (
     <div className="grid grid-cols-2 gap-2 text-xs">
       <div className="flex flex-col gap-0.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
           Shell
         </span>
         <div className="flex items-center gap-1">
@@ -215,14 +215,14 @@ function ShellIntelSection({ workshop }: { workshop: WorkshopData | null }) {
       </div>
 
       <div className="flex flex-col gap-0.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
           Intelligence
         </span>
         <span className="font-medium truncate">
           {intelligence?.primary_model || 'Unassigned'}
         </span>
         {intelligence?.temperature !== undefined && (
-          <span className="text-[10px] text-[var(--text3)]">
+          <span className="text-xs text-[var(--text3)]">
             temp {intelligence.temperature}
           </span>
         )}
@@ -236,7 +236,7 @@ function SkillsSection({ workshop }: { workshop: WorkshopData | null }) {
     return (
       <div>
         <SectionLabel>Skills</SectionLabel>
-        <span className="text-[10px] text-[var(--text3)]">No workshop data</span>
+        <span className="text-xs text-[var(--text3)]">No workshop data</span>
       </div>
     )
   }
@@ -247,24 +247,28 @@ function SkillsSection({ workshop }: { workshop: WorkshopData | null }) {
     <div className="flex flex-col gap-1.5">
       <SectionLabel>Skills</SectionLabel>
       {shown.length === 0 ? (
-        <span className="text-[10px] text-[var(--text3)]">No skills equipped</span>
+        <span className="text-xs text-[var(--text3)]">No skills equipped</span>
       ) : (
         shown.map((skill, i) => (
           <div key={`${skill.skill_id}-${i}`} className="flex flex-col gap-0.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium truncate max-w-[70%]">
+              <span className="text-xs font-medium truncate max-w-[70%]">
                 {skill.skill_id}
               </span>
-              <span className="text-[10px] text-[var(--text3)]">
+              <span className="text-xs text-[var(--text3)]">
                 {skill.total_uses} uses
               </span>
             </div>
-            <div className="relative h-1 w-full overflow-hidden rounded-full bg-[var(--border)]">
-              <div
-                className="absolute left-0 top-0 h-full rounded-full bg-[var(--accent-porter)] transition-all"
-                style={{ width: `${Math.min(skill.success_rate_30d, 100)}%` }}
-              />
-            </div>
+            {skill.success_rate_30d > 0 ? (
+              <div className="relative h-1 w-full overflow-hidden rounded-full bg-[var(--border)]">
+                <div
+                  className="absolute left-0 top-0 h-full rounded-full bg-[var(--accent-porter)] transition-all"
+                  style={{ width: `${Math.min(skill.success_rate_30d, 100)}%` }}
+                />
+              </div>
+            ) : (
+              <span className="text-xs text-[var(--text3)]/50">&mdash;</span>
+            )}
           </div>
         ))
       )}
@@ -279,13 +283,13 @@ function SupportsSection({ workshop }: { workshop: WorkshopData | null }) {
     <div className="flex flex-col gap-1.5">
       <SectionLabel>Supports</SectionLabel>
       {supports.length === 0 ? (
-        <span className="text-[10px] text-[var(--text3)]">None equipped</span>
+        <span className="text-xs text-[var(--text3)]">None equipped</span>
       ) : (
         supports.map((s, i) => (
           <div key={`${s.id}-${i}`} className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-medium">{s.id}</span>
+            <span className="text-xs font-medium">{s.id}</span>
             {s.measured_impact && (
-              <span className="text-[10px] text-[var(--success)]">
+              <span className="text-xs text-[var(--success)]">
                 {s.measured_impact}
               </span>
             )}
@@ -297,29 +301,24 @@ function SupportsSection({ workshop }: { workshop: WorkshopData | null }) {
 }
 
 function EquipmentSection({ workshop }: { workshop: WorkshopData | null }) {
-  const slots = workshop?.equipment_slots?.slice(0, 6) ?? []
+  const allSlots = workshop?.equipment_slots?.slice(0, 6) ?? []
+  const equippedSlots = allSlots.filter(s => s.equipped)
 
   return (
     <div className="flex flex-col gap-1.5">
       <SectionLabel>Equipment</SectionLabel>
-      {slots.length === 0 ? (
-        <span className="text-[10px] text-[var(--text3)]">No slots</span>
+      {equippedSlots.length === 0 ? (
+        <span className="text-xs text-[var(--text3)]">Nothing equipped</span>
       ) : (
         <div className="grid grid-cols-2 gap-1">
-          {slots.map((slot, i) => (
-            <div key={i} className="flex items-center gap-1 text-[10px]">
-              <Target size={10} className="text-[var(--text3)] shrink-0" />
+          {equippedSlots.map((slot, i) => (
+            <div key={i} className="flex items-center gap-1 text-xs">
+              <Target size={12} className="text-[var(--text3)] shrink-0" />
               <span className="text-[var(--text3)] capitalize truncate">
                 {slot.slot || `Slot ${i + 1}`}:
               </span>
-              <span
-                className={
-                  slot.equipped
-                    ? 'font-medium truncate'
-                    : 'text-[var(--text3)]/40 italic'
-                }
-              >
-                {slot.equipped || 'Empty'}
+              <span className="font-medium truncate">
+                {slot.equipped}
               </span>
             </div>
           ))}
@@ -331,7 +330,7 @@ function EquipmentSection({ workshop }: { workshop: WorkshopData | null }) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+    <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
       {children}
     </span>
   )
@@ -347,7 +346,7 @@ export function CharacterCard({ rpg, workshop, agentName }: CharacterCardProps) 
         <CardContent className="py-6 flex flex-col items-center gap-2 text-center">
           <Zap size={24} className="text-[var(--text3)]" />
           <p className="text-sm text-[var(--text3)]">
-            Forge this agent to unlock its character sheet
+            Forge this agent to unlock its agent build
           </p>
         </CardContent>
       </Card>
@@ -368,18 +367,18 @@ export function CharacterCard({ rpg, workshop, agentName }: CharacterCardProps) 
 
           {/* Header row */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-sm flex-1 min-w-0 truncate">
+            <span className="font-bold text-base flex-1 min-w-0 truncate">
               {agentName}
             </span>
-            <Badge variant="outline" className={`capitalize text-[10px] ${rarityColorClass}`}>
+            <Badge variant="outline" className={`capitalize text-xs ${rarityColorClass}`}>
               {rarity}
             </Badge>
             {rpg && (
               <>
-                <Badge variant="secondary" className="text-[10px]">
+                <Badge variant="secondary" className="text-xs">
                   ELO {rpg.elo}
                 </Badge>
-                <Badge variant="secondary" className="text-[10px]">
+                <Badge variant="secondary" className="text-xs">
                   LV {rpg.level}
                 </Badge>
               </>
@@ -400,14 +399,22 @@ export function CharacterCard({ rpg, workshop, agentName }: CharacterCardProps) 
           {/* Stat Pentagon */}
           <StatPentagon rpg={rpg} />
 
+          <div className="border-b border-border/30" />
+
           {/* Shell + Intelligence */}
           <ShellIntelSection workshop={workshop} />
+
+          <div className="border-b border-border/30" />
 
           {/* Skills */}
           <SkillsSection workshop={workshop} />
 
+          <div className="border-b border-border/30" />
+
           {/* Supports */}
           <SupportsSection workshop={workshop} />
+
+          <div className="border-b border-border/30" />
 
           {/* Equipment */}
           <EquipmentSection workshop={workshop} />
@@ -418,7 +425,7 @@ export function CharacterCard({ rpg, workshop, agentName }: CharacterCardProps) 
               <SectionLabel>Specialties</SectionLabel>
               <div className="flex flex-wrap gap-1">
                 {specialties.slice(0, 3).map((s, i) => (
-                  <Badge key={i} variant="outline" className="text-[10px]">
+                  <Badge key={i} variant="outline" className="text-xs">
                     {s.label}
                   </Badge>
                 ))}

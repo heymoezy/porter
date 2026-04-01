@@ -4,14 +4,14 @@ export interface PassiveTreeViewProps {
 }
 
 const NODE_DEFS: Record<string, { label: string; effect: string; unlockLevel: number }> = {
-  "autonomous-routing": { label: "Auto Route",   effect: "+12% efficiency",    unlockLevel: 5 },
-  "context-anchor":     { label: "Ctx Anchor",   effect: "No quality decay",   unlockLevel: 10 },
-  "fail-fast-guard":    { label: "Fail Fast",    effect: "-18% hallucination", unlockLevel: 15 },
-  "cost-optimizer":     { label: "Cost Opt",     effect: "Cheapest viable",    unlockLevel: 20 },
-  "deep-memory":        { label: "Deep Recall",  effect: "Full history",       unlockLevel: 25 },
-  "team-synergy":       { label: "Team Synergy", effect: "+10% bonded",        unlockLevel: 30 },
-  "battle-hardened":    { label: "Hardened",     effect: "+5% all in arena",   unlockLevel: 0 },  // 10 battle wins
-  "specialist-focus":   { label: "Specialist",   effect: "+15% top domain",    unlockLevel: 0 },  // 50 domain dispatches
+  "autonomous-routing": { label: "Auto Routing",     effect: "+12% efficiency",    unlockLevel: 5 },
+  "context-anchor":     { label: "Context Anchor",   effect: "No quality decay",   unlockLevel: 10 },
+  "fail-fast-guard":    { label: "Fail Fast",        effect: "-18% hallucination", unlockLevel: 15 },
+  "cost-optimizer":     { label: "Cost Optimizer",   effect: "Cheapest viable",    unlockLevel: 20 },
+  "deep-memory":        { label: "Deep Recall",      effect: "Full history",       unlockLevel: 25 },
+  "team-synergy":       { label: "Team Synergy",     effect: "+10% bonded",        unlockLevel: 30 },
+  "battle-hardened":    { label: "Hardened",          effect: "+5% all in arena",   unlockLevel: 0 },  // 10 battle wins
+  "specialist-focus":   { label: "Specialist",        effect: "+15% top domain",    unlockLevel: 0 },  // 50 domain dispatches
 }
 
 const NODE_ORDER = Object.keys(NODE_DEFS)
@@ -41,7 +41,7 @@ function nodeWrapperClass(state: NodeState): string {
   switch (state) {
     case "active":   return "opacity-100"
     case "unlocked": return "opacity-100"
-    case "locked":   return "opacity-40"
+    case "locked":   return "opacity-60"
   }
 }
 
@@ -74,13 +74,16 @@ export function PassiveTreeView({ nodes, agentLevel: _agentLevel }: PassiveTreeV
           return (
             <div
               key={nodeId}
-              className={`flex flex-col items-center gap-0.5 p-1 rounded cursor-default ${nodeWrapperClass(state)}`}
+              className={`flex flex-col items-center gap-1 p-1.5 rounded cursor-default ${nodeWrapperClass(state)}`}
               title={title}
             >
-              <div className={`size-3 rounded-full ${nodeCircleClass(state)}`} />
-              <span className={`text-2xs text-center leading-tight ${nodeLabelClass(state)}`}>
+              <div className={`size-5 rounded-full ${nodeCircleClass(state)}`} />
+              <span className={`text-xs text-center leading-tight ${nodeLabelClass(state)}`}>
                 {def.label}
               </span>
+              {def.unlockLevel > 0 && (
+                <span className="text-2xs text-text3">Lv. {def.unlockLevel}</span>
+              )}
             </div>
           )
         })}

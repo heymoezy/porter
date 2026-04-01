@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
+import { Cpu, Heart, Crosshair } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
 interface UsageLimit {
   limit_type: string
@@ -64,20 +66,26 @@ interface VitalBarRowProps {
   value: string
   pct: number
   colorClass: string
+  icon: LucideIcon
 }
 
-function VitalBarRow({ label, value, pct, colorClass }: VitalBarRowProps) {
+function VitalBarRow({ label, value, pct, colorClass, icon: Icon }: VitalBarRowProps) {
   return (
     <div className="flex flex-col gap-0.5">
       <div className="flex items-center justify-between">
-        <span className="text-2xs font-semibold uppercase tracking-wide text-text3">{label}</span>
+        <span className="text-2xs font-semibold uppercase tracking-wide text-text3 flex items-center gap-1">
+          <Icon className="size-3 text-text3" />
+          {label}
+        </span>
         <span className="text-2xs font-mono text-foreground">{value}</span>
       </div>
-      <div className="h-1.5 w-full rounded-full bg-raised overflow-hidden">
+      <div className="relative h-2 w-full rounded-full bg-raised overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-700 ${colorClass}`}
+          className={`h-full rounded-full transition-all duration-300 ${colorClass}`}
           style={{ width: `${pct}%` }}
         />
+        {/* 50% threshold marker */}
+        <div className="absolute top-0 left-1/2 h-full w-px bg-text3/30" />
       </div>
     </div>
   )
@@ -110,18 +118,21 @@ export function VitalsBar({ templateId: _templateId, reliability, dispatchCount 
         value={`${Math.round(tokenPct)}%`}
         pct={tokenPct}
         colorClass={tokenColor(tokenPct)}
+        icon={Cpu}
       />
       <VitalBarRow
         label="Health"
         value={`${Math.round(healthPct)}%`}
         pct={healthPct}
         colorClass={healthColor(healthPct)}
+        icon={Heart}
       />
       <VitalBarRow
         label="Focus"
         value={`${Math.round(focusPct)}%`}
         pct={focusPct}
         colorClass={focusColor(focusPct)}
+        icon={Crosshair}
       />
     </div>
   )
