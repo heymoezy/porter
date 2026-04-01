@@ -8,7 +8,7 @@ import {
   Users, Mail, CreditCard, LayoutDashboard, Bug,
   ChevronLeft, ChevronRight, Settings, LogOut,
   Activity, Monitor,
-  Route, BookOpen, FileText,
+  Route, BookOpen,
   Code2, Palette, HardDrive, Network, Flame, Lightbulb,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
@@ -37,19 +37,17 @@ const groups = [
   { label: "Ops", items: [
     { icon: Route, label: "Bridge", path: "/bridge" },
     { icon: BookOpen, label: "Recall", path: "/recall" },
+    { icon: Lightbulb, label: "Intelligence", path: "/intelligence" },
     { icon: Monitor, label: "System", path: "/brain" },
     { icon: Activity, label: "Activity", path: "/activity" },
     { icon: Bug, label: "Diagnostics", path: "/diagnostics" },
   ]},
+  { label: "Files", items: [
+    { icon: HardDrive, label: "Files", path: "/files" },
+  ]},
   { label: "Dev", items: [
     { icon: Palette, label: "Design System", path: "/design-system" },
-    { icon: HardDrive, label: "Files", path: "/files" },
-    { icon: Lightbulb, label: "Intelligence", path: "/intelligence" },
     { icon: Code2, label: "Architecture", path: "/architecture" },
-    { icon: FileText, label: "Changelog", path: "/changelog" },
-  ]},
-  { label: "", items: [
-    { icon: Settings, label: "Settings", path: "/settings" },
   ]},
 ]
 
@@ -124,6 +122,9 @@ export function Sidebar({ collapsed, onToggle, notificationCount = 0, bridgeUpda
                 <p className="text-xs font-bold text-foreground truncate">{user.displayName || user.username}</p>
                 <p className="text-2xs text-text3">{(user.role ?? "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</p>
               </div>
+              <Link to="/settings" className="flex h-6 w-6 items-center justify-center rounded text-text3 hover:text-text2 hover:bg-raised">
+                <Settings className="h-3.5 w-3.5" />
+              </Link>
               <button onClick={() => logout.mutate()} className="flex h-6 w-6 items-center justify-center rounded text-text3 hover:text-text2">
                 <LogOut className="h-3.5 w-3.5" />
               </button>
