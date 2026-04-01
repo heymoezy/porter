@@ -1,235 +1,216 @@
 # Pitfalls Research
 
-**Domain:** AI Gateway — Model routing, provider management, cost tracking, circuit breakers, config migration
-**Researched:** 2026-03-25
-**Confidence:** HIGH (grounded in Porter's actual ai-router.ts + verified against production gateway postmortems and official API docs)
+**Domain:** RPG Gamification of AI Agents — Battle Arena, Competitive Ranking, Stat Systems, Productivity-Game Tension
+**Researched:** 2026-03-29
+**Confidence:** HIGH (grounded in: LLM judge bias research papers 2024-2025, Chatbot Arena vote-rigging paper ICML 2025, Elo manipulation literature, gamification failure analysis, Porter's specific VPS constraints)
 
-This file is specific to the v3.0 Porter Bridge milestone. It extends, not replaces, the v2.0 PITFALLS.md which covers streaming, RBAC, and collaborative session pitfalls.
+This file is specific to the v4.0 Agent RPG System + Battle Arena milestone. It extends the existing PITFALLS.md covering v3.0 Bridge pitfalls, which remain relevant for dispatch and gateway integration.
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Health Checks That Run on Every Request
+### Pitfall 1: LLM Judge Positional Bias Corrupts Battle Results
 
 **What goes wrong:**
-`probeBackend()` in the current `ai-router.ts` fires an HTTP HEAD request to the backend URL on every single `selectModel()` call — and then fires a second probe on the alt-tier to decide whether to log the decision. This means a 2-second HEAD request (or two) hits the network on every dispatch. Under load, this becomes the dominant latency source. Worse: if Ollama is on localhost and responds in <1ms, the probe feels free in development. Under production load with network-attached backends, each probe adds 50-200ms to every response.
+The battle judge receives two responses — Agent A's answer and Agent B's answer — in a fixed or predictable order. Research on LLM-as-a-Judge systems (ACL 2025, arxiv 2406.07791) shows position bias is not random chance: judges systematically favor the response presented first by 5-15% in pairwise comparisons. GPT-4 showed 40% inconsistency when answer order was swapped in the same comparison. This means the agent that draws "slot 1" wins more battles than their actual output quality deserves.
 
 **Why it happens:**
-The probe pattern is the right idea but placed at the wrong granularity. Developers validate the concept locally (it works, latency is negligible), then ship without profiling. The per-request probe becomes an invisible tax.
+Developers write the simplest judge prompt: "Here are two responses to [prompt]. Which is better?" with A always listed before B. This works in testing (low battle volume masks the bias) and fails at scale when users notice their agent always loses despite appearing to give better answers.
 
 **How to avoid:**
-Introduce a backend health cache with a TTL (10-30 seconds). A background worker probes each gateway every N seconds and writes results to an in-memory map (or the gateway_health DB table). The dispatch path reads from the cache — no network call per request. The cache entry includes: `{ available: boolean, lastChecked: unix_ms, latencyMs: number, consecutiveFailures: number }`. Only probe inline as a fallback when the cache entry is stale.
-
-```typescript
-// Health cache pattern — check, not probe, on each dispatch
-const healthCache = new Map<string, { available: boolean; expiry: number }>();
-function isBackendAvailable(url: string): boolean {
-  const entry = healthCache.get(url);
-  if (entry && Date.now() < entry.expiry) return entry.available;
-  // Cache miss — assume available, let background worker update
-  return true;
-}
-```
+- Always randomize which agent's response appears first in the judge prompt. Use a coin-flip at battle time, stored in the battle record so re-evaluation is reproducible.
+- Run ensemble judging: 3 separate judge model calls with randomized positions each time. Take the majority vote. A 2-1 majority is the score; a 3-0 sweep is a dominant win.
+- Never use the same model family to judge battles between agents running that same family (e.g., GPT-4o judging a battle where Agent A is running GPT-4o). Self-enhancement bias gives a 5-7% systematic boost (arxiv 2410.21819).
+- Store `judge_model`, `position_a_agent`, `position_b_agent`, and all three individual scores in the battle record for auditability and bias detection.
 
 **Warning signs:**
-- Average dispatch latency consistently 100-300ms higher than model response time
-- Two HEAD requests per dispatch visible in server access logs
-- `probeBackend` showing up in slow query / tracing spans
+- Agents equipped with one specific model win >70% of their battles despite varying prompts and opponents
+- Win rate correlates with battle slot assignment rather than skill
+- User complaints that "my agent always loses even when the answer looks better"
 
-**Phase to address:** Phase 1 (Gateway Registry). Establish the health cache as the foundation. All subsequent gateway probe logic uses the cache, not inline probes.
+**Phase to address:** Phase 9 (Battle Arena MVP) — the judge architecture must be designed before any battles run. Retrofitting randomization into an existing battle log is not possible without invalidating historical Elo ratings.
 
 ---
 
-### Pitfall 2: Treating All Provider Errors as the Same Circuit-Breaker Trigger
+### Pitfall 2: Compute Runaway — Every Battle Is Real API Dollars
 
 **What goes wrong:**
-The current router throws a generic error on non-OK responses. A circuit breaker naively built on top will count every error equally — 429 (rate limited), 500 (server crash), 503 (maintenance), and 401 (bad API key) all increment the failure counter equally. This causes two disaster scenarios:
+A single battle dispatches a prompt to two agents simultaneously plus three judge calls = 5 LLM API requests per battle. At $0.01-0.08 per request (depending on model tier), 100 battles/day = $5-40/day in judge costs alone before agent response costs. Free-tier users can trigger battles at no personal cost while the platform absorbs the bill. A user running automated battle scripts (or a tournament bracket of 16 agents = 60 battles) can spend $50 of platform compute in minutes.
 
-1. **Over-tripping:** A burst of 429s (rate limit, self-clearing in 60 seconds) trips the circuit open for 5 minutes. The gateway fails over to the expensive model for requests that would have succeeded with a 5-second retry.
-
-2. **Under-tripping:** A provider silently returns 200 with empty or malformed responses (hallucination of availability). The circuit never opens because HTTP was successful, but agents receive garbage responses. This is the "silent failure" mode.
+On Porter's current 2 vCPU VPS, simultaneous battle execution also risks resource exhaustion: two long-form agent responses plus three judge calls = 5 concurrent API requests with streaming SSE connections.
 
 **Why it happens:**
-HTTP status codes were designed for web servers, not LLM APIs. LLM providers add their own semantics: a 200 with `{"error": "content_policy_violation"}` in the body is a provider rejection, not success. Circuit breakers inherited from REST API patterns miss this.
+Battle costs are invisible in development (small volume, developer's own API keys). The per-battle cost feels trivial ("it's just 5 cents") until you have concurrent users or abuse. Rate limits are added reactively after the first billing shock.
 
 **How to avoid:**
-Classify errors before counting them. Three classes:
-- **Transient (retry, do NOT trip breaker fast):** 429 with Retry-After header, 503 with short maintenance window, network timeout on first attempt. Use exponential backoff with jitter, not circuit breaking.
-- **Persistent (trip breaker, failover):** 5xx series with no Retry-After, consecutive timeouts (>3), provider returning empty `choices[]` array on 200.
-- **Configuration (alert, do not retry or failover):** 401/403 (bad API key — retrying wastes money), 404 (model not found — failover may not help if all gateways share the same wrong model name).
-
-Also validate response body, not just HTTP status: `if (!data.choices?.length || !data.choices[0].message?.content)` is a breaker event regardless of HTTP 200.
+- Hard cap battles per tier per day, enforced at the API level before the first dispatch fires: Free=5, Pro=50, Enterprise=custom. Check the cap in the battle request handler before any LLM call.
+- Implement a per-battle cost estimate before execution: calculate approximate token cost based on prompt length and selected agent models, display to user, require acknowledgment for battles over a configurable threshold.
+- Use Ollama (local, $0) as the default judge model. Only upgrade to a paid judge for Pro/Enterprise tiers or when local judge scores fall below a confidence threshold.
+- Queue battles rather than executing immediately: a simple `battle_queue` table with `status: pending|running|complete` prevents concurrent overload. Process one battle at a time per user.
+- Monitor per-user battle spend with an in-memory accumulator; cut off at configurable daily limit.
 
 **Warning signs:**
-- Circuit breaker trips during provider rate-limit windows (429 storms)
-- Agents receive empty responses that were silently treated as success
-- 401 errors being retried 3x before failing (each retry burns money and is pointless)
+- No `battles_today` counter in the user's session or a rate-limit check before dispatch
+- Tournament feature launches without a bracket-size cap
+- Battle endpoint accepts requests without checking user's tier limits
+- Cost per day exceeds 10x expected baseline (monitor `dispatch_logs` cost column)
 
-**Phase to address:** Phase 3 (Smart Routing + Circuit Breakers). Design the error taxonomy before writing any circuit breaker code.
+**Phase to address:** Phase 9 (Battle Arena MVP) — rate limits and the battle queue must be built into the MVP, not added later. Phase 7 (Session Registry) should provide the infrastructure for per-user session cost tracking.
 
 ---
 
-### Pitfall 3: Heuristic Routing That Misfires on Short Complex Requests
+### Pitfall 3: Stale Meta — Claude Equipped Wins Everything
 
 **What goes wrong:**
-`shouldRouteCheap()` uses length (<160 chars, <28 words) + keyword matching as the routing gate. This misfires in two directions:
+The design spec identifies this risk explicitly: if model choice (the Weapon slot) determines win rate more than prompt quality (Armor) or tool selection (Accessories), users discover the dominant strategy immediately. "Equip Claude Sonnet, use the stock 'You are a helpful assistant' prompt, win 80% of battles." Once this is common knowledge, the arena becomes a Claude advertisement and engagement collapses. Users with no access to premium models give up. The meta stagnates within weeks.
 
-- **Under-routing to strong model:** "Fix this bug: `null pointer on line 47`" — short, no URL, triggers cheap model. But it references code and requires debugging ability that Qwen 1.5B cannot reliably provide. The user gets a wrong answer.
-- **Over-routing to strong model:** A 200-word business question with no code keywords ("Please help me think through whether we should expand to a new market this quarter given the current situation") — long, no technical keywords, but this is strategic reasoning, not debugging. Cheap model may handle it fine and save cost.
-
-Length and keywords are a proxy for complexity, not a measure of it. They have ~70% accuracy at best (per ICLR 2025 routing benchmark).
+Chatbot Arena (LMSYS) already demonstrated this pattern at scale: top-performing models cluster, bottom of the leaderboard rarely changes, and the human voter base migrates toward testing only the top models. By 2025 the methodology was criticized as reflecting "who has the most fluent style" rather than actual utility.
 
 **Why it happens:**
-Length heuristics are fast, cheap, and good enough for the 70% case. The failure modes only become visible when users report bad answers on edge cases. It is easy to ship this as "good enough for MVP" and never revisit.
+The design intends that Armor (system prompt) > Weapon (model), but this balance requires deliberate calibration and must be validated empirically before launch. If the judge evaluates "output quality" and the strongest model produces objectively better prose, the scoring naturally skews toward model power.
 
 **How to avoid:**
-For v3.0, accept the current heuristic as Phase 1 baseline — it is already better than no routing. But **instrument every routing decision with outcome feedback**. Log: `{ message_hash, tier_selected, response_quality: null }`. Add a mechanism (even manual initially) to flag routing misses. In a later phase, use accumulated routing decisions from `decision_log` to tune the thresholds. The routing logic in `ai-router.ts` should be extracted into a pluggable `RoutingStrategy` interface so it can be swapped without touching dispatch.
+- Before launch, run a calibration tournament: same Armor (identical system prompt) across all available models. If win rates correlate >0.8 with model benchmark scores, the judge is evaluating model power not build quality.
+- Weight the scoring rubric toward compliance, format adherence, and task-specific criteria rather than general "quality." An agent that follows its system prompt perfectly but uses Ollama should beat an agent that ignores its system prompt but uses Claude.
+- Introduce prompt-locked battles (a specific challenge mode): both agents receive the same system prompt override, neutralizing the Armor variable. This isolates Weapon + Accessories.
+- Track `specialty_win_rates` per domain. If Claude agents win >80% of all domains, the meta is broken. This is a launch-blocker metric, not a post-launch discovery.
+- Model rotation: periodically introduce battles where the Weapon slot is randomized (like Chatbot Arena's anonymous model testing) to help users discover whether their build quality actually matters.
 
 **Warning signs:**
-- Users complaining about poor answers on short messages (under-routing)
-- `decision_log` shows >90% of requests going to strong model (over-routing kills cost savings)
-- Cheap model selected for messages containing backtick-quoted code snippets under the threshold
+- Pre-launch calibration shows model win rate correlates strongly with model benchmark rank
+- Beta testers report "I just equip Claude and never lose"
+- Specialty leaderboards show the same top models across all domains
 
-**Phase to address:** Phase 2 (Model Catalog). The catalog stores per-model capability profiles that can augment routing decisions. Phase 3 (Smart Routing) uses those profiles.
+**Phase to address:** Phase 9 (Battle Arena MVP) — calibration testing before public battles. Phase 10 (Spectator + Tournaments) — separate tournament modes that control for model tier.
 
 ---
 
-### Pitfall 4: Token Cost Tracking That Ignores Input/Output Asymmetry and Pricing Tiers
+### Pitfall 4: Elo Rating Manipulation via Sandbagging and Tanking
 
 **What goes wrong:**
-The current `trackTokenUsage()` stores `input_tokens` and `output_tokens` separately but has no pricing attached. When someone builds a cost dashboard on top of this, the naive implementation multiplies `(input + output) * some_per_token_price`. This is wrong in three ways:
+Standard Elo (default 1200, symmetric win/loss deltas) has well-documented manipulation vectors. The ICML 2025 paper "Improving Your Model Ranking on Chatbot Arena by Vote Rigging" demonstrated that Elo rankings can be manipulated with only hundreds of strategic votes or battles. In the Porter context, the most likely attacks are:
 
-1. **Input/output price ratio varies 2-10x by provider.** Claude Sonnet: $3/M input vs $15/M output (5:1). GPT-4o: $2.50/M input vs $10/M output (4:1). Qwen local: $0 for both. Treating them as equal inflates/deflates actual spend estimates.
-
-2. **Context-dependent pricing tiers.** Anthropic charges higher rates when prompt_tokens > 200K. Gemini 2.5 Pro has a similar threshold. These tiers are invisible to flat per-token math.
-
-3. **Cached token discounts.** When prompt caching is active (Anthropic cache_read_input_tokens, OpenAI cached tokens), cached tokens cost 10-50% of normal input tokens. The current schema has no field for cached token counts. A gateway that reports higher token usage than actual cost is misleading.
+1. **Sandbagging**: Deliberately losing battles to lower an agent's Elo, then selectively winning high-stakes matches when Elo is low (gains more points per win due to the Elo formula's upset bonus).
+2. **Farming easy opponents**: Only entering battles against new agents (default 1200 Elo), winning predictably, padding the rating without facing real competition.
+3. **Rating inflation via disconnects**: Abandoning a battle mid-execution (network error, timeout) leaves the opponent in a state where neither Elo is updated, preventing a legitimate win from being recorded.
 
 **Why it happens:**
-Token tracking is an operational concern, not a feature. It gets bolted on after the core routing works. The schema grows organically and nobody goes back to add pricing tiers or cached token fields.
+Elo was designed for chess — games where disconnection is obvious, sandbagging is visible to observers, and players cannot control opponent selection. In automated systems where users control battle initiation and timing, these assumptions break.
 
 **How to avoid:**
-Schema the cost model upfront in v3.0:
-```sql
--- gateway_models table should include:
-price_input_per_million   DOUBLE PRECISION,  -- per 1M input tokens
-price_output_per_million  DOUBLE PRECISION,  -- per 1M output tokens
-price_cache_read_per_million DOUBLE PRECISION DEFAULT NULL, -- when caching active
-pricing_tier_threshold    INTEGER DEFAULT NULL,  -- tokens above this use tier2 pricing
-price_tier2_input         DOUBLE PRECISION DEFAULT NULL,
-price_tier2_output        DOUBLE PRECISION DEFAULT NULL
-```
-
-And token_usage_daily should gain:
-```sql
-cached_input_tokens INTEGER DEFAULT 0,  -- for cache_read_input_tokens (Anthropic)
-estimated_cost_usd  DOUBLE PRECISION DEFAULT 0  -- computed at write time, not query time
-```
-
-For local models (Ollama), set all price fields to 0.0 explicitly. This makes cost rollup trivial and correct.
+- Minimum battle count before Elo is displayed: require 10+ completed battles before showing a public Elo score. Early-game Elo volatility is real but invisible while the rating is provisional.
+- Battle completion is mandatory for Elo update: if either agent fails to return a response within the timeout window, the battle is marked `incomplete` and no Elo update occurs. A forfeiture system (3 incompletes = -50 Elo) prevents timeout-farming.
+- Restrict opponent selection: matchmaking should prefer opponents within ±200 Elo. Free-tier users cannot manually cherry-pick opponents; matchmaking is automated.
+- Separate domain Elo from global Elo: a Python specialist with 1800 domain Elo cannot inflate their global Elo by entering Creative Writing battles they will lose. Domain Elo and global Elo are calculated independently.
+- Rate-limit battles per agent per hour (not just per user): 10 battles/agent/hour prevents rapid Elo grinding.
 
 **Warning signs:**
-- Cost dashboard shows a single "tokens" number with a single rate applied
-- Cached tokens appearing in `prompt_tokens` but no separate tracking
-- No `provider` column in token_usage_daily (can't differentiate Anthropic vs OpenAI pricing)
+- Top Elo agents have unusually high win rates against much lower-rated opponents (cherry-picking)
+- Agents with high Elo have <10 battles (insufficient sample)
+- Suspicious pattern: agent loses 20 consecutive battles, then wins 10 against low-rated opponents
 
-**Phase to address:** Phase 1 (Gateway Registry) — pricing fields go into the model catalog schema. Phase 4 (Cost Dashboard) builds on top of correctly-structured data.
+**Phase to address:** Phase 9 (Battle Arena MVP) — matchmaking constraints must be in the MVP. Phase 10 (Tournaments) — tournament structures inherently prevent cherry-picking.
 
 ---
 
-### Pitfall 5: API Key Storage That Leaks Through Logs or SSE Events
+### Pitfall 5: The Toy Problem — Game Mechanics Displace Utility
 
 **What goes wrong:**
-Gateway credentials (API keys, auth tokens) take several paths through a production system where they can accidentally surface:
+Gartner's finding that 80% of workplace gamification projects fail because they "lack creativity and meaning" is not about missing leaderboards — it is about replacing the actual value proposition with point collection. For Porter specifically: if users start dispatching trivial tasks repeatedly to grind XP ("+10 per dispatch completed") rather than using agents for real work, the platform's utility metrics collapse while engagement metrics look fine. A user dispatching "say hello" 500 times to get their agent to 2-star is gaming the system, not using the product.
 
-1. **Error serialization.** `throw new Error(\`Request to ${url} failed: ${JSON.stringify(requestBody)}\`)` — if the request body contained `Authorization` headers or the URL had a query-string API key, the error message contains the key. Error messages go to logs. Logs are often forwarded to observability tools with weak access controls.
-
-2. **SSE decision events.** The current `logDecision()` emits an SSE `decision:made` event. If the decision reasoning string ever includes a sanitized-but-not-sanitized provider config object, keys can appear in the browser's EventSource stream — visible to any user with devtools open.
-
-3. **Gateway config API.** The planned Bridge admin surface needs a `GET /api/v1/bridge/gateways/:id` endpoint. If this returns the full DB row, the stored API key is exposed to any admin-role user. The LiteLLM supply chain attack (2025) showed that credential exposure via API responses is a primary vector.
-
-4. **Database backups.** API keys stored in plaintext in `gateway_configs.api_key` are exposed in every database dump, snapshot, or migration script.
+This is Goodhart's Law: "When a measure becomes a target, it ceases to be a good measure."
 
 **Why it happens:**
-Development speed. Storing keys in the DB is the fastest path to a working gateway. The security layer gets deferred.
+XP and level-up animations feel compelling to build. They work in the demo. The failure mode is invisible until user behavior data reveals gaming patterns. Developers optimize for engagement metrics (session length, dispatch count) without distinguishing trivial dispatches from meaningful work.
 
 **How to avoid:**
-- Store API keys with a write-once read-never API response policy: the gateway config `GET` endpoint returns `"api_key": "sk-...••••1234"` (masked) after initial save. Never return the full key via API again.
-- Log sanitization middleware: before any error is logged or emitted via SSE, strip fields matching `/(key|token|secret|auth|password|bearer)/i` from the object being serialized.
-- For the v3.0 milestone scope (single VPS, not multi-tenant enterprise), plaintext storage in DB with field-level masking in the API layer is acceptable. Do NOT invest in Vault/KMS at this stage — premature for current scale.
-- Never include gateway config objects in SSE event payloads.
+- XP values must be quality-gated, not activity-gated. The base "+10 per dispatch" should be the floor; the signal that matters is "+25 for positive feedback" and "+100 for battle win." Weight quality signals 3-5x over raw dispatch counts.
+- Star progression gates should require quality thresholds, not just dispatch counts. The spec already has 85% reliability required for 3-star — extend this: 50-dispatch threshold for 2-star should also require `average_quality_score > 7.0` from the last 20 dispatches with feedback.
+- Track dispatch quality in aggregate: if an agent's last 20 dispatches have <5% positive feedback rate, flag it in the admin dashboard as "potential grinding pattern."
+- The Forge reveal animation and progression events should feel earned, not cheap. Cheap XP inflation (daily login bonus, "achievement unlocked for reading your agent card") trains users to see the game layer as trivial. Every progression event should represent real agent capability growth.
+- Keep the game layer visually subordinate to the work layer. Character cards appear in an Armory/Forge section; the Projects view remains clean. Users should not need to think about Elo to get work done.
 
 **Warning signs:**
-- Error logs showing long hexadecimal strings that look like API keys
-- Browser devtools showing full `sk-ant-...` keys in SSE event streams
-- `GET /api/v1/bridge/gateways/:id` returning an `api_key` field in the response body
+- Average dispatch length falling over time (users sending shorter, lower-effort prompts)
+- High dispatch count but near-zero positive feedback rate for some agents
+- Users complaining that progression "feels fake" or is easy to game
+- Session time increasing while project completion rate is flat or falling
 
-**Phase to address:** Phase 1 (Gateway Registry) — the schema and API design must bake in key masking from day one.
+**Phase to address:** Phase 4 (Stat Calculation Engine) — quality gates in XP calculation must be built at the data layer. Phase 8 (Forge Birth Animation) — visual hierarchy decisions that keep game below work.
 
 ---
 
-### Pitfall 6: Migration from Hardcoded Config That Breaks the Running System
+### Pitfall 6: Immutable Dispatch Log Becomes a Performance Bottleneck
 
 **What goes wrong:**
-Porter currently has two backends hardcoded in `ai-router.ts` via `config.ts`: Ollama (cheap) and OpenClaw (strong). The v3.0 Bridge moves this to a `gateway_configs` DB table. The migration path has a gap: the new DB-driven router reads from `gateway_configs` at dispatch time. If the table is empty (fresh deploy, migration not yet seeded, or DB connection failed at startup), every dispatch throws "no gateways configured." The system goes from partially working to completely broken during the migration window.
+The spec correctly makes stats derive from an immutable `dispatch_log` (anti-gaming). But as dispatch_log grows — 500+ dispatches for a Legendary-tier agent, multiplied across dozens of agents and users — re-deriving all stats from raw logs on every character card render becomes a full-table-scan problem. A `SELECT avg(latency_ms) FROM dispatch_log WHERE agent_id = $1` over 10,000 rows is fine. The same query for SPD, EFF, REL, COMBO, and QTY across a roster of 50 agents on the Forge page is 250 table scans per page load.
 
-This is the "expand and contract" problem — you cannot atomically swap from config-file to DB-driven without a period where neither source is authoritative.
+Porter's 2 vCPU VPS with PostgreSQL cannot sustain this under any meaningful concurrent load.
 
 **Why it happens:**
-Migration is planned as a cutover ("switch to the new system on Monday") rather than a gradual transition. The old system is deleted before the new system is fully validated.
+The stat derivation pattern is correct in principle and works perfectly with small datasets during development. The performance cliff appears at scale and is invisible until an active user has >200 dispatches per agent.
 
 **How to avoid:**
-Use a fallback chain, not a cutover:
-
-```typescript
-async function resolveGateways(): Promise<GatewayConfig[]> {
-  // 1. Try DB first (authoritative when populated)
-  const dbGateways = await loadGatewaysFromDB();
-  if (dbGateways.length > 0) return dbGateways;
-
-  // 2. Fall back to env/config (keeps existing deployments working)
-  return buildGatewaysFromEnvConfig();
-}
-```
-
-Keep `buildGatewaysFromEnvConfig()` as a permanent escape hatch — not a temporary migration shim. If the DB is wiped or corrupted, env-based config keeps the system running. The 35 Playwright tests must pass against both the env-config path and the DB path. Write one test for each. Only deprecate the env-config path when the DB path has been in production for 30+ days without incident.
+- Use a materialized stat cache table: `agent_stat_snapshots` (agent_id, qty, spd, eff, rel, combo, level, xp, last_recalculated_at). Rebuild this table asynchronously on dispatch completion via the existing workflow/scheduler system.
+- The character card API reads from `agent_stat_snapshots`, not from raw `dispatch_log`. The snapshot is at most 5 minutes stale — acceptable for a game display.
+- Incremental stat updates: on each new dispatch, update the snapshot incrementally (rolling average) rather than full re-scan. `new_avg = (old_avg * n + new_value) / (n + 1)`.
+- Index `dispatch_log` on `(agent_id, created_at)` minimally. Add `(agent_id, completed_at, quality_score)` as a composite index for quality stat queries.
 
 **Warning signs:**
-- Any deploy that requires a "migration window" with downtime
-- The phrase "just seed the DB before deploying" in the migration plan
-- Tests only covering the happy path (DB has data) not the empty-DB case
+- Forge page load time exceeds 500ms when any user has >100 dispatches
+- Character card endpoint takes longer per request as dispatch volume grows
+- `pg_stat_activity` shows long-running `avg(latency_ms)` scans on dispatch_log
 
-**Phase to address:** Phase 1 (Gateway Registry). The fallback chain must be the first thing built, before any other gateway feature.
+**Phase to address:** Phase 4 (Stat Calculation Engine) — the snapshot cache must be designed alongside the stat schema, not added when performance issues appear.
 
 ---
 
-### Pitfall 7: Ollama vs OpenAI API Format Mismatch in the Multi-Backend Path
+### Pitfall 7: .md File Anti-Gaming That Breaks Real Workflows
 
 **What goes wrong:**
-Ollama's native API (`/api/generate`, `/api/chat`) and its OpenAI-compatibility layer (`/v1/chat/completions`) have subtle structural differences that cause silent failures:
-
-1. **Streaming delta structure.** Ollama's SSE stream under the OpenAI compat layer sends `{"message": {"role": "assistant", "content": "token"}}` per chunk, not `{"delta": {"content": "token"}}` like real OpenAI. Code that reads `chunk.choices[0].delta.content` gets `undefined` from Ollama. The stream appears to work (no error thrown) but all tokens are silently dropped.
-
-2. **Token usage in streaming.** Ollama does not include `usage` in streaming SSE chunks by default (GitHub issue #4448 — still open as of early 2026). The final chunk has `eval_count` (output tokens) and `prompt_eval_count` (input tokens) but only in the native API format, not in the OpenAI compat streaming format. Code that reads `data.usage.prompt_tokens` from a streaming Ollama response gets `undefined`, so token tracking silently logs 0 for streaming calls.
-
-3. **Tool calling.** Ollama's OpenAI compat layer does not reliably support tool calling. The native `/api/chat` endpoint is required for tool use. Routing tool-bearing requests through the OpenAI compat path produces malformed or ignored tool calls with no error.
+The spec states `.md files are DERIVED from DB state, regenerated on progression events, overwritten from DB on every progression event. No self-rating. Blind battle judging." This is the right anti-gaming approach. But it creates a real operational problem: Porter's existing Memory V2 system and agent dispatch pipeline already reads from `.md` files (SOUL.md, IDENTITY.md, SKILLS.md) as part of system prompt construction. If a file is mid-regeneration when a dispatch fires, the agent may receive a partial or empty system prompt. Or worse: a user manually edits SOUL.md with a genuine improvement (not gaming), and the next level-up event overwrites their edit with a DB-derived version that loses the improvement.
 
 **Why it happens:**
-Developers write against the OpenAI spec, test with an actual OpenAI-compatible provider, then swap in Ollama without reading the compat caveats. The interface appears identical; the edge cases are invisible until production load hits them.
+The anti-gaming requirement and the memory injection pipeline were designed independently. The spec doesn't address the atomic write + concurrent read problem on these files.
 
 **How to avoid:**
-- Keep the Ollama dispatch path using the native API (`/api/generate` for non-chat, `/api/chat` for tool calls). The current `ai-router.ts` already does this correctly — maintain this separation.
-- For streaming, add an explicit `accept: 'application/x-ndjson'` header for Ollama native streaming. Do not use the OpenAI SSE compat path for Ollama.
-- For token counting from Ollama streaming: accumulate `eval_count` from the final chunk (`done: true`) of the native streaming response. Do not expect `usage` in intermediate chunks.
-- Write a provider-adapter layer: each gateway type (ollama, openai, anthropic, openclaw) has its own response parser. Do not write one parser and regex around the differences.
+- Atomic writes: generate the new `.md` content to a temp file (`SOUL.md.tmp`), then rename atomically (`mv SOUL.md.tmp SOUL.md`). This prevents partial reads.
+- Write a lock: before regeneration, write a sentinel (`SOUL.md.lock`) that the dispatch pipeline checks. If locked, use the cached last-known version from DB rather than the file.
+- User edits to `.md` files should be synced BACK to the DB, not overwritten. Provide a `SOUL.md` editor in the Forge Workshop UI that writes to the DB field (`soul_override` on the agent template). The DB field is the source of truth; the file is a derived artifact.
+- Version the `.md` files: track a `md_version` integer in the DB. If the file version doesn't match the DB version, regenerate. This prevents stale files from persisting after schema changes.
 
 **Warning signs:**
-- Token usage logs showing 0 for all Ollama streaming responses
-- Tool call results appearing as text in the conversation rather than as structured tool responses
-- Streaming "works" with OpenClaw but produces empty responses from Ollama
+- Agent system prompts appearing empty or truncated in dispatch logs
+- User-edited SOUL.md content disappearing after a level-up
+- Dispatch and level-up events happening within the same second on high-activity agents
 
-**Phase to address:** Phase 1 (Gateway Registry). Provider adapters are a foundational primitive. Define the `GatewayAdapter` interface before wiring up dispatch.
+**Phase to address:** Phase 2 (Forge Unification) — the `.md` file sync architecture must be resolved before Forge Workshop is built. Phase 4 (Stat Calculation Engine) — triggers that regenerate `.md` files must use atomic writes.
+
+---
+
+### Pitfall 8: Model Deprecation Orphans an Agent's "Weapon"
+
+**What goes wrong:**
+The spec lists this as an open question: "How do we handle model deprecation (agent's weapon disappears)?" This is not hypothetical — OpenAI deprecated gpt-4-0314 in September 2024, Anthropic deprecated claude-2.0 in November 2024. Agents built around a specific model version become unplayable when the model is removed from the gateway catalog. Their Elo history and stats are intact but their battles cannot execute. If the Weapon slot is empty, the agent has no model to respond with in a battle.
+
+Worse: if stats were derived from dispatches on GPT-4-0314 and the user is forced to re-equip GPT-4o, the comparative stats are now invalid — the agent's historical SPD numbers reflected GPT-4-0314's latency, not GPT-4o's.
+
+**Why it happens:**
+Model versioning is a provider concern that bleeding into platform state. The gear system treats model choice as a simple string reference without lifecycle awareness.
+
+**How to avoid:**
+- Never store a raw model version string in the Weapon slot. Store a `model_alias` that maps to a current model via the gateway model catalog. `"claude-3-sonnet"` → resolves to current Sonnet version. The catalog owns the versioning.
+- When a model is deprecated: mark it `status: deprecated` in the catalog. Agents using deprecated models are flagged in the Forge UI as "needs re-arming." Their existing stats and Elo are preserved and attributed to the `model_alias` lineage.
+- Stat continuity: when a model is upgraded within an alias (e.g., Sonnet 3.5 → Sonnet 4), add a `model_transition_event` to the agent's history noting the version change. SPD stats before and after the transition are kept in separate cohorts for transparency.
+- Provide a one-click "upgrade weapon" action that migrates the agent to the nearest equivalent current model with a confirmation prompt showing stat impact estimate.
+
+**Warning signs:**
+- Agents with raw model version strings (e.g., `gpt-4-0314`) rather than catalog aliases in their Weapon slot
+- No `status` field on catalog model entries
+- Battle execution failing silently because the Weapon model is unavailable
+
+**Phase to address:** Phase 3 (Character Card + Gear UI) — gear slot display must resolve aliases. Phase 19 (Model Catalog) is already shipped — extend it with model alias and deprecation lifecycle.
 
 ---
 
@@ -237,12 +218,13 @@ Developers write against the OpenAI spec, test with an actual OpenAI-compatible 
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Per-request health probes (current state) | Simple, no background job needed | Adds 100-300ms to every dispatch; cascading under load | Never at scale; Phase 1 should fix this |
-| Flat token pricing (input+output same rate) | Cost dashboard ships faster | Inaccurate cost reporting misleads budget decisions | MVP only, before pricing tiers matter |
-| API keys in plaintext DB column | Fastest path to working gateway | Keys exposed in every backup, dump, migration | Acceptable with API masking for single-VPS SaaS at current scale |
-| Single routing heuristic (length+keywords) | Simple, fast, zero dependencies | ~70% accuracy; misfires on short complex requests | Acceptable for Phase 1; must instrument for tuning |
-| Hardcoded fallback alongside DB config | Zero migration risk | Two sources of truth; easy to forget to update hardcoded fallback | Always keep as escape hatch; not debt, this is resilience |
-| No retry budget per session | Fewer moving parts | A single transient 503 fails the whole request | Only acceptable before circuit breakers are built |
+| Single judge model call (no ensemble) | Faster battles, cheaper per-battle | Biased results, unfair Elo; users lose trust | MVP only if labeled "beta scoring" |
+| Stats calculated live from dispatch_log | No extra table, simple code | Full table scans per page load; breaks at 200+ dispatches per agent | Never past MVP; Phase 4 must add snapshot cache |
+| Global Elo only (no domain Elo) | Simpler schema | Stale meta is invisible; Python specialist unfairly ranked against creative writers | Acceptable for MVP; domain Elo in Phase 10 |
+| Paid model as default judge | Best scoring quality | $0.05-0.10 per battle; 100 battles/day = $5-10/day judge cost alone | Never for free tier; use local Ollama judge for free tier |
+| Raw model version in Weapon slot | Fastest implementation | Model deprecation orphans agents silently | Never; always use catalog aliases |
+| XP awarded for any dispatch | Simple, encouraging | Users grind trivial tasks; stats inflate meaninglessly | Never; quality gate XP from Phase 4 |
+| .md file direct write without lock | Simple, zero infrastructure | Partial reads corrupt agent system prompts mid-dispatch | Never; atomic writes are cheap |
 
 ---
 
@@ -250,13 +232,12 @@ Developers write against the OpenAI spec, test with an actual OpenAI-compatible 
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Ollama `/api/generate` | Sending `messages` array (OpenAI format) | Use `prompt` string for `/api/generate`; use `messages` only for `/api/chat` |
-| Ollama streaming | Reading `chunk.choices[0].delta.content` | Read `chunk.message.content` on native format; use done:true chunk for final token count |
-| OpenClaw `/v1/chat/completions` | Not checking `choices[0].message.content` exists | Always assert `choices` array is non-empty before reading content |
-| Anthropic API (future) | Treating `usage.input_tokens` as equivalent to OpenAI `prompt_tokens` | Field names match but `cache_read_input_tokens` is separate and must be tracked separately |
-| Google Gemini API (future) | Expecting `choices[0].message.content` | Gemini uses `candidates[0].content.parts[0].text` on native API; OpenAI compat wrapper maps this but has its own gaps |
-| Any provider, 429 response | Immediate failover to next backend | Read `Retry-After` header; wait and retry on same backend before failing over |
-| Any provider, 401 response | Retry or failover | Alert only — no retry, no failover. Key is invalid everywhere until rotated. |
+| Battle judge via Porter Bridge | Using same gateway as agent under test | Judge call must use a separate, designated judge gateway — never the same adapter the agent is running on |
+| Elo formula | Using symmetric K-factor for all battles | Use K=32 for provisional (<10 battles), K=16 for established (10-30), K=8 for veteran (30+) — prevents early volatility |
+| SSE streaming in spectator mode | Streaming both agents' full responses before judge scores | Stream token-by-token with agent A on left, agent B on right simultaneously; judge score arrives last |
+| dispatch_log → stat derivation | Running stat recalculation synchronously on dispatch complete | Always async via the scheduler/workflow system; dispatch path must complete before recalculation starts |
+| LLM judge prompt | Asking "which is better overall?" | Decompose into four scored dimensions (quality, speed, efficiency, style) each rated 1-10; prevents halo effect |
+| Battle archive + replay | Storing only final scores | Store full prompts, both responses, judge reasoning, and individual scores per dimension for replays and dispute resolution |
 
 ---
 
@@ -264,11 +245,12 @@ Developers write against the OpenAI spec, test with an actual OpenAI-compatible 
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Per-request backend probing | Dispatch latency = model latency + 2x probe latency | Background health cache with TTL | Immediately under any meaningful load (>5 req/s) |
-| No connection pooling to AI backends | New TCP connection per dispatch | Reuse `undici` pool or persistent `fetch` agent per backend URL | >20 concurrent requests |
-| Decision log write on every dispatch | Postgres writes blocking dispatch path | Already async (swallowed catch) — keep it async, never await it | Acceptable at current scale |
-| Token usage upsert per-request (current) | Postgres upsert per dispatch | Batch writes every 60 seconds using in-memory accumulator | >100 req/min (fine for now; watch at scale) |
-| Health check calling a real model endpoint | Provider bills for health check tokens | Use `/api/tags` (Ollama) or `/v1/models` (OpenAI) for health — no inference call needed | Every 30s health check = 2 tokens * 2 providers = meaningful cost at scale |
+| Live stat derivation from dispatch_log | Forge page slow; worsens as usage grows | Materialized `agent_stat_snapshots` rebuilt async | >100 dispatches per agent on the page |
+| Simultaneous battle + judge dispatch (5 concurrent requests) | VPS CPU spike; gateway rate limits hit | Battle queue: one battle processed at a time per user | >3 concurrent users triggering battles |
+| Spectator mode SSE fan-out | SSE connections per spectator multiply server load | Limit spectators per active battle; consider server-sent events with a connection cap | >20 spectators on a single battle |
+| Tournament bracket fan-out | 16-agent tournament = 60 battles = 300 LLM calls | Never auto-execute tournament brackets; queue all matches; run with configurable concurrency (1-2 at a time) | Any bracket larger than 4 agents on free tier |
+| Elo recalculation on full history | Re-computing Elo from scratch on full battle history | Never recalculate from scratch; update incrementally; keep `current_elo` as a running value in agent_stats | >500 battles in system history |
+| .md file regeneration on every dispatch | File writes + template rendering blocking dispatch path | Only regenerate on level-up, star-up, and gear change events — not every dispatch | Immediately if triggered on every dispatch |
 
 ---
 
@@ -276,11 +258,11 @@ Developers write against the OpenAI spec, test with an actual OpenAI-compatible 
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Returning full API key in gateway GET response | Key exposure to any admin user; log leakage | Mask to last 4 chars in all API responses after initial save |
-| API key in SSE decision event payload | Key visible in browser devtools to all users | Sanitize all objects before SSE emission; strip key/token/secret fields |
-| Error message including request body with auth headers | Key in application logs | Wrap AI backend fetch calls in a sanitizing error handler |
-| Gateway config accessible to operator-role users | Operators can steal provider credentials | Gateway management endpoints require platform_admin or admin cap minimum |
-| No rate limiting on Bridge admin endpoints | An automated client can enumerate all gateway configs | Apply the existing rate limiter to all `/api/v1/bridge/*` admin endpoints |
+| User can submit battle results manually | Fake wins, Elo inflation | Battle results are ONLY written by the server-side judge process; no client-submitted scores |
+| Agent stats exposed via user-editable field | Stat gaming via API | All stat fields on agent_templates are READ-ONLY via user-facing API; only the internal stat calculation engine writes them |
+| Battle endpoint has no user tier check | Free users run unlimited battles, billing shock | Enforce tier-based battle limits in the route handler before any LLM dispatch |
+| Judge prompt reveals which agent is which | Self-enhancement bias at model level | Judge prompt uses Agent A / Agent B labels with randomized assignment; never includes agent names or equipped model names |
+| Replay sharing exposes other users' agent configs | Gear loadout is competitive IP | Replay share links show responses and scores only; Armor (system prompt) and Accessories are masked in public replays |
 
 ---
 
@@ -288,23 +270,25 @@ Developers write against the OpenAI spec, test with an actual OpenAI-compatible 
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Showing "backend unreachable" with no context | User doesn't know if it's temporary or permanent | Show last-seen time + consecutive failure count: "Ollama offline for 2m (3 attempts)" |
-| Gateway health as binary up/down | Masks degraded performance (slow but responding) | Track `latencyMs` in health cache; show "slow" state when p95 > 5s |
-| Cost numbers without context | "$0.003" is meaningless to non-technical users | Show cost per session, per day, relative to limit; not raw token math |
-| First-run auto-detect that silently fails | User thinks setup worked but nothing is configured | First-run wizard must show explicit confirmed state per gateway, not just "scanning..." |
-| Routing decisions hidden from admin | Admin can't verify routing is working correctly | Bridge admin surface must show recent decisions with message preview + tier selected |
+| Showing Elo rating before 10 battles | Meaningless number causes early frustration | Display "Provisional" badge until 10 battles; show battle count progress toward first official rating |
+| Level-up animation on every tiny XP gain | Cheapens the progression; feels spammy | Reserve animation for star promotions and level milestones (10, 25, 50, 100); small XP gains are silent |
+| Battle result "Agent B wins" with no explanation | Users cannot learn from losses | Always show judge breakdown by dimension; show specific feedback on what scored lower |
+| Gear complexity front-loaded in Forge | New users overwhelmed; drop off before forging first agent | Default all gear slots to sensible defaults (Ollama weapon, stock system prompt, no accessories); expert mode unhides the depth |
+| Rarity borders visible everywhere in the UI | Game aesthetic bleeds into work surfaces | Rarity borders and particle effects stay in Forge + Arena; Projects and People views use agent avatars only — no rarity chrome |
+| Leaderboard shows only top 10 globally | Bottom 90% has no incentive to engage | Percentile bands ("You're in the top 30% of Fixer-class agents") keep most users engaged; global top-10 is a vanity metric |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Gateway health check:** Check uses `/api/tags` or `/v1/models` not a real inference call — verify no tokens billed per health check
-- [ ] **Token tracking during streaming:** Streaming path accumulates tokens from the final chunk's eval_count, not from intermediate chunks — verify non-zero token counts appear for streaming calls
-- [ ] **Circuit breaker error classification:** 429 responses do NOT increment the persistent-failure counter — verify by injecting a 429 and checking circuit state
-- [ ] **API key masking:** `GET /api/v1/bridge/gateways/:id` returns masked key (`sk-...••••1234`) not the full key — verify in test
-- [ ] **Empty DB fallback:** With no rows in `gateway_configs`, dispatch still works via env-config fallback — verify with a freshly seeded empty DB
-- [ ] **Ollama tool calls:** Tool-bearing dispatches use the native `/api/chat` endpoint, not the OpenAI compat path — verify by checking request URL in logs when tools are present
-- [ ] **Decision log non-blocking:** Inserting a 5-second delay in `logDecision()` does NOT slow down dispatch — verify dispatch latency is unchanged
+- [ ] **Battle judge bias check:** Run 20 battles with positions swapped; win rates should differ by <10% — if >10%, position randomization is broken
+- [ ] **Cost cap enforcement:** Attempt to trigger a 6th battle on a Free account — must return HTTP 429 with clear tier message, not 500
+- [ ] **Stat snapshot cache:** With 200 dispatch_log rows for one agent, Forge page must load in <200ms — if slower, snapshot cache is not being used
+- [ ] **Immutable stats:** Manually update a stat field via `UPDATE agent_templates SET qty = 99 WHERE id = $1` — the character card must show the DB-recalculated value within 5 minutes, not the manually set one
+- [ ] **Elo update on battle complete:** After one battle completes, both agents' Elo in `agent_stats` must reflect the result — verify `updated_at` timestamp changed
+- [ ] **Domain Elo separation (if shipped):** An agent with 1800 Python Elo entering a Creative Writing battle must not have their Python Elo affected by the result
+- [ ] **.md atomic write:** Trigger a level-up while a dispatch is in-flight — the dispatch's system prompt must use either the old or new SOUL.md completely, never a partial version
+- [ ] **Weapon slot model alias:** Delete a model from the catalog — agents using it must be flagged "needs re-arming" in Forge, not silently broken
 
 ---
 
@@ -312,11 +296,12 @@ Developers write against the OpenAI spec, test with an actual OpenAI-compatible 
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Per-request probing causing latency spikes | LOW | Add health cache in front of probeBackend(); takes 1-2 hours, no schema change |
-| Wrong error classification trips breaker on 429 | LOW | Patch error classifier, reset circuit state in DB/memory, redeploy |
-| API key leaked via API response | HIGH | Rotate key at provider immediately; audit logs for exposure window; patch masking; notify if multi-tenant |
-| DB-driven gateway config empty after migration | LOW (if fallback exists) / HIGH (if not) | Env-config fallback activates automatically; seed DB from env values |
-| Ollama streaming token count always 0 | LOW | Switch streaming token accumulation to read `eval_count` from final done:true chunk |
+| Judge bias discovered post-launch (historical Elo corrupted) | HIGH | Full Elo reset is the nuclear option; prefer: recalculate Elo for affected battles with corrected judge; flag affected users with "ratings recalibrated" notice |
+| Compute runaway (billing shock) | MEDIUM | Retroactively apply tier caps; add emergency kill-switch (`BATTLES_ENABLED=false` env flag); refund or credit affected accounts |
+| Stale meta (one model dominates) | MEDIUM | Introduce "prompt-locked" battle mode immediately (same system prompt for both agents); adjust judge scoring weights toward format compliance over prose quality |
+| Stat gaming discovered (users inflating dispatch counts) | LOW | Retroactively apply quality gate to XP: dispatches with zero feedback count count for 2 XP not 10; send users a "stats recalculated" notification |
+| Elo manipulation via sandbagging | LOW | Minimum 10 battles, automated opponent in valid Elo range, no cherry-picking — these constraints prevent most sandbagging before it starts |
+| .md file corruption on concurrent write | LOW | Re-trigger regeneration from DB; files are always re-derivable; no data loss risk if DB is source of truth |
 
 ---
 
@@ -324,31 +309,34 @@ Developers write against the OpenAI spec, test with an actual OpenAI-compatible 
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Per-request health probing | Phase 1: Gateway Registry | Health cache test: 100 dispatches should generate ≤2 probe HTTP calls |
-| Circuit breaker error conflation | Phase 3: Smart Routing + Circuit Breakers | Inject 429 storm; verify circuit stays closed; inject 500 storm; verify circuit opens |
-| Heuristic routing misfires | Phase 2: Model Catalog (instrument) + Phase 3 (tune) | Log routing decisions for 48h; check % going to strong model (should be 40-60%) |
-| Cost tracking input/output asymmetry | Phase 1: Gateway Registry (schema) + Phase 4: Cost Dashboard | Cost estimate for 1M Anthropic input tokens should be ~$3, not ~$9 |
-| API key exposure | Phase 1: Gateway Registry | GET endpoint test asserts masked key in response body |
-| Config migration gap | Phase 1: Gateway Registry | Playwright test with empty gateway_configs — dispatch must succeed via fallback |
-| Ollama/OpenAI format mismatch | Phase 1: Gateway Registry (adapters) | Provider adapter unit tests with fixture responses from each provider |
+| LLM judge positional bias | Phase 9: Battle Arena MVP | Swap 20 battle position assignments; win rate delta must be <10% |
+| Compute runaway | Phase 9: Battle Arena MVP | Attempt 6th battle on Free tier — must be blocked before dispatch fires |
+| Stale meta (model dominance) | Phase 9: MVP calibration before launch | Pre-launch calibration tournament; Claude vs Ollama same-prompt test; win rate gap must be <30% |
+| Elo sandbagging | Phase 9: Battle Arena MVP | Attempt cherry-pick opponent selection — matchmaking must reject ±200+ Elo mismatches |
+| Toy problem (XP grinding) | Phase 4: Stat Calculation Engine | Dispatch 50 trivial 1-word prompts; confirm XP gain does not reach 2-star threshold |
+| Stat snapshot performance | Phase 4: Stat Calculation Engine | Forge page load with 200-dispatch agent must be <200ms |
+| .md file concurrent write | Phase 2: Forge Unification | Concurrent level-up + dispatch stress test; system prompt must never be empty |
+| Model deprecation orphan | Phase 3: Character Card + Gear UI | Mark a test model as deprecated; agent Weapon slot must show "re-arm required" badge |
+| Elo vote rigging (if community votes added) | Phase 10: Spectator + Tournaments | Community vote weight must be capped at 10% of final score; bot detection on voting patterns |
 
 ---
 
 ## Sources
 
-- Porter ai-router.ts (2026-03-25) — actual implementation grounding all pitfalls
-- [Ollama OpenAI Compatibility Docs](https://docs.ollama.com/api/openai-compatibility) — streaming delta structure differences, tool calling limitations (HIGH confidence)
-- [Ollama streaming usage issue #4448](https://github.com/ollama/ollama/issues/4448) — missing usage in streaming OpenAI compat format (HIGH confidence)
-- [Retries, Fallbacks, and Circuit Breakers in LLM Apps](https://www.getmaxim.ai/articles/retries-fallbacks-and-circuit-breakers-in-llm-apps-a-production-guide/) — error classification taxonomy (MEDIUM confidence)
-- [Circuit Breaker for LLM — Anthropic TypeScript](https://medium.com/@spacholski99/circuit-breaker-for-llm-with-retry-and-backoff-anthropic-api-example-typescript-1f99a0a0cf87) — implementation patterns (MEDIUM confidence)
-- [LLM API Token Security: 7 Most Common Mistakes](https://aiq.hu/en/llm-api-token-security-the-7-most-common-mistakes-and-how-to-avoid-them/) — key storage and rotation (MEDIUM confidence)
-- [LiteLLM Supply Chain Attack Wake-Up Call](https://blog.dreamfactory.com/why-the-litellm-supply-chain-attack-is-a-wake-up-call-for-ai-api-credential-management/) — credential exposure via API responses (MEDIUM confidence)
-- [LLM Routing in Production](https://blog.logrocket.com/llm-routing-right-model-for-requests/) — heuristic accuracy limitations, feedback loop importance (MEDIUM confidence)
-- [Langfuse Token and Cost Tracking](https://langfuse.com/docs/observability/features/token-and-cost-tracking) — pricing tier support, cache token tracking (HIGH confidence)
-- [LiteLLM Health Checks](https://docs.litellm.ai/docs/proxy/health) — health check patterns, background vs inline (MEDIUM confidence)
-- hermes-agent-patterns.md — dynamic tool schema rebuild, context compressor tool-call repair (HIGH confidence — MIT source)
-- chat-latency-and-prompt-caching-notes.md — prompt caching implications for cost tracking (HIGH confidence — from official Anthropic/OpenAI docs)
+- [Justice or Prejudice? Quantifying Biases in LLM-as-a-Judge](https://arxiv.org/html/2410.02736v1) — 12 key biases identified; position bias, verbosity bias, self-enhancement quantified (HIGH confidence)
+- [Judging the Judges: A Systematic Study of Position Bias in LLM-as-a-Judge](https://aclanthology.org/2025.ijcnlp-long.18/) — ACL 2025; position bias not random, varies significantly across judges and tasks (HIGH confidence)
+- [Self-Preference Bias in LLM-as-a-Judge](https://arxiv.org/html/2410.21819v1) — 5-7% systematic self-enhancement boost; use separate models for generation and evaluation (HIGH confidence)
+- [Improving Your Model Ranking on Chatbot Arena by Vote Rigging](https://arxiv.org/abs/2501.17858) — ICML 2025; Elo rankings manipulable with hundreds of strategic votes (HIGH confidence)
+- [The AI industry is obsessed with Chatbot Arena, but it might not be the best benchmark](https://techcrunch.com/2024/09/05/the-ai-industry-is-obsessed-with-chatbot-arena-but-it-might-not-be-the-best-benchmark/) — sampling bias, selective disclosure, style bias in crowdsourced voting (MEDIUM confidence)
+- [Elo rating systems and how to manipulate them](https://tonysheng.substack.com/p/elo-rating-systems-and-how-to-manipulate) — sandbagging, de-leveling, stats boosting mechanics (MEDIUM confidence)
+- [Do 80% of all gamification projects fail? Gartner is right](https://centrical.com/resources/will-80-of-gamification-projects-fail/) — failure modes: lack of meaning, Goodhart's Law, activity metrics vs outcome metrics (HIGH confidence)
+- [Productivity App Gamification That Doesn't Backfire](https://trophy.so/blog/productivity-app-gamification-doesnt-backfire) — common backfire patterns: rewarding hours over results, task splitting for points, metric gaming (MEDIUM confidence)
+- [LLM API Pricing Comparison 2025](https://www.binadox.com/blog/llm-api-pricing-comparison-2025-complete-cost-analysis-guide/) — per-request costs $0.03-3.6 cents depending on model; GPT-4 500-word response ~$0.084 (HIGH confidence)
+- [Smarter AI Cost Optimization With Guardrails That Scale](https://www.cloudzero.com/blog/ai-cost-guardrails/) — runaway loop can exceed monthly budget in hours without rate limits (MEDIUM confidence)
+- [LLM-as-a-Judge: A 2026 Guide to Automated Model Assessment](https://labelyourdata.com/articles/llm-as-a-judge) — 93% of teams struggle with implementation; inconsistent scoring, cost, latency challenges (MEDIUM confidence)
+- [Rating Roulette: Self-Inconsistency in LLM-As-A-Judge](https://aclanthology.org/2025.findings-emnlp.1361.pdf) — single-shot evaluations introduce inconsistencies; multiple iterations required (HIGH confidence)
+- agent-rpg-design-v2.md — Grok review warnings: judge quality, compute cost, stale meta, toy problem, stats gaming (HIGH confidence — primary project spec)
 
 ---
-*Pitfalls research for: Porter Bridge — AI Gateway & Model Intelligence (v3.0)*
-*Researched: 2026-03-25*
+*Pitfalls research for: Porter v4.0 — Agent RPG System + Battle Arena*
+*Researched: 2026-03-29*

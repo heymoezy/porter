@@ -1,785 +1,796 @@
 # Architecture Research
 
-**Domain:** Porter Bridge — AI Gateway Layer (v3.0)
-**Researched:** 2026-03-25
-**Confidence:** HIGH (all findings from direct source-code inspection)
+**Domain:** Porter v4.0 — Agent RPG System + Battle Arena
+**Researched:** 2026-03-29
+**Confidence:** HIGH (all findings from direct source-code inspection of backend/src/)
 
 ---
 
-## v3.0 Bridge — Gateway Integration Architecture
+## System Overview
 
-This section supersedes and extends the v2.0 architecture below. The Bridge layer
-integrates with — not replaces — the existing ai-router/stream-service/config stack.
-
----
-
-### System Overview
+The RPG system layers on top of the existing Porter architecture without breaking it. Every new
+table, service, and route is additive. The dispatch log (`bridge_dispatch_log`) is the single
+immutable source of truth: stats are always derived from it, never hand-entered.
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                        API Layer  (:3001)                                     │
-│  ┌─────────────────┐  ┌───────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │ /api/v1/chat    │  │/api/v1/agents │  │/api/bridge/* │  │ /api/v1/sse  │  │
-│  │ (existing)      │  │ (existing)    │  │ (new)        │  │ (existing)   │  │
-│  └────────┬────────┘  └──────┬────────┘  └──────┬───────┘  └──────┬───────┘  │
-└───────────┼───────────────────┼────────────────────┼────────────────┼──────────┘
-            │                   │                    │                │
-┌───────────┼───────────────────┼────────────────────┼────────────────┼──────────┐
-│           ▼     BRIDGE LAYER  (new)                ▼                │          │
-│  ┌────────────────────────────────────────────────────┐             │          │
-│  │           bridge/bridge-router.ts                  │             │          │
-│  │  ┌─────────────────────┐  ┌─────────────────────┐  │             │          │
-│  │  │  GatewayRegistry    │  │   RoutingEngine      │  │             │          │
-│  │  │  (DB-backed, reads  │  │  (rules + heuristic) │  │             │          │
-│  │  │   gateways table)   │  │  delegates to        │  │             │          │
-│  │  └──────────┬──────────┘  │  shouldRouteCheap()  │  │             │          │
-│  │             │             │  for backward compat │  │             │          │
-│  │             │             └──────────┬───────────┘  │             │          │
-│  │             │                        │              │             │          │
-│  │  ┌──────────▼────────────────────────▼───────────┐  │             │          │
-│  │  │           BridgeDispatcher                    │  │             │          │
-│  │  │  select() → adapter.dispatch/stream()         │  │             │          │
-│  │  │  logBridgeDispatch() → bridge_dispatch_log    │  │             │          │
-│  │  │  emitSSE(bridge:*)                            │  │             │          │
-│  │  └──────────────────────────┬────────────────────┘  │             │          │
-│  └─────────────────────────────┼──────────────────────┘             │          │
-└────────────────────────────────┼────────────────────────────────────┼──────────┘
-                                 │                                     │
-┌────────────────────────────────┼─────────────────────────────────────┼──────────┐
-│                   ADAPTERS     │                                      │          │
-│  ┌──────────────┐  ┌───────────┴──────┐  ┌─────────────┐  ┌─────────┴────────┐  │
-│  │OllamaAdapter │  │OpenClawAdapter   │  │CodexCLIAdapt│  │ClaudeAdapter     │  │
-│  │wraps existing│  │wraps existing    │  │(new) spawn  │  │(new) spawn       │  │
-│  │stream-service│  │stream-service    │  │codex binary │  │claude binary     │  │
-│  └──────┬───────┘  └──────────┬───────┘  └──────┬──────┘  └────────┬─────────┘  │
-│         │                     │                  │                  │             │
-│  ┌──────┴─────────────────────┴──────────────────┴──────────────────┴──────────┐  │
-│  │         StreamNormalizer — unified AsyncIterable<string>                    │  │
-│  │   Ollama NDJSON | OpenAI SSE | Codex JSONL | Claude JSON                   │  │
-│  └──────────────────────────────────────────────────────────────────────────────┘  │
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          API Layer  (:3001)                                      │
+│                                                                                  │
+│  Existing                          New v4.0                                      │
+│  ┌──────────────┐  ┌────────────┐  ┌────────────┐  ┌─────────────┐  ┌─────────┐ │
+│  │/api/v1/chat  │  │/api/v1/    │  │/api/v1/    │  │/api/v1/     │  │/api/v1/ │ │
+│  │/api/v1/agent │  │templates   │  │rpg/*       │  │battles/*    │  │sessions │ │
+│  │/api/bridge/* │  │/admin/forge│  │            │  │             │  │         │ │
+│  └──────┬───────┘  └─────┬──────┘  └─────┬──────┘  └──────┬──────┘  └────┬────┘ │
+└─────────┼────────────────┼───────────────┼────────────────┼───────────────┼──────┘
+          │                │               │                │               │
+┌─────────┼────────────────┼───────────────┼────────────────┼───────────────┼──────┐
+│         │      SERVICE LAYER             │                │               │      │
+│         │                │               ▼                ▼               ▼      │
+│         │          ┌─────┴──────┐  ┌──────────────┐  ┌──────────────┐           │
+│         │          │ forge.ts   │  │ rpg-engine   │  │battle-       │           │
+│         │          │ (MODIFIED) │  │ .ts (NEW)    │  │ orchestrator │           │
+│         │          └─────┬──────┘  └──────┬───────┘  │ .ts (NEW)   │           │
+│         │                │                │          └──────┬───────┘           │
+│         │                │                │                 │                   │
+│  ┌──────▼────────────────▼────────────────▼─────────────────▼────────────────┐  │
+│  │                    routing-engine.ts (EXISTING — unchanged)                │  │
+│  │              Handles dispatch, logging, circuit-breakers, fallback         │  │
+│  └─────────────────────────────────┬──────────────────────────────────────────┘  │
+└────────────────────────────────────┼───────────────────────────────────────────┘
+                                     │
+┌────────────────────────────────────▼───────────────────────────────────────────┐
+│                      DATA LAYER (PostgreSQL 16)                                  │
+│                                                                                  │
+│  Existing (immutable)              New v4.0 tables                               │
+│  ┌────────────────┐  ┌────────┐   ┌───────────────┐  ┌──────────┐  ┌─────────┐  │
+│  │bridge_dispatch │  │agent_  │   │agent_rpg_stats│  │battles   │  │battle_  │  │
+│  │_log            │  │templ-  │   │(derived cache)│  │          │  │rounds   │  │
+│  │(read-only for  │  │ates    │   │               │  │          │  │         │  │
+│  │ stat engine)   │  │(ALTER) │   └───────────────┘  └──────────┘  └─────────┘  │
+│  └────────────────┘  └────────┘   ┌───────────────┐  ┌──────────┐  ┌─────────┐  │
+│  ┌────────────────┐               │agent_bonds     │  │battle_   │  │session_ │  │
+│  │personas        │               │               │  │judgments │  │registry │  │
+│  │(ALTER)         │               └───────────────┘  └──────────┘  └─────────┘  │
+│  └────────────────┘               ┌───────────────┐  ┌──────────┐               │
+│                                   │intelligence_  │  │msg_bus_  │               │
+│                                   │patterns       │  │events    │               │
+│                                   └───────────────┘  └──────────┘               │
 └──────────────────────────────────────────────────────────────────────────────────┘
-                                 │
-┌────────────────────────────────┼─────────────────────────────────────────────────┐
-│                   DATA LAYER (PostgreSQL 16)                                       │
-│  ┌───────────────┐  ┌────────────────┐  ┌──────────────────┐  ┌────────────────┐  │
-│  │  gateways     │  │   models       │  │  routing_rules   │  │bridge_dispatch │  │
-│  │  (new)        │  │  (new)         │  │  (new)           │  │  _log (new)    │  │
-│  └───────────────┘  └────────────────┘  └──────────────────┘  └────────────────┘  │
-│  ┌───────────────┐  ┌────────────────┐  ┌──────────────────┐                      │
-│  │ decision_log  │  │token_usage_    │  │ agent_jobs,      │                      │
-│  │ (existing)    │  │daily (existing)│  │ agent_activity   │                      │
-│  │               │  │                │  │ (existing)       │                      │
-│  └───────────────┘  └────────────────┘  └──────────────────┘                      │
-└──────────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                              SSE broadcasts
+                         (existing sse-hub.ts)
 ```
 
 ---
 
-### Component Boundaries
+## Component Boundaries
 
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| `bridge/bridge-router.ts` | Top-level public API: `bridgeDispatch()`, `bridgeStream()` — replaces direct calls to `aiRouterDispatch()` in routes | GatewayRegistry, RoutingEngine, BridgeDispatcher |
-| `bridge/gateway-registry.ts` | Reads `gateways` table, maintains in-memory health cache (TTL 30s), exposes `getAvailable()` | PostgreSQL, adapters (for probing) |
-| `bridge/routing-engine.ts` | Evaluates `routing_rules` rows, delegates to `shouldRouteCheap()` for heuristic fallback, returns `{ gateway, model, reason, rule_matched }` | GatewayRegistry, models table |
-| `bridge/startup-detector.ts` | On Fastify boot: probe PATH + HTTP, upsert `gateways` + `models`, set `detected_by='startup'` | config.ts (seed URLs), PostgreSQL, adapters |
-| `bridge/adapters/ollama.ts` | Wraps `OllamaStreamBackend` and Ollama dispatch logic from ai-router | Existing stream-service.ts |
-| `bridge/adapters/openclaw.ts` | Wraps `OpenClawStreamBackend` and OpenClaw dispatch logic from ai-router | Existing stream-service.ts |
-| `bridge/adapters/codex-cli.ts` | Spawns `codex exec --json --ephemeral`, parses JSONL events | codex binary |
-| `bridge/adapters/claude-cli.ts` | Spawns `claude -p --output-format json`, parses JSON output | claude binary |
-| `bridge/stream-normalizer.ts` | Translates all adapter outputs to unified `AsyncIterable<string>` | All adapters |
-| `services/ai-router.ts` | UNCHANGED — remains as adapter internals | Not modified |
-| `services/stream-service.ts` | UNCHANGED — wrapped by adapters | Not modified |
-| `services/config.ts` | UNCHANGED — seeds startup detector, not the runtime registry | Not modified |
+### Existing Components — Modified
 
-**Critical constraint:** `ai-router.ts` and `stream-service.ts` are read-only during Bridge build.
-All 35 Playwright tests that rely on their exports continue to pass without modification.
+| Component | Current Role | Change for v4.0 |
+|-----------|-------------|-----------------|
+| `backend/src/db/schema.ts` | Drizzle schema, all tables | ADD: 6 new table definitions |
+| `backend/src/db/migrate-*.ts` | Migration pattern | ADD: `migrate-rpg-v1.ts` (new migration file) |
+| `agent_templates` table | 92 rows, template metadata | ALTER: add RPG columns (rarity, stars, xp, level, class, gear slots, elo) |
+| `personas` table | Active agent instances | ALTER: add `rpg_stats_id` FK, `agent_template_id` back-ref |
+| `backend/src/services/forge.ts` | 3-station assembly line | EXTEND: add birth event that triggers initial stat calculation; emit `rpg:born` SSE |
+| `backend/src/routes/v1/admin/forge.ts` | Admin forge CRUD | EXTEND: expose new Forge tabs (Templates/Armory/Workshop) unified under single nav |
+| `backend/src/services/sse-hub.ts` | Broadcast events | EXTEND: new event namespaces `rpg:*`, `battle:*`, `session:*` |
 
----
+### New Components — Created
 
-### Recommended Project Structure
-
-```
-backend/src/
-├── services/
-│   ├── ai-router.ts              (existing — UNCHANGED, wrapped by adapters)
-│   ├── stream-service.ts         (existing — UNCHANGED, wrapped by adapters)
-│   ├── sse-hub.ts                (existing — UNCHANGED)
-│   ├── scheduler.ts              (existing — add one bridge health tick call)
-│   │
-│   └── bridge/                   (new directory — all Bridge code)
-│       ├── index.ts               (re-exports: bridgeDispatch, bridgeStream, getGatewayStatus)
-│       ├── bridge-router.ts       (select gateway + model, delegate to dispatcher)
-│       ├── gateway-registry.ts    (DB read + health cache)
-│       ├── routing-engine.ts      (rule eval + heuristic fallback)
-│       ├── startup-detector.ts    (boot-time probe + DB upsert)
-│       ├── adapters/
-│       │   ├── interface.ts       (GatewayAdapter interface definition)
-│       │   ├── ollama.ts          (wraps existing OllamaStreamBackend)
-│       │   ├── openclaw.ts        (wraps existing OpenClawStreamBackend)
-│       │   ├── codex-cli.ts       (new subprocess adapter)
-│       │   └── claude-cli.ts      (new subprocess adapter)
-│       └── stream-normalizer.ts   (unified AsyncIterable<string>)
-│
-├── db/
-│   ├── schema.ts                  (existing — add new table definitions here)
-│   └── migrate-bridge.ts          (new migration — Bridge tables)
-│
-└── routes/v1/
-    └── bridge.ts                  (new route file — gateway CRUD, models, rules, log)
-```
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `rpg-engine.ts` | `backend/src/services/rpg-engine.ts` | Stat calculation from dispatch_log; XP+level math; rarity thresholds; .md file regeneration triggers |
+| `battle-orchestrator.ts` | `backend/src/services/battle-orchestrator.ts` | Parallel dispatch to 2 agents with same prompt; judge dispatch; Elo update; result recording |
+| `session-registry.ts` | `backend/src/services/session-registry.ts` | Porter-owned session tracking with per-session token/context window accounting |
+| `msg-bus.ts` | `backend/src/services/msg-bus.ts` | Structured inter-gateway envelope store; extends existing AgentMessage type |
+| `intelligence-loop.ts` | `backend/src/services/intelligence-loop.ts` | Reads dispatch patterns from bridge_dispatch_log; extracts routing concepts; writes to concepts table |
+| `/api/v1/rpg.ts` | `backend/src/routes/v1/rpg.ts` | Agent stat reads, leaderboard, rarity/class queries |
+| `/api/v1/battles.ts` | `backend/src/routes/v1/battles.ts` | Battle CRUD: start, status, replay, leaderboard |
+| `/api/v1/sessions.ts` | `backend/src/routes/v1/sessions.ts` | Session registry CRUD; token accounting per session |
+| `migrate-rpg-v1.ts` | `backend/src/db/migrate-rpg-v1.ts` | DDL for all 6 new tables + ALTER existing |
 
 ---
 
-### New PostgreSQL Tables
+## New Database Tables
 
-#### `gateways`
-
-Registry of all known AI backends. One row per configured gateway instance.
+### 1. `agent_rpg_stats` — Derived stat cache
 
 ```sql
-CREATE TABLE IF NOT EXISTS gateways (
+CREATE TABLE agent_rpg_stats (
   id              TEXT PRIMARY KEY,
-  -- 'ollama-local', 'openclaw-main', 'codex-cli', 'claude-cli'
-  name            TEXT NOT NULL,
-  -- Human label: 'Ollama (Local)', 'OpenClaw Gateway'
-  provider        TEXT NOT NULL,
-  -- 'ollama' | 'openclaw' | 'codex' | 'claude' | 'gemini'
-  gateway_type    TEXT NOT NULL DEFAULT 'http',
-  -- 'http' | 'cli' | 'grpc'
-  base_url        TEXT,
-  -- http gateways: 'http://127.0.0.1:11434'. NULL for CLI gateways.
-  binary_path     TEXT,
-  -- CLI gateways: resolved binary path from PATH. NULL for HTTP.
-  auth_kind       TEXT NOT NULL DEFAULT 'none',
-  -- 'none' | 'bearer' | 'env_var' | 'cli_auth'
-  auth_ref        TEXT,
-  -- Name of the env var holding the token (e.g. 'OPENCLAW_TOKEN').
-  -- Never the token itself. Adapter reads process.env[auth_ref] at dispatch time.
-  status          TEXT NOT NULL DEFAULT 'unknown',
-  -- 'online' | 'offline' | 'degraded' | 'unknown'
-  last_probe_at   DOUBLE PRECISION,
-  last_probe_ms   INTEGER,
-  probe_error     TEXT,
-  priority        INTEGER NOT NULL DEFAULT 50,
-  -- Lower = preferred when capability is tied between gateways
-  enabled         INTEGER NOT NULL DEFAULT 1,
-  detected_by     TEXT NOT NULL DEFAULT 'manual',
-  -- 'startup' | 'manual' | 'api'
-  version_string  TEXT,
-  -- From --version probe (CLI) or /version endpoint (HTTP)
+  template_id     TEXT NOT NULL REFERENCES agent_templates(id) ON DELETE CASCADE,
+  -- 5 core stats, 0-100
+  quality         DOUBLE PRECISION DEFAULT 0,
+  speed           DOUBLE PRECISION DEFAULT 0,
+  efficiency      DOUBLE PRECISION DEFAULT 0,
+  reliability     DOUBLE PRECISION DEFAULT 0,
+  combo           DOUBLE PRECISION DEFAULT 0,
+  -- progression
+  xp              INTEGER DEFAULT 0,
+  level           INTEGER DEFAULT 1,
+  stars           INTEGER DEFAULT 1,        -- 1-5
+  rarity          TEXT DEFAULT 'common',    -- common|rare|epic|legendary|mythic
+  agent_class     TEXT DEFAULT 'striker',   -- striker|guardian|fixer|amplifier|orchestrator
+  elo             INTEGER DEFAULT 1200,
+  -- gear slots (FKs to skills/tools tables)
+  weapon_model    TEXT,                     -- FK to models.id
+  armor_prompt_id TEXT,                     -- FK to agent_templates.id or custom text
+  accessory1_tool TEXT,                     -- FK to tools.id
+  accessory2_tool TEXT,                     -- FK to tools.id
+  set_bonus_active INTEGER DEFAULT 0,
+  -- computed metadata
+  specialties     JSONB DEFAULT '[]',       -- [{domain, win_rate, battles}]
+  dispatch_count  INTEGER DEFAULT 0,
+  battle_count    INTEGER DEFAULT 0,
+  last_computed   DOUBLE PRECISION,
   created_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
   updated_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW())
 );
 ```
 
-#### `models`
+**Relationship:** `agent_templates.id` 1:1 `agent_rpg_stats.template_id`
 
-Unified model catalog. Populated by adapters during gateway detection and health ticks.
+This is a derived cache, not the source of truth. It is always recomputable from
+`bridge_dispatch_log` + `battles` + `battle_judgments`. The `rpg-engine.ts` service owns
+writes to this table. Routes only read it.
+
+### 2. `battles` — Battle records
 
 ```sql
-CREATE TABLE IF NOT EXISTS models (
+CREATE TABLE battles (
   id              TEXT PRIMARY KEY,
-  -- Composite: 'ollama/qwen2.5-coder:1.5b', 'openclaw/gpt-5.4'
-  gateway_id      TEXT NOT NULL REFERENCES gateways(id) ON DELETE CASCADE,
-  model_name      TEXT NOT NULL,
-  -- Raw name: 'qwen2.5-coder:1.5b', 'gpt-5.4'
-  display_name    TEXT,
-  -- Human label: 'Qwen 2.5 Coder 1.5B'
-  provider_family TEXT,
-  -- 'openai' | 'anthropic' | 'google' | 'qwen' | 'unknown'
-  cost_tier       TEXT NOT NULL DEFAULT 'unknown',
-  -- 'free' | 'standard' | 'premium'
-  context_window  INTEGER,
-  -- Max context tokens
-  strengths       JSONB DEFAULT '[]',
-  -- ['coding', 'reasoning', 'analysis', 'multimodal']
-  capabilities    JSONB DEFAULT '{}',
-  -- {'streaming': true, 'tools': false, 'vision': false}
-  is_agentic      INTEGER DEFAULT 0,
-  -- 1 if model can use tools / read-write files
-  is_default      INTEGER DEFAULT 0,
-  -- 1 = default model for this gateway
-  enabled         INTEGER DEFAULT 1,
-  size_bytes      BIGINT,
-  -- Local models only (Ollama): disk size
-  benchmark_score INTEGER,
-  -- 0-100 composite; set by forge pipeline or manual entry
-  last_seen_at    DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
+  challenger_id   TEXT NOT NULL,            -- agent_templates.id
+  defender_id     TEXT NOT NULL,            -- agent_templates.id
+  prompt          TEXT NOT NULL,
+  domain          TEXT DEFAULT 'general',   -- specialty domain tag
+  status          TEXT DEFAULT 'pending',   -- pending|running|judging|complete|failed
+  winner_id       TEXT,                     -- agent_templates.id or null for draw
+  judge_model     TEXT,                     -- which model judged
+  judge_scores    JSONB DEFAULT '{}',       -- {quality:0-10, speed:0-10, efficiency:0-10, style:0-10}
+  challenger_elo_before INTEGER,
+  defender_elo_before   INTEGER,
+  challenger_elo_after  INTEGER,
+  defender_elo_after    INTEGER,
+  challenger_dispatch_id TEXT,              -- bridge_dispatch_log.id
+  defender_dispatch_id   TEXT,             -- bridge_dispatch_log.id
+  judge_dispatch_id      TEXT,             -- bridge_dispatch_log.id for the judge call
+  initiated_by    TEXT,                     -- username
+  spectators      JSONB DEFAULT '[]',
+  replay_data     JSONB DEFAULT '{}',
+  created_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
+  completed_at    DOUBLE PRECISION
+);
+```
+
+### 3. `battle_rounds` — Per-round detail for turn-based battles
+
+```sql
+CREATE TABLE battle_rounds (
+  id              TEXT PRIMARY KEY,
+  battle_id       TEXT NOT NULL REFERENCES battles(id) ON DELETE CASCADE,
+  round_num       INTEGER NOT NULL,
+  challenger_response TEXT,
+  defender_response   TEXT,
+  challenger_tokens   INTEGER,
+  defender_tokens     INTEGER,
+  challenger_latency_ms INTEGER,
+  defender_latency_ms   INTEGER,
+  round_winner    TEXT,                     -- 'challenger'|'defender'|'draw'
   created_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW())
 );
 ```
 
-#### `routing_rules`
-
-Operator-configurable rules that override the default complexity heuristic.
-Evaluated in `priority ASC` order; first match wins.
+### 4. `battle_judgments` — Judge scoring detail
 
 ```sql
-CREATE TABLE IF NOT EXISTS routing_rules (
-  id              SERIAL PRIMARY KEY,
-  name            TEXT NOT NULL,
-  rule_type       TEXT NOT NULL,
-  -- 'complexity'     — based on message length/keywords
-  -- 'cost_cap'       — route cheap when plan budget is near limit
-  -- 'capability'     — route to gateway with required capability
-  -- 'agent_affinity' — honour persona.preferred_backend
-  condition_json  JSONB NOT NULL DEFAULT '{}',
-  -- complexity:     { "max_length": 160, "keyword_patterns": [] }
-  -- cost_cap:       { "cost_tier": "free" }
-  -- capability:     { "required": ["tools", "vision"] }
-  -- agent_affinity: { "agent_id": "uuid" }
-  target_gateway  TEXT REFERENCES gateways(id),
-  target_model    TEXT REFERENCES models(id),
-  -- Either or both can be set; NULL means "best available"
-  priority        INTEGER NOT NULL DEFAULT 50,
-  enabled         INTEGER NOT NULL DEFAULT 1,
-  created_by      TEXT,
+CREATE TABLE battle_judgments (
+  id              TEXT PRIMARY KEY,
+  battle_id       TEXT NOT NULL REFERENCES battles(id) ON DELETE CASCADE,
+  judge_model     TEXT NOT NULL,
+  quality_score   DOUBLE PRECISION,         -- 1-10
+  speed_score     DOUBLE PRECISION,
+  efficiency_score DOUBLE PRECISION,
+  style_score     DOUBLE PRECISION,
+  rationale       TEXT,
+  verdict         TEXT,                     -- 'challenger'|'defender'|'draw'
+  confidence      DOUBLE PRECISION,
+  raw_response    TEXT,
+  created_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW())
+);
+```
+
+### 5. `agent_bonds` — COMBO stat: agent pair affinity tracking
+
+```sql
+CREATE TABLE agent_bonds (
+  id              TEXT PRIMARY KEY,
+  agent_a_id      TEXT NOT NULL,            -- agent_templates.id
+  agent_b_id      TEXT NOT NULL,            -- agent_templates.id
+  chain_count     INTEGER DEFAULT 0,        -- times worked in same multi-agent workflow
+  success_count   INTEGER DEFAULT 0,
+  combo_score     DOUBLE PRECISION DEFAULT 0,
+  last_chained    DOUBLE PRECISION,
   created_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
-  updated_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW())
+  UNIQUE (agent_a_id, agent_b_id)
 );
 ```
 
-#### `bridge_dispatch_log`
+**Used by:** `rpg-engine.ts` to derive the COMBO stat; queries `bridge_dispatch_log` for
+rows with both agents present in the same `correlation_id`.
 
-Per-request dispatch record. More granular than `decision_log`
-(which records abstract routing decisions). Feeds the cost and latency dashboards.
+### 6. `session_registry` — Porter-owned session tracking
 
 ```sql
-CREATE TABLE IF NOT EXISTS bridge_dispatch_log (
-  id                TEXT PRIMARY KEY,
-  -- UUID generated at dispatch start
-  gateway_id        TEXT REFERENCES gateways(id),
-  model_id          TEXT REFERENCES models(id),
-  agent_id          TEXT,
-  -- references personas.id — NULL for direct chat dispatches
-  project_id        TEXT,
-  job_id            TEXT,
-  -- references agent_jobs.id — NULL for interactive dispatches
-  chat_id           TEXT,
-  dispatch_type     TEXT NOT NULL DEFAULT 'chat',
-  -- 'chat' | 'stream' | 'agent_job' | 'forge'
-  status            TEXT NOT NULL DEFAULT 'pending',
-  -- 'pending' | 'completed' | 'failed' | 'cancelled'
-  routing_reason    TEXT,
-  -- Human-readable: 'cheap model selected (simple message)'
-  rule_matched      INTEGER,
-  -- routing_rules.id of the rule that fired; NULL = heuristic
-  prompt_tokens     INTEGER DEFAULT 0,
-  completion_tokens INTEGER DEFAULT 0,
-  total_tokens      INTEGER DEFAULT 0,
-  cost_usd          DOUBLE PRECISION DEFAULT 0,
-  duration_ms       INTEGER,
-  streamed          INTEGER DEFAULT 0,
-  -- 1 = was a streaming dispatch
-  error             TEXT,
-  started_at        DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
-  completed_at      DOUBLE PRECISION
+CREATE TABLE session_registry (
+  id              TEXT PRIMARY KEY,
+  chat_id         TEXT,                     -- FK to chats.id if applicable
+  agent_id        TEXT,                     -- which agent owns this session
+  username        TEXT,
+  gateway_type    TEXT,
+  model_name      TEXT,
+  token_budget    INTEGER DEFAULT 0,
+  tokens_used     INTEGER DEFAULT 0,
+  context_msgs    INTEGER DEFAULT 0,
+  status          TEXT DEFAULT 'active',    -- active|expired|closed
+  metadata        JSONB DEFAULT '{}',
+  created_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
+  last_active_at  DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
+  closed_at       DOUBLE PRECISION
 );
-
-CREATE INDEX IF NOT EXISTS idx_bridge_dispatch_started
-  ON bridge_dispatch_log(started_at DESC);
-CREATE INDEX IF NOT EXISTS idx_bridge_dispatch_gateway
-  ON bridge_dispatch_log(gateway_id, started_at DESC);
-CREATE INDEX IF NOT EXISTS idx_bridge_dispatch_agent
-  ON bridge_dispatch_log(agent_id, started_at DESC);
 ```
 
-**Relationship to existing tables:**
-- `token_usage_daily` (existing) continues daily aggregation — Bridge writes to it via the
-  existing `trackTokenUsage()` function, unchanged
-- `bridge_dispatch_log` provides per-request detail for admin cost/latency views
-- `decision_log` (existing) continues recording abstract model-selection decisions —
-  Bridge calls `logDecision()` as before, just with richer context
+### 7. `msg_bus_events` — Structured inter-gateway message log
+
+```sql
+CREATE TABLE msg_bus_events (
+  id              TEXT PRIMARY KEY,
+  correlation_id  TEXT,
+  source_agent    TEXT,
+  source_gateway  TEXT,
+  target_agent    TEXT,
+  target_gateway  TEXT,
+  intent          TEXT,                     -- request|response|ack|error
+  payload         JSONB DEFAULT '{}',
+  response_payload JSONB,
+  hop_count       INTEGER DEFAULT 0,
+  latency_ms      INTEGER,
+  dispatch_log_id TEXT,                     -- bridge_dispatch_log.id
+  status          TEXT DEFAULT 'pending',   -- pending|delivered|failed
+  created_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
+  delivered_at    DOUBLE PRECISION
+);
+```
+
+This extends the existing `AgentMessage` type in `bridge/types.ts` with persistence.
+Currently `agent_messages` table exists but is marked legacy. `msg_bus_events` replaces it
+with the structured envelope schema.
+
+### 8. `intelligence_patterns` — Dispatch signal log (Intelligence Loop)
+
+```sql
+CREATE TABLE intelligence_patterns (
+  id              TEXT PRIMARY KEY,
+  pattern_type    TEXT NOT NULL,            -- gateway_preference|cost_spike|model_failure|combo_chain
+  gateway_type    TEXT,
+  agent_id        TEXT,
+  summary         TEXT NOT NULL,
+  evidence        JSONB DEFAULT '[]',       -- array of dispatch_log.id references
+  confidence      INTEGER DEFAULT 50,
+  promoted_to_concept_id TEXT,             -- concepts.id if elevated
+  status          TEXT DEFAULT 'raw',      -- raw|reviewed|promoted|dismissed
+  created_at      DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
+  reviewed_at     DOUBLE PRECISION
+);
+```
+
+### Existing Table Alterations
+
+**`agent_templates` — Add RPG columns:**
+```sql
+ALTER TABLE agent_templates ADD COLUMN rarity TEXT DEFAULT 'common';
+ALTER TABLE agent_templates ADD COLUMN stars INTEGER DEFAULT 1;
+ALTER TABLE agent_templates ADD COLUMN xp INTEGER DEFAULT 0;
+ALTER TABLE agent_templates ADD COLUMN level INTEGER DEFAULT 1;
+ALTER TABLE agent_templates ADD COLUMN agent_class TEXT DEFAULT 'striker';
+ALTER TABLE agent_templates ADD COLUMN elo INTEGER DEFAULT 1200;
+ALTER TABLE agent_templates ADD COLUMN rpg_enabled INTEGER DEFAULT 0;
+```
+
+**`personas` — Add RPG cross-reference:**
+```sql
+ALTER TABLE personas ADD COLUMN rpg_stats_id TEXT;  -- FK to agent_rpg_stats.id
+```
 
 ---
 
-### How Bridge Wraps ai-router.ts
+## Service Architecture
 
-The integration follows a **delegation + wrapping** pattern. Bridge is the new external API.
-ai-router.ts becomes an internal implementation detail of two adapters.
+### rpg-engine.ts — Stat Calculation Engine
 
-```
-BEFORE v3:
-  route handler → aiRouterDispatch(req) → Ollama or OpenClaw
-
-AFTER v3:
-  route handler → bridgeDispatch(req)
-                    → GatewayRegistry.getAvailable()
-                    → RoutingEngine.select()
-                    → OllamaAdapter.dispatch()  (wraps ai-router Ollama path)
-                    → OpenClawAdapter.dispatch() (wraps ai-router OpenClaw path)
-                    → CodexCLIAdapter.dispatch() (new)
-                    → ClaudeAdapter.dispatch()   (new)
-```
-
-Adapter wrapping example (ollama):
+This service is the core of the RPG system. It reads `bridge_dispatch_log` and derives all
+5 stats. It is the ONLY writer to `agent_rpg_stats`. Routes never write stats directly.
 
 ```typescript
-// bridge/adapters/ollama.ts
-import { OllamaStreamBackend } from '../../stream-service.js';  // existing, not modified
-import { config } from '../../config.js';                        // existing, not modified
-
-export class OllamaAdapter implements GatewayAdapter {
-  readonly gatewayType = 'http' as const;
-
-  async dispatch(req: BridgeRequest): Promise<BridgeResult> {
-    // Exact same fetch logic as ai-router.dispatch() Ollama branch,
-    // but receives gateway URL from req.gateway.base_url (DB-sourced)
-    // rather than config.ollamaUrl (hardcoded env var)
-    const resp = await fetch(`${req.gateway.base_url}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: req.model.model_name, prompt: req.message, stream: false }),
-    });
-    const data = await resp.json() as { response: string; eval_count?: number };
-    return { response: data.response, tokensUsed: data.eval_count };
-  }
-
-  async *stream(req: BridgeRequest, signal: AbortSignal): AsyncIterable<string> {
-    // Delegates directly to existing OllamaStreamBackend — zero duplication
-    const backend = new OllamaStreamBackend();
-    yield* backend.stream(req.message, signal);
-  }
-
-  async probe(): Promise<ProbeResult> {
-    try {
-      const resp = await fetch(`${req.gateway.base_url}/api/tags`,
-        { signal: AbortSignal.timeout(2000) });
-      return { ok: resp.ok, latency_ms: /* measured */ };
-    } catch {
-      return { ok: false };
-    }
-  }
-
-  async listModels(): Promise<ModelDescriptor[]> {
-    const resp = await fetch(`${this.baseUrl}/api/tags`);
-    const data = await resp.json() as { models: { name: string; size: number }[] };
-    return data.models.map(m => ({
-      model_name: m.name,
-      cost_tier: 'free',
-      strengths: ['quick-tasks', 'privacy', 'offline'],
-      size_bytes: m.size,
-    }));
-  }
+// Public interface
+interface RpgEngine {
+  computeStats(templateId: string): Promise<AgentRpgStats>;
+  recomputeAll(): Promise<void>;           // background job
+  awardXp(templateId: string, source: XpSource, amount: number): Promise<void>;
+  checkProgressionEvents(templateId: string): Promise<ProgressionEvent[]>;
+  regenerateMdFiles(templateId: string, event: ProgressionEvent): Promise<void>;
 }
 ```
 
-**Migration path for routes:**
+**Stat derivation logic:**
 
-| Step | What Changes |
-|------|-------------|
-| 1 | Add `bridge/` directory, implement adapters, no route changes |
-| 2 | Routes import `bridgeDispatch` from `bridge/index.ts` instead of `ai-router.ts` |
-| 3 | ai-router.ts remains in place; its exports still tested by Playwright suite |
-| 4 (later) | After tests updated to use Bridge, ai-router.ts becomes internal-only |
+| Stat | Query |
+|------|-------|
+| SPD | `SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms) FROM bridge_dispatch_log WHERE agent_id = $1` → invert to 0-100 scale |
+| REL | `SELECT 100 - (COUNT(*) FILTER(WHERE response IS NULL OR status='error') * 100.0 / COUNT(*)) FROM bridge_dispatch_log WHERE agent_id = $1` |
+| EFF | `SELECT AVG(output_tokens * 1.0 / NULLIF(input_tokens,0)) * quality_weight FROM bridge_dispatch_log WHERE agent_id = $1` (requires battle judgment quality scores joined in) |
+| QTY | `SELECT AVG(quality_score) FROM battle_judgments bj JOIN battles b ON bj.battle_id = b.id WHERE b.challenger_id = $1 OR b.defender_id = $1` |
+| COMBO | `SELECT (success_count * 1.0 / NULLIF(chain_count,0)) * 100 FROM agent_bonds WHERE agent_a_id = $1 OR agent_b_id = $1` aggregated |
 
----
+SPD, REL, EFF can be computed from dispatch log alone. QTY requires at least one battle.
+COMBO requires multi-agent dispatch correlation. Agents with no battles start QTY at 50.
 
-### Data Flow: Gateway Registration to Memory
+**XP sources and amounts are defined as constants, not stored in the schema.** The audit
+trail is the dispatch_log and battles table — not a separate XP ledger.
 
+**Progression events that trigger .md regeneration:**
 ```
-──────────────────── STARTUP ────────────────────────────────────────────────────
-
-Fastify boot → StartupDetector.run()
-  ├── Read config.ollamaUrl, config.openclawUrl (existing env-var config)
-  ├── Probe HTTP: GET ollamaUrl/api/tags
-  │     → if 200: upsert gateways(id='ollama-local', status='online')
-  │                upsert models from response tags
-  ├── Probe HTTP: HEAD openclawUrl
-  │     → if 200/405: upsert gateways(id='openclaw-main', status='online')
-  │                    fetch /v1/models if available; upsert model rows
-  ├── Probe PATH: which(claude, codex, gemini)
-  │     → for each found: exec `--version`, capture version_string
-  │                        upsert gateways(id='claude-cli', gateway_type='cli', ...)
-  └── Emit SSE: bridge:gateway_detected { gateway_id, provider, status, model_count }
-
-──────────────────── ROUTING ─────────────────────────────────────────────────────
-
-bridgeDispatch(req: BridgeRequest)
-  │
-  ├── 1. GatewayRegistry.getAvailable()
-  │        SELECT * FROM gateways WHERE enabled=1 AND status IN ('online','degraded')
-  │        ORDER BY priority ASC
-  │        Returns ordered list; uses 30s in-memory cache to avoid per-request DB reads
-  │
-  ├── 2. RoutingEngine.select(req, available)
-  │        a. Iterate routing_rules ORDER BY priority ASC
-  │           - agent_affinity: req.agentId → personas.preferred_backend → match gateway
-  │           - complexity:     shouldRouteCheap(req.message) → map to cost_tier filter
-  │           - cost_cap:       featureFlags.billing → check token budget vs plan
-  │           - capability:     req.requiredCapabilities → filter models.capabilities
-  │        b. First matching rule returns { gateway, model, rule_matched }
-  │        c. No rule match → default: shouldRouteCheap() heuristic (backward compat)
-  │        Returns: { gateway, model, reason, rule_matched }
-  │
-  ├── 3. INSERT bridge_dispatch_log(status='pending', ...) — fire and forget
-  │
-  ├── 4. Emit SSE: bridge:dispatch_started { dispatch_id, gateway_id, model_id }
-  │
-  ├── 5. adapter.dispatch(req) OR adapter.stream(req, signal)
-  │        OllamaAdapter   → Ollama NDJSON  → StreamNormalizer → AsyncIterable<string>
-  │        OpenClawAdapter → OpenAI SSE     → StreamNormalizer → AsyncIterable<string>
-  │        CodexCLIAdapter → JSONL stdout   → StreamNormalizer → AsyncIterable<string>
-  │        ClaudeAdapter   → JSON stdout    → StreamNormalizer → AsyncIterable<string>
-  │
-  ├── 6. SUCCESS:
-  │        UPDATE bridge_dispatch_log SET status='completed', tokens, duration_ms
-  │        trackTokenUsage(model, input, output)   ← existing function, unchanged
-  │        logDecision(...)                        ← existing function, unchanged
-  │        Emit SSE: bridge:dispatch_completed { dispatch_id, tokens, duration_ms }
-  │
-  ├── 7. FAILURE:
-  │        UPDATE bridge_dispatch_log SET status='failed', error=...
-  │        Mark gateway degraded if probe also fails
-  │        Emit SSE: bridge:dispatch_failed { dispatch_id, error, fallback_used }
-  │        Retry with next available gateway (exclude degraded, re-enter step 2)
-  │
-  └── 8. logDecision() ← existing decision_log write, always preserved
-
-──────────────────── HEALTH TICK ─────────────────────────────────────────────────
-
-scheduler.ts tick (every 2s, existing) → every 15 ticks (30s):
-  BridgeHealthTick.run()
-    ├── SELECT * FROM gateways WHERE enabled=1
-    ├── For each: adapter.probe() → { ok, latency_ms }
-    ├── UPDATE gateways SET status, last_probe_at, last_probe_ms, probe_error
-    ├── Invalidate GatewayRegistry in-memory cache
-    └── Emit SSE: bridge:health_update { gateways: [{id, status, latency_ms}] }
-
-──────────────────── MEMORY INTEGRATION ──────────────────────────────────────────
-
-Phase 1 (this milestone): Bridge decisions feed decision_log (existing).
-  Every routing decision writes: decision_type='model_selection', chosen, reasoning.
-
-Phase 2 (Bridge agents, later):
-  Bridge Operator agent reads bridge_dispatch_log for patterns.
-  Route Analyst agent reads routing_rules + dispatch_log, suggests rule changes.
-  Model Scout agent reads models table, triggers listModels() on new gateways.
-  All three agents are personas with preferred_backend constraints, using Memory V3.
+star_up      → regenerate SOUL.md + IDENTITY.md
+level_10x    → regenerate IDENTITY.md
+class_change → regenerate ROLE_CARD.md
+skill_unlock → regenerate SKILLS.md
+gear_change  → regenerate TOOLS.md
+battle_win   → append to HEARTBEAT.md
 ```
 
----
-
-### Integration Points with Existing Services
-
-#### scheduler.ts
-
-Add one health tick alongside the existing `DEADLINE_CHECK_INTERVAL` (15 ticks):
+### battle-orchestrator.ts — Battle Engine
 
 ```typescript
-const BRIDGE_HEALTH_INTERVAL = 15; // Every 30s — same as DEADLINE_CHECK_INTERVAL
-
-// In the existing tick handler:
-if (tickCount % BRIDGE_HEALTH_INTERVAL === 0) {
-  await runBridgeHealthCheck().catch(() => {}); // non-critical, swallow errors
+interface BattleOrchestrator {
+  startBattle(challengerId: string, defenderId: string, prompt: string, domain?: string): Promise<string>; // battle ID
+  runBattle(battleId: string): Promise<BattleResult>;
+  judgeBattle(battleId: string): Promise<void>;
+  updateElo(battleId: string): Promise<void>;
 }
 ```
 
-No structural changes to scheduler.ts. One line added in the tick body.
+**Battle execution flow:**
+```
+startBattle() → INSERT INTO battles (status='pending')
+     ↓
+runBattle()
+  → parallel dispatch via routing-engine.ts for BOTH agents (same prompt)
+  → bridge_dispatch_log records challenger_dispatch_id + defender_dispatch_id
+  → SSE broadcast: battle:round_complete
+     ↓
+judgeBattle()
+  → dispatch to judge model (ensemble: 3 different models, median wins)
+  → INSERT INTO battle_judgments (3 rows, one per judge)
+  → compute final scores (median of 3 judges)
+  → UPDATE battles SET winner_id, judge_scores, status='complete'
+     ↓
+updateElo()
+  → standard Elo formula (K=32 default)
+  → UPDATE agent_templates SET elo, stars (if threshold crossed)
+  → rpg-engine.awardXp() for both agents
+  → SSE broadcast: battle:complete, rpg:xp_gained
+```
 
-#### sse-hub.ts
+**Critical design: battle dispatches use the existing `routingEngine.dispatch()`.** The
+battle orchestrator passes `agentId` in the RoutingContext so dispatch is attributed to the
+correct agent in `bridge_dispatch_log`. This is how battle results feed back into stats.
 
-Unchanged. Bridge emits via `emitSSE()` which calls `sse-hub.broadcast()` internally.
-New event namespace: `bridge:*`
+### session-registry.ts — Session Tracking
 
-| SSE Event | Payload | When |
-|-----------|---------|------|
-| `bridge:gateway_detected` | `{ gateway_id, provider, status, model_count }` | Startup |
-| `bridge:gateway_status` | `{ gateway_id, status, latency_ms }` | Health tick |
-| `bridge:dispatch_started` | `{ dispatch_id, gateway_id, model_id, agent_id }` | Before adapter |
-| `bridge:dispatch_completed` | `{ dispatch_id, tokens, duration_ms, cost_usd }` | After success |
-| `bridge:dispatch_failed` | `{ dispatch_id, error, gateway_id, fallback_used }` | After failure |
-| `decision:made` | existing schema, unchanged | Still fires from logDecision() |
-
-#### config.ts
-
-Not modified. The env vars `OLLAMA_URL`, `OPENCLAW_URL`, `OLLAMA_MODEL`, `OPENCLAW_MODEL`,
-and `OPENCLAW_TOKEN` remain. StartupDetector reads them once on boot to seed the initial
-gateway rows. After startup, `gateways` table is authoritative — operators can override
-URLs, add gateways, change priorities via the admin API without touching env vars.
-
-#### stream-service.ts
-
-Not modified. `OllamaStreamBackend` and `OpenClawStreamBackend` are imported and delegated
-to from the corresponding adapters. `selectStreamBackend()` becomes an internal detail
-of bridge routing — external callers use `bridgeStream()` instead.
-
-#### Admin Backend (:5180)
-
-Admin backend reads from same PostgreSQL. Bridge tables are immediately available to admin
-SQL queries with no API changes to admin backend required. Suggested admin surfaces:
-
-| Admin Tab | Data | Query |
-|-----------|------|-------|
-| Bridge > Gateways | `gateways` | Full list with health status, last probe latency |
-| Bridge > Models | `models JOIN gateways` | Catalog with gateway, cost tier, capabilities |
-| Bridge > Activity | `bridge_dispatch_log` | Last N dispatches with latency, status |
-| Bridge > Cost | `bridge_dispatch_log` grouped by model, date | Rolling cost windows |
-| Bridge > Rules | `routing_rules` | CRUD — priority-ordered list |
-
----
-
-### Architectural Patterns
-
-#### Pattern 1: Adapter Interface with Capability Flags
-
-Every gateway adapter implements a shared `GatewayAdapter` interface. The routing engine
-inspects capabilities from the `models` table, not hardcoded `if (backend === 'ollama')` branches.
+Porter currently tracks HTTP sessions (auth cookies) in the `sessions` table. This new
+service tracks AI dispatch sessions — a logical grouping of related dispatches across a
+conversation or workflow run.
 
 ```typescript
-export interface GatewayAdapter {
-  readonly gatewayType: 'http' | 'cli';
-  dispatch(req: BridgeRequest): Promise<BridgeResult>;
-  stream(req: BridgeRequest, signal: AbortSignal): AsyncIterable<string>;
-  probe(): Promise<ProbeResult>;            // { ok, latency_ms, version? }
-  listModels(): Promise<ModelDescriptor[]>; // discovered models for this gateway
+interface SessionRegistry {
+  openSession(chatId: string, agentId?: string, budget?: number): Promise<string>;
+  recordDispatch(sessionId: string, dispatchLogId: string, tokens: number): Promise<void>;
+  closeSession(sessionId: string): Promise<SessionSummary>;
+  getSession(sessionId: string): Promise<SessionRow>;
 }
 ```
 
-Adding a new gateway = implement this interface + add a row to `gateways`. No changes
-to bridge-router.ts, scheduler.ts, or routes.
+The `session_registry` table supplements (not replaces) `session_routing_context`. The
+existing table tracks which model was used per message. The new table tracks aggregate
+resource consumption per logical session.
 
-#### Pattern 2: DB-Authoritative Gateway State
+### intelligence-loop.ts — Pattern Extraction
 
-Gateway health is persisted to `gateways.status`. SSE events are notifications, not state.
-Both Fastify (:3001) and Admin backend (:5180) read from the same PostgreSQL — they see
-the same ground truth without any cross-process messaging.
-
-Never maintain health in a module-level Map<string, Status>. It is lost on restart and
-invisible to the admin backend.
-
-#### Pattern 3: Non-Blocking Telemetry Writes
-
-All `bridge_dispatch_log` writes are fire-and-forget — consistent with the existing
-`logDecision()` and `trackTokenUsage()` pattern:
+This service runs as a background job (via the existing `scheduler.ts`) on a configurable
+interval (default: every 6 hours).
 
 ```typescript
-// Correct: dispatch never waits for logging
-logBridgeDispatch({ id, gateway_id, ... }).catch(() => {});
+interface IntelligenceLoop {
+  extractPatterns(): Promise<IntelligencePattern[]>;
+  reviewPatterns(): Promise<void>;        // promote high-confidence patterns to concepts
+  pruneStale(): Promise<void>;
+}
 ```
 
-Logging latency must not contribute to dispatch latency. The `bridge_dispatch_log.started_at`
-timestamp is captured before the adapter call; `completed_at` is set after.
+**Pattern types extracted:**
+```
+gateway_preference  → "agent X dispatches to OpenClaw 87% of the time"
+cost_spike         → "average cost per dispatch increased 40% this week"
+model_failure      → "Ollama failure rate spiked to 23% in last 24h"
+combo_chain        → "agents A+B have 91% success when chained on research tasks"
+```
 
-#### Pattern 4: Startup Seeding Then DB Authority
+High-confidence patterns (>= 75) are promoted to `concepts` table via the existing
+Memory V2 concepts schema. This closes the intelligence loop: Bridge dispatch data →
+extracted patterns → Memory concepts → injected into future system prompts → smarter routing.
 
-On first boot, StartupDetector reads `config.*` env vars to seed initial gateway rows.
-On all subsequent boots, the DB rows are used directly — no re-detection by default.
-Operators can trigger re-detection via `POST /api/bridge/detect`.
+### msg-bus.ts — Message Bus
 
-This avoids probing every gateway on every request (the current ai-router anti-pattern
-of calling `probeBackend()` inline with every dispatch).
+Thin persistence layer over the existing `bridge/types.ts` AgentMessage interface. When
+`POST /api/v1/bridge/agent-message` is called, the routing engine dispatches and returns.
+The msg-bus service now persists the envelope to `msg_bus_events` before dispatch for
+auditability and correlation tracking.
 
----
+**This is NOT a queue.** Dispatch remains synchronous. The table is an audit log.
 
-### Anti-Patterns
-
-#### Anti-Pattern 1: Gateway Config in config.ts
-
-**What happens:** Add `config.codexBinaryPath`, `config.claudeToken`, etc. as the
-gateway registry grows to cover Codex, Claude, Gemini CLIs.
-
-**Why wrong:** config.ts becomes a second registry that diverges from the DB. Admin
-UI cannot manage gateways without a redeployment. Per-user gateway configurations
-(multi-tenant future) become impossible.
-
-**Do this instead:** Only `ollamaUrl` and `openclawUrl` remain in config.ts as
-bootstrap seeds for the StartupDetector. All runtime gateway state lives in `gateways`.
-
-#### Anti-Pattern 2: Modifying ai-router.ts During Bridge Build
-
-**What happens:** Refactor ai-router.ts internals while building bridge-router.ts.
-
-**Why wrong:** 35 Playwright tests directly import and test `shouldRouteCheap`,
-`compressContext`, `filterToolsForBackend`. Any signature change causes test failures.
-
-**Do this instead:** Bridge wraps ai-router with zero changes. ai-router.ts is
-read-only during the Bridge milestone. Cleanup is a separate, later commit after
-tests are updated.
-
-#### Anti-Pattern 3: Health Probe on Every Request
-
-**What happens:** Call `probeBackend()` inside `bridgeDispatch()` before selecting
-a gateway — the current ai-router.ts behavior (it fires a HEAD before every dispatch).
-
-**Why wrong:** Every AI call incurs an extra HTTP round-trip. At 50 concurrent users
-each streaming, that is 50 wasted HEAD requests per second.
-
-**Do this instead:** Health state is maintained by the scheduler health tick (30s cadence).
-`GatewayRegistry.getAvailable()` reads from DB cache, TTL 30s. Probes only run in the
-background, never inline with dispatch.
-
-#### Anti-Pattern 4: Hardcoding CLI Binary Paths
-
-**What happens:** `config.claudeBinaryPath = '/home/lobster/.npm-global/bin/claude'`
-
-**Why wrong:** Different on every user's machine. SaaS premise is "runs on your machine."
-Also wrong for remote deployments where the binary is in `/usr/local/bin/`.
-
-**Do this instead:** StartupDetector uses `which claude` (PATH resolution). Resolved path
-stored in `gateways.binary_path`. If binary relocates, `POST /api/bridge/detect` re-runs
-detection and updates the row.
-
-#### Anti-Pattern 5: Using bridge_dispatch_log as Decision Log
-
-**What happens:** Eliminate `decision_log` table, consolidate everything into
-`bridge_dispatch_log`.
-
-**Why wrong:** `decision_log` records abstract orchestration decisions (agent routing,
-task skips) that are not tied to a dispatch. Bridge dispatch log records concrete
-network calls. They serve different dashboards: transparency (decisions) vs cost/latency
-(dispatches). Conflating them makes both dashboards harder to build.
-
-**Do this instead:** Keep both. Bridge always calls `logDecision()` for model selection
-events AND writes to `bridge_dispatch_log` for dispatch telemetry.
+```typescript
+interface MsgBus {
+  record(msg: AgentMessage, dispatchLogId: string, result: BridgeDispatchResult): Promise<void>;
+  getByCorrelation(correlationId: string): Promise<MsgBusEvent[]>;
+}
+```
 
 ---
 
-### Build Order
+## Data Flow Diagrams
 
-Sequencing is dictated by: schema before routes, adapters before router,
-router before route cutover.
+### Flow 1: Dispatch → Stats Update
 
-| Step | What to Build | Rationale |
-|------|--------------|-----------|
-| 1 | `migrate-bridge.ts` — create 4 new tables | Must exist before any reads/writes |
-| 2 | `startup-detector.ts` — probe + seed | Gives the system real data immediately; validates schema |
-| 3 | `bridge/adapters/interface.ts` — GatewayAdapter interface | Contract before implementations |
-| 4 | `bridge/adapters/ollama.ts` + `openclaw.ts` — wrap existing | Lowest risk: logic already proven in ai-router |
-| 5 | `gateway-registry.ts` + `routing-engine.ts` (non-streaming) | Core routing, no new adapter needed |
-| 6 | `bridge-router.ts` — `bridgeDispatch()` wiring all together | Integrates registry + engine + adapters |
-| 7 | `bridge_dispatch_log` writes + health tick in scheduler | Telemetry, non-blocking |
-| 8 | Route cutover: update `/api/v1/chat` + agent jobs to call `bridgeDispatch()` | Replace ai-router calls; run Playwright |
-| 9 | `bridge/adapters/codex-cli.ts` + `claude-cli.ts` — subprocess adapters | New capability; can land after existing tests pass |
-| 10 | `routes/v1/bridge.ts` — CRUD for gateways, models, rules, log viewer | Admin surface; needs all data to be present |
+```
+User/Agent dispatches via /api/v1/chat or /api/bridge/dispatch
+         ↓
+routing-engine.ts selects gateway, executes, logs to bridge_dispatch_log
+         ↓
+SSE: bridge:dispatch_complete {agentId, latencyMs, tokens}
+         ↓
+rpg-engine.ts subscribes to bridge:dispatch_complete events
+         ↓
+  [if dispatch_count milestone hit: 50, 200, 500, 1000]
+         ↓
+rpg-engine.computeStats(templateId)
+  queries bridge_dispatch_log for SPD, REL, EFF
+  queries battle_judgments for QTY
+  queries agent_bonds for COMBO
+         ↓
+UPDATE agent_rpg_stats SET ...
+         ↓
+rpg-engine.checkProgressionEvents()
+  → star_up? level_up? class_change?
+         ↓
+rpg-engine.regenerateMdFiles() if progression occurred
+         ↓
+SSE: rpg:stats_updated {templateId, newStats, progressionEvent?}
+         ↓
+Frontend: update character card, animate level-up if progression
+```
 
-**Test gate at step 8:** All 35 Playwright tests must pass before step 9 proceeds.
-This confirms the Bridge wrapping did not break existing behavior.
+### Flow 2: Battle → Elo → Leaderboard
+
+```
+POST /api/v1/battles/start {challengerId, defenderId, prompt}
+         ↓
+battle-orchestrator.startBattle()
+  INSERT battles (status='pending')
+         ↓
+battle-orchestrator.runBattle()
+  parallel: routingEngine.dispatch(ctx={agentId: challenger}, prompt)
+            routingEngine.dispatch(ctx={agentId: defender}, prompt)
+  → both log to bridge_dispatch_log (stat-eligible dispatches)
+  → INSERT battle_rounds
+  SSE: battle:running {battleId}
+         ↓
+battle-orchestrator.judgeBattle()
+  dispatch to 3 judge models (ensemble)
+  → INSERT battle_judgments (3 rows)
+  compute median scores
+  → UPDATE battles SET winner_id, judge_scores, status='complete'
+  SSE: battle:complete {battleId, winnerId, scores}
+         ↓
+battle-orchestrator.updateElo()
+  Elo formula → UPDATE agent_templates SET elo
+  rpg-engine.awardXp(winner, 'battle_win', 100)
+  rpg-engine.awardXp(loser, 'battle_lost', 25)
+         ↓
+rpg-engine.checkProgressionEvents() for both agents
+         ↓
+GET /api/v1/battles/leaderboard
+  SELECT t.id, t.name, t.elo, r.stars, r.rarity, r.level
+  FROM agent_templates t JOIN agent_rpg_stats r ON r.template_id = t.id
+  ORDER BY t.elo DESC
+```
+
+### Flow 3: Intelligence Loop → Routing Concepts
+
+```
+scheduler.ts triggers intelligence-loop every 6h
+         ↓
+intelligence-loop.extractPatterns()
+  queries bridge_dispatch_log (last 7 days)
+  pattern: gateway_preference
+    SELECT gateway_type, COUNT(*) as dispatches, agent_id
+    GROUP BY gateway_type, agent_id
+    HAVING COUNT(*) > 10
+  pattern: cost_spike
+    compare 7-day rolling avg vs previous 7-day avg
+  pattern: combo_chain
+    JOIN on correlation_id to find co-dispatches
+         ↓
+INSERT intelligence_patterns (status='raw')
+         ↓
+intelligence-loop.reviewPatterns()
+  WHERE confidence >= 75 AND status='raw'
+  → INSERT concepts (scope='workspace', sourceType='agent', content=summary)
+  → UPDATE intelligence_patterns SET status='promoted', promoted_to_concept_id
+         ↓
+Next dispatch: memory-injection.ts reads concepts table
+  → pattern injected into system prompt
+  → routing engine has awareness of historical patterns
+```
+
+### Flow 4: Forge Birth → Initial RPG Profile
+
+```
+Forge station 3 completes (Outfitter)
+  UPDATE forge_pipeline SET status='complete'
+         ↓
+forge.ts emits SSE: forge:agent_born {templateId, agentId}
+         ↓
+rpg-engine.ts handles forge:agent_born
+  INSERT agent_rpg_stats (template_id=templateId, rarity='common', stars=1)
+  UPDATE agent_templates SET rpg_enabled=1, rarity='common', stars=1
+         ↓
+rpg-engine.regenerateMdFiles(templateId, 'born')
+  → rewrites SOUL.md, IDENTITY.md with RPG context
+         ↓
+SSE: rpg:agent_born {templateId, stats}
+         ↓
+Frontend: character card appears for new agent
+```
 
 ---
 
-### Scaling Considerations
+## Recommended Project Structure
+
+New files only — existing structure unchanged.
+
+```
+backend/src/
+├── db/
+│   ├── schema.ts                    MODIFY — add 7 new table definitions
+│   └── migrate-rpg-v1.ts            NEW    — all DDL for v4.0
+│
+├── services/
+│   ├── rpg-engine.ts                NEW    — stat calculation, XP, progression
+│   ├── battle-orchestrator.ts       NEW    — battle execution + judging
+│   ├── session-registry.ts          NEW    — session-level token tracking
+│   ├── msg-bus.ts                   NEW    — message envelope persistence
+│   ├── intelligence-loop.ts         NEW    — pattern extraction + concept promotion
+│   └── forge.ts                     MODIFY — emit rpg:born on station 3 complete
+│
+└── routes/v1/
+    ├── rpg.ts                       NEW    — agent stats, leaderboard, rarity queries
+    ├── battles.ts                   NEW    — battle CRUD, spectator, replay
+    ├── sessions.ts                  NEW    — session registry API
+    └── admin/
+        └── forge.ts                 MODIFY — unified Forge tabs in admin surface
+```
+
+---
+
+## Build Order Dependencies
+
+The dependency chain determines phase order. Each phase below cannot start until its
+dependencies are complete.
+
+```
+Phase 1: Schema + Migration
+  (no dependencies — pure DDL)
+  ALTER agent_templates, ALTER personas
+  CREATE agent_rpg_stats, battles, battle_rounds, battle_judgments
+  CREATE agent_bonds, session_registry, msg_bus_events, intelligence_patterns
+  → Unblocks: everything
+
+Phase 2: RPG Engine (stat calculation)
+  Depends on: Phase 1 (agent_rpg_stats table)
+  Depends on: existing bridge_dispatch_log (already exists)
+  → rpg-engine.ts: computeStats(), awardXp(), checkProgressionEvents()
+  → Unblocks: Phase 3 (character card needs stats to display)
+               Phase 5 (battle needs XP awards)
+
+Phase 3: Forge Unification (nav + UI merge)
+  Depends on: Phase 1 (schema — rpg_enabled flag on templates)
+  Depends on: Phase 2 (stats available for display in Workshop tab)
+  → Merge Skills + Tools + Forge nav items into one
+  → Add Templates/Armory/Workshop/Arena tabs to forge route
+  → Unblocks: Phase 4 (skill tree UI lives inside Workshop tab)
+
+Phase 4: Skill Tree + Character Card APIs
+  Depends on: Phase 2 (stat APIs)
+  Depends on: Phase 3 (Workshop tab shell)
+  → /api/v1/rpg routes: stats, class, gear, skills
+  → character card data API (pentagon stats, rarity, gear slots)
+  → Unblocks: Phase 5 (battle needs character cards to show combatants)
+
+Phase 5: Battle Arena MVP
+  Depends on: Phase 1 (battles table)
+  Depends on: Phase 2 (XP awards post-battle)
+  Depends on: Phase 4 (agent stats for Elo display)
+  → battle-orchestrator.ts: runBattle(), judgeBattle(), updateElo()
+  → /api/v1/battles routes: start, status, result, leaderboard
+  → Unblocks: Phase 6 (spectator needs running battles)
+
+Phase 6: Session Registry + Message Bus
+  Depends on: Phase 1 (session_registry, msg_bus_events tables)
+  Depends on: existing routing-engine.ts (msg-bus wraps dispatch)
+  → session-registry.ts + sessions route
+  → msg-bus.ts wraps /api/v1/bridge/agent-message
+  → Unblocks: Phase 7 (intelligence loop reads session patterns)
+
+Phase 7: Intelligence Loop
+  Depends on: Phase 1 (intelligence_patterns table)
+  Depends on: Phase 5 (battle data enriches patterns)
+  Depends on: Phase 6 (session data enriches patterns)
+  Depends on: existing concepts table (promotion target)
+  → intelligence-loop.ts: extractPatterns(), reviewPatterns()
+  → No new routes — background job only
+```
+
+**Critical path:** Phase 1 → Phase 2 → Phase 5 (battle) is the minimum viable arc.
+Phase 3 (Forge unification) and Phase 4 (character card) are parallel with Phase 5
+but depend on Phase 2 completing first.
+
+---
+
+## Integration Points with Existing Bridge Infrastructure
+
+### routing-engine.ts — Read-only integration
+
+The battle orchestrator calls `routingEngine.dispatch()` and `routingEngine.selectStreamWithFallback()` exactly as existing chat routes do. No modifications to routing-engine. The only new behavior: `BattleOrchestrator` passes `agentId` in `RoutingContext` so that battle dispatches are correctly attributed to the competing agent in `bridge_dispatch_log`.
+
+### sse-hub.ts — New event namespaces
+
+Existing `broadcast(event, data)` signature is unchanged. New event names added:
+
+| Event | When | Payload |
+|-------|------|---------|
+| `rpg:stats_updated` | After stat recompute | `{templateId, quality, speed, efficiency, reliability, combo, level, stars}` |
+| `rpg:agent_born` | After forge station 3 | `{templateId, rarity, stars}` |
+| `rpg:xp_gained` | After XP award | `{templateId, amount, source, newTotal, newLevel}` |
+| `rpg:star_up` | After star threshold crossed | `{templateId, newStars}` |
+| `battle:running` | Battle dispatches started | `{battleId, challengerId, defenderId}` |
+| `battle:round_complete` | Each round completes | `{battleId, roundNum, challengerTokens, defenderTokens}` |
+| `battle:judging` | Judge model dispatching | `{battleId}` |
+| `battle:complete` | Final result ready | `{battleId, winnerId, challengerElo, defenderElo}` |
+| `session:opened` | Session registry entry created | `{sessionId, agentId, chatId}` |
+| `session:closed` | Session closed | `{sessionId, tokensUsed, duration}` |
+
+### memory-injection.ts — Downstream consumer
+
+No modification. The intelligence loop writes to `concepts` table using the existing schema.
+`memory-injection.ts` already queries concepts for injection — it will automatically pick up
+bridge patterns once they are promoted.
+
+### forge.ts — Minimal modification
+
+One addition: after station 3 (Outfitter) marks a pipeline item complete, emit
+`rpg:agent_born` via `sse-hub.broadcast()`. The RPG engine subscribes to this event and
+initializes the agent's stat record. This keeps RPG concerns out of the forge service.
+
+### scheduler.ts — Register new job
+
+Register `intelligence-loop.extractPatterns()` as a cron job. The existing scheduler accepts
+new registrations with no API change required.
+
+---
+
+## Anti-Patterns to Avoid
+
+### Anti-Pattern 1: Writing Stats Directly from Routes
+
+**What people do:** Battle result endpoint directly UPDATEs `agent_rpg_stats`.
+
+**Why it's wrong:** Stats must be recomputable from immutable dispatch_log + battles.
+If routes can write stats directly, the "no gaming" invariant breaks. A bad actor could
+POST fabricated stat updates.
+
+**Do this instead:** Routes only write to `battles` and `battle_judgments`. `rpg-engine.ts`
+is the only service that writes to `agent_rpg_stats`. It always recomputes from source data.
+
+### Anti-Pattern 2: Battle Dispatch Bypasses Bridge
+
+**What people do:** Battle orchestrator calls adapter directly, skipping routing-engine.
+
+**Why it's wrong:** Battle dispatches won't appear in `bridge_dispatch_log`. Stats engine
+can't find them. Circuit breakers don't apply. Rate limiting doesn't apply.
+
+**Do this instead:** `battle-orchestrator.ts` always calls `routingEngine.dispatch()` with
+`{agentId}` in context. Battle dispatches are full first-class Bridge dispatches.
+
+### Anti-Pattern 3: Judge Dispatch to Same Model as Combatants
+
+**What people do:** Both agents use Claude. Judge also uses Claude.
+
+**Why it's wrong:** Same model judging its own output — obvious bias.
+
+**Do this instead:** Judge model is selected from a different gateway than the combatants.
+`battle-orchestrator.ts` enforces this via `forceGatewayType` exclusions in RoutingContext.
+Ensemble of 3 judges from different gateways further mitigates bias.
+
+### Anti-Pattern 4: Session Registry as Auth Sessions
+
+**What people do:** Use `session_registry` for user auth/cookie tracking.
+
+**Why it's wrong:** Auth sessions live in the `sessions` table (existing). The session
+registry tracks AI dispatch sessions — resource accounting for a logical workflow run.
+Conflating them creates security issues and schema confusion.
+
+**Do this instead:** `session_registry` has no auth concerns. It references `chat_id` as
+an optional correlation anchor, not as an auth mechanism.
+
+### Anti-Pattern 5: Intelligence Patterns Written Eagerly
+
+**What people do:** Every dispatch event triggers a pattern check and immediate concept write.
+
+**Why it's wrong:** Noisy. Most single dispatch events aren't meaningful signals. Concepts
+table fills with low-value observations, diluting the memory injection quality.
+
+**Do this instead:** Intelligence loop runs on a schedule (6h default). Patterns require
+minimum evidence (at least 10 supporting dispatches). Only patterns >= 75 confidence get
+promoted to concepts. This is the same noise filtering principle as Memory V2 signals.
+
+---
+
+## Scaling Considerations
 
 | Scale | Architecture Adjustments |
 |-------|--------------------------|
-| 1-10 users | In-process; scheduler health tick; no queue needed |
-| 10-50 users | Add composite index on `bridge_dispatch_log(started_at DESC, gateway_id)` for admin queries |
-| 100+ users | CLI adapters spawn subprocesses — add per-gateway subprocess semaphore (max N concurrent codex/claude invocations); default N=3 |
-| Multi-tenant | Add `workspace_id` to `gateways` and `models`; per-tenant gateway registries; StartupDetector scopes detection per tenant |
+| 0-100 agents, <10 battles/day | Synchronous stat recompute on every progression milestone. No queue needed. |
+| 100-1000 agents, 100 battles/day | Move stat recompute to background job (scheduler.ts). Stat reads always from `agent_rpg_stats` cache. Battle dispatch parallelism handled by existing `dispatch-queues.ts`. |
+| 1000+ agents, tournament mode | Ensemble judge calls become bottleneck. Add judge dispatch queue. Consider pre-cached Elo rankings materialized view. PostgreSQL can handle this at current VPS scale without separate services. |
 
-**First bottleneck:** CLI adapters (`codex`, `claude`) spawn child processes. At 10+
-concurrent dispatches to CLI gateways, process count explodes. Mitigation: a
-`ConcurrencyLimiter` in each CLI adapter (semaphore pattern, acquire before spawn, release on exit).
+**First bottleneck:** Judge dispatch latency. Three judge calls per battle = 3x LLM
+round-trips in sequence. Mitigate with parallel judge calls (Promise.all on three judge
+dispatches), then take median. This is already the right design — just ensure the
+implementation uses parallel, not sequential dispatch.
 
-**Second bottleneck:** `bridge_dispatch_log` on high-throughput workloads. Mitigation:
-batch inserts via a write buffer (flush every 100ms or 50 rows, whichever comes first).
-The table is append-only, so batching is safe.
-
----
-
-### Sources
-
-- `backend/src/services/ai-router.ts` — direct code inspection (HIGH confidence)
-- `backend/src/services/stream-service.ts` — direct code inspection (HIGH confidence)
-- `backend/src/config.ts` — direct code inspection (HIGH confidence)
-- `backend/src/db/schema.ts` — complete table inventory, direct inspection (HIGH confidence)
-- `backend/src/services/sse-hub.ts` — direct code inspection (HIGH confidence)
-- `backend/src/services/scheduler.ts` — direct code inspection (HIGH confidence)
-- `research/cli-runtime-design-brief.md` — CLI_RUNTIME_REGISTRY spec, CLI tool capabilities (HIGH confidence)
-- `research/hermes-agent-patterns.md` — routing heuristics, tool schema rebuild pattern (HIGH confidence)
-- `research/runtime-logging-hardening-plan.md` — event schema, telemetry subsystem model (HIGH confidence)
-- `.planning/PROJECT.md` — v3.0 milestone goals and constraints (HIGH confidence)
-
----
-
-*Architecture research for: Porter Bridge AI Gateway v3.0*
-*Researched: 2026-03-25*
-*Confidence: HIGH — all findings from direct codebase inspection, zero training-data inference*
-
----
----
-
-## v2.0 Baseline Architecture (reference — do not modify)
-
-The content below documents the v2.0 architecture established 2026-03-21. It remains
-accurate as context for understanding how Bridge integrates with the existing system.
-
-**Domain:** AI Orchestration Platform — Fastify/Drizzle/PostgreSQL backend extension
-**Researched:** 2026-03-21
-**Confidence:** HIGH (based on direct codebase inspection)
-
----
-
-### Existing Architecture (v1.0 Baseline)
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Clients                                          │
-│  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐             │
-│  │  frontend-v2   │  │  Legacy React  │  │ External (LS,  │             │
-│  │  /v2/* (React  │  │  (frontend/)   │  │ WhatsApp, etc) │             │
-│  │  Router 7)     │  │                │  │                │             │
-│  └───────┬────────┘  └───────┬────────┘  └───────┬────────┘             │
-└──────────┼────────────────────┼────────────────────┼────────────────────┘
-           │ :3001              │ :3001               │ :3001
-┌──────────▼────────────────────▼─────────────────────▼────────────────────┐
-│                        Fastify Server (:3001)                             │
-│  ┌──────────────┐  ┌────────────────────────────────────────────────┐    │
-│  │  Auth Plugin │  │  /api/v1/* (17 route groups, response envelope) │    │
-│  │  (requireAuth│  │  /api/* legacy routes                          │    │
-│  │  decorator)  │  │  /health — plain response                      │    │
-│  └──────────────┘  └───────────────────────┬────────────────────────┘    │
-│                                             │                             │
-│  ┌──────────────────────────────────────────▼───────────────────────┐    │
-│  │                     Services Layer                               │    │
-│  │  ai-router.ts  scheduler.ts  event-triggers.ts                   │    │
-│  │  billing.ts    email.ts      github.ts  calendar.ts              │    │
-│  │  whatsapp.ts   external-dispatcher.ts  sse-hub.ts                │    │
-│  └──────────────────────────────────────────┬───────────────────────┘    │
-│                                             │                             │
-│  ┌──────────────────────────────────────────▼───────────────────────┐    │
-│  │             Drizzle ORM + PostgreSQL 16                          │    │
-│  │  (SQLite fully eliminated as of 2026-03-25)                      │    │
-│  └──────────────────────────────────────────────────────────────────┘    │
-└───────────────────────────────────────────────────────────────────────────┘
+**Second bottleneck:** Stat recompute query on large dispatch logs. The query
+`WHERE agent_id = $1` on `bridge_dispatch_log` must be indexed. Add:
+```sql
+CREATE INDEX idx_dispatch_log_agent_id ON bridge_dispatch_log(agent_id);
+CREATE INDEX idx_dispatch_log_agent_created ON bridge_dispatch_log(agent_id, created_at);
 ```
 
-### Existing Component Inventory (v2.0)
+---
 
-| Component | Location | Status | Notes |
-|-----------|----------|--------|-------|
-| Auth plugin | `plugins/auth.ts` | STABLE | Cookie sessions, `requireAuth` decorator |
-| v1 route index | `routes/v1/index.ts` | STABLE | 17 groups under `/api/v1/` |
-| Envelope lib | `lib/envelope.ts` | STABLE | `ok(data)` / `err(code, msg)` pattern |
-| AI router | `services/ai-router.ts` | STABLE | cheap/strong routing, context compression |
-| Scheduler | `services/scheduler.ts` | STABLE | 2s tick, 7 workflow types |
-| SSE hub | `services/sse-hub.ts` | STABLE | Native in-process broadcaster |
-| Stream service | `services/stream-service.ts` | STABLE | Ollama NDJSON + OpenClaw SSE |
-| Event triggers | `services/event-triggers.ts` | STABLE | deadline, file-created, message-received |
-| External dispatcher | `services/external-dispatcher.ts` | STABLE | GitHub, email, calendar, WhatsApp |
-| Billing service | `services/billing.ts` | PARTIAL | Lemon Squeezy wired, limits not enforced |
-| Memory injection | `services/memory-injection.ts` | STABLE | Memory V2/V3 injection |
+## Sources
 
-### Existing Schema Tables (as of 2026-03-25)
+- Direct source inspection: `backend/src/db/schema.ts` (all 967 lines)
+- Direct source inspection: `backend/src/services/bridge/types.ts` (all 258 lines)
+- Direct source inspection: `backend/src/services/bridge/routing-engine.ts`
+- Direct source inspection: `backend/src/services/forge.ts`
+- Direct source inspection: `backend/src/services/sse-hub.ts`
+- Direct source inspection: `backend/src/services/stream-service.ts`
+- Design spec: `research/agent-rpg-design-v2.md`
+- Project context: `.planning/PROJECT.md`
 
-```
-users, sessions, tasks, chats, chat_messages, chat_attachments
-projects, personas, persona_skills, schema_migrations
-agent_jobs, agent_activity, decision_log, token_usage_daily
-workspace_connections, project_connections, calendar_events
-subscriptions, auth_tokens, billing_events
-project_collaborators, collaboration_events
-companies, contacts, contact_emails, contact_phones, contact_social
-conversations, messages, files, file_projects, file_contacts, file_conversations
-contact_conversations, contact_projects
-contact_analyses, agent_templates, concepts, learning_sessions
-customer_events, customer_scores, admin_agent_tasks, error_log
-email_messages, workspace_settings
-forge_pipeline, forge_station_runs, forge_settings
-audit_log, invites, invite_uses, agent_messages
-directives, project_notes, agent_notes
-```
-
-*Architecture research for: Porter v2.0 Backend Ready*
-*Researched: 2026-03-21*
+---
+*Architecture research for: Porter v4.0 Agent RPG System + Battle Arena*
+*Researched: 2026-03-29*
+*Confidence: HIGH — all findings from source-code inspection, no training-data assumptions*

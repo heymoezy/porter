@@ -1,17 +1,17 @@
 # Project Research Summary
 
-**Project:** Porter v3.0 — Bridge (AI Gateway & Model Intelligence)
-**Domain:** AI Orchestration SaaS — Gateway Registry, Smart Routing, Multi-Backend Dispatch
-**Researched:** 2026-03-25
+**Project:** Porter v4.0 — The Arena
+**Domain:** Agent RPG System + Battle Arena
+**Researched:** 2026-03-29
 **Confidence:** HIGH
 
 ## Executive Summary
 
-Porter v3.0 Bridge replaces the hardcoded two-backend dispatch in `ai-router.ts` with a database-backed gateway registry, multi-backend adapter layer, and smart routing engine. The product is not an API proxy — it is an orchestration layer over tools the user already owns (Ollama, OpenClaw, Claude CLI, Codex CLI, Gemini CLI). This is the architectural moat: zero external dependency, zero markup, zero credential custody. All competitors (LiteLLM, Portkey, Helicone, OpenRouter) require the user to give them API keys or route through their infrastructure. Porter does not.
+Porter v4.0 adds an RPG gamification layer on top of the existing Bridge dispatch infrastructure, transforming agent templates into competitive characters with real performance-derived stats, gear slots, and an Elo-rated battle arena. The central design insight is that stats must be immutably derived from the existing `bridge_dispatch_log` — no manual editing, no fake numbers. This single architectural decision both prevents gaming and creates a genuine differentiator: Porter stats mean something because they reflect real usage, not designer fiat. The entire v4.0 build is additive; the existing routing engine, dispatch pipeline, and memory system require zero modification to their interfaces.
 
-The recommended approach is a strict delegation-and-wrapping pattern: a new `services/bridge/` directory sits above the existing `ai-router.ts` and `stream-service.ts`, which remain untouched. Four typed adapters (OllamaAdapter, OpenClawAdapter, CodexCLIAdapter, ClaudeAdapter) each implement a `GatewayAdapter` interface, and a `StreamNormalizer` converts all output formats to a unified `AsyncIterable<string>`. Three new PostgreSQL tables (`gateways`, `models`, `routing_rules`) plus a dispatch log replace all hardcoded config. Three lightweight npm packages are added: `opossum` (circuit breakers), `p-queue` (per-backend dispatch concurrency), and `which` (CLI binary detection). No Redis, no external AI gateways, no Python dependencies.
+The recommended approach is a strict phase sequence driven by data dependencies. The stat calculation engine (`rpg-engine.ts`) must be built before character cards, battles, or leaderboards — everything downstream reads from its derived cache. Battles require the stat engine for XP awards and the existing dispatch infrastructure for execution. Forge unification and the skill tree UI are parallel work that converges at the Battle Arena phase. The PixiJS-powered spectator mode, tournament brackets, and agent import are explicitly Phase 4+ features; shipping them before the RPG foundation is validated would be premature.
 
-The key risks are all Phase 1 concerns: the migration from hardcoded config to DB-driven config must use a fallback chain (not a cutover) or the system goes dark during deployment; the per-request health probe pattern in the current `probeBackend()` adds 100-300ms per dispatch and must be replaced by a background health cache before any other routing logic is built on top; and API key masking must be baked into the gateway schema and API layer from day one, not added later. All three risks have clear prevention strategies documented in PITFALLS.md and are addressable in Phase 1.
+The most significant risks are judge bias corrupting Elo ratings (positional and self-enhancement bias are empirically documented at 5-15% systematic distortion), compute runaway from uncapped battle costs (5 LLM calls per battle at $0.01-0.08 each), and the toy problem where users grind trivial dispatches for XP rather than doing real work. All three risks have concrete mitigations that must be built into the Battle Arena MVP — they cannot be retrofitted after launch without invalidating historical rating data.
 
 ---
 
@@ -19,133 +19,156 @@ The key risks are all Phase 1 concerns: the migration from hardcoded config to D
 
 ### Recommended Stack
 
-The existing Fastify 5 / Drizzle ORM / PostgreSQL 16 / Zod 4 stack requires only three new runtime packages. `opossum` (circuit breaker — Red Hat-sponsored, 70K weekly downloads, Node.js 22 compatible, ESM-native) handles Closed/Open/Half-Open state per backend with event emission that feeds the existing SSE hub. `p-queue` (dispatch concurrency — sindresorhus, actively maintained, native ESM) provides per-backend queuing with configurable concurrency and RPM caps without requiring Redis. `which` (CLI binary detection — 150M weekly downloads, used by npm itself) handles cross-platform PATH scanning for `claude`, `codex`, `gemini`, `ollama` binaries without shell spawning.
+The stack is almost entirely the existing Porter infrastructure. No new backend npm packages are required — the Elo formula is a custom 20-line TypeScript implementation and agent import parsers use Zod (already installed). The frontend adds five libraries for visual game-feel: `recharts` (radar/pentagon chart for stats), `motion` v12 (spring animations and forge reveal sequences), `@tsparticles/react` (forge birth particle burst), `@pixi/react` + `pixi.js` v8 (WebGL battle arena canvas), and `use-sound` (optional sound effects, off by default).
 
 **Core technologies:**
-- `opossum` 9.0.0: Circuit breaker per gateway — replaces unreliable per-request probing with stateful Open/Half-Open/Closed management
-- `p-queue` 9.1.0: Per-backend dispatch queue — prevents VPS saturation under concurrent agent load; no Redis required
-- `which` 4.0.0: CLI binary detection — enables zero-config first-run auto-discovery by scanning PATH for installed tools
-- PostgreSQL 16 (existing): Four new tables via Drizzle schema additions, no new infrastructure
-- `toad-scheduler` via existing `@fastify/schedule` (existing): Background health tick every 30s
+- `recharts` 3.8.1 — SVG pentagon stat chart; React 19 confirmed; 15-line integration via RadarChart
+- `motion` 12.38.0 — forge reveal sequences and level-up animations; import from `motion/react` not `framer-motion`
+- `@pixi/react` 8.0.5 + `pixi.js` 8.x — WebGL arena canvas ONLY; not for character cards or list UI
+- `@tsparticles/react` 3.0.0 — forge birth particle burst; MEDIUM React 19 confidence; canvas 2D fallback documented
+- `use-sound` 5.0.0 — off by default; MEDIUM React 19 confidence; howler.js direct as fallback
+- Tailwind v4 `@theme` keyframes — passive rarity border glows; CSS compositor thread, zero React render cost
+- Custom `elo.ts` (20 lines) — K-factor tunable per star level (40 provisional, 32 standard, 24 veteran); no package
+- Drizzle + PostgreSQL — 7 new tables + 2 existing table ALTERs via `migrate-rpg-v1.ts`; no new ORM
 
-**What NOT to add:** LiteLLM proxy (Python, 500MB RAM, separate process, defeats architecture), Redis (p-queue is sufficient for single-server), openai/anthropic SDKs (native fetch already covers the wire format), Prometheus (structured DB tables are sufficient at current scale).
+**Critical version flag:** `@tsparticles/react` and `use-sound` have MEDIUM React 19 confidence. Test early in Phase 8 (Forge Animation). Both have documented fallbacks.
 
 ### Expected Features
 
-**Must have — table stakes (Phase 1):**
-- Gateway registry with persistent health status and status badges
-- Local runtime detection (auto-discover Ollama, OpenClaw, CLI binaries on boot)
-- Circuit breaker per gateway (Closed/Open/Half-Open with configurable thresholds)
-- Retry with exponential backoff (separate from circuit breaking — handles transient errors)
-- Fallback chain (N gateways in priority order, not just cheap/strong binary)
-- Token usage API endpoint (expose existing `token_usage_daily` with date/model filters)
-- Decision log API endpoint (paginated, filterable — expose existing `decision_log`)
-- `/api/v1/bridge/status` unified health view
+**Must have (table stakes — P1, RPG Foundation):**
+- 5-stat character card (QTY/SPD/EFF/REL/COMBO) with radar/pentagon chart display
+- XP accumulation and level counter (1-100) with visible progress bar
+- Rarity tiers (Common/Rare/Epic/Legendary/Mythic) with CSS border glow animations
+- Star progression (1-5) gated by dispatch milestones and reliability thresholds
+- Gear slot display (Weapon/Armor/Accessory 1/Accessory 2) mapped to real agent config
+- Class assignment (Striker/Guardian/Fixer/Amplifier/Orchestrator) from dominant stat after 50 dispatches
+- Elo rating displayed on character card (provisional badge until 10 battles)
+- Battle result display with judge score breakdown by dimension
 
-**Should have — differentiators (Phase 2):**
-- Unified model catalog across all backends (auto-populated on detection and periodic refresh)
-- Capability-based routing (strengths metadata on gateways and models)
-- Backend-aware tool schema filtering wired to live gateway health state
-- First-run setup wizard integration showing detected gateways with confirmed status
-- Direct access annotations on every dispatch result (backend, version, model, auth method)
+**Should have (differentiators — P2, Battle Arena + Forge):**
+- Stats immutably derived from dispatch logs — no manual edit path (anti-gaming moat)
+- Ensemble LLM judge: 3 judges, position-randomized, blind to agent identity
+- Forge birth animation (gacha reveal with particles and spring animation sequences)
+- Skill tree (Active tools equippable, Passive unlocks at 3-star, Ultimate at 4-star)
+- Forge nav unification (collapse Skills + Tools + Forge into single nav item)
+- Data-emergent specialties from battle history (not fixed class bonuses)
+- .md file auto-regeneration on progression events (star-up, level milestone, class change)
 
-**Defer to Phase 3 — Bridge agents:**
-- Bridge Operator agent (autonomous health monitoring with Memory V2 integration)
-- Model Scout agent (autonomous model discovery, catalog maintenance)
-- Route Analyst agent (weekly routing optimization proposals from decision log data)
-- Preference learning (routing weight updates from accumulated decision history)
+**Defer to Phase 4+:**
+- Spectator mode with live SSE token counter race (PixiJS arena)
+- Tournament system (weekly bracket, seeded by Elo)
+- Shareable battle replays with persistent URLs
+- Agent import from LangGraph/CrewAI/AutoGen via Open Agent Specification
+- Specialty leaderboard per domain
 
-**Anti-features (intentional omissions):**
-- API key storage and management — creates security liability; each CLI tool owns its own auth
-- Porter as API proxy (re-exposing LLM APIs) — defeats product philosophy and competitive moat
-- Semantic caching — requires vector store; VPS (2 vCPU, 8GB RAM) cannot support it
-- Per-user granular token attribution — belongs in the billing phase (explicitly deferred)
-- Gateway marketplace / connector store — maintenance burden; config-driven extensibility is sufficient
+**Anti-features — never build:**
+- Manual stat editing (destroys the core value proposition)
+- Pay-to-win gear (premium model = guaranteed win)
+- Seasonal Elo or XP resets (agents represent real dispatch history)
+- Fully automated tournament brackets without human oversight
+- Real-time multiplayer WebSocket battles (async achieves same UX at fraction of complexity)
 
 ### Architecture Approach
 
-The Bridge layer is a clean wrapper above existing services using a delegation pattern. A new `services/bridge/` directory contains all Bridge code. `bridge-router.ts` is the public entry point replacing direct `aiRouterDispatch()` calls in route handlers. `gateway-registry.ts` maintains a 30-second in-memory health cache backed by the `gateways` table (no per-request DB reads). `routing-engine.ts` evaluates `routing_rules` rows then falls back to the existing `shouldRouteCheap()` heuristic for backward compatibility. `startup-detector.ts` probes PATH and HTTP endpoints on Fastify boot and upserts the initial gateway rows. Four typed adapters wrap the existing `stream-service.ts` internals and a `stream-normalizer.ts` unifies their output into `AsyncIterable<string>`. The existing `ai-router.ts` and `stream-service.ts` are explicitly read-only — all 35 Playwright tests continue to pass without modification.
+The RPG system is a clean additive layer over the existing Bridge. Every new component reads from `bridge_dispatch_log` (immutable, never touched) and writes to a derived cache (`agent_rpg_stats`). The routing engine, dispatch pipeline, memory injection, and SSE hub require zero interface changes — they gain new event namespaces (`rpg:*`, `battle:*`, `session:*`) but nothing else is modified. Battle dispatches go through the existing `routingEngine.dispatch()` so they appear in `bridge_dispatch_log` and feed back into stats automatically. The architecture research confirmed all integration points via direct source-code inspection of `backend/src/`.
 
 **Major components:**
-1. `bridge/gateway-registry.ts` — DB-backed registry with 30s TTL health cache; foundation for all other Bridge features
-2. `bridge/routing-engine.ts` — rule evaluation + heuristic fallback; pluggable `RoutingStrategy` interface for future tuning
-3. `bridge/startup-detector.ts` — boot-time binary + HTTP probe; seeds registry; enables zero-config onboarding
-4. `bridge/adapters/{ollama,openclaw,codex-cli,claude-cli}.ts` — provider-specific dispatch + response parsing
-5. `bridge/stream-normalizer.ts` — unified streaming output regardless of backend format (Ollama NDJSON, OpenAI SSE, Codex JSONL, Claude JSON)
-6. `routes/v1/bridge.ts` — gateway CRUD, model catalog, routing rules, dispatch log API
+1. `rpg-engine.ts` — sole writer to `agent_rpg_stats`; derives all 5 stats from dispatch_log; owns XP, level, star, rarity, class progression; triggers .md regeneration on progression events
+2. `battle-orchestrator.ts` — parallel dispatches both agents with identical prompt via existing Bridge; calls 3-judge ensemble; updates Elo; emits `battle:complete` SSE
+3. `session-registry.ts` — AI dispatch session tracking with per-session token accounting; supplements auth sessions, does not replace them
+4. `intelligence-loop.ts` — background job extracting gateway/cost/combo patterns from dispatch data; promotes high-confidence signals to Memory V2 `concepts` table (closes the bridge → memory → routing intelligence loop)
+5. `msg-bus.ts` — audit log persistence over existing AgentMessage interface; NOT a queue; records for correlation tracking only
 
-**SSE events:** New `bridge:*` namespace (`bridge:gateway_detected`, `bridge:gateway_status`, `bridge:dispatch_started`, `bridge:dispatch_completed`, `bridge:dispatch_failed`) emitted via existing `emitSSE()` — no changes to `sse-hub.ts`.
-
-**Data layer:** Four new tables (`gateways`, `models`, `routing_rules`, `bridge_dispatch_log`) plus `bridge_cost_records` for per-request cost tracking. Existing `decision_log` and `token_usage_daily` are unchanged and continue to be written by the Bridge layer via the existing `logDecision()` and `trackTokenUsage()` functions.
+**Critical invariant:** `rpg-engine.ts` is the ONLY writer to `agent_rpg_stats`. Routes are read-only. This must be enforced by having no direct stat UPDATE paths in any route handler — enforcing it prevents gaming and ensures stats are always recomputable from immutable source data.
 
 ### Critical Pitfalls
 
-1. **Per-request health probing** — `probeBackend()` fires a HEAD request on every dispatch, adding 100-300ms. Fix: background health cache with 30s TTL in `gateway-registry.ts`; dispatch reads from cache only. Must be the first piece of infrastructure built in Phase 1.
+1. **LLM judge positional bias corrupts Elo** — position A wins 5-15% more often systematically (ACL 2025, multiple papers). Mitigation: randomize A/B assignment per judge call (3 separate calls), store `position_a_agent` in battle record for auditability. Must be in MVP — cannot retrofit without invalidating historical Elo.
 
-2. **Config migration gap** — Switching from hardcoded env config to DB-driven config without a fallback chain leaves the system broken if the DB is empty on first deploy. Fix: `resolveGateways()` tries DB first, falls back permanently to env config. Write this before any other gateway feature; write a Playwright test covering the empty-DB case.
+2. **Compute runaway from uncapped battles** — 5 LLM calls per battle; 100 battles/day = $5-40/day judge costs alone. Mitigation: tier-based daily caps (Free=5, Pro=50) enforced before the first dispatch fires; Ollama as default judge for free tier; battle queue (one per user at a time) prevents concurrent VPS overload.
 
-3. **Circuit breaker error conflation** — Treating 429 (rate limit), 500 (crash), and 401 (bad key) as the same breaker trigger causes over-tripping on rate limits and wasted retries on auth failures. Fix: three-class error taxonomy (transient / persistent / configuration) before writing any circuit breaker code.
+3. **Stale meta — one model dominates** — if Weapon (model) determines win rate more than Armor (system prompt), the arena becomes a vendor advertisement and engagement collapses. Mitigation: pre-launch calibration tournament (same prompt, all models); judge rubric weighted toward prompt compliance over prose quality; Claude vs Ollama win-rate gap must be <30% before public launch.
 
-4. **Ollama vs. OpenAI format mismatch** — Ollama's OpenAI compat layer drops streaming token counts silently and fails tool calls. Fix: provider-specific adapter parsers; Ollama native API for tool calls; accumulate `eval_count` from final `done:true` chunk for token counts.
+4. **Stat snapshot performance bottleneck** — live derivation of 5 stats from `bridge_dispatch_log` per character card request becomes 250 table scans for a 50-agent Forge page. Breaks above 100 dispatches per agent. Mitigation: `agent_rpg_stats` materialized cache rebuilt async via existing scheduler; character card API reads cache only, never raw logs. Must be designed in Phase 2, not added when performance issues appear.
 
-5. **API key exposure** — Gateway config `GET` endpoints must mask keys to last 4 chars. Error serialization must strip auth fields. SSE payloads must never include gateway config objects. These constraints go in the schema and API design on day one.
+5. **XP grinding (toy problem / Goodhart's Law)** — users dispatch trivial one-word prompts for +10 XP each, inflating stats and breaking the "stats mean something" value prop. Mitigation: quality-gated XP (quality signals worth 3-5x raw dispatch count); 2-star threshold requires `avg_quality_score > 7.0` not just dispatch count; admin dashboard flags grinding patterns.
 
 ---
 
 ## Implications for Roadmap
 
-Based on the dependency graph from FEATURES.md and the architecture from ARCHITECTURE.md, a strict 3-phase structure is required. Phases cannot be reordered — each phase depends on the data infrastructure of the prior phase.
+Based on research, the build order is determined by hard data dependencies. The critical path is: Schema → RPG Engine → Battle Arena MVP. Forge unification and character card UI are parallel tracks that converge at the Battle Arena phase.
 
-### Phase 1: Gateway Registry Foundation
+### Phase 1: Schema + Migration Foundation
+**Rationale:** Pure DDL, no dependencies. All 9 phases depend on these tables existing. Ship first, unblocks all parallel work.
+**Delivers:** 7 new tables (`agent_rpg_stats`, `battles`, `battle_rounds`, `battle_judgments`, `agent_bonds`, `session_registry`, `msg_bus_events`, `intelligence_patterns`) + ALTER 2 existing (`agent_templates`, `personas`). `migrate-rpg-v1.ts` file. `schema.ts` Drizzle definitions.
+**Avoids:** Schema changes mid-service-development cause type errors and migration ordering conflicts.
 
-**Rationale:** Gateway Registry is the root dependency for every other Bridge feature. Nothing can be built without it. The config migration gap, health probe latency, and API key exposure pitfalls are architectural, not cosmetic — they must be solved here before any features are layered on top. The fallback chain (env config → DB config) must be the first piece of code written.
+### Phase 2: RPG Engine (Stat Calculation + Progression)
+**Rationale:** The entire RPG display layer depends on stats being available. Character cards show empty pentagonswithout it. Battles cannot award XP without it. Build before any UI work.
+**Delivers:** `rpg-engine.ts` with computeStats, awardXp, checkProgressionEvents, regenerateMdFiles; async stat recalculation triggered on dispatch milestones via existing scheduler; materialized `agent_rpg_stats` cache.
+**Implements:** SPD/REL/EFF from dispatch_log immediately; QTY after first battle; COMBO after multi-agent correlation.
+**Avoids:** Pitfall 4 (performance) — snapshot cache is a Phase 2 design decision, not a later fix.
 
-**Delivers:** DB-backed gateway registry (`gateways`, `bridge_dispatch_log`, `bridge_cost_records` tables), auto-detection on startup via `startup-detector.ts`, persistent background health probing with 30s TTL cache, circuit breakers with correct three-class error taxonomy, retry + exponential backoff, N-backend fallback chain with permanent env-config escape hatch, API key masking in all gateway API responses, full provider adapter layer (`GatewayAdapter` interface + all four adapters), `stream-normalizer.ts`, token usage API endpoint, decision log API endpoint, `/api/v1/bridge/status` endpoint.
+### Phase 3: Forge Unification (Nav + Workshop Tab Shell)
+**Rationale:** Parallel with Phase 2 once schema exists. Frontend nav merge is independent of stat calculation. Unblocks skill tree UI and Workshop configuration.
+**Delivers:** Single "Forge" nav item replacing Skills + Tools + Forge; Templates/Armory/Workshop/Arena tab shell; `rpg_enabled` toggle on agent templates.
+**Avoids:** Building skill tree UI before the Workshop tab container exists.
 
-**Addresses:** All P1 features from FEATURES.md (Gateway Registry, Local Runtime Detection, Persistent Health Probing, Circuit Breaker, Retry + Backoff, Fallback Chain, Token Usage API, Decision Log API, Bridge Status).
+### Phase 4: Character Card + Skill Tree APIs
+**Rationale:** Display layer over Phase 2 stats. Must precede Battle Arena because the Arena tab shows combatant character cards during battle.
+**Delivers:** `/api/v1/rpg` routes (stats, class, gear, leaderboard endpoint); recharts pentagon component; Tailwind v4 rarity CSS animations; gear slot display; skill tree UI in Workshop tab.
+**Uses:** recharts 3.8.1, Tailwind v4 `@theme` keyframes.
+**Avoids:** UX pitfall — provisional Elo badge shown until 10 battles; gear complexity hidden behind expert mode default.
 
-**Avoids:** Per-request probing pitfall, config migration gap, circuit breaker error conflation, Ollama format mismatch, API key exposure.
+### Phase 5: Battle Arena MVP
+**Rationale:** Payoff of the RPG foundation. Requires all prior phases. The judge architecture must be correct from the first battle because retroactive Elo recalibration is expensive.
+**Delivers:** `battle-orchestrator.ts`; `/api/v1/battles` routes (start, status, result, leaderboard); ensemble 3-judge judging with position randomization; Elo update on completion; side-by-side battle result display with dimension breakdown.
+**Uses:** Custom `elo.ts` (20 lines, K-factor by star level); existing `routingEngine.dispatch()`.
+**Avoids:** Pitfall 1 (judge bias) — position randomization and ensemble judging mandatory in MVP. Pitfall 2 (compute runaway) — tier caps enforced before any dispatch fires. Run pre-launch calibration tournament (Pitfall 3) before enabling battles for all users.
 
-**Stack additions installed in this phase:** `opossum`, `p-queue`, `which`, `@types/opossum`, `@types/which`.
+### Phase 6: Session Registry + Message Bus
+**Rationale:** Infrastructure for per-session token accounting. Required before intelligence loop can extract meaningful session-level patterns. Can be built in parallel with Phase 5.
+**Delivers:** `session-registry.ts`; `msg-bus.ts` wrapping existing agent-message dispatch; `/api/v1/sessions` routes; per-session token budget tracking.
 
-### Phase 2: Model Catalog and Intelligence Layer
+### Phase 7: Intelligence Loop
+**Rationale:** Closes the feedback loop. Needs battle data (Phase 5) and session data (Phase 6) to detect meaningful patterns. Produces concepts that improve routing — highest long-term leverage of any v4.0 feature.
+**Delivers:** `intelligence-loop.ts` background job (every 6h via existing scheduler); `intelligence_patterns` table; auto-promotion of high-confidence patterns to Memory V2 `concepts`; gateway_preference, cost_spike, model_failure, combo_chain pattern types.
 
-**Rationale:** Model catalog requires Phase 1 gateway registry to exist and be stable. Capability-based routing requires a populated model catalog. First-run wizard integration requires both detection and catalog data. This phase transforms the system from "works" to "feels intelligent" — the gateway layer becomes self-describing.
+### Phase 8: Forge Birth Animation + Visual Polish
+**Rationale:** Retention hook. Functional dependency on Forge Workshop (Phase 3) and character card (Phase 4) being complete. High user value but blocks nothing else — correctly deferred until core loop is working.
+**Delivers:** motion v12 level-up and star-up sequences; @tsparticles forge birth particle burst; question-driven creation flow → rarity reveal → character born animation.
+**Uses:** motion 12.38.0, @tsparticles/react 3.0.0.
+**Research flag:** Verify @tsparticles React 19 compatibility here before building — documented fallback available.
 
-**Delivers:** `models` table + `routing_rules` table (DB migrations), unified model catalog auto-populated from adapter `listModels()` on detection + periodic 6h refresh, capability-based routing using strengths metadata from model catalog, backend-aware tool schema filtering wired to live gateway health state, first-run setup wizard integration showing detected gateways with confirmed per-gateway status, direct access annotations on every dispatch result (backend, version, model, auth method).
-
-**Addresses:** All P2 features from FEATURES.md (Model Catalog, Capability-based Routing, Backend-aware Tool Filtering, First-run Wizard Integration, Direct Access Annotations).
-
-**Avoids:** Heuristic routing misfire pitfall (instrument all routing decisions for later tuning), cost tracking input/output asymmetry (pricing fields in model catalog schema ensure correct USD calculation from day one).
-
-### Phase 3: Bridge Agents
-
-**Rationale:** Bridge agents require at minimum 7 days of `bridge_dispatch_log` data for Route Analyst to produce meaningful analysis. They also require Memory V2 (complete) and the scheduler (existing). This phase is the product moat — no other AI gateway ships agents that manage the gateway layer. Bridge Operator and Model Scout can start as soon as Phase 2 is stable; Route Analyst must wait for sufficient dispatch history.
-
-**Delivers:** Bridge Operator agent (scheduled every 60s, probes all backends, opens/closes circuit breakers, emits `bridge:health` SSE events, writes reliability patterns to Memory V2), Model Scout agent (scheduled every 6h, scans backends for new models, updates catalog, emits `bridge:model-discovered` SSE events, writes capability concepts to Memory V2), Route Analyst agent (scheduled weekly, analyzes decision logs, proposes routing rule updates as Memory V2 low-trust concepts requiring human approval, generates routing performance report).
-
-**Addresses:** All P3 features from FEATURES.md (Bridge Operator, Model Scout, Route Analyst, Preference Learning).
-
-**Constraint:** Do not activate Route Analyst until 7+ days of dispatch log data exists. Bridge Operator and Model Scout have no such constraint.
+### Phase 9+: Spectator, Tournaments, Agent Import
+**Rationale:** Growth and viral features. Explicitly deferred until Phase 5 battle loop is validated with real usage data. Each is independent and can be sequenced based on user demand signals.
+**Delivers:** PixiJS spectator mode with live SSE token counter race; tournament bracket system (manual admin scheduling); LangGraph/CrewAI/AutoGen agent import via Open Agent Specification.
+**Research flag:** Both PixiJS arena integration and OAS agent import warrant `/gsd:research-phase` — see below.
 
 ### Phase Ordering Rationale
 
-- Gateway Registry must precede everything — it is the data substrate all other features read from and write to. No shortcut here.
-- Circuit breakers and health cache must be built before model catalog and routing rules — routing decisions are meaningless against stale health data.
-- Model catalog enables capability-based routing which requires models to carry strengths metadata — cannot be retrofitted onto an empty catalog.
-- Bridge agents require stable data infrastructure and meaningful log history — premature activation produces low-quality analysis that contaminates Memory V2.
-- The config fallback chain must be the first piece of code in Phase 1 — any other order risks breaking the running system during deployment.
+- Schema is non-negotiable first — all service code imports Drizzle table references that must exist.
+- RPG engine before all UI because character card, leaderboard, and battle all read from `agent_rpg_stats`.
+- Forge unification (Phase 3) is parallel with RPG engine because it is a frontend routing change with no stat dependency.
+- Battle Arena (Phase 5) requires character card APIs (Phase 4) because the Arena tab renders combatant cards.
+- Intelligence loop is last among backend services because it benefits from battle data richness — running it before Phase 5 produces only gateway preference patterns, not combo or quality insights.
+- Animation phase (Phase 8) is deliberately late — it layers delight on a working system rather than building polish before function.
+- Spectator and tournaments are post-validation because they add extreme complexity (WebGL, SSE fan-out, bracket scheduling) before the core loop is proven.
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **Phase 1 — CLI adapter dispatch (CodexCLIAdapter, ClaudeAdapter):** Spawning `codex exec --json --ephemeral` and `claude -p --output-format json`, parsing their JSONL/JSON stdout under error conditions, and handling multi-turn tool interactions have non-obvious edge cases. A targeted spike before implementation is recommended.
-- **Phase 3 — Route Analyst proposal format:** How routing rule proposals are structured as Memory V2 concepts and surfaced for human approval is not yet specified. Needs a design spec before Phase 3 begins.
+Phases likely needing `/gsd:research-phase` during planning:
+- **Phase 9 (Spectator Mode):** `@pixi/react` v8 + React 19 reconciler is new (December 2025). SSE fan-out architecture for concurrent spectators on the 2 vCPU VPS needs specific load analysis.
+- **Phase 9 (Agent Import):** Open Agent Specification (arXiv 2510.04173, October 2024) is new and poorly battle-tested. LangGraph has an official adapter; CrewAI and AutoGen are partial. Real framework export files need to be tested against the import parser before building the UI.
+- **Phase 5 (Judge Calibration):** Define specific pass/fail thresholds for the pre-launch calibration tournament — what win-rate positional delta is acceptable, minimum battle sample size, recovery protocol if calibration fails.
 
-Phases with standard patterns (skip research):
-- **Phase 1 — circuit breakers and dispatch queue:** `opossum` and `p-queue` integration patterns are fully defined in STACK.md with working TypeScript examples.
-- **Phase 1 — DB schema migrations:** Drizzle ORM migration pattern is established throughout the existing codebase.
-- **Phase 2 — model catalog population:** Ollama `/api/tags` and OpenAI `/v1/models` response shapes are confirmed in PITFALLS.md. No surprises expected.
+Phases with standard patterns (skip research-phase):
+- **Phase 1 (Schema):** Drizzle + PostgreSQL DDL follows established project patterns. Full schema defined in ARCHITECTURE.md.
+- **Phase 2 (RPG Engine):** Stat derivation is standard SQL aggregation (PERCENTILE_CONT, rolling averages). All queries defined in ARCHITECTURE.md.
+- **Phase 4 (Character Card):** recharts RadarChart integration is a 15-line pattern. Tailwind v4 keyframes are documented.
+- **Phase 6 (Session Registry):** Session tracking is a well-understood pattern; table schema fully specified.
+- **Phase 7 (Intelligence Loop):** All pattern queries and Memory V2 promotion logic are defined. Implements existing scheduler API.
 
 ---
 
@@ -153,48 +176,49 @@ Phases with standard patterns (skip research):
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All three new packages npm-verified; existing stack read directly from backend/package.json and source files; no version guessing |
-| Features | HIGH | Cross-referenced LiteLLM, Portkey, Helicone, Bifrost, Getmaxim; Porter codebase read directly for existing capabilities; anti-features grounded in explicit product philosophy |
-| Architecture | HIGH | All findings from direct source-code inspection of ai-router.ts, stream-service.ts, schema.ts, config.ts, scheduler.ts, sse-hub.ts; zero inferred patterns |
-| Pitfalls | HIGH | All pitfalls grounded in Porter's actual ai-router.ts implementation; cross-referenced production gateway postmortems and official Ollama docs including confirmed open issue #4448 |
+| Stack | HIGH | Core libraries version-confirmed via npm. Two MEDIUM flags (@tsparticles/react, use-sound) both have documented fallbacks. PixiJS v8 + React 19 confirmed. |
+| Features | HIGH | Cross-referenced with Path of Exile, Genshin, Chatbot Arena, Auto-Arena, LMSYS methodology. Feature priorities validated against existing agent-rpg-design-v2.md spec (Grok-reviewed). |
+| Architecture | HIGH | All findings from direct source-code inspection of backend/src/. Build order dependencies confirmed against actual file structure and existing service interfaces. |
+| Pitfalls | HIGH | Grounded in peer-reviewed research: ACL 2025 position bias, ICML 2025 vote-rigging, NeurIPS 2023 verbosity bias, Gartner gamification failure. All mitigations are specific and implementable in MVP. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Codex CLI output format under error conditions:** The JSONL event schema for `codex exec --json --ephemeral` in error paths needs a spike. Normal output format is documented; error output format is less certain.
-- **Claude CLI multi-turn tool call passthrough:** `claude -p --output-format json` for tool-bearing dispatches — the exact flag set and output structure for multi-turn tool interactions needs validation during Phase 1 implementation.
-- **`@types/opossum` v8 types with opossum v9:** STACK.md flags MEDIUM confidence on type coverage. Verify at install time that v8 typings cover the v9 API surface in use.
-- **Route Analyst proposal format:** How routing rule proposals are structured as Memory V2 low-trust concepts and surfaced for human approval is undefined. Needs a design spec before Phase 3 begins.
+- **Judge calibration thresholds:** Research defines failure modes but not a specific pass/fail metric for pre-launch calibration. Define during Phase 5 planning: suggest 50 same-prompt calibration battles, positional win-rate delta must be <10%.
+- **@tsparticles React 19 compatibility:** Unconfirmed. Test at the start of Phase 8 — if React 19 reconciler warnings appear, switch to documented canvas 2D fallback.
+- **Open Agent Specification field mapping:** OAS is October 2024 and LangGraph/CrewAI real-world exports haven't been tested. Frame import as "best-effort mapping" with user-completion UI, not guaranteed fidelity. Test against sample framework exports during Phase 9 planning.
+- **VPS memory budget under WebGL:** 2 vCPU / 8GB RAM has not been load-tested with PixiJS WebGL canvas + SSE fan-out simultaneously. Flag as Phase 9 risk; consider spectator connection cap (suggested: 20 per active battle).
 
 ---
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- `backend/src/services/ai-router.ts` — dispatch pattern, probeBackend(), trackTokenUsage(), shouldRouteCheap() — read directly
-- `backend/src/routes/v1/admin/models.ts` — COST_PER_M table, existing admin models API — read directly
-- `backend/src/db/schema.ts` — existing tables confirmed — read directly
-- `backend/package.json` — confirmed installed dependencies — read directly
-- `research/cli-runtime-design-brief.md` — PROVIDER_REGISTRY and CLI tool capabilities
-- `research/chat-latency-and-prompt-caching-notes.md` — prompt caching implications for cost tracking
-- [opossum npm](https://www.npmjs.com/package/opossum) — v9.0.0, June 2025
-- [opossum documentation](https://nodeshift.dev/opossum/) — API reference for CircuitBreaker options
-- [p-queue GitHub](https://github.com/sindresorhus/p-queue) — concurrency + interval options confirmed
-- [which npm](https://www.npmjs.com/package/which) — v4.0.0, ESM-native, 150M weekly downloads
-- [Ollama OpenAI Compatibility Docs](https://docs.ollama.com/api/openai-compatibility) — streaming delta structure differences, tool calling limitations
-- [Ollama streaming usage issue #4448](https://github.com/ollama/ollama/issues/4448) — confirmed missing usage in streaming OpenAI compat format
+- `backend/src/db/schema.ts` — confirmed existing table structure and Drizzle patterns (direct read)
+- `backend/package.json` + `admin/frontend/package.json` — confirmed installed dependencies and versions (direct read)
+- `research/agent-rpg-design-v2.md` — core design spec, Grok-reviewed
+- [recharts npm](https://www.npmjs.com/package/recharts) — v3.8.1 confirmed, React 19 support issue closed
+- [motion npm](https://www.npmjs.com/package/motion) — v12.38.0 confirmed March 2026, React 19 concurrent rendering explicit
+- [@pixi/react npm](https://www.npmjs.com/package/@pixi/react) — v8.0.5, "designed exclusively for React 19"
+- [Judging LLM-as-a-Judge (NeurIPS 2023)](https://arxiv.org/abs/2306.05685) — position bias, verbosity bias, self-enhancement bias quantified
+- [Judging the Judges: Position Bias (ACL 2025)](https://aclanthology.org/2025.ijcnlp-long.18/) — systematic positional bias, varies across judges and tasks
+- [Self-Preference Bias in LLM-as-a-Judge](https://arxiv.org/html/2410.21819v1) — 5-7% systematic self-enhancement
+- [Improving Model Ranking by Vote Rigging (ICML 2025)](https://arxiv.org/abs/2501.17858) — Elo manipulation with hundreds of strategic battles
+- [Auto-Arena: 3-Judge Committee](https://openreview.net/forum?id=pMp5njgeLx) — 92.14% human preference correlation
+- [LMSYS Chatbot Arena](https://lmsys.org/blog/2023-05-03-arena/) — blind pairwise Elo methodology
+- [Tailwind CSS v4 animation docs](https://tailwindcss.com/docs/animation) — @theme keyframes confirmed
 
 ### Secondary (MEDIUM confidence)
-- [LiteLLM proxy features](https://docs.litellm.ai/docs/simple_proxy) — competitor feature baseline
-- [Portkey AI gateway features](https://portkey.ai/docs/product/ai-gateway) — competitor feature baseline
-- [Best enterprise LLM gateways 2026](https://www.getmaxim.ai/articles/best-enterprise-llm-gateways-in-2026-a-comparative-guide/) — feature matrix comparison
-- [Retries, Fallbacks, Circuit Breakers in LLM Apps](https://www.getmaxim.ai/articles/retries-fallbacks-and-circuit-breakers-in-llm-apps-a-production-guide/) — error classification taxonomy
-- [LLM API Token Security: 7 Most Common Mistakes](https://aiq.hu/en/llm-api-token-security-the-7-most-common-mistakes-and-how-to-avoid-them/) — key storage and rotation patterns
-- [LiteLLM Supply Chain Attack](https://blog.dreamfactory.com/why-the-litellm-supply-chain-attack-is-a-wake-up-call-for-ai-api-credential-management/) — credential exposure via API responses
-- [Langfuse Token and Cost Tracking](https://langfuse.com/docs/observability/features/token-and-cost-tracking) — pricing tier support, cache token tracking
-- [LLM Routing in Production](https://blog.logrocket.com/llm-routing-right-model-for-requests/) — heuristic accuracy limitations, feedback loop importance
+- [use-sound npm](https://www.npmjs.com/package/use-sound) — v5.0.0, React 19 unconfirmed
+- [@tsparticles/react npm](https://www.npmjs.com/package/@tsparticles/react) — v3.0.0, React 19 unconfirmed
+- [Open Agent Specification (arXiv 2510.04173)](https://arxiv.org/pdf/2510.04173) — agent portability format, October 2024
+- [LangGraph A2A integration](https://docs.langchain.com/langgraph-platform/autogen-integration) — official cross-framework adapter
+- [Gartner gamification failure analysis](https://centrical.com/resources/will-80-of-gamification-projects-fail/) — 80% failure, Goodhart's Law patterns
+
+### Tertiary (LOW confidence)
+- [Elo manipulation patterns](https://tonysheng.substack.com/p/elo-rating-systems-and-how-to-manipulate) — sandbagging and cherry-picking mechanics (community source; consistent with ICML 2025 academic findings)
 
 ---
-*Research completed: 2026-03-25*
+*Research completed: 2026-03-29*
 *Ready for roadmap: yes*
