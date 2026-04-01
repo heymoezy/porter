@@ -14,7 +14,7 @@ import { useForgeSSE, useForgeState, useForgeStart, useForgeStop, useForgeQueue,
 import { useChatPanel } from "~/hooks/use-chat-panel"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
-import { Play, Pause, Search, Flame, Shield, Wrench, Sparkles, Link2, ChevronDown, ChevronRight, Bot } from "lucide-react"
+import { Play, Pause, Search, Flame, Wrench, Sparkles, Link2, ChevronDown, ChevronRight, Bot } from "lucide-react"
 
 // ── Station Specialists ──────────────────────────────────
 
@@ -394,22 +394,6 @@ function ArmoryTools() {
   )
 }
 
-// ── Armory: combined ──────────────────────────────────────
-
-function ArmoryContent() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-2xs font-bold uppercase tracking-wider text-text3 mb-2">Tools & Connections</p>
-        <ArmoryTools />
-      </div>
-      <div>
-        <p className="text-2xs font-bold uppercase tracking-wider text-text3 mb-2">Skills Registry</p>
-        <ArmorySkills />
-      </div>
-    </div>
-  )
-}
 
 // ── Workshop ──────────────────────────────────────────────
 
@@ -655,8 +639,11 @@ export default function ForgePage() {
               <TabsTrigger value="templates" className="text-xs gap-1.5 data-[state=active]:bg-[var(--forge-ember)]/10 data-[state=active]:text-[var(--forge-flame)]">
                 <Flame className="size-3" /> Templates
               </TabsTrigger>
-              <TabsTrigger value="armory" className="text-xs gap-1.5">
-                <Shield className="size-3" /> Armory
+              <TabsTrigger value="skills" className="text-xs gap-1.5">
+                <Sparkles className="size-3" /> Skills
+              </TabsTrigger>
+              <TabsTrigger value="tools" className="text-xs gap-1.5">
+                <Wrench className="size-3" /> Tools
               </TabsTrigger>
               <TabsTrigger value="workshop" className="text-xs gap-1.5">
                 <Wrench className="size-3" /> Workshop
@@ -887,9 +874,14 @@ export default function ForgePage() {
               </div>
             </TabsContent>
 
-            {/* Armory — tools + skills inventory */}
-            <TabsContent value="armory" className="flex-1 overflow-y-auto p-4 mt-0 space-y-6">
-              <ArmoryContent />
+            {/* Skills — skill registry */}
+            <TabsContent value="skills" className="flex-1 overflow-y-auto p-4 mt-0">
+              <ArmorySkills />
+            </TabsContent>
+
+            {/* Tools — inventory + connections */}
+            <TabsContent value="tools" className="flex-1 overflow-y-auto p-4 mt-0">
+              <ArmoryTools />
             </TabsContent>
 
             {/* Workshop — live build configurator */}
