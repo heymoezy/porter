@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
 status: unknown
-stopped_at: Completed 27-03-PLAN.md — SHEET tab wired and shipped
-last_updated: "2026-04-01T08:11:35.492Z"
+stopped_at: Completed 29-02-PLAN.md — msg-bus wired into /agent-message
+last_updated: "2026-04-01T08:26:05.012Z"
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 14
+  completed_plans: 12
 ---
 
 # Project State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Porter is where builders bring their agents to fight. Build anywhere, battle here, prove your shit works.
-**Current focus:** Phase 27 — character-sheet-ui
+**Current focus:** Phase 29 — session-registry-message-bus
 
 ## Current Position
 
-Phase: 27 (character-sheet-ui) — EXECUTING
+Phase: 29 (session-registry-message-bus) — EXECUTING
 Plan: 1 of 3
 
 ## Performance Metrics
@@ -50,6 +50,7 @@ Plan: 1 of 3
 | Phase 27-character-sheet-ui P01 | 220 | 2 tasks | 3 files |
 | Phase 27-character-sheet-ui P02 | 231s | 2 tasks | 3 files |
 | Phase 27-character-sheet-ui P03 | 218s | 3 tasks | 1 files |
+| Phase 29 P02 | 240 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,8 @@ Plan: 1 of 3
 - [Phase 27-02]: Focus vital uses dispatchCount%50 proxy — Phase 29 session registry replaces with real context window pressure
 - [Phase 27-02]: PassiveTreeView skips unknown node_ids silently — NODE_DEFS is canonical list, not props.nodes
 - [Phase 27-character-sheet-ui]: SHEET tab inserted before INSTANCES — RPG content grouped logically, workshop query is template-scoped (same id as agent), VitalsBar dispatchCount defaults to 0 for fresh agents
+- [Phase 29]: logMsgBusEvent returns UUID so caller can backfill after dispatch — not fire-and-forget internally
+- [Phase 29]: updateMsgBusEvent on success/fail paths uses .catch(() => {}) — never blocks response to caller
 
 ### Pending Todos
 
@@ -98,6 +101,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T08:11:35.490Z
-Stopped at: Completed 27-03-PLAN.md — SHEET tab wired and shipped
+Last session: 2026-04-01T08:26:05.005Z
+Stopped at: Completed 29-02-PLAN.md — msg-bus wired into /agent-message
 Resume file: None

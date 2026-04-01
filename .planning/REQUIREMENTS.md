@@ -75,8 +75,8 @@
 - [ ] **SES-01**: Per-session token count, context %, age tracking
 - [ ] **SES-02**: Context pressure detection at 80%
 - [ ] **SES-03**: Session rotation with Recall summary carry
-- [ ] **MSG-01**: Structured message envelope for inter-gateway communication
-- [ ] **MSG-02**: Cross-model handoffs
+- [x] **MSG-01**: Structured message envelope for inter-gateway communication
+- [x] **MSG-02**: Cross-model handoffs
 
 ### Intelligence Loop
 
@@ -172,8 +172,8 @@
 | SES-01 | Phase 29 | Pending |
 | SES-02 | Phase 29 | Pending |
 | SES-03 | Phase 29 | Pending |
-| MSG-01 | Phase 29 | Pending |
-| MSG-02 | Phase 29 | Pending |
+| MSG-01 | Phase 29 | Complete |
+| MSG-02 | Phase 29 | Complete |
 | INT-01 | Phase 30 | Pending |
 | INT-02 | Phase 30 | Pending |
 | INT-03 | Phase 30 | Pending |
