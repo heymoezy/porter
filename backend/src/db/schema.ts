@@ -494,6 +494,21 @@ export const agentTemplates = pgTable('agent_templates', {
   isInternal: integer('is_internal').notNull().default(0),
   sortOrder: integer('sort_order').default(50),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  // ── RPG Fields (v4.0) ────────────────────────────────────────────────────
+  shell: text('shell').default('builder'),
+  shellIcon: text('shell_icon').default(''),
+  shellColor: text('shell_color').default(''),
+  intelligence: jsonb('intelligence').default(sql`'{}'::jsonb`),
+  supports: jsonb('supports').default(sql`'[]'::jsonb`),
+  equipmentSlots: jsonb('equipment_slots').default(sql`'[]'::jsonb`),
+  passiveTree: jsonb('passive_tree').default(sql`'[]'::jsonb`),
+  level: integer('level').default(1),
+  xp: integer('xp').default(0),
+  starLevel: integer('star_level').default(1),
+  rarity: text('rarity').default('common'),
+  eloRating: integer('elo_rating').default(1200),
+  specialties: jsonb('specialties').default(sql`'[]'::jsonb`),
+  rpgEnabled: integer('rpg_enabled').default(0),
 });
 
 // ── Autonomous Learning + Memory V2 Concepts ─────────────────────────────────
@@ -841,6 +856,10 @@ export const templateSkills = pgTable('template_skills', {
   templateId: text('template_id').notNull(),
   skillId: text('skill_id').notNull(),
   sortOrder: integer('sort_order').default(0),
+  // ── RPG Fields (v4.0) ────────────────────────────────────────────────────
+  successRate30d: doublePrecision('success_rate_30d').default(0),
+  totalUses: integer('total_uses').default(0),
+  lastUsed: doublePrecision('last_used'),
 });
 // Note: Primary key (template_id, skill_id) defined in migration DDL
 
