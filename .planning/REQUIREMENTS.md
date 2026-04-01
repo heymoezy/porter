@@ -118,11 +118,74 @@
 
 ## Traceability
 
-(Updated by roadmapper)
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| SCH-01 | Phase 24 | Pending |
+| SCH-02 | Phase 24 | Pending |
+| SCH-03 | Phase 24 | Pending |
+| SCH-04 | Phase 24 | Pending |
+| SCH-05 | Phase 24 | Pending |
+| SCH-06 | Phase 24 | Pending |
+| SCH-07 | Phase 24 | Pending |
+| RPG-01 | Phase 25 | Pending |
+| RPG-02 | Phase 25 | Pending |
+| RPG-03 | Phase 25 | Pending |
+| RPG-04 | Phase 25 | Pending |
+| RPG-05 | Phase 25 | Pending |
+| RPG-06 | Phase 25 | Pending |
+| RPG-07 | Phase 25 | Pending |
+| MD-01 | Phase 25 | Pending |
+| MD-02 | Phase 25 | Pending |
+| MD-03 | Phase 25 | Pending |
+| MD-04 | Phase 25 | Pending |
+| MD-05 | Phase 25 | Pending |
+| FRG-01 | Phase 26 | Pending |
+| FRG-02 | Phase 26 | Pending |
+| FRG-03 | Phase 26 | Pending |
+| FRG-04 | Phase 26 | Pending |
+| FRG-05 | Phase 26 | Pending |
+| FRG-06 | Phase 26 | Pending |
+| FRG-07 | Phase 26 | Pending |
+| SKL-01 | Phase 26 | Pending |
+| SKL-02 | Phase 26 | Pending |
+| SKL-03 | Phase 26 | Pending |
+| SKL-04 | Phase 26 | Pending |
+| SKL-05 | Phase 26 | Pending |
+| UI-01 | Phase 27 | Pending |
+| UI-02 | Phase 27 | Pending |
+| UI-03 | Phase 27 | Pending |
+| UI-04 | Phase 27 | Pending |
+| UI-05 | Phase 27 | Pending |
+| UI-06 | Phase 27 | Pending |
+| VIT-01 | Phase 27 | Pending |
+| VIT-02 | Phase 27 | Pending |
+| VIT-03 | Phase 27 | Pending |
+| BTL-01 | Phase 28 | Pending |
+| BTL-02 | Phase 28 | Pending |
+| BTL-03 | Phase 28 | Pending |
+| BTL-04 | Phase 28 | Pending |
+| BTL-05 | Phase 28 | Pending |
+| BTL-06 | Phase 28 | Pending |
+| BTL-07 | Phase 28 | Pending |
+| BTL-08 | Phase 28 | Pending |
+| BTL-09 | Phase 28 | Pending |
+| SES-01 | Phase 29 | Pending |
+| SES-02 | Phase 29 | Pending |
+| SES-03 | Phase 29 | Pending |
+| MSG-01 | Phase 29 | Pending |
+| MSG-02 | Phase 29 | Pending |
+| INT-01 | Phase 30 | Pending |
+| INT-02 | Phase 30 | Pending |
+| INT-03 | Phase 30 | Pending |
+| INT-04 | Phase 30 | Pending |
+| BRG-01 | Phase 30 | Pending |
+| BRG-02 | Phase 30 | Pending |
+| BRG-03 | Phase 30 | Pending |
+| BRG-04 | Phase 30 | Pending |
 
-**Coverage:**
-- v4.0 requirements: 52 total
+**Coverage:** 62/62 requirements mapped (100%)
 
 ---
 *Requirements defined: 2026-04-01*
+*Roadmap created: 2026-04-01*
 *Design: research/agent-rpg-design-v3-final.md*

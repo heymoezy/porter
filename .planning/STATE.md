@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
-status: defining_requirements
+status: ready_to_plan
 stopped_at: null
 last_updated: "2026-04-01T04:00:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -19,48 +19,44 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Porter is where builders bring their agents to fight. Build anywhere, battle here, prove your shit works.
-**Current focus:** Defining requirements for v4.0 The Arena
+**Current focus:** Phase 24 — Schema Migration (ready to plan)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-04-01 — Milestone v4.0 started
+Phase: 24 of 30 (Schema Migration)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-04-01 — Roadmap created, 7 phases defined for v4.0 The Arena
+
+Progress: [░░░░░░░░░░] 0% (0/7 phases)
 
 ## Performance Metrics
 
 **Velocity (from v1.0 + v2.0 + v3.0):**
 
 - Total plans completed: 72 (51 from v1.0, 2 from v2.0, 19 from v3.0)
-- Phases completed: 24 (7 from v1.0, 9 from v2.0, 8 from v3.0)
+- Phases completed: 23 across all prior milestones
 - Average plan duration: ~6 min
+
+**By Phase (v4.0):**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
 ### Decisions
 
-- [v4.0]: Agent RPG system — agents modeled as video game characters with real stats from dispatch data
-- [v4.0]: 5 stats not 6: Quality, Speed, Efficiency, Reliability, Combo (Grok review killed HP, renamed LCK→EFF, added COMBO)
-- [v4.0]: Killed forced factions — replaced with data-driven specialties from battle results
-- [v4.0]: Forge unification — Skills + Tools + Forge merged into one nav item
-- [v4.0]: Gear matters more than model choice — prevents stale meta
-- [v4.0]: Battle Arena is the killer feature — spectator mode, tournaments, remix button
-- [v4.0]: .md files are DERIVED from DB state, not source-of-truth (anti-gaming)
-- [v4.0]: Stats recalculated from immutable dispatch_log — no manual editing
-- [v4.0]: Bridge dispatch bypass — PORTER_BRIDGE_DISPATCH env var skips session hooks
-- [v4.0]: Agent templates rationalized — 104 → 92 (12 duplicates cut)
-- [v4.0]: Template IDs use plain slugs (bridge-operator, not sys-bridge-operator)
-- [v4.0]: 3 Bridge agents: Vigil (Bridge Operator), Atlas (Route Optimizer), Ledger (Cost Controller)
-- [v4.0]: Agent lifecycle types: persistent (heartbeat), event-driven, one-shot
-- [v4.0]: 6 .md file tabs: SOUL, IDENTITY, ROLE_CARD, SKILLS, TOOLS, HEARTBEAT
-- [v4.0]: Business model: orchestration platform with RPG retention layer (not standalone game)
-- [v4.0]: Study Path of Exile for progression depth, TFT for arena mechanics
-
-### Design Documents
-
-- research/agent-rpg-design-v2.md — comprehensive RPG system spec (post-Grok review)
-- research/agent-rpg-design.md — v1 design (superseded)
+- [v4.0]: Stats are ALWAYS derived from immutable bridge_dispatch_log — rpg-engine.ts is the only writer to agent_rpg_stats
+- [v4.0]: Judge ensemble (3 models, position-randomized) must be built into Battle Arena MVP — cannot retrofit without invalidating historical Elo
+- [v4.0]: Pre-launch calibration required: 50 same-prompt battles, positional win-rate delta must be <10%
+- [v4.0]: Free tier battle cap (5/day) enforced before any API call fires
+- [v4.0]: Phase 26 (Forge) can start in parallel with Phase 25 (RPG Engine) — frontend nav merge has no stat dependency
+- [v4.0]: Phase 29 (Session Registry) can run in parallel with Phase 28 (Battle Arena)
+- [v4.0]: @tsparticles/react React 19 compatibility — unconfirmed, test at Phase 26 start, canvas 2D fallback documented
 
 ### Pending Todos
 
@@ -68,13 +64,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- [v4.0]: Gemini CLI quota exhausted — cannot use for research until reset
-- [v4.0]: GPT-5.4 via Bridge now works but responses are verbose/generic compared to direct use
-- [v4.0]: Judge quality at scale — LLM judges biased, need ensemble + human calibration
-- [v4.0]: Compute cost of battles — every battle = real API dollars
+- [v4.0]: Judge quality at scale — LLM judges biased, ensemble + human spot-check required (built into Phase 28)
+- [v4.0]: Compute cost of battles — every battle = 5 LLM calls, tier caps must be enforced first (Phase 28)
+- [v4.0]: Stale meta risk — if model choice determines win rate more than system prompt, Arena loses value (pre-launch calibration mitigates)
 
 ## Session Continuity
 
 Last session: 2026-04-01
-Stopped at: Milestone v4.0 initialization
+Stopped at: Roadmap created — 7 phases defined, all 62 requirements mapped, ready to plan Phase 24
 Resume file: None
