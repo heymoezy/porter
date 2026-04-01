@@ -7,7 +7,7 @@ import { Separator } from "~/components/ui/separator"
 import {
   Users, Mail, CreditCard, LayoutDashboard, Bug,
   ChevronLeft, ChevronRight, Settings, LogOut,
-  Wrench, Sparkles, Activity, Monitor,
+  Activity, Monitor,
   Route, BookOpen, FileText,
   Code2, Palette, HardDrive, Network, Flame, Lightbulb,
 } from "lucide-react"
@@ -30,9 +30,7 @@ const groups = [
     { icon: CreditCard, label: "Revenue", path: "/billing" },
   ]},
   { label: "Agents", items: [
-    { icon: Flame, label: "Agent Forge", path: "/forge" },
-    { icon: Sparkles, label: "Skills", path: "/skills" },
-    { icon: Wrench, label: "Tools", path: "/tools" },
+    { icon: Flame, label: "Forge", path: "/forge" },
     { icon: Network, label: "Org Chart", path: "/org-chart" },
     { icon: Mail, label: "Email", path: "/email" },
   ]},
