@@ -87,11 +87,11 @@
 
 ### .md File Regeneration
 
-- [ ] **MD-01**: SOUL.md regenerated on star up
-- [ ] **MD-02**: IDENTITY.md grows on level milestones
-- [ ] **MD-03**: SKILLS.md reflects actual DB state
-- [ ] **MD-04**: TOOLS.md reflects equipped gear
-- [ ] **MD-05**: All .md files overwritten from DB on progression events
+- [x] **MD-01**: SOUL.md regenerated on star up
+- [x] **MD-02**: IDENTITY.md grows on level milestones
+- [x] **MD-03**: SKILLS.md reflects actual DB state
+- [x] **MD-04**: TOOLS.md reflects equipped gear
+- [x] **MD-05**: All .md files overwritten from DB on progression events
 
 ### Bridge Operator
 
@@ -134,11 +134,11 @@
 | RPG-05 | Phase 25 | Complete |
 | RPG-06 | Phase 25 | Complete |
 | RPG-07 | Phase 25 | Complete |
-| MD-01 | Phase 25 | Pending |
-| MD-02 | Phase 25 | Pending |
-| MD-03 | Phase 25 | Pending |
-| MD-04 | Phase 25 | Pending |
-| MD-05 | Phase 25 | Pending |
+| MD-01 | Phase 25 | Complete |
+| MD-02 | Phase 25 | Complete |
+| MD-03 | Phase 25 | Complete |
+| MD-04 | Phase 25 | Complete |
+| MD-05 | Phase 25 | Complete |
 | FRG-01 | Phase 26 | Pending |
 | FRG-02 | Phase 26 | Pending |
 | FRG-03 | Phase 26 | Pending |

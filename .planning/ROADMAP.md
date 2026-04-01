@@ -177,7 +177,7 @@ Phases execute in numeric order: 24 → 25 → 26 (parallel with 25) → 27 → 
 | 8-15 | v2.0 | - | Complete | 2026-03-24 |
 | 16-23 | v3.0 | - | Complete | 2026-03-25 |
 | 24. Schema Migration | v4.0 | 2/2 | Complete | 2026-04-01 |
-| 25. RPG Engine | v4.0 | 0/3 | Not started | - |
+| 25. RPG Engine | 2/3 | In Progress|  | - |
 | 26. Forge Unification | v4.0 | 0/TBD | Not started | - |
 | 27. Character Sheet UI | v4.0 | 0/TBD | Not started | - |
 | 28. Battle Arena | v4.0 | 0/TBD | Not started | - |

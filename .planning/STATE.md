@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
 status: unknown
-stopped_at: Completed 25-01-PLAN.md — rpg-engine.ts implemented, 49 tests pass, sole writer to agent_rpg_stats
-last_updated: "2026-04-01T07:04:07Z"
+stopped_at: Completed 25-02-PLAN.md — regenerateMdFiles() added to rpg-engine.ts, rpg-stats + rpg-recalculate admin endpoints live
+last_updated: "2026-04-01T07:13:38.575Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -42,6 +42,7 @@ Plan: 2 of 3 (plan 1 complete)
 | 25-rpg-engine | 1/3 | 4min | ~4min |
 
 *Updated after each plan completion*
+| Phase 25-rpg-engine P02 | 5 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -61,6 +62,8 @@ Plan: 2 of 3 (plan 1 complete)
 - [Phase 24]: agentTemplates RPG columns match exact SQL column names from migrate-rpg-v1.ts — zero drift possible
 - [25-01]: Pure stat helpers exported for unit-testability — computeQuality/Speed/Efficiency/Reliability/Combo/Level/Stars/Rarity take plain numbers, no DB needed in tests
 - [25-01]: SELECT-then-INSERT/UPDATE used (not ON CONFLICT) because migration creates INDEX not UNIQUE constraint on template_id
+- [Phase 25-rpg-engine]: regenerateMdFiles uses trigger-based routing — star_up writes SOUL.md, level_milestone writes IDENTITY.md only at multiples of 10, skill_change writes SKILLS.md, equipment_change writes TOOLS.md, full writes all four
+- [Phase 25-rpg-engine]: RPG admin endpoints applied to routes/admin/agents.ts not v1/admin/agents.ts — v1/admin is not mounted in the live app
 
 ### Pending Todos
 
@@ -74,6 +77,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T07:04:07Z
-Stopped at: Completed 25-01-PLAN.md — rpg-engine.ts, 49 tests pass, sole writer to agent_rpg_stats
+Last session: 2026-04-01T07:13:38.572Z
+Stopped at: Completed 25-02-PLAN.md — regenerateMdFiles() added to rpg-engine.ts, rpg-stats + rpg-recalculate admin endpoints live
 Resume file: None
