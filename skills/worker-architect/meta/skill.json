@@ -1,0 +1,14 @@
+{
+  "id": "worker-architect",
+  "name": "Worker Architect",
+  "description": "Designs the right worker role, scope, and loadout for tasks.",
+  "category": "Orchestration",
+  "source": "porter-core",
+  "checks": [
+    "Audit roster first",
+    "Prefer reuse over sprawl",
+    "Define role boundaries",
+    "Name concrete skills and tools"
+  ],
+  "generated_at": "2026-04-01T00:00:00.000Z"
+}

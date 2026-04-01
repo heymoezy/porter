@@ -21,9 +21,9 @@ import { Play, Pause, Search, Flame, Shield, Wrench, Sparkles, Link2, ChevronDow
 const DEFAULT_PORTRAIT = { skin: "#F5D0A9", hair: "#2C1810", eyes: "#1A1A2E", shirt: "#8B5CF6", hairStyle: "short" as const }
 
 const SPECIALISTS = {
-  1: { name: "Quill", template: "Soul Writer", skin: "#f1c27d", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#c2410c", hairStyle: "parted" as const },
-  2: { name: "Sage", template: "Skill Trainer", skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#a16207", hairStyle: "short" as const },
-  3: { name: "Anvil", template: "Gear Outfitter", skin: "#c68642", hair: "#292524", eyes: "#1a1a2e", shirt: "#92400e", hairStyle: "mohawk" as const },
+  1: { name: "Quill", template: "Soul Writer", skin: "#f1c27d", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#c2410c", hairStyle: "parted" as const, agentId: "forge-quill" },
+  2: { name: "Sage", template: "Skill Trainer", skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#a16207", hairStyle: "short" as const, agentId: "forge-sage" },
+  3: { name: "Anvil", template: "Gear Outfitter", skin: "#c68642", hair: "#292524", eyes: "#1a1a2e", shirt: "#92400e", hairStyle: "mohawk" as const, agentId: "forge-anvil" },
 }
 
 // ── Bombastic Verbs ──────────────────────────────────────
@@ -717,7 +717,7 @@ export default function ForgePage() {
                       ? `${pickVerb(WRITER_VERBS, active.find(i => i.station === 1)!.template_id)} ${active.find(i => i.station === 1)?.template_name}...`
                       : undefined}
                     processedCount={items.filter(i => i.station > 1 || i.status === "complete").length}
-                    href={undefined}
+                    href={`/agents/${SPECIALISTS[1].agentId}`}
                   />
 
                   <ConveyorLine active={running} length={24} />
@@ -731,7 +731,7 @@ export default function ForgePage() {
                       ? `${pickVerb(TRAINER_VERBS, active.find(i => i.station === 2)!.template_id)} ${active.find(i => i.station === 2)?.template_name}...`
                       : undefined}
                     processedCount={items.filter(i => i.station > 2 || i.status === "complete").length}
-                    href={undefined}
+                    href={`/agents/${SPECIALISTS[2].agentId}`}
                   />
 
                   <ConveyorLine active={running} length={24} />
@@ -745,7 +745,7 @@ export default function ForgePage() {
                       ? `${pickVerb(OUTFITTER_VERBS, active.find(i => i.station === 3)!.template_id)} ${active.find(i => i.station === 3)?.template_name}...`
                       : undefined}
                     processedCount={complete.length}
-                    href={undefined}
+                    href={`/agents/${SPECIALISTS[3].agentId}`}
                   />
 
                   <ConveyorLine active={running} length={32} />

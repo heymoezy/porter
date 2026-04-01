@@ -10,10 +10,13 @@ import { Sparkles, Search, ChevronDown, ChevronRight, Bot } from "lucide-react"
 interface SkillAgent { id: string; name: string; role: string; enabled: boolean }
 interface Skill {
   id: string; name: string; description: string; category: string; source: string
+  enabled: boolean; visible: boolean; featured: boolean
+  template_count: number; agent_count: number
   agents: SkillAgent[]
 }
 interface SkillsResponse {
-  skills: Skill[]; totalSkills: number; totalAssignments: number; assignedSkills: number
+  skills: Skill[]; totalSkills: number; visibleSkills: number; featuredSkills: number
+  assignedSkills: number; totalAssignments: number; totalTemplatesUsingSkills: number
   categories: Record<string, number>; sources: Record<string, number>
 }
 
@@ -187,9 +190,9 @@ function SkillsContent() {
 
 export default function SkillsPage() {
   return (
-      <div className="overflow-y-auto p-4 flex-1">
-        <AgentPresenceSummary surface="skills" className="mb-3" />
-        <SkillsContent />
-      </div>
+    <div className="overflow-y-auto p-4 flex-1">
+      <AgentPresenceSummary surface="skills" className="mb-3" />
+      <SkillsContent />
+    </div>
   )
 }

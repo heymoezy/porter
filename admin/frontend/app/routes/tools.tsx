@@ -6,25 +6,11 @@ import { Switch } from "~/components/ui/switch"
 import { Wrench, Link2 } from "lucide-react"
 
 interface Tool {
-  key: string
-  detected: boolean
-  version: string
-  source: string
-  health: string
-  lastChecked: number
+  key: string; detected: boolean; version: string; source: string; health: string; lastChecked: number
 }
-
 interface Connection {
-  id: string
-  provider: string
-  kind: string
-  status: string
-  displayName: string
-  toolsCount: number
-  lastSync: number
-  lastError: string
-  installedBy: string
-  createdAt: number
+  id: string; provider: string; kind: string; status: string
+  displayName: string; toolsCount: number; lastSync: number
 }
 
 function ToolsContent() {
@@ -76,33 +62,26 @@ function ToolsContent() {
               </tr>
             </thead>
             <tbody>
-              {serverTools.map(t => {
-                const visible = t.health !== "hidden"
-                return (
-                  <tr key={t.key} className="border-b border-border/30 last:border-0">
-                    <td className="px-3 py-1.5 text-xs font-medium text-text">{t.key}</td>
-                    <td className="px-3 py-1.5 text-xs text-text2">{t.version || "—"}</td>
-                    <td className="px-3 py-1.5">
-                      <Badge className={`text-2xs border-0 ${t.detected ? "bg-success/15 text-success" : "bg-text3/15 text-text3"}`}>
-                        {t.detected ? "detected" : "missing"}
-                      </Badge>
-                    </td>
-                    <td className="px-3 py-1.5 text-right">
-                      <Switch
-                        checked={visible}
-                        onCheckedChange={() => toggleTool.mutate(t.key)}
-                        className="scale-75"
-                      />
-                    </td>
-                  </tr>
-                )
-              })}
+              {serverTools.map(t => (
+                <tr key={t.key} className="border-b border-border/30 last:border-0">
+                  <td className="px-3 py-1.5 text-xs font-medium text-text">{t.key}</td>
+                  <td className="px-3 py-1.5 text-xs text-text2">{t.version || "—"}</td>
+                  <td className="px-3 py-1.5">
+                    <Badge className={`text-2xs border-0 ${t.detected ? "bg-success/15 text-success" : "bg-text3/15 text-text3"}`}>
+                      {t.detected ? "detected" : "missing"}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-1.5 text-right">
+                    <Switch checked={t.health !== "hidden"} onCheckedChange={() => toggleTool.mutate(t.key)} className="scale-75" />
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* Runtime Tools (user-side) */}
+      {/* Runtime Tools */}
       {runtimeTools.length > 0 && (
         <div className="rounded-xl border border-border overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2 bg-surface border-b border-border">
@@ -165,9 +144,9 @@ function ToolsContent() {
 
 export default function ToolsPage() {
   return (
-      <div className="overflow-y-auto p-4 flex-1">
-        <AgentPresenceSummary surface="tools" className="mb-3" />
-        <ToolsContent />
-      </div>
+    <div className="overflow-y-auto p-4 flex-1">
+      <AgentPresenceSummary surface="tools" className="mb-3" />
+      <ToolsContent />
+    </div>
   )
 }

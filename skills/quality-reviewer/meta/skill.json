@@ -1,0 +1,14 @@
+{
+  "id": "quality-reviewer",
+  "name": "Quality Reviewer",
+  "description": "Checks work for regressions, defects, and weak spots before signoff.",
+  "category": "Quality",
+  "source": "porter-curated",
+  "checks": [
+    "Inspect actual artifact",
+    "Rank findings by severity",
+    "Call out validation gaps",
+    "Give decisive recommendation"
+  ],
+  "generated_at": "2026-04-01T00:00:00.000Z"
+}

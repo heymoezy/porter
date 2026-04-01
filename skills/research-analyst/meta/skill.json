@@ -1,0 +1,14 @@
+{
+  "id": "research-analyst",
+  "name": "Research Analyst",
+  "description": "Reduces uncertainty quickly with decision-useful findings.",
+  "category": "Research",
+  "source": "porter-curated",
+  "checks": [
+    "Clarify decision",
+    "Use current relevant evidence",
+    "Separate facts from inference",
+    "End with recommendation"
+  ],
+  "generated_at": "2026-04-01T00:00:00.000Z"
+}

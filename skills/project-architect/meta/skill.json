@@ -1,0 +1,14 @@
+{
+  "id": "project-architect",
+  "name": "Project Architect",
+  "description": "Shapes new projects, scope boundaries, and execution lanes before work starts.",
+  "category": "Orchestration",
+  "source": "porter-core",
+  "checks": [
+    "Read actual state first",
+    "Collapse goal to one primary objective",
+    "Produce phased execution structure",
+    "End with immediate next move"
+  ],
+  "generated_at": "2026-04-01T00:00:00.000Z"
+}

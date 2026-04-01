@@ -1,0 +1,14 @@
+{
+  "id": "prompt-architect",
+  "name": "Prompt Architect",
+  "description": "Repairs weak prompts and sharpens worker briefs before delegation.",
+  "category": "Orchestration",
+  "source": "porter-core",
+  "checks": [
+    "Preserve intent",
+    "Remove ambiguity",
+    "Add deliverables and validation",
+    "Keep prompt compact"
+  ],
+  "generated_at": "2026-04-01T00:00:00.000Z"
+}
