@@ -7,13 +7,13 @@
 
 ### Schema & Data Model
 
-- [ ] **SCH-01**: Agent templates have RPG fields: shell, intelligence, supports, equipment_slots, passive_tree, level, xp, star_level, rarity, elo_rating, specialties
-- [ ] **SCH-02**: New `agent_battles` table: battle_id, agent_a, agent_b, prompt, scores, winner, elo_delta, judge_results, created_at
-- [ ] **SCH-03**: New `agent_bonds` table: agent_a, agent_b, bond_level, co_dispatches
-- [ ] **SCH-04**: New `battle_replays` table: battle_id, agent_responses, judge_reasoning, sheet_diff
-- [ ] **SCH-05**: Agent skills junction table extended with success_rate_30d, total_uses, last_used
-- [ ] **SCH-06**: Supports system stored as JSONB with id, target_skill, prompt_diff, measured_impact
-- [ ] **SCH-07**: Passive tree stored as JSONB array of nodes with unlocked/active state and measured battle impact
+- [x] **SCH-01**: Agent templates have RPG fields: shell, intelligence, supports, equipment_slots, passive_tree, level, xp, star_level, rarity, elo_rating, specialties
+- [x] **SCH-02**: New `agent_battles` table: battle_id, agent_a, agent_b, prompt, scores, winner, elo_delta, judge_results, created_at
+- [x] **SCH-03**: New `agent_bonds` table: agent_a, agent_b, bond_level, co_dispatches
+- [x] **SCH-04**: New `battle_replays` table: battle_id, agent_responses, judge_reasoning, sheet_diff
+- [x] **SCH-05**: Agent skills junction table extended with success_rate_30d, total_uses, last_used
+- [x] **SCH-06**: Supports system stored as JSONB with id, target_skill, prompt_diff, measured_impact
+- [x] **SCH-07**: Passive tree stored as JSONB array of nodes with unlocked/active state and measured battle impact
 
 ### RPG Engine (Stat Calculation)
 
@@ -120,13 +120,13 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCH-01 | Phase 24 | Pending |
-| SCH-02 | Phase 24 | Pending |
-| SCH-03 | Phase 24 | Pending |
-| SCH-04 | Phase 24 | Pending |
-| SCH-05 | Phase 24 | Pending |
-| SCH-06 | Phase 24 | Pending |
-| SCH-07 | Phase 24 | Pending |
+| SCH-01 | Phase 24 | Complete |
+| SCH-02 | Phase 24 | Complete |
+| SCH-03 | Phase 24 | Complete |
+| SCH-04 | Phase 24 | Complete |
+| SCH-05 | Phase 24 | Complete |
+| SCH-06 | Phase 24 | Complete |
+| SCH-07 | Phase 24 | Complete |
 | RPG-01 | Phase 25 | Pending |
 | RPG-02 | Phase 25 | Pending |
 | RPG-03 | Phase 25 | Pending |

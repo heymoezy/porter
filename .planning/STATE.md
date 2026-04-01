@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
-status: ready_to_plan
-stopped_at: null
-last_updated: "2026-04-01T04:00:00.000Z"
+status: in_progress
+stopped_at: Completed 24-01-PLAN.md — RPG schema migration applied, all 8 tables + 17 columns exist in PostgreSQL
+last_updated: "2026-04-01T06:39:00Z"
 progress:
   total_phases: 7
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
 ---
 
 # Project State
@@ -19,16 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Porter is where builders bring their agents to fight. Build anywhere, battle here, prove your shit works.
-**Current focus:** Phase 24 — Schema Migration (ready to plan)
+**Current focus:** Phase 24 — schema-migration
 
 ## Current Position
 
-Phase: 24 of 30 (Schema Migration)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-04-01 — Roadmap created, 7 phases defined for v4.0 The Arena
-
-Progress: [░░░░░░░░░░] 0% (0/7 phases)
+Phase: 24 (schema-migration) — EXECUTING
+Plan: 2 of 2 (plan 1 complete)
 
 ## Performance Metrics
 
@@ -42,7 +38,7 @@ Progress: [░░░░░░░░░░] 0% (0/7 phases)
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 24-schema-migration | 1 | 19min | 19min |
 
 *Updated after each plan completion*
 
@@ -57,6 +53,9 @@ Progress: [░░░░░░░░░░] 0% (0/7 phases)
 - [v4.0]: Phase 26 (Forge) can start in parallel with Phase 25 (RPG Engine) — frontend nav merge has no stat dependency
 - [v4.0]: Phase 29 (Session Registry) can run in parallel with Phase 28 (Battle Arena)
 - [v4.0]: @tsparticles/react React 19 compatibility — unconfirmed, test at Phase 26 start, canvas 2D fallback documented
+- [24-01]: Migration transaction is atomic all-or-nothing — single transaction wraps all 10 DDL statements
+- [24-01]: agent_rpg_stats/battle child tables use CASCADE DELETE from parent — no orphan rows
+- [24-01]: Playwright browser tests hang in this environment (pre-existing Chromium constraint) — API-level verification used instead
 
 ### Pending Todos
 
@@ -71,5 +70,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-01
-Stopped at: Roadmap created — 7 phases defined, all 62 requirements mapped, ready to plan Phase 24
+Stopped at: Completed 24-01-PLAN.md — RPG schema migration applied, all 8 tables + 17 columns exist in PostgreSQL
 Resume file: None
