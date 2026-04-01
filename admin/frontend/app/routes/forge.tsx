@@ -21,9 +21,9 @@ import { Play, Pause, Search, Flame, Shield, Wrench, Sparkles, Link2, ChevronDow
 const DEFAULT_PORTRAIT = { skin: "#F5D0A9", hair: "#2C1810", eyes: "#1A1A2E", shirt: "#8B5CF6", hairStyle: "short" as const }
 
 const SPECIALISTS = {
-  1: { name: "The Scribe", skin: "#f1c27d", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#c2410c", hairStyle: "parted" as const },
-  2: { name: "The Mentor", skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#a16207", hairStyle: "short" as const },
-  3: { name: "The Armorer", skin: "#c68642", hair: "#292524", eyes: "#1a1a2e", shirt: "#92400e", hairStyle: "mohawk" as const },
+  1: { name: "Quill", template: "Soul Writer", skin: "#f1c27d", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#c2410c", hairStyle: "parted" as const },
+  2: { name: "Sage", template: "Skill Trainer", skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#a16207", hairStyle: "short" as const },
+  3: { name: "Anvil", template: "Gear Outfitter", skin: "#c68642", hair: "#292524", eyes: "#1a1a2e", shirt: "#92400e", hairStyle: "mohawk" as const },
 }
 
 // ── Bombastic Verbs ──────────────────────────────────────
@@ -709,7 +709,7 @@ export default function ForgePage() {
                   <ConveyorLine active={running} length={32} />
 
                   <StationCard
-                    name="Writer"
+                    name="Quill"
                     stationNumber={1}
                     specialist={SPECIALISTS[1]}
                     state={active.some(i => i.station === 1) ? "active" : "idle"}
@@ -717,13 +717,13 @@ export default function ForgePage() {
                       ? `${pickVerb(WRITER_VERBS, active.find(i => i.station === 1)!.template_id)} ${active.find(i => i.station === 1)?.template_name}...`
                       : undefined}
                     processedCount={items.filter(i => i.station > 1 || i.status === "complete").length}
-                    href="/agents/forge-scribe"
+                    href={undefined}
                   />
 
                   <ConveyorLine active={running} length={24} />
 
                   <StationCard
-                    name="Trainer"
+                    name="Sage"
                     stationNumber={2}
                     specialist={SPECIALISTS[2]}
                     state={active.some(i => i.station === 2) ? "active" : "idle"}
@@ -731,13 +731,13 @@ export default function ForgePage() {
                       ? `${pickVerb(TRAINER_VERBS, active.find(i => i.station === 2)!.template_id)} ${active.find(i => i.station === 2)?.template_name}...`
                       : undefined}
                     processedCount={items.filter(i => i.station > 2 || i.status === "complete").length}
-                    href="/agents/forge-mentor"
+                    href={undefined}
                   />
 
                   <ConveyorLine active={running} length={24} />
 
                   <StationCard
-                    name="Outfitter"
+                    name="Anvil"
                     stationNumber={3}
                     specialist={SPECIALISTS[3]}
                     state={active.some(i => i.station === 3) ? "active" : "idle"}
@@ -745,7 +745,7 @@ export default function ForgePage() {
                       ? `${pickVerb(OUTFITTER_VERBS, active.find(i => i.station === 3)!.template_id)} ${active.find(i => i.station === 3)?.template_name}...`
                       : undefined}
                     processedCount={complete.length}
-                    href="/agents/forge-armorer"
+                    href={undefined}
                   />
 
                   <ConveyorLine active={running} length={32} />
@@ -768,11 +768,12 @@ export default function ForgePage() {
                     <span className="text-2xs text-text3">{queued.length} waiting</span>
                   </div>
                   <div className="flex items-end gap-4 overflow-x-auto pb-1 scrollbar-thin">
-                    {/* Queue Master — at the gate, unborn (grey) */}
-                    <Link to="/agents/forge-queue-master" className="shrink-0 flex flex-col items-center grayscale opacity-50 hover:opacity-70 transition-opacity">
+                    {/* Warden — forge queue keeper */}
+                    <div className="shrink-0 flex flex-col items-center grayscale opacity-50">
                       <PixelPortrait skin="#8d5524" hair="#1a1a2e" eyes="#0f172a" shirt="#dc2626" hairStyle="ponytail" size="sm" />
-                      <span className="text-2xs font-bold text-text3 mt-1">Queue Master</span>
-                    </Link>
+                      <span className="text-2xs font-bold text-text3 mt-1">Warden</span>
+                      <span className="text-2xs text-text3 leading-none">Queue Keeper</span>
+                    </div>
 
                     {/* Divider — the velvet rope */}
                     <div className="shrink-0 w-px h-10 bg-[var(--forge-ember)]/30" />

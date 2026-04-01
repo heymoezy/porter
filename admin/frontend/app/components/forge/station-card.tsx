@@ -9,7 +9,7 @@ type HairStyle = "short" | "long" | "mohawk" | "bald" | "parted" | "buzz" | "cur
 interface StationCardProps {
   name: string
   stationNumber: 1 | 2 | 3
-  specialist: { name: string; skin: string; hair: string; eyes: string; shirt: string; hairStyle: HairStyle }
+  specialist: { name: string; template?: string; skin: string; hair: string; eyes: string; shirt: string; hairStyle: HairStyle }
   state: StationState
   action?: string
   model?: string
@@ -46,7 +46,7 @@ function StationCard({ name, stationNumber, specialist, state, action, model, pr
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold text-text truncate group-hover:text-accent-porter leading-none">{name}</p>
-            <p className="text-2xs text-text2 truncate leading-none">{specialist.name}</p>
+            <p className="text-2xs text-text3 truncate leading-none">{specialist.template || specialist.name}</p>
           </div>
         </Link>
       ) : (
@@ -56,7 +56,7 @@ function StationCard({ name, stationNumber, specialist, state, action, model, pr
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold text-text truncate leading-none">{name}</p>
-            <p className="text-2xs text-text2 truncate leading-none">{specialist.name}</p>
+            <p className="text-2xs text-text3 truncate leading-none">{specialist.template || specialist.name}</p>
           </div>
         </div>
       )}
