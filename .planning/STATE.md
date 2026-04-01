@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: The Arena
-status: in_progress
-stopped_at: Completed 24-02-PLAN.md — Drizzle schema extensions for all RPG/Arena tables, 74 exports, build clean
-last_updated: "2026-04-01T06:47:08.915Z"
+status: unknown
+stopped_at: Completed 25-01-PLAN.md — rpg-engine.ts implemented, 49 tests pass, sole writer to agent_rpg_stats
+last_updated: "2026-04-01T07:04:07Z"
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 5
+  completed_plans: 3
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 
 ## Current Position
 
-Phase: 24 (schema-migration) — COMPLETE
-Plan: 2 of 2 (both complete)
+Phase: 25 (rpg-engine) — EXECUTING
+Plan: 2 of 3 (plan 1 complete)
 
 ## Performance Metrics
 
@@ -39,6 +39,7 @@ Plan: 2 of 2 (both complete)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 24-schema-migration | 2 | 23min | ~11.5min |
+| 25-rpg-engine | 1/3 | 4min | ~4min |
 
 *Updated after each plan completion*
 
@@ -58,6 +59,8 @@ Plan: 2 of 2 (both complete)
 - [24-01]: Playwright browser tests hang in this environment (pre-existing Chromium constraint) — API-level verification used instead
 - [Phase 24]: Appended new table exports to end of schema.ts — preserves all existing exports and avoids merge conflicts
 - [Phase 24]: agentTemplates RPG columns match exact SQL column names from migrate-rpg-v1.ts — zero drift possible
+- [25-01]: Pure stat helpers exported for unit-testability — computeQuality/Speed/Efficiency/Reliability/Combo/Level/Stars/Rarity take plain numbers, no DB needed in tests
+- [25-01]: SELECT-then-INSERT/UPDATE used (not ON CONFLICT) because migration creates INDEX not UNIQUE constraint on template_id
 
 ### Pending Todos
 
@@ -71,6 +74,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T06:47:08.913Z
-Stopped at: Completed 24-02-PLAN.md — Drizzle schema extensions for all RPG/Arena tables, 74 exports, build clean
+Last session: 2026-04-01T07:04:07Z
+Stopped at: Completed 25-01-PLAN.md — rpg-engine.ts, 49 tests pass, sole writer to agent_rpg_stats
 Resume file: None

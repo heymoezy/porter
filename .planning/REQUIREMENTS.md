@@ -17,13 +17,13 @@
 
 ### RPG Engine (Stat Calculation)
 
-- [ ] **RPG-01**: 5 core stats (QTY/SPD/EFF/REL/COMBO) derived from immutable bridge_dispatch_log
-- [ ] **RPG-02**: XP system: dispatch (+10), feedback (+25), specialty (+50), battle won (+100), battle lost (+25), chain (+75), failed (+2)
-- [ ] **RPG-03**: Level 1-100 with XP curve (level * 100)
-- [ ] **RPG-04**: Star progression: 1★ (forged) → 2★ (50) → 3★ (200+85%REL) → 4★ (500+10battles) → 5★ (1000+top)
-- [ ] **RPG-05**: Rarity auto-calculated: Common→Rare→Epic→Legendary→Mythic from usage milestones
-- [ ] **RPG-06**: Specialties auto-populated from dispatch + battle history
-- [ ] **RPG-07**: Stats recalculated from immutable logs on every progression event
+- [x] **RPG-01**: 5 core stats (QTY/SPD/EFF/REL/COMBO) derived from immutable bridge_dispatch_log
+- [x] **RPG-02**: XP system: dispatch (+10), feedback (+25), specialty (+50), battle won (+100), battle lost (+25), chain (+75), failed (+2)
+- [x] **RPG-03**: Level 1-100 with XP curve (level * 100)
+- [x] **RPG-04**: Star progression: 1★ (forged) → 2★ (50) → 3★ (200+85%REL) → 4★ (500+10battles) → 5★ (1000+top)
+- [x] **RPG-05**: Rarity auto-calculated: Common→Rare→Epic→Legendary→Mythic from usage milestones
+- [x] **RPG-06**: Specialties auto-populated from dispatch + battle history
+- [x] **RPG-07**: Stats recalculated from immutable logs on every progression event
 
 ### Vitals (Live Status)
 
@@ -127,13 +127,13 @@
 | SCH-05 | Phase 24 | Complete |
 | SCH-06 | Phase 24 | Complete |
 | SCH-07 | Phase 24 | Complete |
-| RPG-01 | Phase 25 | Pending |
-| RPG-02 | Phase 25 | Pending |
-| RPG-03 | Phase 25 | Pending |
-| RPG-04 | Phase 25 | Pending |
-| RPG-05 | Phase 25 | Pending |
-| RPG-06 | Phase 25 | Pending |
-| RPG-07 | Phase 25 | Pending |
+| RPG-01 | Phase 25 | Complete |
+| RPG-02 | Phase 25 | Complete |
+| RPG-03 | Phase 25 | Complete |
+| RPG-04 | Phase 25 | Complete |
+| RPG-05 | Phase 25 | Complete |
+| RPG-06 | Phase 25 | Complete |
+| RPG-07 | Phase 25 | Complete |
 | MD-01 | Phase 25 | Pending |
 | MD-02 | Phase 25 | Pending |
 | MD-03 | Phase 25 | Pending |

@@ -103,7 +103,7 @@ Plans:
   5. The stat cache is rebuilt asynchronously via the existing scheduler — character card API reads cache only, never performs live log aggregation
 **Plans**: 3 plans
 Plans:
-- [ ] 25-01-PLAN.md — rpg-engine.ts core service: stat calculation SQL, XP/level/star/rarity/specialty logic
+- [x] 25-01-PLAN.md — rpg-engine.ts core service: stat calculation SQL, XP/level/star/rarity/specialty logic (2026-04-01)
 - [ ] 25-02-PLAN.md — regenerateMdFiles() + admin API routes (GET/POST rpg-stats endpoints)
 - [ ] 25-03-PLAN.md — routing-engine.ts logDispatch hook + scheduler background recalculation job
 
