@@ -232,8 +232,10 @@ export default function FilesPage() {
     },
   })
 
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const uploadMut = useMutation({
     mutationFn: async (file: File) => {
+      setUploadError(null)
       const form = new FormData()
       form.append("file", file)
       form.append("root", activeRoot)
@@ -243,11 +245,17 @@ export default function FilesPage() {
         credentials: "include",
         body: form,
       })
-      if (!res.ok) throw new Error("Upload failed")
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.error?.message || `Upload failed (${res.status})`)
+      }
       return res.json()
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["files", "list", activeRoot, currentPath] })
+    },
+    onError: (e) => {
+      setUploadError((e as Error).message)
     },
   })
 
@@ -380,11 +388,14 @@ export default function FilesPage() {
             <Rows3 className="size-3.5" />
           </button>
 
-          {/* Upload spinner */}
+          {/* Upload spinner + error */}
           {uploadMut.isPending && (
             <span className="flex items-center gap-1.5 text-xs text-text3">
               <Loader2 className="size-3.5 animate-spin" />
             </span>
+          )}
+          {uploadError && (
+            <span className="text-xs text-danger">{uploadError}</span>
           )}
 
           {/* Upload button */}
