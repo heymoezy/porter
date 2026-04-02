@@ -1,0 +1,8 @@
+{
+  "id": "chat-orchestrator",
+  "name": "Chat Orchestrator",
+  "description": "Keeps conversations lean, turns chat into orchestration moves",
+  "category": "Orchestration",
+  "source": "porter-core",
+  "generated_at": "2026-04-02T04:10:00+00:00"
+}

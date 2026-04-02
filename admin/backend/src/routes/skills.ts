@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { ok, err } from '../lib/envelope.js';
-import { execute, queryOne } from '../db/pg.js';
+import { execute, queryOne, queryAll } from '../db/pg.js';
 import {
   ensureSkillPack,
   getResearchNotes,
@@ -179,5 +179,43 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     }
 
     return ok({ generated: true, dir: pack.dir, files: pack.files });
+  });
+
+  // POST /api/admin/skills/builder/generate-all — generate packs for all skills missing packs
+  fastify.post('/builder/generate-all', async () => {
+    const rows = await queryAll<{ id: string; name: string; description: string; category: string; source: string; config_schema: Record<string, unknown> | null }>(
+      `SELECT id, name, description, category, source, config_schema FROM skills WHERE pack_status = 'missing' OR pack_status IS NULL`
+    );
+
+    let generated = 0;
+    const errors: string[] = [];
+
+    for (const row of rows) {
+      try {
+        const cfg = row.config_schema || {};
+        const blueprint: SkillBuilderBlueprint = {
+          id: row.id,
+          name: row.name,
+          description: row.description || '',
+          category: row.category || 'Unknown',
+          source: row.source || 'porter-curated',
+          prompt: (cfg as any).prompt || `Operate as ${row.name}. ${row.description || ''}`,
+          triggers: (cfg as any).triggers || [],
+          inputs: (cfg as any).inputs || [],
+          outputs: (cfg as any).outputs || [],
+          checks: (cfg as any).checks || [],
+          examples: (cfg as any).examples || [],
+          tools: (cfg as any).tools || [],
+          related_repositories: (cfg as any).related_repositories || [],
+        };
+        ensureSkillPack(blueprint);
+        await execute(`UPDATE skills SET pack_status = 'ready' WHERE id = $1`, [row.id]);
+        generated++;
+      } catch (e) {
+        errors.push(`${row.id}: ${(e as Error).message}`);
+      }
+    }
+
+    return ok({ generated, skipped: 0, total: rows.length, errors });
   });
 }

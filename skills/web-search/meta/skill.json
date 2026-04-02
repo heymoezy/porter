@@ -1,0 +1,8 @@
+{
+  "id": "web-search",
+  "name": "Web Search",
+  "description": "Searches the web for current information",
+  "category": "Research",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:10:02+00:00"
+}

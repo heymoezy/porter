@@ -1,0 +1,8 @@
+{
+  "id": "delegation-governor",
+  "name": "Delegation Governor",
+  "description": "Decides what to delegate vs handle directly",
+  "category": "Orchestration",
+  "source": "porter-core",
+  "generated_at": "2026-04-02T04:10:00+00:00"
+}

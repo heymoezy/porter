@@ -1,0 +1,8 @@
+{
+  "id": "customer-support",
+  "name": "Customer Support",
+  "description": "Handles inbound queries with empathy and accuracy",
+  "category": "Operations",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:10:02+00:00"
+}

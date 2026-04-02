@@ -1,19 +1,21 @@
 import { FastifyInstance } from 'fastify';
-import { ok } from '../../lib/admin-envelope.js';
+import { ok, err } from '../../lib/admin-envelope.js';
 import { queryAll, queryOne, execute } from '../../db/pg-helpers.js';
+import { proxyToAdmin } from '../../lib/admin-proxy.js';
 
 interface SkillRow {
   id: string; name: string; description: string; category: string; source: string;
   enabled: number; visible: number; featured: number;
   icon: string; color: string; short_label: string;
   sort_order: number; featured_order: number;
+  pack_status: string;
   template_count: number; agent_count: number;
 }
 
 export default async function skillsRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', fastify.requirePlatformAdmin);
 
-  // GET /api/admin/skills — full skill library from skills table + assignments
+  // ── List ────────────────────────────────────────────────
   fastify.get('/', async () => {
     try {
       const rows = await queryAll<SkillRow>(`
@@ -24,7 +26,6 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
         ORDER BY s.featured DESC, s.featured_order, s.sort_order, s.name
       `);
 
-      // Persona assignments
       const assignments = await queryAll<{
         skill_name: string; persona_id: string; enabled: number;
         name: string | null; role: string | null;
@@ -56,16 +57,19 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
         short_label: row.short_label || '',
         sort_order: row.sort_order ?? 50,
         featured_order: row.featured_order ?? 0,
+        pack_status: row.pack_status || 'missing',
         template_count: row.template_count ?? 0,
         agent_count: row.agent_count ?? 0,
-        agents: bySkill.get(row.id as string) ?? [],
+        agents: bySkill.get(row.id) ?? [],
       }));
 
       const categories: Record<string, number> = {};
       const sources: Record<string, number> = {};
+      const packStatuses: Record<string, number> = {};
       for (const s of skills) {
         categories[s.category] = (categories[s.category] || 0) + 1;
         sources[s.source] = (sources[s.source] || 0) + 1;
+        packStatuses[s.pack_status] = (packStatuses[s.pack_status] || 0) + 1;
       }
 
       return ok({
@@ -75,16 +79,73 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
         featuredSkills: skills.filter(s => s.featured).length,
         assignedSkills: skills.filter(s => s.agent_count > 0).length,
         totalAssignments: assignments.length,
-        totalTemplatesUsingSkills: skills.reduce((sum, s) => sum + (s.template_count as number), 0),
+        totalTemplatesUsingSkills: skills.reduce((sum, s) => sum + s.template_count, 0),
         categories,
         sources,
+        packStatuses,
       });
     } catch {
-      return ok({ skills: [], totalSkills: 0, visibleSkills: 0, featuredSkills: 0, assignedSkills: 0, totalAssignments: 0, totalTemplatesUsingSkills: 0, categories: {}, sources: {} });
+      return ok({ skills: [], totalSkills: 0, visibleSkills: 0, featuredSkills: 0, assignedSkills: 0, totalAssignments: 0, totalTemplatesUsingSkills: 0, categories: {}, sources: {}, packStatuses: {} });
     }
   });
 
-  // PUT /api/admin/skills/:personaId/:skillName/toggle
+  // ── Create ──────────────────────────────────────────────
+  fastify.post('/', async (req, reply) => {
+    const body = req.body as Record<string, unknown>;
+    const id = String(body.id || '').trim();
+    const name = String(body.name || '').trim();
+    if (!id || !name) { reply.status(400); return err('INVALID', 'id and name required'); }
+
+    const exists = await queryOne('SELECT id FROM skills WHERE id = $1', [id]);
+    if (exists) { reply.status(409); return err('CONFLICT', `Skill ${id} already exists`); }
+
+    await execute(`
+      INSERT INTO skills (id, name, description, category, source, enabled, visible, featured, icon, color, short_label, sort_order, featured_order, pack_status, config_schema)
+      VALUES ($1, $2, $3, $4, $5, 1, 1, 0, '', '', '', 50, 0, 'missing', '{}')
+    `, [id, name, body.description || '', body.category || 'Unknown', body.source || 'porter-curated']);
+
+    return ok({ id, created: true });
+  });
+
+  // ── Update ──────────────────────────────────────────────
+  fastify.put('/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = req.body as Record<string, unknown>;
+    const exists = await queryOne('SELECT id FROM skills WHERE id = $1', [id]);
+    if (!exists) { reply.status(404); return err('NOT_FOUND', `Skill ${id} not found`); }
+
+    const fields: string[] = [];
+    const vals: unknown[] = [];
+    let idx = 1;
+    for (const key of ['name', 'description', 'category', 'source', 'icon', 'color', 'short_label']) {
+      if (body[key] !== undefined) { fields.push(`${key} = $${idx}`); vals.push(body[key]); idx++; }
+    }
+    for (const key of ['enabled', 'visible', 'featured']) {
+      if (body[key] !== undefined) { fields.push(`${key} = $${idx}`); vals.push(body[key] ? 1 : 0); idx++; }
+    }
+    for (const key of ['sort_order', 'featured_order']) {
+      if (body[key] !== undefined) { fields.push(`${key} = $${idx}`); vals.push(Number(body[key])); idx++; }
+    }
+    if (fields.length === 0) return ok({ id, updated: false });
+
+    fields.push(`updated_at = EXTRACT(EPOCH FROM NOW())`);
+    vals.push(id);
+    await execute(`UPDATE skills SET ${fields.join(', ')} WHERE id = $${idx}`, vals);
+    return ok({ id, updated: true });
+  });
+
+  // ── Delete ──────────────────────────────────────────────
+  fastify.delete('/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const exists = await queryOne('SELECT id FROM skills WHERE id = $1', [id]);
+    if (!exists) { reply.status(404); return err('NOT_FOUND', `Skill ${id} not found`); }
+    await execute('DELETE FROM persona_skills WHERE skill_name = $1', [id]);
+    await execute('DELETE FROM template_skills WHERE skill_id = $1', [id]);
+    await execute('DELETE FROM skills WHERE id = $1', [id]);
+    return ok({ id, deleted: true });
+  });
+
+  // ── Toggle persona assignment ───────────────────────────
   fastify.put('/:personaId/:skillName/toggle', async (req) => {
     const { personaId, skillName } = req.params as { personaId: string; skillName: string };
     const row = await queryOne<{ enabled: number }>('SELECT enabled FROM persona_skills WHERE persona_id = $1 AND skill_name = $2', [personaId, skillName]);
@@ -92,5 +153,25 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     const newEnabled = row.enabled ? 0 : 1;
     await execute('UPDATE persona_skills SET enabled = $1 WHERE persona_id = $2 AND skill_name = $3', [newEnabled, personaId, skillName]);
     return ok({ personaId, skillName, enabled: !!newEnabled });
+  });
+
+  // ── Pack generation proxy (to admin backend) ────────────
+  fastify.post('/builder/generate', async (req) => {
+    const result = await proxyToAdmin('/api/admin/skills/builder/generate', {
+      method: 'POST',
+      body: req.body,
+      timeout: 30000,
+    });
+    if (!result.ok) return ok({ error: result.error });
+    return ok(result.data);
+  });
+
+  fastify.post('/builder/generate-all', async () => {
+    const result = await proxyToAdmin('/api/admin/skills/builder/generate-all', {
+      method: 'POST',
+      timeout: 120000,
+    });
+    if (!result.ok) return ok({ error: result.error });
+    return ok(result.data);
   });
 }

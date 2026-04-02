@@ -1,0 +1,8 @@
+{
+  "id": "runtime-selector",
+  "name": "Runtime Selector",
+  "description": "Chooses the right runtime for each job",
+  "category": "Infrastructure",
+  "source": "porter-core",
+  "generated_at": "2026-04-02T04:10:01+00:00"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "memory-curator",
+  "name": "Memory Curator",
+  "description": "Distills durable directives and learned truths",
+  "category": "Memory",
+  "source": "porter-core",
+  "generated_at": "2026-04-02T04:10:01+00:00"
+}

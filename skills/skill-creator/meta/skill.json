@@ -1,0 +1,8 @@
+{
+  "id": "skill-creator",
+  "name": "Skill Creator",
+  "description": "Creates specialist worker skills when roster lacks coverage",
+  "category": "Orchestration",
+  "source": "porter-internal",
+  "generated_at": "2026-04-02T04:10:01+00:00"
+}

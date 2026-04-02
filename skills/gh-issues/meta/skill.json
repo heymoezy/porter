@@ -1,0 +1,8 @@
+{
+  "id": "gh-issues",
+  "name": "GitHub Issues",
+  "description": "Issue intake, triage, and queue shaping",
+  "category": "Development",
+  "source": "runtime",
+  "generated_at": "2026-04-02T04:10:01+00:00"
+}

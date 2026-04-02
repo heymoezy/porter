@@ -1,0 +1,8 @@
+{
+  "id": "runtime-auditor",
+  "name": "Runtime Auditor",
+  "description": "Inspects runtime state, routing pressure, failures",
+  "category": "Infrastructure",
+  "source": "porter-internal",
+  "generated_at": "2026-04-02T04:10:01+00:00"
+}

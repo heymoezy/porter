@@ -1,0 +1,8 @@
+{
+  "id": "tmux",
+  "name": "Tmux",
+  "description": "Multi-session supervision across worker terminals",
+  "category": "Infrastructure",
+  "source": "porter-internal",
+  "generated_at": "2026-04-02T04:10:01+00:00"
+}

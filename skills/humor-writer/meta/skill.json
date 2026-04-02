@@ -1,0 +1,8 @@
+{
+  "id": "humor-writer",
+  "name": "Humor Writer",
+  "description": "Writes short, high-hit-rate jokes matched to tone and audience",
+  "category": "Writing",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:10:01+00:00"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "directive-librarian",
+  "name": "Directive Librarian",
+  "description": "Turns memory into reviewed directives, tracks disputed guidance",
+  "category": "Memory",
+  "source": "porter-core",
+  "generated_at": "2026-04-02T04:10:01+00:00"
+}
