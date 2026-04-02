@@ -6,6 +6,26 @@ const SKILLS_ROOT = path.resolve(process.env.PORTER_SKILLS_DIR || '/home/lobster
 const BUILDER_ROOT = path.join(SKILLS_ROOT, '_builder');
 const RESEARCH_ROOT = path.join(SKILLS_ROOT, '_research');
 
+const EXPECTED_PACK_FILES = ['SKILL.md', 'prompt.md', 'guides/qa-checklist.md', 'examples/README.md', 'meta/skill.json'];
+
+const SCAFFOLD_PHRASES = [
+  'none yet',
+  '- none',
+  'Operate as ',
+  'Porter-specific notes',
+  'Add examples',
+  'TODO',
+  'TBD',
+  'placeholder',
+  'When a project requires',
+  'When Porter delegates work',
+  'When specialized',
+];
+
+const SCAFFOLD_WORD_THRESHOLD = 300;
+const BASELINE_WORD_THRESHOLD = 600;
+const PRODUCTION_WORD_THRESHOLD = 1200;
+
 export interface SkillAgentAssignment {
   id: string;
   name: string;
@@ -38,6 +58,8 @@ export interface SkillRecord {
   hasExamples: boolean;
   hasChecklist: boolean;
   hasMetadata: boolean;
+  qualityTier?: QualityTier;
+  diagnostics?: PackDiagnostics;
 }
 
 export interface SkillFileSummary {
@@ -63,6 +85,12 @@ export interface SkillLibrarySummary {
     partial: number;
     missing: number;
   };
+  tiers: {
+    scaffold: number;
+    baseline: number;
+    production: number;
+    'high-performing': number;
+  };
 }
 
 export interface SkillBuilderBlueprint {
@@ -79,6 +107,19 @@ export interface SkillBuilderBlueprint {
   examples: Array<{ title: string; user: string; assistant: string }>;
   tools: string[];
   related_repositories: Array<{ name: string; url: string; note: string }>;
+}
+
+export type QualityTier = 'scaffold' | 'baseline' | 'production' | 'high-performing';
+
+export interface PackDiagnostics {
+  fileCount: number;
+  nonEmptyCount: number;
+  totalWords: number;
+  scaffoldPhraseMatches: number;
+  scaffoldPct: number;
+  missingFiles: string[];
+  emptyFiles: string[];
+  qualityTier: QualityTier;
 }
 
 function ensureDir(dir: string) {
@@ -155,6 +196,56 @@ function evaluatePackStatus(files: SkillFileSummary[]) {
   } as const;
 }
 
+export function computePackDiagnostics(skillId: string, files: SkillFileSummary[]): PackDiagnostics {
+  const dir = getSkillDir(skillId);
+  const presentPaths = new Set(files.map(f => f.path));
+  const missingFiles = EXPECTED_PACK_FILES.filter(p => !presentPaths.has(p));
+  const emptyFiles: string[] = [];
+  let totalWords = 0;
+  let scaffoldPhraseMatches = 0;
+
+  for (const file of files) {
+    const fullPath = path.join(dir, file.path);
+    const text = safeReadText(fullPath);
+    if (!text.trim()) { emptyFiles.push(file.path); continue; }
+    totalWords += text.split(/\s+/).filter(Boolean).length;
+    for (const phrase of SCAFFOLD_PHRASES) {
+      if (text.includes(phrase)) scaffoldPhraseMatches++;
+    }
+  }
+
+  const scaffoldPct = files.length > 0
+    ? Math.round((scaffoldPhraseMatches / (files.length * SCAFFOLD_PHRASES.length)) * 100)
+    : 100;
+
+  let qualityTier: QualityTier = 'scaffold';
+  if (missingFiles.length === 0 && emptyFiles.length === 0) {
+    if (totalWords >= PRODUCTION_WORD_THRESHOLD && scaffoldPhraseMatches <= 2) qualityTier = 'high-performing';
+    else if (totalWords >= BASELINE_WORD_THRESHOLD && scaffoldPhraseMatches <= 4) qualityTier = 'production';
+    else if (totalWords >= SCAFFOLD_WORD_THRESHOLD) qualityTier = 'baseline';
+  }
+
+  return {
+    fileCount: files.length,
+    nonEmptyCount: files.length - emptyFiles.length,
+    totalWords,
+    scaffoldPhraseMatches,
+    scaffoldPct,
+    missingFiles,
+    emptyFiles,
+    qualityTier,
+  };
+}
+
+export function writeSkillPackFile(skillId: string, relativePath: string, content: string): boolean {
+  const base = path.resolve(getSkillDir(skillId));
+  const target = path.resolve(base, relativePath);
+  if (!target.startsWith(base + path.sep) && target !== base) return false;
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, content, 'utf8');
+  return true;
+}
+
 export async function getSkillLibrary() {
   ensureDir(SKILLS_ROOT);
 
@@ -188,6 +279,17 @@ export async function getSkillLibrary() {
   const skills: SkillRecord[] = rows.map((row: any) => {
     const files = listSkillFiles(row.id);
     const status = evaluatePackStatus(files);
+    // Fast quality tier for list view: use file size sum as proxy for word count
+    const totalSize = files.reduce((s, f) => s + f.size, 0);
+    const presentPaths = new Set(files.map(f => f.path));
+    const hasMissing = EXPECTED_PACK_FILES.some(p => !presentPaths.has(p));
+    const hasEmpty = files.some(f => f.size === 0);
+    let qualityTier: QualityTier = 'scaffold';
+    if (!hasMissing && !hasEmpty) {
+      if (totalSize >= 4000) qualityTier = 'high-performing';
+      else if (totalSize >= 2000) qualityTier = 'production';
+      else if (totalSize >= 1000) qualityTier = 'baseline';
+    }
     return {
       ...row,
       enabled: !!row.enabled,
@@ -199,6 +301,7 @@ export async function getSkillLibrary() {
       agents: bySkill.get(row.id) ?? [],
       files,
       ...status,
+      qualityTier,
     } satisfies SkillRecord;
   });
 
@@ -213,12 +316,14 @@ export async function getSkillLibrary() {
     categories: {},
     sources: {},
     status: { ready: 0, partial: 0, missing: 0 },
+    tiers: { scaffold: 0, baseline: 0, production: 0, 'high-performing': 0 },
   };
 
   for (const skill of skills) {
     summary.categories[skill.category] = (summary.categories[skill.category] || 0) + 1;
     summary.sources[skill.source] = (summary.sources[skill.source] || 0) + 1;
     summary.status[skill.packStatus]++;
+    if (skill.qualityTier) summary.tiers[skill.qualityTier]++;
   }
 
   return { skills, summary, roots: { skills: SKILLS_ROOT, builder: BUILDER_ROOT, research: RESEARCH_ROOT } };
@@ -236,7 +341,10 @@ export async function getSkillDetail(skillId: string) {
   if (!row) return null;
 
   const library = await getSkillLibrary();
-  return library.skills.find(skill => skill.id === skillId) ?? null;
+  const skill = library.skills.find(s => s.id === skillId) ?? null;
+  if (!skill) return null;
+  const diagnostics = computePackDiagnostics(skillId, skill.files);
+  return { ...skill, qualityTier: diagnostics.qualityTier, diagnostics };
 }
 
 export function ensureSkillPack(blueprint: SkillBuilderBlueprint) {
