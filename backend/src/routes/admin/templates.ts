@@ -167,6 +167,21 @@ export default async function templatesRoutes(fastify: FastifyInstance) {
     });
   });
 
+  // GET /api/admin/templates/:id/instances — personas created from this template
+  fastify.get('/:id/instances', async (req) => {
+    const { id } = req.params as { id: string };
+    const rows = await queryAll<{
+      id: string; name: string; role: string; status: string;
+      created_at: string; last_active: string | null; avatar: string | null;
+      appearance_spec: unknown; soul_hash: string | null;
+    }>(
+      `SELECT id, name, role, status, created_at, last_active, avatar, appearance_spec, soul_hash
+       FROM personas WHERE template_id = $1 ORDER BY created_at DESC`,
+      [id]
+    );
+    return ok({ instances: rows });
+  });
+
   // GET /api/admin/templates/:id — single template with .md files
   fastify.get('/:id', async (req) => {
     const { id } = req.params as { id: string };
