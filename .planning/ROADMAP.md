@@ -93,7 +93,7 @@
   4. The generated SKILLS.md contains only skill IDs, short descriptions, pack paths, and runtime rules — no prose duplication
   5. Modifying a persona's skill assignments via API regenerates its SKILLS.md within the same request
   6. skills_text column is preserved for backwards compatibility but never read during instantiation
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 Plans:
 - [ ] 31-01-PLAN.md — Schema update + migration script (template_skills population, persona_skills.skill_id)
 - [ ] 31-02-PLAN.md — Instantiation rewrite + forge Station 2 + SKILLS.md manifest generator
@@ -182,7 +182,7 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 8-15 | v2.0 | - | Complete | 2026-03-24 |
 | 16-23 | v3.0 | - | Complete | 2026-03-25 |
 | 24-30 | v4.0 | 17/17 | Partial (28 deferred) | 2026-04-02 |
-| 31. Source of Truth | v5.0 | 0/3 | Planned | - |
+| 31. Source of Truth | 1/3 | In Progress|  | - |
 | 32. Skill Pack Explorer | v5.0 | 0/TBD | Not started | - |
 | 33. Runtime Skill Selector | v5.0 | 0/TBD | Not started | - |
 | 34. Feedback Telemetry | v5.0 | 0/TBD | Not started | - |

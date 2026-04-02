@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
-status: defining_requirements
-stopped_at: Milestone v5.0 started — defining requirements
-last_updated: "2026-04-02T12:00:00.000Z"
+status: unknown
+stopped_at: Completed 31-01-PLAN.md
+last_updated: "2026-04-02T12:29:54.398Z"
 progress:
   total_phases: 7
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
 ---
 
 # Project State
@@ -19,14 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Skills must be live behavioral modules — selected at runtime, injected into prompts, measured, and evolved through feedback.
-**Current focus:** Defining requirements for v5.0 Living Skills
+**Current focus:** Phase 31 — Source of Truth Cleanup
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-04-02 — Milestone v5.0 started
+Phase: 31 (Source of Truth Cleanup) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -47,6 +45,8 @@ Last activity: 2026-04-02 — Milestone v5.0 started
 - [v5.0]: Quality must be measurable — "files exist" ≠ "skill is good"
 - [v5.0]: Evolution must be observable — what changed, why, whether it helped
 - [v5.0]: Current state: template_skills has 0 rows, persona_skills has 17 rows (porter-core only), skills_text on all 107 templates, 81% of 209 skill packs are scaffold filler
+- [Phase 31]: Used separate migration file (migrate-sot-v1.ts) following codebase convention instead of appending to consolidated migration
+- [Phase 31]: 361/452 JSONB tags unmatched (short tags vs skill slugs) -- expected, not a failure
 
 ### Pending Todos
 
@@ -60,6 +60,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T12:00:00.000Z
-Stopped at: Milestone v5.0 started — defining requirements
+Last session: 2026-04-02T12:29:54.395Z
+Stopped at: Completed 31-01-PLAN.md
 Resume file: None

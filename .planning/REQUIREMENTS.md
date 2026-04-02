@@ -7,11 +7,11 @@
 
 ### Source of Truth
 
-- [ ] **SOT-01**: template_skills junction table is the canonical source for template→skill mappings (populated from existing JSONB arrays via migration)
-- [ ] **SOT-02**: persona_skills junction table is the canonical source for agent→skill mappings (uses skill_id not skill_name)
+- [x] **SOT-01**: template_skills junction table is the canonical source for template→skill mappings (populated from existing JSONB arrays via migration)
+- [x] **SOT-02**: persona_skills junction table is the canonical source for agent→skill mappings (uses skill_id not skill_name)
 - [ ] **SOT-03**: SKILLS.md is a thin manifest generated from DB assignments at instantiate-time — contains skill IDs, short descriptions, pack paths, and runtime rules only
 - [ ] **SOT-04**: Instantiation flow reads skills from template_skills junction table, not from skills_text column
-- [ ] **SOT-05**: skills_text column on agent_templates is deprecated — migration preserves data but instantiation ignores it
+- [x] **SOT-05**: skills_text column on agent_templates is deprecated — migration preserves data but instantiation ignores it
 - [ ] **SOT-06**: Changing skill assignments in DB triggers SKILLS.md regeneration for affected personas
 
 ### Skill Pack Explorer
@@ -90,11 +90,11 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SOT-01 | Phase 31 | Pending |
-| SOT-02 | Phase 31 | Pending |
+| SOT-01 | Phase 31 | Complete |
+| SOT-02 | Phase 31 | Complete |
 | SOT-03 | Phase 31 | Pending |
 | SOT-04 | Phase 31 | Pending |
-| SOT-05 | Phase 31 | Pending |
+| SOT-05 | Phase 31 | Complete |
 | SOT-06 | Phase 31 | Pending |
 | PKX-01 | Phase 32 | Pending |
 | PKX-02 | Phase 32 | Pending |
