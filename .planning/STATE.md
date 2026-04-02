@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 31-02-PLAN.md
-last_updated: "2026-04-02T12:37:22.480Z"
+stopped_at: Completed 31-03-PLAN.md
+last_updated: "2026-04-02T12:43:25.553Z"
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 ## Current Position
 
-Phase: 31 (Source of Truth Cleanup) — EXECUTING
-Plan: 3 of 3
+Phase: 31 (Source of Truth Cleanup) — COMPLETE
+Plan: 3 of 3 (all complete)
 
 ## Performance Metrics
 
@@ -50,6 +50,9 @@ Plan: 3 of 3
 - [Phase 31]: Removed JSONB fallback for skills -- template_skills junction is now the only source in instantiation and forge
 - [Phase 31]: Kept JSONB fallback for tools (out of scope for skills SOT cleanup)
 - [Phase 31]: skill_id used as both skill_name and skill_id in persona_skills INSERT (skill_name column is deprecated)
+- [Phase 31]: Toggle endpoint uses skill_id with OR skill_name fallback for backwards compat during transition
+- [Phase 31]: v1/admin/skills.ts delete was missing junction table cleanup -- fixed as part of SOT-06
+- [Phase 31]: rpg-engine query fixed from nonexistent skill_name column to skill_id with LEFT JOIN to skills table
 
 ### Pending Todos
 
@@ -63,6 +66,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T12:37:22.477Z
-Stopped at: Completed 31-02-PLAN.md
+Last session: 2026-04-02T12:43:25.550Z
+Stopped at: Completed 31-03-PLAN.md
 Resume file: None

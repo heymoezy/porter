@@ -12,7 +12,7 @@
 - [x] **SOT-03**: SKILLS.md is a thin manifest generated from DB assignments at instantiate-time — contains skill IDs, short descriptions, pack paths, and runtime rules only
 - [x] **SOT-04**: Instantiation flow reads skills from template_skills junction table, not from skills_text column
 - [x] **SOT-05**: skills_text column on agent_templates is deprecated — migration preserves data but instantiation ignores it
-- [ ] **SOT-06**: Changing skill assignments in DB triggers SKILLS.md regeneration for affected personas
+- [x] **SOT-06**: Changing skill assignments in DB triggers SKILLS.md regeneration for affected personas
 
 ### Skill Pack Explorer
 
@@ -95,7 +95,7 @@
 | SOT-03 | Phase 31 | Complete |
 | SOT-04 | Phase 31 | Complete |
 | SOT-05 | Phase 31 | Complete |
-| SOT-06 | Phase 31 | Pending |
+| SOT-06 | Phase 31 | Complete |
 | PKX-01 | Phase 32 | Pending |
 | PKX-02 | Phase 32 | Pending |
 | PKX-03 | Phase 32 | Pending |
