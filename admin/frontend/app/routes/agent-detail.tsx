@@ -53,9 +53,8 @@ const CORE_TABS = [
   { id: "SKILLS.md", label: "SKILLS", icon: Sparkles },
 ]
 
-function buildFileTabs(lifecycle: string | undefined, hasTools: boolean, isBorn: boolean) {
-  // Born agents have a real SKILLS tab — don't show the .md file tab to avoid duplication
-  const tabs = isBorn ? CORE_TABS.filter(t => t.id !== "SKILLS.md") : [...CORE_TABS]
+function buildFileTabs(lifecycle: string | undefined, hasTools: boolean) {
+  const tabs = [...CORE_TABS]
   if (hasTools) tabs.push({ id: "TOOLS.md", label: "TOOLS", icon: Wrench })
   if (lifecycle === "persistent") tabs.push({ id: "HEARTBEAT.md", label: "HEARTBEAT", icon: HeartPulse })
   return tabs
@@ -152,7 +151,7 @@ function AgentDetailContent() {
   const lifecycle = tmplData?.lifecycle
   const heartbeatInterval = tmplData?.heartbeat_interval
   const hasTools = skills.length > 0 || (tmplData?.tags ?? []).some((t: string) => t === "tools")
-  const fileTabs = buildFileTabs(lifecycle, hasTools, isBorn)
+  const fileTabs = buildFileTabs(lifecycle, hasTools)
   const birthDate = isBorn ? fmtDate(String(p.created_at)) : null
 
   const saveMutation = useMutation({
