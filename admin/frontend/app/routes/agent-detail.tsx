@@ -52,11 +52,12 @@ const CORE_TABS = [
   { id: "SOUL.md", label: "SOUL", icon: Shield },
   { id: "IDENTITY.md", label: "IDENTITY", icon: FileText },
   { id: "ROLE_CARD.md", label: "ROLE", icon: FileText },
-  { id: "SKILLS.md", label: "SKILLS", icon: Sparkles },
+  { id: "SKILLS.md", label: "SPEC", icon: Sparkles },
 ]
 
-function buildFileTabs(lifecycle: string | undefined, hasTools: boolean) {
-  const tabs = [...CORE_TABS]
+function buildFileTabs(lifecycle: string | undefined, hasTools: boolean, isBorn: boolean) {
+  // Born agents have a real SKILLS tab — don't show the .md file tab to avoid duplication
+  const tabs = isBorn ? CORE_TABS.filter(t => t.id !== "SKILLS.md") : [...CORE_TABS]
   if (hasTools) tabs.push({ id: "TOOLS.md", label: "TOOLS", icon: Wrench })
   if (lifecycle === "persistent") tabs.push({ id: "HEARTBEAT.md", label: "HEARTBEAT", icon: HeartPulse })
   return tabs
@@ -100,19 +101,22 @@ function AgentDetailContent() {
     retry: false,
   })
 
+  // Resolve template ID: for instances, use persona's template_id; for templates, use URL id
+  const templateIdForLookup = (apiData?.persona?.template_id ? String(apiData.persona.template_id) : id) ?? id
+
   // Template API — provides rich metadata for all agents
   const { data: tmplData, isLoading: tmplLoading } = useQuery({
-    queryKey: ["admin", "templates", "detail", id],
-    queryFn: () => api<TemplateApiData>(`/api/admin/templates/${id}`),
-    enabled: !!id,
+    queryKey: ["admin", "templates", "detail", templateIdForLookup],
+    queryFn: () => api<TemplateApiData>(`/api/admin/templates/${templateIdForLookup}`),
+    enabled: !!templateIdForLookup,
     retry: false,
   })
 
   // Instances of this template
   const { data: instancesData } = useQuery({
-    queryKey: ["admin", "templates", id, "instances"],
-    queryFn: () => api<{ instances: InstanceRow[] }>(`/api/admin/templates/${id}/instances`),
-    enabled: !!id,
+    queryKey: ["admin", "templates", templateIdForLookup, "instances"],
+    queryFn: () => api<{ instances: InstanceRow[] }>(`/api/admin/templates/${templateIdForLookup}/instances`),
+    enabled: !!templateIdForLookup,
     retry: false,
   })
 
@@ -127,9 +131,9 @@ function AgentDetailContent() {
 
   // Workshop data — skills, supports, equipment, passive tree
   const { data: workshopData } = useQuery({
-    queryKey: ["admin", "templates", id, "workshop"],
-    queryFn: () => api<WorkshopData>(`/api/admin/templates/${id}/workshop`).catch(() => null),
-    enabled: !!id,
+    queryKey: ["admin", "templates", templateIdForLookup, "workshop"],
+    queryFn: () => api<WorkshopData>(`/api/admin/templates/${templateIdForLookup}/workshop`).catch(() => null),
+    enabled: !!templateIdForLookup,
     retry: false,
     staleTime: 60_000,
   })
@@ -144,14 +148,14 @@ function AgentDetailContent() {
   const projects = apiData?.projects ?? []
   const instances = instancesData?.instances ?? []
 
+  // Born = has been through Forge (exists as a persona instance)
+  const isBorn = hasApi && !!p.created_at
+
   // Build file tabs based on template capabilities
   const lifecycle = tmplData?.lifecycle
   const heartbeatInterval = tmplData?.heartbeat_interval
   const hasTools = skills.length > 0 || (tmplData?.tags ?? []).some((t: string) => t === "tools")
-  const fileTabs = buildFileTabs(lifecycle, hasTools)
-
-  // Born = has been through Forge (exists as a persona instance)
-  const isBorn = hasApi && !!p.created_at
+  const fileTabs = buildFileTabs(lifecycle, hasTools, isBorn)
   const birthDate = isBorn ? fmtDate(String(p.created_at)) : null
 
   const saveMutation = useMutation({

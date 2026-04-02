@@ -1,3 +1,8 @@
+## v4.0.1 (2026-04-02)
+
+- fix: file upload auth — accept porter_admin_session cookie
+
+
 ## v4.4.0 (2026-04-02)
 
 **Skills Marketplace — Discovery + Tags**
