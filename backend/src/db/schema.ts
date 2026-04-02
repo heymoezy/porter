@@ -806,8 +806,28 @@ export const personaSkills = pgTable('persona_skills', {
   skillId: text('skill_id'),                     // NEW: FK to skills.id — canonical after migration
   enabled: integer('enabled').default(1),
   assignedAt: doublePrecision('assigned_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  // Phase 34: feedback telemetry counters
+  timesSelected: integer('times_selected').default(0),
+  timesCompleted: integer('times_completed').default(0),
+  positiveFeedbackCount: integer('positive_feedback_count').default(0),
+  negativeFeedbackCount: integer('negative_feedback_count').default(0),
+  lastUsedAt: doublePrecision('last_used_at'),
+  effectivenessScore: doublePrecision('effectiveness_score'),
 });
 // Note: Primary key (persona_id, skill_name) defined in migration DDL
+
+// ── Skill Feedback Events (Phase 34) ─────────────────────────────────────────
+
+export const skillFeedbackEvents = pgTable('skill_feedback_events', {
+  id: text('id').primaryKey(),
+  personaId: text('persona_id').notNull(),
+  skillId: text('skill_id').notNull(),
+  dispatchId: text('dispatch_id').notNull(),
+  // event_type values: positive, negative, correction, retry, abandon, success
+  eventType: text('event_type').notNull(),
+  note: text('note'),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
 
 // ── Skills & Tools Registry (Phase 15) ──────────────────────────────────────
 
