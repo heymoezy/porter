@@ -153,6 +153,13 @@ const renameSchema = z.object({
   newName: z.string().min(1),
 });
 
+const moveSchema = z.object({
+  root: z.string().min(1),
+  sourcePath: z.string().default(''),
+  name: z.string().min(1),
+  destPath: z.string(),
+});
+
 // --- Route plugin -----------------------------------------------------------
 
 export default async function filesV1Routes(fastify: FastifyInstance, _opts: FastifyPluginOptions) {
@@ -487,6 +494,57 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
       return reply.send(ok({ renamed: true, newName: sanitized }));
     } catch (e: any) {
       return reply.code(500).send(err('FS_ERROR', e.message ?? 'Failed to rename'));
+    }
+  });
+
+  // POST /api/v1/files/move — move file/directory to another location
+  fastify.post('/move', {
+    preHandler: [fastify.requireAuth],
+  }, async (request, reply) => {
+    const parsed = moveSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(err('INVALID_INPUT', parsed.error.issues[0]?.message ?? 'Invalid input'));
+    }
+
+    const { root, sourcePath, name, destPath } = parsed.data;
+    const dirs = getServeDirs();
+    const rootPath = dirs[root];
+    if (!rootPath) {
+      return reply.code(404).send(err('ROOT_NOT_FOUND', `Unknown root: ${root}`));
+    }
+
+    const sourceRel = [sourcePath, name].filter(Boolean).join('/');
+    const source = safeResolve(rootPath, sourceRel);
+    if (!source) {
+      return reply.code(400).send(err('INVALID_PATH', 'Invalid source path'));
+    }
+
+    const destDir = safeResolve(rootPath, destPath);
+    if (!destDir) {
+      return reply.code(400).send(err('INVALID_PATH', 'Invalid destination path'));
+    }
+
+    try { await fs.access(source); } catch {
+      return reply.code(404).send(err('NOT_FOUND', 'Source not found'));
+    }
+
+    try {
+      const stat = await fs.stat(destDir);
+      if (!stat.isDirectory()) {
+        return reply.code(400).send(err('NOT_DIRECTORY', 'Destination is not a directory'));
+      }
+    } catch {
+      return reply.code(404).send(err('NOT_FOUND', 'Destination directory not found'));
+    }
+
+    const dest = path.join(destDir, name);
+    try { await fs.access(dest); return reply.code(409).send(err('ALREADY_EXISTS', 'File already exists at destination')); } catch {}
+
+    try {
+      await fs.rename(source, dest);
+      return reply.send(ok({ moved: true, name, destPath }));
+    } catch (e: any) {
+      return reply.code(500).send(err('FS_ERROR', e.message ?? 'Failed to move'));
     }
   });
 

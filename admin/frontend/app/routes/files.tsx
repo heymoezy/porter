@@ -10,6 +10,7 @@ import { AgentPresenceSummary } from "~/components/agent-presence"
 import { api } from "~/lib/api"
 import { FileTypeIcon } from "~/components/file-type-icon"
 import { Button } from "~/components/ui/button"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/dialog"
 import { Input } from "~/components/ui/input"
 import { ScrollArea } from "~/components/ui/scroll-area"
 
@@ -233,6 +234,17 @@ export default function FilesPage() {
       setRenaming(null)
     },
   })
+
+  const moveMut = useMutation({
+    mutationFn: async ({ name, destPath }: { name: string; destPath: string }) => {
+      return api("/api/v1/files/move", { method: "POST", json: { root: activeRoot, sourcePath: currentPath, name, destPath } })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["files", "list"] })
+    },
+  })
+
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
 
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadQueue, setUploadQueue] = useState<Array<{ name: string; status: "pending" | "uploading" | "done" | "error" }>>([])
@@ -594,18 +606,43 @@ export default function FilesPage() {
                   const isDir = entry.type === "dir"
                   const isActive = previewFile?.name === entry.name
                   const isRenaming = renaming === entry.name
-                  const isConfirmingDelete = confirmDelete === entry.name
+                  const isDragTarget = isDir && dragOverFolder === entry.name
 
                   return (
                     <div
                       key={entry.name}
+                      draggable={!isRenaming}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/x-porter-file", entry.name)
+                        e.dataTransfer.effectAllowed = "move"
+                      }}
+                      onDragOver={(e) => {
+                        if (isDir && e.dataTransfer.types.includes("text/x-porter-file")) {
+                          e.preventDefault()
+                          e.dataTransfer.dropEffect = "move"
+                          setDragOverFolder(entry.name)
+                        }
+                      }}
+                      onDragLeave={() => { if (isDragTarget) setDragOverFolder(null) }}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setDragOverFolder(null)
+                        const fileName = e.dataTransfer.getData("text/x-porter-file")
+                        if (isDir && fileName && fileName !== entry.name) {
+                          const destPath = currentPath ? `${currentPath}/${entry.name}` : entry.name
+                          moveMut.mutate({ name: fileName, destPath })
+                        }
+                      }}
                       onClick={() => !isRenaming && (isDir ? navigateInto(entry.name) : openFile(entry.name))}
                       className={`grid grid-cols-[1fr_80px_120px_36px] gap-2 items-center px-5 text-left transition-colors duration-100 group cursor-pointer ${
                         compact ? "py-1" : "py-2"
                       } ${
-                        isActive
-                          ? "bg-accent-porter/8"
-                          : "hover:bg-raised/50"
+                        isDragTarget
+                          ? "bg-accent-porter/15 ring-1 ring-accent-porter/30"
+                          : isActive
+                            ? "bg-accent-porter/8"
+                            : "hover:bg-raised/50"
                       } border-b border-border/20 last:border-0`}
                     >
                       {/* Name column */}
@@ -672,23 +709,6 @@ export default function FilesPage() {
 
                       {/* Actions column */}
                       <div className="flex justify-center relative">
-                        {isConfirmingDelete ? (
-                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              onClick={() => deleteMut.mutate(entry.name)}
-                              className="size-6 flex items-center justify-center rounded text-danger hover:bg-danger/10"
-                              title="Confirm delete"
-                            >
-                              <Trash2 className="size-3" />
-                            </button>
-                            <button
-                              onClick={() => setConfirmDelete(null)}
-                              className="size-6 flex items-center justify-center rounded text-text3 hover:bg-raised"
-                            >
-                              <X className="size-3" />
-                            </button>
-                          </div>
-                        ) : (
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
@@ -702,7 +722,6 @@ export default function FilesPage() {
                           >
                             <MoreVertical className="size-3.5" />
                           </button>
-                        )}
                       </div>
                     </div>
                   )
@@ -782,6 +801,28 @@ export default function FilesPage() {
           </div>
         )}
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!confirmDelete} onOpenChange={(open) => { if (!open) setConfirmDelete(null) }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete {confirmDelete}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-text2">This will permanently delete <span className="font-medium text-foreground">{confirmDelete}</span>. This action cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setConfirmDelete(null)}>Cancel</Button>
+            <Button
+              size="sm"
+              disabled={deleteMut.isPending}
+              onClick={() => { if (confirmDelete) deleteMut.mutate(confirmDelete) }}
+              className="bg-danger hover:bg-danger/90 text-white"
+            >
+              {deleteMut.isPending ? <Loader2 className="size-3 animate-spin mr-1" /> : <Trash2 className="size-3 mr-1" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
