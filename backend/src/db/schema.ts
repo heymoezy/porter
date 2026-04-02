@@ -947,6 +947,8 @@ export const bridgeDispatchLog = pgTable('bridge_dispatch_log', {
   intent: text('intent'),
   replyTo: text('reply_to'),
   isAgentMessage: integer('is_agent_message'),
+  // skills_used: runtime skill selection telemetry (added rts_v1)
+  skillsUsed: jsonb('skills_used'),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
