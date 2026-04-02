@@ -128,8 +128,8 @@ Plans:
   5. An agent with no assigned skills or no relevant skills dispatches normally without skill injection
 **Plans:** 2/2 plans complete
 Plans:
-- [ ] 33-01-PLAN.md — Migration (skills_used JSONB) + skill-selector.ts service (scoring, pack reading)
-- [ ] 33-02-PLAN.md — Chat pipeline wiring + dispatch logging integration
+- [x] 33-01-PLAN.md — Migration (skills_used JSONB) + skill-selector.ts service (scoring, pack reading)
+- [x] 33-02-PLAN.md — Chat pipeline wiring + dispatch logging integration
 
 ### Phase 34: Feedback Telemetry
 **Goal**: Every dispatch outcome produces a structured feedback signal linked to the skills that were used — enabling per-skill effectiveness measurement that actually means something
@@ -141,7 +141,11 @@ Plans:
   3. Each persona_skill row has live aggregated stats: times_selected, times_completed, positive/negative counts, effectiveness_score (computed from feedback ratio)
   4. Admin can view per-skill effectiveness on skill detail, agent detail, and template detail pages
   5. Effectiveness scores are queryable via API: GET /api/admin/skills/:id/effectiveness and GET /api/admin/agents/:id/skill-effectiveness
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 34-01-PLAN.md — Migration (skill_feedback_events + persona_skills counters) + dispatch_id lifecycle + times_selected
+- [ ] 34-02-PLAN.md — Feedback POST endpoint + chat thumbs-up/down UI
+- [ ] 34-03-PLAN.md — Admin effectiveness API endpoints + UI on detail pages
 
 ### Phase 35: Agent Evolution Loop
 **Goal**: Feedback patterns drive concrete skill recommendations that admin can review and approve — closing the loop from "skill was used" to "skill inventory changed because of measured performance"
@@ -192,8 +196,8 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 24-30 | v4.0 | 17/17 | Partial (28 deferred) | 2026-04-02 |
 | 31. Source of Truth | v5.0 | 3/3 | Complete | 2026-04-02 |
 | 32. Skill Pack Explorer | v5.0 | 4/4 | Complete | 2026-04-02 |
-| 33. Runtime Skill Selector | 2/2 | Complete    | 2026-04-02 | - |
-| 34. Feedback Telemetry | v5.0 | 0/TBD | Not started | - |
+| 33. Runtime Skill Selector | v5.0 | 2/2 | Complete | 2026-04-02 |
+| 34. Feedback Telemetry | v5.0 | 0/3 | Planned | - |
 | 35. Agent Evolution Loop | v5.0 | 0/TBD | Not started | - |
 | 36. Skill Quality Scoring | v5.0 | 0/TBD | Not started | - |
 | 37. Template Skill UX | v5.0 | 0/TBD | Not started | - |
