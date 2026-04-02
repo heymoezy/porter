@@ -141,7 +141,7 @@ Plans:
   3. Each persona_skill row has live aggregated stats: times_selected, times_completed, positive/negative counts, effectiveness_score (computed from feedback ratio)
   4. Admin can view per-skill effectiveness on skill detail, agent detail, and template detail pages
   5. Effectiveness scores are queryable via API: GET /api/admin/skills/:id/effectiveness and GET /api/admin/agents/:id/skill-effectiveness
-**Plans:** 4 plans (1/4 complete)
+**Plans:** 2/4 plans executed
 Plans:
 - [x] 34-00-PLAN.md — Playwright test scaffold for FBK-01 through FBK-05 (Wave 0)
 - [ ] 34-01-PLAN.md — Migration (skill_feedback_events + persona_skills counters) + dispatch_id lifecycle + times_selected
@@ -198,7 +198,7 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 31. Source of Truth | v5.0 | 3/3 | Complete | 2026-04-02 |
 | 32. Skill Pack Explorer | v5.0 | 4/4 | Complete | 2026-04-02 |
 | 33. Runtime Skill Selector | v5.0 | 2/2 | Complete | 2026-04-02 |
-| 34. Feedback Telemetry | v5.0 | 1/4 | Executing | - |
+| 34. Feedback Telemetry | 2/4 | In Progress|  | - |
 | 35. Agent Evolution Loop | v5.0 | 0/TBD | Not started | - |
 | 36. Skill Quality Scoring | v5.0 | 0/TBD | Not started | - |
 | 37. Template Skill UX | v5.0 | 0/TBD | Not started | - |

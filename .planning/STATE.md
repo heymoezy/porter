@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 34-00-PLAN.md
-last_updated: "2026-04-02T17:59:00Z"
+stopped_at: Completed 34-01-PLAN.md
+last_updated: "2026-04-02T18:02:55.897Z"
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -71,6 +71,8 @@ Plan: 2 of 4
 - [Phase 33]: stream-service.ts required zero changes — ctxOverride spread already propagates skillsUsed automatically
 - [Phase 33]: Full RTS loop complete: selectSkills called at dispatch, skill prompts injected into systemPrompt, telemetry persisted in bridge_dispatch_log.skills_used
 - [Phase 34-00]: FBK test stubs use test.skip(true, 'TODO: Enable after Wave N...') rather than test.todo() — enables single-line activation with no structural changes
+- [Phase 34-01]: __DISPATCH_META__ token convention threads dispatch_id from routing-engine to SSE done event without changing StreamBackend interface
+- [Phase 34-01]: times_selected increment uses COALESCE(skill_id, skill_name) for backwards compat with pre-Phase-31 persona_skills rows
 
 ### Pending Todos
 
@@ -84,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T17:59:00Z
-Stopped at: Completed 34-00-PLAN.md
+Last session: 2026-04-02T18:02:46.417Z
+Stopped at: Completed 34-01-PLAN.md
 Resume file: None
