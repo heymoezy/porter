@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 32-00-PLAN.md
-last_updated: "2026-04-02T16:38:51Z"
+stopped_at: Completed 32-01-PLAN.md
+last_updated: "2026-04-02T16:41:36.071Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 7
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -56,6 +56,8 @@ Plan: 2 of 4
 - [Phase 32-00]: Admin Playwright tests use full URL (http://127.0.0.1:5175) not baseURL override — keeps Brain base URL clean for existing regression tests
 - [Phase 32-00]: motion-designer used as TEST_SKILL constant — always present, has scaffold content covering both populated and empty file states
 - [Phase 32-00]: PKX-0N test naming convention enables --grep PKX-0N targeted test runs throughout Phase 32
+- [Phase 32-skill-pack-explorer]: Fast quality tier (size heuristic) on list endpoint, full word-count diagnostics only on detail — avoids ~1045 readFileSync calls
+- [Phase 32-skill-pack-explorer]: PUT /:id/files/* registered before generic PUT /:id to prevent Fastify route param shadowing on file writes
 
 ### Pending Todos
 
@@ -69,6 +71,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T16:38:51Z
-Stopped at: Completed 32-00-PLAN.md
+Last session: 2026-04-02T16:41:36.068Z
+Stopped at: Completed 32-01-PLAN.md
 Resume file: None
