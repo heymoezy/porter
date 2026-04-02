@@ -7,9 +7,9 @@ import { Separator } from "~/components/ui/separator"
 import {
   Users, Mail, CreditCard, LayoutDashboard,
   ChevronLeft, ChevronRight, Settings, LogOut,
-  Monitor,
+  Monitor, FolderOpen,
   Route, BookOpen,
-  Code2, Palette, HardDrive, Network, Flame, Lightbulb,
+  Code2, Palette, Network, Flame, Lightbulb,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -25,6 +25,9 @@ const groups = [
   { label: "", items: [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   ]},
+  { label: "Projects", items: [
+    { icon: FolderOpen, label: "Projects", path: "/files" },
+  ]},
   { label: "Business", items: [
     { icon: Users, label: "Customers", path: "/users" },
     { icon: CreditCard, label: "Revenue", path: "/billing" },
@@ -39,9 +42,6 @@ const groups = [
     { icon: BookOpen, label: "Recall", path: "/recall" },
     { icon: Lightbulb, label: "Intelligence", path: "/intelligence" },
     { icon: Monitor, label: "System", path: "/system" },
-  ]},
-  { label: "Files", items: [
-    { icon: HardDrive, label: "Files", path: "/files" },
   ]},
   { label: "Dev", items: [
     { icon: Palette, label: "Design System", path: "/design-system" },
