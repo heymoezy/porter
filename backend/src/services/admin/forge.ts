@@ -14,6 +14,7 @@
 import { queryOne, queryAll, execute } from '../../db/pg-helpers.js';
 import { pool } from '../../db/client.js';
 import { config } from '../../config.js';
+import { writeSkillsManifest } from '../skills-manifest.js';
 import crypto from 'crypto';
 
 // ── Types ────────────────────────────────────────────────
@@ -367,18 +368,24 @@ async function runTrainer(item: PipelineItem): Promise<void> {
   });
 
   try {
-    const template = await queryOne<{ skills: unknown }>('SELECT skills FROM agent_templates WHERE id = $1', [item.template_id]);
-    const templateSkills: string[] = (template?.skills as string[]) ?? [];
+    // Read skills from template_skills junction (SOT-01 canonical, no JSONB fallback)
+    const junctionSkills = (await pool.query(
+      'SELECT skill_id FROM template_skills WHERE template_id = $1 ORDER BY sort_order',
+      [item.template_id]
+    )).rows as Array<{ skill_id: string }>;
 
+    const templateSkillIds = junctionSkills.map(r => r.skill_id);
+
+    // Map to persona_skills with skill_id (upsert)
     const assigned: string[] = [];
-    for (const skill of templateSkills) {
+    for (const skillId of templateSkillIds) {
       await execute(
-        `INSERT INTO persona_skills (persona_id, skill_name, enabled, assigned_at)
-         SELECT $1, $2, 1, EXTRACT(epoch FROM now())
+        `INSERT INTO persona_skills (persona_id, skill_name, skill_id, enabled, assigned_at)
+         SELECT $1, $2, $3, 1, EXTRACT(epoch FROM now())
          WHERE NOT EXISTS (SELECT 1 FROM persona_skills WHERE persona_id = $1 AND skill_name = $2)`,
-        [item.agent_id, skill]
+        [item.agent_id, skillId, skillId]
       );
-      assigned.push(skill);
+      assigned.push(skillId);
     }
 
     await completeStationRun(runId, 'pass', {
@@ -388,6 +395,14 @@ async function runTrainer(item: PipelineItem): Promise<void> {
     });
 
     await advanceStation(item);
+
+    // Generate SKILLS.md manifest from DB assignments
+    if (item.agent_id) {
+      const persona = await queryOne<{ name: string }>('SELECT name FROM personas WHERE id = $1', [item.agent_id]);
+      if (persona) {
+        await writeSkillsManifest(item.agent_id, persona.name);
+      }
+    }
 
     emitForgeEvent({
       type: 'forge:station_complete',

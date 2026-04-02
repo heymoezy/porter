@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
 import { config } from '../../config.js';
+import { generateSkillsManifest } from '../../services/skills-manifest.js';
 import { z } from 'zod';
 import crypto from 'crypto';
 import fs from 'fs/promises';
@@ -266,18 +267,20 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
       return reply.code(404).send(err('TEMPLATE_NOT_FOUND', 'Template not found'));
     }
 
-    // Read skills and tools from junction tables (Phase 15), fallback to JSONB
+    // Read skills from template_skills junction (SOT-01 -- canonical source, no JSONB fallback)
     const junctionSkills = (await pool.query(
       'SELECT skill_id FROM template_skills WHERE template_id = $1 ORDER BY sort_order',
       [template.id]
     )).rows.map((r: { skill_id: string }) => r.skill_id);
 
+    const skillsList = junctionSkills;  // No fallback to JSONB
+
+    // Read tools from junction table, fallback to JSONB (tools migration is separate)
     const junctionTools = (await pool.query(
       'SELECT tool_id FROM template_tools WHERE template_id = $1 ORDER BY sort_order',
       [template.id]
     )).rows.map((r: { tool_id: string }) => r.tool_id);
 
-    const skillsList = junctionSkills.length > 0 ? junctionSkills : parseJsonField<string[]>(template.skills, []);
     const toolsList = junctionTools.length > 0 ? junctionTools : parseJsonField<string[]>(template.tools, []);
 
     // Validate required backends
@@ -340,6 +343,15 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
       request.sessionUser!.username,
     ]);
 
+    // Insert persona_skills from template_skills (with skill_id)
+    for (let i = 0; i < skillsList.length; i++) {
+      await pool.query(`
+        INSERT INTO persona_skills (persona_id, skill_name, skill_id, enabled, assigned_at)
+        VALUES ($1, $2, $3, 1, EXTRACT(EPOCH FROM NOW()))
+        ON CONFLICT DO NOTHING
+      `, [agentId, skillsList[i], skillsList[i]]);
+    }
+
     // Write .md files to personas directory
     const personaDir = path.join(process.env.HOME!, 'documents/porter/personas', agentId);
     try {
@@ -347,7 +359,9 @@ export default async function templateV1Routes(fastify: FastifyInstance, _option
       await fs.writeFile(path.join(personaDir, 'SOUL.md'), template.soul_text);
       await fs.writeFile(path.join(personaDir, 'ROLE_CARD.md'), template.role_card_text);
       await fs.writeFile(path.join(personaDir, 'IDENTITY.md'), template.identity_text);
-      await fs.writeFile(path.join(personaDir, 'SKILLS.md'), template.skills_text);
+      // Generate SKILLS.md from DB assignments (not skills_text)
+      const skillsManifest = await generateSkillsManifest(agentId, parsed.data.name || template.name);
+      await fs.writeFile(path.join(personaDir, 'SKILLS.md'), skillsManifest);
     } catch (fsErr) {
       // Rollback: delete persona row on file write failure
       await pool.query('DELETE FROM personas WHERE id = $1', [agentId]);

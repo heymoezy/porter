@@ -11,6 +11,7 @@
  */
 import { pool } from '../db/client.js';
 import { config } from '../config.js';
+import { writeSkillsManifest } from './skills-manifest.js';
 import crypto from 'crypto';
 
 // ── Types ────────────────────────────────────────────────
@@ -385,30 +386,23 @@ async function runTrainer(item: PipelineItem): Promise<void> {
   });
 
   try {
-    // Read template skills — prefer junction table (Phase 15), fall back to JSONB if empty
+    // Read skills from template_skills junction (SOT-01 canonical, no JSONB fallback)
     const junctionSkills = (await pool.query(
       'SELECT ts.skill_id FROM template_skills ts WHERE ts.template_id = $1 ORDER BY ts.sort_order',
       [item.template_id]
     )).rows as Array<{ skill_id: string }>;
 
-    let templateSkills: string[];
-    if (junctionSkills.length > 0) {
-      templateSkills = junctionSkills.map(r => r.skill_id);
-    } else {
-      // Fallback: read JSONB (pre-Phase 15 data or empty junction)
-      const template = (await pool.query('SELECT skills FROM agent_templates WHERE id = $1', [item.template_id])).rows[0] as { skills: string } | undefined;
-      templateSkills = template?.skills ? JSON.parse(template.skills) : [];
-    }
+    const templateSkillIds = junctionSkills.map(r => r.skill_id);
 
-    // Map to persona_skills (upsert)
+    // Map to persona_skills with skill_id (upsert)
     const assigned: string[] = [];
-    for (const skill of templateSkills) {
+    for (const skillId of templateSkillIds) {
       await pool.query(`
-        INSERT INTO persona_skills (persona_id, skill_name, enabled, assigned_at)
-        VALUES ($1, $2, 1, EXTRACT(EPOCH FROM NOW()))
+        INSERT INTO persona_skills (persona_id, skill_name, skill_id, enabled, assigned_at)
+        VALUES ($1, $2, $3, 1, EXTRACT(EPOCH FROM NOW()))
         ON CONFLICT DO NOTHING
-      `, [item.agent_id, skill]);
-      assigned.push(skill);
+      `, [item.agent_id, skillId, skillId]);
+      assigned.push(skillId);
     }
 
     await completeStationRun(runId, 'pass', {
@@ -418,6 +412,14 @@ async function runTrainer(item: PipelineItem): Promise<void> {
     });
 
     await advanceStation(item);
+
+    // Generate SKILLS.md manifest from DB assignments
+    if (item.agent_id) {
+      const persona = (await pool.query('SELECT name FROM personas WHERE id = $1', [item.agent_id])).rows[0] as { name: string } | undefined;
+      if (persona) {
+        await writeSkillsManifest(item.agent_id, persona.name);
+      }
+    }
 
     emitForgeEvent({
       type: 'forge:station_complete',
