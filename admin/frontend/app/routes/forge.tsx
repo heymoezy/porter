@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router"
-import { ChatPanel } from "~/components/chat-panel"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
@@ -12,7 +11,6 @@ import {
 import { SkillsStudio } from "~/components/forge/skills-studio"
 import { ToolsStudio } from "~/components/forge/tools-studio"
 import { useForgeSSE, useForgeState, useForgeStart, useForgeStop, useForgeQueue, useForgeRemove } from "~/hooks/use-forge"
-import { useChatPanel } from "~/hooks/use-chat-panel"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Play, Pause, Search, Flame, Wrench, Sparkles } from "lucide-react"
@@ -242,7 +240,6 @@ export default function ForgePage() {
   const stopMut = useForgeStop()
   const queueMut = useForgeQueue()
   const removeMut = useForgeRemove()
-  const chat = useChatPanel()
   const [templateSearch, setTemplateSearch] = useState("")
   const [templateCat, setTemplateCat] = useState("all")
   const [activeTab, setActiveTab] = useState("templates")
@@ -289,7 +286,6 @@ export default function ForgePage() {
 
   return (
     <div className="flex h-full min-h-0">
-      {!chat.expanded && (
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
           {/* Tab bar */}
@@ -557,7 +553,6 @@ export default function ForgePage() {
             </TabsContent>
           </Tabs>
         </div>
-      )}
 
       {/* Birth animation overlay — fires when a forge item transitions to complete */}
       {birthItem && (() => {
@@ -581,22 +576,6 @@ export default function ForgePage() {
         )
       })()}
 
-      {/* Chat */}
-      {chat.open ? (
-        <ChatPanel
-          streamEndpoint="/api/admin/porter/chat"
-          context={{ scope: "forge" }}
-          systemContext={`You are Porter on the Agent Forge page. ${stats.queued} queued, ${stats.claimed} forging, ${stats.complete} born, ${stats.error} errors. Wave ${state?.currentWave ?? 0}. ${running ? "RUNNING." : "PAUSED."} ${tmplData?.count ?? 0} templates in catalog.`}
-          placeholder="Control the forge..."
-          greeting={running ? "Forge is active. What do you need?" : "Forge is idle. Say 'start' to ignite, or browse the templates below."}
-          storageKey="chat_forge"
-          {...chat.chatProps}
-        />
-      ) : (
-        <button onClick={chat.reopen} className="shrink-0 w-8 border-l border-border bg-background flex items-center justify-center hover:bg-raised transition-colors" title="Open chat">
-          <PixelPortrait {...DEFAULT_PORTRAIT} size="xs" />
-        </button>
-      )}
     </div>
   )
 }

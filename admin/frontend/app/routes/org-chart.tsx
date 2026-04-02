@@ -1,9 +1,6 @@
 import { useState } from "react"
 import { OrgNode, OrgConnector } from "~/components/forge"
 import type { OrgNodeAgent, OrgNodeState } from "~/components/forge"
-import { ChatPanel } from "~/components/chat-panel"
-import { PixelPortrait } from "~/components/pixel-portrait"
-import { useChatPanel } from "~/hooks/use-chat-panel"
 import { useNavigate } from "react-router"
 
 // ── Workforce ────────────────────────────────────────────
@@ -92,7 +89,6 @@ const TOTAL_AGENTS = 1 + Object.values(TEAMS).reduce((s, t) => s + t.agents.leng
 
 export default function OrgChartPage() {
   const navigate = useNavigate()
-  const chat = useChatPanel()
   const [activeTeams, setActiveTeams] = useState<Set<string>>(new Set(ALL_TEAM_KEYS))
   const [hovered, setHovered] = useState<OrgNodeAgent | null>(null)
 
@@ -112,7 +108,7 @@ export default function OrgChartPage() {
   return (
       <div className="flex h-full min-h-0">
         {/* Org chart — visual tree */}
-        {!chat.expanded && <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto p-5">
           {/* Filters */}
           <div className="flex items-center gap-1.5 mb-5">
             {ALL_TEAM_KEYS.map(key => {
@@ -184,24 +180,7 @@ export default function OrgChartPage() {
               <p className="text-xs text-text2 mt-1">{hovered.role?.replace(/^LEAD — /, "")}</p>
             </div>
           )}
-        </div>}
-
-        {/* Chat */}
-        {chat.open ? (
-          <ChatPanel
-            streamEndpoint="/api/admin/porter/chat"
-            context={{ scope: "org-chart" }}
-            systemContext={`You are Porter, master orchestrator. Org Chart — ${TOTAL_AGENTS} agents, ${ALL_TEAM_KEYS.length} teams, 10 templates.\n\nTeams:\n${Object.entries(TEAMS).map(([, t]) => `• ${t.label} (${t.agents.length}): ${t.mission}`).join("\n")}\n\nAll agents are ghost/pending — waiting for the Forge. Help refine roles, reassign templates, add/remove agents.`}
-            placeholder="Discuss the workforce..."
-            greeting={`${TOTAL_AGENTS} agents across ${ALL_TEAM_KEYS.length} teams. All ghosts — ready for the Forge. Hover over any agent to see details.`}
-            storageKey="chat_orgchart"
-            {...chat.chatProps}
-          />
-        ) : (
-          <button onClick={chat.reopen} className="shrink-0 w-8 border-l border-border bg-background flex items-center justify-center hover:bg-raised transition-colors" title="Open chat">
-            <PixelPortrait skin="#F5D0A9" hair="#2C1810" eyes="#1A1A2E" shirt="#8B5CF6" hairStyle="short" size="xs" />
-          </button>
-        )}
+        </div>
       </div>
   )
 }
