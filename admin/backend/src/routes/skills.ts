@@ -69,6 +69,26 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     return ok({ text });
   });
 
+  // FBK-04: Per-skill effectiveness across all agents using this skill
+  fastify.get('/:id/effectiveness', async (req, _reply) => {
+    const { id } = req.params as { id: string };
+    const rows = await queryAll(
+      `SELECT ps.persona_id, p.name AS persona_name,
+              COALESCE(ps.times_selected, 0) AS times_selected,
+              COALESCE(ps.times_completed, 0) AS times_completed,
+              COALESCE(ps.positive_feedback_count, 0) AS positive_count,
+              COALESCE(ps.negative_feedback_count, 0) AS negative_count,
+              ps.effectiveness_score,
+              ps.last_used_at
+       FROM persona_skills ps
+       LEFT JOIN personas p ON p.id = ps.persona_id
+       WHERE COALESCE(ps.skill_id, ps.skill_name) = $1
+       ORDER BY ps.effectiveness_score DESC NULLS LAST`,
+      [id]
+    );
+    return ok({ skill_id: id, agents: rows });
+  });
+
   fastify.get('/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     const skill = await getSkillDetail(id);

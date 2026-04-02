@@ -119,6 +119,32 @@ export default async function templatesRoutes(fastify: FastifyInstance) {
     return ok({ total, categories: catCounts, archetypes: archetypeCounts });
   });
 
+  // FBK-04: Per-template aggregated skill effectiveness across all spawned agents
+  fastify.get('/:id/skill-effectiveness', async (req, _reply) => {
+    const { id } = req.params as { id: string };
+    const rows = await queryAll(
+      `SELECT ts.skill_id, s.name AS skill_name,
+              SUM(COALESCE(ps.times_selected, 0))::int AS times_selected,
+              SUM(COALESCE(ps.positive_feedback_count, 0))::int AS positive_count,
+              SUM(COALESCE(ps.negative_feedback_count, 0))::int AS negative_count,
+              CASE
+                WHEN SUM(COALESCE(ps.positive_feedback_count, 0) + COALESCE(ps.negative_feedback_count, 0)) > 0
+                THEN ROUND(SUM(COALESCE(ps.positive_feedback_count, 0))::numeric /
+                     SUM(COALESCE(ps.positive_feedback_count, 0) + COALESCE(ps.negative_feedback_count, 0))::numeric, 3)
+                ELSE NULL
+              END AS effectiveness_score
+       FROM template_skills ts
+       JOIN skills s ON s.id = ts.skill_id
+       LEFT JOIN personas p ON p.template_id = $1
+       LEFT JOIN persona_skills ps ON ps.persona_id = p.id AND COALESCE(ps.skill_id, ps.skill_name) = ts.skill_id
+       WHERE ts.template_id = $1
+       GROUP BY ts.skill_id, s.name
+       ORDER BY effectiveness_score DESC NULLS LAST`,
+      [id]
+    );
+    return ok({ template_id: id, skills: rows });
+  });
+
   // GET /api/admin/templates/:id — single template with .md files
   fastify.get('/:id', async (req) => {
     const { id } = req.params as { id: string };

@@ -76,6 +76,26 @@ export default async function agentsRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // FBK-04: Per-agent skill effectiveness — all skills for this agent with feedback metrics
+  fastify.get('/:id/skill-effectiveness', async (req, _reply) => {
+    const { id } = req.params as { id: string };
+    const rows = await queryAll(
+      `SELECT ps.skill_id, COALESCE(s.name, ps.skill_name, ps.skill_id) AS skill_name,
+              COALESCE(ps.times_selected, 0) AS times_selected,
+              COALESCE(ps.times_completed, 0) AS times_completed,
+              COALESCE(ps.positive_feedback_count, 0) AS positive_count,
+              COALESCE(ps.negative_feedback_count, 0) AS negative_count,
+              ps.effectiveness_score,
+              ps.last_used_at
+       FROM persona_skills ps
+       LEFT JOIN skills s ON s.id = COALESCE(ps.skill_id, ps.skill_name)
+       WHERE ps.persona_id = $1
+       ORDER BY ps.effectiveness_score DESC NULLS LAST`,
+      [id]
+    );
+    return ok({ agent_id: id, skills: rows });
+  });
+
   // GET /api/admin/agents/:id — full agent detail with .md files
   fastify.get('/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
