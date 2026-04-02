@@ -341,15 +341,6 @@ function AgentDetailContent() {
               <TabsTrigger value="build-tab" className="gap-1">
                 <Wrench className="size-2.5" /> BUILD
               </TabsTrigger>
-              {/* Instances tab — only on templates (not on instances) */}
-              {!isInstance && (
-              <TabsTrigger value="instances-tab" className="gap-1">
-                <Users className="size-2.5" /> INSTANCES
-                {instances.length > 0 && (
-                  <span className="text-2xs text-text3 ml-0.5">({instances.length})</span>
-                )}
-              </TabsTrigger>
-              )}
             </TabsList>
             {isFileTab && (
               <Button
@@ -365,21 +356,47 @@ function AgentDetailContent() {
 
           {fileTabs.map(tab => (
             <TabsContent key={tab.id} value={tab.id} className="flex-1 min-h-0 mt-2">
-              <Card className="h-full flex flex-col">
-                <div className="flex items-center px-3 py-1.5 border-b border-border bg-muted/50 shrink-0">
-                  <span className="text-2xs font-mono text-text3">{tab.id}</span>
-                </div>
-                <textarea
-                  value={activeTab === tab.id ? currentContent : (files[tab.id] ?? "")}
-                  onChange={e => setEditContent(e.target.value)}
-                  readOnly={!hasApi}
-                  className="flex-1 w-full bg-background p-3 font-mono text-xs text-foreground placeholder:text-text3 focus:outline-none resize-none min-h-0"
-                  spellCheck={false}
-                  placeholder={hasApi
-                    ? `No ${tab.id} yet. Start typing to define this agent's ${tab.label.toLowerCase()}.`
-                    : `Awaiting forge — ${tab.id} will be generated when this agent is forged.`}
-                />
-              </Card>
+              <div className="h-full flex flex-col gap-2">
+                <Card className="flex-1 flex flex-col min-h-0">
+                  <div className="flex items-center px-3 py-1.5 border-b border-border bg-muted/50 shrink-0">
+                    <span className="text-2xs font-mono text-text3">{tab.id}</span>
+                  </div>
+                  <textarea
+                    value={activeTab === tab.id ? currentContent : (files[tab.id] ?? "")}
+                    onChange={e => setEditContent(e.target.value)}
+                    readOnly={!hasApi}
+                    className="flex-1 w-full bg-background p-3 font-mono text-xs text-foreground placeholder:text-text3 focus:outline-none resize-none min-h-0"
+                    spellCheck={false}
+                    placeholder={hasApi
+                      ? `No ${tab.id} yet. Start typing to define this agent's ${tab.label.toLowerCase()}.`
+                      : `Awaiting forge — ${tab.id} will be generated when this agent is forged.`}
+                  />
+                </Card>
+                {/* Instances — shown in SOUL tab for templates only */}
+                {tab.id === "SOUL.md" && !isInstance && instances.length > 0 && (
+                  <Card className="shrink-0">
+                    <div className="flex items-center px-3 py-1.5 border-b border-border bg-muted/50">
+                      <Users className="size-3 text-text3 mr-1.5" />
+                      <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Instances ({instances.length})</span>
+                    </div>
+                    <div className="divide-y divide-border/20">
+                      {instances.map(inst => {
+                        const instBorn = !!(inst as any).soul_hash
+                        return (
+                          <Link key={inst.id} to={`/agents/${inst.id}`} className="flex items-center gap-3 px-4 py-2 hover:bg-raised/30 transition-colors">
+                            <div className={`size-2 rounded-full shrink-0 ${instBorn ? "bg-success" : "bg-text3/40"}`} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-foreground">{inst.name}</p>
+                              <p className="text-2xs text-text3">{inst.role}</p>
+                            </div>
+                            <span className="text-2xs text-text3 shrink-0">{instBorn ? "Born" : "Unborn"}</span>
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  </Card>
+                )}
+              </div>
             </TabsContent>
           ))}
 
@@ -420,33 +437,6 @@ function AgentDetailContent() {
                 </Card>
               </TabsContent>
           )}
-
-          {/* Instances tab */}
-          <TabsContent value="instances-tab" className="flex-1 min-h-0 mt-2">
-            <Card className="h-full overflow-y-auto">
-              {instances.length === 0 ? (
-                <div className="px-3 py-6 text-center text-xs text-text3">
-                  No instances yet — use Forge to create one
-                </div>
-              ) : (
-                <div className="divide-y divide-border/20">
-                  {instances.map(inst => {
-                    const instBorn = !!(inst as any).soul_hash
-                    return (
-                    <Link key={inst.id} to={`/agents/${inst.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-raised/30 transition-colors">
-                      <div className={`size-2 rounded-full shrink-0 ${instBorn ? "bg-success" : "bg-text3/40"}`} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-foreground">{inst.name}</p>
-                        <p className="text-2xs text-text3">{inst.role}</p>
-                      </div>
-                      <span className="text-2xs text-text3 shrink-0">{instBorn ? "Born" : "Unborn"}</span>
-                    </Link>
-                    )
-                  })}
-                </div>
-              )}
-            </Card>
-          </TabsContent>
 
           {/* Build tab — agent build with RPG stats */}
           <TabsContent value="build-tab" className="flex-1 min-h-0 mt-2">
