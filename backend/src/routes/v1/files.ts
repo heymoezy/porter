@@ -292,8 +292,11 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
 
     const dirs = getServeDirs();
     const rootKeys = Object.keys(dirs);
-    const root = (data.fields.root as any)?.value || rootKeys[0] || 'documents';
-    const relPath = (data.fields.path as any)?.value || '';
+
+    const rootField = data.fields.root as any;
+    const pathField = data.fields.path as any;
+    const root = rootField?.value || rootKeys[0] || 'documents';
+    const relPath = pathField?.value || '';
 
     const rootPath = dirs[root];
     if (!rootPath) {
@@ -331,9 +334,9 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
       }
       const buffer = Buffer.concat(chunks);
 
-      // Enforce 10MB limit
-      if (buffer.length > 10 * 1024 * 1024) {
-        return reply.code(413).send(err('FILE_TOO_LARGE', 'File exceeds 10MB limit'));
+      // Enforce 100MB limit
+      if (buffer.length > 100 * 1024 * 1024) {
+        return reply.code(413).send(err('FILE_TOO_LARGE', 'File exceeds 100MB limit'));
       }
 
       await fs.writeFile(destPath, buffer);
@@ -599,9 +602,9 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
     }
     const buffer = Buffer.concat(chunks);
 
-    // Enforce 10MB limit
-    if (buffer.length > 10 * 1024 * 1024) {
-      return reply.code(413).send(err('FILE_TOO_LARGE', 'File exceeds 10MB limit'));
+    // Enforce 100MB limit
+    if (buffer.length > 100 * 1024 * 1024) {
+      return reply.code(413).send(err('FILE_TOO_LARGE', 'File exceeds 100MB limit'));
     }
 
     const fileId = crypto.randomUUID();

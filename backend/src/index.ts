@@ -80,7 +80,7 @@ fastify.register(cors, {
   credentials: true,
 });
 fastify.register(cookie);
-fastify.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB max
+fastify.register(multipart, { limits: { fileSize: 100 * 1024 * 1024 } }); // 100MB max
 
 // OpenAPI spec generation — must register before routes for Zod schema compilation
 fastify.register(openapiPlugin);
