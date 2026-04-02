@@ -192,6 +192,10 @@ export default function FilesPage() {
 
   const currentPath = pathSegments.join("/")
 
+  // Refs that ALWAYS hold the latest root + path — immune to re-renders/effects
+  const activeRootRef = useRef("")
+  const currentPathRef = useRef("")
+
   // Fetch agents assigned to projects (agent_group = 'system' or specific personas)
   const { data: agentsData } = useQuery({
     queryKey: ["admin", "agents", "projects"],
@@ -210,6 +214,10 @@ export default function FilesPage() {
   const roots = rootsData?.roots ?? []
   const [selectedRoot, setSelectedRoot] = useState<string | null>(null)
   const activeRoot = selectedRoot ?? roots[0] ?? ""
+
+  // Keep refs in sync — these are what upload functions read
+  activeRootRef.current = activeRoot
+  currentPathRef.current = currentPath
 
   // Fetch directory listing — short staleTime so mutations trigger fresh refetch
   const { data: dirData, isLoading: dirLoading, error } = useQuery({
@@ -271,31 +279,31 @@ export default function FilesPage() {
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
 
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [uploadQueue, setUploadQueue] = useState<Array<{ name: string; status: "pending" | "uploading" | "done" | "error" }>>([])
-  const uploadMut = useMutation({
-    mutationFn: async ({ file, root, path }: { file: File; root: string; path: string }) => {
+  const [uploadQueue, setUploadQueue] = useState<Array<{ name: string; status: "pending" | "uploading" | "done" | "error"; pct: number }>>([])
+
+  function uploadOneFile(file: File, root: string, path: string, onProgress: (pct: number) => void): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open("POST", "/api/v1/files/upload")
+      xhr.withCredentials = true
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve()
+        else {
+          try { const body = JSON.parse(xhr.responseText); reject(new Error(body?.error?.message || `Upload failed (${xhr.status})`)) }
+          catch { reject(new Error(`Upload failed (${xhr.status})`)) }
+        }
+      }
+      xhr.onerror = () => reject(new Error("Network error"))
       const form = new FormData()
       form.append("file", file)
       form.append("root", root)
       form.append("path", path)
-      const res = await fetch("/api/v1/files/upload", {
-        method: "POST",
-        credentials: "include",
-        body: form,
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body?.error?.message || `Upload failed (${res.status})`)
-      }
-      return res.json()
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["files", "list"] })
-    },
-    onError: (e) => {
-      setUploadError((e as Error).message)
-    },
-  })
+      xhr.send(form)
+    })
+  }
 
   const [newFolderName, setNewFolderName] = useState<string | null>(null)
   const mkdirMut = useMutation({
@@ -307,20 +315,24 @@ export default function FilesPage() {
     },
   })
 
-  async function uploadFiles(fileList: FileList | File[], targetRoot?: string, targetPath?: string) {
+  async function uploadFiles(fileList: FileList | File[]) {
     setUploadError(null)
     const files = Array.from(fileList)
-    // Use explicit target or capture current values at call time
-    const root = targetRoot ?? activeRoot
-    const path = targetPath ?? currentPath
-    const queue = files.map(f => ({ name: f.name, status: "pending" as const }))
+    // Read from refs — guaranteed latest values, immune to re-renders
+    const root = activeRootRef.current
+    const path = currentPathRef.current
+    const queue = files.map(f => ({ name: f.name, status: "pending" as const, pct: 0 }))
     setUploadQueue(queue)
     for (let i = 0; i < files.length; i++) {
-      setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "uploading" } : item))
+      setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "uploading", pct: 0 } : item))
       try {
-        await uploadMut.mutateAsync({ file: files[i], root, path })
-        setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "done" } : item))
-      } catch {
+        await uploadOneFile(files[i], root, path, (pct) => {
+          setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, pct } : item))
+        })
+        setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "done", pct: 100 } : item))
+        qc.invalidateQueries({ queryKey: ["files", "list"] })
+      } catch (e) {
+        setUploadError((e as Error).message)
         setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "error" } : item))
         break
       }
@@ -330,7 +342,7 @@ export default function FilesPage() {
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
-    if (files && files.length > 0) uploadFiles(files, activeRoot, currentPath)
+    if (files && files.length > 0) uploadFiles(files)
     e.target.value = ""
   }
 
@@ -378,7 +390,7 @@ export default function FilesPage() {
     setDragging(false)
     const files = e.dataTransfer.files
     if (files.length > 0 && activeRoot && dirWritable) {
-      uploadFiles(files, activeRoot, currentPath)
+      uploadFiles(files)
     }
   }
 
@@ -412,7 +424,7 @@ export default function FilesPage() {
             setDragging(false)
             const files = e.dataTransfer.files
             if (files.length > 0 && activeRoot && dirWritable) {
-              uploadFiles(files, activeRoot, currentPath)
+              uploadFiles(files)
             }
           }}
         >
@@ -509,7 +521,7 @@ export default function FilesPage() {
           <Button
             size="sm"
             onClick={() => fileInputRef.current?.click()}
-            disabled={!activeRoot || !dirWritable || uploadMut.isPending}
+            disabled={!activeRoot || !dirWritable || uploadQueue.length > 0}
             className="gap-1.5"
           >
             <Upload className="size-3.5" />
@@ -645,10 +657,10 @@ export default function FilesPage() {
                     <div className="flex items-center gap-2">
                       {item.status === "uploading" && (
                         <>
-                          <div className="flex-1 h-1.5 bg-raised rounded-full overflow-hidden">
-                            <div className="h-full bg-accent-porter rounded-full animate-pulse" style={{ width: "60%" }} />
+                          <div className="flex-1 h-2 bg-raised rounded-full overflow-hidden">
+                            <div className="h-full bg-accent-porter rounded-full transition-all duration-200" style={{ width: `${item.pct}%` }} />
                           </div>
-                          <Loader2 className="size-3 animate-spin text-accent-porter shrink-0" />
+                          <span className="text-2xs text-accent-porter tabular-nums w-8 text-right">{item.pct}%</span>
                         </>
                       )}
                       {item.status === "pending" && <span className="text-2xs text-text3">Waiting...</span>}
