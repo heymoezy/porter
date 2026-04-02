@@ -283,12 +283,12 @@ export default function FilesPage() {
     },
   })
 
-  async function uploadFiles(fileList: FileList | File[]) {
+  async function uploadFiles(fileList: FileList | File[], targetRoot?: string, targetPath?: string) {
     setUploadError(null)
     const files = Array.from(fileList)
-    // Capture current root and path at call time (not closure time)
-    const root = activeRoot
-    const path = currentPath
+    // Use explicit target or capture current values at call time
+    const root = targetRoot ?? activeRoot
+    const path = targetPath ?? currentPath
     const queue = files.map(f => ({ name: f.name, status: "pending" as const }))
     setUploadQueue(queue)
     for (let i = 0; i < files.length; i++) {
@@ -306,7 +306,7 @@ export default function FilesPage() {
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
-    if (files && files.length > 0) uploadFiles(files)
+    if (files && files.length > 0) uploadFiles(files, activeRoot, currentPath)
     e.target.value = ""
   }
 
@@ -354,7 +354,7 @@ export default function FilesPage() {
     setDragging(false)
     const files = e.dataTransfer.files
     if (files.length > 0 && activeRoot && dirWritable) {
-      uploadFiles(files)
+      uploadFiles(files, activeRoot, currentPath)
     }
   }
 
