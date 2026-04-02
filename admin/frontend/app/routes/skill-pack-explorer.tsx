@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link, useBlocker } from "react-router"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { SkillQualityBadge, type QualityTier } from "~/components/skill-quality-badge"
+import { SkillEffectivenessBar } from "~/components/skill-effectiveness-bar"
 import { Button } from "~/components/ui/button"
 import { Badge } from "~/components/ui/badge"
 import { Card } from "~/components/ui/card"
@@ -152,6 +153,12 @@ export default function SkillPackExplorer() {
     retry: false,
   })
 
+  const { data: effectivenessData } = useQuery({
+    queryKey: ["skill-effectiveness", id],
+    queryFn: () => fetch(`/api/admin/skills/${id}/effectiveness`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!id,
+  })
+
   useEffect(() => {
     if (fileError) {
       setEditorContent("")
@@ -214,6 +221,29 @@ export default function SkillPackExplorer() {
       {/* Diagnostics summary */}
       <div className="px-4 py-2">
         <DiagnosticsSummary diagnostics={skill.diagnostics} />
+      </div>
+
+      {/* Skill Effectiveness */}
+      <div className="px-4 py-2 border-b border-border">
+        <h3 className="text-sm font-medium text-text2 mb-2">Skill Effectiveness</h3>
+        {!effectivenessData?.data?.agents?.length ? (
+          <p className="text-xs text-text3">No feedback data yet</p>
+        ) : (
+          <div className="space-y-1.5">
+            <p className="text-xs text-text3 mb-1">Effectiveness by agent</p>
+            {effectivenessData.data.agents.map((a: any) => (
+              <div key={a.persona_id} className="flex items-center justify-between py-0.5">
+                <span className="text-sm text-text2 truncate mr-4">{a.persona_name || a.persona_id}</span>
+                <SkillEffectivenessBar
+                  positive={a.positive_count}
+                  negative={a.negative_count}
+                  score={a.effectiveness_score}
+                  timesSelected={a.times_selected}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Split pane */}

@@ -16,6 +16,7 @@ import {
 import { CharacterCard, type RpgStats, type WorkshopData } from "~/components/character-card"
 import { VitalsBar } from "~/components/vitals-bar"
 import { PassiveTreeView } from "~/components/passive-tree-view"
+import { SkillEffectivenessBar } from "~/components/skill-effectiveness-bar"
 
 // ── Types ────────────────────────────────────────────────
 
@@ -135,6 +136,22 @@ function AgentDetailContent() {
     enabled: !!templateIdForLookup,
     retry: false,
     staleTime: 60_000,
+  })
+
+  // FBK-04: Agent skill effectiveness (only for born instances with an id)
+  const { data: skillEffectiveness } = useQuery({
+    queryKey: ["agent-skill-effectiveness", id],
+    queryFn: () => fetch(`/api/admin/agents/${id}/skill-effectiveness`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!id && !isPlanned,
+    retry: false,
+  })
+
+  // FBK-04: Template skill effectiveness (aggregated across all spawned agents)
+  const { data: templateEffectiveness } = useQuery({
+    queryKey: ["template-skill-effectiveness", templateIdForLookup],
+    queryFn: () => fetch(`/api/admin/templates/${templateIdForLookup}/skill-effectiveness`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!templateIdForLookup,
+    retry: false,
   })
 
   const rpgStats = rpgData?.stats ?? null
@@ -401,45 +418,69 @@ function AgentDetailContent() {
           ))}
 
           {hasApi && (
-              <TabsContent value="skills-tab" className="flex-1 min-h-0 mt-2">
-                <Card className="h-full overflow-y-auto">
-                  {skills.length === 0 ? (
-                    <div className="px-3 py-6 text-center text-xs text-text3">No skills assigned</div>
-                  ) : (
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-border/50 bg-muted/50 text-left">
-                          <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Skill</th>
-                          <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Category</th>
-                          <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Source</th>
-                          <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 text-right">Enabled</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {skills.map(s => (
-                          <tr key={s.name} className="border-b border-border/20 last:border-0">
-                            <td className="px-3 py-1.5">
-                              <Link
-                                to={`/skills/${s.name}/pack`}
-                                className="text-xs font-medium text-foreground hover:text-accent-porter hover:underline transition-colors"
-                              >
-                                {s.name}
-                              </Link>
-                              {s.description && <p className="text-2xs text-text3 truncate max-w-[280px]">{s.description}</p>}
-                            </td>
-                            <td className="px-3 py-1.5 text-2xs text-text3">{s.category || "—"}</td>
-                            <td className="px-3 py-1.5">
-                              <Badge className="text-2xs border-0 bg-text3/15 text-text3">{s.source || "detected"}</Badge>
-                            </td>
-                            <td className="px-3 py-1.5 text-right">
-                              <Switch checked={s.enabled} onCheckedChange={() => toggleSkill.mutate(s.name)} className="scale-75" />
-                            </td>
+              <TabsContent value="skills-tab" className="flex-1 min-h-0 mt-2 overflow-y-auto">
+                <div className="flex flex-col gap-4">
+                  <Card className="overflow-y-auto">
+                    {skills.length === 0 ? (
+                      <div className="px-3 py-6 text-center text-xs text-text3">No skills assigned</div>
+                    ) : (
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-border/50 bg-muted/50 text-left">
+                            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Skill</th>
+                            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Category</th>
+                            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Source</th>
+                            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 text-right">Enabled</th>
                           </tr>
+                        </thead>
+                        <tbody>
+                          {skills.map(s => (
+                            <tr key={s.name} className="border-b border-border/20 last:border-0">
+                              <td className="px-3 py-1.5">
+                                <Link
+                                  to={`/skills/${s.name}/pack`}
+                                  className="text-xs font-medium text-foreground hover:text-accent-porter hover:underline transition-colors"
+                                >
+                                  {s.name}
+                                </Link>
+                                {s.description && <p className="text-2xs text-text3 truncate max-w-[280px]">{s.description}</p>}
+                              </td>
+                              <td className="px-3 py-1.5 text-2xs text-text3">{s.category || "—"}</td>
+                              <td className="px-3 py-1.5">
+                                <Badge className="text-2xs border-0 bg-text3/15 text-text3">{s.source || "detected"}</Badge>
+                              </td>
+                              <td className="px-3 py-1.5 text-right">
+                                <Switch checked={s.enabled} onCheckedChange={() => toggleSkill.mutate(s.name)} className="scale-75" />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </Card>
+
+                  {/* Skill Effectiveness — standalone section */}
+                  <div className="mt-2">
+                    <h3 className="text-sm font-medium text-text2 mb-3">Skill Effectiveness</h3>
+                    {!skillEffectiveness?.data?.skills?.length ? (
+                      <p className="text-xs text-text3">No feedback data yet</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {skillEffectiveness.data.skills.map((s: any) => (
+                          <div key={s.skill_id ?? s.skill_name} className="flex items-center justify-between py-1">
+                            <span className="text-sm text-text2 truncate mr-4">{s.skill_name || s.skill_id}</span>
+                            <SkillEffectivenessBar
+                              positive={s.positive_count}
+                              negative={s.negative_count}
+                              score={s.effectiveness_score}
+                              timesSelected={s.times_selected}
+                            />
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
-                  )}
-                </Card>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </TabsContent>
           )}
 
@@ -470,6 +511,31 @@ function AgentDetailContent() {
                       <p className="text-xs text-text3">Forge this agent to unlock its agent build</p>
                     </CardContent>
                   </Card>
+                )}
+
+                {/* Skill Effectiveness — standalone section for templates */}
+                {!isInstance && (
+                  <div className="mt-2">
+                    <h3 className="text-sm font-medium text-text2 mb-3">Skill Effectiveness</h3>
+                    {!templateEffectiveness?.data?.skills?.length ? (
+                      <p className="text-xs text-text3">No feedback data yet</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-xs text-text3 mb-2">Aggregated across all spawned agents</p>
+                        {templateEffectiveness.data.skills.map((s: any) => (
+                          <div key={s.skill_id} className="flex items-center justify-between py-1">
+                            <span className="text-sm text-text2 truncate mr-4">{s.skill_name || s.skill_id}</span>
+                            <SkillEffectivenessBar
+                              positive={s.positive_count}
+                              negative={s.negative_count}
+                              score={s.effectiveness_score}
+                              timesSelected={s.times_selected}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
