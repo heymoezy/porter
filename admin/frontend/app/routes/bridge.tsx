@@ -333,9 +333,9 @@ function fmtNow() {
 // ── Bridge Agent Team ────────────────────────────────
 
 const BRIDGE_TEAM = [
-  { id: "bridge-operator", tab: "operator", name: "Vigil", specialist: "Bridge Operator", role: "Health & Sessions", skin: "#c68642", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#059669", hairStyle: "short" as const },
-  { id: "route-optimizer", tab: "routing", name: "Atlas", specialist: "Route Optimizer", role: "Models · Dispatch · Rules", skin: "#8d5524", hair: "#292524", eyes: "#1a1a2e", shirt: "#2563eb", hairStyle: "mohawk" as const },
-  { id: "cost-controller", tab: "controller", name: "Ledger", specialist: "Cost Controller", role: "Tokens · Limits · Costs", skin: "#e0ac69", hair: "#2C1810", eyes: "#1a1a2e", shirt: "#d97706", hairStyle: "short" as const },
+  { templateId: "bridge-operator", tab: "operator", name: "Vigil", specialist: "Bridge Operator", role: "Health & Sessions", skin: "#c68642", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#059669", hairStyle: "short" as const },
+  { templateId: "route-optimizer", tab: "routing", name: "Compass", specialist: "Route Optimizer", role: "Models · Dispatch · Rules", skin: "#8d5524", hair: "#292524", eyes: "#1a1a2e", shirt: "#2563eb", hairStyle: "mohawk" as const },
+  { templateId: "cost-controller", tab: "controller", name: "Ledger", specialist: "Cost Controller", role: "Tokens · Limits · Costs", skin: "#e0ac69", hair: "#2C1810", eyes: "#1a1a2e", shirt: "#d97706", hairStyle: "short" as const },
 ]
 
 // ── Operator Event Log ────────────────────────────────
@@ -1194,7 +1194,7 @@ export default function BridgePage() {
             <button
               key={agent.tab}
               onClick={() => {
-                if (isActive) navigate(`/templates/${agent.id}`)
+                if (isActive) navigate(`/agents/${agent.templateId}`)
                 else { setActiveTab(agent.tab); setEditingGw(null) }
               }}
               className={`flex-1 flex items-center justify-center gap-2.5 py-3 px-3 transition-colors duration-200 relative ${

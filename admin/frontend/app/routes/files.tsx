@@ -195,7 +195,7 @@ export default function FilesPage() {
     staleTime: 60000,
   })
   const projectAgents = (agentsData?.agents ?? []).filter(a =>
-    a.id === "projects-curator" || a.id === "porter-core"
+    a.id === "projects-curator"
   )
 
   // Fetch available roots
@@ -405,29 +405,32 @@ export default function FilesPage() {
         <div className="flex items-center gap-3">
           <span className="text-xs text-text3 font-mono">/home/lobster/projects{currentPath ? `/${currentPath}` : ""}</span>
 
-          {/* Assigned agents — from DB */}
+          {/* Assigned agents — from DB, link to template */}
           {projectAgents.map(a => {
             const spec = a.appearance_spec ? (typeof a.appearance_spec === 'string' ? JSON.parse(a.appearance_spec) : a.appearance_spec) : {}
             const palette = spec.palette ?? spec
+            const isBorn = !!(a as any).soul_hash
             return (
               <Link
                 key={a.id}
                 to={a.template_id ? `/agents/${a.template_id}` : `/agents/${a.id}`}
-                className="flex items-center gap-2 rounded-lg border border-accent-porter/20 bg-accent-porter/3 px-2.5 py-1.5 hover:border-accent-porter/40 transition-colors"
+                className="flex items-center gap-2 rounded-lg border border-border/40 bg-surface/50 px-2.5 py-1.5 hover:border-accent-porter/40 transition-colors"
               >
-                <PixelPortrait
-                  skin={palette.skin || "#f1c27d"}
-                  hair={palette.hair || "#2c1b18"}
-                  eyes={palette.eyes || "#1a1a2e"}
-                  shirt={palette.shirt || "#64748b"}
-                  hairStyle={palette.hairStyle || "short"}
-                  size="sm"
-                />
+                <div className={isBorn ? "" : "grayscale opacity-60"}>
+                  <PixelPortrait
+                    skin={palette.skin || "#f1c27d"}
+                    hair={palette.hair || "#2c1b18"}
+                    eyes={palette.eyes || "#1a1a2e"}
+                    shirt={palette.shirt || "#64748b"}
+                    hairStyle={palette.hairStyle || "short"}
+                    size="sm"
+                  />
+                </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-bold leading-tight text-text">{a.name}</p>
+                  <p className="text-xs font-bold leading-tight text-text2">{a.name}</p>
                   <p className="text-2xs text-text3 leading-tight">{a.role}</p>
                 </div>
-                <span className="size-1.5 rounded-full shrink-0 bg-success" />
+                <span className={`size-1.5 rounded-full shrink-0 ${isBorn ? "bg-success" : "bg-text3/40"}`} />
               </Link>
             )
           })}

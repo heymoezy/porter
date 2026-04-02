@@ -43,7 +43,7 @@ const TEAMS: Record<string, TeamDef> = {
     dotColor: "bg-[var(--accent-porter)]",
     agents: [
       { id: "bridge-operator",  name: "Vigil",  role: "LEAD — Health & Sessions",        template: "Bridge Operator",  team: "admin", appearance: { skin: "#c68642", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#059669", hairStyle: "short" } },
-      { id: "route-optimizer",  name: "Atlas",  role: "Models · Dispatch · Rules",      template: "Route Optimizer",  team: "admin", appearance: { skin: "#8d5524", hair: "#292524", eyes: "#1a1a2e", shirt: "#2563eb", hairStyle: "mohawk" } },
+      { id: "route-optimizer",  name: "Compass", role: "Models · Dispatch · Rules",      template: "Route Optimizer",  team: "admin", appearance: { skin: "#8d5524", hair: "#292524", eyes: "#1a1a2e", shirt: "#2563eb", hairStyle: "mohawk" } },
       { id: "cost-controller",  name: "Ledger", role: "Tokens · Limits · Costs",        template: "Cost Controller",  team: "admin", appearance: { skin: "#e0ac69", hair: "#2C1810", eyes: "#1a1a2e", shirt: "#d97706", hairStyle: "short" } },
     ],
   },
