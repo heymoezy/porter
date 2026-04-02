@@ -109,3 +109,18 @@ None - plan executed exactly as written. The only notable observation: `template
 ---
 *Phase: 34-feedback-telemetry*
 *Completed: 2026-04-02*
+
+## Self-Check: PASSED
+
+All created files confirmed present:
+- `admin/backend/src/routes/skills.ts` — FOUND
+- `admin/backend/src/routes/agents.ts` — FOUND
+- `admin/backend/src/routes/templates.ts` — FOUND
+- `admin/frontend/app/components/skill-effectiveness-bar.tsx` — FOUND
+- `admin/frontend/app/routes/skill-pack-explorer.tsx` — FOUND
+- `admin/frontend/app/routes/agent-detail.tsx` — FOUND
+- `.planning/phases/34-feedback-telemetry/34-03-SUMMARY.md` — FOUND
+
+Commits confirmed:
+- `5824052` — FOUND
+- `16743bd` — FOUND
