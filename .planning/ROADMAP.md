@@ -74,7 +74,7 @@
 
 - [x] **Phase 31: Source of Truth Cleanup** — DB assignments canonical, SKILLS.md = generated manifest (completed 2026-04-02)
 - [x] **Phase 32: Skill Pack Explorer** — View/edit real .md files, quality diagnostics (completed 2026-04-02)
-- [ ] **Phase 33: Runtime Skill Selector** — Rank skills per task, inject packs, log selection
+- [x] **Phase 33: Runtime Skill Selector** — Rank skills per task, inject packs, log selection (completed 2026-04-02)
 - [ ] **Phase 34: Feedback Telemetry** — Capture signals, effectiveness scoring
 - [ ] **Phase 35: Agent Evolution Loop** — Recommendations, proposed changes, supervised apply
 - [ ] **Phase 36: Skill Quality Scoring** — Real quality tiers, audit job
@@ -126,7 +126,7 @@ Plans:
   3. Selected skill pack content (prompt.md + SKILL.md) is injected into the dispatch system prompt between memory tiers and gateway instructions
   4. Every dispatch record in bridge_dispatch_log includes a skills_used JSONB column with candidate list, selected list, and scores
   5. An agent with no assigned skills or no relevant skills dispatches normally without skill injection
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 33-01-PLAN.md — Migration (skills_used JSONB) + skill-selector.ts service (scoring, pack reading)
 - [ ] 33-02-PLAN.md — Chat pipeline wiring + dispatch logging integration
@@ -192,7 +192,7 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 24-30 | v4.0 | 17/17 | Partial (28 deferred) | 2026-04-02 |
 | 31. Source of Truth | v5.0 | 3/3 | Complete | 2026-04-02 |
 | 32. Skill Pack Explorer | v5.0 | 4/4 | Complete | 2026-04-02 |
-| 33. Runtime Skill Selector | 1/2 | In Progress|  | - |
+| 33. Runtime Skill Selector | 2/2 | Complete   | 2026-04-02 | - |
 | 34. Feedback Telemetry | v5.0 | 0/TBD | Not started | - |
 | 35. Agent Evolution Loop | v5.0 | 0/TBD | Not started | - |
 | 36. Skill Quality Scoring | v5.0 | 0/TBD | Not started | - |

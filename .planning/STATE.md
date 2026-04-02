@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 33-01-PLAN.md
-last_updated: "2026-04-02T17:40:00.000Z"
+stopped_at: Completed 33-02-PLAN.md
+last_updated: "2026-04-02T17:30:00.101Z"
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -67,6 +67,9 @@ Plan: 2 of 2 (Plan 01 complete)
 - [Phase 33-01]: SCORE_THRESHOLD=1 (any match qualifies) ensures inclusive selection; MAX_SELECTED=3 caps injected skills per dispatch
 - [Phase 33-01]: bridge_dispatch_log.skills_used JSONB column added with GIN index for future skill telemetry analytics
 - [Phase 33-01]: selectSkills wraps full body in try/catch — fire-and-forget safe, never throws during dispatch pipeline
+- [Phase 33]: skillsUsed shape defined inline in RoutingContext — no cross-service imports, serializable subset sufficient for JSONB logging
+- [Phase 33]: stream-service.ts required zero changes — ctxOverride spread already propagates skillsUsed automatically
+- [Phase 33]: Full RTS loop complete: selectSkills called at dispatch, skill prompts injected into systemPrompt, telemetry persisted in bridge_dispatch_log.skills_used
 
 ### Pending Todos
 
@@ -80,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T17:40:00.000Z
-Stopped at: Completed 33-01-PLAN.md
+Last session: 2026-04-02T17:30:00.099Z
+Stopped at: Completed 33-02-PLAN.md
 Resume file: None
