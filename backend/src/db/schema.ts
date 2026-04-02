@@ -847,6 +847,8 @@ export const skills = pgTable('skills', {
   sortOrder: integer('sort_order').default(50),
   featuredOrder: integer('featured_order').default(0),
   configSchema: jsonb('config_schema').default(sql`'{}'::jsonb`),
+  qualityScore: doublePrecision('quality_score').default(0),
+  qualityTier: text('quality_tier').default('scaffold'),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
   updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
