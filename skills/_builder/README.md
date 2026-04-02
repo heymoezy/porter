@@ -16,7 +16,7 @@ Each skill lives in its own directory:
 ## Source of truth
 
 - DB row in `skills` table = registry / visibility / category / featured state
-- Filesystem pack in `/home/lobster/documents/porter/skills/<skill-id>/` = actual skill artifact
+- Filesystem pack in `/home/lobster/projects/porter/skills/<skill-id>/` = actual skill artifact
 
 ## Current builder flow
 

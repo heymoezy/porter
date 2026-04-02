@@ -2,7 +2,7 @@
 
 ## Test Stack
 - **Framework:** Playwright (Node.js)
-- **Run:** `cd /home/lobster/documents/porter/tests && npx playwright test`
+- **Run:** `cd /home/lobster/projects/porter/tests && npx playwright test`
 - **Config:** `playwright.config.js` — headless Chromium, base URL `http://127.0.0.1:3001`
 - **Current count:** 35 tests
 

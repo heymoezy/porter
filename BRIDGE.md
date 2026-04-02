@@ -1,6 +1,6 @@
 # Porter Bridge — Hub & Spoke Contract
 
-Canonical location: repo root `/home/lobster/documents/porter/BRIDGE.md`.
+Canonical location: repo root `/home/lobster/projects/porter/BRIDGE.md`.
 If you're working from `backend/`, this is still the source of truth.
 
 ## Endpoint

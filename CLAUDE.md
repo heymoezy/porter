@@ -14,7 +14,7 @@ Porter Brain is the **API backend and database owner**. Together with Porter Adm
 - **Config:** `porter_config.json` (via `PORTER_DATA_DIR` env var)
 - **Database:** PostgreSQL (Drizzle ORM) — Brain owns this, Admin connects to it
 - **Tests:** `cd tests && npx playwright test` (35 tests)
-- **Version:** v3.3.2
+- **Version:** v4.4.0
 
 ## Monorepo Structure
 
@@ -29,7 +29,7 @@ Business model: API metering. Any future UI/frontend is just an API customer —
 
 ## Shared Memory System
 
-- **Canonical checkpoint:** `tasks/checkpoint.md` — all models read/update this
+- **Canonical checkpoint:** `CHECKPOINT.md` (repo root) — all models read/update this
 - **Directives table:** operating rules injected into every AI dispatch
 - **Concepts table:** project state, searchable via FTS
 - **Memory injection:** `backend/src/services/memory-injection.ts` — tiered injection pipeline
@@ -37,7 +37,7 @@ Business model: API metering. Any future UI/frontend is just an API customer —
 
 ## Bridge Layer
 
-Canonical hub/spoke contract: `/home/lobster/documents/porter/BRIDGE.md`
+Canonical hub/spoke contract: `/home/lobster/projects/porter/BRIDGE.md`
 
 5 gateway adapters in `backend/src/services/bridge/adapters/`:
 - OpenClaw (GPT-5.4) — primary strong model, :18789

@@ -51,6 +51,6 @@ Account, system info
 - No polling — use SSE for real-time updates, fetch once otherwise
 
 ## Monorepo Layout
-This is part of the Porter monorepo (`heymoezy/porter`). Working dir: `/home/lobster/documents/porter/admin/`.
+This is part of the Porter monorepo (`heymoezy/porter`). Working dir: `/home/lobster/projects/porter/admin/`.
 - **Brain:** `../backend/` — Fastify API, :3001, owns PostgreSQL
 - **Admin:** this directory (`admin/backend/` + `admin/frontend/`)
