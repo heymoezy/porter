@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
-status: unknown
-stopped_at: Completed 32-01-PLAN.md
-last_updated: "2026-04-02T16:41:36.071Z"
+status: executing
+stopped_at: Completed 32-02-PLAN.md
+last_updated: "2026-04-02T16:51:51Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 32 (Skill Pack Explorer) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 
 ## Performance Metrics
 
@@ -58,6 +58,9 @@ Plan: 2 of 4
 - [Phase 32-00]: PKX-0N test naming convention enables --grep PKX-0N targeted test runs throughout Phase 32
 - [Phase 32-skill-pack-explorer]: Fast quality tier (size heuristic) on list endpoint, full word-count diagnostics only on detail — avoids ~1045 readFileSync calls
 - [Phase 32-skill-pack-explorer]: PUT /:id/files/* registered before generic PUT /:id to prevent Fastify route param shadowing on file writes
+- [Phase 32-02]: Eager-import lang/theme modules but lazy-import only the React CodeMirror component — simpler SSR safety
+- [Phase 32-02]: Two-layer dirty guard: confirm() for within-page file switching, useBlocker for SPA navigation
+- [Phase 32-02]: retry:false on file content query — 404 for missing files becomes isError so empty editor shows
 
 ### Pending Todos
 
@@ -71,6 +74,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T16:41:36.068Z
-Stopped at: Completed 32-01-PLAN.md
+Last session: 2026-04-02T16:51:51Z
+Stopped at: Completed 32-02-PLAN.md
 Resume file: None
