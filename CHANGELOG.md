@@ -1,3 +1,8 @@
+## v4.0.1 (2026-04-02)
+
+- docs: start milestone v5.0 Living Skills (7 phases, 36 requirements)
+
+
 ## v4.5.0 (2026-04-02)
 
 **Projects + Agent Identity Overhaul**
