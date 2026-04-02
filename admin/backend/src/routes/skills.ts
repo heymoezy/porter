@@ -47,6 +47,52 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     return ok({ skill });
   });
 
+  // POST /api/admin/skills — create a new skill
+  fastify.post('/', async (req, reply) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const id = String(body.id ?? '').trim();
+    const name = String(body.name ?? '').trim();
+    if (!id || !name) {
+      reply.status(400);
+      return err('INVALID_INPUT', 'id and name are required');
+    }
+
+    const existing = await queryOne<{ id: string }>('SELECT id FROM skills WHERE id = $1', [id]);
+    if (existing) {
+      reply.status(409);
+      return err('DUPLICATE', `Skill "${id}" already exists`);
+    }
+
+    await execute(`
+      INSERT INTO skills (id, name, description, category, source, enabled, visible, featured, icon, color, short_label, sort_order, featured_order, config_schema)
+      VALUES ($1, $2, $3, $4, $5, 1, 1, 0, '', '', '', 50, 0, '{}')
+    `, [
+      id,
+      name,
+      String(body.description ?? ''),
+      String(body.category ?? 'Unknown'),
+      String(body.source ?? 'porter-curated'),
+    ]);
+
+    const skill = await getSkillDetail(id);
+    return ok({ skill });
+  });
+
+  // DELETE /api/admin/skills/:id — delete a skill
+  fastify.delete('/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const existing = await queryOne<{ id: string }>('SELECT id FROM skills WHERE id = $1', [id]);
+    if (!existing) {
+      reply.status(404);
+      return err('NOT_FOUND', 'Skill not found');
+    }
+
+    await execute('DELETE FROM persona_skills WHERE skill_name = $1', [id]);
+    await execute('DELETE FROM template_skills WHERE skill_id = $1', [id]);
+    await execute('DELETE FROM skills WHERE id = $1', [id]);
+    return ok({ deleted: id });
+  });
+
   fastify.put('/:personaId/:skillName/toggle', async (req, reply) => {
     const { personaId, skillName } = req.params as { personaId: string; skillName: string };
     const row = await queryOne<{ enabled: number }>('SELECT enabled FROM persona_skills WHERE persona_id = $1 AND skill_name = $2', [personaId, skillName]);

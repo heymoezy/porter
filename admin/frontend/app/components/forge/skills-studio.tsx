@@ -2,20 +2,28 @@ import { Fragment, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
+import { Button } from "~/components/ui/button"
 import { Switch } from "~/components/ui/switch"
 import { Input } from "~/components/ui/input"
-import { Sparkles, Search, ChevronDown, ChevronRight, Bot } from "lucide-react"
+import { Sparkles, Search, ChevronDown, ChevronRight, Bot, Plus, Pencil, Loader2, Package } from "lucide-react"
+import { SkillCreateDialog } from "~/components/forge/skill-create-dialog"
+import { SkillEditSheet } from "~/components/forge/skill-edit-sheet"
 
 // ── Types ──────────────────────────────────────────────────
 
 interface SkillAgent { id: string; name: string; role: string; enabled: boolean }
 interface Skill {
   id: string; name: string; description: string; category: string; source: string
+  enabled: boolean; visible: boolean; featured: boolean
+  icon: string; color: string; short_label: string
+  sort_order: number; featured_order: number
+  packStatus: "ready" | "partial" | "missing"
   agents: SkillAgent[]
 }
 interface SkillsResponse {
   skills: Skill[]; totalSkills: number; totalAssignments: number; assignedSkills: number
   categories: Record<string, number>; sources: Record<string, number>
+  status: { ready: number; partial: number; missing: number }
 }
 
 const sourceColors: Record<string, string> = {
@@ -26,6 +34,12 @@ const sourceColors: Record<string, string> = {
   "detected": "bg-text3/15 text-text3",
 }
 
+const packStatusStyles: Record<string, string> = {
+  ready: "bg-success/15 text-success",
+  partial: "bg-warning/15 text-warning",
+  missing: "bg-text3/15 text-text3",
+}
+
 // ── Component ──────────────────────────────────────────────
 
 export function SkillsStudio() {
@@ -33,6 +47,9 @@ export function SkillsStudio() {
   const [search, setSearch] = useState("")
   const [activeCat, setActiveCat] = useState("all")
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editSkill, setEditSkill] = useState<Skill | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "skills"],
@@ -42,6 +59,12 @@ export function SkillsStudio() {
   const toggleSkill = useMutation({
     mutationFn: ({ personaId, skillName }: { personaId: string; skillName: string }) =>
       api(`/api/admin/skills/${personaId}/${skillName}/toggle`, { method: "PUT" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "skills"] }),
+  })
+
+  const generateAll = useMutation({
+    mutationFn: () =>
+      api<{ generated: number; total: number }>("/api/admin/skills/builder/generate-all", { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "skills"] }),
   })
 
@@ -56,6 +79,10 @@ export function SkillsStudio() {
   const allSkills = data?.skills ?? []
   const categories = data?.categories ?? {}
   const sources = data?.sources ?? {}
+  const statusCounts = data?.status ?? { ready: 0, partial: 0, missing: 0 }
+  const missingCount = statusCounts.missing
+
+  const categoryList = Object.keys(categories).sort()
 
   let skills = allSkills
   if (activeCat !== "all") skills = skills.filter(s => s.category === activeCat)
@@ -67,9 +94,15 @@ export function SkillsStudio() {
     )
   }
 
+  function openEdit(skill: Skill, e: React.MouseEvent) {
+    e.stopPropagation()
+    setEditSkill(skill)
+    setEditOpen(true)
+  }
+
   return (
     <div className="space-y-2">
-      {/* Stats + search */}
+      {/* Stats + actions + search */}
       <div className="flex items-center gap-2">
         <Sparkles className="size-3 text-accent-porter" />
         <span className="text-2xs font-semibold uppercase tracking-wide text-text3">
@@ -82,6 +115,25 @@ export function SkillsStudio() {
             </Badge>
           ))}
         </div>
+        {missingCount > 0 && (
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => generateAll.mutate()}
+            disabled={generateAll.isPending}
+          >
+            {generateAll.isPending ? (
+              <Loader2 className="size-3 mr-1 animate-spin" />
+            ) : (
+              <Package className="size-3 mr-1" />
+            )}
+            Generate Missing ({missingCount})
+          </Button>
+        )}
+        <Button size="xs" onClick={() => setCreateOpen(true)}>
+          <Plus className="size-3 mr-1" />
+          New
+        </Button>
         <div className="relative">
           <Search className="absolute left-2 top-1/2 size-3 -translate-y-1/2 text-text3" />
           <Input
@@ -121,7 +173,9 @@ export function SkillsStudio() {
               <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Skill</th>
               <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Description</th>
               <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Source</th>
+              <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Pack</th>
               <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 text-right">Agents</th>
+              <th className="w-8 px-2 py-1.5" />
             </tr>
           </thead>
           <tbody>
@@ -146,17 +200,31 @@ export function SkillsStudio() {
                         {skill.source}
                       </Badge>
                     </td>
+                    <td className="px-2 py-1">
+                      <Badge className={`text-2xs border-0 ${packStatusStyles[skill.packStatus] || "bg-text3/15 text-text3"}`}>
+                        {skill.packStatus}
+                      </Badge>
+                    </td>
                     <td className="px-2 py-1 text-right">
                       {skill.agents.length > 0 ? (
                         <span className="text-xs text-text2">{enabledCount}/{skill.agents.length}</span>
                       ) : (
-                        <span className="text-2xs text-text3">—</span>
+                        <span className="text-2xs text-text3">--</span>
                       )}
+                    </td>
+                    <td className="px-2 py-1">
+                      <button
+                        onClick={(e) => openEdit(skill, e)}
+                        className="rounded p-1 text-text3 hover:text-text hover:bg-raised transition-colors"
+                        title="Edit skill"
+                      >
+                        <Pencil className="size-3" />
+                      </button>
                     </td>
                   </tr>
                   {isExpanded && skill.agents.length > 0 && (
                     <tr key={`${skill.id}-agents`}>
-                      <td colSpan={5} className="bg-surface/50 border-b border-border/20">
+                      <td colSpan={7} className="bg-surface/50 border-b border-border/20">
                         <div className="px-8 py-1">
                           {skill.agents.map(a => (
                             <div key={a.id} className="flex items-center gap-2 py-0.5">
@@ -184,6 +252,19 @@ export function SkillsStudio() {
       {skills.length === 0 && (
         <div className="py-6 text-center text-xs text-text3">{search ? "No skills match" : "No skills"}</div>
       )}
+
+      {/* Dialogs */}
+      <SkillCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        categories={categoryList}
+      />
+      <SkillEditSheet
+        skill={editSkill}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        categories={categoryList}
+      />
     </div>
   )
 }
