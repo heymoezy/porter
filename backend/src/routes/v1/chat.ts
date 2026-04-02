@@ -314,10 +314,20 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       skillsUsed,  // Phase 33: skill selection telemetry for dispatch logging
     });
     let fullResponse = '';
+    // Phase 34: capture dispatch_id yielded by routing-engine as __DISPATCH_META__ token
+    let capturedDispatchId: string | null = null;
 
     try {
       for await (const token of streamBackend.stream(augmentedMessage, ac.signal, systemPrompt)) {
         if (ac.signal.aborted) break;
+        // Phase 34: intercept metadata token — strip from response, do not send to client
+        if (token.startsWith('__DISPATCH_META__')) {
+          try {
+            const meta = JSON.parse(token.slice('__DISPATCH_META__'.length));
+            capturedDispatchId = meta.dispatch_id ?? null;
+          } catch { /* malformed meta — ignore */ }
+          continue;
+        }
         fullResponse += token;
         reply.raw.write(`data: ${JSON.stringify({ token })}\n\n`);
       }
@@ -328,7 +338,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     } finally {
       // Always emit done event (prevents client EventSource reconnect loops)
       const modelLabel = streamBackend.name === 'ollama' ? `ollama/${config.ollamaModel}` : streamBackend.name;
-      reply.raw.write(`data: ${JSON.stringify({ done: true, backend: modelLabel, full_response: fullResponse })}\n\n`);
+      reply.raw.write(`data: ${JSON.stringify({ done: true, backend: modelLabel, full_response: fullResponse, dispatch_id: capturedDispatchId })}\n\n`);
       reply.raw.end();
 
       // Persist completed message to chat history (non-blocking, best-effort)

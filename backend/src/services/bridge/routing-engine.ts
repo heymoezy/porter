@@ -358,6 +358,21 @@ export class RoutingEngine {
           awardXP(ctx.agentId, 'dispatch').catch(() => {});
         }
 
+        // Phase 34: Increment times_selected counter on persona_skills for each selected skill
+        if (ctx.skillsUsed?.selected?.length && ctx.agentId) {
+          try {
+            const skillIds = ctx.skillsUsed.selected.map(s => s.skillId);
+            await pool.query(
+              `UPDATE persona_skills
+               SET times_selected = COALESCE(times_selected, 0) + 1,
+                   last_used_at = EXTRACT(EPOCH FROM NOW())
+               WHERE persona_id = $1
+                 AND COALESCE(skill_id, skill_name) = ANY($2)`,
+              [ctx.agentId, skillIds]
+            );
+          } catch { /* non-fatal — counter update must never block dispatch */ }
+        }
+
         // SES-01: Track per-session token usage
         try {
           const totalTokens = (result.inputTokens ?? 0) + (result.outputTokens ?? 0);
@@ -646,8 +661,10 @@ export class RoutingEngine {
           inputTokens: Math.ceil(JSON.stringify(req.messages).length / 4),
         };
 
-        // Fire-and-forget logging
-        self.logDispatch(decision, ctx, result).catch(() => {});
+        // Phase 34: capture dispatch ID and yield as metadata token for chat.ts to thread into SSE done event
+        const dispatchId = self.logDispatch(decision, ctx, result).catch(() => null as string | null);
+        const resolvedId = await dispatchId;
+        if (resolvedId) yield `__DISPATCH_META__${JSON.stringify({ dispatch_id: resolvedId })}`;
       } catch (err) {
         // Errors in the stream are re-thrown to the caller
         throw err;
