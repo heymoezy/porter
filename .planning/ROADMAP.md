@@ -5,7 +5,8 @@
 - ✅ **v1.0 Foundation + Core Platform** — Phases 1-7 (shipped 2026-03-21)
 - ✅ **v2.0 Backend Ready** — Phases 8-15 (shipped 2026-03-24)
 - ✅ **v3.0 Porter Bridge** — Phases 16-23 (shipped 2026-03-25) — AI gateway, model intelligence, smart routing
-- 🚧 **v4.0 The Arena** — Phases 24-30 (active) — Agent RPG system, battle arena, forge unification, intelligence loop
+- ⏸️ **v4.0 The Arena** — Phases 24-30 (6/7 shipped, Phase 28 Battle Arena deferred)
+- 🚧 **v5.0 Living Skills** — Phases 31-37 (active) — Skills as live behavioral modules
 
 ## Phases
 
@@ -38,164 +39,149 @@
 - [x] Phase 13.05: PostgreSQL Migration — SQLite to PostgreSQL 16 + pgvector, all schemas/queries/FTS ported (2026-03-24)
 - [x] Phase 13.1: Memory V3 State Engine — Structured directives/notes, tiered injection, consolidation, agent self-edit (2026-03-24)
 - [x] Phase 15: Skills & Tools Architecture — DB registry, CRUD APIs, junction tables, visibility controls, forge integration (2026-03-24)
-- ~~Phase 14: Billing Enforcement — Deferred to future milestone~~
 
-38/41 requirements complete (3 billing deferred). See milestones/v2.0-ROADMAP.md for full details.
+38/41 requirements complete (3 billing deferred).
 
 </details>
 
 <details>
 <summary>v3.0 Porter Bridge (Phases 16-23) — SHIPPED 2026-03-25</summary>
 
-- [x] Phase 16: Gateway Foundation — DB schema, adapter interface, config migration, auto-detection, key masking (2026-03-25)
-- [x] Phase 17: Provider Adapters — Concrete adapters for all backends + unified stream normalizer (2026-03-25)
-- [x] Phase 18: Resilience Layer — Background health probes, circuit breakers, retry/backoff, N-backend fallback (2026-03-25)
-- [x] Phase 19: Model Catalog — Models table, auto-population, capability metadata, version tracking, cost tracking (2026-03-25)
-- [x] Phase 20: Smart Routing Engine — DB-driven model selection, routing rules, decision logging, concurrency, session context (2026-03-25)
-- [x] Phase 21: First-Run Setup — Gateway detection endpoint, guided setup API, zero-config path, OpenClaw integration (2026-03-25)
-- [x] Phase 22: Bridge Admin Surface — 7 admin API endpoints, SSE events, design system components, agent-ready layout (2026-03-25)
-- [x] Phase 23: Integration & Multi-Tenant — Brain/Recall integration, per-user keys, workspace overrides, usage attribution (2026-03-25)
+- [x] Phase 16-23: Gateway foundation, provider adapters, resilience, model catalog, smart routing, first-run setup, bridge admin, integration & multi-tenant
 
 46/46 requirements complete. Version v3.3.2.
 
 </details>
 
+<details>
+<summary>v4.0 The Arena (Phases 24-30) — PARTIAL (6/7 shipped)</summary>
+
+- [x] Phase 24: Schema Migration — RPG tables, battle tables, session registry, intelligence patterns
+- [x] Phase 25: RPG Engine — Stat calculation, XP/level/star/rarity, .md regeneration
+- [x] Phase 26: Forge Unification — Nav merge, 4-tab shell, armory absorbs skills/tools
+- [x] Phase 27: Character Sheet UI — Pentagon stats, rarity borders, vitals, passive tree
+- [ ] Phase 28: Battle Arena — DEFERRED to v6.0
+- [x] Phase 29: Session Registry + Message Bus — Per-session tokens, context pressure, envelope protocol
+- [x] Phase 30: Intelligence Loop + Bridge Operator — Pattern extraction, concept promotion, Vigil surfaces
+
+</details>
+
 ---
 
-### v4.0 The Arena (Active)
+### v5.0 Living Skills (Active)
 
-**Milestone Goal:** Transform Porter's agent system into an RPG character framework where agents have real stats derived from dispatch data, level up through usage, equip tools like gear, and battle each other head-to-head. Unify Forge + Skills + Tools into one page. Close the Bridge intelligence loop (Bridge → Intelligence → Recall → routing). Stats mean something because they come from real usage — never from designer fiat.
+**Milestone Goal:** Transform skills from a static catalog into live behavioral modules that are selected at runtime, injected into dispatch prompts, measured for effectiveness, and evolved through feedback. Fix the broken source of truth, build real authoring UX, implement runtime selection, close the feedback loop, and replace fake quality tiers with real measurement.
 
-- [x] **Phase 24: Schema Migration** — 7 new tables + 2 ALTERs for the entire RPG + Arena data model (completed 2026-04-01)
-- [x] **Phase 25: RPG Engine** — Stat calculation from dispatch logs, XP/level/star/rarity progression, .md regeneration (completed 2026-04-01)
-- [x] **Phase 26: Forge Unification** — Nav merge, 4-tab shell, skills/supports system with live success rates (completed 2026-04-01)
-- [x] **Phase 27: Character Sheet UI** — Pentagon stat chart, rarity borders, vitals bars, passive tree, gear display (completed 2026-04-01)
-- [ ] **Phase 28: Battle Arena** — Head-to-head battles, ensemble judge, Elo ratings, pre-launch calibration
-- [x] **Phase 29: Session Registry + Message Bus** — Per-session token accounting, context pressure detection, envelope protocol (completed 2026-04-01)
-- [x] **Phase 30: Intelligence Loop + Bridge Operator** — Pattern extraction, Recall promotion, Vigil live surfaces (completed 2026-04-01)
+- [ ] **Phase 31: Source of Truth Cleanup** — DB assignments canonical, SKILLS.md = generated manifest
+- [ ] **Phase 32: Skill Pack Explorer** — View/edit real .md files, quality diagnostics
+- [ ] **Phase 33: Runtime Skill Selector** — Rank skills per task, inject packs, log selection
+- [ ] **Phase 34: Feedback Telemetry** — Capture signals, effectiveness scoring
+- [ ] **Phase 35: Agent Evolution Loop** — Recommendations, proposed changes, supervised apply
+- [ ] **Phase 36: Skill Quality Scoring** — Real quality tiers, audit job
+- [ ] **Phase 37: Template Skill UX** — Assignment authoring, effectiveness display
 
 ## Phase Details
 
-### Phase 24: Schema Migration
-**Goal**: Every table and column the RPG, Arena, Session, and Intelligence systems depend on exists in PostgreSQL — all downstream service code can be written against a stable, typed Drizzle schema
-**Depends on**: Phase 23 (v3.0 complete)
-**Requirements**: SCH-01, SCH-02, SCH-03, SCH-04, SCH-05, SCH-06, SCH-07
+### Phase 31: Source of Truth Cleanup
+**Goal**: template_skills and persona_skills junction tables are the single source of truth for all skill assignments — SKILLS.md is a thin generated manifest, skills_text is deprecated, and no skill data is duplicated across DB columns and files
+**Depends on**: Phase 30 (v4.0 complete)
+**Requirements**: SOT-01, SOT-02, SOT-03, SOT-04, SOT-05, SOT-06
 **Success Criteria** (what must be TRUE):
-  1. `agent_templates` table has RPG columns (shell, intelligence, supports, equipment_slots, passive_tree, level, xp, star_level, rarity, elo_rating, specialties) without breaking existing rows
-  2. `agent_battles` table exists and accepts a battle record with agent_a, agent_b, prompt, scores JSONB, winner, elo_delta, judge_results, and created_at
-  3. `agent_bonds`, `battle_replays`, `session_registry`, `msg_bus_events`, and `intelligence_patterns` tables all exist with correct FK constraints and indexes
-  4. Agent skills junction table has success_rate_30d, total_uses, and last_used columns
-  5. Drizzle migration runs cleanly on the live database with zero downtime and all 35 Playwright tests still pass
-**Plans**: 2 plans
-Plans:
-- [x] 24-01-PLAN.md — Raw SQL migration (migrate-rpg-v1.ts) + index.ts wiring
-- [x] 24-02-PLAN.md — Drizzle schema.ts type definitions for all new tables
-
-### Phase 25: RPG Engine
-**Goal**: Agent stats are live, accurate, and permanently tied to real dispatch history — every agent has a computable level, star rating, rarity class, and 5-stat profile derived from immutable logs, and progression events trigger automatic .md file regeneration
-**Depends on**: Phase 24
-**Requirements**: RPG-01, RPG-02, RPG-03, RPG-04, RPG-05, RPG-06, RPG-07, MD-01, MD-02, MD-03, MD-04, MD-05
-**Success Criteria** (what must be TRUE):
-  1. Calling the RPG engine for an agent with dispatch history returns a populated `agent_rpg_stats` cache row with all 5 stats (QTY/SPD/EFF/REL/COMBO) derived from `bridge_dispatch_log` — no manual values exist anywhere in the codebase
-  2. An agent that completes 50 dispatches advances from level 1 toward level 5 with XP accumulating at the correct per-event rates (dispatch +10, feedback +25, specialty +50, battle won +100)
-  3. Star progression gates work: reaching 2-star requires 50 dispatches, 3-star requires 200 dispatches AND avg reliability >= 85% — attempting to force star-up via direct DB write has no effect because stats are recomputed from logs
-  4. When an agent levels up or gains a star, SOUL.md, IDENTITY.md, SKILLS.md, and TOOLS.md are overwritten from DB state within the same transaction — .md files always reflect current DB truth
-  5. The stat cache is rebuilt asynchronously via the existing scheduler — character card API reads cache only, never performs live log aggregation
-**Plans**: 3 plans
-Plans:
-- [x] 25-01-PLAN.md — rpg-engine.ts core service: stat calculation SQL, XP/level/star/rarity/specialty logic (2026-04-01)
-- [ ] 25-02-PLAN.md — regenerateMdFiles() + admin API routes (GET/POST rpg-stats endpoints)
-- [ ] 25-03-PLAN.md — routing-engine.ts logDispatch hook + scheduler background recalculation job
-
-### Phase 26: Forge Unification
-**Goal**: Skills, Tools, and Forge are one nav item with four coherent tabs — users build, equip, and configure agents in a single place instead of navigating three separate sections
-**Depends on**: Phase 24
-**Requirements**: FRG-01, FRG-02, FRG-03, FRG-04, FRG-05, FRG-06, FRG-07, SKL-01, SKL-02, SKL-03, SKL-04, SKL-05
-**Success Criteria** (what must be TRUE):
-  1. The admin nav has a single "Forge" item — "Skills" and "Tools" nav items are gone, all their content is accessible within Forge's tabs
-  2. Forge shows four tabs: Templates, Armory, Workshop, Arena — each tab loads its content independently
-  3. Workshop tab displays an agent's active skills with live 30-day success rate next to each skill name, and skill slot count increases visibly as agent level rises
-  4. Supports display an exact prompt diff and a measured battle impact score — not placeholder text
-  5. Forging a new agent from a template shows the birth animation sequence (grayscale → color → particle burst) and ends with the agent appearing in the agent list
-**Plans**: 3 plans
-Plans:
-- [ ] 26-01-PLAN.md — Backend: GET /api/admin/templates/:id/workshop endpoint with skills + success_rate_30d + supports JSONB
-- [ ] 26-02-PLAN.md — Frontend: Sidebar nav merge (3 items → 1) + 4-tab Forge shell + Armory tab absorbs skills/tools
-- [ ] 26-03-PLAN.md — Frontend: Full Workshop tab with live skill rates + supports diff + birth animation grayscale-to-color
-
-### Phase 27: Character Sheet UI
-**Goal**: Every agent has a full character sheet users can read like a game card — stats, gear, vitals, passive tree, rarity, and star level are visible, accurate, and update in real time
-**Depends on**: Phase 25, Phase 26
-**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-05, UI-06, VIT-01, VIT-02, VIT-03
-**Success Criteria** (what must be TRUE):
-  1. An agent's character card displays all sections without empty states: Shell, Intelligence, Skills, Supports, Equipment, Passive Tree, Vitals, Level/XP bar, 5-stat pentagon, rarity badge, star rating
-  2. The stat pentagon (recharts RadarChart) renders correctly for all 5 stats at any value range — an agent with all stats at 0 shows an empty pentagon, not a crash
-  3. The three vitals bars (Tokens, Health, Focus) are color-coded and update live via SSE — a new dispatch visibly changes the Health bar within 5 seconds
-  4. Rarity border animations render correctly for all 5 tiers: Common (gray), Rare (blue glow), Epic (purple pulse), Legendary (gold animated), Mythic (red particles)
-  5. Star display shows current stars filled, the next star unfilled with a progress arc, and the exact dispatch/battle count needed to unlock the next tier
-**Plans**: 3 plans
-Plans:
-- [ ] 27-01-PLAN.md — recharts install + rarity CSS keyframes + CharacterCard component (pentagon, stars, rarity border, shell/intelligence/skills/supports/equipment sections)
-- [ ] 27-02-PLAN.md — VitalsBar component (Tokens/Health/Focus with real data) + PassiveTreeView (8-node grid)
-- [ ] 27-03-PLAN.md — Wire into agent-detail.tsx SHEET tab + build + ship + human verify
-
-### Phase 28: Battle Arena
-**Goal**: Any two agents can fight head-to-head on the same prompt, judged blindly by an ensemble of 3 models, with Elo ratings that mean something because judge bias is structurally prevented from day one
-**Depends on**: Phase 27
-**Requirements**: BTL-01, BTL-02, BTL-03, BTL-04, BTL-05, BTL-06, BTL-07, BTL-08, BTL-09
-**Success Criteria** (what must be TRUE):
-  1. Starting a battle sends the identical prompt to both agents simultaneously via the existing routing engine — both responses arrive and are stored before any judgment begins
-  2. Three judge model calls run with A/B positions independently randomized per call — the battle record stores which agent occupied position A for each judge, enabling post-hoc bias auditing
-  3. Elo ratings update correctly after every battle: winner gains rating proportional to opponent strength, loser loses proportionally, and provisional badge disappears after 30 battles
-  4. Post-battle report shows a full character sheet diff — which stats changed, by how much, with the judge score breakdown (quality 40% / speed 20% / efficiency 20% / style 20%) visible per dimension
-  5. Free tier enforcement stops a user who has used 5 battles today before any API call fires — the rate limit check is the first thing the battle endpoint does
-  6. A pre-launch calibration run of 50 same-prompt battles shows positional win-rate delta below 10% — battles are not enabled for all users until this threshold is met
+  1. Running `SELECT COUNT(*) FROM template_skills` returns a number matching the total skill assignments across all 107 templates (migrated from JSONB arrays)
+  2. persona_skills references skill IDs (not names) and the existing 17 porter-core rows are migrated to use skill IDs
+  3. Instantiating a template creates persona_skills rows from template_skills and generates a thin SKILLS.md manifest (not from skills_text)
+  4. The generated SKILLS.md contains only skill IDs, short descriptions, pack paths, and runtime rules — no prose duplication
+  5. Modifying a persona's skill assignments via API regenerates its SKILLS.md within the same request
+  6. skills_text column is preserved for backwards compatibility but never read during instantiation
 **Plans**: TBD
 
-### Phase 29: Session Registry + Message Bus
-**Goal**: Every AI dispatch session is tracked with token counts and context pressure, and inter-gateway messages are recorded as a structured audit log — the infrastructure the intelligence loop needs to detect meaningful patterns
-**Depends on**: Phase 24
-**Requirements**: SES-01, SES-02, SES-03, MSG-01, MSG-02
+### Phase 32: Skill Pack Explorer
+**Goal**: Admin can inspect and edit the actual skill pack files (.md, guides, examples, metadata) from the browser — not just DB metadata fields — with quality diagnostics that reveal scaffold vs real content
+**Depends on**: Phase 31
+**Requirements**: PKX-01, PKX-02, PKX-03, PKX-04, PKX-05
 **Success Criteria** (what must be TRUE):
-  1. Every dispatch session has a row in `session_registry` with per-session token count, context window percentage, and session age — queryable by session ID
-  2. When a session crosses 80% context pressure, an event fires within one scheduler tick (2 seconds) — the event is visible in the admin Bridge operator view
-  3. Session rotation creates a Recall summary of the outgoing session and carries it into the new session context — conversation continuity survives the rotation
-  4. Inter-gateway messages are written to `msg_bus_events` with a structured envelope (type, source gateway, target gateway, correlation ID, payload) — cross-model handoffs are traceable by correlation ID
-**Plans**: 3 plans
-Plans:
-- [ ] 29-01-PLAN.md — session-registry.ts service + logDispatch hook (SES-01, SES-03)
-- [ ] 29-02-PLAN.md — msg-bus.ts service + /agent-message route wiring (MSG-01, MSG-02)
-- [ ] 29-03-PLAN.md — scheduler context pressure probe + build + ship (SES-02)
+  1. Clicking a skill in the admin opens a file tree showing all files in that skill's pack directory
+  2. Selecting a file shows its content in an editor pane; saving writes back to disk via API
+  3. Pack diagnostics badge shows a quality score: file count, non-empty file count, word count, and scaffold detection (generic boilerplate matching)
+  4. Template and agent detail pages have a clickable link on each assigned skill that opens the pack explorer for that skill
+  5. Missing or empty files are flagged with warnings in the file tree
+**Plans**: TBD
 
-### Phase 30: Intelligence Loop + Bridge Operator
-**Goal**: Battle and dispatch patterns feed back into routing decisions through Memory V2 concepts, and Vigil sees all of it live — the system gets measurably smarter with every battle and session
-**Depends on**: Phase 28, Phase 29
-**Requirements**: INT-01, INT-02, INT-03, INT-04, BRG-01, BRG-02, BRG-03, BRG-04
+### Phase 33: Runtime Skill Selector
+**Goal**: Porter selects the right skills at dispatch time — gathering assigned skills, ranking them against the task, injecting only the top matches into the prompt, and logging what was used and why
+**Depends on**: Phase 31
+**Requirements**: RTS-01, RTS-02, RTS-03, RTS-04, RTS-05
 **Success Criteria** (what must be TRUE):
-  1. The intelligence background job (runs every 6 hours) extracts at least 4 pattern types from dispatch + battle data: latency trends, model strength by task type, failure clusters, and combo chain wins
-  2. High-confidence patterns (confidence score >= 0.8) are automatically promoted to Memory V2 `concepts` table — a routing decision made after promotion references the learned concept in its reasoning log
-  3. The routing engine reads learned gateway preferences from concepts — an agent that has won 10 battles using Claude produces routing decisions that prefer Claude for that agent's specialty task type
-  4. Vigil's admin tab shows live session state, message bus activity, and intelligence patterns as a single unified feed — no page refresh needed to see new events
-**Plans**: 3 plans
-Plans:
-- [ ] 30-01-PLAN.md — intelligence-loop.ts service: 4-type pattern extraction + concept promotion
-- [ ] 30-02-PLAN.md — concept-aware routing engine + admin API (/sessions, /patterns, /msgbus)
-- [ ] 30-03-PLAN.md — Frontend SSE handlers + OperatorActivityLog feeds + build + ship
+  1. A dispatch for an agent with 5 assigned skills selects 0-3 based on task relevance — not all 5
+  2. The skill selector uses description, triggers, tags, and historical success rate to rank candidates
+  3. Selected skill pack content (prompt.md + SKILL.md) is injected into the dispatch system prompt between memory tiers and gateway instructions
+  4. Every dispatch record in bridge_dispatch_log includes a skills_used JSONB column with candidate list, selected list, and scores
+  5. An agent with no assigned skills or no relevant skills dispatches normally without skill injection
+**Plans**: TBD
+
+### Phase 34: Feedback Telemetry
+**Goal**: Every dispatch outcome produces a structured feedback signal linked to the skills that were used — enabling per-skill effectiveness measurement that actually means something
+**Depends on**: Phase 33
+**Requirements**: FBK-01, FBK-02, FBK-03, FBK-04, FBK-05
+**Success Criteria** (what must be TRUE):
+  1. skill_feedback_events table exists with persona_id, skill_id, dispatch_id, event_type (positive/negative/correction/retry/abandon/success), and note columns
+  2. Thumbs up/down on a chat response creates feedback events for all skills that were active during that dispatch
+  3. Each persona_skill row has live aggregated stats: times_selected, times_completed, positive/negative counts, effectiveness_score (computed from feedback ratio)
+  4. Admin can view per-skill effectiveness on skill detail, agent detail, and template detail pages
+  5. Effectiveness scores are queryable via API: GET /api/admin/skills/:id/effectiveness and GET /api/admin/agents/:id/skill-effectiveness
+**Plans**: TBD
+
+### Phase 35: Agent Evolution Loop
+**Goal**: Feedback patterns drive concrete skill recommendations that admin can review and approve — closing the loop from "skill was used" to "skill inventory changed because of measured performance"
+**Depends on**: Phase 34
+**Requirements**: EVO-01, EVO-02, EVO-03, EVO-04, EVO-05
+**Success Criteria** (what must be TRUE):
+  1. A background job (runs every 6 hours) analyzes feedback patterns per agent and generates recommendations: add skill, remove skill, rewrite prompt, enrich examples
+  2. Recommendations are stored in a skill_evolution_proposals table with proposed_change JSONB, reasoning, triggering_feedback_ids, and status (pending/approved/rejected)
+  3. Admin UI shows pending proposals with diffs (what would change) and approve/reject buttons
+  4. Approving a proposal updates persona_skills, regenerates SKILLS.md, and logs the evolution event
+  5. Evolution event log shows timeline of what changed, why, which feedback triggered it, and whether effectiveness improved after the change
+**Plans**: TBD
+
+### Phase 36: Skill Quality Scoring
+**Goal**: Every skill has a measurable quality score that distinguishes scaffold filler from production-ready content — admin can see at a glance which skills are real and which need work
+**Depends on**: Phase 34
+**Requirements**: QLT-01, QLT-02, QLT-03, QLT-04, QLT-05
+**Success Criteria** (what must be TRUE):
+  1. Every skill has a quality_score (0-100) computed from: file completeness (20%), content specificity (20%), example count (15%), guide richness (15%), prompt uniqueness (10%), usage frequency (10%), effectiveness score (10%)
+  2. Quality tiers are derived from score: scaffold (0-25), baseline (26-50), production (51-75), high-performing (76-100), stale (any score + no usage in 30 days)
+  3. Skills table and marketplace show quality tier badges with color coding instead of ready/partial/missing
+  4. Admin can filter skills by quality tier in both table and grid views
+  5. A quality audit API endpoint scores all skills and returns a report of scaffolds needing enrichment
+**Plans**: TBD
+
+### Phase 37: Template Skill UX
+**Goal**: Template detail view is the command center for skill configuration — showing what's assigned, why, how effective each skill is, and letting admin author the skill loadout with priorities and auto-detect settings
+**Depends on**: Phase 36
+**Requirements**: TUX-01, TUX-02, TUX-03, TUX-04, TUX-05
+**Success Criteria** (what must be TRUE):
+  1. Template detail shows all assigned skills from template_skills with each skill's description, quality tier, and assignment rationale
+  2. Admin can add, remove, and reorder skills on a template with drag-and-drop or manual sort
+  3. Each skill on a template can be marked mandatory (always selected) or optional (subject to runtime auto-detection)
+  4. Template detail shows aggregated skill effectiveness across all agents spawned from that template
+  5. A "preview" feature shows which skills would be auto-selected for a sample task prompt
+**Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 24 → 25 → 26 (parallel with 25) → 27 → 28 → 29 (parallel with 28) → 30.
+Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can parallel 36) → 36 → 37.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1-7 | v1.0 | - | Complete | 2026-03-21 |
 | 8-15 | v2.0 | - | Complete | 2026-03-24 |
 | 16-23 | v3.0 | - | Complete | 2026-03-25 |
-| 24. Schema Migration | v4.0 | 2/2 | Complete | 2026-04-01 |
-| 25. RPG Engine | 3/3 | Complete   | 2026-04-01 | - |
-| 26. Forge Unification | 3/3 | Complete   | 2026-04-01 | - |
-| 27. Character Sheet UI | 3/3 | Complete   | 2026-04-01 | - |
-| 28. Battle Arena | v4.0 | 0/TBD | Not started | - |
-| 29. Session Registry + Message Bus | 3/3 | Complete   | 2026-04-01 | - |
-| 30. Intelligence Loop + Bridge Operator | 3/3 | Complete   | 2026-04-01 | - |
+| 24-30 | v4.0 | 17/17 | Partial (28 deferred) | 2026-04-02 |
+| 31. Source of Truth | v5.0 | 0/TBD | Not started | - |
+| 32. Skill Pack Explorer | v5.0 | 0/TBD | Not started | - |
+| 33. Runtime Skill Selector | v5.0 | 0/TBD | Not started | - |
+| 34. Feedback Telemetry | v5.0 | 0/TBD | Not started | - |
+| 35. Agent Evolution Loop | v5.0 | 0/TBD | Not started | - |
+| 36. Skill Quality Scoring | v5.0 | 0/TBD | Not started | - |
+| 37. Template Skill UX | v5.0 | 0/TBD | Not started | - |

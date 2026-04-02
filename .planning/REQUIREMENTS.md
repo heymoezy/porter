@@ -1,191 +1,137 @@
-# Requirements: Porter v4.0 — The Arena
+# Requirements: Porter v5.0 — Living Skills
 
-**Defined:** 2026-04-01
-**Core Value:** Porter is where builders bring their agents to fight. Build anywhere, battle here, prove your shit works.
+**Defined:** 2026-04-02
+**Core Value:** Skills must be live behavioral modules — selected at runtime, injected into prompts, measured for effectiveness, and evolved through feedback.
 
-## v4.0 Requirements
+## v5.0 Requirements
 
-### Schema & Data Model
+### Source of Truth
 
-- [x] **SCH-01**: Agent templates have RPG fields: shell, intelligence, supports, equipment_slots, passive_tree, level, xp, star_level, rarity, elo_rating, specialties
-- [x] **SCH-02**: New `agent_battles` table: battle_id, agent_a, agent_b, prompt, scores, winner, elo_delta, judge_results, created_at
-- [x] **SCH-03**: New `agent_bonds` table: agent_a, agent_b, bond_level, co_dispatches
-- [x] **SCH-04**: New `battle_replays` table: battle_id, agent_responses, judge_reasoning, sheet_diff
-- [x] **SCH-05**: Agent skills junction table extended with success_rate_30d, total_uses, last_used
-- [x] **SCH-06**: Supports system stored as JSONB with id, target_skill, prompt_diff, measured_impact
-- [x] **SCH-07**: Passive tree stored as JSONB array of nodes with unlocked/active state and measured battle impact
+- [ ] **SOT-01**: template_skills junction table is the canonical source for template→skill mappings (populated from existing JSONB arrays via migration)
+- [ ] **SOT-02**: persona_skills junction table is the canonical source for agent→skill mappings (uses skill_id not skill_name)
+- [ ] **SOT-03**: SKILLS.md is a thin manifest generated from DB assignments at instantiate-time — contains skill IDs, short descriptions, pack paths, and runtime rules only
+- [ ] **SOT-04**: Instantiation flow reads skills from template_skills junction table, not from skills_text column
+- [ ] **SOT-05**: skills_text column on agent_templates is deprecated — migration preserves data but instantiation ignores it
+- [ ] **SOT-06**: Changing skill assignments in DB triggers SKILLS.md regeneration for affected personas
 
-### RPG Engine (Stat Calculation)
+### Skill Pack Explorer
 
-- [x] **RPG-01**: 5 core stats (QTY/SPD/EFF/REL/COMBO) derived from immutable bridge_dispatch_log
-- [x] **RPG-02**: XP system: dispatch (+10), feedback (+25), specialty (+50), battle won (+100), battle lost (+25), chain (+75), failed (+2)
-- [x] **RPG-03**: Level 1-100 with XP curve (level * 100)
-- [x] **RPG-04**: Star progression: 1★ (forged) → 2★ (50) → 3★ (200+85%REL) → 4★ (500+10battles) → 5★ (1000+top)
-- [x] **RPG-05**: Rarity auto-calculated: Common→Rare→Epic→Legendary→Mythic from usage milestones
-- [x] **RPG-06**: Specialties auto-populated from dispatch + battle history
-- [x] **RPG-07**: Stats recalculated from immutable logs on every progression event
+- [ ] **PKX-01**: Admin can view a skill pack's file tree (SKILL.md, prompt.md, guides/*, examples/*, meta/skill.json) from the skill detail view
+- [ ] **PKX-02**: Admin can read and edit any file in a skill pack from the browser
+- [ ] **PKX-03**: Admin can save edited pack files back to disk via API
+- [ ] **PKX-04**: Pack diagnostics show missing files, empty files, generic scaffold detection, and word count/richness score per skill
+- [ ] **PKX-05**: Template and agent detail pages have "open assigned skills" link that navigates to the skill pack explorer
 
-### Vitals (Live Status)
+### Runtime Skill Selection
 
-- [x] **VIT-01**: Tokens bar — remaining daily/session budget
-- [x] **VIT-02**: Health bar — error rate over last 10 dispatches
-- [x] **VIT-03**: Focus bar — context window pressure
+- [ ] **RTS-01**: Every dispatch gathers the agent's assigned skills from persona_skills
+- [ ] **RTS-02**: A skill selector ranks candidate skills against the task using description, triggers, tags, and historical success
+- [ ] **RTS-03**: Only the top 0-3 most relevant skill packs are injected into the dispatch prompt context
+- [ ] **RTS-04**: Every dispatch logs which skills were candidates, which were selected, and the ranking scores
+- [ ] **RTS-05**: Dispatches with no relevant skills proceed without skill injection (graceful zero-skill path)
 
-### Character Sheet UI
+### Feedback Telemetry
 
-- [x] **UI-01**: Full character card: Shell, Intelligence, Skills, Supports, Equipment, Passive Tree, Vitals, Level, Stats, Rarity
-- [x] **UI-02**: Stat pentagon (5 stats) using recharts
-- [x] **UI-03**: Vitals as 3 color-coded bars with real-time updates
-- [x] **UI-04**: Rarity borders: gray/blue glow/purple pulse/gold animated/red particles
-- [x] **UI-05**: Star display (1-5★) with progress to next
-- [x] **UI-06**: Passive tree visual — compact node graph
+- [ ] **FBK-01**: skill_feedback_events table captures per-dispatch skill effectiveness signals (positive, negative, correction, retry, abandon, success)
+- [ ] **FBK-02**: Each persona_skill record tracks times_selected, times_completed, positive_feedback_count, negative_feedback_count, last_used_at, effectiveness_score
+- [ ] **FBK-03**: Thumbs up/down on a dispatch response stores a skill_feedback_event linked to the selected skills
+- [ ] **FBK-04**: Skill effectiveness scores are aggregated and queryable per skill, per agent, and per template
+- [ ] **FBK-05**: Admin UI shows effectiveness metrics on skill detail, agent detail, and template detail pages
 
-### Skills & Supports
+### Agent Evolution
 
-- [x] **SKL-01**: Active skills with live success rate from last 30 runs
-- [x] **SKL-02**: Skill slots increase with level (4 base, +1 per star)
-- [x] **SKL-03**: Supports as mechanical modifiers with exact prompt diff shown
-- [x] **SKL-04**: Each Support shows measurable battle impact
-- [x] **SKL-05**: Support slots on skills (1-2 per skill)
+- [ ] **EVO-01**: A background job analyzes feedback patterns and generates skill recommendations (add, remove, rewrite prompt, enrich examples)
+- [ ] **EVO-02**: Recommendations are stored as proposed changes visible in admin UI with diffs
+- [ ] **EVO-03**: Admin can approve or reject proposed skill changes (supervised mutation)
+- [ ] **EVO-04**: Approved changes update persona_skills and regenerate SKILLS.md automatically
+- [ ] **EVO-05**: Evolution events are logged (what changed, why, which feedback cluster triggered it)
 
-### Forge Unification
+### Skill Quality
 
-- [x] **FRG-01**: Skills + Tools + Forge merged into single "Forge" nav item
-- [x] **FRG-02**: 4 tabs: Templates, Armory, Workshop, Arena
-- [x] **FRG-03**: Templates tab — browse/create templates
-- [x] **FRG-04**: Armory tab — tools, skills, supports inventory
-- [x] **FRG-05**: Workshop tab — configure builds pre-forge
-- [x] **FRG-06**: Birth animation — grayscale to color with particles
-- [x] **FRG-07**: Flow: template → configure → equip → passive nodes → forge → deploy
+- [ ] **QLT-01**: Every skill has a computed quality score based on: file completeness, specificity, example count, guide richness, prompt uniqueness, recent usage, success rate, user feedback
+- [ ] **QLT-02**: Quality tiers replace pack_status: scaffold, baseline, production, high-performing, stale
+- [ ] **QLT-03**: Skills table and marketplace show quality tier badges instead of ready/partial/missing
+- [ ] **QLT-04**: Admin can filter skills by quality tier
+- [ ] **QLT-05**: A quality audit job can score all skills and flag scaffolds for enrichment
+
+### Template Skill UX
+
+- [ ] **TUX-01**: Template detail view shows assigned skills from template_skills with why each is attached
+- [ ] **TUX-02**: Admin can attach, detach, and reorder skills on a template from the template detail page
+- [ ] **TUX-03**: Template authoring supports marking skills as mandatory vs optional and setting priority
+- [ ] **TUX-04**: Template detail shows recent skill effectiveness across all spawned agents using that template
+- [ ] **TUX-05**: Template detail shows what runtime auto-detection will select for sample task prompts
+
+## v6.0 Requirements (Deferred)
 
 ### Battle Arena
+- **BTL-01**: Head-to-head battles with same prompt, blind judge ensemble, Elo ratings
+- **BTL-02**: Pre-launch calibration (50 battles, positional win-rate delta < 10%)
 
-- [ ] **BTL-01**: Head-to-head: identical prompt, simultaneous response
-- [ ] **BTL-02**: Blind judge ensemble: 3 models, position-randomized, median wins
-- [ ] **BTL-03**: Scoring: quality 40%, speed 20%, efficiency 20%, style 20%
-- [ ] **BTL-04**: Elo rating (1200 default, per-specialty, provisional below 30)
-- [ ] **BTL-05**: Post-battle report as full sheet diff
-- [ ] **BTL-06**: Fork & Mutate — one-click clone winner's build
-- [ ] **BTL-07**: Matchmaking by Level + Intelligence profile
-- [ ] **BTL-08**: Rate limits enforced (free: 5/day)
-- [ ] **BTL-09**: Judge quality: 5% human spot-check, bias detection, 2-of-3 quorum
+### Autonomous Evolution
+- **AEV-01**: Controlled auto-evolution for low-risk changes (manifest-only, example additions)
+- **AEV-02**: Agent identity boundaries — evolution never silently rewrites soul/identity
 
-### Session Registry & Message Bus
-
-- [x] **SES-01**: Per-session token count, context %, age tracking
-- [x] **SES-02**: Context pressure detection at 80%
-- [x] **SES-03**: Session rotation with Recall summary carry
-- [x] **MSG-01**: Structured message envelope for inter-gateway communication
-- [x] **MSG-02**: Cross-model handoffs
-
-### Intelligence Loop
-
-- [x] **INT-01**: Dispatch pattern extraction (latency trends, model strengths, failures)
-- [x] **INT-02**: Write patterns to Recall as concepts
-- [x] **INT-03**: Routing reads Recall for learned preferences
-- [x] **INT-04**: Intelligence surfaces on Bridge operator tab
-
-### .md File Regeneration
-
-- [x] **MD-01**: SOUL.md regenerated on star up
-- [x] **MD-02**: IDENTITY.md grows on level milestones
-- [x] **MD-03**: SKILLS.md reflects actual DB state
-- [x] **MD-04**: TOOLS.md reflects equipped gear
-- [x] **MD-05**: All .md files overwritten from DB on progression events
-
-### Bridge Operator
-
-- [x] **BRG-01**: Vigil sees live session state
-- [x] **BRG-02**: Vigil sees message bus activity
-- [x] **BRG-03**: Vigil sees intelligence patterns
-- [x] **BRG-04**: Operator activity shows session + message + intelligence events
-
-## Future (v4.1+)
-
-- Spectator mode, tournaments, replay clips
-- Agent import (LangGraph, CrewAI, AutoGen)
-- Marketplace (templates, loadouts, 30% cut)
-- Team battles, daily challenges, seasonal events
+### Skill Content Enrichment
+- **SCE-01**: AI-assisted skill pack enrichment (generate domain-specific prompts, examples, guides)
+- **SCE-02**: Skill pack versioning with rollback
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| 3D / Unreal | Pixel art + CSS + PixiJS sufficient |
-| Static factions | Data-driven specialties replace them |
-| Manual stat editing | Anti-gaming — derived from logs |
-| Standalone game | Feature inside platform |
+| Full autonomous evolution (Level 3) | Safety risk — supervised mutation first, auto-evolution in v6.0 |
+| Skill marketplace/sharing between workspaces | Single-tenant first, multi-tenant later |
+| Real-time skill injection during streaming | Skill selection happens before dispatch, not mid-stream |
+| Custom skill DSL/programming language | Skills are markdown + JSON, not code |
+| Skill dependencies/composition | Individual skills first, composition later |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCH-01 | Phase 24 | Complete |
-| SCH-02 | Phase 24 | Complete |
-| SCH-03 | Phase 24 | Complete |
-| SCH-04 | Phase 24 | Complete |
-| SCH-05 | Phase 24 | Complete |
-| SCH-06 | Phase 24 | Complete |
-| SCH-07 | Phase 24 | Complete |
-| RPG-01 | Phase 25 | Complete |
-| RPG-02 | Phase 25 | Complete |
-| RPG-03 | Phase 25 | Complete |
-| RPG-04 | Phase 25 | Complete |
-| RPG-05 | Phase 25 | Complete |
-| RPG-06 | Phase 25 | Complete |
-| RPG-07 | Phase 25 | Complete |
-| MD-01 | Phase 25 | Complete |
-| MD-02 | Phase 25 | Complete |
-| MD-03 | Phase 25 | Complete |
-| MD-04 | Phase 25 | Complete |
-| MD-05 | Phase 25 | Complete |
-| FRG-01 | Phase 26 | Complete |
-| FRG-02 | Phase 26 | Complete |
-| FRG-03 | Phase 26 | Complete |
-| FRG-04 | Phase 26 | Complete |
-| FRG-05 | Phase 26 | Complete |
-| FRG-06 | Phase 26 | Complete |
-| FRG-07 | Phase 26 | Complete |
-| SKL-01 | Phase 26 | Complete |
-| SKL-02 | Phase 26 | Complete |
-| SKL-03 | Phase 26 | Complete |
-| SKL-04 | Phase 26 | Complete |
-| SKL-05 | Phase 26 | Complete |
-| UI-01 | Phase 27 | Complete |
-| UI-02 | Phase 27 | Complete |
-| UI-03 | Phase 27 | Complete |
-| UI-04 | Phase 27 | Complete |
-| UI-05 | Phase 27 | Complete |
-| UI-06 | Phase 27 | Complete |
-| VIT-01 | Phase 27 | Complete |
-| VIT-02 | Phase 27 | Complete |
-| VIT-03 | Phase 27 | Complete |
-| BTL-01 | Phase 28 | Pending |
-| BTL-02 | Phase 28 | Pending |
-| BTL-03 | Phase 28 | Pending |
-| BTL-04 | Phase 28 | Pending |
-| BTL-05 | Phase 28 | Pending |
-| BTL-06 | Phase 28 | Pending |
-| BTL-07 | Phase 28 | Pending |
-| BTL-08 | Phase 28 | Pending |
-| BTL-09 | Phase 28 | Pending |
-| SES-01 | Phase 29 | Complete |
-| SES-02 | Phase 29 | Complete |
-| SES-03 | Phase 29 | Complete |
-| MSG-01 | Phase 29 | Complete |
-| MSG-02 | Phase 29 | Complete |
-| INT-01 | Phase 30 | Complete |
-| INT-02 | Phase 30 | Complete |
-| INT-03 | Phase 30 | Complete |
-| INT-04 | Phase 30 | Complete |
-| BRG-01 | Phase 30 | Complete |
-| BRG-02 | Phase 30 | Complete |
-| BRG-03 | Phase 30 | Complete |
-| BRG-04 | Phase 30 | Complete |
+| SOT-01 | Phase 31 | Pending |
+| SOT-02 | Phase 31 | Pending |
+| SOT-03 | Phase 31 | Pending |
+| SOT-04 | Phase 31 | Pending |
+| SOT-05 | Phase 31 | Pending |
+| SOT-06 | Phase 31 | Pending |
+| PKX-01 | Phase 32 | Pending |
+| PKX-02 | Phase 32 | Pending |
+| PKX-03 | Phase 32 | Pending |
+| PKX-04 | Phase 32 | Pending |
+| PKX-05 | Phase 32 | Pending |
+| RTS-01 | Phase 33 | Pending |
+| RTS-02 | Phase 33 | Pending |
+| RTS-03 | Phase 33 | Pending |
+| RTS-04 | Phase 33 | Pending |
+| RTS-05 | Phase 33 | Pending |
+| FBK-01 | Phase 34 | Pending |
+| FBK-02 | Phase 34 | Pending |
+| FBK-03 | Phase 34 | Pending |
+| FBK-04 | Phase 34 | Pending |
+| FBK-05 | Phase 34 | Pending |
+| EVO-01 | Phase 35 | Pending |
+| EVO-02 | Phase 35 | Pending |
+| EVO-03 | Phase 35 | Pending |
+| EVO-04 | Phase 35 | Pending |
+| EVO-05 | Phase 35 | Pending |
+| QLT-01 | Phase 36 | Pending |
+| QLT-02 | Phase 36 | Pending |
+| QLT-03 | Phase 36 | Pending |
+| QLT-04 | Phase 36 | Pending |
+| QLT-05 | Phase 36 | Pending |
+| TUX-01 | Phase 37 | Pending |
+| TUX-02 | Phase 37 | Pending |
+| TUX-03 | Phase 37 | Pending |
+| TUX-04 | Phase 37 | Pending |
+| TUX-05 | Phase 37 | Pending |
 
-**Coverage:** 62/62 requirements mapped (100%)
+**Coverage:**
+- v5.0 requirements: 36 total
+- Mapped to phases: 36
+- Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-04-01*
-*Roadmap created: 2026-04-01*
-*Design: research/agent-rpg-design-v3-final.md*
+*Requirements defined: 2026-04-02*
+*Last updated: 2026-04-02 after milestone v5.0 definition*

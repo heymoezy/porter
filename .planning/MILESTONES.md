@@ -1,8 +1,28 @@
 # Milestones: Porter
 
-## v3.0 — Porter Bridge (Active)
+## v4.0 — The Arena (Partial: 6/7 phases shipped, Phase 28 Battle Arena deferred)
+
+**Started:** 2026-04-01
+**Shipped:** 2026-04-02 (partial — Battle Arena deferred)
+**Goal:** Agent RPG system, battle arena, forge unification, intelligence loop.
+**Phases:** 24-30 (7 phases, 17 plans)
+
+**Key accomplishments:**
+- RPG engine (5 stats from dispatch logs, XP/level/star/rarity progression)
+- Forge unification (3 nav items → 1, 4-tab shell)
+- Character sheet UI (stat pentagon, rarity borders, vitals, passive tree)
+- Session registry + message bus (per-session token tracking, structured envelope)
+- Intelligence loop (pattern extraction → concept promotion → smarter routing)
+- Bridge operator (Vigil sees sessions, messages, patterns live)
+
+**Deferred:** Phase 28 Battle Arena — judge ensemble, Elo ratings, pre-launch calibration
+
+---
+
+## v3.0 — Porter Bridge (Shipped: 2026-03-25)
 
 **Started:** 2026-03-25
+**Shipped:** 2026-03-25
 **Goal:** Unified AI gateway layer — database-backed gateway registry, multi-backend adapters, smart routing, cost tracking, admin APIs. Commercial quality with circuit breakers, retry, graceful degradation.
 **Phases:** 16-23 (8 phases, 46 requirements)
 **Key dependencies:** opossum (circuit breakers), p-queue (concurrency), which (CLI detection)

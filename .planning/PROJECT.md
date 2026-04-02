@@ -8,24 +8,20 @@ Porter is an AI orchestration platform where non-technical users create projects
 
 Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input — the "GSD-like flow" applied to everything Porter does.
 
-## Current Milestone: v4.0 The Arena — Agent RPG System, Battle Arena, Forge Unification
+## Current Milestone: v5.0 Living Skills — Skills as Live Behavioral Modules
 
-**Goal:** Transform Porter's agent system into an RPG character framework where agents have real stats derived from dispatch data, level up through usage, equip tools like gear, and battle each other head-to-head. Unify Forge + Skills + Tools into one page. Connect Bridge intelligence loop (Bridge → Intelligence → Recall → routing).
+**Goal:** Transform Porter's skills from a static catalog into live behavioral modules that are selected at runtime, injected into agent prompts, measured for effectiveness, and evolve through feedback. Fix the source of truth (DB assignments, not prose blobs), build real authoring/inspection UX, implement runtime skill selection per dispatch, close the feedback loop, and replace fake quality tiers with real measurement.
 
 **Target features:**
-- Agent RPG schema (5 stats: Quality/Speed/Efficiency/Reliability/Combo, rarity, stars, XP/level, classes, gear slots)
-- Forge unification (Skills + Tools + Forge → one page with Templates/Armory/Workshop/Arena tabs)
-- Skills overhaul (active skills with cooldowns, passive skills at 3★, ultimate skills at 4★)
-- Character card UI (stat pentagon, rarity borders, gear display, star progression)
-- Stat calculation engine (immutable dispatch logs → derived stats, anti-gaming)
-- Battle Arena MVP (same prompt, blind judge, Elo rating, spectator mode)
-- Session registry (Porter owns sessions, per-session token/context tracking)
-- Message bus (structured envelope for inter-gateway communication, cross-model handoffs)
-- Intelligence loop (dispatch patterns → Recall concepts → smarter routing)
-- Bridge operator enhancements (Vigil sees sessions, messages, intelligence in real-time)
-- .md file regeneration (SOUL/IDENTITY/SKILLS auto-rebuild on progression events)
-- Agent import (external frameworks: LangGraph, CrewAI, JSON spec)
-- Design system integration (all new components from design system, no freestyle)
+- Source of truth cleanup (template_skills + persona_skills canonical, SKILLS.md = generated manifest)
+- Skill Pack Explorer (view/edit actual .md files, quality diagnostics, scaffold detection)
+- Runtime skill auto-detection (rank assigned skills per task, inject selected packs into prompts, log selection)
+- Feedback telemetry (capture success/failure/correction signals, per-skill effectiveness scoring)
+- Agent evolution loop (feedback → learning → recommendations → supervised apply)
+- Skill quality scoring (replace ready/partial/missing with scaffold/baseline/production/high-performing/stale)
+- Template UX fix (templates show linked skills, assignment authoring, auto-detect thresholds)
+
+**Previous milestone:** v4.0 The Arena (6/7 phases shipped, Phase 28 Battle Arena deferred)
 
 ## Requirements
 
@@ -122,6 +118,9 @@ Porter has been in development since Feb 18, 2026. Current version is v2.2.0 (Fa
 | porter.py fully deprecated | All AI routing, SSE, streaming now in Fastify. porter.py stopped+disabled. | ✓ Completed 2026-03-24 |
 | SQLite fully eliminated | Both Brain and Admin on PostgreSQL. better-sqlite3 removed. | ✓ Completed 2026-03-25 |
 | Bridge as major innovation | AI gateway management is Porter's differentiator — first-run detection, smart routing, cost tracking | — v3.0 scope |
+| Skills must be live behavioral modules, not catalog entries | OpenClaw audit revealed skills_text is static prose, template_skills empty, no runtime selection, no feedback loop | — v5.0 scope |
+| DB assignments are source of truth for skills | skills_text / JSONB arrays are legacy; template_skills + persona_skills junction tables are canonical | — v5.0 scope |
+| SKILLS.md is a thin manifest, not prose | Generated from DB assignments at instantiate-time, points to pack roots, no duplication | — v5.0 scope |
 
 ---
-*Last updated: 2026-03-25 after Phase 23 Integration & Multi-Tenant complete — v3.0 Porter Bridge milestone DONE*
+*Last updated: 2026-04-02 after v5.0 Living Skills milestone started*

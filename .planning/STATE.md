@@ -1,106 +1,52 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.0
-milestone_name: The Arena
-status: unknown
-stopped_at: Completed 30-03-PLAN.md — frontend SSE handlers + OperatorActivityLog feeds + build + ship, Plan 3 of 3 (Phase 30 complete)
-last_updated: "2026-04-01T09:00:09.372Z"
+milestone: v5.0
+milestone_name: Living Skills
+status: defining_requirements
+stopped_at: Milestone v5.0 started — defining requirements
+last_updated: "2026-04-02T12:00:00.000Z"
 progress:
   total_phases: 7
-  completed_phases: 6
-  total_plans: 17
-  completed_plans: 17
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-01)
+See: .planning/PROJECT.md (updated 2026-04-02)
 
-**Core value:** Porter is where builders bring their agents to fight. Build anywhere, battle here, prove your shit works.
-**Current focus:** Phase 30 — intelligence-loop-bridge-operator
+**Core value:** Skills must be live behavioral modules — selected at runtime, injected into prompts, measured, and evolved through feedback.
+**Current focus:** Defining requirements for v5.0 Living Skills
 
 ## Current Position
 
-Phase: 30 (intelligence-loop-bridge-operator) — EXECUTING
-Plan: 1 of 3
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-02 — Milestone v5.0 started
 
 ## Performance Metrics
 
-**Velocity (from v1.0 + v2.0 + v3.0):**
+**Velocity (from v1.0 + v2.0 + v3.0 + v4.0):**
 
-- Total plans completed: 72 (51 from v1.0, 2 from v2.0, 19 from v3.0)
-- Phases completed: 23 across all prior milestones
+- Total plans completed: 89 (51 from v1.0, 2 from v2.0, 19 from v3.0, 17 from v4.0)
+- Phases completed: 29 across all milestones
 - Average plan duration: ~6 min
-
-**By Phase (v4.0):**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 24-schema-migration | 2 | 23min | ~11.5min |
-| 25-rpg-engine | 3/3 | ~20min | ~6.6min |
-
-*Updated after each plan completion*
-| Phase 25-rpg-engine P02 | 5 | 2 tasks | 2 files |
-| Phase 25-rpg-engine P03 | 8 | 2 tasks | 2 files |
-| Phase 26-forge-unification P01 | 111s | 2 tasks | 1 files |
-| Phase 26-forge-unification P02 | 6 | 4 tasks | 5 files |
-| Phase 26-forge-unification P03 | 7 | 3 tasks | 3 files |
-| Phase 27-character-sheet-ui P01 | 220 | 2 tasks | 3 files |
-| Phase 27-character-sheet-ui P02 | 231s | 2 tasks | 3 files |
-| Phase 27-character-sheet-ui P03 | 218s | 3 tasks | 1 files |
-| Phase 29 P02 | 240 | 2 tasks | 2 files |
-| Phase 29-session-registry-message-bus P01 | 274s | 2 tasks | 2 files |
-| Phase 29 P03 | 8min | 1 tasks | 1 files |
-| Phase 30 P01 | 138 | 2 tasks | 2 files |
-| Phase 30 P02 | 143 | 2 tasks | 2 files |
-| Phase 30-intelligence-loop-bridge-operator P03 | 8min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
 ### Decisions
 
-- [v4.0]: Stats are ALWAYS derived from immutable bridge_dispatch_log — rpg-engine.ts is the only writer to agent_rpg_stats
-- [v4.0]: Judge ensemble (3 models, position-randomized) must be built into Battle Arena MVP — cannot retrofit without invalidating historical Elo
-- [v4.0]: Pre-launch calibration required: 50 same-prompt battles, positional win-rate delta must be <10%
-- [v4.0]: Free tier battle cap (5/day) enforced before any API call fires
-- [v4.0]: Phase 26 (Forge) can start in parallel with Phase 25 (RPG Engine) — frontend nav merge has no stat dependency
-- [v4.0]: Phase 29 (Session Registry) can run in parallel with Phase 28 (Battle Arena)
-- [v4.0]: @tsparticles/react React 19 compatibility — unconfirmed, test at Phase 26 start, canvas 2D fallback documented
-- [24-01]: Migration transaction is atomic all-or-nothing — single transaction wraps all 10 DDL statements
-- [24-01]: agent_rpg_stats/battle child tables use CASCADE DELETE from parent — no orphan rows
-- [24-01]: Playwright browser tests hang in this environment (pre-existing Chromium constraint) — API-level verification used instead
-- [Phase 24]: Appended new table exports to end of schema.ts — preserves all existing exports and avoids merge conflicts
-- [Phase 24]: agentTemplates RPG columns match exact SQL column names from migrate-rpg-v1.ts — zero drift possible
-- [25-01]: Pure stat helpers exported for unit-testability — computeQuality/Speed/Efficiency/Reliability/Combo/Level/Stars/Rarity take plain numbers, no DB needed in tests
-- [25-01]: SELECT-then-INSERT/UPDATE used (not ON CONFLICT) because migration creates INDEX not UNIQUE constraint on template_id
-- [Phase 25-rpg-engine]: regenerateMdFiles uses trigger-based routing — star_up writes SOUL.md, level_milestone writes IDENTITY.md only at multiples of 10, skill_change writes SKILLS.md, equipment_change writes TOOLS.md, full writes all four
-- [Phase 25-rpg-engine]: RPG admin endpoints applied to routes/admin/agents.ts not v1/admin/agents.ts — v1/admin is not mounted in the live app
-- [25-03]: logDispatch only called on success paths — 'failed' XP event never needed, 'dispatch' is always correct
-- [25-03]: RPG recalculation placed before agentScheduling gate in tick() — runs as infrastructure probe, not agent job
-- [Phase 26-01]: Workshop endpoint registered before /:id to avoid Fastify route shadowing
-- [Phase 26-01]: skill_slots = max(4, 4 + star_level - 1) ensures minimum 4 slots regardless of star_level
-- [Phase 26-forge-unification]: Skills and Tools absorbed inline into forge.tsx Armory tab — keeps page self-contained, no cross-route imports
-- [Phase 26-forge-unification]: AgentPresenceSummary omitted from Armory tab — page-level concern, not needed inside a tab
-- [Phase 26-forge-unification]: BirthAnimation replaced flash-burst with ring+spark+grayscale-reveal — more dramatic, CSS-only, no npm
-- [Phase 26-forge-unification]: WorkshopContent gates on selectedTemplate state — Queue button sets template + switches tab atomically
-- [Phase 27-character-sheet-ui]: Progress component lacks indicatorClassName — used custom div with xp-bar-fill class for XP bar gradient
-- [Phase 27-character-sheet-ui]: recharts@3.8.1 (^3.x) accepted — both v2 and v3 export RadarChart
-- [Phase 27-02]: VitalsBar templateId prefixed with _ to preserve Phase 29 API contract without TS unused-var warning
-- [Phase 27-02]: Focus vital uses dispatchCount%50 proxy — Phase 29 session registry replaces with real context window pressure
-- [Phase 27-02]: PassiveTreeView skips unknown node_ids silently — NODE_DEFS is canonical list, not props.nodes
-- [Phase 27-character-sheet-ui]: SHEET tab inserted before INSTANCES — RPG content grouped logically, workshop query is template-scoped (same id as agent), VitalsBar dispatchCount defaults to 0 for fresh agents
-- [Phase 29]: logMsgBusEvent returns UUID so caller can backfill after dispatch — not fire-and-forget internally
-- [Phase 29]: updateMsgBusEvent on success/fail paths uses .catch(() => {}) — never blocks response to caller
-- [Phase 29-01]: message_text does not exist in bridge_dispatch_log — rotateSession uses COALESCE(NULLIF(intent,''), LEFT(chosen_reason,80)) for session summary snippets
-- [Phase 29]: CONTEXT_PRESSURE_THRESHOLD = 0.8, CONTEXT_ROTATION_THRESHOLD = 0.95 as named constants in scheduler
-- [Phase 30]: Intelligence extraction runs as infrastructure probe (outside agentScheduling gate) — same pattern as RPG recalculation
-- [Phase 30]: Deduplication window is 6h (21600s) — matches extraction interval to prevent duplicate patterns
-- [Phase 30]: [Phase 30-02]: Concept lookup uses try/catch — DB failure never blocks routing
-- [Phase 30]: [Phase 30-02]: Concept preference is highest sort tier: concept > capacity > priority
-- [Phase 30-03]: Context pressure SSE handler invalidates sessions query so OperatorActivityLog re-fetches on pressure events
-- [Phase 30-03]: Sessions/msgbus/patterns sections appended after existing intel feed — preserves existing log content order
+- [v5.0]: template_skills and persona_skills junction tables are THE source of truth — not JSONB arrays, not skills_text prose
+- [v5.0]: SKILLS.md is a thin manifest generated from DB assignments — not hand-authored content
+- [v5.0]: Skills are injected into prompts at dispatch time based on task relevance — not all assigned skills, only selected subset
+- [v5.0]: Feedback must hit persistence — if it isn't stored, it didn't happen
+- [v5.0]: Quality must be measurable — "files exist" ≠ "skill is good"
+- [v5.0]: Evolution must be observable — what changed, why, whether it helped
+- [v5.0]: Current state: template_skills has 0 rows, persona_skills has 17 rows (porter-core only), skills_text on all 107 templates, 81% of 209 skill packs are scaffold filler
 
 ### Pending Todos
 
@@ -108,12 +54,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- [v4.0]: Judge quality at scale — LLM judges biased, ensemble + human spot-check required (built into Phase 28)
-- [v4.0]: Compute cost of battles — every battle = 5 LLM calls, tier caps must be enforced first (Phase 28)
-- [v4.0]: Stale meta risk — if model choice determines win rate more than system prompt, Arena loses value (pre-launch calibration mitigates)
+- [v5.0]: 81% of skill packs are scaffold filler — quality enrichment is a content problem, not just a code problem
+- [v5.0]: persona_skills uses skill_name not skill_id — needs migration for consistency
+- [v5.0]: template_skills is completely empty — migration must populate from template JSONB arrays
 
 ## Session Continuity
 
-Last session: 2026-04-01T09:00:09.369Z
-Stopped at: Completed 30-03-PLAN.md — frontend SSE handlers + OperatorActivityLog feeds + build + ship, Plan 3 of 3 (Phase 30 complete)
+Last session: 2026-04-02T12:00:00.000Z
+Stopped at: Milestone v5.0 started — defining requirements
 Resume file: None
