@@ -20,6 +20,7 @@ export default [
     route("templates/:id", "routes/template-detail.tsx"),
     route("tools", "routes/tools.tsx"),
     route("skills", "routes/skills.tsx"),
+    route("skills/:id/pack", "routes/skill-pack-explorer.tsx"),
     route("bridge", "routes/bridge.tsx"),
     route("recall", "routes/recall.tsx"),
     route("changelog", "routes/changelog.tsx"),
