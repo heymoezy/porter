@@ -419,7 +419,12 @@ function AgentDetailContent() {
                         {skills.map(s => (
                           <tr key={s.name} className="border-b border-border/20 last:border-0">
                             <td className="px-3 py-1.5">
-                              <p className="text-xs font-medium text-foreground">{s.name}</p>
+                              <Link
+                                to={`/skills/${s.name}/pack`}
+                                className="text-xs font-medium text-foreground hover:text-accent-porter hover:underline transition-colors"
+                              >
+                                {s.name}
+                              </Link>
                               {s.description && <p className="text-2xs text-text3 truncate max-w-[280px]">{s.description}</p>}
                             </td>
                             <td className="px-3 py-1.5 text-2xs text-text3">{s.category || "—"}</td>
