@@ -2,7 +2,7 @@ import { useState, useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   FolderOpen, Upload, ChevronRight, FileText,
-  Folder, Loader2, X, Download, Search,
+  Folder, FolderPlus, Loader2, X, Download, Search,
   MoreVertical, Pencil, Trash2, Check, Maximize2, Minimize2, Rows3,
   Home, AlertTriangle,
 } from "lucide-react"
@@ -259,6 +259,16 @@ export default function FilesPage() {
     },
   })
 
+  const [newFolderName, setNewFolderName] = useState<string | null>(null)
+  const mkdirMut = useMutation({
+    mutationFn: (name: string) =>
+      api("/api/v1/files/mkdir", { method: "POST", json: { root: activeRoot, path: currentPath, name } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["files", "list", activeRoot, currentPath] })
+      setNewFolderName(null)
+    },
+  })
+
   async function uploadFiles(fileList: FileList | File[]) {
     setUploadError(null)
     const files = Array.from(fileList)
@@ -413,6 +423,18 @@ export default function FilesPage() {
             <span className="text-xs text-danger">{uploadError}</span>
           )}
 
+          {/* New Folder button */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setNewFolderName("")}
+            disabled={!activeRoot || !dirWritable || newFolderName !== null}
+            className="gap-1.5"
+          >
+            <FolderPlus className="size-3.5" />
+            New Folder
+          </Button>
+
           {/* Upload button */}
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
           <Button
@@ -509,6 +531,36 @@ export default function FilesPage() {
                   <div className="flex flex-col items-center justify-center py-24 text-text3">
                     <FileText className="size-10 opacity-30 mb-3" />
                     <p className="text-sm font-medium">{search ? "No matches" : "Empty folder"}</p>
+                  </div>
+                )}
+
+                {/* New folder inline input */}
+                {newFolderName !== null && (
+                  <div className={`flex items-center gap-3 px-3 ${compact ? "py-1" : "py-2"} bg-accent-porter/5 border-b border-border/30`}>
+                    <FolderPlus className="size-4 text-accent-porter shrink-0" />
+                    <form
+                      className="flex items-center gap-2 flex-1"
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        const name = newFolderName.trim()
+                        if (name) mkdirMut.mutate(name)
+                      }}
+                    >
+                      <input
+                        autoFocus
+                        value={newFolderName}
+                        onChange={(e) => setNewFolderName(e.target.value)}
+                        placeholder="Folder name..."
+                        className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-text3"
+                        onKeyDown={(e) => { if (e.key === "Escape") setNewFolderName(null) }}
+                      />
+                      <button type="submit" disabled={!newFolderName.trim() || mkdirMut.isPending} className="flex items-center justify-center size-6 rounded text-success hover:bg-success/10 disabled:opacity-30">
+                        <Check className="size-3.5" />
+                      </button>
+                      <button type="button" onClick={() => setNewFolderName(null)} className="flex items-center justify-center size-6 rounded text-text3 hover:bg-raised">
+                        <X className="size-3.5" />
+                      </button>
+                    </form>
                   </div>
                 )}
 
