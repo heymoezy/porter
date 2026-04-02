@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { ok, err } from '../../lib/admin-envelope.js';
 import { queryAll, queryOne, execute } from '../../db/pg-helpers.js';
 import { proxyToAdmin } from '../../lib/admin-proxy.js';
+import { writeSkillsManifest } from '../../services/skills-manifest.js';
 
 interface SkillRow {
   id: string; name: string; description: string; category: string; source: string;
@@ -178,20 +179,51 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     const { id } = req.params as { id: string };
     const exists = await queryOne('SELECT id FROM skills WHERE id = $1', [id]);
     if (!exists) { reply.status(404); return err('NOT_FOUND', `Skill ${id} not found`); }
-    await execute('DELETE FROM persona_skills WHERE skill_name = $1', [id]);
+
+    // Find affected personas before deletion for SKILLS.md regeneration (SOT-06)
+    const affectedPersonas = await queryAll<{ persona_id: string; name: string }>(
+      `SELECT DISTINCT ps.persona_id, p.name FROM persona_skills ps
+       JOIN personas p ON p.id = ps.persona_id
+       WHERE ps.skill_id = $1 OR ps.skill_name = $1`,
+      [id]
+    );
+
+    await execute('DELETE FROM persona_skills WHERE skill_id = $1 OR skill_name = $1', [id]);
     await execute('DELETE FROM template_skills WHERE skill_id = $1', [id]);
     await execute('DELETE FROM skills WHERE id = $1', [id]);
+
+    // Regenerate SKILLS.md for affected personas (SOT-06)
+    for (const p of affectedPersonas) {
+      try { await writeSkillsManifest(p.persona_id, p.name); } catch (e) {
+        console.error(`Failed to regenerate SKILLS.md for ${p.persona_id}:`, e);
+      }
+    }
+
     return ok({ id, deleted: true });
   });
 
   // ── Toggle persona assignment ───────────────────────────
-  fastify.put('/:personaId/:skillName/toggle', async (req) => {
-    const { personaId, skillName } = req.params as { personaId: string; skillName: string };
-    const row = await queryOne<{ enabled: number }>('SELECT enabled FROM persona_skills WHERE persona_id = $1 AND skill_name = $2', [personaId, skillName]);
+  fastify.put('/:personaId/:skillId/toggle', async (req) => {
+    const { personaId, skillId } = req.params as { personaId: string; skillId: string };
+    // Support both skill_id and skill_name for backwards compat during transition
+    const row = await queryOne<{ enabled: number; skill_name: string }>(
+      'SELECT enabled, skill_name FROM persona_skills WHERE persona_id = $1 AND (skill_id = $2 OR skill_name = $2)',
+      [personaId, skillId]
+    );
     if (!row) return ok({ error: 'not_found' });
     const newEnabled = row.enabled ? 0 : 1;
-    await execute('UPDATE persona_skills SET enabled = $1 WHERE persona_id = $2 AND skill_name = $3', [newEnabled, personaId, skillName]);
-    return ok({ personaId, skillName, enabled: !!newEnabled });
+    await execute(
+      'UPDATE persona_skills SET enabled = $1 WHERE persona_id = $2 AND (skill_id = $3 OR skill_name = $3)',
+      [newEnabled, personaId, skillId]
+    );
+    // Regenerate SKILLS.md (SOT-06)
+    const persona = await queryOne<{ name: string }>('SELECT name FROM personas WHERE id = $1', [personaId]);
+    if (persona) {
+      try { await writeSkillsManifest(personaId, persona.name); } catch (e) {
+        console.error('Failed to regenerate SKILLS.md:', e);
+      }
+    }
+    return ok({ personaId, skillId, enabled: !!newEnabled });
   });
 
   // ── Pack generation proxy (to admin backend) ────────────

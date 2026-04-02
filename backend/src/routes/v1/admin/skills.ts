@@ -3,6 +3,7 @@ import { ok, err } from '../../../lib/envelope.js';
 import { pool } from '../../../db/client.js';
 import { z } from 'zod';
 import crypto from 'crypto';
+import { writeSkillsManifest } from '../../../services/skills-manifest.js';
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -181,10 +182,30 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
   // DELETE /api/admin/skills/:id — remove a skill
   fastify.delete('/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
-    const result = await pool.query('DELETE FROM skills WHERE id = $1', [id]);
-    if (!result.rowCount || result.rowCount === 0) {
+    const exists = (await pool.query('SELECT id FROM skills WHERE id = $1', [id])).rows[0];
+    if (!exists) {
       return reply.code(404).send(err('NOT_FOUND', 'Skill not found'));
     }
+
+    // Find affected personas before deletion for SKILLS.md regeneration (SOT-06)
+    const affectedPersonas = (await pool.query(
+      `SELECT DISTINCT ps.persona_id, p.name FROM persona_skills ps
+       JOIN personas p ON p.id = ps.persona_id
+       WHERE ps.skill_id = $1 OR ps.skill_name = $1`,
+      [id]
+    )).rows as Array<{ persona_id: string; name: string }>;
+
+    await pool.query('DELETE FROM persona_skills WHERE skill_id = $1 OR skill_name = $1', [id]);
+    await pool.query('DELETE FROM template_skills WHERE skill_id = $1', [id]);
+    await pool.query('DELETE FROM skills WHERE id = $1', [id]);
+
+    // Regenerate SKILLS.md for affected personas (SOT-06)
+    for (const p of affectedPersonas) {
+      try { await writeSkillsManifest(p.persona_id, p.name); } catch (e) {
+        console.error(`Failed to regenerate SKILLS.md for ${p.persona_id}:`, e);
+      }
+    }
+
     return ok({ deleted: true });
   });
 
@@ -197,6 +218,20 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     }
     const newEnabled = row.enabled ? 0 : 1;
     await pool.query('UPDATE skills SET enabled = $1, updated_at = EXTRACT(EPOCH FROM NOW()) WHERE id = $2', [newEnabled, id]);
+
+    // Regenerate SKILLS.md for all personas using this skill (SOT-06)
+    const affectedPersonas = (await pool.query(
+      `SELECT DISTINCT ps.persona_id, p.name FROM persona_skills ps
+       JOIN personas p ON p.id = ps.persona_id
+       WHERE ps.skill_id = $1 OR ps.skill_name = $1`,
+      [id]
+    )).rows as Array<{ persona_id: string; name: string }>;
+    for (const p of affectedPersonas) {
+      try { await writeSkillsManifest(p.persona_id, p.name); } catch (e) {
+        console.error(`Failed to regenerate SKILLS.md for ${p.persona_id}:`, e);
+      }
+    }
+
     return ok({ id, enabled: newEnabled });
   });
 }
