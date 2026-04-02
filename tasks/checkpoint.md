@@ -1,6 +1,6 @@
 # Porter Checkpoint
 # CANONICAL — all gateways read this file. Do not create per-gateway checkpoints.
-# Location: /home/lobster/documents/porter/tasks/checkpoint.md
+# Location: /home/lobster/projects/porter/tasks/checkpoint.md
 
 project: porter
 version: v4.4.0

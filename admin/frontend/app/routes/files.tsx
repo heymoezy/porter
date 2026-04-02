@@ -6,7 +6,6 @@ import {
   MoreVertical, Pencil, Trash2, Check, Maximize2, Minimize2, Rows3,
   Home, AlertTriangle,
 } from "lucide-react"
-import { AgentPresenceSummary } from "~/components/agent-presence"
 import { api } from "~/lib/api"
 import { FileTypeIcon } from "~/components/file-type-icon"
 import { Button } from "~/components/ui/button"
@@ -381,12 +380,10 @@ export default function FilesPage() {
 
       {/* Header bar */}
       <div className="shrink-0 px-4 pt-3 pb-2 space-y-2">
-        <AgentPresenceSummary surface="files" />
-
         {/* Title + root selector + actions */}
         <div className="flex items-center gap-3">
           <FolderOpen className="size-4 text-accent-porter shrink-0" />
-          <h1 className="text-sm font-bold text-text">Files</h1>
+          <h1 className="text-sm font-bold text-text">Projects</h1>
 
           {/* Root selector */}
           {roots.length > 1 && (
