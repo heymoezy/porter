@@ -111,10 +111,10 @@ Plans:
   5. Missing or empty files are flagged with warnings in the file tree
 **Plans:** 4/4 plans complete
 Plans:
-- [ ] 32-00-PLAN.md — Wave 0 test scaffold (Playwright tests for PKX-01 through PKX-05)
-- [ ] 32-01-PLAN.md — Backend quality diagnostics + PUT file write endpoint
-- [ ] 32-02-PLAN.md — Frontend pack explorer page (CodeMirror editor, file tree, diagnostics)
-- [ ] 32-03-PLAN.md — Quality badges + navigation wiring (skills-studio, marketplace, agent-detail)
+- [x] 32-00-PLAN.md — Wave 0 test scaffold (Playwright tests for PKX-01 through PKX-05)
+- [x] 32-01-PLAN.md — Backend quality diagnostics + PUT file write endpoint
+- [x] 32-02-PLAN.md — Frontend pack explorer page (CodeMirror editor, file tree, diagnostics)
+- [x] 32-03-PLAN.md — Quality badges + navigation wiring (skills-studio, marketplace, agent-detail)
 
 ### Phase 33: Runtime Skill Selector
 **Goal**: Porter selects the right skills at dispatch time — gathering assigned skills, ranking them against the task, injecting only the top matches into the prompt, and logging what was used and why
@@ -126,7 +126,10 @@ Plans:
   3. Selected skill pack content (prompt.md + SKILL.md) is injected into the dispatch system prompt between memory tiers and gateway instructions
   4. Every dispatch record in bridge_dispatch_log includes a skills_used JSONB column with candidate list, selected list, and scores
   5. An agent with no assigned skills or no relevant skills dispatches normally without skill injection
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 33-01-PLAN.md — Migration (skills_used JSONB) + skill-selector.ts service (scoring, pack reading)
+- [ ] 33-02-PLAN.md — Chat pipeline wiring + dispatch logging integration
 
 ### Phase 34: Feedback Telemetry
 **Goal**: Every dispatch outcome produces a structured feedback signal linked to the skills that were used — enabling per-skill effectiveness measurement that actually means something
@@ -188,8 +191,8 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 16-23 | v3.0 | - | Complete | 2026-03-25 |
 | 24-30 | v4.0 | 17/17 | Partial (28 deferred) | 2026-04-02 |
 | 31. Source of Truth | v5.0 | 3/3 | Complete | 2026-04-02 |
-| 32. Skill Pack Explorer | 4/4 | Complete    | 2026-04-02 | - |
-| 33. Runtime Skill Selector | v5.0 | 0/TBD | Not started | - |
+| 32. Skill Pack Explorer | v5.0 | 4/4 | Complete | 2026-04-02 |
+| 33. Runtime Skill Selector | v5.0 | 0/2 | Planning complete | - |
 | 34. Feedback Telemetry | v5.0 | 0/TBD | Not started | - |
 | 35. Agent Evolution Loop | v5.0 | 0/TBD | Not started | - |
 | 36. Skill Quality Scoring | v5.0 | 0/TBD | Not started | - |
