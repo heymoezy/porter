@@ -237,11 +237,11 @@ export default function FilesPage() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadQueue, setUploadQueue] = useState<Array<{ name: string; status: "pending" | "uploading" | "done" | "error" }>>([])
   const uploadMut = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, root, path }: { file: File; root: string; path: string }) => {
       const form = new FormData()
       form.append("file", file)
-      form.append("root", activeRoot)
-      form.append("path", currentPath)
+      form.append("root", root)
+      form.append("path", path)
       const res = await fetch("/api/v1/files/upload", {
         method: "POST",
         credentials: "include",
@@ -254,7 +254,7 @@ export default function FilesPage() {
       return res.json()
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["files", "list", activeRoot, currentPath] })
+      qc.invalidateQueries({ queryKey: ["files", "list"] })
     },
     onError: (e) => {
       setUploadError((e as Error).message)
@@ -274,19 +274,21 @@ export default function FilesPage() {
   async function uploadFiles(fileList: FileList | File[]) {
     setUploadError(null)
     const files = Array.from(fileList)
+    // Capture current root and path at call time (not closure time)
+    const root = activeRoot
+    const path = currentPath
     const queue = files.map(f => ({ name: f.name, status: "pending" as const }))
     setUploadQueue(queue)
     for (let i = 0; i < files.length; i++) {
       setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "uploading" } : item))
       try {
-        await uploadMut.mutateAsync(files[i])
+        await uploadMut.mutateAsync({ file: files[i], root, path })
         setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "done" } : item))
       } catch {
         setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "error" } : item))
         break
       }
     }
-    // Clear completed items after a short delay
     setTimeout(() => setUploadQueue(prev => prev.filter(item => item.status !== "done")), 1500)
   }
 
