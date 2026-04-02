@@ -9,6 +9,7 @@ interface SkillRow {
   icon: string; color: string; short_label: string;
   sort_order: number; featured_order: number;
   pack_status: string;
+  tags: string | null;
   template_count: number; agent_count: number;
 }
 
@@ -16,8 +17,14 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', fastify.requirePlatformAdmin);
 
   // ── List ────────────────────────────────────────────────
-  fastify.get('/', async () => {
+  fastify.get('/', async (req) => {
     try {
+      const qs = req.query as Record<string, string | undefined>;
+      const searchQ = qs.search?.trim().toLowerCase();
+      const categoryQ = qs.category?.trim();
+      const featuredQ = qs.featured === 'true';
+      const packStatusQ = qs.packStatus?.trim();
+
       const rows = await queryAll<SkillRow>(`
         SELECT s.*,
           COALESCE((SELECT COUNT(*) FROM template_skills ts WHERE ts.skill_id = s.id), 0)::int AS template_count,
@@ -43,7 +50,13 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
         bySkill.set(a.skill_name, list);
       }
 
-      const skills = rows.map(row => ({
+      // Parse tags from jsonb
+      function parseTags(raw: string | null): string[] {
+        if (!raw) return [];
+        try { return Array.isArray(raw) ? raw : JSON.parse(raw); } catch { return []; }
+      }
+
+      let skills = rows.map(row => ({
         id: row.id,
         name: row.name,
         description: row.description || '',
@@ -58,10 +71,32 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
         sort_order: row.sort_order ?? 50,
         featured_order: row.featured_order ?? 0,
         pack_status: row.pack_status || 'missing',
+        tags: parseTags(row.tags),
         template_count: row.template_count ?? 0,
         agent_count: row.agent_count ?? 0,
         agents: bySkill.get(row.id) ?? [],
       }));
+
+      // Build allTags from full set before filtering
+      const allTags: Record<string, number> = {};
+      for (const s of skills) {
+        for (const t of s.tags) {
+          allTags[t] = (allTags[t] || 0) + 1;
+        }
+      }
+
+      // Apply filters
+      if (categoryQ) skills = skills.filter(s => s.category === categoryQ);
+      if (featuredQ) skills = skills.filter(s => s.featured);
+      if (packStatusQ) skills = skills.filter(s => s.pack_status === packStatusQ);
+      if (searchQ) {
+        skills = skills.filter(s =>
+          s.name.toLowerCase().includes(searchQ) ||
+          s.description.toLowerCase().includes(searchQ) ||
+          s.id.toLowerCase().includes(searchQ) ||
+          s.tags.some(t => t.toLowerCase().includes(searchQ))
+        );
+      }
 
       const categories: Record<string, number> = {};
       const sources: Record<string, number> = {};
@@ -83,9 +118,10 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
         categories,
         sources,
         packStatuses,
+        allTags,
       });
     } catch {
-      return ok({ skills: [], totalSkills: 0, visibleSkills: 0, featuredSkills: 0, assignedSkills: 0, totalAssignments: 0, totalTemplatesUsingSkills: 0, categories: {}, sources: {}, packStatuses: {} });
+      return ok({ skills: [], totalSkills: 0, visibleSkills: 0, featuredSkills: 0, assignedSkills: 0, totalAssignments: 0, totalTemplatesUsingSkills: 0, categories: {}, sources: {}, packStatuses: {}, allTags: {} });
     }
   });
 
@@ -125,6 +161,9 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     }
     for (const key of ['sort_order', 'featured_order']) {
       if (body[key] !== undefined) { fields.push(`${key} = $${idx}`); vals.push(Number(body[key])); idx++; }
+    }
+    if (body.tags !== undefined) {
+      fields.push(`tags = $${idx}`); vals.push(JSON.stringify(body.tags)); idx++;
     }
     if (fields.length === 0) return ok({ id, updated: false });
 

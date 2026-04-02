@@ -21,7 +21,7 @@ import {
   SelectContent,
   SelectItem,
 } from "~/components/ui/select"
-import { Loader2, AlertTriangle, Trash2, Package } from "lucide-react"
+import { Loader2, AlertTriangle, Trash2, Package, X } from "lucide-react"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -33,6 +33,7 @@ interface Skill {
   icon: string; color: string; short_label: string
   sort_order: number; featured_order: number
   packStatus: "ready" | "partial" | "missing"
+  tags: string[]
   agents: SkillAgent[]
 }
 
@@ -56,6 +57,7 @@ interface EditForm {
   icon: string
   color: string
   short_label: string
+  tags: string[]
 }
 
 const SOURCES = ["porter-core", "porter-curated", "porter-internal", "runtime"]
@@ -77,8 +79,9 @@ export function SkillEditSheet({ skill, open, onOpenChange, categories }: SkillE
     name: "", description: "", category: "", source: "porter-curated",
     enabled: true, visible: true, featured: false,
     sort_order: 50, featured_order: 0,
-    icon: "", color: "", short_label: "",
+    icon: "", color: "", short_label: "", tags: [],
   })
+  const [tagInput, setTagInput] = useState("")
 
   // Populate form when skill changes
   useEffect(() => {
@@ -96,7 +99,9 @@ export function SkillEditSheet({ skill, open, onOpenChange, categories }: SkillE
         icon: skill.icon || "",
         color: skill.color || "",
         short_label: skill.short_label || "",
+        tags: skill.tags || [],
       })
+      setTagInput("")
       setFormError(null)
       setDeleteConfirm(false)
     }
@@ -304,6 +309,47 @@ export function SkillEditSheet({ skill, open, onOpenChange, categories }: SkillE
                 value={form.short_label}
                 onChange={e => setForm(f => ({ ...f, short_label: e.target.value }))}
                 placeholder="review"
+              />
+            </div>
+          </div>
+
+          {/* Tags */}
+          <div className="grid gap-1.5">
+            <Label>Tags</Label>
+            <div className="flex flex-wrap gap-1 min-h-[28px] rounded-lg border border-border/50 p-2">
+              {form.tags.map(tag => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-0.5 rounded-full bg-raised px-2 py-0.5 text-2xs text-text2"
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, tags: f.tags.filter(t => t !== tag) }))}
+                    className="rounded-full p-0.5 text-text3 hover:text-text hover:bg-surface transition-colors"
+                  >
+                    <X className="size-2.5" />
+                  </button>
+                </span>
+              ))}
+              <Input
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && tagInput.trim()) {
+                    e.preventDefault()
+                    const tag = tagInput.trim().toLowerCase()
+                    if (!form.tags.includes(tag)) {
+                      setForm(f => ({ ...f, tags: [...f.tags, tag] }))
+                    }
+                    setTagInput("")
+                  }
+                  if (e.key === "Backspace" && !tagInput && form.tags.length > 0) {
+                    setForm(f => ({ ...f, tags: f.tags.slice(0, -1) }))
+                  }
+                }}
+                placeholder="Type + Enter"
+                className="h-6 min-w-[80px] flex-1 border-0 bg-transparent px-1 text-2xs shadow-none focus-visible:ring-0"
               />
             </div>
           </div>

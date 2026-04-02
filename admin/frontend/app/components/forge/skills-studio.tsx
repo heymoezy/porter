@@ -5,10 +5,11 @@ import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Switch } from "~/components/ui/switch"
 import { Input } from "~/components/ui/input"
-import { Sparkles, Search, ChevronDown, ChevronRight, Bot, Plus, Pencil, Loader2, Package, Download } from "lucide-react"
+import { Sparkles, Search, ChevronDown, ChevronRight, Bot, Plus, Pencil, Loader2, Package, Download, LayoutGrid, Table2 } from "lucide-react"
 import { SkillCreateDialog } from "~/components/forge/skill-create-dialog"
 import { SkillEditSheet } from "~/components/forge/skill-edit-sheet"
 import { SkillImportDialog } from "~/components/forge/skill-import-dialog"
+import { SkillsMarketplace } from "~/components/forge/skills-marketplace"
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -19,11 +20,13 @@ interface Skill {
   icon: string; color: string; short_label: string
   sort_order: number; featured_order: number
   packStatus: "ready" | "partial" | "missing"
+  tags: string[]
   agents: SkillAgent[]
 }
 interface SkillsResponse {
   skills: Skill[]; totalSkills: number; totalAssignments: number; assignedSkills: number
   categories: Record<string, number>; sources: Record<string, number>
+  allTags: Record<string, number>
   status: { ready: number; partial: number; missing: number }
 }
 
@@ -52,6 +55,7 @@ export function SkillsStudio() {
   const [importOpen, setImportOpen] = useState(false)
   const [editSkill, setEditSkill] = useState<Skill | null>(null)
   const [editOpen, setEditOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table")
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "skills"],
@@ -81,6 +85,7 @@ export function SkillsStudio() {
   const allSkills = data?.skills ?? []
   const categories = data?.categories ?? {}
   const sources = data?.sources ?? {}
+  const allTags = data?.allTags ?? {}
   const statusCounts = data?.status ?? { ready: 0, partial: 0, missing: 0 }
   const missingCount = statusCounts.missing
 
@@ -140,123 +145,152 @@ export function SkillsStudio() {
           <Plus className="size-3 mr-1" />
           New
         </Button>
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 size-3 -translate-y-1/2 text-text3" />
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Filter..."
-            className="h-7 w-[150px] bg-raised border-border pl-7 text-xs"
-          />
-        </div>
-      </div>
-
-      {/* Category tabs */}
-      <div className="flex flex-wrap gap-1">
-        <button
-          onClick={() => setActiveCat("all")}
-          className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors ${
-            activeCat === "all" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
-          }`}
-        >all ({allSkills.length})</button>
-        {Object.entries(categories).sort(([,a],[,b]) => b - a).map(([cat, cnt]) => (
+        <div className="flex items-center rounded-md border border-border overflow-hidden">
           <button
-            key={cat}
-            onClick={() => setActiveCat(cat)}
-            className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors ${
-              activeCat === cat ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
-            }`}
-          >{cat} ({cnt})</button>
-        ))}
+            onClick={() => setViewMode("table")}
+            className={`p-1.5 transition-colors ${viewMode === "table" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2"}`}
+            title="Table view"
+          >
+            <Table2 className="size-3" />
+          </button>
+          <button
+            onClick={() => setViewMode("grid")}
+            className={`p-1.5 transition-colors ${viewMode === "grid" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2"}`}
+            title="Grid view"
+          >
+            <LayoutGrid className="size-3" />
+          </button>
+        </div>
+        {viewMode === "table" && (
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 size-3 -translate-y-1/2 text-text3" />
+            <Input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Filter..."
+              className="h-7 w-[150px] bg-raised border-border pl-7 text-xs"
+            />
+          </div>
+        )}
       </div>
 
-      {/* Skills table */}
-      <div className="rounded-xl border border-border overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border/50 bg-surface text-left">
-              <th className="w-5 px-2 py-1.5" />
-              <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Skill</th>
-              <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Description</th>
-              <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Source</th>
-              <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Pack</th>
-              <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 text-right">Agents</th>
-              <th className="w-8 px-2 py-1.5" />
-            </tr>
-          </thead>
-          <tbody>
-            {skills.map(skill => {
-              const isExpanded = expandedSkill === skill.id
-              const enabledCount = skill.agents.filter(a => a.enabled).length
-              return (
-                <Fragment key={skill.id}>
-                  <tr
-                    onClick={() => setExpandedSkill(isExpanded ? null : skill.id)}
-                    className="border-b border-border/20 last:border-0 cursor-pointer hover:bg-surface/60 transition-colors"
-                  >
-                    <td className="px-2 py-1">
-                      {skill.agents.length > 0 ? (
-                        isExpanded ? <ChevronDown className="size-3 text-text3" /> : <ChevronRight className="size-3 text-text3" />
-                      ) : <span className="size-3" />}
-                    </td>
-                    <td className="px-2 py-1 text-xs font-bold text-text whitespace-nowrap">{skill.name}</td>
-                    <td className="px-2 py-1 text-2xs text-text3 truncate max-w-[300px]">{skill.description}</td>
-                    <td className="px-2 py-1">
-                      <Badge className={`text-2xs border-0 ${sourceColors[skill.source] || "bg-text3/15 text-text3"}`}>
-                        {skill.source}
-                      </Badge>
-                    </td>
-                    <td className="px-2 py-1">
-                      <Badge className={`text-2xs border-0 ${packStatusStyles[skill.packStatus] || "bg-text3/15 text-text3"}`}>
-                        {skill.packStatus}
-                      </Badge>
-                    </td>
-                    <td className="px-2 py-1 text-right">
-                      {skill.agents.length > 0 ? (
-                        <span className="text-xs text-text2">{enabledCount}/{skill.agents.length}</span>
-                      ) : (
-                        <span className="text-2xs text-text3">--</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1">
-                      <button
-                        onClick={(e) => openEdit(skill, e)}
-                        className="rounded p-1 text-text3 hover:text-text hover:bg-raised transition-colors"
-                        title="Edit skill"
+      {viewMode === "grid" ? (
+        <SkillsMarketplace
+          skills={allSkills}
+          categories={categories}
+          allTags={allTags}
+          onSelect={(skill) => { setEditSkill(skill); setEditOpen(true) }}
+        />
+      ) : (
+        <>
+          {/* Category tabs */}
+          <div className="flex flex-wrap gap-1">
+            <button
+              onClick={() => setActiveCat("all")}
+              className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors ${
+                activeCat === "all" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
+              }`}
+            >all ({allSkills.length})</button>
+            {Object.entries(categories).sort(([,a],[,b]) => b - a).map(([cat, cnt]) => (
+              <button
+                key={cat}
+                onClick={() => setActiveCat(cat)}
+                className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors ${
+                  activeCat === cat ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
+                }`}
+              >{cat} ({cnt})</button>
+            ))}
+          </div>
+
+          {/* Skills table */}
+          <div className="rounded-xl border border-border overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border/50 bg-surface text-left">
+                  <th className="w-5 px-2 py-1.5" />
+                  <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Skill</th>
+                  <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Description</th>
+                  <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Source</th>
+                  <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Pack</th>
+                  <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 text-right">Agents</th>
+                  <th className="w-8 px-2 py-1.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {skills.map(skill => {
+                  const isExpanded = expandedSkill === skill.id
+                  const enabledCount = skill.agents.filter(a => a.enabled).length
+                  return (
+                    <Fragment key={skill.id}>
+                      <tr
+                        onClick={() => setExpandedSkill(isExpanded ? null : skill.id)}
+                        className="border-b border-border/20 last:border-0 cursor-pointer hover:bg-surface/60 transition-colors"
                       >
-                        <Pencil className="size-3" />
-                      </button>
-                    </td>
-                  </tr>
-                  {isExpanded && skill.agents.length > 0 && (
-                    <tr key={`${skill.id}-agents`}>
-                      <td colSpan={7} className="bg-surface/50 border-b border-border/20">
-                        <div className="px-8 py-1">
-                          {skill.agents.map(a => (
-                            <div key={a.id} className="flex items-center gap-2 py-0.5">
-                              <Bot className="size-2.5 text-text3" />
-                              <span className="text-2xs font-medium text-text flex-1">{a.name}</span>
-                              <span className="text-2xs text-text3 truncate max-w-[200px]">{a.role}</span>
-                              <Switch
-                                checked={a.enabled}
-                                onCheckedChange={() => toggleSkill.mutate({ personaId: a.id, skillName: skill.id })}
-                                className="scale-[0.65]"
-                              />
+                        <td className="px-2 py-1">
+                          {skill.agents.length > 0 ? (
+                            isExpanded ? <ChevronDown className="size-3 text-text3" /> : <ChevronRight className="size-3 text-text3" />
+                          ) : <span className="size-3" />}
+                        </td>
+                        <td className="px-2 py-1 text-xs font-bold text-text whitespace-nowrap">{skill.name}</td>
+                        <td className="px-2 py-1 text-2xs text-text3 truncate max-w-[300px]">{skill.description}</td>
+                        <td className="px-2 py-1">
+                          <Badge className={`text-2xs border-0 ${sourceColors[skill.source] || "bg-text3/15 text-text3"}`}>
+                            {skill.source}
+                          </Badge>
+                        </td>
+                        <td className="px-2 py-1">
+                          <Badge className={`text-2xs border-0 ${packStatusStyles[skill.packStatus] || "bg-text3/15 text-text3"}`}>
+                            {skill.packStatus}
+                          </Badge>
+                        </td>
+                        <td className="px-2 py-1 text-right">
+                          {skill.agents.length > 0 ? (
+                            <span className="text-xs text-text2">{enabledCount}/{skill.agents.length}</span>
+                          ) : (
+                            <span className="text-2xs text-text3">--</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1">
+                          <button
+                            onClick={(e) => openEdit(skill, e)}
+                            className="rounded p-1 text-text3 hover:text-text hover:bg-raised transition-colors"
+                            title="Edit skill"
+                          >
+                            <Pencil className="size-3" />
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && skill.agents.length > 0 && (
+                        <tr key={`${skill.id}-agents`}>
+                          <td colSpan={7} className="bg-surface/50 border-b border-border/20">
+                            <div className="px-8 py-1">
+                              {skill.agents.map(a => (
+                                <div key={a.id} className="flex items-center gap-2 py-0.5">
+                                  <Bot className="size-2.5 text-text3" />
+                                  <span className="text-2xs font-medium text-text flex-1">{a.name}</span>
+                                  <span className="text-2xs text-text3 truncate max-w-[200px]">{a.role}</span>
+                                  <Switch
+                                    checked={a.enabled}
+                                    onCheckedChange={() => toggleSkill.mutate({ personaId: a.id, skillName: skill.id })}
+                                    className="scale-[0.65]"
+                                  />
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
 
-      {skills.length === 0 && (
-        <div className="py-6 text-center text-xs text-text3">{search ? "No skills match" : "No skills"}</div>
+          {skills.length === 0 && (
+            <div className="py-6 text-center text-xs text-text3">{search ? "No skills match" : "No skills"}</div>
+          )}
+        </>
       )}
 
       {/* Dialogs */}

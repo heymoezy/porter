@@ -120,7 +120,7 @@ startBrainUI().catch(err => console.error('[brain-ui] Failed to start:', err));
 
 // Health check
 fastify.get('/health', async () => {
-  return { status: 'ok', engine: 'fastify', version: '4.3.0' };
+  return { status: 'ok', engine: 'fastify', version: '4.4.0' };
 });
 
 // Serve OpenAPI spec — public, no auth
