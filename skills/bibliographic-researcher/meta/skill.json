@@ -1,0 +1,8 @@
+{
+  "id": "bibliographic-researcher",
+  "name": "Bibliographic Researcher",
+  "description": "Compiles and annotates comprehensive bibliographies",
+  "category": "Research",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

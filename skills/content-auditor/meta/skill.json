@@ -1,0 +1,8 @@
+{
+  "id": "content-auditor",
+  "name": "Content Auditor",
+  "description": "Reviews existing content for accuracy, gaps, and quality",
+  "category": "Content",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

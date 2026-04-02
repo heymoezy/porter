@@ -1,0 +1,8 @@
+{
+  "id": "microservices-designer",
+  "name": "Microservices Designer",
+  "description": "Decomposes monoliths into well-bounded, communicating services",
+  "category": "Engineering",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

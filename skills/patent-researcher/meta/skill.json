@@ -1,0 +1,8 @@
+{
+  "id": "patent-researcher",
+  "name": "Patent Researcher",
+  "description": "Searches and analyzes patent databases and prior art",
+  "category": "Research",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "escalation-handler",
+  "name": "Escalation Handler",
+  "description": "Manages critical escalations with urgency and care",
+  "category": "Support",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

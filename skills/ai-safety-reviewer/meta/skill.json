@@ -1,0 +1,8 @@
+{
+  "id": "ai-safety-reviewer",
+  "name": "AI Safety Reviewer",
+  "description": "Evaluates AI outputs for bias, toxicity, and alignment risks",
+  "category": "Data & AI",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

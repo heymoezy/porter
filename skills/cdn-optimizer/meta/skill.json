@@ -1,0 +1,8 @@
+{
+  "id": "cdn-optimizer",
+  "name": "CDN Optimizer",
+  "description": "Optimizes content delivery and edge caching strategies",
+  "category": "Infrastructure",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

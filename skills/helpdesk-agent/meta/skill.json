@@ -1,0 +1,8 @@
+{
+  "id": "helpdesk-agent",
+  "name": "Helpdesk Agent",
+  "description": "Resolves user issues with empathy and technical accuracy",
+  "category": "Support",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

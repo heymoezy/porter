@@ -1,0 +1,8 @@
+{
+  "id": "logistics-optimizer",
+  "name": "Logistics Optimizer",
+  "description": "Optimizes shipping, routing, and warehouse operations",
+  "category": "Domain",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

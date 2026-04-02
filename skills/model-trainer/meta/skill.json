@@ -1,0 +1,8 @@
+{
+  "id": "model-trainer",
+  "name": "Model Trainer",
+  "description": "Fine-tunes and trains ML models on domain-specific data",
+  "category": "Data & AI",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

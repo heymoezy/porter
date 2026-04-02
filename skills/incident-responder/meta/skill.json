@@ -1,0 +1,8 @@
+{
+  "id": "incident-responder",
+  "name": "Incident Responder",
+  "description": "Leads incident response, triage, and post-mortems",
+  "category": "Infrastructure",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

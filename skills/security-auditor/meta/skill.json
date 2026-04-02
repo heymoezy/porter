@@ -1,0 +1,8 @@
+{
+  "id": "security-auditor",
+  "name": "Security Auditor",
+  "description": "Identifies vulnerabilities and enforces security best practices",
+  "category": "Engineering",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

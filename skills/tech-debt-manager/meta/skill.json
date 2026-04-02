@@ -1,0 +1,8 @@
+{
+  "id": "tech-debt-manager",
+  "name": "Tech Debt Manager",
+  "description": "Identifies, prioritizes, and systematically reduces technical debt",
+  "category": "Engineering",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

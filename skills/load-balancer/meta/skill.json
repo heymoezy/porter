@@ -1,0 +1,8 @@
+{
+  "id": "load-balancer",
+  "name": "Load Balancer Specialist",
+  "description": "Configures traffic distribution and high availability",
+  "category": "Infrastructure",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}

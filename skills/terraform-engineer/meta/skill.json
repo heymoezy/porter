@@ -1,0 +1,8 @@
+{
+  "id": "terraform-engineer",
+  "name": "Terraform Engineer",
+  "description": "Provisions and manages infrastructure as code with Terraform",
+  "category": "Infrastructure",
+  "source": "porter-curated",
+  "generated_at": "2026-04-02T04:19:59+00:00"
+}
