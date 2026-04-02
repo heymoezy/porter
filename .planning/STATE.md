@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 34-01-PLAN.md
-last_updated: "2026-04-02T18:02:55.897Z"
+stopped_at: Completed 34-02-PLAN.md
+last_updated: "2026-04-02T18:08:36.693Z"
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # Project State
@@ -73,6 +73,8 @@ Plan: 2 of 4
 - [Phase 34-00]: FBK test stubs use test.skip(true, 'TODO: Enable after Wave N...') rather than test.todo() — enables single-line activation with no structural changes
 - [Phase 34-01]: __DISPATCH_META__ token convention threads dispatch_id from routing-engine to SSE done event without changing StreamBackend interface
 - [Phase 34-01]: times_selected increment uses COALESCE(skill_id, skill_name) for backwards compat with pre-Phase-31 persona_skills rows
+- [Phase 34]: Fan-out feedback per selected skill — one skill_feedback_events row per skill for granular attribution
+- [Phase 34]: dispatchId lives in React state only (not sessionStorage) — feedback buttons are ephemeral, no persistence needed
 
 ### Pending Todos
 
@@ -86,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T18:02:46.417Z
-Stopped at: Completed 34-01-PLAN.md
+Last session: 2026-04-02T18:08:36.689Z
+Stopped at: Completed 34-02-PLAN.md
 Resume file: None

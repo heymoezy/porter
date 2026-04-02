@@ -34,7 +34,7 @@
 
 - [x] **FBK-01**: skill_feedback_events table captures per-dispatch skill effectiveness signals (positive, negative, correction, retry, abandon, success)
 - [x] **FBK-02**: Each persona_skill record tracks times_selected, times_completed, positive_feedback_count, negative_feedback_count, last_used_at, effectiveness_score
-- [ ] **FBK-03**: Thumbs up/down on a dispatch response stores a skill_feedback_event linked to the selected skills
+- [x] **FBK-03**: Thumbs up/down on a dispatch response stores a skill_feedback_event linked to the selected skills
 - [ ] **FBK-04**: Skill effectiveness scores are aggregated and queryable per skill, per agent, and per template
 - [ ] **FBK-05**: Admin UI shows effectiveness metrics on skill detail, agent detail, and template detail pages
 
@@ -108,7 +108,7 @@
 | RTS-05 | Phase 33 | Complete |
 | FBK-01 | Phase 34 | Complete |
 | FBK-02 | Phase 34 | Complete |
-| FBK-03 | Phase 34 | Pending |
+| FBK-03 | Phase 34 | Complete |
 | FBK-04 | Phase 34 | Pending |
 | FBK-05 | Phase 34 | Pending |
 | EVO-01 | Phase 35 | Pending |
