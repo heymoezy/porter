@@ -95,9 +95,9 @@
   6. skills_text column is preserved for backwards compatibility but never read during instantiation
 **Plans:** 3/3 plans complete
 Plans:
-- [ ] 31-01-PLAN.md — Schema update + migration script (template_skills population, persona_skills.skill_id)
-- [ ] 31-02-PLAN.md — Instantiation rewrite + forge Station 2 + SKILLS.md manifest generator
-- [ ] 31-03-PLAN.md — API toggle/delete endpoints + rpg-engine alignment + regeneration triggers
+- [x] 31-01-PLAN.md — Schema update + migration script (template_skills population, persona_skills.skill_id)
+- [x] 31-02-PLAN.md — Instantiation rewrite + forge Station 2 + SKILLS.md manifest generator
+- [x] 31-03-PLAN.md — API toggle/delete endpoints + rpg-engine alignment + regeneration triggers
 
 ### Phase 32: Skill Pack Explorer
 **Goal**: Admin can inspect and edit the actual skill pack files (.md, guides, examples, metadata) from the browser — not just DB metadata fields — with quality diagnostics that reveal scaffold vs real content
@@ -109,7 +109,11 @@ Plans:
   3. Pack diagnostics badge shows a quality score: file count, non-empty file count, word count, and scaffold detection (generic boilerplate matching)
   4. Template and agent detail pages have a clickable link on each assigned skill that opens the pack explorer for that skill
   5. Missing or empty files are flagged with warnings in the file tree
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 32-01-PLAN.md — Backend quality diagnostics + PUT file write endpoint
+- [ ] 32-02-PLAN.md — Frontend pack explorer page (CodeMirror editor, file tree, diagnostics)
+- [ ] 32-03-PLAN.md — Quality badges + navigation wiring (skills-studio, marketplace, agent-detail)
 
 ### Phase 33: Runtime Skill Selector
 **Goal**: Porter selects the right skills at dispatch time — gathering assigned skills, ranking them against the task, injecting only the top matches into the prompt, and logging what was used and why
@@ -182,8 +186,8 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 8-15 | v2.0 | - | Complete | 2026-03-24 |
 | 16-23 | v3.0 | - | Complete | 2026-03-25 |
 | 24-30 | v4.0 | 17/17 | Partial (28 deferred) | 2026-04-02 |
-| 31. Source of Truth | 3/3 | Complete    | 2026-04-02 | - |
-| 32. Skill Pack Explorer | v5.0 | 0/TBD | Not started | - |
+| 31. Source of Truth | v5.0 | 3/3 | Complete | 2026-04-02 |
+| 32. Skill Pack Explorer | v5.0 | 0/3 | Planned | - |
 | 33. Runtime Skill Selector | v5.0 | 0/TBD | Not started | - |
 | 34. Feedback Telemetry | v5.0 | 0/TBD | Not started | - |
 | 35. Agent Evolution Loop | v5.0 | 0/TBD | Not started | - |
