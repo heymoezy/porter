@@ -12,35 +12,37 @@ updated_by: claude-opus-4.6
 Single monorepo (heymoezy/porter). One Fastify process on :3001. API metering business model.
 3 pillars: Bridge (hub), Forge (factory), Recall (shared brain).
 5 gateways: Claude CLI, OpenClaw, Ollama, Codex CLI, Gemini CLI.
-Service token auth for inter-gateway communication (X-Porter-Service-Token).
+**IMPORTANT: Only port :3001 exists. Port 5175 is DEAD. Brain + Admin merged.**
 
-## Completed (v4.5.0 — 2026-04-02)
+## Milestone v5.0 — Living Skills
 
-**Projects System:**
-- /home/lobster/documents → /home/lobster/projects (each folder = a project)
-- PROJECT.md + CHECKPOINT.md standard in every project folder
-- Projects Curator agent (Atlas) assigned to manage index
-- Full file manager: drag-drop move, delete dialog, new folder, 100MB uploads, real % progress
+### Completed
+- **Phase 31**: Source of Truth Cleanup (3 plans) — template_skills/persona_skills canonical, SKILLS.md generated
+- **Phase 32**: Skill Pack Explorer (4 plans) — CodeMirror 6 file editor at /skills/:id/pack, quality diagnostics, badges everywhere
+- **Phase 33**: Runtime Skill Selector (2 plans) — selectSkills() keyword scoring, prompt injection, skills_used JSONB logging
+- **Phase 34**: Feedback Telemetry (4 plans) — skill_feedback_events table, thumbs up/down, effectiveness_score, admin API + UI bars
+  - **NOTE**: Plans/tests reference :5175 which is WRONG. Must be :3001. Fix in next session.
 
-**Agent Template/Instance Model:**
-- Clear template vs instance distinction throughout the UI
-- 8 personas with correct template_id mappings
-- Instances shown in SOUL tab on template view
-- Born = soul_hash (only Porter is born)
-- Instances endpoint added to brain (was missing)
+### Remaining (3 phases)
+1. **Phase 35**: Agent Evolution Loop — background job analyzes feedback → skill recommendations → admin approve/reject
+2. **Phase 36**: Skill Quality Scoring — measurable quality_score (0-100), scaffold/baseline/production/high-performing tiers
+3. **Phase 37**: Template Skill UX — template detail as skill config command center, drag-drop, mandatory/optional, preview
 
-**Skills 10x (v4.1.0–v4.4.0):**
-- 207 skills across 20 categories, all with complete on-disk packs
-- SkillsStudio CRUD UI, marketplace grid view, tag filters, import system
-- skill-library.ts service, admin-proxy.ts for Brain→Admin forwarding
+### Dependency Chain
+- Phase 35 depends on Phase 34 ✓
+- Phase 36 depends on Phase 34 ✓ (can parallel with 35)
+- Phase 37 depends on Phase 36
 
-**Admin Improvements (v4.0.1–v4.0.6):**
-- Nav restructure, System page merge, Files→Projects, Build tab redesign
-- Agent skills tab enrichment, chat panels removed from Forge/Org Chart
+## Session Notes (2026-04-02)
+- Updated all paths from /home/lobster/documents/porter/ → /home/lobster/projects/porter/
+- porter-admin standalone repo is ARCHIVED
+- Brain + Admin share one version number
+- Port 5175 is DEAD — only 3001
+- Moe wants delegation through Porter Bridge to other models (Codex, OpenClaw) when approaching session limits
+- Phase 34 verification still pending (34-03 executed but phase not verified/closed yet)
 
-## Pending (next session)
-
-1. OpenClaw usage fix — finalize live usage tracking
-2. Design system update — document new components
-3. Skill content quality — enrich 170 new skill packs with specific prompts/examples
-4. Template↔Skill assignments — populate template_skills junction table
+## Resume Instructions
+1. Verify Phase 34 (run verifier, mark complete)
+2. Fix :5175 references in tests/skill-feedback.spec.js and tests/skill-pack-explorer.spec.js → :3001
+3. Push all local commits to remote
+4. Continue with Phase 35 (or delegate to Codex/OpenClaw via Bridge)
