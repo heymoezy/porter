@@ -7,7 +7,8 @@ import {
   MoreVertical, Pencil, Trash2, Check, Maximize2, Minimize2, Rows3,
   Home, AlertTriangle,
 } from "lucide-react"
-import { AgentPresenceSummary } from "~/components/agent-presence"
+import { PixelPortrait } from "~/components/pixel-portrait"
+import { getAgentsForSurface } from "~/lib/agent-registry"
 import { api } from "~/lib/api"
 import { FileTypeIcon } from "~/components/file-type-icon"
 import { Button } from "~/components/ui/button"
@@ -394,7 +395,35 @@ export default function FilesPage() {
         <div className="flex items-center gap-3">
           <span className="text-xs text-text3 font-mono">/home/lobster/projects{currentPath ? `/${currentPath}` : ""}</span>
 
-          <AgentPresenceSummary surface="files" />
+          {/* Assigned agents */}
+          {(() => {
+            const agents = getAgentsForSurface("files")
+            if (agents.length === 0) return null
+            return (
+              <div className="flex items-center gap-3">
+                {agents.map(a => {
+                  const isGhost = a.status === "planned"
+                  return (
+                    <div key={a.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 ${
+                      isGhost ? "border-border/40 bg-card" : "border-accent-porter/20 bg-accent-porter/3"
+                    }`}>
+                      <div className={isGhost ? "grayscale opacity-40" : ""}>
+                        <PixelPortrait {...a.avatar} size="sm" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`text-xs font-bold leading-tight ${isGhost ? "text-text2" : "text-text"}`}>{a.name}</p>
+                        <p className="text-2xs text-text3 leading-tight">{a.role}</p>
+                      </div>
+                      <span className={`size-1.5 rounded-full shrink-0 ${
+                        a.status === "active" ? "bg-success animate-pulse" :
+                        a.status === "error" ? "bg-danger" : "bg-text3/40"
+                      }`} />
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
 
           <div className="flex-1" />
 

@@ -10,7 +10,7 @@ import { Switch } from "~/components/ui/switch"
 import { PixelPortrait } from "~/components/pixel-portrait"
 import { getAgent, type AgentDef } from "~/lib/agent-registry"
 import {
-  Shield, Save, Sparkles, FolderKanban,
+  Shield, Save, Sparkles,
   FileText, Eye, X, Flame, Users, Wrench, HeartPulse,
 } from "lucide-react"
 import { CharacterCard, type RpgStats, type WorkshopData } from "~/components/character-card"
@@ -20,13 +20,11 @@ import { PassiveTreeView } from "~/components/passive-tree-view"
 // ── Types ────────────────────────────────────────────────
 
 interface Skill { name: string; enabled: boolean; assignedAt: number; description?: string; category?: string; source?: string }
-interface Project { project_id: string; project_name: string; role: string }
 
 interface AgentApiData {
   persona: Record<string, unknown>
   files: Record<string, string | null>
   skills: Skill[]
-  projects: Project[]
   metrics: { recentMessages: number; signalCount: number }
 }
 
@@ -52,7 +50,7 @@ const CORE_TABS = [
   { id: "SOUL.md", label: "SOUL", icon: Shield },
   { id: "IDENTITY.md", label: "IDENTITY", icon: FileText },
   { id: "ROLE_CARD.md", label: "ROLE", icon: FileText },
-  { id: "SKILLS.md", label: "SPEC", icon: Sparkles },
+  { id: "SKILLS.md", label: "SKILLS", icon: Sparkles },
 ]
 
 function buildFileTabs(lifecycle: string | undefined, hasTools: boolean, isBorn: boolean) {
@@ -101,10 +99,12 @@ function AgentDetailContent() {
     retry: false,
   })
 
-  // Resolve template ID: for instances, use persona's template_id; for templates, use URL id
-  const templateIdForLookup = (apiData?.persona?.template_id ? String(apiData.persona.template_id) : id) ?? id
+  // Resolve template ID: instances have persona.template_id → use that; otherwise URL id IS the template
+  const hasApi = !agentError && !!apiData
+  const p = apiData?.persona ?? {}
+  const templateIdForLookup = hasApi && p.template_id ? String(p.template_id) : id
 
-  // Template API — provides rich metadata for all agents
+  // Template API — depends on agent query finishing first so we know the correct template ID
   const { data: tmplData, isLoading: tmplLoading } = useQuery({
     queryKey: ["admin", "templates", "detail", templateIdForLookup],
     queryFn: () => api<TemplateApiData>(`/api/admin/templates/${templateIdForLookup}`),
@@ -141,11 +141,8 @@ function AgentDetailContent() {
   const rpgStats = rpgData?.stats ?? null
   const workshop = workshopData ?? null
 
-  const hasApi = !agentError && !!apiData
-  const p = apiData?.persona ?? {}
   const files = hasApi ? (apiData?.files ?? {}) : (tmplData?.files ?? {})
   const skills = apiData?.skills ?? []
-  const projects = apiData?.projects ?? []
   const instances = instancesData?.instances ?? []
 
   // Born = has been through Forge (exists as a persona instance)
@@ -322,16 +319,11 @@ function AgentDetailContent() {
                   {files[tab.id] && <div className="size-1.5 rounded-full bg-success" />}
                 </TabsTrigger>
               ))}
-              {/* Skills + Deploy for born agents */}
+              {/* Skills tab for born agents */}
               {hasApi && (
-                <>
-                  <TabsTrigger value="skills-tab" className="gap-1">
-                    <Sparkles className="size-2.5" /> SKILLS
-                  </TabsTrigger>
-                  <TabsTrigger value="deploy-tab" className="gap-1">
-                    <FolderKanban className="size-2.5" /> DEPLOY
-                  </TabsTrigger>
-                </>
+                <TabsTrigger value="skills-tab" className="gap-1">
+                  <Sparkles className="size-2.5" /> SKILLS
+                </TabsTrigger>
               )}
               {/* Build tab — agent build with RPG stats */}
               <TabsTrigger value="build-tab" className="gap-1">
@@ -378,7 +370,6 @@ function AgentDetailContent() {
           ))}
 
           {hasApi && (
-            <>
               <TabsContent value="skills-tab" className="flex-1 min-h-0 mt-2">
                 <Card className="h-full overflow-y-auto">
                   {skills.length === 0 ? (
@@ -414,32 +405,6 @@ function AgentDetailContent() {
                   )}
                 </Card>
               </TabsContent>
-
-              <TabsContent value="deploy-tab" className="flex-1 min-h-0 mt-2">
-                <Card className="h-full overflow-y-auto">
-                  {projects.length === 0 ? (
-                    <div className="px-3 py-6 text-center text-xs text-text3">Not deployed to any projects</div>
-                  ) : (
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-border/50 bg-muted/50 text-left">
-                          <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Project</th>
-                          <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Role</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {projects.map(pr => (
-                          <tr key={pr.project_id} className="border-b border-border/20 last:border-0">
-                            <td className="px-3 py-1 text-xs font-medium text-foreground">{pr.project_name || pr.project_id}</td>
-                            <td className="px-3 py-1 text-xs text-text3">{pr.role}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </Card>
-              </TabsContent>
-            </>
           )}
 
           {/* Instances tab */}
