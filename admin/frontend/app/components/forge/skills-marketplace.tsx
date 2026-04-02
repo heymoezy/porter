@@ -2,6 +2,7 @@ import { useState, useMemo } from "react"
 import { Badge } from "~/components/ui/badge"
 import { Input } from "~/components/ui/input"
 import { Search, Star } from "lucide-react"
+import { SkillQualityBadge, type QualityTier } from "~/components/skill-quality-badge"
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -13,6 +14,7 @@ interface Skill {
   icon: string; color: string; short_label: string
   sort_order: number; featured_order: number
   packStatus: "ready" | "partial" | "missing"
+  qualityTier?: QualityTier
   tags: string[]
   agents: SkillAgent[]
 }
@@ -22,12 +24,6 @@ interface SkillsMarketplaceProps {
   categories: Record<string, number>
   allTags: Record<string, number>
   onSelect?: (skill: Skill) => void
-}
-
-const packStatusStyles: Record<string, string> = {
-  ready: "bg-success/15 text-success",
-  partial: "bg-warning/15 text-warning",
-  missing: "bg-text3/15 text-text3",
 }
 
 // ── Component ──────────────────────────────────────────────
@@ -154,9 +150,7 @@ export function SkillsMarketplace({ skills, categories, allTags, onSelect }: Ski
                 <p className="text-2xs text-text3 line-clamp-2 mt-0.5">{skill.description}</p>
                 <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                   <Badge className="text-2xs bg-muted text-text3 border-0">{skill.category}</Badge>
-                  <Badge className={`text-2xs border-0 ${packStatusStyles[skill.packStatus] || "bg-text3/15 text-text3"}`}>
-                    {skill.packStatus}
-                  </Badge>
+                  <SkillQualityBadge tier={skill.qualityTier} />
                   {skill.agents.length > 0 && <span className="text-2xs text-text3">{skill.agents.length} agents</span>}
                 </div>
                 {skill.tags.length > 0 && (
@@ -184,9 +178,7 @@ export function SkillsMarketplace({ skills, categories, allTags, onSelect }: Ski
             <p className="text-2xs text-text3 line-clamp-2 mt-0.5">{skill.description}</p>
             <div className="flex items-center gap-1 mt-1.5 flex-wrap">
               <Badge className="text-2xs bg-muted text-text3 border-0">{skill.category}</Badge>
-              <Badge className={`text-2xs border-0 ${packStatusStyles[skill.packStatus] || "bg-text3/15 text-text3"}`}>
-                {skill.packStatus}
-              </Badge>
+              <SkillQualityBadge tier={skill.qualityTier} />
               {skill.agents.length > 0 && <span className="text-2xs text-text3">{skill.agents.length} agents</span>}
             </div>
             {skill.tags.length > 0 && (

@@ -1,4 +1,5 @@
 import { Fragment, useState } from "react"
+import { useNavigate } from "react-router"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
@@ -10,6 +11,7 @@ import { SkillCreateDialog } from "~/components/forge/skill-create-dialog"
 import { SkillEditSheet } from "~/components/forge/skill-edit-sheet"
 import { SkillImportDialog } from "~/components/forge/skill-import-dialog"
 import { SkillsMarketplace } from "~/components/forge/skills-marketplace"
+import { SkillQualityBadge, type QualityTier } from "~/components/skill-quality-badge"
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -20,6 +22,7 @@ interface Skill {
   icon: string; color: string; short_label: string
   sort_order: number; featured_order: number
   packStatus: "ready" | "partial" | "missing"
+  qualityTier?: QualityTier
   tags: string[]
   agents: SkillAgent[]
 }
@@ -28,6 +31,7 @@ interface SkillsResponse {
   categories: Record<string, number>; sources: Record<string, number>
   allTags: Record<string, number>
   status: { ready: number; partial: number; missing: number }
+  tiers?: { scaffold: number; baseline: number; production: number; 'high-performing': number }
 }
 
 const sourceColors: Record<string, string> = {
@@ -38,16 +42,11 @@ const sourceColors: Record<string, string> = {
   "detected": "bg-text3/15 text-text3",
 }
 
-const packStatusStyles: Record<string, string> = {
-  ready: "bg-success/15 text-success",
-  partial: "bg-warning/15 text-warning",
-  missing: "bg-text3/15 text-text3",
-}
-
 // ── Component ──────────────────────────────────────────────
 
 export function SkillsStudio() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [search, setSearch] = useState("")
   const [activeCat, setActiveCat] = useState("all")
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
@@ -179,7 +178,7 @@ export function SkillsStudio() {
           skills={allSkills}
           categories={categories}
           allTags={allTags}
-          onSelect={(skill) => { setEditSkill(skill); setEditOpen(true) }}
+          onSelect={(skill) => navigate(`/skills/${skill.id}/pack`)}
         />
       ) : (
         <>
@@ -211,7 +210,7 @@ export function SkillsStudio() {
                   <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Skill</th>
                   <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Description</th>
                   <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Source</th>
-                  <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Pack</th>
+                  <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Quality</th>
                   <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 text-right">Agents</th>
                   <th className="w-8 px-2 py-1.5" />
                 </tr>
@@ -231,7 +230,14 @@ export function SkillsStudio() {
                             isExpanded ? <ChevronDown className="size-3 text-text3" /> : <ChevronRight className="size-3 text-text3" />
                           ) : <span className="size-3" />}
                         </td>
-                        <td className="px-2 py-1 text-xs font-bold text-text whitespace-nowrap">{skill.name}</td>
+                        <td className="px-2 py-1 text-xs font-bold whitespace-nowrap">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigate(`/skills/${skill.id}/pack`) }}
+                            className="text-text hover:text-accent-porter transition-colors hover:underline"
+                          >
+                            {skill.name}
+                          </button>
+                        </td>
                         <td className="px-2 py-1 text-2xs text-text3 truncate max-w-[300px]">{skill.description}</td>
                         <td className="px-2 py-1">
                           <Badge className={`text-2xs border-0 ${sourceColors[skill.source] || "bg-text3/15 text-text3"}`}>
@@ -239,9 +245,7 @@ export function SkillsStudio() {
                           </Badge>
                         </td>
                         <td className="px-2 py-1">
-                          <Badge className={`text-2xs border-0 ${packStatusStyles[skill.packStatus] || "bg-text3/15 text-text3"}`}>
-                            {skill.packStatus}
-                          </Badge>
+                          <SkillQualityBadge tier={skill.qualityTier} />
                         </td>
                         <td className="px-2 py-1 text-right">
                           {skill.agents.length > 0 ? (
