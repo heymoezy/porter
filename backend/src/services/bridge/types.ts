@@ -117,6 +117,13 @@ export interface RoutingContext {
   username?: string;
   forceGatewayType?: string;
   forceModelName?: string;
+  /** Phase 33: Runtime skill selection telemetry — passed through to logDispatch */
+  skillsUsed?: {
+    candidates: Array<{ skillId: string; name: string; score: number; reason: string }>;
+    selected: Array<{ skillId: string; name: string; score: number; reason: string }>;
+    threshold: number;
+    totalCandidates: number;
+  };
 }
 
 export interface RoutingDecision {
