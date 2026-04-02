@@ -438,10 +438,8 @@ export default function FilesPage() {
 
       {/* Header bar */}
       <div className="shrink-0 px-4 pt-3 pb-2 space-y-2">
-        {/* Path + actions */}
+        {/* Agents + actions */}
         <div className="flex items-center gap-3">
-          <span className="text-xs text-text3 font-mono">/home/lobster/projects{currentPath ? `/${currentPath}` : ""}</span>
-
           {/* Assigned agents — from DB, link to template */}
           {projectAgents.map(a => {
             const spec = a.appearance_spec ? (typeof a.appearance_spec === 'string' ? JSON.parse(a.appearance_spec) : a.appearance_spec) : {}
@@ -467,7 +465,6 @@ export default function FilesPage() {
                   <p className="text-xs font-bold leading-tight text-text2">{a.name}</p>
                   <p className="text-2xs text-text3 leading-tight">{a.role}</p>
                 </div>
-                <span className={`size-1.5 rounded-full shrink-0 ${isBorn ? "bg-success" : "bg-text3/40"}`} />
               </Link>
             )
           })}
@@ -562,8 +559,8 @@ export default function FilesPage() {
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Column headers */}
             {activeRoot && !error && (
-              <div className="shrink-0 grid grid-cols-[1fr_80px_120px_36px] gap-2 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-text3 border-y border-border/50">
-                <span>Name</span>
+              <div className="shrink-0 grid grid-cols-[1fr_80px_120px_36px] gap-2 px-5 py-2 text-[10px] font-semibold tracking-[0.06em] text-text3 border-y border-border/50">
+                <span className="font-mono">/home/lobster/projects{currentPath ? `/${currentPath}` : ""}</span>
                 <span className="text-right">Size</span>
                 <span className="text-right">Modified</span>
                 <span />

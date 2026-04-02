@@ -415,19 +415,19 @@ function AgentDetailContent() {
                 </div>
               ) : (
                 <div className="divide-y divide-border/20">
-                  {instances.map(inst => (
+                  {instances.map(inst => {
+                    const instBorn = !!(inst as any).soul_hash
+                    return (
                     <Link key={inst.id} to={`/agents/${inst.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-raised/30 transition-colors">
-                      <div className={`size-2 rounded-full shrink-0 ${inst.status === "active" ? "bg-success" : inst.status === "idle" ? "bg-text3/40" : "bg-warning"}`} />
+                      <div className={`size-2 rounded-full shrink-0 ${instBorn ? "bg-success" : "bg-text3/40"}`} />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-foreground">{inst.name}</p>
                         <p className="text-2xs text-text3">{inst.role}</p>
                       </div>
-                      {inst.created_at && (
-                        <span className="text-2xs text-text3 shrink-0">Born {fmtDate(inst.created_at)}</span>
-                      )}
-                      <span className="text-2xs text-text3 shrink-0">{inst.status}</span>
+                      <span className="text-2xs text-text3 shrink-0">{instBorn ? "Born" : "Unborn"}</span>
                     </Link>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </Card>
