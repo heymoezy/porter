@@ -7,6 +7,8 @@ import {
   getSkillDetail,
   getSkillLibrary,
   getSkillPackText,
+  writeSkillPackFile,
+  computePackDiagnostics,
   type SkillBuilderBlueprint,
 } from '../services/skill-library.js';
 import {
@@ -31,6 +33,30 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
 
   fastify.get('/research', async () => {
     return ok({ notes: getResearchNotes() });
+  });
+
+  // PUT /:id/files/* — write a skill pack file back to disk
+  fastify.put('/:id/files/*', async (req, reply) => {
+    const { id, '*': relativePath } = req.params as { id: string; '*': string };
+    const { content } = (req.body ?? {}) as { content?: string };
+
+    if (typeof content !== 'string') {
+      reply.status(400);
+      return err('INVALID_INPUT', 'content must be a string');
+    }
+
+    if (!relativePath) {
+      reply.status(400);
+      return err('INVALID_INPUT', 'file path is required');
+    }
+
+    const wrote = writeSkillPackFile(id, relativePath, content);
+    if (!wrote) {
+      reply.status(403);
+      return err('FORBIDDEN', 'Path traversal rejected');
+    }
+
+    return ok({ saved: true, path: relativePath });
   });
 
   fastify.get('/:id/files/*', async (req, reply) => {
