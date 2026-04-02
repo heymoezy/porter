@@ -144,6 +144,9 @@ function AgentDetailContent() {
   const skills = apiData?.skills ?? []
   const instances = instancesData?.instances ?? []
 
+  // Is this an instance (persona with template_id) or a template?
+  const isInstance = hasApi && !!p.template_id
+
   // Born = has been through Forge (has soul_hash)
   const isBorn = hasApi && !!p.soul_hash
 
@@ -216,6 +219,16 @@ function AgentDetailContent() {
                 <h2 className="text-base font-bold text-foreground">{displayName}</h2>
                 {isBorn && (
                   <Badge className="text-2xs bg-success/15 text-success border-0">born</Badge>
+                )}
+                {!isBorn && isInstance && (
+                  <Badge className="text-2xs bg-text3/15 text-text3 border-0">unborn</Badge>
+                )}
+                {isInstance && tmplData && (
+                  <Link to={`/agents/${templateIdForLookup}`}>
+                    <Badge className="text-2xs bg-accent-porter/15 text-accent-porter border-0 hover:bg-accent-porter/25 transition-colors cursor-pointer">
+                      Component: {tmplData.name}
+                    </Badge>
+                  </Link>
                 )}
                 {category ? <Badge className="text-2xs bg-muted text-text3 border-0">{category}</Badge> : null}
                 {lifecycle === "persistent" && (
@@ -328,13 +341,15 @@ function AgentDetailContent() {
               <TabsTrigger value="build-tab" className="gap-1">
                 <Wrench className="size-2.5" /> BUILD
               </TabsTrigger>
-              {/* Instances tab — always visible on templates */}
+              {/* Instances tab — only on templates (not on instances) */}
+              {!isInstance && (
               <TabsTrigger value="instances-tab" className="gap-1">
                 <Users className="size-2.5" /> INSTANCES
                 {instances.length > 0 && (
                   <span className="text-2xs text-text3 ml-0.5">({instances.length})</span>
                 )}
               </TabsTrigger>
+              )}
             </TabsList>
             {isFileTab && (
               <Button
