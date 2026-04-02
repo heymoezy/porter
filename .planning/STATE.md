@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 33-02-PLAN.md
-last_updated: "2026-04-02T17:33:58.523Z"
+stopped_at: Completed 34-00-PLAN.md
+last_updated: "2026-04-02T17:59:00Z"
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 13
+  completed_plans: 10
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Skills must be live behavioral modules — selected at runtime, injected into prompts, measured, and evolved through feedback.
-**Current focus:** Phase 33 — Runtime Skill Selector
+**Current focus:** Phase 34 — Feedback Telemetry
 
 ## Current Position
 
-Phase: 33 (Runtime Skill Selector) — EXECUTING
-Plan: 2 of 2 (Plan 01 complete)
+Phase: 34 (Feedback Telemetry) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -70,6 +70,7 @@ Plan: 2 of 2 (Plan 01 complete)
 - [Phase 33]: skillsUsed shape defined inline in RoutingContext — no cross-service imports, serializable subset sufficient for JSONB logging
 - [Phase 33]: stream-service.ts required zero changes — ctxOverride spread already propagates skillsUsed automatically
 - [Phase 33]: Full RTS loop complete: selectSkills called at dispatch, skill prompts injected into systemPrompt, telemetry persisted in bridge_dispatch_log.skills_used
+- [Phase 34-00]: FBK test stubs use test.skip(true, 'TODO: Enable after Wave N...') rather than test.todo() — enables single-line activation with no structural changes
 
 ### Pending Todos
 
@@ -83,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T17:30:00.099Z
-Stopped at: Completed 33-02-PLAN.md
+Last session: 2026-04-02T17:59:00Z
+Stopped at: Completed 34-00-PLAN.md
 Resume file: None
