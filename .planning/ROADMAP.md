@@ -73,7 +73,7 @@
 **Milestone Goal:** Transform skills from a static catalog into live behavioral modules that are selected at runtime, injected into dispatch prompts, measured for effectiveness, and evolved through feedback. Fix the broken source of truth, build real authoring UX, implement runtime selection, close the feedback loop, and replace fake quality tiers with real measurement.
 
 - [x] **Phase 31: Source of Truth Cleanup** — DB assignments canonical, SKILLS.md = generated manifest (completed 2026-04-02)
-- [ ] **Phase 32: Skill Pack Explorer** — View/edit real .md files, quality diagnostics
+- [x] **Phase 32: Skill Pack Explorer** — View/edit real .md files, quality diagnostics (completed 2026-04-02)
 - [ ] **Phase 33: Runtime Skill Selector** — Rank skills per task, inject packs, log selection
 - [ ] **Phase 34: Feedback Telemetry** — Capture signals, effectiveness scoring
 - [ ] **Phase 35: Agent Evolution Loop** — Recommendations, proposed changes, supervised apply
@@ -109,7 +109,7 @@ Plans:
   3. Pack diagnostics badge shows a quality score: file count, non-empty file count, word count, and scaffold detection (generic boilerplate matching)
   4. Template and agent detail pages have a clickable link on each assigned skill that opens the pack explorer for that skill
   5. Missing or empty files are flagged with warnings in the file tree
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 - [ ] 32-00-PLAN.md — Wave 0 test scaffold (Playwright tests for PKX-01 through PKX-05)
 - [ ] 32-01-PLAN.md — Backend quality diagnostics + PUT file write endpoint
@@ -188,7 +188,7 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 16-23 | v3.0 | - | Complete | 2026-03-25 |
 | 24-30 | v4.0 | 17/17 | Partial (28 deferred) | 2026-04-02 |
 | 31. Source of Truth | v5.0 | 3/3 | Complete | 2026-04-02 |
-| 32. Skill Pack Explorer | 3/4 | In Progress|  | - |
+| 32. Skill Pack Explorer | 4/4 | Complete   | 2026-04-02 | - |
 | 33. Runtime Skill Selector | v5.0 | 0/TBD | Not started | - |
 | 34. Feedback Telemetry | v5.0 | 0/TBD | Not started | - |
 | 35. Agent Evolution Loop | v5.0 | 0/TBD | Not started | - |
