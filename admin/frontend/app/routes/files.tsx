@@ -186,7 +186,7 @@ export default function FilesPage() {
   const [selectedRoot, setSelectedRoot] = useState<string | null>(null)
   const activeRoot = selectedRoot ?? roots[0] ?? ""
 
-  // Fetch directory listing
+  // Fetch directory listing — short staleTime so mutations trigger fresh refetch
   const { data: dirData, isLoading: dirLoading, error } = useQuery({
     queryKey: ["files", "list", activeRoot, currentPath],
     queryFn: () => {
@@ -195,6 +195,8 @@ export default function FilesPage() {
       return api<FilesResponse>(`/api/v1/files?${params}`)
     },
     enabled: !!activeRoot,
+    staleTime: 2000,
+    refetchOnWindowFocus: true,
   })
   const rawEntries = dirData?.entries ?? []
   const dirWritable = dirData?.writable ?? false
@@ -233,7 +235,7 @@ export default function FilesPage() {
   })
 
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
+  const [uploadQueue, setUploadQueue] = useState<Array<{ name: string; status: "pending" | "uploading" | "done" | "error" }>>([])
   const uploadMut = useMutation({
     mutationFn: async (file: File) => {
       const form = new FormData()
@@ -272,14 +274,20 @@ export default function FilesPage() {
   async function uploadFiles(fileList: FileList | File[]) {
     setUploadError(null)
     const files = Array.from(fileList)
-    setUploadProgress({ current: 0, total: files.length })
+    const queue = files.map(f => ({ name: f.name, status: "pending" as const }))
+    setUploadQueue(queue)
     for (let i = 0; i < files.length; i++) {
-      setUploadProgress({ current: i + 1, total: files.length })
+      setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "uploading" } : item))
       try {
         await uploadMut.mutateAsync(files[i])
-      } catch { /* error handled by onError */ break }
+        setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "done" } : item))
+      } catch {
+        setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "error" } : item))
+        break
+      }
     }
-    setUploadProgress(null)
+    // Clear completed items after a short delay
+    setTimeout(() => setUploadQueue(prev => prev.filter(item => item.status !== "done")), 1500)
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -409,16 +417,6 @@ export default function FilesPage() {
             <Rows3 className="size-3.5" />
           </button>
 
-          {/* Upload progress + error */}
-          {(uploadMut.isPending || uploadProgress) && (
-            <span className="flex items-center gap-1.5 text-xs text-text3">
-              <Loader2 className="size-3.5 animate-spin" />
-              {uploadProgress && uploadProgress.total > 1 && (
-                <span className="tabular-nums">{uploadProgress.current}/{uploadProgress.total}</span>
-              )}
-              <span>Uploading...</span>
-            </span>
-          )}
           {uploadError && (
             <span className="text-xs text-danger">{uploadError}</span>
           )}
@@ -563,6 +561,31 @@ export default function FilesPage() {
                     </form>
                   </div>
                 )}
+
+                {/* Upload queue — inline progress rows */}
+                {uploadQueue.map((item) => (
+                  <div key={`upload-${item.name}`} className={`grid grid-cols-[1fr_80px_120px_36px] gap-2 items-center px-5 ${compact ? "py-1" : "py-2"} bg-accent-porter/5 border-b border-border/30`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Upload className="size-3.5 text-accent-porter shrink-0" />
+                      <span className="text-sm text-foreground truncate">{item.name}</span>
+                    </div>
+                    <div />
+                    <div className="flex items-center gap-2">
+                      {item.status === "uploading" && (
+                        <>
+                          <div className="flex-1 h-1.5 bg-raised rounded-full overflow-hidden">
+                            <div className="h-full bg-accent-porter rounded-full animate-pulse" style={{ width: "60%" }} />
+                          </div>
+                          <Loader2 className="size-3 animate-spin text-accent-porter shrink-0" />
+                        </>
+                      )}
+                      {item.status === "pending" && <span className="text-2xs text-text3">Waiting...</span>}
+                      {item.status === "done" && <Check className="size-3.5 text-success" />}
+                      {item.status === "error" && <span className="text-2xs text-danger">Failed</span>}
+                    </div>
+                    <div />
+                  </div>
+                ))}
 
                 {/* File entries */}
                 {!isLoading && !error && entries.map((entry) => {
