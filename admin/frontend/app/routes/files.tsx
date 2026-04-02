@@ -6,6 +6,7 @@ import {
   MoreVertical, Pencil, Trash2, Check, Maximize2, Minimize2, Rows3,
   Home, AlertTriangle,
 } from "lucide-react"
+import { AgentPresenceSummary } from "~/components/agent-presence"
 import { api } from "~/lib/api"
 import { FileTypeIcon } from "~/components/file-type-icon"
 import { Button } from "~/components/ui/button"
@@ -380,25 +381,11 @@ export default function FilesPage() {
 
       {/* Header bar */}
       <div className="shrink-0 px-4 pt-3 pb-2 space-y-2">
-        {/* Title + root selector + actions */}
+        {/* Path + actions */}
         <div className="flex items-center gap-3">
-          <FolderOpen className="size-4 text-accent-porter shrink-0" />
-          <h1 className="text-sm font-bold text-text">Projects</h1>
+          <span className="text-xs text-text3 font-mono">/home/lobster/projects{currentPath ? `/${currentPath}` : ""}</span>
 
-          {/* Root selector */}
-          {roots.length > 1 && (
-            <div className="ml-1 flex gap-1">
-              {roots.map(r => (
-                <button
-                  key={r}
-                  onClick={() => switchRoot(r)}
-                  className={`rounded-md px-2 py-0.5 text-2xs font-medium transition-colors ${
-                    activeRoot === r ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
-                  }`}
-                >{r}</button>
-              ))}
-            </div>
-          )}
+          <AgentPresenceSummary surface="files" />
 
           <div className="flex-1" />
 
@@ -458,28 +445,29 @@ export default function FilesPage() {
         </div>
 
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1 text-xs">
-          <button
-            onClick={() => navigateTo([])}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-text3 hover:bg-raised hover:text-text2 transition-colors"
-          >
-            <Home className="size-3" />
-            <span>{activeRoot || "Files"}</span>
-          </button>
-          {pathSegments.map((seg, i) => (
-            <span key={i} className="flex items-center gap-1">
-              <ChevronRight className="size-2.5 text-text3/50" />
-              <button
-                onClick={() => navigateTo(pathSegments.slice(0, i + 1))}
-                className={`rounded px-1.5 py-0.5 transition-colors ${
-                  i === pathSegments.length - 1
-                    ? "font-medium text-text"
-                    : "text-text3 hover:bg-raised hover:text-text2"
-                }`}
-              >{seg}</button>
-            </span>
-          ))}
-        </nav>
+        {pathSegments.length > 0 && (
+          <nav className="flex items-center gap-1 text-xs">
+            <button
+              onClick={() => navigateTo([])}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-text3 hover:bg-raised hover:text-text2 transition-colors"
+            >
+              <Home className="size-3" />
+            </button>
+            {pathSegments.map((seg, i) => (
+              <span key={i} className="flex items-center gap-1">
+                <ChevronRight className="size-2.5 text-text3/50" />
+                <button
+                  onClick={() => navigateTo(pathSegments.slice(0, i + 1))}
+                  className={`rounded px-1.5 py-0.5 transition-colors ${
+                    i === pathSegments.length - 1
+                      ? "font-medium text-text"
+                      : "text-text3 hover:bg-raised hover:text-text2"
+                  }`}
+                >{seg}</button>
+              </span>
+            ))}
+          </nav>
+        )}
       </div>
 
       {/* Main content area */}
