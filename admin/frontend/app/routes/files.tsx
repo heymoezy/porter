@@ -1,4 +1,5 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
+import { useLocation } from "react-router"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   FolderOpen, Upload, ChevronRight, FileText,
@@ -164,8 +165,16 @@ function FilePreviewPanel({
 
 export default function FilesPage() {
   const qc = useQueryClient()
+  const location = useLocation()
   const [pathSegments, setPathSegments] = useState<string[]>([])
   const [previewFile, setPreviewFile] = useState<{ name: string; path: string } | null>(null)
+
+  // Reset to root when clicking Projects nav link
+  // location.key changes only on Link clicks (not on in-page folder navigation)
+  useEffect(() => {
+    setPathSegments([])
+    setPreviewFile(null)
+  }, [location.key])
   const [previewExpanded, setPreviewExpanded] = useState(false)
   const [compact, setCompact] = useState(() => {
     if (typeof window === "undefined") return false
