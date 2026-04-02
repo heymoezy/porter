@@ -109,7 +109,7 @@ Plans:
   3. Pack diagnostics badge shows a quality score: file count, non-empty file count, word count, and scaffold detection (generic boilerplate matching)
   4. Template and agent detail pages have a clickable link on each assigned skill that opens the pack explorer for that skill
   5. Missing or empty files are flagged with warnings in the file tree
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 Plans:
 - [ ] 32-00-PLAN.md — Wave 0 test scaffold (Playwright tests for PKX-01 through PKX-05)
 - [ ] 32-01-PLAN.md — Backend quality diagnostics + PUT file write endpoint
@@ -188,7 +188,7 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 16-23 | v3.0 | - | Complete | 2026-03-25 |
 | 24-30 | v4.0 | 17/17 | Partial (28 deferred) | 2026-04-02 |
 | 31. Source of Truth | v5.0 | 3/3 | Complete | 2026-04-02 |
-| 32. Skill Pack Explorer | v5.0 | 0/3 | Planned | - |
+| 32. Skill Pack Explorer | 1/4 | In Progress|  | - |
 | 33. Runtime Skill Selector | v5.0 | 0/TBD | Not started | - |
 | 34. Feedback Telemetry | v5.0 | 0/TBD | Not started | - |
 | 35. Agent Evolution Loop | v5.0 | 0/TBD | Not started | - |

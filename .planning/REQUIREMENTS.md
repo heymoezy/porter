@@ -16,11 +16,11 @@
 
 ### Skill Pack Explorer
 
-- [ ] **PKX-01**: Admin can view a skill pack's file tree (SKILL.md, prompt.md, guides/*, examples/*, meta/skill.json) from the skill detail view
-- [ ] **PKX-02**: Admin can read and edit any file in a skill pack from the browser
-- [ ] **PKX-03**: Admin can save edited pack files back to disk via API
-- [ ] **PKX-04**: Pack diagnostics show missing files, empty files, generic scaffold detection, and word count/richness score per skill
-- [ ] **PKX-05**: Template and agent detail pages have "open assigned skills" link that navigates to the skill pack explorer
+- [x] **PKX-01**: Admin can view a skill pack's file tree (SKILL.md, prompt.md, guides/*, examples/*, meta/skill.json) from the skill detail view
+- [x] **PKX-02**: Admin can read and edit any file in a skill pack from the browser
+- [x] **PKX-03**: Admin can save edited pack files back to disk via API
+- [x] **PKX-04**: Pack diagnostics show missing files, empty files, generic scaffold detection, and word count/richness score per skill
+- [x] **PKX-05**: Template and agent detail pages have "open assigned skills" link that navigates to the skill pack explorer
 
 ### Runtime Skill Selection
 
@@ -96,11 +96,11 @@
 | SOT-04 | Phase 31 | Complete |
 | SOT-05 | Phase 31 | Complete |
 | SOT-06 | Phase 31 | Complete |
-| PKX-01 | Phase 32 | Pending |
-| PKX-02 | Phase 32 | Pending |
-| PKX-03 | Phase 32 | Pending |
-| PKX-04 | Phase 32 | Pending |
-| PKX-05 | Phase 32 | Pending |
+| PKX-01 | Phase 32 | Complete |
+| PKX-02 | Phase 32 | Complete |
+| PKX-03 | Phase 32 | Complete |
+| PKX-04 | Phase 32 | Complete |
+| PKX-05 | Phase 32 | Complete |
 | RTS-01 | Phase 33 | Pending |
 | RTS-02 | Phase 33 | Pending |
 | RTS-03 | Phase 33 | Pending |

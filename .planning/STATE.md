@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 31-03-PLAN.md
-last_updated: "2026-04-02T12:47:59.636Z"
+stopped_at: Completed 32-00-PLAN.md
+last_updated: "2026-04-02T16:38:51Z"
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 7
+  completed_plans: 4
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Skills must be live behavioral modules — selected at runtime, injected into prompts, measured, and evolved through feedback.
-**Current focus:** Phase 31 — Source of Truth Cleanup
+**Current focus:** Phase 32 — Skill Pack Explorer
 
 ## Current Position
 
-Phase: 31 (Source of Truth Cleanup) — COMPLETE
-Plan: 3 of 3 (all complete)
+Phase: 32 (Skill Pack Explorer) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -53,6 +53,9 @@ Plan: 3 of 3 (all complete)
 - [Phase 31]: Toggle endpoint uses skill_id with OR skill_name fallback for backwards compat during transition
 - [Phase 31]: v1/admin/skills.ts delete was missing junction table cleanup -- fixed as part of SOT-06
 - [Phase 31]: rpg-engine query fixed from nonexistent skill_name column to skill_id with LEFT JOIN to skills table
+- [Phase 32-00]: Admin Playwright tests use full URL (http://127.0.0.1:5175) not baseURL override — keeps Brain base URL clean for existing regression tests
+- [Phase 32-00]: motion-designer used as TEST_SKILL constant — always present, has scaffold content covering both populated and empty file states
+- [Phase 32-00]: PKX-0N test naming convention enables --grep PKX-0N targeted test runs throughout Phase 32
 
 ### Pending Todos
 
@@ -66,6 +69,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T12:43:25.550Z
-Stopped at: Completed 31-03-PLAN.md
+Last session: 2026-04-02T16:38:51Z
+Stopped at: Completed 32-00-PLAN.md
 Resume file: None
