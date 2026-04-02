@@ -713,16 +713,24 @@ export async function regenerateMdFiles(
 
     const agent = agentRows[0];
 
-    // ── 2. Fetch active skills ────────────────────────────────────────────────
+    // ── 2. Fetch active skills (JOIN to skills registry for enriched data) ────
     const { rows: skillRows } = await pool.query<{
-      skill_name: string;
+      skill_id: string;
+      display_name: string;
+      description: string;
+      category: string;
       success_rate_30d: number | null;
       total_uses: number | null;
     }>(
-      `SELECT skill_name, success_rate_30d, total_uses
-       FROM template_skills
-       WHERE template_id = $1
-       ORDER BY total_uses DESC NULLS LAST`,
+      `SELECT ts.skill_id,
+              COALESCE(s.name, ts.skill_id) AS display_name,
+              COALESCE(s.description, '') AS description,
+              COALESCE(s.category, 'uncategorized') AS category,
+              ts.success_rate_30d, ts.total_uses
+       FROM template_skills ts
+       LEFT JOIN skills s ON s.id = ts.skill_id
+       WHERE ts.template_id = $1
+       ORDER BY s.category, s.name, ts.total_uses DESC NULLS LAST`,
       [templateId],
     );
 
@@ -803,7 +811,11 @@ _Last regenerated: ${now}_
         skillsSection = skillRows
           .map(
             (s) =>
-              `### ${s.skill_name}\n- Success rate (30d): ${s.success_rate_30d != null ? s.success_rate_30d.toFixed(1) : 'N/A'}%\n- Total uses: ${s.total_uses ?? 0}`,
+              `### ${s.skill_id}\n` +
+              `- **${s.display_name}**${s.description ? ` — ${s.description.slice(0, 120)}` : ''}\n` +
+              `- Pack: \`skills/${s.skill_id}/\`\n` +
+              `- Success rate (30d): ${s.success_rate_30d != null ? Number(s.success_rate_30d).toFixed(1) : 'N/A'}%\n` +
+              `- Total uses: ${s.total_uses ?? 0}`,
           )
           .join('\n\n');
       }
