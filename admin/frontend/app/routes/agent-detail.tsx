@@ -144,8 +144,8 @@ function AgentDetailContent() {
   const skills = apiData?.skills ?? []
   const instances = instancesData?.instances ?? []
 
-  // Born = has been through Forge (exists as a persona instance)
-  const isBorn = hasApi && !!p.created_at
+  // Born = has been through Forge (has soul_hash)
+  const isBorn = hasApi && !!p.soul_hash
 
   // Build file tabs based on template capabilities
   const lifecycle = tmplData?.lifecycle

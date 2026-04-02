@@ -30,7 +30,7 @@ export default async function agentsRoutes(fastify: FastifyInstance) {
       const personas = await queryAll(
         `SELECT id, name, role, avatar, preferred_backend, status, agent_group,
                 is_system, is_locked, is_master, owner, appearance_style, appearance_spec,
-                created_at, last_active
+                created_at, last_active, template_id, soul_hash
          FROM personas ORDER BY is_system DESC, sort_order, name`
       ) as Array<Record<string, unknown>>;
 
