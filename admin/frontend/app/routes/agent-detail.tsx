@@ -355,9 +355,9 @@ function AgentDetailContent() {
           </div>
 
           {fileTabs.map(tab => (
-            <TabsContent key={tab.id} value={tab.id} className="flex-1 min-h-0 mt-2">
-              <div className="h-full flex flex-col gap-2">
-                <Card className="flex-1 flex flex-col min-h-0">
+            <TabsContent key={tab.id} value={tab.id} className="flex-1 min-h-0 mt-2 overflow-y-auto">
+              <div className="flex flex-col gap-2 min-h-full">
+                <Card className="flex-1 flex flex-col min-h-[200px]">
                   <div className="flex items-center px-3 py-1.5 border-b border-border bg-muted/50 shrink-0">
                     <span className="text-2xs font-mono text-text3">{tab.id}</span>
                   </div>
