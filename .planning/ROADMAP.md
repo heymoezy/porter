@@ -109,8 +109,9 @@ Plans:
   3. Pack diagnostics badge shows a quality score: file count, non-empty file count, word count, and scaffold detection (generic boilerplate matching)
   4. Template and agent detail pages have a clickable link on each assigned skill that opens the pack explorer for that skill
   5. Missing or empty files are flagged with warnings in the file tree
-**Plans:** 3 plans
+**Plans:** 4 plans
 Plans:
+- [ ] 32-00-PLAN.md — Wave 0 test scaffold (Playwright tests for PKX-01 through PKX-05)
 - [ ] 32-01-PLAN.md — Backend quality diagnostics + PUT file write endpoint
 - [ ] 32-02-PLAN.md — Frontend pack explorer page (CodeMirror editor, file tree, diagnostics)
 - [ ] 32-03-PLAN.md — Quality badges + navigation wiring (skills-studio, marketplace, agent-detail)

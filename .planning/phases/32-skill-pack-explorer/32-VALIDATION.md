@@ -2,8 +2,8 @@
 phase: 32
 slug: skill-pack-explorer
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-02
 ---
 
@@ -17,9 +17,9 @@ created: 2026-04-02
 
 | Property | Value |
 |----------|-------|
-| **Framework** | vitest (frontend) + Playwright (e2e) |
-| **Config file** | admin/frontend/vitest.config.ts (if exists) or create |
-| **Quick run command** | `cd admin/frontend && npx vitest run --reporter=verbose` |
+| **Framework** | Playwright (e2e) |
+| **Config file** | tests/playwright.config.js |
+| **Quick run command** | `cd tests && npx playwright test skill-pack-explorer.spec.js` |
 | **Full suite command** | `cd tests && npx playwright test` |
 | **Estimated runtime** | ~30 seconds |
 
@@ -27,8 +27,8 @@ created: 2026-04-02
 
 ## Sampling Rate
 
-- **After every task commit:** Run `cd admin/frontend && npx vitest run --reporter=verbose`
-- **After every plan wave:** Run `cd tests && npx playwright test`
+- **After every task commit:** Run task-specific `<verify>` command (tsc/build + grep checks)
+- **After every plan wave:** Run `cd tests && npx playwright test skill-pack-explorer.spec.js`
 - **Before `/gsd:verify-work`:** Full suite must be green
 - **Max feedback latency:** 30 seconds
 
@@ -38,24 +38,21 @@ created: 2026-04-02
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 32-01-01 | 01 | 1 | PKX-02 | integration | `curl -s http://127.0.0.1:5175/api/skills/:id/files/prompt.md` | ❌ W0 | ⬜ pending |
-| 32-01-02 | 01 | 1 | PKX-02 | integration | `curl -X PUT http://127.0.0.1:5175/api/skills/:id/files/prompt.md` | ❌ W0 | ⬜ pending |
-| 32-02-01 | 02 | 1 | PKX-03 | unit | `cd admin/frontend && npx vitest run scaffold-detection` | ❌ W0 | ⬜ pending |
-| 32-03-01 | 03 | 2 | PKX-01 | e2e | `cd tests && npx playwright test skill-pack` | ❌ W0 | ⬜ pending |
-| 32-03-02 | 03 | 2 | PKX-04 | e2e | `cd tests && npx playwright test skill-pack --grep link` | ❌ W0 | ⬜ pending |
-| 32-03-03 | 03 | 2 | PKX-05 | visual | manual inspection of empty file warnings | N/A | ⬜ pending |
+| 32-00-01 | 00 | 0 | PKX-01..05 | scaffold | `cd tests && npx playwright test skill-pack-explorer.spec.js --list` | Wave 0 creates | ⬜ pending |
+| 32-01-01 | 01 | 1 | PKX-02,04 | integration | `cd admin/backend && npx tsc --noEmit` + grep checks | N/A (type check) | ⬜ pending |
+| 32-01-02 | 01 | 1 | PKX-03 | integration | `grep -n "fastify.put.*files" admin/backend/src/routes/skills.ts` + tsc | N/A (type check) | ⬜ pending |
+| 32-02-01 | 02 | 2 | PKX-01,02 | build+grep | `npx react-router build` + grep useBlocker/lazy/useMutation | N/A (build check) | ⬜ pending |
+| 32-02-02 | 02 | 2 | PKX-01,02,03 | e2e | `cd tests && npx playwright test skill-pack-explorer.spec.js --grep "PKX-01\|PKX-02\|PKX-03"` | ✅ Wave 0 | ⬜ pending |
+| 32-03-01 | 03 | 2 | PKX-04 | build+grep | `npx react-router build` + grep SkillQualityBadge | N/A (build check) | ⬜ pending |
+| 32-03-02 | 03 | 2 | PKX-05 | e2e | `cd tests && npx playwright test skill-pack-explorer.spec.js --grep "PKX-05"` | ✅ Wave 0 | ⬜ pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: ⬜ pending / ✅ green / ❌ red / ⚠️ flaky*
 
 ---
 
-## Wave 0 Requirements
+## Wave 0 Plan
 
-- [ ] CodeMirror 6 packages installed (`@uiw/react-codemirror`, `@codemirror/lang-markdown`, `@codemirror/lang-json`, `@codemirror/theme-one-dark`)
-- [ ] PUT endpoint for skill pack file writes
-- [ ] Pack diagnostics computation in skill-library.ts
-
-*If none: "Existing infrastructure covers all phase requirements."*
+Plan 32-00-PLAN.md creates `tests/skill-pack-explorer.spec.js` with Playwright smoke tests for PKX-01 through PKX-05. This must execute first (wave 0) before any implementation plans.
 
 ---
 
@@ -64,18 +61,18 @@ created: 2026-04-02
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
 | File tree visual layout | PKX-01 | CSS/layout quality | Open /skills/:id/pack, verify left tree + right editor layout |
-| Empty file warnings visible | PKX-05 | Visual indicator check | Navigate to a skill with missing files, verify grayed entries with "Empty" badge |
+| Empty file warnings visible | PKX-01 | Visual indicator check | Navigate to a skill with missing files, verify grayed entries with "Empty" badge |
 | Breadcrumb navigation | PKX-01 | Navigation flow | Click through Skills > Skill Name > Pack, verify breadcrumb updates |
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** ready
