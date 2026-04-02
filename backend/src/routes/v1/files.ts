@@ -283,13 +283,14 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
       return reply.code(400).send(err('NO_FILE', 'No file uploaded'));
     }
 
-    const root = (data.fields.root as any)?.value || 'documents';
+    const dirs = getServeDirs();
+    const rootKeys = Object.keys(dirs);
+    const root = (data.fields.root as any)?.value || rootKeys[0] || 'documents';
     const relPath = (data.fields.path as any)?.value || '';
 
-    const dirs = getServeDirs();
     const rootPath = dirs[root];
     if (!rootPath) {
-      return reply.code(404).send(err('ROOT_NOT_FOUND', `Unknown root: ${root}`));
+      return reply.code(404).send(err('ROOT_NOT_FOUND', `Unknown root: ${root}. Available: ${rootKeys.join(', ')}`));
     }
 
     const targetDir = safeResolve(rootPath, relPath);
