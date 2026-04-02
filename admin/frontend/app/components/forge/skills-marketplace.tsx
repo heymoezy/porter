@@ -13,8 +13,9 @@ interface Skill {
   enabled: boolean; visible: boolean; featured: boolean
   icon: string; color: string; short_label: string
   sort_order: number; featured_order: number
-  packStatus: "ready" | "partial" | "missing"
-  qualityTier?: QualityTier
+  packStatus: string
+  qualityScore: number
+  qualityTier: QualityTier
   tags: string[]
   agents: SkillAgent[]
 }
@@ -23,14 +24,24 @@ interface SkillsMarketplaceProps {
   skills: Skill[]
   categories: Record<string, number>
   allTags: Record<string, number>
+  tiers: Record<string, number>
   onSelect?: (skill: Skill) => void
+}
+
+const tierColors: Record<string, string> = {
+  "scaffold": "bg-danger/15 text-danger",
+  "baseline": "bg-warning/15 text-warning",
+  "production": "bg-success/15 text-success",
+  "high-performing": "bg-blue-500/15 text-blue-400",
+  "stale": "bg-slate-500/15 text-slate-400",
 }
 
 // ── Component ──────────────────────────────────────────────
 
-export function SkillsMarketplace({ skills, categories, allTags, onSelect }: SkillsMarketplaceProps) {
+export function SkillsMarketplace({ skills, categories, allTags, tiers, onSelect }: SkillsMarketplaceProps) {
   const [search, setSearch] = useState("")
   const [activeCat, setActiveCat] = useState("all")
+  const [activeTier, setActiveTier] = useState("all")
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set())
 
   // Top tags sorted by count
@@ -44,6 +55,7 @@ export function SkillsMarketplace({ skills, categories, allTags, onSelect }: Ski
   const filtered = useMemo(() => {
     let result = skills
     if (activeCat !== "all") result = result.filter(s => s.category === activeCat)
+    if (activeTier !== "all") result = result.filter(s => s.qualityTier === activeTier)
     if (activeTags.size > 0) {
       result = result.filter(s => s.tags.some(t => activeTags.has(t)))
     }
@@ -57,7 +69,7 @@ export function SkillsMarketplace({ skills, categories, allTags, onSelect }: Ski
       )
     }
     return result
-  }, [skills, activeCat, activeTags, search])
+  }, [skills, activeCat, activeTier, activeTags, search])
 
   const featured = useMemo(() => skills.filter(s => s.featured), [skills])
 
@@ -110,23 +122,45 @@ export function SkillsMarketplace({ skills, categories, allTags, onSelect }: Ski
         </div>
       )}
 
-      {/* Category pills */}
-      <div className="flex flex-wrap gap-1">
-        <button
-          onClick={() => setActiveCat("all")}
-          className={`rounded-md px-2 py-0.5 text-2xs font-medium transition-colors ${
-            activeCat === "all" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
-          }`}
-        >all ({skills.length})</button>
-        {Object.entries(categories).sort(([, a], [, b]) => b - a).map(([cat, cnt]) => (
+      {/* Filter pills row */}
+      <div className="flex items-center justify-between">
+        {/* Category pills */}
+        <div className="flex flex-wrap gap-1">
           <button
-            key={cat}
-            onClick={() => setActiveCat(cat)}
+            onClick={() => setActiveCat("all")}
             className={`rounded-md px-2 py-0.5 text-2xs font-medium transition-colors ${
-              activeCat === cat ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
+              activeCat === "all" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
             }`}
-          >{cat} ({cnt})</button>
-        ))}
+          >all ({skills.length})</button>
+          {Object.entries(categories).sort(([, a], [, b]) => b - a).map(([cat, cnt]) => (
+            <button
+              key={cat}
+              onClick={() => setActiveCat(cat)}
+              className={`rounded-md px-2 py-0.5 text-2xs font-medium transition-colors ${
+                activeCat === cat ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
+              }`}
+            >{cat} ({cnt})</button>
+          ))}
+        </div>
+
+        {/* Tier pills */}
+        <div className="flex flex-wrap gap-1">
+          <button
+            onClick={() => setActiveTier("all")}
+            className={`rounded-md px-2 py-0.5 text-2xs font-medium transition-colors ${
+              activeTier === "all" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
+            }`}
+          >All Tiers</button>
+          {Object.entries(tiers || {}).filter(([,cnt]) => cnt > 0).map(([tier, cnt]) => (
+            <button
+              key={tier}
+              onClick={() => setActiveTier(tier)}
+              className={`rounded-md px-2 py-0.5 text-2xs font-medium transition-colors border border-transparent ${
+                activeTier === tier ? tierColors[tier] + " border-current" : "text-text3 hover:text-text2 hover:bg-raised"
+              }`}
+            >{tier} ({cnt})</button>
+          ))}
+        </div>
       </div>
 
       {/* Featured section */}

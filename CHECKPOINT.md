@@ -21,12 +21,11 @@ Single monorepo (heymoezy/porter). One Fastify process on :3001. API metering bu
 - **Phase 32**: Skill Pack Explorer (4 plans) — CodeMirror 6 file editor at /skills/:id/pack, quality diagnostics, badges everywhere
 - **Phase 33**: Runtime Skill Selector (2 plans) — selectSkills() keyword scoring, prompt injection, skills_used JSONB logging
 - **Phase 34**: Feedback Telemetry (4 plans) — skill_feedback_events table, thumbs up/down, effectiveness_score, admin API + UI bars
-  - **NOTE**: Plans/tests reference :5175 which is WRONG. Must be :3001. Fix in next session.
+- **Phase 36**: Skill Quality Scoring (1 plan) — measurable quality_score (0-100), scaffold/baseline/production/high-performing/stale tiers, audit endpoint, tier filters.
 
-### Remaining (3 phases)
+### Remaining (2 phases)
 1. **Phase 35**: Agent Evolution Loop — background job analyzes feedback → skill recommendations → admin approve/reject
-2. **Phase 36**: Skill Quality Scoring — measurable quality_score (0-100), scaffold/baseline/production/high-performing tiers
-3. **Phase 37**: Template Skill UX — template detail as skill config command center, drag-drop, mandatory/optional, preview
+2. **Phase 37**: Template Skill UX — template detail as skill config command center, drag-drop, mandatory/optional, preview
 
 ### Dependency Chain
 - Phase 35 depends on Phase 34 ✓

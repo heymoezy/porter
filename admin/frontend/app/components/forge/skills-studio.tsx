@@ -21,8 +21,9 @@ interface Skill {
   enabled: boolean; visible: boolean; featured: boolean
   icon: string; color: string; short_label: string
   sort_order: number; featured_order: number
-  packStatus: "ready" | "partial" | "missing"
-  qualityTier?: QualityTier
+  packStatus: string
+  qualityScore: number
+  qualityTier: QualityTier
   tags: string[]
   agents: SkillAgent[]
 }
@@ -31,7 +32,7 @@ interface SkillsResponse {
   categories: Record<string, number>; sources: Record<string, number>
   allTags: Record<string, number>
   status: { ready: number; partial: number; missing: number }
-  tiers?: { scaffold: number; baseline: number; production: number; 'high-performing': number }
+  tiers: { scaffold: number; baseline: number; production: number; 'high-performing': number; stale: number }
 }
 
 const sourceColors: Record<string, string> = {
@@ -42,6 +43,14 @@ const sourceColors: Record<string, string> = {
   "detected": "bg-text3/15 text-text3",
 }
 
+const tierColors: Record<string, string> = {
+  "scaffold": "bg-danger/15 text-danger",
+  "baseline": "bg-warning/15 text-warning",
+  "production": "bg-success/15 text-success",
+  "high-performing": "bg-blue-500/15 text-blue-400",
+  "stale": "bg-slate-500/15 text-slate-400",
+}
+
 // ── Component ──────────────────────────────────────────────
 
 export function SkillsStudio() {
@@ -49,6 +58,7 @@ export function SkillsStudio() {
   const navigate = useNavigate()
   const [search, setSearch] = useState("")
   const [activeCat, setActiveCat] = useState("all")
+  const [activeTier, setActiveTier] = useState("all")
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
@@ -73,6 +83,12 @@ export function SkillsStudio() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "skills"] }),
   })
 
+  const runAudit = useMutation({
+    mutationFn: () =>
+      api("/api/admin/skills/audit", { method: "GET" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "skills"] }),
+  })
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-10">
@@ -86,12 +102,14 @@ export function SkillsStudio() {
   const sources = data?.sources ?? {}
   const allTags = data?.allTags ?? {}
   const statusCounts = data?.status ?? { ready: 0, partial: 0, missing: 0 }
+  const tierCounts = data?.tiers ?? { scaffold: 0, baseline: 0, production: 0, 'high-performing': 0, stale: 0 }
   const missingCount = statusCounts.missing
 
   const categoryList = Object.keys(categories).sort()
 
   let skills = allSkills
   if (activeCat !== "all") skills = skills.filter(s => s.category === activeCat)
+  if (activeTier !== "all") skills = skills.filter(s => s.qualityTier === activeTier)
   if (search) {
     const q = search.toLowerCase()
     skills = skills.filter(s =>
@@ -121,6 +139,19 @@ export function SkillsStudio() {
             </Badge>
           ))}
         </div>
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={() => runAudit.mutate()}
+          disabled={runAudit.isPending}
+        >
+          {runAudit.isPending ? (
+            <Loader2 className="size-3 mr-1 animate-spin" />
+          ) : (
+            <Search className="size-3 mr-1" />
+          )}
+          Audit
+        </Button>
         {missingCount > 0 && (
           <Button
             size="xs"
@@ -133,7 +164,7 @@ export function SkillsStudio() {
             ) : (
               <Package className="size-3 mr-1" />
             )}
-            Generate Missing ({missingCount})
+            Scaffold ({missingCount})
           </Button>
         )}
         <Button size="xs" variant="outline" onClick={() => setImportOpen(true)}>
@@ -178,27 +209,50 @@ export function SkillsStudio() {
           skills={allSkills}
           categories={categories}
           allTags={allTags}
+          tiers={tierCounts}
           onSelect={(skill) => navigate(`/skills/${skill.id}/pack`)}
         />
       ) : (
         <>
-          {/* Category tabs */}
-          <div className="flex flex-wrap gap-1">
-            <button
-              onClick={() => setActiveCat("all")}
-              className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors ${
-                activeCat === "all" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
-              }`}
-            >all ({allSkills.length})</button>
-            {Object.entries(categories).sort(([,a],[,b]) => b - a).map(([cat, cnt]) => (
+          {/* Filters */}
+          <div className="flex items-center justify-between">
+            {/* Category tabs */}
+            <div className="flex flex-wrap gap-1">
               <button
-                key={cat}
-                onClick={() => setActiveCat(cat)}
+                onClick={() => setActiveCat("all")}
                 className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors ${
-                  activeCat === cat ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
+                  activeCat === "all" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
                 }`}
-              >{cat} ({cnt})</button>
-            ))}
+              >all ({allSkills.length})</button>
+              {Object.entries(categories).sort(([,a],[,b]) => b - a).map(([cat, cnt]) => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCat(cat)}
+                  className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors ${
+                    activeCat === cat ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
+                  }`}
+                >{cat} ({cnt})</button>
+              ))}
+            </div>
+
+            {/* Tier filters */}
+            <div className="flex flex-wrap gap-1">
+              <button
+                onClick={() => setActiveTier("all")}
+                className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors ${
+                  activeTier === "all" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
+                }`}
+              >All Tiers</button>
+              {Object.entries(tierCounts).filter(([,cnt]) => cnt > 0).map(([tier, cnt]) => (
+                <button
+                  key={tier}
+                  onClick={() => setActiveTier(tier)}
+                  className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors border border-transparent ${
+                    activeTier === tier ? tierColors[tier] + " border-current" : "text-text3 hover:text-text2 hover:bg-raised"
+                  }`}
+                >{tier} ({cnt})</button>
+              ))}
+            </div>
           </div>
 
           {/* Skills table */}

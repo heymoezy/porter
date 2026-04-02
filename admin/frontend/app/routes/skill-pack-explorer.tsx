@@ -21,11 +21,16 @@ interface PackDiagnostics {
   fileCount: number; nonEmptyCount: number; totalWords: number;
   scaffoldPhraseMatches: number; scaffoldPct: number;
   missingFiles: string[]; emptyFiles: string[];
-  qualityTier: QualityTier;
+  exampleCount: number; guideCount: number; promptWordCount: number;
+  qualityScore: number; qualityTier: QualityTier;
+  components: {
+    completeness: number; specificity: number; examples: number;
+    richness: number; uniqueness: number; usage: number; effectiveness: number;
+  };
 }
 interface SkillDetail {
   id: string; name: string; description: string; category: string;
-  files: SkillFile[]; qualityTier: QualityTier; diagnostics: PackDiagnostics;
+  files: SkillFile[]; qualityScore: number; qualityTier: QualityTier; diagnostics: PackDiagnostics;
 }
 
 // ── Sub-components ──────────────────────────────────────────
@@ -112,17 +117,31 @@ function FileTree({ files, diagnostics, selectedPath, onSelect }: {
 function DiagnosticsSummary({ diagnostics }: { diagnostics?: PackDiagnostics }) {
   if (!diagnostics) return null
   return (
-    <div className="flex items-center gap-4 px-3 py-2 rounded-lg bg-surface border border-border text-xs">
-      <SkillQualityBadge tier={diagnostics.qualityTier} />
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 rounded-lg bg-surface border border-border text-xs">
+      <div className="flex items-center gap-2">
+        <SkillQualityBadge tier={diagnostics.qualityTier} />
+        <span className="font-bold text-text">Score: {diagnostics.qualityScore}/100</span>
+      </div>
+      <div className="h-4 w-px bg-border hidden sm:block" />
       <span className="text-text3">{diagnostics.fileCount} files</span>
-      <span className="text-text3">{diagnostics.nonEmptyCount} non-empty</span>
+      <span className="text-text3">{diagnostics.exampleCount} examples</span>
+      <span className="text-text3">{diagnostics.guideCount} guides</span>
       <span className="text-text3">{diagnostics.totalWords.toLocaleString()} words</span>
       {diagnostics.scaffoldPct > 0 && (
-        <span className="text-warning">{diagnostics.scaffoldPct}% scaffold</span>
+        <span className="text-warning font-medium">{diagnostics.scaffoldPct}% scaffold</span>
       )}
       {diagnostics.missingFiles.length > 0 && (
-        <span className="text-danger">{diagnostics.missingFiles.length} missing</span>
+        <span className="text-danger font-medium">{diagnostics.missingFiles.length} missing</span>
       )}
+      <div className="w-full flex gap-2 mt-1 pt-1 border-t border-border/50 text-[10px] text-text3 overflow-x-auto whitespace-nowrap">
+        <span>Completeness: {diagnostics.components.completeness}/20</span>
+        <span>Specificity: {diagnostics.components.specificity}/20</span>
+        <span>Examples: {diagnostics.components.examples}/15</span>
+        <span>Richness: {diagnostics.components.richness}/15</span>
+        <span>Uniqueness: {diagnostics.components.uniqueness}/10</span>
+        <span>Usage: {diagnostics.components.usage}/10</span>
+        <span>Effectiveness: {diagnostics.components.effectiveness}/10</span>
+      </div>
     </div>
   )
 }

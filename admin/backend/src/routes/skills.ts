@@ -35,6 +35,66 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     return ok({ notes: getResearchNotes() });
   });
 
+  // QLT-05: Quality audit API endpoint scores all skills and returns enrichment report
+  fastify.get('/audit', async () => {
+    const { skills } = await getSkillLibrary();
+    const reports = [];
+
+    for (const skill of skills) {
+      // Get detailed stats for this skill for accurate scoring
+      const stats = await queryOne<any>(`
+        SELECT
+          COALESCE(SUM(ps.times_selected), 0)::int AS total_usage_count,
+          COALESCE(AVG(ps.effectiveness_score), 0)::float AS avg_effectiveness,
+          MAX(ps.last_used_at) AS last_used_at
+        FROM persona_skills ps
+        WHERE COALESCE(ps.skill_id, ps.skill_name) = $1
+      `, [skill.id]);
+
+      const diagnostics = computePackDiagnostics(
+        skill.id,
+        skill.files,
+        {
+          total_uses: stats.total_usage_count,
+          avg_effectiveness: stats.avg_effectiveness,
+          last_used: stats.last_used_at
+        }
+      );
+
+      // Update DB with computed scores
+      await execute(`
+        UPDATE skills
+        SET quality_score = $2,
+            quality_tier = $3,
+            updated_at = EXTRACT(EPOCH FROM NOW())
+        WHERE id = $1
+      `, [skill.id, diagnostics.qualityScore, diagnostics.qualityTier]);
+
+      reports.push({
+        id: skill.id,
+        name: skill.name,
+        qualityScore: diagnostics.qualityScore,
+        qualityTier: diagnostics.qualityTier,
+        missingFiles: diagnostics.missingFiles,
+        scaffoldPct: diagnostics.scaffoldPct,
+        totalWords: diagnostics.totalWords,
+        usageCount: stats.total_usage_count,
+        effectiveness: stats.avg_effectiveness,
+      });
+    }
+
+    return ok({
+      timestamp: Date.now(),
+      totalSkills: reports.length,
+      scaffolds: reports.filter(r => r.qualityTier === 'scaffold').length,
+      baseline: reports.filter(r => r.qualityTier === 'baseline').length,
+      production: reports.filter(r => r.qualityTier === 'production').length,
+      highPerforming: reports.filter(r => r.qualityTier === 'high-performing').length,
+      stale: reports.filter(r => r.qualityTier === 'stale').length,
+      reports
+    });
+  });
+
   // PUT /:id/files/* — write a skill pack file back to disk
   fastify.put('/:id/files/*', async (req, reply) => {
     const { id, '*': relativePath } = req.params as { id: string; '*': string };

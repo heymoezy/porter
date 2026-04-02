@@ -92,6 +92,13 @@ None - no external service configuration required.
 - Remove `test.skip(true, ...)` from FBK-04 after Wave 3 (admin effectiveness endpoints) ships
 - Remove `test.skip(true, ...)` from FBK-05 after Wave 4 (admin UI extensions) ships
 
+## Self-Check: PASSED
+
+- FOUND: tests/skill-feedback.spec.js
+- FOUND: .planning/phases/34-feedback-telemetry/34-00-SUMMARY.md
+- FOUND: commit e783661 (test scaffold)
+- FOUND: commit ea3107c (metadata)
+
 ---
 *Phase: 34-feedback-telemetry*
 *Completed: 2026-04-02*

@@ -53,12 +53,13 @@ export interface SkillRecord {
   template_count: number;
   agents: SkillAgentAssignment[];
   files: SkillFileSummary[];
-  packStatus: 'ready' | 'partial' | 'missing';
+  packStatus: QualityTier;
   hasPrompt: boolean;
   hasExamples: boolean;
   hasChecklist: boolean;
   hasMetadata: boolean;
   qualityTier?: QualityTier;
+  qualityScore?: number;
   diagnostics?: PackDiagnostics;
 }
 
@@ -80,16 +81,13 @@ export interface SkillLibrarySummary {
   totalFiles: number;
   categories: Record<string, number>;
   sources: Record<string, number>;
-  status: {
-    ready: number;
-    partial: number;
-    missing: number;
-  };
+  status: Record<string, number>;
   tiers: {
     scaffold: number;
     baseline: number;
     production: number;
     'high-performing': number;
+    stale: number;
   };
 }
 
@@ -109,7 +107,7 @@ export interface SkillBuilderBlueprint {
   related_repositories: Array<{ name: string; url: string; note: string }>;
 }
 
-export type QualityTier = 'scaffold' | 'baseline' | 'production' | 'high-performing';
+export type QualityTier = 'scaffold' | 'baseline' | 'production' | 'high-performing' | 'stale';
 
 export interface PackDiagnostics {
   fileCount: number;
@@ -120,6 +118,18 @@ export interface PackDiagnostics {
   missingFiles: string[];
   emptyFiles: string[];
   qualityTier: QualityTier;
+  qualityScore: number;
+  exampleCount: number;
+  guideCount: number;
+  components: {
+    completeness: number;
+    specificity: number;
+    examples: number;
+    richness: number;
+    uniqueness: number;
+    usage: number;
+    effectiveness: number;
+  };
 }
 
 function ensureDir(dir: string) {
@@ -185,45 +195,79 @@ function evaluatePackStatus(files: SkillFileSummary[]) {
   const hasPrompt = names.has('prompt.md') || names.has('guides/prompting.md');
   const hasExamples = Array.from(names).some(name => name.startsWith('examples/'));
   const hasChecklist = names.has('guides/qa-checklist.md');
-  const complete = hasSkill && hasMetadata && hasPrompt && hasExamples && hasChecklist;
-  const any = hasSkill || hasMetadata || hasPrompt || hasExamples || hasChecklist;
   return {
-    packStatus: complete ? 'ready' : any ? 'partial' : 'missing',
+    hasSkill,
+    hasMetadata,
     hasPrompt,
     hasExamples,
     hasChecklist,
-    hasMetadata,
   } as const;
 }
 
-export function computePackDiagnostics(skillId: string, files: SkillFileSummary[]): PackDiagnostics {
+export interface TelemetryData {
+  total_uses: number;
+  avg_effectiveness: number;
+  last_used: number | null;
+}
+
+export function computePackDiagnostics(skillId: string, files: SkillFileSummary[], telemetry?: TelemetryData): PackDiagnostics {
   const dir = getSkillDir(skillId);
   const presentPaths = new Set(files.map(f => f.path));
   const missingFiles = EXPECTED_PACK_FILES.filter(p => !presentPaths.has(p));
   const emptyFiles: string[] = [];
   let totalWords = 0;
   let scaffoldPhraseMatches = 0;
+  let promptScaffoldMatches = 0;
 
   for (const file of files) {
     const fullPath = path.join(dir, file.path);
     const text = safeReadText(fullPath);
     if (!text.trim()) { emptyFiles.push(file.path); continue; }
-    totalWords += text.split(/\s+/).filter(Boolean).length;
+    const words = text.split(/\s+/).filter(Boolean).length;
+    totalWords += words;
+    
+    let fileScaffoldCount = 0;
     for (const phrase of SCAFFOLD_PHRASES) {
-      if (text.includes(phrase)) scaffoldPhraseMatches++;
+      if (text.includes(phrase)) {
+        scaffoldPhraseMatches++;
+        fileScaffoldCount++;
+      }
+    }
+
+    if (file.path === 'prompt.md') {
+      promptScaffoldMatches = fileScaffoldCount;
+    }
+  }
+
+  const exampleCount = files.filter(f => f.kind === 'example').length;
+  const guideCount = files.filter(f => f.kind === 'guide').length;
+
+  const completenessScore = (EXPECTED_PACK_FILES.length - missingFiles.length) * 4;
+  const specificityScore = Math.min(20, (totalWords / 1200) * 20);
+  const exampleScore = Math.min(15, (exampleCount / 5) * 15);
+  const guideScore = Math.min(15, (guideCount / 3) * 15);
+  const promptScore = Math.max(0, 10 - (promptScaffoldMatches * 2));
+  const usageScore = telemetry ? Math.min(10, (telemetry.total_uses / 50) * 10) : 0;
+  const eff = telemetry ? telemetry.avg_effectiveness : 0;
+  const effectivenessScore = Math.min(10, (eff > 1 ? eff / 10 : eff * 10));
+
+  const qualityScore = Math.round(completenessScore + specificityScore + exampleScore + guideScore + promptScore + usageScore + effectivenessScore);
+
+  let qualityTier: QualityTier = 'scaffold';
+  if (qualityScore > 75) qualityTier = 'high-performing';
+  else if (qualityScore > 50) qualityTier = 'production';
+  else if (qualityScore > 25) qualityTier = 'baseline';
+
+  if (telemetry?.last_used) {
+    const thirtyDaysAgo = Date.now() / 1000 - (30 * 24 * 60 * 60);
+    if (telemetry.last_used < thirtyDaysAgo) {
+      qualityTier = 'stale';
     }
   }
 
   const scaffoldPct = files.length > 0
     ? Math.round((scaffoldPhraseMatches / (files.length * SCAFFOLD_PHRASES.length)) * 100)
     : 100;
-
-  let qualityTier: QualityTier = 'scaffold';
-  if (missingFiles.length === 0 && emptyFiles.length === 0) {
-    if (totalWords >= PRODUCTION_WORD_THRESHOLD && scaffoldPhraseMatches <= 2) qualityTier = 'high-performing';
-    else if (totalWords >= BASELINE_WORD_THRESHOLD && scaffoldPhraseMatches <= 4) qualityTier = 'production';
-    else if (totalWords >= SCAFFOLD_WORD_THRESHOLD) qualityTier = 'baseline';
-  }
 
   return {
     fileCount: files.length,
@@ -234,6 +278,18 @@ export function computePackDiagnostics(skillId: string, files: SkillFileSummary[
     missingFiles,
     emptyFiles,
     qualityTier,
+    qualityScore,
+    exampleCount,
+    guideCount,
+    components: {
+      completeness: completenessScore,
+      specificity: Math.round(specificityScore),
+      examples: Math.round(exampleScore),
+      richness: Math.round(guideScore),
+      uniqueness: Math.round(promptScore),
+      usage: Math.round(usageScore),
+      effectiveness: Math.round(effectivenessScore),
+    }
   };
 }
 
@@ -252,7 +308,10 @@ export async function getSkillLibrary() {
   const rows = await queryAll<any>(`
     SELECT s.*,
       COALESCE((SELECT COUNT(*) FROM template_skills ts WHERE ts.skill_id = s.id), 0)::int AS template_count,
-      COALESCE((SELECT COUNT(*) FROM persona_skills ps WHERE ps.skill_name = s.id AND ps.enabled = 1), 0)::int AS agent_count
+      COALESCE((SELECT COUNT(*) FROM persona_skills ps WHERE ps.skill_name = s.id AND ps.enabled = 1), 0)::int AS agent_count,
+      COALESCE((SELECT SUM(ps.times_selected) FROM persona_skills ps WHERE ps.skill_name = s.id), 0)::int AS total_uses,
+      COALESCE((SELECT AVG(ps.effectiveness_score) FROM persona_skills ps WHERE ps.skill_name = s.id), 0)::float AS avg_effectiveness,
+      (SELECT MAX(ps.last_used_at) FROM persona_skills ps WHERE ps.skill_name = s.id) AS last_used
     FROM skills s
     ORDER BY s.featured DESC, s.featured_order, s.sort_order, s.name
   `);
@@ -266,7 +325,7 @@ export async function getSkillLibrary() {
 
   const bySkill = new Map<string, SkillAgentAssignment[]>();
   for (const row of assignments) {
-    const list = bySkill.get(row.skill_name) ?? [];
+    const list = bySkill.get(row.skill_name) || [];
     list.push({
       id: row.persona_id,
       name: row.name || row.persona_id,
@@ -278,18 +337,14 @@ export async function getSkillLibrary() {
 
   const skills: SkillRecord[] = rows.map((row: any) => {
     const files = listSkillFiles(row.id);
+    const telemetry: TelemetryData = {
+      total_uses: row.total_uses || 0,
+      avg_effectiveness: row.avg_effectiveness || 0,
+      last_used: row.last_used,
+    };
+    const diagnostics = computePackDiagnostics(row.id, files, telemetry);
     const status = evaluatePackStatus(files);
-    // Fast quality tier for list view: use file size sum as proxy for word count
-    const totalSize = files.reduce((s, f) => s + f.size, 0);
-    const presentPaths = new Set(files.map(f => f.path));
-    const hasMissing = EXPECTED_PACK_FILES.some(p => !presentPaths.has(p));
-    const hasEmpty = files.some(f => f.size === 0);
-    let qualityTier: QualityTier = 'scaffold';
-    if (!hasMissing && !hasEmpty) {
-      if (totalSize >= 4000) qualityTier = 'high-performing';
-      else if (totalSize >= 2000) qualityTier = 'production';
-      else if (totalSize >= 1000) qualityTier = 'baseline';
-    }
+
     return {
       ...row,
       enabled: !!row.enabled,
@@ -298,10 +353,12 @@ export async function getSkillLibrary() {
       config_schema: row.config_schema || {},
       agent_count: row.agent_count || 0,
       template_count: row.template_count || 0,
-      agents: bySkill.get(row.id) ?? [],
+      agents: bySkill.get(row.id) || [],
       files,
+      packStatus: diagnostics.qualityTier,
       ...status,
-      qualityTier,
+      qualityTier: diagnostics.qualityTier,
+      qualityScore: diagnostics.qualityScore,
     } satisfies SkillRecord;
   });
 
@@ -315,14 +372,14 @@ export async function getSkillLibrary() {
     totalFiles: skills.reduce((sum, s) => sum + s.files.length, 0),
     categories: {},
     sources: {},
-    status: { ready: 0, partial: 0, missing: 0 },
-    tiers: { scaffold: 0, baseline: 0, production: 0, 'high-performing': 0 },
+    status: {},
+    tiers: { scaffold: 0, baseline: 0, production: 0, 'high-performing': 0, stale: 0 },
   };
 
   for (const skill of skills) {
     summary.categories[skill.category] = (summary.categories[skill.category] || 0) + 1;
     summary.sources[skill.source] = (summary.sources[skill.source] || 0) + 1;
-    summary.status[skill.packStatus]++;
+    summary.status[skill.packStatus] = (summary.status[skill.packStatus] || 0) + 1;
     if (skill.qualityTier) summary.tiers[skill.qualityTier]++;
   }
 
@@ -333,7 +390,10 @@ export async function getSkillDetail(skillId: string) {
   const row = await queryOne<any>(`
     SELECT s.*,
       COALESCE((SELECT COUNT(*) FROM template_skills ts WHERE ts.skill_id = s.id), 0)::int AS template_count,
-      COALESCE((SELECT COUNT(*) FROM persona_skills ps WHERE ps.skill_name = s.id AND ps.enabled = 1), 0)::int AS agent_count
+      COALESCE((SELECT COUNT(*) FROM persona_skills ps WHERE ps.skill_name = s.id AND ps.enabled = 1), 0)::int AS agent_count,
+      COALESCE((SELECT SUM(ps.times_selected) FROM persona_skills ps WHERE ps.skill_name = s.id), 0)::int AS total_uses,
+      COALESCE((SELECT AVG(ps.effectiveness_score) FROM persona_skills ps WHERE ps.skill_name = s.id), 0)::float AS avg_effectiveness,
+      (SELECT MAX(ps.last_used_at) FROM persona_skills ps WHERE ps.skill_name = s.id) AS last_used
     FROM skills s
     WHERE s.id = $1
   `, [skillId]);
@@ -341,10 +401,16 @@ export async function getSkillDetail(skillId: string) {
   if (!row) return null;
 
   const library = await getSkillLibrary();
-  const skill = library.skills.find(s => s.id === skillId) ?? null;
+  const skill = library.skills.find(s => s.id === skillId) || null;
   if (!skill) return null;
-  const diagnostics = computePackDiagnostics(skillId, skill.files);
-  return { ...skill, qualityTier: diagnostics.qualityTier, diagnostics };
+  
+  const telemetry: TelemetryData = {
+    total_uses: row.total_uses || 0,
+    avg_effectiveness: row.avg_effectiveness || 0,
+    last_used: row.last_used,
+  };
+  const diagnostics = computePackDiagnostics(skillId, skill.files, telemetry);
+  return { ...skill, qualityTier: diagnostics.qualityTier, qualityScore: diagnostics.qualityScore, diagnostics };
 }
 
 export function ensureSkillPack(blueprint: SkillBuilderBlueprint) {
