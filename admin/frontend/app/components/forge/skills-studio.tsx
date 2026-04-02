@@ -5,9 +5,10 @@ import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Switch } from "~/components/ui/switch"
 import { Input } from "~/components/ui/input"
-import { Sparkles, Search, ChevronDown, ChevronRight, Bot, Plus, Pencil, Loader2, Package } from "lucide-react"
+import { Sparkles, Search, ChevronDown, ChevronRight, Bot, Plus, Pencil, Loader2, Package, Download } from "lucide-react"
 import { SkillCreateDialog } from "~/components/forge/skill-create-dialog"
 import { SkillEditSheet } from "~/components/forge/skill-edit-sheet"
+import { SkillImportDialog } from "~/components/forge/skill-import-dialog"
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ export function SkillsStudio() {
   const [activeCat, setActiveCat] = useState("all")
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [editSkill, setEditSkill] = useState<Skill | null>(null)
   const [editOpen, setEditOpen] = useState(false)
 
@@ -130,6 +132,10 @@ export function SkillsStudio() {
             Generate Missing ({missingCount})
           </Button>
         )}
+        <Button size="xs" variant="outline" onClick={() => setImportOpen(true)}>
+          <Download className="size-3 mr-1" />
+          Import
+        </Button>
         <Button size="xs" onClick={() => setCreateOpen(true)}>
           <Plus className="size-3 mr-1" />
           New
@@ -264,6 +270,10 @@ export function SkillsStudio() {
         open={editOpen}
         onOpenChange={setEditOpen}
         categories={categoryList}
+      />
+      <SkillImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
       />
     </div>
   )

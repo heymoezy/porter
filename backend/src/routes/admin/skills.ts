@@ -174,4 +174,26 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     if (!result.ok) return ok({ error: result.error });
     return ok(result.data);
   });
+
+  // ── Import from external repos (proxy to admin backend) ──
+
+  fastify.post('/import/scan', async (req) => {
+    const result = await proxyToAdmin('/api/admin/skills/import/scan', {
+      method: 'POST',
+      body: req.body,
+      timeout: 60000,
+    });
+    if (!result.ok) return ok({ error: result.error });
+    return ok(result.data);
+  });
+
+  fastify.post('/import/execute', async (req) => {
+    const result = await proxyToAdmin('/api/admin/skills/import/execute', {
+      method: 'POST',
+      body: req.body,
+      timeout: 120000,
+    });
+    if (!result.ok) return ok({ error: result.error });
+    return ok(result.data);
+  });
 }

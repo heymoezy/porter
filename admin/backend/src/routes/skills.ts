@@ -9,6 +9,12 @@ import {
   getSkillPackText,
   type SkillBuilderBlueprint,
 } from '../services/skill-library.js';
+import {
+  scanRepo,
+  importCandidates,
+  cleanupTemp,
+  type ImportCandidate,
+} from '../services/skill-importer.js';
 
 function toIntFlag(value: unknown, fallback: number) {
   if (value == null) return fallback;
@@ -225,6 +231,48 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     }
 
     return ok({ generated: true, dir: pack.dir, files: pack.files });
+  });
+
+  // ── Import from external repos ────────────────────────────
+
+  // POST /api/admin/skills/import/scan — clone + scan a repo for SKILL.md files
+  fastify.post('/import/scan', async (req, reply) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const repoUrl = String(body.repoUrl ?? '').trim();
+    if (!repoUrl) {
+      reply.status(400);
+      return err('INVALID_INPUT', 'repoUrl is required');
+    }
+
+    try {
+      const candidates = await scanRepo(repoUrl);
+      return ok({ candidates, repoUrl });
+    } catch (e) {
+      reply.status(422);
+      return err('SCAN_FAILED', (e as Error).message);
+    }
+  });
+
+  // POST /api/admin/skills/import/execute — import selected candidates
+  fastify.post('/import/execute', async (req, reply) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const candidates = body.candidates as ImportCandidate[] | undefined;
+    const overwrite = !!body.overwrite;
+
+    if (!Array.isArray(candidates) || candidates.length === 0) {
+      reply.status(400);
+      return err('INVALID_INPUT', 'candidates array is required');
+    }
+
+    try {
+      const result = await importCandidates(candidates, overwrite);
+      // Clean up temp clone dirs after import
+      cleanupTemp();
+      return ok(result);
+    } catch (e) {
+      reply.status(500);
+      return err('IMPORT_FAILED', (e as Error).message);
+    }
   });
 
   // POST /api/admin/skills/builder/generate-all — generate packs for all skills missing packs
