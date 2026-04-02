@@ -165,11 +165,8 @@ function FilePreviewPanel({
 
 export default function FilesPage() {
   const qc = useQueryClient()
-  const location = useLocation()
   const [pathSegments, setPathSegments] = useState<string[]>([])
   const [previewFile, setPreviewFile] = useState<{ name: string; path: string } | null>(null)
-
-  // No reset effect — user navigates back to root via breadcrumb Home button
   const [previewExpanded, setPreviewExpanded] = useState(false)
   const [compact, setCompact] = useState(() => {
     if (typeof window === "undefined") return false
