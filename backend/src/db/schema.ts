@@ -490,7 +490,7 @@ export const agentTemplates = pgTable('agent_templates', {
   soulText: text('soul_text').notNull().default(''),
   roleCardText: text('role_card_text').notNull().default(''),
   identityText: text('identity_text').notNull().default(''),
-  skillsText: text('skills_text').notNull().default(''),
+  skillsText: text('skills_text').notNull().default(''),  // DEPRECATED (SOT-05): preserved but never read during instantiation
   isInternal: integer('is_internal').notNull().default(0),
   sortOrder: integer('sort_order').default(50),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
@@ -802,7 +802,8 @@ export const agentNotes = pgTable('agent_notes', {
 
 export const personaSkills = pgTable('persona_skills', {
   personaId: text('persona_id').notNull(),
-  skillName: text('skill_name').notNull(),
+  skillName: text('skill_name').notNull(),      // DEPRECATED — retained for backwards compat
+  skillId: text('skill_id'),                     // NEW: FK to skills.id — canonical after migration
   enabled: integer('enabled').default(1),
   assignedAt: doublePrecision('assigned_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
