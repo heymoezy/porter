@@ -42,8 +42,8 @@ async function authPlugin(fastify: FastifyInstance) {
       }
     }
 
-    // 2. Try session cookie
-    const token = request.cookies?.porter_session;
+    // 2. Try session cookie (check both product and admin cookies)
+    const token = request.cookies?.porter_session || request.cookies?.porter_admin_session;
     if (!token) return;
 
     const [session] = await db.select().from(schema.sessions)
