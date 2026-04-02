@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 31-01-PLAN.md
-last_updated: "2026-04-02T12:29:54.398Z"
+stopped_at: Completed 31-02-PLAN.md
+last_updated: "2026-04-02T12:37:22.480Z"
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 31 (Source of Truth Cleanup) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -47,6 +47,9 @@ Plan: 2 of 3
 - [v5.0]: Current state: template_skills has 0 rows, persona_skills has 17 rows (porter-core only), skills_text on all 107 templates, 81% of 209 skill packs are scaffold filler
 - [Phase 31]: Used separate migration file (migrate-sot-v1.ts) following codebase convention instead of appending to consolidated migration
 - [Phase 31]: 361/452 JSONB tags unmatched (short tags vs skill slugs) -- expected, not a failure
+- [Phase 31]: Removed JSONB fallback for skills -- template_skills junction is now the only source in instantiation and forge
+- [Phase 31]: Kept JSONB fallback for tools (out of scope for skills SOT cleanup)
+- [Phase 31]: skill_id used as both skill_name and skill_id in persona_skills INSERT (skill_name column is deprecated)
 
 ### Pending Todos
 
@@ -60,6 +63,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T12:29:54.395Z
-Stopped at: Completed 31-01-PLAN.md
+Last session: 2026-04-02T12:37:22.477Z
+Stopped at: Completed 31-02-PLAN.md
 Resume file: None
