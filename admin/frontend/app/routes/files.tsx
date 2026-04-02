@@ -1,4 +1,5 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
+import { useLocation } from "react-router"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   FolderOpen, Upload, ChevronRight, FileText,
@@ -165,8 +166,20 @@ function FilePreviewPanel({
 
 export default function FilesPage() {
   const qc = useQueryClient()
+  const location = useLocation()
+  const resetToken = (location.state as any)?.reset
   const [pathSegments, setPathSegments] = useState<string[]>([])
   const [previewFile, setPreviewFile] = useState<{ name: string; path: string } | null>(null)
+
+  // Reset to root when nav link is clicked (passes state.reset timestamp)
+  const lastReset = useRef(resetToken)
+  useEffect(() => {
+    if (resetToken && resetToken !== lastReset.current) {
+      lastReset.current = resetToken
+      setPathSegments([])
+      setPreviewFile(null)
+    }
+  }, [resetToken])
   const [previewExpanded, setPreviewExpanded] = useState(false)
   const [compact, setCompact] = useState(() => {
     if (typeof window === "undefined") return false
@@ -379,13 +392,34 @@ export default function FilesPage() {
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      {/* Drop overlay */}
+      {/* Drop overlay — receives drop events directly */}
       {dragging && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-bg/80 backdrop-blur-sm border-2 border-dashed border-accent-porter rounded-xl m-2 pointer-events-none">
-          <div className="text-center">
+        <div
+          className="absolute inset-0 z-30 flex items-center justify-center bg-bg/80 backdrop-blur-sm border-2 border-dashed border-accent-porter rounded-xl m-2"
+          onDragOver={(e) => e.preventDefault()}
+          onDragLeave={(e) => {
+            e.preventDefault()
+            // Only dismiss if leaving the overlay entirely (not entering a child)
+            if (e.currentTarget === e.target) {
+              dragCounter.current = 0
+              setDragging(false)
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            dragCounter.current = 0
+            setDragging(false)
+            const files = e.dataTransfer.files
+            if (files.length > 0 && activeRoot && dirWritable) {
+              uploadFiles(files, activeRoot, currentPath)
+            }
+          }}
+        >
+          <div className="text-center pointer-events-none">
             <Upload className="size-10 text-accent-porter mx-auto mb-2" />
             <p className="text-sm font-medium text-text">Drop files to upload</p>
-            <p className="text-xs text-text3 mt-1">{activeRoot} / {currentPath || "root"}</p>
+            <p className="text-xs text-text3 mt-1">/home/lobster/projects{currentPath ? `/${currentPath}` : ""}</p>
           </div>
         </div>
       )}

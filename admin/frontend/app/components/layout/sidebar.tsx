@@ -81,6 +81,7 @@ export function Sidebar({ collapsed, onToggle, notificationCount = 0, bridgeUpda
                 <Link
                   key={item.label}
                   to={item.path}
+                  state={item.path === "/files" ? { reset: Date.now() } : undefined}
                   className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors duration-[var(--duration-instant)] ${
                     active
                       ? "bg-accent-porter/10 font-medium text-accent-porter"
