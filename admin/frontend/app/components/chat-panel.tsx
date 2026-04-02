@@ -8,7 +8,7 @@
  * slash commands, model switching, resize/expand, collapse, auto-scroll.
  */
 import { useState, useRef, useEffect, useCallback } from "react"
-import { Send, ChevronRight, Maximize2, Minimize2, RotateCcw, History, ArrowLeft } from "lucide-react"
+import { Send, ChevronRight, Maximize2, Minimize2, RotateCcw, History, ArrowLeft, ThumbsUp, ThumbsDown } from "lucide-react"
 import { PixelPortrait } from "~/components/pixel-portrait"
 
 // ── Markdown ─────────────────────────────────────────────
@@ -49,6 +49,8 @@ interface ChatMessage {
   role: "user" | "assistant"
   content: string
   backend?: string
+  dispatchId?: string | null      // from SSE done event (Phase 34)
+  feedbackSent?: "positive" | "negative" | null  // tracks submitted feedback
 }
 
 interface ChatPanelProps {
@@ -212,7 +214,17 @@ export function ChatPanel({
             try {
               const data = JSON.parse(line.slice(6))
               if (data.token) { fullText += data.token; setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: fullText } : m)); scrollToBottom() }
-              if (data.done) { const bk = data.backend || data.backend_used || data.runtime_label; if (bk) setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, backend: bk } : m)); break }
+              if (data.done) {
+                const bk = data.backend || data.backend_used || data.runtime_label
+                const dispatchId = data.dispatch_id ?? null
+                if (bk || dispatchId) {
+                  setMessages(prev => prev.map(m => m.id === assistantId
+                    ? { ...m, backend: bk || m.backend, dispatchId }
+                    : m
+                  ))
+                }
+                break
+              }
             } catch {}
           }
         }
@@ -240,6 +252,21 @@ export function ChatPanel({
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
+  }
+
+  async function sendFeedback(msg: ChatMessage, eventType: "positive" | "negative") {
+    if (!msg.dispatchId || msg.feedbackSent) return
+    try {
+      await fetch(`/api/v1/feedback/${msg.dispatchId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ event_type: eventType }),
+      })
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, feedbackSent: eventType } : m))
+    } catch (e) {
+      console.error("Feedback submission failed:", e)
+    }
   }
 
   return (
@@ -325,6 +352,34 @@ export function ChatPanel({
                 ) : <MdText text={m.content} />}
               </div>
               {m.backend && <p className="text-2xs text-text3 mt-0.5 font-mono opacity-60">{m.backend}</p>}
+              {m.role === "assistant" && m.dispatchId && (
+                <div className="flex items-center gap-1 mt-1">
+                  <button
+                    onClick={() => sendFeedback(m, "positive")}
+                    disabled={!!m.feedbackSent}
+                    className={`p-0.5 rounded transition-colors ${
+                      m.feedbackSent === "positive" ? "text-green-500" :
+                      m.feedbackSent ? "text-text3 opacity-30" :
+                      "text-text3 hover:text-green-500"
+                    }`}
+                    title="Good response"
+                  >
+                    <ThumbsUp size={14} />
+                  </button>
+                  <button
+                    onClick={() => sendFeedback(m, "negative")}
+                    disabled={!!m.feedbackSent}
+                    className={`p-0.5 rounded transition-colors ${
+                      m.feedbackSent === "negative" ? "text-red-500" :
+                      m.feedbackSent ? "text-text3 opacity-30" :
+                      "text-text3 hover:text-red-500"
+                    }`}
+                    title="Poor response"
+                  >
+                    <ThumbsDown size={14} />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}
