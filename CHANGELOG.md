@@ -1,27 +1,3 @@
-## v4.0.1 (2026-04-02)
-
-- docs: update checkpoint to v4.4.0 — Skills 10x complete
-- feat: skills marketplace UI + tags + discovery system v4.4.0
-- feat: skill import from external GitHub repos v4.3.0
-- feat: expand skill catalog to 207 skills across 20 categories v4.2.0
-- feat: SkillsStudio CRUD UI — create dialog, edit sheet, pack badges v4.1.1
-- feat: skills CRUD API + pack generation for all 37 skills v4.1.0
-- docs: update checkpoint to v4.0.6
-- feat: rich agent skills tab + skills API join v4.0.6
-- feat: rename Sheet → Build tab + improve RPG component design v4.0.5
-- feat: full-featured Files page + multipart upload proxy v4.0.4
-- fix: version 4.0.3 in main health endpoint
-- feat: combine System + Activity + Diagnostics into single System page v4.0.3
-- fix: restore full skill-library.ts content (was empty)
-- fix: admin skills wildcard route pattern for Fastify
-- feat: skill-library service + CRUD skills API (admin backend)
-- refactor: extract SkillsStudio + ToolsStudio into shared components
-- feat: restructure admin nav v4.0.2
-- fix: forge tabs — split Armory into Skills + Tools tabs
-- fix: clean skills/tools pages + forge station agent links
-- fix: version 4.0.1 in health endpoints (was reverted by Gemini)
-
-
 ## v4.4.0 (2026-04-02)
 
 **Skills Marketplace — Discovery + Tags**
