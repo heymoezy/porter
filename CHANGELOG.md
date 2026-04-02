@@ -1,3 +1,116 @@
+## v4.0.1 (2026-04-02)
+
+- docs: update checkpoint to v4.4.0 — Skills 10x complete
+- feat: skills marketplace UI + tags + discovery system v4.4.0
+- feat: skill import from external GitHub repos v4.3.0
+- feat: expand skill catalog to 207 skills across 20 categories v4.2.0
+- feat: SkillsStudio CRUD UI — create dialog, edit sheet, pack badges v4.1.1
+- feat: skills CRUD API + pack generation for all 37 skills v4.1.0
+- docs: update checkpoint to v4.0.6
+- feat: rich agent skills tab + skills API join v4.0.6
+- feat: rename Sheet → Build tab + improve RPG component design v4.0.5
+- feat: full-featured Files page + multipart upload proxy v4.0.4
+- fix: version 4.0.3 in main health endpoint
+- feat: combine System + Activity + Diagnostics into single System page v4.0.3
+- fix: restore full skill-library.ts content (was empty)
+- fix: admin skills wildcard route pattern for Fastify
+- feat: skill-library service + CRUD skills API (admin backend)
+- refactor: extract SkillsStudio + ToolsStudio into shared components
+- feat: restructure admin nav v4.0.2
+- fix: forge tabs — split Armory into Skills + Tools tabs
+- fix: clean skills/tools pages + forge station agent links
+- fix: version 4.0.1 in health endpoints (was reverted by Gemini)
+
+
+## v4.4.0 (2026-04-02)
+
+**Skills Marketplace — Discovery + Tags**
+
+- SkillsMarketplace component: card grid view with featured section, tag filters, search
+- Tags column added to skills table, all 207 skills tagged (2-4 tags each)
+- 8 featured skills seeded (project-architect, prompt-architect, code-implementer, etc.)
+- Brain API: search, category/featured/packStatus query filters, allTags summary
+- Table/Grid view toggle in SkillsStudio
+- Tag editor in SkillEditSheet (add/remove inline)
+
+## v4.3.0 (2026-04-02)
+
+**Skill Import System**
+
+- skill-importer.ts: clone external GitHub repos, scan SKILL.md files, parse frontmatter
+- Import API: scan + execute endpoints, proxied through Brain
+- SkillImportDialog: 3-step UI (source → preview with checkboxes → results)
+- Pre-configured sources: VoltAgent, Anthropic, Supabase + custom URL
+- Conflict detection, overwrite support
+
+## v4.2.0 (2026-04-02)
+
+**Skill Catalog Expansion — 207 Skills**
+
+- 170 new skills across 20 categories with complete on-disk packs
+- Categories: Engineering, Data & AI, Business, Content, Research, Creative, Design, Domain, Infrastructure, Legal, Support
+- Each skill has domain-specific SKILL.md, prompt.md, qa-checklist, examples, metadata
+- Idempotent seed script at scripts/seed-skills-expansion.sh
+
+## v4.1.1 (2026-04-02)
+
+**SkillsStudio CRUD UI**
+
+- SkillCreateDialog: name/id/description/category/source form with auto-slug
+- SkillEditSheet: full metadata editor, switches, pack status badge, generate/delete
+- Pack status column in SkillsStudio table (ready/partial/missing badges)
+- "+ New" and "Generate Missing" buttons in header
+
+## v4.1.0 (2026-04-02)
+
+**Skills CRUD API + Pack Generation**
+
+- Brain skills route: POST create, PUT update, DELETE, pack proxy endpoints
+- admin-proxy.ts utility for Brain→Admin backend forwarding
+- generate-all endpoint for bulk pack generation
+- pack_status column added to skills table
+- All 37 original skills now have complete on-disk packs
+
+## v4.0.6 (2026-04-01)
+
+**Agent Skills Tab Enrichment**
+
+- Agent detail Skills tab joins skills table for description, category, source
+- Skills table with 4 columns instead of 2
+
+## v4.0.5 (2026-04-01)
+
+**Build Tab + RPG Component Redesign**
+
+- Sheet tab renamed to BUILD with Wrench icon
+- CharacterCard: larger text, section dividers, equipped-only equipment display
+- VitalsBar: icons, taller bars, 50% threshold markers, faster animation
+- PassiveTreeView: larger nodes/text, full labels, unlock level display
+
+## v4.0.4 (2026-04-01)
+
+**Full-Featured Files Page**
+
+- Ported from frontend-v2: breadcrumb nav, drag-drop upload, download, rename, delete
+- File preview panel (text, image, PDF)
+- Compact/comfortable view toggle, search filter
+
+## v4.0.3 (2026-04-01)
+
+**System Page Merge**
+
+- System + Activity + Diagnostics merged into single /system page with 3 sub-tabs
+- Redirects from /brain, /activity, /diagnostics for backwards compat
+
+## v4.0.2 (2026-04-01)
+
+**Admin Nav Restructure**
+
+- Intelligence moved from Dev to Ops
+- Changelog removed from nav (linked in footer)
+- Settings as gear icon next to logout
+- Files gets its own nav section
+
 ## v4.0.1 (2026-04-01)
 
 **Forge page fixes + template card polish**
