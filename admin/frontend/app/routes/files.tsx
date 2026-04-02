@@ -233,9 +233,9 @@ export default function FilesPage() {
   })
 
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
   const uploadMut = useMutation({
     mutationFn: async (file: File) => {
-      setUploadError(null)
       const form = new FormData()
       form.append("file", file)
       form.append("root", activeRoot)
@@ -259,9 +259,22 @@ export default function FilesPage() {
     },
   })
 
+  async function uploadFiles(fileList: FileList | File[]) {
+    setUploadError(null)
+    const files = Array.from(fileList)
+    setUploadProgress({ current: 0, total: files.length })
+    for (let i = 0; i < files.length; i++) {
+      setUploadProgress({ current: i + 1, total: files.length })
+      try {
+        await uploadMut.mutateAsync(files[i])
+      } catch { /* error handled by onError */ break }
+    }
+    setUploadProgress(null)
+  }
+
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) uploadMut.mutate(file)
+    const files = e.target.files
+    if (files && files.length > 0) uploadFiles(files)
     e.target.value = ""
   }
 
@@ -309,9 +322,7 @@ export default function FilesPage() {
     setDragging(false)
     const files = e.dataTransfer.files
     if (files.length > 0 && activeRoot && dirWritable) {
-      for (let i = 0; i < files.length; i++) {
-        uploadMut.mutate(files[i])
-      }
+      uploadFiles(files)
     }
   }
 
@@ -388,10 +399,14 @@ export default function FilesPage() {
             <Rows3 className="size-3.5" />
           </button>
 
-          {/* Upload spinner + error */}
-          {uploadMut.isPending && (
+          {/* Upload progress + error */}
+          {(uploadMut.isPending || uploadProgress) && (
             <span className="flex items-center gap-1.5 text-xs text-text3">
               <Loader2 className="size-3.5 animate-spin" />
+              {uploadProgress && uploadProgress.total > 1 && (
+                <span className="tabular-nums">{uploadProgress.current}/{uploadProgress.total}</span>
+              )}
+              <span>Uploading...</span>
             </span>
           )}
           {uploadError && (
@@ -399,7 +414,7 @@ export default function FilesPage() {
           )}
 
           {/* Upload button */}
-          <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} />
+          <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
           <Button
             size="sm"
             onClick={() => fileInputRef.current?.click()}
