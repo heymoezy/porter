@@ -141,8 +141,9 @@ Plans:
   3. Each persona_skill row has live aggregated stats: times_selected, times_completed, positive/negative counts, effectiveness_score (computed from feedback ratio)
   4. Admin can view per-skill effectiveness on skill detail, agent detail, and template detail pages
   5. Effectiveness scores are queryable via API: GET /api/admin/skills/:id/effectiveness and GET /api/admin/agents/:id/skill-effectiveness
-**Plans:** 3 plans
+**Plans:** 4 plans
 Plans:
+- [ ] 34-00-PLAN.md — Playwright test scaffold for FBK-01 through FBK-05 (Wave 0)
 - [ ] 34-01-PLAN.md — Migration (skill_feedback_events + persona_skills counters) + dispatch_id lifecycle + times_selected
 - [ ] 34-02-PLAN.md — Feedback POST endpoint + chat thumbs-up/down UI
 - [ ] 34-03-PLAN.md — Admin effectiveness API endpoints + UI on detail pages
