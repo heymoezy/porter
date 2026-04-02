@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 32-03-PLAN.md
-last_updated: "2026-04-02T17:04:09.210Z"
+stopped_at: Completed 33-01-PLAN.md
+last_updated: "2026-04-02T17:40:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 9
+  completed_plans: 8
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Skills must be live behavioral modules — selected at runtime, injected into prompts, measured, and evolved through feedback.
-**Current focus:** Phase 32 — Skill Pack Explorer
+**Current focus:** Phase 33 — Runtime Skill Selector
 
 ## Current Position
 
-Phase: 32 (Skill Pack Explorer) — EXECUTING
-Plan: 3 of 4
+Phase: 33 (Runtime Skill Selector) — EXECUTING
+Plan: 2 of 2 (Plan 01 complete)
 
 ## Performance Metrics
 
@@ -63,6 +63,10 @@ Plan: 3 of 4
 - [Phase 32-02]: retry:false on file content query — 404 for missing files becomes isError so empty editor shows
 - [Phase 32-skill-pack-explorer]: Plan 02 prerequisites created inline during plan 03 execution as Rule 3 auto-fix (skill-quality-badge.tsx, skill-pack-explorer.tsx, CodeMirror, route)
 - [Phase 32-skill-pack-explorer]: s.name used as skill ID in agent-detail Link (persona_skills stores skill_id in name field per Phase 31)
+- [Phase 33-01]: scoreSkill exported as pure function — testable without DB/FS mocking, description +2, tag +3, trigger +3, name part +1
+- [Phase 33-01]: SCORE_THRESHOLD=1 (any match qualifies) ensures inclusive selection; MAX_SELECTED=3 caps injected skills per dispatch
+- [Phase 33-01]: bridge_dispatch_log.skills_used JSONB column added with GIN index for future skill telemetry analytics
+- [Phase 33-01]: selectSkills wraps full body in try/catch — fire-and-forget safe, never throws during dispatch pipeline
 
 ### Pending Todos
 
@@ -76,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T16:59:12.188Z
-Stopped at: Completed 32-03-PLAN.md
+Last session: 2026-04-02T17:40:00.000Z
+Stopped at: Completed 33-01-PLAN.md
 Resume file: None

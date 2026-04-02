@@ -24,11 +24,11 @@
 
 ### Runtime Skill Selection
 
-- [ ] **RTS-01**: Every dispatch gathers the agent's assigned skills from persona_skills
-- [ ] **RTS-02**: A skill selector ranks candidate skills against the task using description, triggers, tags, and historical success
-- [ ] **RTS-03**: Only the top 0-3 most relevant skill packs are injected into the dispatch prompt context
+- [x] **RTS-01**: Every dispatch gathers the agent's assigned skills from persona_skills
+- [x] **RTS-02**: A skill selector ranks candidate skills against the task using description, triggers, tags, and historical success
+- [x] **RTS-03**: Only the top 0-3 most relevant skill packs are injected into the dispatch prompt context
 - [ ] **RTS-04**: Every dispatch logs which skills were candidates, which were selected, and the ranking scores
-- [ ] **RTS-05**: Dispatches with no relevant skills proceed without skill injection (graceful zero-skill path)
+- [x] **RTS-05**: Dispatches with no relevant skills proceed without skill injection (graceful zero-skill path)
 
 ### Feedback Telemetry
 
@@ -101,11 +101,11 @@
 | PKX-03 | Phase 32 | Complete |
 | PKX-04 | Phase 32 | Complete |
 | PKX-05 | Phase 32 | Complete |
-| RTS-01 | Phase 33 | Pending |
-| RTS-02 | Phase 33 | Pending |
-| RTS-03 | Phase 33 | Pending |
+| RTS-01 | Phase 33 | Complete |
+| RTS-02 | Phase 33 | Complete |
+| RTS-03 | Phase 33 | Complete |
 | RTS-04 | Phase 33 | Pending |
-| RTS-05 | Phase 33 | Pending |
+| RTS-05 | Phase 33 | Complete |
 | FBK-01 | Phase 34 | Pending |
 | FBK-02 | Phase 34 | Pending |
 | FBK-03 | Phase 34 | Pending |
