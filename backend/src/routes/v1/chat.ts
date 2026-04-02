@@ -7,6 +7,8 @@ import { config } from '../../config.js';
 import { z } from 'zod';
 import { selectStreamBackend } from '../../services/stream-service.js';
 import { buildMemoryContext } from '../../services/memory-injection.js';
+import { selectSkills } from '../../services/skill-selector.js';
+import type { RoutingContext } from '../../services/bridge/types.js';
 import type { ProjectRole } from '../../lib/roles.js';
 
 // --- Schemas ----------------------------------------------------------------
@@ -282,12 +284,34 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       } catch { /* fallback to default */ }
     }
 
+    // Phase 33: Runtime skill selection — inject relevant skill packs into system prompt
+    let skillsUsed: RoutingContext['skillsUsed'] | undefined;
+    if (agentId) {
+      try {
+        const skillResult = await selectSkills(agentId, message);
+        if (skillResult.promptBlock) {
+          systemPrompt = (systemPrompt ?? '') + '\n\n' + skillResult.promptBlock;
+        }
+        if (skillResult.candidates.length > 0) {
+          skillsUsed = {
+            candidates: skillResult.candidates.map(c => ({ skillId: c.skillId, name: c.name, score: c.score, reason: c.reason })),
+            selected: skillResult.selected.map(s => ({ skillId: s.skillId, name: s.name, score: s.score, reason: s.reason })),
+            threshold: 1,
+            totalCandidates: skillResult.candidates.length,
+          };
+        }
+      } catch {
+        // Skill selection is best-effort — never block a dispatch
+      }
+    }
+
     // STRM-02: prefer strong model for user chat, fall back to ollama if unavailable
     const streamBackend = await selectStreamBackend(message, backend ?? 'auto', {
       agentId,
       chatId,
       projectId,
       username: request.sessionUser!.username,
+      skillsUsed,  // Phase 33: skill selection telemetry for dispatch logging
     });
     let fullResponse = '';
 
