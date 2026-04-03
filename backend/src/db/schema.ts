@@ -1218,3 +1218,39 @@ export const taskNodes = pgTable('task_nodes', {
   startedAt: doublePrecision('started_at'),
   completedAt: doublePrecision('completed_at'),
 });
+
+// ── Project Watchers (Phase 46 — Project Monitoring) ─────────────────────────
+
+export const projectWatchers = pgTable('project_watchers', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull(),
+  name: text('name').notNull(),
+  watcherType: text('watcher_type').notNull(),
+  scheduleCron: text('schedule_cron').notNull(),
+  scheduleIntervalSec: integer('schedule_interval_sec').notNull().default(21600),
+  config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
+  status: text('status').notNull().default('active'),
+  lastRunAt: doublePrecision('last_run_at'),
+  nextRunAt: doublePrecision('next_run_at'),
+  lastError: text('last_error'),
+  runCount: integer('run_count').default(0),
+  findingCount: integer('finding_count').default(0),
+  notifyEmail: text('notify_email'),
+  createdBy: text('created_by').notNull(),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const watcherFindings = pgTable('watcher_findings', {
+  id: text('id').primaryKey(),
+  watcherId: text('watcher_id').notNull(),
+  projectId: text('project_id').notNull(),
+  sourceType: text('source_type').notNull(),
+  title: text('title').notNull(),
+  summary: text('summary').notNull(),
+  detail: jsonb('detail').notNull().default(sql`'{}'::jsonb`),
+  importance: text('importance').notNull().default('normal'),
+  isRead: integer('is_read').default(0),
+  jobId: text('job_id'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
