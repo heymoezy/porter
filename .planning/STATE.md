@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 39-01-PLAN.md
-last_updated: "2026-04-03T08:04:42.973Z"
+stopped_at: Completed 39-03-PLAN.md
+last_updated: "2026-04-03T08:07:31.828Z"
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 24
-  completed_plans: 23
+  completed_plans: 24
 ---
 
 # Project State
@@ -98,6 +98,8 @@ Plan: 1 of 3
 - [Phase 39]: executeTask is a standalone async generator (not class method) — simpler, testable, no this binding
 - [Phase 39]: Separate getTaskQueue from dispatch-queues.ts — task queues must not share concurrency with chat requests
 - [Phase 39]: CWD_ALLOWLIST is a module constant — security gate not config-driven, intentionally restrictive
+- [Phase 39]: List endpoint truncates prompt to 200 chars and output to 500 chars — full content only via detail endpoint
+- [Phase 39]: paramIdx counter pattern used for dynamic WHERE clause building in bridge task list endpoint
 
 ### Roadmap Evolution
 
@@ -115,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T08:04:42.970Z
-Stopped at: Completed 39-01-PLAN.md
+Last session: 2026-04-03T08:07:31.823Z
+Stopped at: Completed 39-03-PLAN.md
 Resume file: None
