@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 38-03-PLAN.md
-last_updated: "2026-04-03T04:22:10.573Z"
+stopped_at: Completed 39-01-PLAN.md
+last_updated: "2026-04-03T08:04:42.973Z"
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 7
-  total_plans: 21
-  completed_plans: 22
+  total_plans: 24
+  completed_plans: 23
 ---
 
 # Project State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Skills must be live behavioral modules — selected at runtime, injected into prompts, measured, and evolved through feedback.
-**Current focus:** Phase 38 — Adaptive Agent Context
+**Current focus:** Phase 39 — Bridge Task Dispatch
 
 ## Current Position
 
-Phase: 38 (Adaptive Agent Context) — EXECUTING
+Phase: 39 (Bridge Task Dispatch) — EXECUTING
 Plan: 1 of 3
 
 ## Performance Metrics
@@ -95,6 +95,9 @@ Plan: 1 of 3
 - [Phase 38-adaptive-agent-context]: [Phase 38-01]: scoreDirective uses (10 - floor(priority/10)) for priority bonus; ALWAYS_INJECT_THRESHOLD=2; SkillCandidate gains tags field; directiveStats travels via RoutingContext; selectDirectives fallback when no task context
 - [Phase 38]: context_stats written via UPDATE after INSERT — session data only available after upsertSession resolves
 - [Phase 38]: Admin routes are at routes/admin/bridge.ts — routes/v1/admin/bridge.ts is not registered in index.ts (dead duplicate)
+- [Phase 39]: executeTask is a standalone async generator (not class method) — simpler, testable, no this binding
+- [Phase 39]: Separate getTaskQueue from dispatch-queues.ts — task queues must not share concurrency with chat requests
+- [Phase 39]: CWD_ALLOWLIST is a module constant — security gate not config-driven, intentionally restrictive
 
 ### Roadmap Evolution
 
@@ -112,6 +115,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T04:19:31.148Z
-Stopped at: Completed 38-03-PLAN.md
+Last session: 2026-04-03T08:04:42.970Z
+Stopped at: Completed 39-01-PLAN.md
 Resume file: None

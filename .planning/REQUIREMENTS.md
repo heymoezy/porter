@@ -77,7 +77,7 @@
 - [ ] **BTD-01**: POST /api/v1/tasks/dispatch accepts a task prompt, optional gateway, optional cwd, and returns a task ID with 202 status
 - [ ] **BTD-02**: CLI adapters (Codex, Gemini, Claude) implement task execution via TaskExecutor that spawns the CLI with tool access in the specified working directory
 - [ ] **BTD-03**: Task output streams back via SSE events (bridge:task-progress with incremental output, bridge:task-complete with full result)
-- [ ] **BTD-04**: bridge_tasks table tracks lifecycle (queued → running → complete → failed) with output, duration, gateway used
+- [x] **BTD-04**: bridge_tasks table tracks lifecycle (queued → running → complete → failed) with output, duration, gateway used
 - [ ] **BTD-05**: Admin can view running/completed tasks with output in the Bridge panel
 
 ## v6.0 Requirements (Deferred)
@@ -152,7 +152,7 @@
 | BTD-01 | Phase 39 | Pending |
 | BTD-02 | Phase 39 | Pending |
 | BTD-03 | Phase 39 | Pending |
-| BTD-04 | Phase 39 | Pending |
+| BTD-04 | Phase 39 | Complete |
 | BTD-05 | Phase 39 | Pending |
 
 **Coverage:**
