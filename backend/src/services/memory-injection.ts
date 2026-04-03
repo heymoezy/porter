@@ -1,4 +1,6 @@
 import { pool } from '../db/client.js';
+import { selectDirectives, tokenizeTaskText } from './directive-scorer.js';
+import type { DirectiveSelectionStats } from './directive-scorer.js';
 
 // ── Token estimation helper ───────────────────────────────────────────────────
 // Approximate: 4 chars ≈ 1 token (common rule of thumb for English text)
@@ -21,16 +23,44 @@ function estimateTokens(text: string): number {
  * tier uses less than its target, the remainder flows to lower-priority tiers.
  * If a tier exceeds its target, it is clipped unless there is spare room from previous tiers.
  */
+export interface MemoryContextResult {
+  text: string;
+  directive_selection?: DirectiveSelectionStats;
+}
+
 export async function buildMemoryContext(opts: {
   agentId?: string;
   projectId?: string;
   tokenBudget?: number;
   searchQuery?: string;
-}): Promise<string> {
-  const { agentId, projectId, searchQuery } = opts;
+  taskText?: string;
+  skillTags?: string[];
+}): Promise<string>;
+
+export async function buildMemoryContext(opts: {
+  agentId?: string;
+  projectId?: string;
+  tokenBudget?: number;
+  searchQuery?: string;
+  taskText?: string;
+  skillTags?: string[];
+  returnMeta: true;
+}): Promise<MemoryContextResult>;
+
+export async function buildMemoryContext(opts: {
+  agentId?: string;
+  projectId?: string;
+  tokenBudget?: number;
+  searchQuery?: string;
+  taskText?: string;
+  skillTags?: string[];
+  returnMeta?: boolean;
+}): Promise<string | MemoryContextResult> {
+  const { agentId, projectId, searchQuery, taskText, skillTags, returnMeta } = opts;
   let totalRemaining = opts.tokenBudget ?? 2000;
 
   const sections: string[] = [];
+  let capturedDirectiveStats: DirectiveSelectionStats | undefined;
 
   // Tier target budgets (rolling)
   const targets = {
@@ -66,32 +96,42 @@ export async function buildMemoryContext(opts: {
 
     // ── Tier 2: Directives (Target: 300 + spare) ──────────────────────────────
     const tier2Budget = targets.tier2 + tier1Spare;
-    let directiveRows: Array<{ content: string; priority: number }> = [];
+    let allDirectiveRows: Array<{ content: string; priority: number; tags?: string[] | null }> = [];
     if (projectId) {
-      const res = await pool.query<{ content: string; priority: number }>(
-        `SELECT content, priority FROM directives
+      const res = await pool.query<{ content: string; priority: number; tags: string[] | null }>(
+        `SELECT content, priority, tags FROM directives
          WHERE status = 'active'
            AND (scope = 'workspace' OR (scope = 'project' AND scope_id = $1))
          ORDER BY priority ASC`,
         [projectId]
       );
-      directiveRows = res.rows;
+      allDirectiveRows = res.rows;
     } else {
-      const res = await pool.query<{ content: string; priority: number }>(
-        `SELECT content, priority FROM directives
+      const res = await pool.query<{ content: string; priority: number; tags: string[] | null }>(
+        `SELECT content, priority, tags FROM directives
          WHERE status = 'active' AND scope = 'workspace'
          ORDER BY priority ASC`
       );
-      directiveRows = res.rows;
+      allDirectiveRows = res.rows;
     }
 
+    // Phase 38: Context-aware directive selection
+    const taskWords = taskText ? tokenizeTaskText(taskText) : [];
+    const activeSkillTags = skillTags ?? [];
+    const { directives: selectedDirectives, stats: directiveStats } = selectDirectives(
+      allDirectiveRows,
+      taskWords,
+      activeSkillTags,
+      Math.min(tier2Budget, totalRemaining),
+    );
+
     let tier2Used = 0;
-    if (directiveRows.length > 0) {
+
+    if (selectedDirectives.length > 0) {
       const header = '## Directives\n';
       let body = '';
-      for (const row of directiveRows) {
+      for (const row of selectedDirectives) {
         const line = row.content + '\n';
-        const lineTokens = estimateTokens(line);
         // Check both tier budget AND total remaining
         if (estimateTokens(header + body + line) > tier2Budget) break;
         if (estimateTokens(header + body + line) > totalRemaining) break;
@@ -103,6 +143,7 @@ export async function buildMemoryContext(opts: {
         sections.push(section);
         totalRemaining -= tokens;
         tier2Used = tokens;
+        capturedDirectiveStats = directiveStats;
       }
     }
     const tier2Spare = Math.max(0, tier2Budget - tier2Used);
@@ -196,8 +237,14 @@ export async function buildMemoryContext(opts: {
 
   } catch (e) {
     console.error('[memory-injection] Error building memory context:', e)
+    if (returnMeta) return { text: '', directive_selection: undefined };
     return '';
   }
 
-  return sections.join('\n\n');
+  const text = sections.join('\n\n');
+
+  if (returnMeta) {
+    return { text, directive_selection: capturedDirectiveStats };
+  }
+  return text;
 }
