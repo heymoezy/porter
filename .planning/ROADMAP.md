@@ -77,7 +77,7 @@
 - [x] **Phase 35: Agent Evolution Loop** — Recommendations, proposed changes, supervised apply (completed 2026-04-03)
 - [x] **Phase 36: Skill Quality Scoring** — Real quality tiers, audit job (completed 2026-04-03)
 - [x] **Phase 37: Template Skill UX** — Assignment authoring, effectiveness display (completed 2026-04-03)
-- [ ] **Phase 38: Adaptive Agent Context** — Smart directive injection, agent self-querying, deep execution, context compression
+- [x] **Phase 38: Adaptive Agent Context** — Smart directive injection, agent self-querying, deep execution, context compression (completed 2026-04-03)
 
 ## Phase Details
 
@@ -200,7 +200,7 @@ Plans:
   3. Bridge supports 50+ turn agent sequences with automatic context summarization — tool call results beyond turn N are compressed to preserve token budget without losing key facts
   4. Verbose tool call results (>500 tokens) are automatically summarized before being appended to conversation history, with full results available via a recall mechanism if needed
   5. Context pressure metrics (tokens used, turns elapsed, compression events) are logged per dispatch in bridge_dispatch_log for observability
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 38-01-PLAN.md — Context-aware directive injection (directive scoring, tags migration, selective Tier 2)
 - [ ] 38-02-PLAN.md — Deep execution & tool output compression (context-compressor service, 70%/85% triggers)
@@ -224,4 +224,4 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 35. Agent Evolution Loop | 3/3 | Complete    | 2026-04-03 | - |
 | 36. Skill Quality Scoring | v5.0 | Complete    | 2026-04-03 | - |
 | 37. Template Skill UX | 2/2 | Complete    | 2026-04-03 | - |
-| 38. Adaptive Agent Context | 2/3 | In Progress|  | - |
+| 38. Adaptive Agent Context | 3/3 | Complete   | 2026-04-03 | - |

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 38-01-PLAN.md
-last_updated: "2026-04-03T04:13:23.348Z"
+stopped_at: Completed 38-03-PLAN.md
+last_updated: "2026-04-03T04:19:31.151Z"
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 21
-  completed_plans: 21
+  completed_plans: 22
 ---
 
 # Project State
@@ -93,6 +93,8 @@ Plan: 1 of 3
 - [Phase 38]: dispatchCompression uses internal Bridge HTTP — avoids circular imports and reuses gateway selection
 - [Phase 38]: triggerCompression is fire-and-forget from upsertSession — zero latency cost on dispatch hot path
 - [Phase 38-adaptive-agent-context]: [Phase 38-01]: scoreDirective uses (10 - floor(priority/10)) for priority bonus; ALWAYS_INJECT_THRESHOLD=2; SkillCandidate gains tags field; directiveStats travels via RoutingContext; selectDirectives fallback when no task context
+- [Phase 38]: context_stats written via UPDATE after INSERT — session data only available after upsertSession resolves
+- [Phase 38]: Admin routes are at routes/admin/bridge.ts — routes/v1/admin/bridge.ts is not registered in index.ts (dead duplicate)
 
 ### Roadmap Evolution
 
@@ -110,6 +112,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T04:13:23.345Z
-Stopped at: Completed 38-01-PLAN.md
+Last session: 2026-04-03T04:19:31.148Z
+Stopped at: Completed 38-03-PLAN.md
 Resume file: None
