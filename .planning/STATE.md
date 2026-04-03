@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
-status: executing
-stopped_at: "Completed 43-01-PLAN.md"
-last_updated: "2026-04-03T10:48:00Z"
+status: unknown
+stopped_at: Completed 44-01-PLAN.md
+last_updated: "2026-04-03T13:53:43.774Z"
 progress:
   total_phases: 17
-  completed_phases: 11
-  total_plans: 35
-  completed_plans: 35
+  completed_phases: 12
+  total_plans: 37
+  completed_plans: 37
 ---
 
 # Project State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
-**Current focus:** Phase 43 — Inter-Agent Messaging
+**Current focus:** Phase 44 — Autonomous Job Queue
 
 ## Current Position
 
-Phase: 43 (Inter-Agent Messaging) — EXECUTING
+Phase: 44 (Autonomous Job Queue) — EXECUTING
 Plan: 2 of 2
 
 ## Performance Metrics
@@ -70,6 +70,10 @@ Plan: 2 of 2
 - [Phase 43-01]: porter-delegation used as routing username in RoutingContext to distinguish in-process delegation from HTTP agent-message calls
 - [Phase 43-01]: Peer-to-peer guard checks sourceAgent !== undefined to allow admin-UI/direct API calls (no sourceAgent) through unblocked — only explicit non-Porter agents with targetAgent are blocked
 - [Phase 43-01]: violation intent in msg_bus_events is the audit-trail pattern for all policy enforcement decisions in the Bridge layer
+- [Phase 44-01]: selectBestAgent uses effectiveness_score DESC with enabled=1 filter for skill-based agent matching
+- [Phase 44-01]: selectBestGateway uses JSONB ->> operator with field:value format for flexible capability matching
+- [Phase 44-01]: scheduleSystemJob dedup checks trigger_type + source='system' + status IN (pending, running)
+- [Phase 44-01]: Gateway assignment happens between job claim and executeJob in tick() — keeps claim logic unchanged
 
 ### Pending Todos
 
@@ -82,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T10:37:45.591Z
-Stopped at: Completed 42-04-PLAN.md (checkpoint:human-verify pending)
+Last session: 2026-04-03T13:53:43.771Z
+Stopped at: Completed 44-01-PLAN.md
 Resume file: None

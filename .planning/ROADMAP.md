@@ -322,7 +322,7 @@ Plans:
   2. A job requiring a specific skill routes to an agent that has that skill assigned — a job requiring tool support routes to a gateway that supports tools
   3. Porter self-enqueues a scheduled job (e.g., health check, monitoring sweep) without any human-initiated request — verified by observing a job with source=system in the queue
   4. Admin can view the live job queue, running jobs, completed jobs, and assignment history with gateway, agent, duration, and outcome for each
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 44-01-PLAN.md — Migration + job-assignment service + scheduler self-scheduling (AJQ-01, AJQ-02, AJQ-03)
@@ -397,7 +397,7 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 41. Session Intelligence | 3/3 | Complete    | 2026-04-03 | - |
 | 42. Task Decomposition Engine | 4/4 | Complete    | 2026-04-03 | - |
 | 43. Inter-Agent Messaging | 1/2 | In Progress|  | - |
-| 44. Autonomous Job Queue | v6.0 | 0/2 | Not started | - |
+| 44. Autonomous Job Queue | 1/2 | In Progress|  | - |
 | 45. Porter Control Plane | v6.0 | 0/TBD | Not started | - |
 | 46. Project Monitoring | v6.0 | 0/TBD | Not started | - |
 | 47. Project Substrate | v6.0 | 0/TBD | Not started | - |
