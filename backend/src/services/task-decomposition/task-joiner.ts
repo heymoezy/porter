@@ -8,6 +8,9 @@
  *   - replan: >50% failed — trigger replanning (caller handles)
  *   - failed: all tasks failed — error summary
  *
+ * Phase 43: Loads inter-agent delegation audit trail from msg_bus_events
+ * and includes delegation context in synthesis prompts.
+ *
  * Uses routingEngine for LLM synthesis (no new dispatch paths).
  * Exports: joinResults
  */
@@ -68,23 +71,69 @@ function rowToTaskNode(row: TaskNodeRow): TaskNode {
   };
 }
 
+// ── Delegation audit ──────────────────────────────────────────────────────────
+
+interface DelegationAudit {
+  totalMessages: number;
+  agents: string[];
+  gateways: string[];
+  totalLatencyMs: number;
+}
+
+/**
+ * Load inter-agent delegation audit trail from msg_bus_events for a DAG root.
+ * Returns aggregate stats about how work was distributed across agents.
+ */
+async function loadDelegationAudit(correlationId: string): Promise<DelegationAudit> {
+  const { rows } = await pool.query<{
+    cnt: number;
+    agents: string[];
+    gateways: string[];
+    total_latency: number;
+  }>(
+    `SELECT
+       COUNT(*)::int AS cnt,
+       ARRAY_AGG(DISTINCT target_agent) FILTER (WHERE target_agent IS NOT NULL) AS agents,
+       ARRAY_AGG(DISTINCT target_gateway) FILTER (WHERE target_gateway IS NOT NULL) AS gateways,
+       COALESCE(SUM(latency_ms), 0)::int AS total_latency
+     FROM msg_bus_events
+     WHERE correlation_id = $1 AND status = 'delivered'`,
+    [correlationId],
+  );
+
+  const row = rows[0];
+  return {
+    totalMessages: row?.cnt ?? 0,
+    agents: row?.agents?.filter(Boolean) ?? [],
+    gateways: row?.gateways?.filter(Boolean) ?? [],
+    totalLatencyMs: row?.total_latency ?? 0,
+  };
+}
+
 // ── synthesize ─────────────────────────────────────────────────────────────────
 
 /**
  * Build a synthesis response when all subtasks completed successfully.
  * Uses LLM to produce a clear, coherent reply from the distributed results.
+ * Includes inter-agent delegation audit context when available.
  */
 async function synthesize(root: TaskNode, completedTasks: TaskNode[]): Promise<JoinResult> {
   const taskLines = completedTasks
     .map(t => `- ${t.description}: ${JSON.stringify(t.result)}`)
     .join('\n');
 
+  // IAM-04: Load delegation audit trail for synthesis context
+  const audit = await loadDelegationAudit(root.rootId);
+  const auditNote = audit.totalMessages > 0
+    ? `\n\nDelegation summary: ${audit.totalMessages} inter-agent messages across agents [${audit.agents.join(', ')}] via gateways [${audit.gateways.join(', ')}], total delegation latency ${audit.totalLatencyMs}ms.`
+    : '';
+
   const prompt = `You are Porter. These subtasks were executed for the user's request.
 
 Original request: "${root.description}"
 
 Completed work:
-${taskLines}
+${taskLines}${auditNote}
 
 Synthesize these results into a clear, complete response to the original request.`;
 
@@ -107,6 +156,7 @@ Synthesize these results into a clear, complete response to the original request
 /**
  * Build a synthesis response when >50% of tasks completed but some failed.
  * Synthesizes completed work and notes what couldn't be finished.
+ * Includes inter-agent delegation audit context when available.
  */
 async function synthesizePartial(
   root: TaskNode,
@@ -121,6 +171,12 @@ async function synthesizePartial(
     .map(t => `- ${t.description}: ${t.error ?? 'Unknown error'}`)
     .join('\n');
 
+  // IAM-04: Load delegation audit trail for synthesis context
+  const audit = await loadDelegationAudit(root.rootId);
+  const auditNote = audit.totalMessages > 0
+    ? `\n\nDelegation summary: ${audit.totalMessages} inter-agent messages across agents [${audit.agents.join(', ')}] via gateways [${audit.gateways.join(', ')}], total delegation latency ${audit.totalLatencyMs}ms.`
+    : '';
+
   const prompt = `You are Porter. These subtasks were executed for the user's request.
 
 Original request: "${root.description}"
@@ -129,7 +185,7 @@ Completed work:
 ${completedLines}
 
 Failed tasks (could not be completed):
-${failedLines}
+${failedLines}${auditNote}
 
 Synthesize the completed results into a clear response. Note what couldn't be completed and suggest next steps.`;
 

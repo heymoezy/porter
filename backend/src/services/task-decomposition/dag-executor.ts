@@ -5,11 +5,15 @@
  * parallel via the existing routing engine. Handles failures with retry/cancel
  * logic and emits SSE progress events for every state transition.
  *
+ * Phase 43: dispatchSubtask uses delegateToAgent() for assigned agents,
+ * ensuring structured inter-agent messaging with correlation tracking.
+ *
  * Exports: executeTaskTree, markReadyTasks, getTreeStats
  */
 
 import { pool } from '../../db/client.js';
 import { routingEngine } from '../bridge/routing-engine.js';
+import { delegateToAgent } from '../bridge/agent-delegation.js';
 import { broadcast } from '../sse-hub.js';
 import type { TaskNode, TaskResult, DAGStats } from './types.js';
 import {
@@ -135,10 +139,12 @@ export async function markReadyTasks(rootId: string): Promise<TaskNode[]> {
 // ── dispatchSubtask ───────────────────────────────────────────────────────────
 
 /**
- * Dispatch a single subtask via the routing engine.
+ * Dispatch a single subtask via the routing engine or agent delegation.
  *
  * Loads completed dependency results to provide context to the LLM.
- * Selects gateway based on task's assignedAgentId and projectId.
+ * If the task has an assignedAgentId, dispatches through delegateToAgent()
+ * for structured inter-agent messaging with correlation tracking (IAM-01/04).
+ * Otherwise falls back to direct routing.
  */
 async function dispatchSubtask(task: TaskNode): Promise<TaskResult> {
   // Load completed dependency results for context injection
@@ -161,6 +167,27 @@ async function dispatchSubtask(task: TaskNode): Promise<TaskResult> {
     ? `${task.description}\n\nContext from prior work:\n${contextStr}\n\nRespond with your result. Be specific and actionable.`
     : `${task.description}\n\nRespond with your result. Be specific and actionable.`;
 
+  // IAM-01/IAM-04: If task has an assigned agent, use structured delegation
+  // This ensures correlation tracking and msg_bus audit trail
+  if (task.assignedAgentId) {
+    const delegation = await delegateToAgent({
+      task: prompt,
+      correlationId: task.rootId,
+      sourceAgent: 'porter',
+      targetAgent: task.assignedAgentId,
+      context: task.context,
+      hopCount: task.depth,
+      ttlMs: 120_000,
+    });
+
+    return {
+      response: delegation.response,
+      model: delegation.model,
+      tokens: 0,
+    };
+  }
+
+  // Fallback: no assigned agent — use direct routing
   const decision = await routingEngine.select({
     message: prompt,
     agentId: task.assignedAgentId ?? undefined,
