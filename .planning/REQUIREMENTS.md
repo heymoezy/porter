@@ -1,165 +1,102 @@
-# Requirements: Porter v5.0 — Living Skills
+# Requirements: Porter v6.0 — The Orchestration Platform
 
-**Defined:** 2026-04-02
-**Core Value:** Skills must be live behavioral modules — selected at runtime, injected into prompts, measured for effectiveness, and evolved through feedback.
+**Defined:** 2026-04-03
+**Core Value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
 
-## v5.0 Requirements
+## v6.0 Requirements
 
-### Source of Truth
+### Task Decomposition
 
-- [x] **SOT-01**: template_skills junction table is the canonical source for template→skill mappings (populated from existing JSONB arrays via migration)
-- [x] **SOT-02**: persona_skills junction table is the canonical source for agent→skill mappings (uses skill_id not skill_name)
-- [x] **SOT-03**: SKILLS.md is a thin manifest generated from DB assignments at instantiate-time — contains skill IDs, short descriptions, pack paths, and runtime rules only
-- [x] **SOT-04**: Instantiation flow reads skills from template_skills junction table, not from skills_text column
-- [x] **SOT-05**: skills_text column on agent_templates is deprecated — migration preserves data but instantiation ignores it
-- [x] **SOT-06**: Changing skill assignments in DB triggers SKILLS.md regeneration for affected personas
+- [ ] **TDE-01**: Complex requests are classified (simple vs multi-step) before dispatch — simple go direct, complex get decomposed
+- [ ] **TDE-02**: Complex tasks produce a dependency DAG (task_nodes table) with parallel and sequential relationships
+- [ ] **TDE-03**: DAG executor dispatches ready tasks in parallel, respects dependencies, tracks completion
+- [ ] **TDE-04**: When a subtask fails, the joiner decides: retry, replan the subtask, or escalate to user
+- [ ] **TDE-05**: Final synthesis step combines subtask results into a coherent response for the caller
 
-### Skill Pack Explorer
+### Inter-Agent Messaging
 
-- [x] **PKX-01**: Admin can view a skill pack's file tree (SKILL.md, prompt.md, guides/*, examples/*, meta/skill.json) from the skill detail view
-- [x] **PKX-02**: Admin can read and edit any file in a skill pack from the browser
-- [x] **PKX-03**: Admin can save edited pack files back to disk via API
-- [x] **PKX-04**: Pack diagnostics show missing files, empty files, generic scaffold detection, and word count/richness score per skill
-- [x] **PKX-05**: Template and agent detail pages have "open assigned skills" link that navigates to the skill pack explorer
+- [ ] **IAM-01**: Agents can dispatch structured work to other agents via the existing /api/v1/bridge/agent-message endpoint
+- [ ] **IAM-02**: Message chains track correlation IDs, hop counts, and full audit trail via msg_bus_events table
+- [ ] **IAM-03**: Porter acts as coordinator — all inter-agent messages route through Porter, not peer-to-peer
+- [ ] **IAM-04**: Agent responses feed back through the decomposition engine for synthesis
 
-### Runtime Skill Selection
+### Autonomous Job Queue
 
-- [x] **RTS-01**: Every dispatch gathers the agent's assigned skills from persona_skills
-- [x] **RTS-02**: A skill selector ranks candidate skills against the task using description, triggers, tags, and historical success
-- [x] **RTS-03**: Only the top 0-3 most relevant skill packs are injected into the dispatch prompt context
-- [x] **RTS-04**: Every dispatch logs which skills were candidates, which were selected, and the ranking scores
-- [x] **RTS-05**: Dispatches with no relevant skills proceed without skill injection (graceful zero-skill path)
+- [ ] **AJQ-01**: agent_jobs table stores structured work items with status lifecycle (queued → assigned → running → complete/failed)
+- [ ] **AJQ-02**: Job assignment engine matches jobs to best available agent based on skills, gateway capabilities, and cost tier
+- [ ] **AJQ-03**: Porter can self-dispatch jobs (scheduled analysis, health checks, monitoring) without human trigger
+- [ ] **AJQ-04**: Admin can view job queue, running jobs, completed jobs, and assignment history
 
-### Feedback Telemetry
+### Gateway Capabilities
 
-- [x] **FBK-01**: skill_feedback_events table captures per-dispatch skill effectiveness signals (positive, negative, correction, retry, abandon, success)
-- [x] **FBK-02**: Each persona_skill record tracks times_selected, times_completed, positive_feedback_count, negative_feedback_count, last_used_at, effectiveness_score
-- [x] **FBK-03**: Thumbs up/down on a dispatch response stores a skill_feedback_event linked to the selected skills
-- [x] **FBK-04**: Skill effectiveness scores are aggregated and queryable per skill, per agent, and per template
-- [x] **FBK-05**: Admin UI shows effectiveness metrics on skill detail, agent detail, and template detail pages
+- [ ] **GWC-01**: Each gateway has a capabilities registry (strengths, cost_tier, context_window, tool_support, agentic flag)
+- [ ] **GWC-02**: Task dispatch selects gateway based on task requirements matched against capabilities
+- [ ] **GWC-03**: Dynamic tool schema — only send tools that the target gateway actually supports
+- [ ] **GWC-04**: All 5 gateways (Claude CLI, Codex CLI, Gemini CLI, OpenClaw, Ollama) work through task dispatch with tool execution
 
-### Agent Evolution
+### Project Monitoring
 
-- [x] **EVO-01**: A background job analyzes feedback patterns and generates skill recommendations (add, remove, rewrite prompt, enrich examples)
-- [x] **EVO-02**: Recommendations are stored as proposed changes visible in admin UI with diffs
-- [x] **EVO-03**: Admin can approve or reject proposed skill changes (supervised mutation)
-- [x] **EVO-04**: Approved changes update persona_skills and regenerate SKILLS.md automatically
-- [x] **EVO-05**: Evolution events are logged (what changed, why, which feedback cluster triggered it)
+- [ ] **PMN-01**: project_watchers table stores watcher configs (name, type, schedule, config JSONB, output mode, status)
+- [ ] **PMN-02**: Watcher types: web_search, email_monitor, rss_feed, custom (freeform prompt)
+- [ ] **PMN-03**: Watcher results appear in project activity feed with source badge, summary, expandable detail
+- [ ] **PMN-04**: Important findings trigger notifications (in-feed + optional email)
+- [ ] **PMN-05**: Admin ops view shows all active watchers across projects with last/next run and resource usage
 
-### Skill Quality
+### Project Substrate
 
-- [x] **QLT-01**: Every skill has a computed quality score based on: file completeness, specificity, example count, guide richness, prompt uniqueness, recent usage, success rate, user feedback
-- [x] **QLT-02**: Quality tiers replace pack_status: scaffold, baseline, production, high-performing, stale
-- [x] **QLT-03**: Skills table and marketplace show quality tier badges instead of ready/partial/missing
-- [x] **QLT-04**: Admin can filter skills by quality tier
-- [x] **QLT-05**: A quality audit job can score all skills and flag scaffolds for enrichment
+- [ ] **PSB-01**: Every project folder has a canonical /_system/ directory with project.md, checkpoint.md, memory.md, decisions.md, tasks.md, agents.md
+- [ ] **PSB-02**: Default project structure includes /_system/, /intake/, /context/, /work/, /outputs/, /archive/
+- [ ] **PSB-03**: Upload triggers intelligence ingress: classify, route to correct project location, emit signal, update project context
+- [ ] **PSB-04**: Atlas agent monitors project structure health and repairs drift
 
-### Template Skill UX
+### Session Intelligence
 
-- [x] **TUX-01**: Template detail view shows assigned skills from template_skills with why each is attached
-- [x] **TUX-02**: Admin can attach, detach, and reorder skills on a template from the template detail page
-- [x] **TUX-03**: Template authoring supports marking skills as mandatory vs optional and setting priority
-- [x] **TUX-04**: Template detail shows recent skill effectiveness across all spawned agents using that template
-- [x] **TUX-05**: Template detail shows what runtime auto-detection will select for sample task prompts
+- [ ] **SIN-01**: Memory frozen at session start — injected in system prompt, never mutated mid-session
+- [ ] **SIN-02**: FTS5 cross-session search — agents can query past sessions for relevant context
+- [ ] **SIN-03**: Dispatch outcome scoring feeds back into routing confidence — Porter learns which gateways work best
 
-### Adaptive Agent Context
+### Porter Control Plane
 
-- [x] **ACX-01**: Agents can execute SQL queries against concepts/directives during dispatch for on-demand context retrieval
-- [x] **ACX-02**: memory-injection.ts selects directives based on task type, skills, and conversation context (avg injected < 50% of total)
-- [x] **ACX-03**: Bridge supports 50+ turn sequences with automatic context summarization
-- [x] **ACX-04**: Verbose tool results (>500 tokens) auto-summarized before appending to history
-- [x] **ACX-05**: Context pressure metrics logged per dispatch in bridge_dispatch_log
+- [ ] **PCP-01**: Porter persona enforces delegation doctrine — direct answer vs handoff vs parallel vs escalate
+- [ ] **PCP-02**: Subagent depth limits (max 2 hops) with tool restrictions on child dispatches
+- [ ] **PCP-03**: Approval gates for high-risk actions (code mutation, external API calls, file deletion)
 
-## Bridge Task Dispatch (Phase 39)
+## v7.0 Requirements (Deferred)
 
-### Task Dispatch
+### Self-Improvement
+- **SIM-01**: Agent-driven development — agents detect bugs, write patches, ship through verification loop
+- **SIM-02**: Pattern mining across dispatch history — auto-tune routing weights
+- **SIM-03**: Self-modifying codebase with approval gates and rollback safety
 
-- [x] **BTD-01**: POST /api/v1/tasks/dispatch accepts a task prompt, optional gateway, optional cwd, and returns a task ID with 202 status
-- [x] **BTD-02**: CLI adapters (Codex, Gemini, Claude) implement task execution via TaskExecutor that spawns the CLI with tool access in the specified working directory
-- [x] **BTD-03**: Task output streams back via SSE events (bridge:task-progress with incremental output, bridge:task-complete with full result)
-- [x] **BTD-04**: bridge_tasks table tracks lifecycle (queued → running → complete → failed) with output, duration, gateway used
-- [x] **BTD-05**: Admin can view running/completed tasks with output in the Bridge panel
-
-## v6.0 Requirements (Deferred)
-
-### Battle Arena
-- **BTL-01**: Head-to-head battles with same prompt, blind judge ensemble, Elo ratings
-- **BTL-02**: Pre-launch calibration (50 battles, positional win-rate delta < 10%)
-
-### Autonomous Evolution
-- **AEV-01**: Controlled auto-evolution for low-risk changes (manifest-only, example additions)
-- **AEV-02**: Agent identity boundaries — evolution never silently rewrites soul/identity
-
-### Skill Content Enrichment
-- **SCE-01**: AI-assisted skill pack enrichment (generate domain-specific prompts, examples, guides)
-- **SCE-02**: Skill pack versioning with rollback
+### SaaS Billing
+- **BIL-01**: Lemon Squeezy subscription integration
+- **BIL-02**: Usage metering per workspace
+- **BIL-03**: Plan limit enforcement
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Full autonomous evolution (Level 3) | Safety risk — supervised mutation first, auto-evolution in v6.0 |
-| Skill marketplace/sharing between workspaces | Single-tenant first, multi-tenant later |
-| Real-time skill injection during streaming | Skill selection happens before dispatch, not mid-stream |
-| Custom skill DSL/programming language | Skills are markdown + JSON, not code |
-| Skill dependencies/composition | Individual skills first, composition later |
+| Mobile native app | Web-first, responsive design |
+| Self-hosting support | SaaS-only for now |
+| Custom model training | Use existing providers via routing |
+| Video/voice calling | Chat and messaging only |
+| Distributed substrate (multi-machine) | v6.0 is local-first; distributed is v7+ |
+| Unsupervised code mutation | Always requires verification loop |
 
 ## Traceability
 
+Updated during roadmap creation.
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SOT-01 | Phase 31 | Complete |
-| SOT-02 | Phase 31 | Complete |
-| SOT-03 | Phase 31 | Complete |
-| SOT-04 | Phase 31 | Complete |
-| SOT-05 | Phase 31 | Complete |
-| SOT-06 | Phase 31 | Complete |
-| PKX-01 | Phase 32 | Complete |
-| PKX-02 | Phase 32 | Complete |
-| PKX-03 | Phase 32 | Complete |
-| PKX-04 | Phase 32 | Complete |
-| PKX-05 | Phase 32 | Complete |
-| RTS-01 | Phase 33 | Complete |
-| RTS-02 | Phase 33 | Complete |
-| RTS-03 | Phase 33 | Complete |
-| RTS-04 | Phase 33 | Complete |
-| RTS-05 | Phase 33 | Complete |
-| FBK-01 | Phase 34 | Complete |
-| FBK-02 | Phase 34 | Complete |
-| FBK-03 | Phase 34 | Complete |
-| FBK-04 | Phase 34 | Complete |
-| FBK-05 | Phase 34 | Complete |
-| EVO-01 | Phase 35 | Complete |
-| EVO-02 | Phase 35 | Complete |
-| EVO-03 | Phase 35 | Complete |
-| EVO-04 | Phase 35 | Complete |
-| EVO-05 | Phase 35 | Complete |
-| QLT-01 | Phase 36 | Pending |
-| QLT-02 | Phase 36 | Pending |
-| QLT-03 | Phase 36 | Pending |
-| QLT-04 | Phase 36 | Pending |
-| QLT-05 | Phase 36 | Pending |
-| TUX-01 | Phase 37 | Complete |
-| TUX-02 | Phase 37 | Complete |
-| TUX-03 | Phase 37 | Complete |
-| TUX-04 | Phase 37 | Complete |
-| TUX-05 | Phase 37 | Complete |
-| ACX-01 | Phase 38 | Complete |
-| ACX-02 | Phase 38 | Complete |
-| ACX-03 | Phase 38 | Complete |
-| ACX-04 | Phase 38 | Complete |
-| ACX-05 | Phase 38 | Complete |
-| BTD-01 | Phase 39 | Complete |
-| BTD-02 | Phase 39 | Complete |
-| BTD-03 | Phase 39 | Complete |
-| BTD-04 | Phase 39 | Complete |
-| BTD-05 | Phase 39 | Complete |
+| (populated by roadmapper) | | |
 
 **Coverage:**
-- v5.0 requirements: 41 total (36 Living Skills + 5 Bridge Task Dispatch)
-- Mapped to phases: 41
-- Unmapped: 0
+- v6.0 requirements: 30 total
+- Mapped to phases: 0
+- Unmapped: 30
 
 ---
-*Requirements defined: 2026-04-02*
-*Last updated: 2026-04-03 after Phase 39 Bridge Task Dispatch definition*
+*Requirements defined: 2026-04-03*
+*Last updated: 2026-04-03 after v6.0 milestone definition*
