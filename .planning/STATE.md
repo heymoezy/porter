@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
-status: unknown
-stopped_at: Completed 47-01-PLAN.md
-last_updated: "2026-04-03T19:05:01.751Z"
+status: phase-complete
+stopped_at: Completed 47-03-PLAN.md
+last_updated: "2026-04-03T19:11:04.729Z"
 progress:
   total_phases: 17
-  completed_phases: 15
-  total_plans: 45
-  completed_plans: 45
+  completed_phases: 16
+  total_plans: 48
+  completed_plans: 48
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 ## Current Position
 
-Phase: 47 (Project Substrate) — EXECUTING
-Plan: 2 of 3
+Phase: 47 (Project Substrate) — COMPLETE
+Plan: 3 of 3 (all complete)
 
 ## Performance Metrics
 
@@ -99,6 +99,8 @@ Plan: 2 of 3
 - [Phase 47]: Wizard provisioning is fire-and-forget (after COMMIT) to avoid rolling back DB on filesystem errors
 - [Phase 47]: Existing _system/ files preserved on re-provisioning (idempotent)
 - [Phase 47]: Project root resolved from porter_config.json projects mount with fallback to dataDir/projects
+- [Phase 47]: Missing canonical directories auto-repaired; missing _system files only flagged (content files are sacred)
+- [Phase 47]: Atlas runs every 30 min (900 ticks) -- structural drift is slow-changing, first run at tick 900 to avoid startup load
 
 ### Pending Todos
 
@@ -111,6 +113,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T19:05:01.747Z
-Stopped at: Completed 47-01-PLAN.md
+Last session: 2026-04-03T19:11:04.726Z
+Stopped at: Completed 47-03-PLAN.md
 Resume file: None

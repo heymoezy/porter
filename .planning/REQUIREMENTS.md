@@ -47,7 +47,7 @@
 - [x] **PSB-01**: Every project folder has a canonical /_system/ directory with project.md, checkpoint.md, memory.md, decisions.md, tasks.md, agents.md
 - [x] **PSB-02**: Default project structure includes /_system/, /intake/, /context/, /work/, /outputs/, /archive/
 - [x] **PSB-03**: Upload triggers intelligence ingress: classify, route to correct project location, emit signal, update project context
-- [ ] **PSB-04**: Atlas agent monitors project structure health and repairs drift
+- [x] **PSB-04**: Atlas agent monitors project structure health and repairs drift
 
 ### Session Intelligence
 
@@ -119,7 +119,7 @@
 | PSB-01 | Phase 47 | Complete |
 | PSB-02 | Phase 47 | Complete |
 | PSB-03 | Phase 47 | Complete |
-| PSB-04 | Phase 47 | Pending |
+| PSB-04 | Phase 47 | Complete |
 
 **Coverage:**
 - v6.0 requirements: 30 total

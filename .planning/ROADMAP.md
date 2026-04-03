@@ -95,7 +95,7 @@
 - [x] **Phase 44: Autonomous Job Queue** - Agent jobs pulled by best-matched agents, Porter self-dispatches scheduled work, admin visibility (completed 2026-04-03)
 - [x] **Phase 45: Porter Control Plane** - Porter enforces delegation doctrine, depth limits, and approval gates for high-risk actions (completed 2026-04-03)
 - [x] **Phase 46: Project Monitoring** - Per-project watchers (web search, RSS, email, custom) run autonomously and surface findings in activity feed (completed 2026-04-03)
-- [ ] **Phase 47: Project Substrate** - Every project has a canonical /_system/ directory, structured intake, intelligence ingress, and Atlas agent
+- [x] **Phase 47: Project Substrate** - Every project has a canonical /_system/ directory, structured intake, intelligence ingress, and Atlas agent (completed 2026-04-03)
 
 ## Phase Details
 
@@ -368,7 +368,7 @@ Plans:
   2. A new project folder has all canonical directories present: /_system/, /intake/, /context/, /work/, /outputs/, /archive/
   3. Uploading a file to a project triggers the intelligence ingress pipeline: file is classified, moved to the correct directory, a signal is emitted to Memory V2, and the project context document is updated
   4. Atlas agent detects and repairs structural drift — missing directories are recreated, misplaced files are flagged, and the repair is logged in project activity
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 47-01-PLAN.md — Project substrate provisioning service + migration (PSB-01, PSB-02)
@@ -402,4 +402,4 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 44. Autonomous Job Queue | 2/2 | Complete    | 2026-04-03 | - |
 | 45. Porter Control Plane | 2/2 | Complete    | 2026-04-03 | - |
 | 46. Project Monitoring | 3/3 | Complete    | 2026-04-03 | - |
-| 47. Project Substrate | 2/3 | In Progress|  | - |
+| 47. Project Substrate | 3/3 | Complete   | 2026-04-03 | - |
