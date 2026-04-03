@@ -1,6 +1,6 @@
 {
   "name": "porter-brain",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "private": true,
   "description": "Porter Brain — Fastify API backend, DB owner, AI router",
   "dependencies": {

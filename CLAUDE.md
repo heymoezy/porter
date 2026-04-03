@@ -14,7 +14,7 @@ Porter Brain is the **API backend and database owner**. Together with Porter Adm
 - **Config:** `porter_config.json` (via `PORTER_DATA_DIR` env var)
 - **Database:** PostgreSQL (Drizzle ORM) — Brain owns this, Admin connects to it
 - **Tests:** `cd tests && npx playwright test` (35 tests)
-- **Version:** v5.0.0
+- **Version:** v5.0.1
 
 ## Monorepo Structure
 
