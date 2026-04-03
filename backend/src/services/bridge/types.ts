@@ -84,6 +84,8 @@ export interface GatewayRow {
   source: GatewaySource;
   priority: number;
   capabilities: string[];
+  /** Structured capability record (populated when DB has JSONB object). Callers should treat as opaque if not needed. */
+  capabilityRecord?: Record<string, unknown>;
   metadata: Record<string, unknown>;
   enabled: number;
   maskedDisplay: string;
