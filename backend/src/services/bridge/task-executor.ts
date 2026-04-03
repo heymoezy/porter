@@ -94,23 +94,31 @@ export interface BuildTaskArgsResult {
 export function buildTaskArgs(
   gatewayType: GatewayType,
   prompt: string,
-  cwd: string
+  cwd: string,
+  tools?: string[],
 ): BuildTaskArgsResult {
   switch (gatewayType) {
-    case 'claude_cli':
+    case 'claude_cli': {
+      const baseArgs = [
+        '-p',
+        '--dangerously-skip-permissions',
+        '--output-format', 'stream-json',
+        '--verbose',
+        '--no-session-persistence',
+      ];
+      // GWC-03: Pass tool allowlist if specified
+      if (tools?.length) {
+        baseArgs.push('--allowedTools', tools.join(','));
+      }
       return {
-        args: [
-          '-p',
-          '--dangerously-skip-permissions',
-          '--output-format', 'stream-json',
-          '--verbose',
-          '--no-session-persistence',
-        ],
+        args: baseArgs,
         stdinPrompt: prompt,
         spawnCwd: cwd,
       };
+    }
 
     case 'gemini_cli':
+      // Note: Gemini CLI (--yolo) does not support per-tool filtering
       return {
         args: [
           '-p', prompt,
@@ -121,6 +129,7 @@ export function buildTaskArgs(
       };
 
     case 'codex_cli':
+      // Note: Codex CLI (--dangerously-bypass-approvals-and-sandbox) does not support per-tool filtering
       return {
         args: [
           'exec',
@@ -162,11 +171,12 @@ export async function* executeTask(
   prompt: string,
   cwd: string,
   signal: AbortSignal,
-  timeoutMs?: number
+  timeoutMs?: number,
+  tools?: string[],
 ): AsyncGenerator<TaskEvent> {
   validateCwd(cwd);
 
-  const { args, stdinPrompt, spawnCwd } = buildTaskArgs(gatewayType, prompt, cwd);
+  const { args, stdinPrompt, spawnCwd } = buildTaskArgs(gatewayType, prompt, cwd, tools);
 
   // Clamp timeout
   const clampedTimeout = Math.min(

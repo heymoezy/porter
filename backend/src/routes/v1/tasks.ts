@@ -29,6 +29,8 @@ import {
 } from '../../services/bridge/http-task-executor.js';
 import { createAdapter } from '../../services/bridge/adapters/index.js';
 import type { GatewayType } from '../../services/bridge/types.js';
+import { normalizeCapabilities } from '../../services/bridge/capability-registry.js';
+import type { GatewayCapabilityRecord } from '../../services/bridge/capability-registry.js';
 
 // ── In-memory abort controllers (for cancellation) ───────────────────────────
 
@@ -41,6 +43,11 @@ const BINARY_DEFAULTS: Record<string, string> = {
   gemini_cli: 'gemini',
   codex_cli: 'codex',
 };
+
+// ── Capability filter helpers ─────────────────────────────────────────────────
+
+/** GWC-02: Cost tier rank for max-budget filtering (lower rank = cheaper) */
+const COST_TIER_RANK: Record<string, number> = { premium: 2, standard: 1, budget: 0 };
 
 // ── DB row type for raw gateways query ───────────────────────────────────────
 
@@ -234,6 +241,8 @@ async function runTaskInBackground(
   timeoutMs: number | undefined,
   ac: AbortController,
   httpConfig?: HttpGatewayConfig,
+  toolSupport?: string,
+  tools?: string[],
 ): Promise<void> {
   const startEpoch = Date.now();
 
@@ -254,9 +263,10 @@ async function runTaskInBackground(
   try {
     await getTaskQueue(gatewayType).add(async () => {
       // ── Choose executor based on gateway type ──────────────────────────
+      const effectiveToolSupport = (toolSupport as 'full' | 'limited' | 'none' | undefined) ?? 'full';
       const eventSource = HTTP_TASK_CAPABLE_TYPES.has(gatewayType) && httpConfig
-        ? executeHttpTask(httpConfig, prompt, cwd, ac.signal)
-        : executeTask(binaryPath, gatewayType, prompt, cwd, ac.signal, timeoutMs);
+        ? executeHttpTask(httpConfig, prompt, cwd, ac.signal, effectiveToolSupport)
+        : executeTask(binaryPath, gatewayType, prompt, cwd, ac.signal, timeoutMs, tools);
 
       const result = await processTaskEvents(taskId, gatewayType, startEpoch, ac, eventSource);
       finalBroadcast = result.finalBroadcast;
@@ -316,6 +326,11 @@ export default async function tasksV1Routes(
       const agentId = body.agent_id as string | undefined;
       const projectId = body.project_id as string | undefined;
       const timeoutMs = body.timeout_ms as number | undefined;
+      // GWC-02: Capability filtering params
+      const requiredStrengths = body.required_strengths as string[] | undefined;
+      const costTierMax = body.cost_tier_max as 'premium' | 'standard' | 'budget' | undefined;
+      // GWC-03: CLI tool allowlist
+      const tools = body.tools as string[] | undefined;
 
       if (typeof prompt !== 'string' || prompt.trim().length === 0) {
         return reply.code(400).send(err('VALIDATION_ERROR', 'prompt is required'));
@@ -346,6 +361,7 @@ export default async function tasksV1Routes(
       let binaryPath: string;
       let modelName: string;
       let httpConfig: HttpGatewayConfig | undefined;
+      let toolSupport: string | undefined;
 
       if (gateway) {
         // Explicit gateway requested — validate it's task-capable
@@ -383,6 +399,10 @@ export default async function tasksV1Routes(
         binaryPath = (meta.binary_path as string | undefined) ?? BINARY_DEFAULTS[raw.type] ?? raw.type;
         modelName = (meta.default_model as string | undefined) ?? raw.name;
 
+        // GWC-03: Extract tool_support from explicit gateway capabilities
+        const rawCaps = normalizeCapabilities(raw.capabilities);
+        toolSupport = rawCaps?.tool_support ?? 'full';
+
         // Build HTTP config for HTTP-type gateways
         if (HTTP_TASK_CAPABLE_TYPES.has(selectedGatewayType)) {
           httpConfig = buildHttpConfig(selectedGatewayType, raw, meta, modelName);
@@ -406,13 +426,38 @@ export default async function tasksV1Routes(
           );
         }
 
-        const chosen = taskCapable[0];
+        // GWC-02: Filter by capability requirements, then pick by priority
+        let capFiltered = taskCapable;
+        if (requiredStrengths?.length || costTierMax) {
+          const maxRank = costTierMax ? (COST_TIER_RANK[costTierMax] ?? 2) : 2;
+
+          const filtered = taskCapable.filter(row => {
+            const caps = normalizeCapabilities(row.capabilities);
+            if (!caps) return true; // unstructured — don't filter out
+
+            const tierRank = COST_TIER_RANK[caps.cost_tier] ?? 2;
+            if (tierRank > maxRank) return false;
+
+            if (requiredStrengths?.length) {
+              if (!requiredStrengths.every(s => caps.strengths.includes(s as GatewayCapabilityRecord['strengths'][number]))) return false;
+            }
+            return true;
+          });
+
+          if (filtered.length > 0) capFiltered = filtered; // graceful degradation
+        }
+
+        const chosen = capFiltered[0];
         const meta = (typeof chosen.metadata === 'object' && chosen.metadata !== null)
           ? (chosen.metadata as Record<string, unknown>)
           : {};
         selectedGatewayType = chosen.type as GatewayType;
         binaryPath = (meta.binary_path as string | undefined) ?? BINARY_DEFAULTS[chosen.type] ?? chosen.type;
         modelName = (meta.default_model as string | undefined) ?? chosen.name;
+
+        // GWC-03: Extract tool_support from chosen gateway capabilities
+        const chosenCaps = normalizeCapabilities(chosen.capabilities);
+        toolSupport = chosenCaps?.tool_support ?? 'full';
 
         // Build HTTP config for HTTP-type gateways
         if (HTTP_TASK_CAPABLE_TYPES.has(selectedGatewayType)) {
@@ -446,6 +491,8 @@ export default async function tasksV1Routes(
         timeoutMs,
         ac,
         httpConfig,
+        toolSupport,
+        tools,
       );
 
       return reply.code(202).send(

@@ -29,6 +29,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { TaskEvent } from './types.js';
 import { validateCwd } from './task-executor.js';
+import { filterToolsBySupport } from './capability-registry.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -344,6 +345,7 @@ export async function* executeHttpTask(
   prompt: string,
   cwd: string,
   signal: AbortSignal,
+  toolSupport: 'full' | 'limited' | 'none' = 'full',
 ): AsyncGenerator<TaskEvent> {
   // Validate cwd upfront
   validateCwd(cwd);
@@ -361,6 +363,9 @@ export async function* executeHttpTask(
   if (config.token) {
     headers['Authorization'] = `Bearer ${config.token}`;
   }
+
+  // GWC-03: Filter tools by gateway capability level
+  const effectiveTools = filterToolsBySupport(PORTER_TOOLS, toolSupport);
 
   // System message — suppress Porter's context-loading startup protocol
   const systemMessage: ChatMessage = {
@@ -396,8 +401,8 @@ export async function* executeHttpTask(
         body: JSON.stringify({
           model: config.model,
           messages,
-          tools: PORTER_TOOLS,
-          tool_choice: 'auto',
+          tools: effectiveTools.length > 0 ? effectiveTools : undefined,
+          tool_choice: effectiveTools.length > 0 ? 'auto' : undefined,
           stream: false,
           max_tokens: 4096,
           temperature: 0.2,
