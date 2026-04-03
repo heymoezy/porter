@@ -77,7 +77,7 @@
 - [x] **Phase 33: Runtime Skill Selector** — Rank skills per task, inject packs, log selection (completed 2026-04-02)
 - [x] **Phase 34: Feedback Telemetry** — Capture signals, effectiveness scoring (completed 2026-04-02)
 - [ ] **Phase 35: Agent Evolution Loop** — Recommendations, proposed changes, supervised apply
-- [ ] **Phase 36: Skill Quality Scoring** — Real quality tiers, audit job
+- [x] **Phase 36: Skill Quality Scoring** — Real quality tiers, audit job (completed 2026-04-03)
 - [ ] **Phase 37: Template Skill UX** — Assignment authoring, effectiveness display
 
 ## Phase Details
@@ -200,5 +200,5 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 33. Runtime Skill Selector | v5.0 | 2/2 | Complete | 2026-04-02 |
 | 34. Feedback Telemetry | 4/4 | Complete   | 2026-04-02 | - |
 | 35. Agent Evolution Loop | v5.0 | 0/TBD | Not started | - |
-| 36. Skill Quality Scoring | v5.0 | 0/TBD | Not started | - |
+| 36. Skill Quality Scoring | v5.0 | Complete    | 2026-04-03 | - |
 | 37. Template Skill UX | v5.0 | 0/TBD | Not started | - |
