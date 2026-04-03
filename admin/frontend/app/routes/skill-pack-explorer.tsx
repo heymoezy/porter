@@ -317,7 +317,7 @@ export default function SkillPackExplorer() {
                       key={selectedFile}
                       value={editorContent}
                       height="100%"
-                      theme={oneDark}
+                      theme={typeof document !== "undefined" && !document.documentElement.classList.contains("light") ? oneDark : "light"}
                       extensions={[isJson ? jsonLang() : markdown()]}
                       onChange={handleEditorChange}
                       basicSetup={{
