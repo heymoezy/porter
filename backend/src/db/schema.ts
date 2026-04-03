@@ -1182,3 +1182,35 @@ export const bridgeTasks = pgTable('bridge_tasks', {
   dispatchLogId: text('dispatch_log_id'),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
+
+// ── Task Nodes (Phase 42 — Task Decomposition Engine) ─────────────────────────
+
+export const taskNodes = pgTable('task_nodes', {
+  id: text('id').primaryKey(),
+  rootId: text('root_id').notNull(),
+  parentId: text('parent_id'),
+  projectId: text('project_id'),
+  chatId: text('chat_id'),
+
+  description: text('description').notNull(),
+  taskType: text('task_type').default('general'),
+  assignedAgentId: text('assigned_agent_id'),
+
+  depth: integer('depth').default(0),
+  dependencies: jsonb('dependencies').default(sql`'[]'::jsonb`),
+
+  status: text('status').notNull().default('pending'),
+  attempt: integer('attempt').default(0),
+  maxAttempts: integer('max_attempts').default(3),
+
+  context: jsonb('context').default(sql`'{}'::jsonb`),
+  result: jsonb('result'),
+  error: text('error'),
+
+  tokenBudget: integer('token_budget'),
+  tokensUsed: integer('tokens_used').default(0),
+
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  startedAt: doublePrecision('started_at'),
+  completedAt: doublePrecision('completed_at'),
+});

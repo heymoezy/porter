@@ -35,6 +35,7 @@ import { migrateTuxV1 } from './db/migrate-tux-v1.js';
 import { migrateAcxV2 } from './db/migrate-acx-v2.js';
 import { migrateAcxV3 } from './db/migrate-acx-v3.js';
 import { migrateSinV1 } from './db/migrate-sin-v1.js';
+import { migrateTdeV1 } from './db/migrate-tde-v1.js';
 import { seedTemplates } from './db/seed-templates.js';
 import { detectAndUpsertGateways } from './services/bridge/startup-detector.js';
 import * as scheduler from './services/scheduler.js';
@@ -209,6 +210,7 @@ const start = async () => {
     await migrateAcxV2(pool);
     await migrateAcxV3(pool);
     await migrateSinV1(pool);
+    await migrateTdeV1(pool);
     await seedTemplates();
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
