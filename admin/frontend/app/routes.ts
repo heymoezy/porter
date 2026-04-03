@@ -30,5 +30,6 @@ export default [
     route("settings", "routes/settings.tsx"),
     route("intelligence", "routes/intelligence.tsx"),
     route("files", "routes/files.tsx"),
+    route("watchers", "routes/watchers.tsx"),
   ]),
 ] satisfies RouteConfig
