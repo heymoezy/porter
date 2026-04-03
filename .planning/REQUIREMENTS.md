@@ -38,8 +38,8 @@
 
 - [x] **PMN-01**: project_watchers table stores watcher configs (name, type, schedule, config JSONB, output mode, status)
 - [x] **PMN-02**: Watcher types: web_search, email_monitor, rss_feed, custom (freeform prompt)
-- [ ] **PMN-03**: Watcher results appear in project activity feed with source badge, summary, expandable detail
-- [ ] **PMN-04**: Important findings trigger notifications (in-feed + optional email)
+- [x] **PMN-03**: Watcher results appear in project activity feed with source badge, summary, expandable detail
+- [x] **PMN-04**: Important findings trigger notifications (in-feed + optional email)
 - [x] **PMN-05**: Admin ops view shows all active watchers across projects with last/next run and resource usage
 
 ### Project Substrate
@@ -113,8 +113,8 @@
 | PCP-03 | Phase 45 | Complete |
 | PMN-01 | Phase 46 | Complete |
 | PMN-02 | Phase 46 | Complete |
-| PMN-03 | Phase 46 | Pending |
-| PMN-04 | Phase 46 | Pending |
+| PMN-03 | Phase 46 | Complete |
+| PMN-04 | Phase 46 | Complete |
 | PMN-05 | Phase 46 | Complete |
 | PSB-01 | Phase 47 | Pending |
 | PSB-02 | Phase 47 | Pending |

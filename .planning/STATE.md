@@ -3,13 +3,14 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 46-03-PLAN.md
-last_updated: "2026-04-03T18:44:23.545Z"
+stopped_at: Completed 46-02-PLAN.md
+last_updated: "2026-04-03T18:44:50.017Z"
 progress:
   total_phases: 17
-  completed_phases: 15
+  completed_phases: 14
   total_plans: 42
-  completed_plans: 43
+  completed_plans: 42
+
 ---
 
 # Project State
@@ -23,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 ## Current Position
 
-Phase: 46 (Project Monitoring) — COMPLETE
+Phase: 46 (Project Monitoring) — EXECUTING
 Plan: 3 of 3
 
 ## Performance Metrics
@@ -89,6 +90,9 @@ Plan: 3 of 3
 - [Phase 46-01]: Custom watcher routes to Ollama (qwen2.5-coder:1.5b) for cheap local inference with graceful fallback
 - [Phase 46-01]: Watcher jobs use source='watcher' (not 'system') to distinguish from system jobs in queries
 - [Phase 46-03]: Client-side filtering for watchers — count <100, avoids extra API complexity
+- [Phase 46-02]: logWatcherFinding kept internal (not exported) to encapsulate notification pipeline within watcher execution
+- [Phase 46-02]: Email notification failures are non-blocking -- finding already stored, email is best-effort
+- [Phase 46-02]: DELETE watcher cascades findings manually (no FK cascade) for explicit control
 
 ### Pending Todos
 
@@ -101,6 +105,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T18:44:23.541Z
-Stopped at: Completed 46-03-PLAN.md
+Last session: 2026-04-03T18:44:50.013Z
+Stopped at: Completed 46-02-PLAN.md
 Resume file: None
