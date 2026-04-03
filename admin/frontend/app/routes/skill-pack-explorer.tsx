@@ -227,11 +227,11 @@ export default function SkillPackExplorer() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Breadcrumb — fixed */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-border text-xs shrink-0">
+        <Link to="/forge" className="text-text3 hover:text-text transition-colors">Forge</Link>
+        <span className="text-text3">/</span>
         <Link to="/skills" className="text-text3 hover:text-text transition-colors">Skills</Link>
         <span className="text-text3">/</span>
         <span className="text-text font-medium">{skill.name}</span>
-        <span className="text-text3">/</span>
-        <span className="text-accent-porter font-medium">Pack Explorer</span>
         <Button size="xs" variant="ghost" onClick={() => navigate(-1)} className="ml-auto">
           <ChevronLeft className="size-3 mr-1" />Back
         </Button>
