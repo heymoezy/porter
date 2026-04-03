@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
-status: unknown
-stopped_at: Completed 34-03-PLAN.md
-last_updated: "2026-04-03T00:58:34.660Z"
+status: executing
+stopped_at: Completed 35-01-PLAN.md
+last_updated: "2026-04-03T01:17:45Z"
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 13
-  completed_plans: 14
+  total_plans: 16
+  completed_plans: 15
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Skills must be live behavioral modules — selected at runtime, injected into prompts, measured, and evolved through feedback.
-**Current focus:** Phase 34 — Feedback Telemetry
+**Current focus:** Phase 35 — Agent Evolution Loop
 
 ## Current Position
 
-Phase: 34 (Feedback Telemetry) — COMPLETE
-Plan: 4 of 4 (all plans complete)
+Phase: 35 (Agent Evolution Loop) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -77,6 +77,10 @@ Plan: 4 of 4 (all plans complete)
 - [Phase 34]: dispatchId lives in React state only (not sessionStorage) — feedback buttons are ephemeral, no persistence needed
 - [Phase 34]: Template effectiveness placed in BUILD tab of agent-detail.tsx — BUILD tab is data-driven view, logical home for aggregated metrics
 - [Phase 34]: FBK-04 test stubs expect camelCase keys (skillId/agentId) but plan spec uses snake_case — left as snake_case per plan, test keys need update when enabling FBK-04
+- [Phase 35-01]: Migration ID 035_skill_evolution_proposals follows 034_ prefix convention from Phase 34
+- [Phase 35-01]: analyzeSkillEvolution is a pure analytics function — reads feedback, writes proposals, no other side effects
+- [Phase 35-01]: Deduplication check on persona_id + skill_id + change_type + status=pending prevents proposal explosion across 6h analyzer runs
+- [Phase 35-01]: triggering_feedback_ids capped at 20 entries per proposal to avoid bloated JSONB
 
 ### Pending Todos
 
@@ -90,6 +94,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T18:22:31.358Z
-Stopped at: Completed 34-03-PLAN.md
+Last session: 2026-04-03T01:17:45Z
+Stopped at: Completed 35-01-PLAN.md
 Resume file: None
