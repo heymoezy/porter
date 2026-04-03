@@ -4,7 +4,7 @@
 
 project: porter
 version: v5.1.0
-updated: 2026-04-02
+updated: 2026-04-03
 updated_by: claude-opus-4.6
 
 ## Architecture
@@ -12,35 +12,38 @@ updated_by: claude-opus-4.6
 Single monorepo (heymoezy/porter). One Fastify process on :3001. API metering business model.
 3 pillars: Bridge (hub), Forge (factory), Recall (shared brain).
 5 gateways: Claude CLI, OpenClaw, Ollama, Codex CLI, Gemini CLI.
-**IMPORTANT: Only port :3001 exists. Port 5175 is DEAD. Brain + Admin merged.**
+**Port 5175 is DEAD. Everything on :3001.**
 
-## Milestone v5.0 — Living Skills
+## Milestone v5.0 — Living Skills — COMPLETE
 
-### Completed
-- **Phase 31**: Source of Truth Cleanup (3 plans) — template_skills/persona_skills canonical, SKILLS.md generated
-- **Phase 32**: Skill Pack Explorer (4 plans) — CodeMirror 6 file editor at /skills/:id/pack, quality diagnostics, badges everywhere
-- **Phase 33**: Runtime Skill Selector (2 plans) — selectSkills() keyword scoring, prompt injection, skills_used JSONB logging
-- **Phase 34**: Feedback Telemetry (4 plans) — skill_feedback_events table, thumbs up/down, effectiveness_score, admin API + UI bars
-- **Phase 36**: Skill Quality Scoring (1 plan) — measurable quality_score (0-100), scaffold/baseline/production/high-performing/stale tiers, audit endpoint, tier filters.
+All 8 phases shipped, 36+ requirements verified:
+- Phase 31: Source of Truth Cleanup
+- Phase 32: Skill Pack Explorer (CodeMirror file editor)
+- Phase 33: Runtime Skill Selector (dispatch-time skill injection)
+- Phase 34: Feedback Telemetry (thumbs up/down, effectiveness scoring)
+- Phase 35: Agent Evolution Loop (background analyzer, proposals, approve/reject)
+- Phase 36: Skill Quality Scoring (0-100 score, tier badges, audit)
+- Phase 37: Template Skill UX (skill config command center on templates)
+- Phase 38: Adaptive Agent Context (directive scoring, compression, observability)
 
-### Remaining (2 phases)
-1. **Phase 35**: Agent Evolution Loop — background job analyzes feedback → skill recommendations → admin approve/reject
-2. **Phase 37**: Template Skill UX — template detail as skill config command center, drag-drop, mandatory/optional, preview
+## Queued Work
 
-### Dependency Chain
-- Phase 35 depends on Phase 34 ✓
-- Phase 36 depends on Phase 34 ✓ (can parallel with 35)
-- Phase 37 depends on Phase 36
+1. **Project Monitoring System** — from /home/lobster/projects/Fatburger Lawsuit/correspondence/PORTER-MONITORING-FEATURE-PROMPT.md
+   - Automated watchers per project (web search, email, RSS, custom)
+   - Activity feed integration, notifications, admin overview
+   - Real use case: Fatburger lawsuit monitoring
 
-## Session Notes (2026-04-02)
-- Updated all paths from /home/lobster/documents/porter/ → /home/lobster/projects/porter/
-- porter-admin standalone repo is ARCHIVED
-- Brain + Admin share one version number
-- Port 5175 is DEAD — only 3001
-- Moe wants delegation through Porter Bridge to other models (Codex, OpenClaw) when approaching session limits
-- Phase 34 verification still pending (34-03 executed but phase not verified/closed yet)
+2. **Project Substrate V1** — from ~/.openclaw/workspace/PROJECT-SUBSTRATE-HANDOFF-TO-CLAUDE.md
+   - Every folder = project container with structure/intake/work/outputs/memory/governance
+   - Upload = intelligence ingress (classify, route, link, interpret, surface)
+   - Atlas governance, Recall memory semantics, Bridge routing
+   - /_system/ model for operational docs
+   - Replace Files tab with proper workspace shell
 
-## Resume Instructions
-1. Verify Phase 34 (run verifier, mark complete)
-2. Push all local commits to remote — already done (2026-04-02 cleanup commit)
-3. Continue with Phase 35 (or delegate to Codex/OpenClaw via Bridge)
+## Recent Session Notes (2026-04-03)
+- v5.0.1: Fixed all routes on Brain :3001 (were in dead admin backend)
+- v5.0.1: 560MB dead code removed, full repo cleanup
+- v5.1.0: Phase 38 Adaptive Agent Context shipped
+- Full changelog restored (v1.0.0-v5.1.0)
+- Skills Curator agent created
+- OpenClaw feedback: Phases 32-34, 37 accepted; 35-36 had issues (now fixed)
