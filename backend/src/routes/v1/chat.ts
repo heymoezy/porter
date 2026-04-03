@@ -255,23 +255,6 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       identityPrefix = `[Collaborator: ${displayName}, Project Role: ${request.projectRole}]\n`;
     }
 
-    // Memory V3: inject tiered memory context before streaming
-    const memoryContext = await buildMemoryContext({
-      agentId: agentId,
-      projectId: projectId,
-      searchQuery: message,
-    });
-
-    // Injection order: [identity prefix] → [memory context] → [user message]
-    // Only the original user message is persisted to chat history (not augmented content)
-    let augmentedMessage = message;
-    if (memoryContext) {
-      augmentedMessage = memoryContext + '\n\n---\n\n' + augmentedMessage;
-    }
-    if (identityPrefix) {
-      augmentedMessage = identityPrefix + augmentedMessage;
-    }
-
     // Build dynamic system prompt from agent template (if available)
     let systemPrompt: string | undefined;
     if (agentId) {
@@ -284,8 +267,10 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       } catch { /* fallback to default */ }
     }
 
-    // Phase 33: Runtime skill selection — inject relevant skill packs into system prompt
+    // Phase 33: Runtime skill selection — runs BEFORE memory injection so skill tags can
+    // influence directive selection (Phase 38 — context-aware directive injection)
     let skillsUsed: RoutingContext['skillsUsed'] | undefined;
+    let selectedSkillTags: string[] = [];
     if (agentId) {
       try {
         const skillResult = await selectSkills(agentId, message);
@@ -299,10 +284,34 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
             threshold: 1,
             totalCandidates: skillResult.candidates.length,
           };
+          // Collect unique tags from selected skills for directive affinity matching
+          selectedSkillTags = [...new Set(
+            skillResult.selected.flatMap(s => s.tags ?? [])
+          )];
         }
       } catch {
         // Skill selection is best-effort — never block a dispatch
       }
+    }
+
+    // Memory V3: inject tiered memory context before streaming
+    // Phase 38: pass taskText + skillTags for context-aware directive selection
+    const memoryContext = await buildMemoryContext({
+      agentId: agentId,
+      projectId: projectId,
+      searchQuery: message,
+      taskText: message,
+      skillTags: selectedSkillTags,
+    });
+
+    // Injection order: [identity prefix] → [memory context] → [user message]
+    // Only the original user message is persisted to chat history (not augmented content)
+    let augmentedMessage = message;
+    if (memoryContext) {
+      augmentedMessage = memoryContext + '\n\n---\n\n' + augmentedMessage;
+    }
+    if (identityPrefix) {
+      augmentedMessage = identityPrefix + augmentedMessage;
     }
 
     // STRM-02: prefer strong model for user chat, fall back to ollama if unavailable

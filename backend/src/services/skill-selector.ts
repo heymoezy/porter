@@ -29,6 +29,7 @@ export interface SkillCandidate {
   skillId: string;
   name: string;
   description: string;
+  tags: string[];
   score: number;
   reason: string;
 }
@@ -202,6 +203,7 @@ export async function selectSkills(
         skillId: skill.id,
         name: skill.name,
         description: skill.description || '',
+        tags: tagsArr,
         score,
         reason,
       };
