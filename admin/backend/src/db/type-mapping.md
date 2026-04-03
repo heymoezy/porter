@@ -1,6 +1,8 @@
 # SQLite-to-PostgreSQL Type Mapping Reference
 
-Authoritative reference for all SQLite-to-PG translations needed across the porter-admin migration (Phases 2-6). Every executor should consult this document when converting route files.
+> **MIGRATION COMPLETE** (Phase 13.05, 2026-03-23). SQLite is fully eliminated. Porter uses PostgreSQL exclusively via Drizzle ORM. This document is retained as a reference for understanding the migration patterns used. No new SQLite code should ever be written.
+
+Authoritative reference for the SQLite-to-PG translations used during the porter-admin migration (Phases 2-6).
 
 ## 1. Column Type Mapping
 

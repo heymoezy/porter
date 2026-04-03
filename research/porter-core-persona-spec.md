@@ -2,7 +2,7 @@
 
 Date: 2026-03-10
 Status: Proposed locked system persona
-Related: [porter-agents-v2-design-brief.md](/home/lobster/documents/porter/research/porter-agents-v2-design-brief.md)
+Related: [porter-agents-v2-design-brief.md](/home/lobster/projects/porter/research/porter-agents-v2-design-brief.md)
 
 ## Purpose
 

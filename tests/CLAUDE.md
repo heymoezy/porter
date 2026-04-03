@@ -7,7 +7,7 @@
 - **Current count:** 35 tests
 
 ## Rules
-- All 35 tests must pass before any commit to porter.py
+- All 35 tests must pass before any commit to the main branch
 - Never modify tests to make them pass — fix the source code instead
 - Screenshots go in `tests/screenshots/` — do not commit unless intentionally updating baselines
 - Login creds for tests: `moe` / `porter`

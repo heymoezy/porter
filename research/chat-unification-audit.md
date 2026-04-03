@@ -1,7 +1,9 @@
 # Chat Unification Audit — GPT-5.4 Findings (2026-03-14)
 
+> **HISTORICAL DOCUMENT** — This audit was performed against porter.py era code. porter.py is now deleted. Fastify is the sole backend. Findings are for reference only.
+
 ## Source
-GPT-5.4 audited the global Porter chat path only. Findings verified against porter.py v0.31.58.
+GPT-5.4 audited the global Porter chat path only. Findings verified against porter.py v0.31.58 (now deleted).
 
 ## The Problem
 Three separate chat systems with different behavior, context models, and capabilities:

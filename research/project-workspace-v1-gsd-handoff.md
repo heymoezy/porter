@@ -38,10 +38,10 @@ Porter should instead expose:
 
 This is consistent with existing internal research:
 
-- [Porter Files — Obsidian-Inspired Spec](/home/lobster/documents/porter/research/porter-files-obsidian.md)
-- [Porter Artifacts V1](/home/lobster/documents/porter/research/porter-artifacts-v1.md)
-- [Porter Memory V3](/home/lobster/documents/porter/research/porter-memory-v3-redesign.md)
-- [Porter Bridge — Design Brief](/home/lobster/documents/porter/research/cli-runtime-design-brief.md)
+- [Porter Files — Obsidian-Inspired Spec](/home/lobster/projects/porter/research/porter-files-obsidian.md)
+- [Porter Artifacts V1](/home/lobster/projects/porter/research/porter-artifacts-v1.md)
+- [Porter Memory V3](/home/lobster/projects/porter/research/porter-memory-v3-redesign.md)
+- [Porter Bridge — Design Brief](/home/lobster/projects/porter/research/cli-runtime-design-brief.md)
 
 ## 3. Product Thesis
 
@@ -121,11 +121,11 @@ Worker outputs should become first-class notes or artifacts with provenance, not
 
 ### What exists now
 
-- Brain file CRUD and raw root/path browsing via [backend/src/routes/v1/files.ts](/home/lobster/documents/porter/backend/src/routes/v1/files.ts)
+- Brain file CRUD and raw root/path browsing via [backend/src/routes/v1/files.ts](/home/lobster/projects/porter/backend/src/routes/v1/files.ts)
 - file registry with project/contact/conversation associations
-- internal/operator files surface in [porter-admin frontend files route](/home/lobster/documents/porter-admin/frontend/app/routes/files.tsx)
-- isolated Bridge surface in [porter-admin bridge route](/home/lobster/documents/porter-admin/frontend/app/routes/bridge.tsx)
-- isolated Recall surface in [porter-admin recall route](/home/lobster/documents/porter-admin/frontend/app/routes/recall.tsx)
+- internal/operator files surface in `admin/frontend/app/routes/files.tsx` (porter-admin merged into monorepo)
+- isolated Bridge surface in `admin/frontend/app/routes/bridge.tsx`
+- isolated Recall surface in `admin/frontend/app/routes/recall.tsx`
 - strong Memory V3 architectural direction in research
 
 ### What is missing
@@ -988,7 +988,7 @@ Recommended user flow:
    - first worker tasks
    - explicit review and state update path
 
-This is much stronger than the current wizard behavior in [backend/src/routes/v1/wizard.ts](/home/lobster/documents/porter/backend/src/routes/v1/wizard.ts), which is still closer to proposal generation than real autonomous project formation.
+This is much stronger than the current wizard behavior in [backend/src/routes/v1/wizard.ts](/home/lobster/projects/porter/backend/src/routes/v1/wizard.ts), which is still closer to proposal generation than real autonomous project formation.
 
 ## 29. Anti-Rail-Drift Mechanisms
 
@@ -1216,19 +1216,19 @@ This section is intentionally approximate. It gives GSD likely ownership zones s
 
 Likely touch points:
 
-- [backend/src/routes/v1/wizard.ts](/home/lobster/documents/porter/backend/src/routes/v1/wizard.ts)
-- [backend/src/routes/v1/projects.ts](/home/lobster/documents/porter/backend/src/routes/v1/projects.ts)
-- [backend/src/routes/v1/agents.ts](/home/lobster/documents/porter/backend/src/routes/v1/agents.ts)
-- [backend/src/routes/v1/jobs.ts](/home/lobster/documents/porter/backend/src/routes/v1/jobs.ts)
-- [backend/src/services/scheduler.ts](/home/lobster/documents/porter/backend/src/services/scheduler.ts)
-- [backend/src/services/ai-router.ts](/home/lobster/documents/porter/backend/src/services/ai-router.ts)
-- project/state schema files in [backend/src/db/schema.ts](/home/lobster/documents/porter/backend/src/db/schema.ts)
+- [backend/src/routes/v1/wizard.ts](/home/lobster/projects/porter/backend/src/routes/v1/wizard.ts)
+- [backend/src/routes/v1/projects.ts](/home/lobster/projects/porter/backend/src/routes/v1/projects.ts)
+- [backend/src/routes/v1/agents.ts](/home/lobster/projects/porter/backend/src/routes/v1/agents.ts)
+- [backend/src/routes/v1/jobs.ts](/home/lobster/projects/porter/backend/src/routes/v1/jobs.ts)
+- [backend/src/services/scheduler.ts](/home/lobster/projects/porter/backend/src/services/scheduler.ts)
+- [backend/src/services/ai-router.ts](/home/lobster/projects/porter/backend/src/services/ai-router.ts)
+- project/state schema files in [backend/src/db/schema.ts](/home/lobster/projects/porter/backend/src/db/schema.ts)
 
 Likely frontend surfaces:
 
 - project creation/launcher flow in product UI repo
 - project detail `Overview`, `Workers`, and `State`
-- optional admin/status mirrors in `porter-admin`
+- optional admin/status mirrors in `admin/` (monorepo)
 
 ### Milestone 1 / IA Lock
 
@@ -1242,8 +1242,8 @@ Likely touch points:
 
 Likely touch points:
 
-- [backend/src/routes/v1/files.ts](/home/lobster/documents/porter/backend/src/routes/v1/files.ts) or new notes routes beside it
-- [backend/src/db/schema.ts](/home/lobster/documents/porter/backend/src/db/schema.ts)
+- [backend/src/routes/v1/files.ts](/home/lobster/projects/porter/backend/src/routes/v1/files.ts) or new notes routes beside it
+- [backend/src/db/schema.ts](/home/lobster/projects/porter/backend/src/db/schema.ts)
 - project UI detail route(s) in product UI repo
 - possibly shared editor components in product UI repo
 
@@ -1261,14 +1261,14 @@ Likely touch points:
 Likely touch points:
 
 - Bridge/runtime metadata producers in legacy/product backend surface
-- [porter-admin frontend/app/routes/bridge.tsx](/home/lobster/documents/porter-admin/frontend/app/routes/bridge.tsx) as reference only
+- `admin/frontend/app/routes/bridge.tsx` as reference only
 - project docs note header/right rail in product UI repo
 
 ### Milestone 5 / Memory V3 State Surface
 
 Likely touch points:
 
-- [research/porter-memory-v3-redesign.md](/home/lobster/documents/porter/research/porter-memory-v3-redesign.md) as source contract
+- [research/porter-memory-v3-redesign.md](/home/lobster/projects/porter/research/porter-memory-v3-redesign.md) as source contract
 - memory/state schema and migration files
 - project detail `State` tab or right rail in product UI repo
 - any memory injection or promotion services
@@ -1277,7 +1277,7 @@ Likely touch points:
 
 Likely touch points:
 
-- [porter-admin frontend/app/routes/recall.tsx](/home/lobster/documents/porter-admin/frontend/app/routes/recall.tsx) as current semantics reference
+- `admin/frontend/app/routes/recall.tsx` as current semantics reference
 - memory query APIs
 - review/promotion workflow UI in product UI repo
 
@@ -1571,4 +1571,4 @@ Expected:
 
 If you want to point GSD at this artifact with minimal extra framing, use:
 
-> Use [project-workspace-v1-gsd-handoff.md](/home/lobster/documents/porter/research/project-workspace-v1-gsd-handoff.md) as the source of truth. Plan and schedule the full `Project Workspace V1` initiative, including autonomous project formation, docs/artifacts/state separation, Bridge provenance at point of work, and Recall refactor into a review/promotion surface. Preserve the project-first IA and do not reintroduce public top-level Files.
+> Use [project-workspace-v1-gsd-handoff.md](/home/lobster/projects/porter/research/project-workspace-v1-gsd-handoff.md) as the source of truth. Plan and schedule the full `Project Workspace V1` initiative, including autonomous project formation, docs/artifacts/state separation, Bridge provenance at point of work, and Recall refactor into a review/promotion surface. Preserve the project-first IA and do not reintroduce public top-level Files.

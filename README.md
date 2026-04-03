@@ -7,20 +7,19 @@ Canonical Bridge contract: `BRIDGE.md` at repo root.
 
 | Component | Port | Path |
 |-----------|------|------|
-| Brain (Fastify API) | :3001 | `backend/` |
-| Admin (SaaS control plane) | :5175 | `admin/` |
+| Brain + Admin (single Fastify process) | :3001 | `backend/` + `admin/` |
 
 Business model: API metering. Any future UI/frontend is an API customer.
 
 ## Architecture
 ```
-API Consumers -> Porter Brain (:3001) -> PostgreSQL
-                      ^         |
-Porter Admin (:5175) -+    Bridge Layer
-                            |
-                  +---------+---------+
-                  |    |    |    |    |
-               OpenClaw Ollama Claude Codex Gemini
+API Consumers -> Porter (:3001) -> PostgreSQL
+                      |
+                 Bridge Layer
+                      |
+        +-------------+-------------+
+        |    |    |    |    |
+   OpenClaw Ollama Claude Codex Gemini
 ```
 
 ## Development
@@ -30,6 +29,3 @@ cd backend && npm install && npm run dev   # Fastify API on :3001
 
 ## Tech Stack
 Fastify 5 . TypeScript . Drizzle ORM . PostgreSQL 16
-
-## Legacy
-`porter.py` — Original Python monolith (~900KB). Deprecated.

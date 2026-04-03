@@ -1,5 +1,7 @@
 # Overnight Release Plan — 2026-03-23
 
+> **HISTORICAL DOCUMENT** — This plan was for Phase 13.05 PostgreSQL migration (completed 2026-03-23). porter.py is now deleted. PostgreSQL is the sole DB. All tasks below have been completed.
+
 **Owner:** Claude (taking over from Moe + GSD)
 **Trigger:** GSD completes Phase 13.05 PostgreSQL migration
 **Goal:** Stabilize, consolidate, ship, push, document

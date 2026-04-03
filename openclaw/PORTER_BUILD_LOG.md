@@ -1,5 +1,7 @@
 # PORTER_BUILD_LOG
 
+> **HISTORICAL DOCUMENT** — This log covers the porter.py era (port :8877). porter.py is deleted. Fastify is the sole backend (:3001). This log is retained for historical context only. The canonical checkpoint is `/home/lobster/projects/porter/CHECKPOINT.md`.
+
 ## Purpose
 Single source of truth for implementation progress so any agent session (Claude/Codex/OpenClaw) can recover context fast.
 

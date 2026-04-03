@@ -1,5 +1,5 @@
 // Porter UI regression tests
-// Run: cd /home/lobster/documents/porter/tests && npx playwright test
+// Run: cd /home/lobster/projects/porter/tests && npx playwright test
 //
 // These tests catch the exact classes of bugs we've been hitting:
 // - Elements visible when they shouldn't be

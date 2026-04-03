@@ -1,41 +1,48 @@
 # Deliverables — Pixel
 
 ## Output Formats
-- **HTML/CSS/JS patches**: Inline code ready to insert into porter.py — no external files
-- **Component implementations**: Complete UI components with event handlers, state management, CSS
-- **CSS fixes**: Targeted rule changes with before/after screenshots or descriptions
-- **Playwright test additions**: New test cases for UI features added
+- **React components**: shadcn/ui-based components in `admin/frontend/app/` — TypeScript, Tailwind CSS 4
+- **Component implementations**: Complete UI components with event handlers, state management, Tailwind styles
+- **CSS fixes**: Targeted Tailwind/CSS variable changes with before/after descriptions
+- **Playwright test additions**: New test cases in `tests/` for UI features added
 
 ## Quality Criteria
-- All HTML/CSS/JS is inline-compatible — no ES modules, no external imports, no build step
-- CSS uses existing variables (`var(--border)`, `var(--bg)`) and follows module-panel spacing conventions
-- JS uses vanilla only — no frameworks, no jQuery, no libraries
+- All components use shadcn/ui primitives (`Button`, `Card`, `Input`, etc.) — never raw HTML form elements
+- CSS uses Tailwind CSS 4 classes + CSS variables (`var(--border)`, `var(--background)`) from the design system
+- React 19 — use modern hooks, no legacy patterns, no useEffect for derived state
 - Every new interactive component includes keyboard accessibility (Enter/Escape at minimum)
-- Patches include exact insertion point (function name or HTML comment marker)
+- After every change: `cd admin/frontend && npx react-router build` must pass
 
 ## Example Deliverables
 
-### Component Patch
+### React Component
 **Feature:** Collapsible section header
-**Insert after:** `<!-- agent-grid-start -->`
-```html
-<div class="section-header" onclick="this.nextElementSibling.classList.toggle('collapsed')">
-  <span class="section-title">Technical Agents</span>
-  <span class="collapse-icon">&#9660;</span>
-</div>
-```
-```css
-.section-header { cursor: pointer; padding: 8px 0; display: flex; justify-content: space-between; }
-.collapsed { display: none; }
-.collapsed + .section-header .collapse-icon { transform: rotate(-90deg); }
+```tsx
+import { ChevronDown } from 'lucide-react';
+import { useState } from 'react';
+
+export function CollapsibleSection({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center justify-between py-2 text-sm font-medium"
+      >
+        {title}
+        <ChevronDown className={`h-4 w-4 transition-transform ${open ? '' : '-rotate-90'}`} />
+      </button>
+      {open && <div>{children}</div>}
+    </div>
+  );
+}
 ```
 
 ### Playwright Test
 ```js
-test('agent card opens slide-out panel', async ({ page }) => {
-  await page.goto('/');
-  await page.click('[data-tab="agents"]');
+test('agent card opens detail view', async ({ page }) => {
+  await page.goto('/admin/agents');
   await page.click('.agent-card:first-child');
-  await expect(page.locator('.slide-out-panel')).toBeVisible();
+  await expect(page.locator('[data-testid="agent-detail"]')).toBeVisible();
 });
 ```

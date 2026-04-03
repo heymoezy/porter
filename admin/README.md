@@ -5,9 +5,8 @@ Part of the Porter monorepo (`heymoezy/porter`). SaaS control plane for Porter â
 ## Port Map
 | Service | Port | Path |
 |---------|------|------|
-| Admin Backend (Fastify) | :5175 | `admin/backend/` |
-| Admin Frontend (Vite dev) | :5176 | `admin/frontend/` |
-| Brain Backend (Fastify) | :3001 | `backend/` (sibling) |
+| Brain + Admin (merged, single process) | :3001 | `backend/` (Brain serves Admin) |
+| Frontend Dev Server (Vite, dev only) | any | `admin/frontend/` â€” proxies API to :3001 |
 
 ## Development
 ```bash

@@ -18,7 +18,7 @@ The web interface is the window into what Porter is doing. Gateway health, dispa
 
 - **Backend:** Fastify 5, TypeScript, Drizzle ORM, PostgreSQL 16
 - **Admin UI:** React 19, React Router 7, Tailwind CSS 4, shadcn/ui
-- **Legacy:** `porter.py` (~900KB Python monolith, deprecated)
+- **Legacy:** `porter.py` — DELETED (was ~900KB Python monolith, fully replaced by Fastify)
 - **Repo:** `heymoezy/porter` (single monorepo)
 - **Port:** `:3001` (single Fastify process serves API + Admin UI)
 
@@ -39,9 +39,9 @@ Usage-based. Bring your own API keys. Porter charges for the orchestration layer
 
 ```
 porter/
-  backend/           Brain Fastify API (:3001)
-  admin/backend/     Admin Fastify API (merged into :3001)
-  admin/frontend/    Admin React frontend (Vite, shadcn/ui)
+  backend/           Brain Fastify API (:3001) — sole running process, serves Admin UI
+  admin/backend/     Admin routes (merged into Brain :3001)
+  admin/frontend/    Admin React frontend (Vite, shadcn/ui) — built to backend/public/
   drizzle/           Drizzle migrations
   skills/            207 skill packs across 20 categories
   personas/          Agent persona definitions
@@ -54,5 +54,5 @@ porter/
 
 - **Type:** Software product
 - **Status:** Active -- Alpha
-- **Version:** v4.4.0
+- **Version:** v4.5.0
 - **Start date:** Feb 18, 2026

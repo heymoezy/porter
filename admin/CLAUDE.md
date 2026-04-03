@@ -8,21 +8,19 @@ Porter Admin is the **SaaS control plane** — platform management + dev tools. 
 - **Frontend:** React 19, React Router 7 (SPA), Tailwind CSS 4, shadcn/ui
 
 ## Ports
-- **:5175** — Admin backend (Fastify) serving production build + API
-- **:5176** — Frontend dev server (Vite) — dev only, proxies API to :5175
-- **:3001** — Porter Brain Fastify backend (sibling at `../backend/`)
-- Connects to Brain's PostgreSQL at `postgresql://lobster:porter@127.0.0.1:5432/porter`
+- **:3001** — Single Fastify process (Brain + Admin merged). All traffic here.
+- Connects to PostgreSQL at `postgresql://lobster:porter@127.0.0.1:5432/porter`
 
 ## Commands
 ```bash
-# Production (default)
-cd backend && npx tsx src/index.ts   # Serves on :5175 (API + static frontend)
+# Production (default) — Brain serves Admin static files
+systemctl --user restart porter-fastify
 
 # Development (when editing frontend)
-cd frontend && npm run dev           # Vite on :5176, proxies to :5175
+cd frontend && npm run dev           # Vite dev server (standalone, proxies to :3001)
 
 # Build frontend
-cd frontend && npx react-router build  # Output to build/client/
+cd frontend && npx react-router build  # Output to build/client/ (served by Brain at :3001)
 ```
 
 ## Pages
@@ -52,5 +50,5 @@ Account, system info
 
 ## Monorepo Layout
 This is part of the Porter monorepo (`heymoezy/porter`). Working dir: `/home/lobster/projects/porter/admin/`.
-- **Brain:** `../backend/` — Fastify API, :3001, owns PostgreSQL
-- **Admin:** this directory (`admin/backend/` + `admin/frontend/`)
+- **Brain:** `../backend/` — Fastify API, :3001, owns PostgreSQL, also serves Admin static files
+- **Admin:** this directory (`admin/backend/` + `admin/frontend/`) — merged into Brain's :3001 process

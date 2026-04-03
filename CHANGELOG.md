@@ -1,3 +1,95 @@
+## v4.5.0 (2026-04-03)
+
+- fix: port all v5.0 skill routes from dead admin backend to Brain :3001
+- docs(v5.0): all debt fixed — audit passed, 36/36 requirements
+- fix(36): port quality scoring from admin/backend to Brain backend
+- fix: port 5175→3001 in tests, check QLT boxes, add Phase 34 verification
+- docs(v5.0): milestone audit — tech_debt status, 30/36 requirements
+- docs(phase-37): complete phase execution
+- docs(37-02): complete template-skill-ux frontend plan
+- feat(37-02): wire TemplateSkillsTab into agent-detail.tsx
+- feat(37-02): create TemplateSkillsTab component
+- docs(37-01): complete template-skill-ux backend foundation plan
+- feat(37-01): Five template skill API endpoints on admin backend
+- feat(37-01): DB migration + schema update for template_skills columns
+- docs(37-template-skill-ux): create phase plan
+- docs(37): research phase template skill ux
+- docs(phase-35): complete phase execution
+- fix(35): close SC-5 gaps — reasoning+feedback in history, effectiveness_after backfill
+- docs(35-03): complete evolution-panel UI plan
+- feat(35-03): wire EvolutionPanel into SkillsStudio
+- feat(35-03): create EvolutionPanel component
+- docs(35-02): add final commit hash to SUMMARY.md
+- docs(35-02): complete agent evolution loop plan 02
+- feat(35-02): add approve/reject endpoints + inline SKILLS.md regeneration
+- feat(35-02): add GET /proposals list + detail endpoints
+- docs(35-01): complete agent evolution loop plan 01
+- feat(35-01): Evolution analyzer service + scheduler hook
+- feat(35-01): Wave 0 test scaffold + migration for evolution tables
+- docs(35): create phase plan for Agent Evolution Loop
+- docs(35): research agent evolution loop phase
+- docs(phase-36): mark complete (executed by Gemini)
+- feat(36): full phase implementation - quality scoring, telemetry join, and UI filters
+- feat(36): implement skill quality scoring infrastructure and UI badges
+- docs(35-37): minimal context for remaining phases
+- docs: checkpoint — phases 31-34 complete, 35-37 remaining
+- docs(34-03): add self-check results to SUMMARY.md
+- docs(34-03): complete effectiveness API + admin UI plan
+- feat(34-03): wire effectiveness metrics into skill/agent/template detail pages
+- feat(34-03): add effectiveness API endpoints + SkillEffectivenessBar component
+- docs(34-02): complete feedback API + chat UI plan
+- feat(34-02): thumbs-up/down feedback UI on chat assistant messages
+- feat(34-02): POST /api/v1/feedback/:dispatchId endpoint
+- docs(34-01): complete feedback telemetry schema plan
+- feat(34-01): surface dispatch_id in SSE done event + increment times_selected
+- docs(34-00): complete feedback telemetry test scaffold plan
+- feat(34-01): migration + schema for skill feedback telemetry
+- test(34-00): add Playwright test scaffold for FBK-01 through FBK-05
+- fix(34): revise plans based on checker feedback
+- docs(34-feedback-telemetry): create phase plan — 3 plans across 3 waves
+- docs(34): research phase feedback-telemetry
+- docs(34): minimal context for infrastructure phase
+- docs(phase-33): complete phase execution
+- docs(33-02): complete runtime-skill-selector wiring plan
+- feat(33-02): wire selectSkills into chat.ts dispatch pipeline
+- feat(33-02): extend RoutingContext and logDispatch for skills_used telemetry
+- docs(33-01): complete skill selector foundation plan
+- feat(33-01): implement skill-selector.ts with selectSkills and scoreSkill
+- test(33-01): add failing tests for skill-selector service
+- feat(33-01): add skills_used JSONB column migration and schema update
+- docs(33): create phase plan for runtime skill selector
+- docs(33): research runtime skill selector phase
+- docs(33): minimal context for infrastructure phase
+- docs(phase-32): complete phase execution
+- docs(32-03): complete badge integration and navigation wiring plan
+- docs(32-02): complete skill-pack-explorer frontend UI plan
+- feat(32-03): add pack explorer link to agent detail skills tab
+- feat(32-03): add quality badges and pack explorer links to skills-studio and marketplace
+- feat(32-02): build SkillPackExplorer route with file tree, CodeMirror editor, dirty guard
+- feat(32-02): install CodeMirror, register pack explorer route, add SkillQualityBadge
+- docs(32-01): complete skill-pack-explorer backend plan
+- docs(32-00): complete Skill Pack Explorer test scaffold plan
+- feat(32-01): add PUT /:id/files/* endpoint to skills routes
+- feat(32-01): add QualityTier, PackDiagnostics, computePackDiagnostics, writeSkillPackFile to skill-library
+- test(32-00): add Playwright test scaffold for Phase 32 Skill Pack Explorer
+- fix(32): revise plans based on checker feedback
+- docs(32): create phase plan for Skill Pack Explorer
+- docs(phase-32): add validation strategy
+- docs(32): research phase for Skill Pack Explorer
+- docs(32): smart discuss context
+- docs(phase-31): complete phase execution
+- docs(31-03): complete Skills SOT API + RPG Engine plan
+- feat(31-03): align rpg-engine SKILLS.md generation with skill_id JOIN
+- feat(31-03): update toggle and delete endpoints with skill_id + manifest regeneration
+- docs(31-02): complete skills SOT query layer plan
+- feat(31-02): rewrite instantiation and forge Station 2 to use template_skills as canonical source
+- feat(31-02): create skills-manifest.ts service for DB-driven SKILLS.md generation
+- docs(31-01): complete Skills SOT Migration plan
+- feat(31-01): add migration script to populate template_skills and persona_skills.skill_id
+- feat(31-01): add skill_id column to persona_skills schema and migration
+- docs(31): plan Phase 31 Source of Truth Cleanup (3 plans, 3 waves)
+
+
 ## v4.0.1 (2026-04-02)
 
 - docs: start milestone v5.0 Living Skills (7 phases, 36 requirements)

@@ -1,40 +1,43 @@
 # Deliverables — LogicLord
 
 ## Output Formats
-- **Python patches**: Functions/classes ready to insert into porter.py — stdlib only, no pip packages
-- **API endpoint implementations**: Route handler + request validation + response format + error handling
-- **Database migrations**: SQLite schema changes with CREATE/ALTER statements and data backfill logic
-- **Backend bug fixes**: Root cause analysis + minimal patch + verification steps
+- **TypeScript route handlers**: Fastify route files in `backend/src/routes/v1/`
+- **API endpoint implementations**: Route handler + Zod validation + response format + error handling
+- **Database migrations**: Drizzle ORM schema changes in `backend/src/db/schema.ts` + `drizzle/` migrations
+- **Backend bug fixes**: Root cause analysis + minimal patch + verification steps (`npx tsc --noEmit`)
 
 ## Quality Criteria
-- All code is stdlib-only Python — no imports beyond what's already in porter.py
+- All code is TypeScript — Drizzle ORM for DB, Fastify for routes, Zod for validation
 - Every API endpoint returns consistent JSON: `{"status": "ok/error", "data": ...}` or `{"error": "message"}`
-- SQL uses parameterized queries — zero string interpolation in queries
-- Error handling uses structured logging, not bare `except:` blocks
-- Patches specify exact insertion point (after which function/class)
+- SQL uses Drizzle query builder or parameterized pg queries — zero string interpolation
+- Error handling uses Fastify reply.code() + structured response
+- After every change: `cd backend && npx tsc --noEmit` must pass
 
 ## Example Deliverables
 
 ### API Endpoint
-**Route:** `GET /api/agents/{agent_id}/telemetry`
-```python
-def handle_agent_telemetry(self, agent_id):
-    rows = self.db.execute(
-        "SELECT ts, tokens_in, tokens_out, latency_ms FROM agent_telemetry WHERE agent_id = ? ORDER BY ts DESC LIMIT 100",
-        (agent_id,)
-    ).fetchall()
-    return self.json_response({"status": "ok", "data": [dict(r) for r in rows]})
+**Route:** `GET /api/v1/agents/:agentId/telemetry`
+```typescript
+fastify.get('/agents/:agentId/telemetry', async (req, reply) => {
+  const { agentId } = req.params as { agentId: string };
+  const rows = await db.query.agentTelemetry.findMany({
+    where: eq(agentTelemetry.agentId, agentId),
+    orderBy: [desc(agentTelemetry.ts)],
+    limit: 100,
+  });
+  return reply.send({ status: 'ok', data: rows });
+});
 ```
 
-### Database Migration
-```sql
-CREATE TABLE IF NOT EXISTS agent_telemetry (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    agent_id TEXT NOT NULL,
-    ts TEXT NOT NULL DEFAULT (datetime('now')),
-    tokens_in INTEGER DEFAULT 0,
-    tokens_out INTEGER DEFAULT 0,
-    latency_ms INTEGER DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS idx_telemetry_agent ON agent_telemetry(agent_id, ts);
+### Database Migration (Drizzle)
+```typescript
+// backend/src/db/schema.ts addition:
+export const agentTelemetry = pgTable('agent_telemetry', {
+  id: serial('id').primaryKey(),
+  agentId: text('agent_id').notNull(),
+  ts: timestamp('ts').defaultNow(),
+  tokensIn: integer('tokens_in').default(0),
+  tokensOut: integer('tokens_out').default(0),
+  latencyMs: integer('latency_ms').default(0),
+});
 ```

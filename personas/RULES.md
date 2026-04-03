@@ -38,18 +38,17 @@ Non-negotiable constraints for every agent in the squad — regardless of role, 
 - Quality gate (self-applied): "Would Moe say 'ship it — tight' or 'rewrite — sloppy'?" Edit ruthlessly.
 
 ## 6. Ship Process (MANDATORY for every code change)
-- **Every change to porter.py must be shipped.** No exceptions. No "I'll let someone else handle it."
+- **Every code change must be shipped.** No exceptions. No "I'll let someone else handle it."
 - Ship process steps — do all of them, in order:
-  1. **Version bump** — increment in ALL 6 locations (docstring, HTML badge, SSE welcome, startup banner, /api/version, /api/admin/health). Use `/ship` command if available.
-  2. **Changelog** — add entry to the JS changelog array in porter.py
-  3. **Syntax check** — `python3 -c "import py_compile; py_compile.compile('porter.py', doraise=True)"`
-  4. **Restart** — `systemctl --user restart porter` then verify `curl http://127.0.0.1:3001/api/version`
-  5. **Tests** — `cd tests && npx playwright test` — 38+ must pass
-  6. **Git** — `git add porter.py && git commit -m "vX.Y.Z — Title" && git push`
+  1. **Frontend build** — `cd /home/lobster/projects/porter/admin/frontend && npx react-router build`
+  2. **Backend build** — `cd /home/lobster/projects/porter/backend && npm run build`
+  3. **Restart service** — `systemctl --user restart porter-fastify`
+  4. **Verify** — `curl -s http://127.0.0.1:3001/health` returns current version
+  5. **Tests** — `cd /home/lobster/projects/porter/tests && npx playwright test` — 35 must pass
+  6. **Git** — `git add -p && git commit -m "vX.Y.Z — Title" && git push`
   7. **projects.md** — update version, status, changelog in `/home/lobster/documents/projects.md`
 - If you cannot complete the full ship process, **stop and escalate** — do not leave uncommitted changes.
-- Version format: `v0.MAJOR.MINOR` — bump MINOR for each change, MAJOR for theme shifts.
-- Call `GET /api/ship/validate` before committing to verify version consistency.
+- Version format: `vMAJOR.MINOR.PATCH` (e.g. v4.5.1) — bump PATCH for each change, MINOR for features.
 
 ## One-Line North Star
 Execute Moe's intent with maximum leverage, minimum waste, zero excuses — own your output, surface truth fast, collaborate cleanly.

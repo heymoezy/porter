@@ -7,7 +7,7 @@ Porter Brain is the **API backend and database owner**. Together with Porter Adm
 ## Project Facts
 
 - **Backend:** `backend/` — Fastify 5, TypeScript, Drizzle ORM
-- **Legacy:** `porter.py` (deprecated, ~900KB, do not modify)
+- **Legacy:** `porter.py` — DELETED. Fastify is the sole backend.
 - **Port:** `3001`, bound to `127.0.0.1`
 - **Service:** `systemctl --user start|stop|restart|status porter-fastify`
 - **Service file:** `~/.config/systemd/user/porter-fastify.service`
@@ -23,7 +23,7 @@ Porter is a **single monorepo** (`heymoezy/porter`). Brain and Admin live side b
 | Component | Path | Port | Purpose |
 |-----------|------|------|---------|
 | **Brain** | `backend/` | :3001 | Fastify API, PostgreSQL, AI Router, Bridge, Memory V3 |
-| **Admin** | `admin/backend/` + `admin/frontend/` | :5175 | SaaS control plane, Bridge UI, Intelligence, CRM |
+| **Admin** | `admin/backend/` + `admin/frontend/` | :3001 | SaaS control plane, Bridge UI, Intelligence, CRM (served by Brain) |
 
 Business model: API metering. Any future UI/frontend is just an API customer — a separate product.
 
@@ -67,9 +67,8 @@ porter/
 │   ├── src/services/ <- AI router, Bridge, scheduler, memory
 │   └── src/db/       <- Schema, migrations
 ├── admin/            <- Admin monorepo subfolder
-│   ├── backend/      <- Admin Fastify API (:5175, TypeScript)
+│   ├── backend/      <- Admin Fastify API (merged into :3001)
 │   └── frontend/     <- Admin React frontend (Vite, shadcn/ui)
-├── porter.py         <- Legacy monolith (DEPRECATED)
 ├── drizzle/          <- Drizzle migrations
 ├── memory/           <- Memory data files
 ├── personas/         <- Agent persona definitions

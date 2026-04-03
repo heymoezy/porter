@@ -1,6 +1,8 @@
 # Porter Unified Plan
 ## Reconciliation of Core App, Retail Site, Dockmaster, and Agent-Memory Integrations
 
+> **HISTORICAL DOCUMENT** — Written during the porter.py era. porter.py, portal.py, and dockmaster are all deleted. Porter is now a Fastify monorepo at `/home/lobster/projects/porter/`. This doc is for historical context only.
+
 ## Why this exists
 Porter already has meaningful functionality across:
 - core file manager (`porter.py`)
