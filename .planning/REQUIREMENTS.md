@@ -10,8 +10,8 @@
 - [x] **TDE-01**: Complex requests are classified (simple vs multi-step) before dispatch — simple go direct, complex get decomposed
 - [x] **TDE-02**: Complex tasks produce a dependency DAG (task_nodes table) with parallel and sequential relationships
 - [x] **TDE-03**: DAG executor dispatches ready tasks in parallel, respects dependencies, tracks completion
-- [ ] **TDE-04**: When a subtask fails, the joiner decides: retry, replan the subtask, or escalate to user
-- [ ] **TDE-05**: Final synthesis step combines subtask results into a coherent response for the caller
+- [x] **TDE-04**: When a subtask fails, the joiner decides: retry, replan the subtask, or escalate to user
+- [x] **TDE-05**: Final synthesis step combines subtask results into a coherent response for the caller
 
 ### Inter-Agent Messaging
 
@@ -98,8 +98,8 @@
 | TDE-01 | Phase 42 | Complete |
 | TDE-02 | Phase 42 | Complete |
 | TDE-03 | Phase 42 | Complete |
-| TDE-04 | Phase 42 | Pending |
-| TDE-05 | Phase 42 | Pending |
+| TDE-04 | Phase 42 | Complete |
+| TDE-05 | Phase 42 | Complete |
 | IAM-01 | Phase 43 | Pending |
 | IAM-02 | Phase 43 | Pending |
 | IAM-03 | Phase 43 | Pending |
