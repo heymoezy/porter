@@ -262,8 +262,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 40-01-PLAN.md — Capability registry types, constant map, migration, startup-detector wiring (GWC-01)
-- [ ] 40-02-PLAN.md — Capability-aware dispatch, tool filtering, CLI allowlists, admin display (GWC-02, GWC-03, GWC-04)
+- [x] 40-01-PLAN.md — Capability registry types, constant map, migration, startup-detector wiring (GWC-01)
+- [x] 40-02-PLAN.md — Capability-aware dispatch, tool filtering, CLI allowlists, admin display (GWC-02, GWC-03, GWC-04)
 
 ### Phase 41: Session Intelligence
 **Goal**: Session memory is frozen at start and never mutated mid-session; agents can search across past sessions; dispatch outcomes feed back into routing confidence so Porter learns which gateways perform best
@@ -273,7 +273,12 @@ Plans:
   1. System prompt injected at session start is identical at turn 1 and turn 50 of the same session — no mid-session memory mutations observed
   2. An agent can issue a cross-session search query and receive ranked results from past sessions matching a keyword or topic
   3. After 10 dispatches to a gateway with measurable outcomes, the routing confidence score for that gateway changes — queryable via admin API
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 41-01-PLAN.md — Migration + frozen memory snapshot service + ai-router wiring (SIN-01)
+- [ ] 41-02-PLAN.md — Cross-session FTS search service + REST endpoint (SIN-02)
+- [ ] 41-03-PLAN.md — Outcome scoring + routing confidence feedback loop (SIN-03)
 
 ### Phase 42: Task Decomposition Engine
 **Goal**: Complex requests are classified, broken into a dependency DAG, executed with parallelism where possible, and synthesized back into a single coherent response — the user sees one answer, Porter ran many agents
@@ -362,8 +367,8 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 37. Template Skill UX | v5.0 | 2/2 | Complete | 2026-04-03 |
 | 38. Adaptive Agent Context | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 39. Bridge Task Dispatch | v5.0 | 3/3 | Complete | 2026-04-03 |
-| 40. Gateway Capability Registry | 2/2 | Complete    | 2026-04-03 | - |
-| 41. Session Intelligence | v6.0 | 0/TBD | Not started | - |
+| 40. Gateway Capability Registry | v6.0 | 2/2 | Complete | 2026-04-03 |
+| 41. Session Intelligence | v6.0 | 0/3 | Not started | - |
 | 42. Task Decomposition Engine | v6.0 | 0/TBD | Not started | - |
 | 43. Inter-Agent Messaging | v6.0 | 0/TBD | Not started | - |
 | 44. Autonomous Job Queue | v6.0 | 0/TBD | Not started | - |
