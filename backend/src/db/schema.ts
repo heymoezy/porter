@@ -184,6 +184,10 @@ export const agentJobs = pgTable('agent_jobs', {
   result: text('result'),
   error: text('error'),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  source: text('source').notNull().default('system'),
+  requiredSkill: text('required_skill'),
+  requiredCapability: text('required_capability'),
+  assignedGateway: text('assigned_gateway'),
 });
 
 export const agentActivity = pgTable('agent_activity', {
