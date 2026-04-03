@@ -1,5 +1,7 @@
 import fs from 'fs';
+import fsp from 'fs/promises';
 import path from 'path';
+import crypto from 'crypto';
 import { FastifyInstance } from 'fastify';
 import { ok, err } from '../../lib/admin-envelope.js';
 import { queryAll, queryOne, execute } from '../../db/pg-helpers.js';
@@ -424,6 +426,301 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
       stale: reports.filter(r => r.qualityTier === 'stale').length,
       reports,
     });
+  });
+
+  // ── Research notes ──────────────────────────────────────
+  fastify.get('/research', async () => {
+    const researchRoot = path.join(SKILLS_ROOT, '_research');
+    try { await fsp.mkdir(researchRoot, { recursive: true }); } catch { /* ignore */ }
+    const notesPath = path.join(researchRoot, 'top-repositories.md');
+    let notes = '';
+    try { notes = await fsp.readFile(notesPath, 'utf8'); } catch { notes = ''; }
+    return ok({ notes });
+  });
+
+  // ── Evolution Proposals ──────────────────────────────────
+
+  // GET /proposals — list proposals with optional status/persona_id filters
+  fastify.get('/proposals', async (req) => {
+    const { status, persona_id } = req.query as { status?: string; persona_id?: string };
+    let sql = `
+      SELECT sep.*,
+             p.name AS persona_name,
+             s.name AS skill_name,
+             s.description AS skill_description
+      FROM skill_evolution_proposals sep
+      LEFT JOIN personas p ON p.id = sep.persona_id
+      LEFT JOIN skills s ON s.id = sep.skill_id
+    `;
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    if (status) { conditions.push(`sep.status = $${params.length + 1}`); params.push(status); }
+    if (persona_id) { conditions.push(`sep.persona_id = $${params.length + 1}`); params.push(persona_id); }
+    if (conditions.length) sql += ` WHERE ${conditions.join(' AND ')}`;
+    sql += ` ORDER BY sep.created_at DESC LIMIT 100`;
+    const rows = await queryAll(sql, params);
+    return ok({ proposals: rows });
+  });
+
+  // POST /proposals/:proposalId/approve — apply change, regen SKILLS.md, log event
+  fastify.post('/proposals/:proposalId/approve', async (req, reply) => {
+    const { proposalId } = req.params as { proposalId: string };
+    const proposal = await queryOne<{
+      id: string; persona_id: string; skill_id: string; change_type: string;
+      proposed_change: Record<string, unknown>; reasoning: string;
+      triggering_feedback_ids: string[]; status: string;
+    }>(`SELECT * FROM skill_evolution_proposals WHERE id = $1 AND status = 'pending'`, [proposalId]);
+    if (!proposal) {
+      reply.status(404);
+      return err('NOT_FOUND', 'Proposal not found or already reviewed');
+    }
+
+    // Capture effectiveness_before from persona_skills
+    const psRow = await queryOne<{ effectiveness_score: number | null }>(
+      `SELECT effectiveness_score FROM persona_skills
+       WHERE persona_id = $1 AND (skill_id = $2 OR skill_name = $2)`,
+      [proposal.persona_id, proposal.skill_id]
+    );
+    const effectivenessBefore = psRow?.effectiveness_score ?? null;
+
+    // Apply change based on change_type
+    if (proposal.change_type === 'remove_skill') {
+      await execute(
+        `DELETE FROM persona_skills WHERE persona_id = $1 AND (skill_id = $2 OR skill_name = $2)`,
+        [proposal.persona_id, proposal.skill_id]
+      );
+    } else if (proposal.change_type === 'add_skill') {
+      await execute(
+        `INSERT INTO persona_skills (persona_id, skill_id, skill_name, enabled)
+         VALUES ($1, $2, $2, 1)
+         ON CONFLICT (persona_id, skill_id) DO NOTHING`,
+        [proposal.persona_id, proposal.skill_id]
+      );
+    }
+    // rewrite_prompt and enrich_examples are flagged for manual follow-up — no persona_skills mutation
+
+    // Regenerate SKILLS.md for this persona
+    const personaRow = await queryOne<{ name: string }>('SELECT name FROM personas WHERE id = $1', [proposal.persona_id]);
+    if (personaRow) {
+      try { await writeSkillsManifest(proposal.persona_id, personaRow.name); } catch (e) {
+        console.error('Failed to regenerate SKILLS.md after proposal approve:', e);
+      }
+    }
+
+    // Log evolution event
+    const eventId = crypto.randomUUID();
+    await execute(
+      `INSERT INTO skill_evolution_events
+         (id, persona_id, skill_id, proposal_id, change_type, change_detail,
+          triggered_by, effectiveness_before, effectiveness_after, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, EXTRACT(EPOCH FROM NOW()))`,
+      [
+        eventId,
+        proposal.persona_id,
+        proposal.skill_id,
+        proposal.id,
+        proposal.change_type,
+        JSON.stringify(proposal.proposed_change),
+        JSON.stringify(proposal.triggering_feedback_ids ?? []),
+        effectivenessBefore,
+      ]
+    );
+
+    // Mark proposal approved
+    const reviewer = (req as any).user?.username ?? 'admin';
+    await execute(
+      `UPDATE skill_evolution_proposals
+       SET status = 'approved', reviewed_at = EXTRACT(EPOCH FROM NOW()), reviewed_by = $2
+       WHERE id = $1`,
+      [proposalId, reviewer]
+    );
+
+    return ok({ approved: true, proposal_id: proposalId });
+  });
+
+  // POST /proposals/:proposalId/reject — mark rejected, log rejection event
+  fastify.post('/proposals/:proposalId/reject', async (req, reply) => {
+    const { proposalId } = req.params as { proposalId: string };
+    const body = (req.body ?? {}) as { reason?: string };
+    const proposal = await queryOne<{
+      id: string; persona_id: string; skill_id: string; change_type: string;
+      proposed_change: Record<string, unknown>; reasoning: string;
+      triggering_feedback_ids: string[]; status: string;
+    }>(`SELECT * FROM skill_evolution_proposals WHERE id = $1 AND status = 'pending'`, [proposalId]);
+    if (!proposal) {
+      reply.status(404);
+      return err('NOT_FOUND', 'Proposal not found or already reviewed');
+    }
+
+    const reviewer = (req as any).user?.username ?? 'admin';
+    await execute(
+      `UPDATE skill_evolution_proposals
+       SET status = 'rejected', reviewed_at = EXTRACT(EPOCH FROM NOW()), reviewed_by = $2
+       WHERE id = $1`,
+      [proposalId, reviewer]
+    );
+
+    // Log rejection event
+    const eventId = crypto.randomUUID();
+    await execute(
+      `INSERT INTO skill_evolution_events
+         (id, persona_id, skill_id, proposal_id, change_type, change_detail,
+          triggered_by, effectiveness_before, effectiveness_after, created_at)
+       VALUES ($1, $2, $3, $4, 'rejected', $5, $6, NULL, NULL, EXTRACT(EPOCH FROM NOW()))`,
+      [
+        eventId,
+        proposal.persona_id,
+        proposal.skill_id,
+        proposal.id,
+        JSON.stringify({ original_proposal: proposal.proposed_change, rejection_reason: body.reason ?? null }),
+        JSON.stringify(proposal.triggering_feedback_ids ?? []),
+      ]
+    );
+
+    return ok({ rejected: true, proposal_id: proposalId });
+  });
+
+  // GET /proposals/:proposalId — single proposal with full detail
+  fastify.get('/proposals/:proposalId', async (req, reply) => {
+    const { proposalId } = req.params as { proposalId: string };
+    const row = await queryOne(
+      `SELECT sep.*,
+              p.name AS persona_name,
+              s.name AS skill_name,
+              s.description AS skill_description
+       FROM skill_evolution_proposals sep
+       LEFT JOIN personas p ON p.id = sep.persona_id
+       LEFT JOIN skills s ON s.id = sep.skill_id
+       WHERE sep.id = $1`,
+      [proposalId]
+    );
+    if (!row) { reply.status(404); return err('NOT_FOUND', 'Proposal not found'); }
+    return ok({ proposal: row });
+  });
+
+  // ── Skill pack file read/write ───────────────────────────
+
+  // GET /:id/files/* — read a skill pack file from disk
+  fastify.get('/:id/files/*', async (req, reply) => {
+    const { id, '*': relativePath } = req.params as { id: string; '*': string };
+    if (!relativePath) { reply.status(400); return err('INVALID_INPUT', 'file path is required'); }
+
+    const skillDir = path.join(SKILLS_ROOT, id);
+    const target = path.resolve(skillDir, relativePath);
+    if (!target.startsWith(skillDir + path.sep) && target !== skillDir) {
+      reply.status(403); return err('FORBIDDEN', 'Path traversal rejected');
+    }
+    if (!fs.existsSync(target) || !fs.statSync(target).isFile()) {
+      reply.status(404); return err('NOT_FOUND', 'File not found');
+    }
+    try {
+      const text = fs.readFileSync(target, 'utf8');
+      return ok({ text });
+    } catch {
+      reply.status(500); return err('READ_ERROR', 'Failed to read file');
+    }
+  });
+
+  // PUT /:id/files/* — write a skill pack file back to disk
+  fastify.put('/:id/files/*', async (req, reply) => {
+    const { id, '*': relativePath } = req.params as { id: string; '*': string };
+    const { content } = (req.body ?? {}) as { content?: string };
+
+    if (typeof content !== 'string') {
+      reply.status(400); return err('INVALID_INPUT', 'content must be a string');
+    }
+    if (!relativePath) {
+      reply.status(400); return err('INVALID_INPUT', 'file path is required');
+    }
+
+    const skillDir = path.join(SKILLS_ROOT, id);
+    const target = path.resolve(skillDir, relativePath);
+    if (!target.startsWith(skillDir + path.sep) && target !== skillDir) {
+      reply.status(403); return err('FORBIDDEN', 'Path traversal rejected');
+    }
+
+    try {
+      await fsp.mkdir(path.dirname(target), { recursive: true });
+      await fsp.writeFile(target, content, 'utf8');
+      return ok({ saved: true, path: relativePath });
+    } catch (e) {
+      reply.status(500); return err('WRITE_ERROR', (e as Error).message);
+    }
+  });
+
+  // GET /:id/effectiveness — per-skill effectiveness across all agents
+  fastify.get('/:id/effectiveness', async (req) => {
+    const { id } = req.params as { id: string };
+    const rows = await queryAll(
+      `SELECT ps.persona_id, p.name AS persona_name,
+              COALESCE(ps.times_selected, 0) AS times_selected,
+              COALESCE(ps.times_completed, 0) AS times_completed,
+              COALESCE(ps.positive_feedback_count, 0) AS positive_count,
+              COALESCE(ps.negative_feedback_count, 0) AS negative_count,
+              ps.effectiveness_score,
+              ps.last_used_at
+       FROM persona_skills ps
+       LEFT JOIN personas p ON p.id = ps.persona_id
+       WHERE COALESCE(ps.skill_id, ps.skill_name) = $1
+       ORDER BY ps.effectiveness_score DESC NULLS LAST`,
+      [id]
+    );
+    return ok({ skill_id: id, agents: rows });
+  });
+
+  // GET /:id — skill detail with files list and diagnostics
+  fastify.get('/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const row = await queryOne<SkillRow & { config_schema: string | null; quality_score: number | null; quality_tier: string | null }>(`
+      SELECT s.*,
+        COALESCE((SELECT COUNT(*) FROM template_skills ts WHERE ts.skill_id = s.id), 0)::int AS template_count,
+        COALESCE((SELECT COUNT(*) FROM persona_skills ps WHERE ps.skill_name = s.id AND ps.enabled = 1), 0)::int AS agent_count,
+        COALESCE((SELECT SUM(ps.times_selected) FROM persona_skills ps WHERE ps.skill_name = s.id), 0)::int AS total_uses,
+        COALESCE((SELECT AVG(ps.effectiveness_score) FROM persona_skills ps WHERE ps.skill_name = s.id), 0)::float AS avg_effectiveness,
+        (SELECT MAX(ps.last_used_at) FROM persona_skills ps WHERE ps.skill_name = s.id) AS last_used
+      FROM skills s
+      WHERE s.id = $1
+    `, [id]);
+    if (!row) { reply.status(404); return err('NOT_FOUND', `Skill ${id} not found`); }
+
+    const files = walkSkillDir(path.join(SKILLS_ROOT, row.id));
+    const telemetry: TelemetryData = {
+      total_uses: row.total_uses || 0,
+      avg_effectiveness: row.avg_effectiveness || 0,
+      last_used: row.last_used,
+    };
+    const diagnostics = computePackDiagnostics(row.id, files, telemetry);
+
+    function parseTags(raw: string | null): string[] {
+      if (!raw) return [];
+      try { return Array.isArray(raw) ? raw : JSON.parse(raw as string); } catch { return []; }
+    }
+
+    const skill = {
+      id: row.id,
+      name: row.name,
+      description: row.description || '',
+      category: row.category || 'Unknown',
+      source: row.source || 'detected',
+      enabled: !!row.enabled,
+      visible: !!row.visible,
+      featured: !!row.featured,
+      icon: row.icon || '',
+      color: row.color || '',
+      short_label: row.short_label || '',
+      sort_order: row.sort_order ?? 50,
+      featured_order: row.featured_order ?? 0,
+      pack_status: row.pack_status || 'missing',
+      tags: parseTags(row.tags),
+      template_count: row.template_count ?? 0,
+      agent_count: row.agent_count ?? 0,
+      files,
+      diagnostics,
+      qualityScore: diagnostics.qualityScore,
+      qualityTier: diagnostics.qualityTier,
+    };
+
+    return ok({ skill });
   });
 
   // ── Toggle persona assignment ───────────────────────────
