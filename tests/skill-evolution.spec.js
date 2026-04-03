@@ -12,7 +12,7 @@ const { execSync } = require('child_process');
 test.setTimeout(30000);
 
 const BRAIN = 'http://127.0.0.1:3001';
-const ADMIN = 'http://127.0.0.1:5175';
+const ADMIN = 'http://127.0.0.1:3001';
 
 test.describe('Phase 35: Agent Evolution Loop', () => {
   test.describe.configure({ mode: 'serial' });

@@ -48,11 +48,11 @@
 
 ### Skill Quality
 
-- [ ] **QLT-01**: Every skill has a computed quality score based on: file completeness, specificity, example count, guide richness, prompt uniqueness, recent usage, success rate, user feedback
-- [ ] **QLT-02**: Quality tiers replace pack_status: scaffold, baseline, production, high-performing, stale
-- [ ] **QLT-03**: Skills table and marketplace show quality tier badges instead of ready/partial/missing
-- [ ] **QLT-04**: Admin can filter skills by quality tier
-- [ ] **QLT-05**: A quality audit job can score all skills and flag scaffolds for enrichment
+- [x] **QLT-01**: Every skill has a computed quality score based on: file completeness, specificity, example count, guide richness, prompt uniqueness, recent usage, success rate, user feedback
+- [x] **QLT-02**: Quality tiers replace pack_status: scaffold, baseline, production, high-performing, stale
+- [x] **QLT-03**: Skills table and marketplace show quality tier badges instead of ready/partial/missing
+- [x] **QLT-04**: Admin can filter skills by quality tier
+- [x] **QLT-05**: A quality audit job can score all skills and flag scaffolds for enrichment
 
 ### Template Skill UX
 

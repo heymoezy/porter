@@ -8,7 +8,7 @@
 const { test, expect } = require('@playwright/test');
 test.setTimeout(30000);
 
-const ADMIN = 'http://127.0.0.1:5175';
+const ADMIN = 'http://127.0.0.1:3001';
 
 // Use motion-designer as canonical test skill — always exists in skill packs
 const TEST_SKILL = 'motion-designer';
