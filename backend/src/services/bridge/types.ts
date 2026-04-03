@@ -124,6 +124,13 @@ export interface RoutingContext {
     threshold: number;
     totalCandidates: number;
   };
+  /** Phase 38: Directive selection stats — for context_stats logging */
+  directiveStats?: {
+    total: number;
+    injected: number;
+    skipped: number;
+    scoring_mode: 'task_aware' | 'all';
+  };
 }
 
 export interface RoutingDecision {

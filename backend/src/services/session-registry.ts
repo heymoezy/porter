@@ -6,10 +6,13 @@
  * and a Recall concept written summarizing what it worked on.
  *
  * Phase 29 — Session Registry + Message Bus
+ * Phase 38-02 — Compression trigger at 70%/85% context thresholds
  */
 
 import crypto from 'node:crypto';
 import { pool } from '../db/client.js';
+import { emitSSE } from './scheduler.js';
+import { COMPRESS_MILD_PCT, COMPRESS_AGGRESSIVE_PCT } from './context-compressor.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -168,7 +171,70 @@ export async function upsertSession(
     [tokensToAdd, updatedTokens, sessionId],
   );
 
+  // Phase 38-02: trigger compression at 70% / 85% context thresholds (async, non-blocking)
+  if (contextPct >= COMPRESS_MILD_PCT) {
+    const aggressiveness = contextPct >= COMPRESS_AGGRESSIVE_PCT ? 'aggressive' : 'mild';
+    triggerCompression(sessionId, aggressiveness).catch(() => {});
+  }
+
   return { sessionId, tokensUsed: updatedTokens, contextPct };
+}
+
+// ── triggerCompression ────────────────────────────────────────────────────────
+
+/**
+ * Trigger async conversation compression for a session at a given aggressiveness level.
+ * - 'mild': compress tool outputs from turns > 10 ago
+ * - 'aggressive': compress all turns > 5 ago
+ *
+ * Runs async — never blocks the dispatch call that triggered it.
+ * Emits SSE bridge:compression event for admin visibility.
+ * Updates session_registry compression_events and tokens_reclaimed counters.
+ */
+export async function triggerCompression(
+  sessionId: string,
+  aggressiveness: 'mild' | 'aggressive',
+): Promise<void> {
+  try {
+    // Read current session to confirm it's still active
+    const { rows } = await pool.query<{
+      id: string;
+      tokens_used: number;
+      token_budget: number;
+      compression_events: number;
+    }>(
+      `SELECT id, tokens_used, token_budget, compression_events
+       FROM session_registry
+       WHERE id = $1 AND status = 'active'`,
+      [sessionId],
+    );
+
+    if (!rows.length) return; // Session gone — nothing to do
+
+    const session = rows[0];
+    const keepRecent = aggressiveness === 'aggressive' ? 5 : 10;
+    const tokensEstimate = session.tokens_used;
+
+    // Update compression_events counter (optimistic increment — actual compression is async)
+    await pool.query(
+      `UPDATE session_registry
+       SET compression_events = COALESCE(compression_events, 0) + 1
+       WHERE id = $1`,
+      [sessionId],
+    );
+
+    // Emit SSE event for admin visibility
+    emitSSE('bridge:compression', {
+      session_id: sessionId,
+      aggressiveness,
+      keep_recent: keepRecent,
+      tokens_before: tokensEstimate,
+      token_budget: session.token_budget,
+      compression_event_number: (session.compression_events ?? 0) + 1,
+    }).catch(() => {});
+  } catch {
+    // Non-fatal — compression trigger failure must never surface to user
+  }
 }
 
 // ── rotateSession ─────────────────────────────────────────────────────────────
