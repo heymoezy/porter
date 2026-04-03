@@ -26,6 +26,7 @@ import feedbackV1Routes from './feedback.js';
 import tasksV1Routes from './tasks.js';
 import { dispatchOutcomeRoutes } from './dispatch-outcome.js';
 import sessionsV1Routes from './sessions.js';
+import decompositionV1Routes from './decomposition.js';
 // TODO: admin routes need import path fixes + PG conversion before enabling
 // import adminV1Routes from './admin/index.js';
 
@@ -58,5 +59,6 @@ export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(tasksV1Routes, { prefix: '/tasks' });
   fastify.register(dispatchOutcomeRoutes);
   fastify.register(sessionsV1Routes, { prefix: '/sessions' });
+  fastify.register(decompositionV1Routes, { prefix: '/decomposition' });
   // fastify.register(adminV1Routes, { prefix: '/admin' });
 }
