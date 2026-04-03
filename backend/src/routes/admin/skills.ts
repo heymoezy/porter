@@ -47,6 +47,9 @@ export interface PackDiagnostics {
 
 interface SkillFileSummary {
   path: string;
+  name: string;
+  ext: string;
+  size: number;
   kind: 'skill' | 'guide' | 'json' | 'example' | 'script' | 'other';
 }
 
@@ -75,7 +78,10 @@ function walkSkillDir(dir: string): SkillFileSummary[] {
       else if (lower.includes('example') || lower.endsWith('.example.md')) kind = 'example';
       else if (lower.endsWith('.json')) kind = 'json';
       else if (lower.endsWith('.sh') || lower.endsWith('.ts') || lower.endsWith('.js') || lower.endsWith('.py')) kind = 'script';
-      results.push({ path: relative, kind });
+      const ext = path.extname(entry.name).slice(1);
+      let size = 0;
+      try { size = fs.statSync(full).size; } catch { /* ok */ }
+      results.push({ path: relative, name: entry.name, ext, size, kind });
     }
   }
   recurse(dir);
