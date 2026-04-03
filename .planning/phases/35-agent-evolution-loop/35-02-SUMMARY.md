@@ -76,7 +76,7 @@ Each task was committed atomically:
 1. **Task 1: Proposals list + detail endpoints** - `2b50362` (feat)
 2. **Task 2: Approve + reject endpoints with SKILLS.md regeneration** - `4e721ee` (feat)
 
-**Plan metadata:** (to be filled after state update commit)
+**Plan metadata:** `c69b522` (docs: complete plan)
 
 ## Files Created/Modified
 
