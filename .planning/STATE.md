@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
-status: ready_to_plan
-stopped_at: Roadmap created for v6.0 — Phase 40 ready to plan
-last_updated: "2026-04-02T00:00:00.000Z"
+status: unknown
+stopped_at: Completed 40-01-PLAN.md
+last_updated: "2026-04-03T09:26:00.411Z"
 progress:
-  total_phases: 8
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 17
+  completed_phases: 8
+  total_plans: 26
+  completed_plans: 26
 ---
 
 # Project State
@@ -19,16 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
-**Current focus:** Phase 40 — Gateway Capability Registry (first phase of v6.0)
+**Current focus:** Phase 40 — Gateway Capability Registry
 
 ## Current Position
 
-Phase: 40 of 47 (Gateway Capability Registry)
-Plan: 0 of TBD
-Status: Ready to plan
-Last activity: 2026-04-02 — v6.0 roadmap created, 8 phases mapped, 30 requirements covered
-
-Progress: [░░░░░░░░░░] 0% (v6.0)
+Phase: 40 (Gateway Capability Registry) — EXECUTING
+Plan: 2 of 2 (Plan 01 complete)
 
 ## Performance Metrics
 
@@ -48,6 +44,8 @@ Progress: [░░░░░░░░░░] 0% (v6.0)
 - [v6.0 scoping]: PMN (project monitoring) watchers are autonomous jobs — depends on AJQ (Phase 44)
 - [v6.0 scoping]: PSB (project substrate) intake intelligence depends on PMN signals — comes last
 - [v5.0]: Bridge task dispatch complete — CLI subprocess + HTTP agent loop verified for Claude, Codex, Gemini
+- [Phase 40]: GatewayRow.capabilities kept as string[] — getLegacyTags() bridges old and new without touching all callers
+- [Phase 40]: Migration uses jsonb_typeof = 'array' guard for idempotency — rows already structured by startup-detector are untouched
 
 ### Pending Todos
 
@@ -60,6 +58,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02
-Stopped at: v6.0 roadmap created — all 30 requirements mapped across 8 phases (40-47)
+Last session: 2026-04-03T09:26:00.409Z
+Stopped at: Completed 40-01-PLAN.md
 Resume file: None

@@ -362,7 +362,7 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 37. Template Skill UX | v5.0 | 2/2 | Complete | 2026-04-03 |
 | 38. Adaptive Agent Context | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 39. Bridge Task Dispatch | v5.0 | 3/3 | Complete | 2026-04-03 |
-| 40. Gateway Capability Registry | v6.0 | 0/2 | Planned | - |
+| 40. Gateway Capability Registry | 1/2 | In Progress|  | - |
 | 41. Session Intelligence | v6.0 | 0/TBD | Not started | - |
 | 42. Task Decomposition Engine | v6.0 | 0/TBD | Not started | - |
 | 43. Inter-Agent Messaging | v6.0 | 0/TBD | Not started | - |
