@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 40-02-PLAN.md
-last_updated: "2026-04-03T09:36:32.979Z"
+stopped_at: Completed 41-01-PLAN.md
+last_updated: "2026-04-03T09:52:06.642Z"
 progress:
   total_phases: 17
   completed_phases: 9
-  total_plans: 26
-  completed_plans: 27
+  total_plans: 29
+  completed_plans: 28
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
-**Current focus:** Phase 40 — Gateway Capability Registry
+**Current focus:** Phase 41 — Session Intelligence
 
 ## Current Position
 
-Phase: 40 (Gateway Capability Registry) — EXECUTING
-Plan: 2 of 2 (Plan 01 complete)
+Phase: 41 (Session Intelligence) — EXECUTING
+Plan: 1 of 3
 
 ## Performance Metrics
 
@@ -48,6 +48,9 @@ Plan: 2 of 2 (Plan 01 complete)
 - [Phase 40]: Migration uses jsonb_typeof = 'array' guard for idempotency — rows already structured by startup-detector are untouched
 - [Phase 40]: normalizeCapabilities called on each row in auto-select path — cheap type check, O(n) but n<=10 gateways
 - [Phase 40]: admin/backend/src/routes/bridge.ts is legacy dead code — active route is backend/src/routes/admin/bridge.ts
+- [Phase 41]: Used dynamic import() for clearSnapshot in rotateSession to avoid circular dependency between session-registry and memory-snapshot
+- [Phase 41]: upsertSession called with 0 tokens in ai-router to resolve session ID before snapshot lookup — idempotent, no token side-effects
+- [Phase 41]: getOrBuildSnapshot uses two-layer cache: in-memory LRU Map first, DB fallback on process restart
 
 ### Pending Todos
 
@@ -60,6 +63,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T09:35:53.691Z
-Stopped at: Completed 40-02-PLAN.md
+Last session: 2026-04-03T09:52:06.639Z
+Stopped at: Completed 41-01-PLAN.md
 Resume file: None
