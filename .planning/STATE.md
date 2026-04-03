@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 45-01-PLAN.md
-last_updated: "2026-04-03T14:23:31.512Z"
+stopped_at: Completed 45-02-PLAN.md
+last_updated: "2026-04-03T14:35:45.976Z"
 progress:
   total_phases: 17
-  completed_phases: 13
+  completed_phases: 14
   total_plans: 39
-  completed_plans: 39
+  completed_plans: 40
 ---
 
 # Project State
@@ -81,6 +81,10 @@ Plan: 2 of 2
 - [Phase 45-01]: Escalation sends clarification message via SSE and persists to chat history — no silent drops
 - [Phase 45-01]: dispatch_strategy is nullable TEXT column (not enum) to support existing rows without backfill
 - [Phase 45-01]: Both bridge.ts (HTTP) and agent-delegation.ts (in-process) enforce depth=3 independently — defense in depth
+- [Phase 45]: classifyRisk is pure synchronous with regex-based pattern matching -- no LLM calls, instant classification
+- [Phase 45]: High-risk actions throw typed error with .code='APPROVAL_REQUIRED' so DAG executor can distinguish approval blocks from real failures
+- [Phase 45]: All approval lifecycle events (requested, granted, rejected) logged to msg_bus_events for audit trail
+- [Phase 45]: Approval endpoints restricted to platform_admin role only -- consistent with bridge management endpoints
 
 ### Pending Todos
 
@@ -93,6 +97,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T14:22:00Z
-Stopped at: Completed 45-01-PLAN.md
+Last session: 2026-04-03T14:35:45.973Z
+Stopped at: Completed 45-02-PLAN.md
 Resume file: None
