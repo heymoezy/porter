@@ -89,7 +89,7 @@
 **Milestone Goal:** Transform Porter from a chat router into a real multi-model orchestration platform. Task decomposition engine turns complex requests into parallel DAGs. Inter-agent messaging enables structured delegation. Autonomous job queues let Porter self-assign work. Gateway capabilities drive intelligent dispatch. Project monitoring watches the world per project. Project substrate gives every project a structured container.
 
 - [x] **Phase 40: Gateway Capability Registry** - Per-gateway strengths, cost tiers, context windows, and tool support stored and queried at dispatch time (completed 2026-04-03)
-- [ ] **Phase 41: Session Intelligence** - Frozen memory snapshots, cross-session FTS search, and dispatch outcome feedback into routing confidence
+- [x] **Phase 41: Session Intelligence** - Frozen memory snapshots, cross-session FTS search, and dispatch outcome feedback into routing confidence (completed 2026-04-03)
 - [ ] **Phase 42: Task Decomposition Engine** - Complex requests classified, decomposed into DAGs, executed in parallel, synthesized into coherent responses
 - [ ] **Phase 43: Inter-Agent Messaging** - Structured agent-to-agent delegation through Porter coordinator with full audit trail
 - [ ] **Phase 44: Autonomous Job Queue** - Agent jobs pulled by best-matched agents, Porter self-dispatches scheduled work, admin visibility
@@ -273,7 +273,7 @@ Plans:
   1. System prompt injected at session start is identical at turn 1 and turn 50 of the same session — no mid-session memory mutations observed
   2. An agent can issue a cross-session search query and receive ranked results from past sessions matching a keyword or topic
   3. After 10 dispatches to a gateway with measurable outcomes, the routing confidence score for that gateway changes — queryable via admin API
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 41-01-PLAN.md — Migration + frozen memory snapshot service + ai-router wiring (SIN-01)
@@ -368,7 +368,7 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 38. Adaptive Agent Context | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 39. Bridge Task Dispatch | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 40. Gateway Capability Registry | v6.0 | 2/2 | Complete | 2026-04-03 |
-| 41. Session Intelligence | 2/3 | In Progress|  | - |
+| 41. Session Intelligence | 3/3 | Complete   | 2026-04-03 | - |
 | 42. Task Decomposition Engine | v6.0 | 0/TBD | Not started | - |
 | 43. Inter-Agent Messaging | v6.0 | 0/TBD | Not started | - |
 | 44. Autonomous Job Queue | v6.0 | 0/TBD | Not started | - |

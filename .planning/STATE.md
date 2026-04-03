@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 41-02-PLAN.md
-last_updated: "2026-04-03T09:58:31.392Z"
+stopped_at: Completed 41-03-PLAN.md
+last_updated: "2026-04-03T10:00:30.278Z"
 progress:
   total_phases: 17
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 29
-  completed_plans: 29
+  completed_plans: 30
 ---
 
 # Project State
@@ -52,6 +52,8 @@ Plan: 1 of 3
 - [Phase 41]: upsertSession called with 0 tokens in ai-router to resolve session ID before snapshot lookup — idempotent, no token side-effects
 - [Phase 41]: getOrBuildSnapshot uses two-layer cache: in-memory LRU Map first, DB fallback on process restart
 - [Phase 41]: Route registered in v1/index.ts barrel (not index.ts directly) — matches all other v1 routes pattern
+- [Phase 41-session-intelligence]: Sync cache reader (getGatewayConfidenceSync) avoids making selectByHeuristic async — keeps routing hot path synchronous
+- [Phase 41-session-intelligence]: Confidence nudge formula (avgScore - 3.0) * confidence * 0.2 keeps nudge gentle so priority still dominates gateway selection
 
 ### Pending Todos
 
@@ -64,6 +66,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T09:58:31.389Z
-Stopped at: Completed 41-02-PLAN.md
+Last session: 2026-04-03T10:00:30.275Z
+Stopped at: Completed 41-03-PLAN.md
 Resume file: None
