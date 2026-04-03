@@ -744,6 +744,8 @@ export const agentMessages = pgTable('agent_messages', {
   chainId: text('chain_id'),
   stepNum: integer('step_num').default(0),
   injectedMemories: jsonb('injected_memories').default(sql`'[]'::jsonb`),
+  // SIN-01: FTS search vector (Phase 41) — actual tsvector type managed by raw SQL migration
+  searchVector: text('search_vector'),
 });
 
 // ── Memory V3: Structured State Tables ───────────────────────────────────────
@@ -973,6 +975,9 @@ export const bridgeDispatchLog = pgTable('bridge_dispatch_log', {
   isAgentMessage: integer('is_agent_message'),
   // skills_used: runtime skill selection telemetry (added rts_v1)
   skillsUsed: jsonb('skills_used'),
+  // SIN-01: outcome rating + note (Phase 41)
+  outcomeScore: integer('outcome_score'),
+  outcomeNote: text('outcome_note'),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 
@@ -1119,6 +1124,9 @@ export const sessionRegistry = pgTable('session_registry', {
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
   lastActiveAt: doublePrecision('last_active_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
   closedAt: doublePrecision('closed_at'),
+  // SIN-01: frozen memory snapshot (Phase 41)
+  memorySnapshot: text('memory_snapshot'),
+  frozenAt: doublePrecision('frozen_at'),
 });
 
 export const msgBusEvents = pgTable('msg_bus_events', {
