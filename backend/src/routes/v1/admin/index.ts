@@ -16,6 +16,7 @@ import settingsRoutes from './settings.js';
 import chatRoutes from './chat.js';
 import adminBridgeRoutes from './bridge.js';
 import jobsRoutes from './jobs.js';
+import watchersRoutes from './watchers.js';
 
 export default async function adminV1Routes(fastify: FastifyInstance) {
   // Diagnostics /report is PUBLIC (clients send error reports without auth)
@@ -50,4 +51,5 @@ export default async function adminV1Routes(fastify: FastifyInstance) {
   fastify.register(chatRoutes, { prefix: '/porter' });
   fastify.register(adminBridgeRoutes, { prefix: '/bridge' });
   fastify.register(jobsRoutes, { prefix: '/jobs' });
+  fastify.register(watchersRoutes, { prefix: '/watchers' });
 }
