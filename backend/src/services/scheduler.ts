@@ -12,6 +12,7 @@ import { recalculateStats } from './rpg-engine.js';
 import { getActiveSessions, rotateSession } from './session-registry.js';
 import { extractIntelligencePatterns } from './intelligence-loop.js';
 import { analyzeSkillEvolution } from './evolution-analyzer.js';
+import { assignJob } from './job-assignment.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -23,6 +24,8 @@ const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
 const RPG_RECALC_INTERVAL = 150; // 150 ticks × 2s = 300s = 5 minutes
 const INTEL_EXTRACTION_INTERVAL = 10800; // 10800 ticks × 2s = 6h
 const EVO_ANALYSIS_INTERVAL = 10800; // 10800 ticks x 2s = 6h
+const SYSTEM_JOB_INTERVAL = 1800;    // 1800 ticks x 2s = 60 min
+const GATEWAY_CHECK_INTERVAL = 900;  // 900 ticks x 2s = 30 min
 const CONTEXT_PRESSURE_THRESHOLD = 0.8;
 const CONTEXT_ROTATION_THRESHOLD = 0.95;
 const WORKER_ID = crypto.randomUUID();
@@ -206,6 +209,10 @@ interface JobRow {
   result: string | null;
   error: string | null;
   created_at: number;
+  source: string;
+  required_skill: string | null;
+  required_capability: string | null;
+  assigned_gateway: string | null;
 }
 
 function logFeatureFlagState() {
@@ -282,6 +289,33 @@ async function runContextPressureCheck(): Promise<void> {
   }
 }
 
+// ── System job self-scheduling (AJQ-03) ─────────────────────────────────────
+
+/**
+ * Enqueue a system job with deduplication guard.
+ * Returns the job ID if created, null if a pending/running duplicate exists.
+ */
+export async function scheduleSystemJob(
+  triggerType: string,
+  triggerData: Record<string, unknown> = {},
+  delaySeconds: number = 0,
+): Promise<string | null> {
+  // Deduplication guard: don't create if one already pending/running
+  const existing = await pool.query(
+    `SELECT 1 FROM agent_jobs WHERE trigger_type = $1 AND source = 'system' AND status IN ('pending', 'running') LIMIT 1`,
+    [triggerType],
+  );
+  if (existing.rows.length > 0) return null;
+
+  const id = crypto.randomUUID();
+  await pool.query(`
+    INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, source, status, scheduled_for, created_at)
+    VALUES ($1, 'system', $2, $3, 'system', 'pending', EXTRACT(EPOCH FROM NOW()) + $4, EXTRACT(EPOCH FROM NOW()))
+  `, [id, triggerType, JSON.stringify(triggerData), delaySeconds]);
+  console.log('[scheduler:system] enqueued %s job %s (delay=%ds)', triggerType, id.slice(0, 8), delaySeconds);
+  return id;
+}
+
 export async function start() {
   if (intervalId) return;
   console.log('[scheduler] started — polling every %dms, worker=%s', POLL_INTERVAL_MS, WORKER_ID.slice(0, 8));
@@ -329,6 +363,16 @@ async function tick() {
       analyzeSkillEvolution().catch(err => console.error('[scheduler:evo] analysis error:', err));
     }
 
+    // AJQ-03: Self-scheduled system jobs
+    if (tickCount > 0 && tickCount % SYSTEM_JOB_INTERVAL === 0) {
+      scheduleSystemJob('health_sweep', {}).catch(err =>
+        console.error('[scheduler:system] health_sweep enqueue error', err));
+    }
+    if (tickCount > 0 && tickCount % GATEWAY_CHECK_INTERVAL === 0) {
+      scheduleSystemJob('gateway_check', {}).catch(err =>
+        console.error('[scheduler:system] gateway_check enqueue error', err));
+    }
+
     // ── Agent jobs — require agentScheduling flag ──────────────────────────
     if (!featureFlags.agentScheduling) return;
 
@@ -336,6 +380,22 @@ async function tick() {
     if (job) {
       await logActivity(job.agent_id, job.id, job.project_id, 'job_started',
         `Job ${job.id.slice(0, 8)} started (trigger: ${job.trigger_type})`, '{}');
+
+      // AJQ: After claiming a job, try to assign agent + gateway based on constraints
+      if (job.required_skill || job.required_capability) {
+        const assignment = await assignJob(job.required_skill, job.required_capability);
+        if (assignment) {
+          if (assignment.gatewayType) {
+            await pool.query('UPDATE agent_jobs SET assigned_gateway = $1 WHERE id = $2', [assignment.gatewayType, job.id]);
+            job.assigned_gateway = assignment.gatewayType;
+          }
+          if (assignment.agentId !== 'system' && job.agent_id === 'system') {
+            await pool.query('UPDATE agent_jobs SET agent_id = $1 WHERE id = $2', [assignment.agentId, job.id]);
+            job.agent_id = assignment.agentId;
+          }
+        }
+      }
+
       await executeJob(job);
     }
 
@@ -647,6 +707,33 @@ async function executeJob(job: JobRow): Promise<void> {
         await logActivity(job.agent_id, job.id, job.project_id, 'job_failed',
           `External call failed after ${MAX_ATTEMPTS} attempts: ${errMsg}`, '{}');
       }
+    }
+    return;
+  }
+
+  // AJQ-03: System health sweep
+  if (job.trigger_type === 'health_sweep') {
+    try {
+      const probeResult = await runHealthProbe();
+      const summary = typeof probeResult === 'object' ? JSON.stringify(probeResult) : String(probeResult);
+      await markJobComplete(job.id, summary.slice(0, 2000));
+      await logActivity('system', job.id, null, 'health_sweep_complete', 'System health sweep completed', summary.slice(0, 500));
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      await markJobFailed(job.id, errMsg);
+    }
+    return;
+  }
+
+  // AJQ-03: Gateway check
+  if (job.trigger_type === 'gateway_check') {
+    try {
+      await refreshAllGateways(pool);
+      await markJobComplete(job.id, JSON.stringify({ checked_at: Date.now() / 1000 }));
+      await logActivity('system', job.id, null, 'gateway_check_complete', 'Gateway check completed', '{}');
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      await markJobFailed(job.id, errMsg);
     }
     return;
   }
