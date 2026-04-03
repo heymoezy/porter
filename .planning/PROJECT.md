@@ -8,20 +8,23 @@ Porter is an AI orchestration platform where non-technical users create projects
 
 Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input — the "GSD-like flow" applied to everything Porter does.
 
-## Current Milestone: v5.0 Living Skills — Skills as Live Behavioral Modules
+## Current Milestone: v6.0 The Orchestration Platform
 
-**Goal:** Transform Porter's skills from a static catalog into live behavioral modules that are selected at runtime, injected into agent prompts, measured for effectiveness, and evolve through feedback. Fix the source of truth (DB assignments, not prose blobs), build real authoring/inspection UX, implement runtime skill selection per dispatch, close the feedback loop, and replace fake quality tiers with real measurement.
+**Goal:** Transform Porter from a chat router into a real multi-model orchestration platform. Task decomposition, inter-agent messaging, autonomous job queues, tool-use dispatch across ALL gateways, project monitoring/watchers, and project substrate architecture.
 
 **Target features:**
-- Source of truth cleanup (template_skills + persona_skills canonical, SKILLS.md = generated manifest)
-- Skill Pack Explorer (view/edit actual .md files, quality diagnostics, scaffold detection)
-- Runtime skill auto-detection (rank assigned skills per task, inject selected packs into prompts, log selection)
-- Feedback telemetry (capture success/failure/correction signals, per-skill effectiveness scoring)
-- Agent evolution loop (feedback → learning → recommendations → supervised apply)
-- Skill quality scoring (replace ready/partial/missing with scaffold/baseline/production/high-performing/stale)
-- Template UX fix (templates show linked skills, assignment authoring, auto-detect thresholds)
+- Task decomposition engine (complex → DAG → parallel execution → synthesis)
+- Inter-agent messaging plane (structured handoffs, coordination, not just chat forwarding)
+- Autonomous job queue (agents pull work, Porter assigns based on capabilities)
+- Tool-use dispatch for ALL gateways (CLI subprocess + HTTP agent loop — already started in v5.2)
+- Project monitoring/watchers (scheduled agents watching external sources per project)
+- Project substrate V1 (every folder = project container with structure/intake/memory/governance)
+- Frozen memory snapshots (immutable at session start, writes go to next session)
+- Dynamic tool schema (strip tools for unavailable backends)
+- Capability registry (per-gateway strengths, cost tier, context window)
+- Porter control plane (Porter as master orchestrator, agents as subordinate workers)
 
-**Previous milestone:** v4.0 The Arena (6/7 phases shipped, Phase 28 Battle Arena deferred)
+**Previous milestone:** v5.0 Living Skills (8 phases shipped — skill selection, feedback telemetry, evolution, quality scoring, template UX, adaptive context, bridge task dispatch)
 
 ## Requirements
 
@@ -49,9 +52,6 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ Ephemeral project-scoped agents — v1.0 Phase 4
 - ✓ Transparency dashboard (activity, health, decisions) — v1.0 Phase 6
 - ✓ SSE real-time hub replacing polling — v1.0 Phase 6
-
-### Active
-
 - ✓ API standardization (consistent /api/v1/* surface, envelopes, error codes, OpenAPI) — v2.0 Phase 8
 - ✓ Streaming chat (token-by-token SSE from all AI backends, cancellation) — v2.0 Phase 9
 - ✓ Collaborative sessions (invite by email, per-person roles, shared project/agent access) — v2.0 Phase 10
@@ -68,40 +68,40 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ Bridge admin surface (7 admin endpoints, gateway CRUD, routing rules, cost analytics, SSE events) — v3.0 Phase 22
 - ✓ Integration & multi-tenant (Memory V3 signals, per-agent stats, session history, user API keys, workspace overrides, usage attribution) — v3.0 Phase 23
 - ✓ Smart routing engine (DB-driven gateway selection, routing rules, dispatch logging, concurrency queuing, session context) — v3.0 Phase 20
-- [ ] SaaS billing (Lemon Squeezy subscriptions, usage metering, plan limit enforcement)
 - ✓ Error capture (frontend error POST endpoint with stack traces, component context) — v2.0 Phase 8
-- [ ] Codebase migration (gradual — porter.py shrinks as features move to Fastify)
+- ✓ Bridge task dispatch (CLI subprocess + HTTP agent loop for real code execution) — v5.2
+
+### Active
+
+- [ ] SaaS billing (Lemon Squeezy subscriptions, usage metering, plan limit enforcement)
 
 ### Out of Scope
 
-- Frontend UI for v2 features — frontend-v2 being built separately
-- Full porter.py deprecation — gradual shrink, not a v2 goal
 - Mobile native app — web-first, responsive design
 - Self-hosting support — SaaS-only for now
 - Custom model training — use existing model providers via routing
 - Video/voice calling — chat and messaging only
-- AARRR analytics — being built by another Claude session
 
 ## Context
 
-Porter has been in development since Feb 18, 2026. Current version is v2.2.0 (Fastify backend; legacy porter.py v0.34.23 deprecated). The codebase has two stacks:
+Porter has been in development since Feb 18, 2026. Current version is v5.2.0. Single monorepo, single Fastify process on :3001.
 
-**Fastify backend** (`backend/src/`): TypeScript, Drizzle ORM, 17 v1 route groups, AI router, scheduler, event triggers, external connections. This is the active stack — all new work goes here.
+**Backend** (`backend/src/`): TypeScript, Fastify 5, Drizzle ORM, PostgreSQL. Brain + Admin merged. All routes on :3001.
 
-**porter.py** (~57K lines): Legacy Python monolith. Still handles some brain functions (memory injection, chat commands, system prompts). Shrinks gradually as functions migrate to Fastify. Proxy plugin forwards unhandled routes to it.
+**Admin** (`admin/frontend/`): React Router 7 + shadcn/ui + Tailwind 4. Served as static files by Brain.
 
-**frontend-v2** (`frontend-v2/`): React Router 7 + shadcn/ui + Tailwind 4. Being built by another Claude session. All v2 backend work is API-only — frontend connects later.
+**Bridge** (`backend/src/services/bridge/`): 5 gateway adapters (Claude CLI, Codex CLI, Gemini CLI, OpenClaw, Ollama). Routing engine, circuit breakers, dispatch logging, task execution (CLI + HTTP). Inter-agent messaging endpoint exists but coordination layer missing.
 
-**frontend** (`frontend/`): Legacy React frontend. Being replaced by frontend-v2.
+**Key gap:** Bridge is currently a chat router, not an orchestration platform. The coordination layer (task decomposition, job queues, agent-to-agent delegation, autonomous operation) was designed in research docs but never built. v6.0 closes this gap.
 
 ## Constraints
 
-- **Architecture**: All v2 work is pure backend API. Zero frontend. Frontend-v2 connects later.
-- **Runtime**: Linux VPS, 8GB RAM, 2 vCPU, no GPU — must stay performant
-- **No pip installs**: Python backend is stdlib-only, new backend work goes to Node/TypeScript
-- **Backwards compatibility**: Existing 35 Playwright tests must keep passing
-- **Single DB**: PostgreSQL 16 — single source of truth (SQLite fully eliminated)
-- **Coordination**: Another Claude session building frontend-v2 and admin analytics — avoid conflicts on shared files
+- **Architecture**: Single Fastify process on :3001. Brain serves admin frontend static files.
+- **Runtime**: Linux VPS, 8GB RAM + 8GB swap, 2 vCPU AMD EPYC, 96GB disk, no GPU
+- **Single DB**: PostgreSQL 16 — single source of truth
+- **Backwards compatibility**: Existing Playwright tests must keep passing
+- **All gateways**: Bridge must support ALL 5 gateways equally (Claude CLI, Codex CLI, Gemini CLI, OpenClaw, Ollama)
+- **No port 5175**: Everything on :3001. Dead admin backend must never be referenced.
 
 ## Key Decisions
 
@@ -109,18 +109,19 @@ Porter has been in development since Feb 18, 2026. Current version is v2.2.0 (Fa
 |----------|-----------|---------|
 | Gradual monolith split (porter.py → Fastify) | 900KB monolith unmaintainable, but full rewrite too risky | ✓ Working — v1.0 migrated core routes |
 | Project flow is first priority | Core value is "create project, agents work" — everything else builds on this | ✓ Shipped — guided wizard in Phase 5 |
-| SaaS product model with collaborative sessions | Unique differentiator: invite people to work with your projects and agents | — v2.0 scope |
+| SaaS product model with collaborative sessions | Unique differentiator: invite people to work with your projects and agents | ✓ Shipped v2.0 Phase 10 |
 | Account-level + project-level connections | Flexibility: connect GitHub once, override per project if needed | ✓ Shipped Phase 7 |
 | Memory V2 must filter noise (logins, uploads) | Current system captures everything, dilutes actual learning | ✓ Shipped Phase 2 |
-| v2.0 is backend-only | Frontend-v2 being built separately. All v2 features are pure API. | — v2.0 |
-| porter.py gradual shrink | Don't spend v2 time on migration. Brain migrates naturally as features move. | — v2.0 |
-
 | porter.py fully deprecated | All AI routing, SSE, streaming now in Fastify. porter.py stopped+disabled. | ✓ Completed 2026-03-24 |
 | SQLite fully eliminated | Both Brain and Admin on PostgreSQL. better-sqlite3 removed. | ✓ Completed 2026-03-25 |
-| Bridge as major innovation | AI gateway management is Porter's differentiator — first-run detection, smart routing, cost tracking | — v3.0 scope |
-| Skills must be live behavioral modules, not catalog entries | OpenClaw audit revealed skills_text is static prose, template_skills empty, no runtime selection, no feedback loop | — v5.0 scope |
-| DB assignments are source of truth for skills | skills_text / JSONB arrays are legacy; template_skills + persona_skills junction tables are canonical | — v5.0 scope |
-| SKILLS.md is a thin manifest, not prose | Generated from DB assignments at instantiate-time, points to pack roots, no duplication | — v5.0 scope |
+| Bridge as major innovation | AI gateway management is Porter's differentiator — first-run detection, smart routing, cost tracking | ✓ Shipped v3.0 |
+| Skills must be live behavioral modules, not catalog entries | OpenClaw audit revealed skills_text is static prose, template_skills empty, no runtime selection, no feedback loop | ✓ Shipped v5.0 |
+| DB assignments are source of truth for skills | skills_text / JSONB arrays are legacy; template_skills + persona_skills junction tables are canonical | ✓ Shipped v5.0 |
+| SKILLS.md is a thin manifest, not prose | Generated from DB assignments at instantiate-time, points to pack roots, no duplication | ✓ Shipped v5.0 |
+| Bridge task dispatch (v5.2) | CLI subprocess + HTTP agent loop for real code execution | ✓ Verified — Claude + Codex + Gemini all working |
+| Brain + Admin merge | One process, one port, one version number | ✓ Shipped v5.0 |
+| porter.py deleted | Fastify is sole backend | ✓ Complete |
+| Orchestration is THE feature | Not a chat router — task decomposition + agent coordination | — v6.0 scope |
 
 ---
-*Last updated: 2026-04-02 after v5.0 Living Skills milestone started*
+*Last updated: 2026-04-02 after v6.0 The Orchestration Platform milestone scoped*
