@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 39-03-PLAN.md
-last_updated: "2026-04-03T08:07:31.828Z"
+stopped_at: Completed 39-02-PLAN.md
+last_updated: "2026-04-03T08:10:09.698Z"
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 24
-  completed_plans: 24
+  completed_plans: 25
 ---
 
 # Project State
@@ -100,6 +100,8 @@ Plan: 1 of 3
 - [Phase 39]: CWD_ALLOWLIST is a module constant — security gate not config-driven, intentionally restrictive
 - [Phase 39]: List endpoint truncates prompt to 200 chars and output to 500 chars — full content only via detail endpoint
 - [Phase 39]: paramIdx counter pattern used for dynamic WHERE clause building in bridge task list endpoint
+- [Phase 39-02]: runTaskInBackground is fire-and-forget (void) keeping POST /dispatch response immediate at 202
+- [Phase 39-02]: In-memory runningTasks Map<string, AbortController> for cancel — no DB round-trip on cancel hot path
 
 ### Roadmap Evolution
 
@@ -117,6 +119,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T08:07:31.823Z
-Stopped at: Completed 39-03-PLAN.md
+Last session: 2026-04-03T08:10:09.695Z
+Stopped at: Completed 39-02-PLAN.md
 Resume file: None

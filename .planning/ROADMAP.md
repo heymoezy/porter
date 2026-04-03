@@ -81,7 +81,7 @@
 
 ### Bridge Task Dispatch
 
-- [ ] **Phase 39: Bridge Task Dispatch** — CLI gateways dispatch real tasks with tool access, lifecycle tracking, SSE streaming, admin visibility
+- [x] **Phase 39: Bridge Task Dispatch** — CLI gateways dispatch real tasks with tool access, lifecycle tracking, SSE streaming, admin visibility (completed 2026-04-03)
 
 ## Phase Details
 
@@ -220,7 +220,7 @@ Plans:
   3. Task output streams via SSE events (bridge:task-progress for incremental output, bridge:task-complete for final result)
   4. bridge_tasks table tracks full lifecycle (queued -> running -> complete/failed/cancelled) with output, duration, exit code, gateway used
   5. Admin can view running/completed tasks with output via GET /api/admin/bridge/tasks
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 39-01-PLAN.md — Types + DB schema + migration + TaskExecutor class
 - [ ] 39-02-PLAN.md — REST API routes (dispatch, poll, cancel, list) + SSE wiring
@@ -245,4 +245,4 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 36. Skill Quality Scoring | v5.0 | Complete    | 2026-04-03 | - |
 | 37. Template Skill UX | 2/2 | Complete    | 2026-04-03 | - |
 | 38. Adaptive Agent Context | 3/3 | Complete    | 2026-04-03 | - |
-| 39. Bridge Task Dispatch | 2/3 | In Progress|  | - |
+| 39. Bridge Task Dispatch | 3/3 | Complete   | 2026-04-03 | - |
