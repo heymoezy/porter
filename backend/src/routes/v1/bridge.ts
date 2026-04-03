@@ -15,7 +15,7 @@ import type {
 import { logMsgBusEvent, updateMsgBusEvent } from '../../services/msg-bus.js';
 
 /** Maximum Bridge hops before a request is rejected to prevent loops. */
-const MAX_AGENT_HOPS = 5;
+const MAX_AGENT_HOPS = 3;
 
 // ── Row mappers ───────────────────────────────────────────────────────────────
 
@@ -463,6 +463,25 @@ export default async function bridgeV1Routes(
 
     // ── Max-hops guard ─────────────────────────────────────────────────────
     if (hopCount >= MAX_AGENT_HOPS) {
+      // PCP-02: Log depth violation to msg_bus_events for audit
+      try {
+        await logMsgBusEvent({
+          correlationId: message.correlationId,
+          sourceAgent: message.sourceAgent,
+          sourceGateway: message.sourceGateway,
+          targetAgent: message.targetAgent,
+          targetGateway: message.targetGateway,
+          intent: 'depth_violation',
+          payload: {
+            reason: 'MAX_HOPS_EXCEEDED',
+            hopCount,
+            maxHops: MAX_AGENT_HOPS,
+            task: message.task?.slice(0, 200),
+          },
+          hopCount,
+        });
+      } catch { /* non-critical */ }
+
       return reply.code(429).send(err(
         'MAX_HOPS_EXCEEDED',
         `Bridge hop limit reached (hopCount=${hopCount}, max=${MAX_AGENT_HOPS})`,

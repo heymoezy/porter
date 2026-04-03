@@ -126,6 +126,8 @@ export interface RoutingContext {
     threshold: number;
     totalCandidates: number;
   };
+  /** Phase 45: Delegation doctrine strategy chosen for this dispatch */
+  dispatchStrategy?: 'direct' | 'delegate' | 'parallel' | 'escalate';
   /** Phase 38: Directive selection stats — for context_stats logging */
   directiveStats?: {
     total: number;

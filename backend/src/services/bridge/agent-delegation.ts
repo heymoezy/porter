@@ -21,6 +21,9 @@ import { logMsgBusEvent, updateMsgBusEvent } from '../msg-bus.js';
 import { routingEngine } from './routing-engine.js';
 import type { AgentMessageLogContext, RoutingContext } from './types.js';
 
+/** PCP-02: Maximum delegation depth (stricter than bridge HTTP limit) */
+const MAX_DELEGATION_DEPTH = 3;
+
 // ── Request / Result interfaces ───────────────────────────────────────────────
 
 /** Parameters for an in-process agent delegation call. */
@@ -99,6 +102,29 @@ export async function delegateToAgent(opts: DelegationRequest): Promise<Delegati
   const source = opts.sourceAgent ?? 'porter';
   const hopCount = opts.hopCount ?? 0;
   const chainId = opts.correlationId;
+
+  // PCP-02: Enforce delegation depth limit
+  if (hopCount >= MAX_DELEGATION_DEPTH) {
+    // Log violation to msg_bus_events
+    try {
+      await logMsgBusEvent({
+        correlationId: opts.correlationId,
+        sourceAgent: source,
+        targetAgent: opts.targetAgent,
+        targetGateway: opts.targetGateway,
+        intent: 'depth_violation',
+        payload: {
+          reason: 'DELEGATION_DEPTH_EXCEEDED',
+          hopCount,
+          maxDepth: MAX_DELEGATION_DEPTH,
+          task: opts.task?.slice(0, 200),
+        },
+        hopCount,
+      });
+    } catch { /* non-critical */ }
+
+    throw new Error(`Delegation depth limit exceeded (depth=${hopCount}, max=${MAX_DELEGATION_DEPTH})`);
+  }
 
   // ── Step 1: Log to msg_bus_events (non-blocking) ──────────────────────────
   let msgBusEventId: string | null = null;
