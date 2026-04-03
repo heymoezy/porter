@@ -109,6 +109,18 @@ None — plan executed exactly as written. The routing-engine.ts Task 2 changes 
 - Plan 38-03 (context pressure observability) is already complete (committed before this plan ran)
 - Phase 38 fully complete: directive scoring (38-01), tool compression (38-02), context observability (38-03)
 
+## Self-Check: PASSED
+
+- FOUND: `backend/src/services/context-compressor.ts`
+- FOUND: `backend/src/db/migrate-acx-v2.ts`
+- FOUND: commit `6d95a6c` (migration)
+- FOUND: commit `0050143` (context-compressor service)
+- FOUND: commit `05f097f` (session-registry trigger + types)
+- VERIFIED: `acx_v2` in schema_migrations
+- VERIFIED: `compression_stats` column on `bridge_dispatch_log`
+- VERIFIED: `compression_events`/`tokens_reclaimed` columns on `session_registry`
+- VERIFIED: Porter health OK (v5.0.1)
+
 ---
 *Phase: 38-adaptive-agent-context*
 *Completed: 2026-04-03*
