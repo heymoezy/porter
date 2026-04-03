@@ -8,6 +8,7 @@ import fsSync from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
+import { processIngress } from '../../services/file-ingress.js';
 
 // --- MIME detection ---------------------------------------------------------
 
@@ -668,13 +669,26 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
       client.release();
     }
 
+    // Intelligence ingress: classify and route file to project directory (best-effort)
+    let ingressResult: { category: string; newPath: string } | null = null;
+    if (projectId) {
+      ingressResult = await processIngress({
+        fileId,
+        filename,
+        diskPath,
+        mimeType,
+        projectId,
+      });
+    }
+
     return reply.code(201).send(ok({
       file: {
         id: fileId,
         filename,
-        disk_path: diskPath,
+        disk_path: ingressResult?.newPath ?? diskPath,
         mime_type: mimeType,
         size_bytes: buffer.length,
+        ...(ingressResult ? { category: ingressResult.category } : {}),
       },
     }));
   });
