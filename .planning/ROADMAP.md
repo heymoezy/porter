@@ -352,7 +352,7 @@ Plans:
   3. Watcher findings appear in the project activity feed with a source badge (web/rss/email/custom), summary text, and expandable detail — not a raw dump
   4. A finding marked as important triggers a notification visible in the in-app feed, and optionally sends an email if configured
   5. Admin ops view shows all active watchers across all projects with last run time, next run time, and resource usage
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 46-01-PLAN.md — Migration (project_watchers + watcher_findings) + watcher execution service + scheduler integration (PMN-01, PMN-02)
@@ -400,5 +400,5 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 43. Inter-Agent Messaging | 1/2 | In Progress|  | - |
 | 44. Autonomous Job Queue | 2/2 | Complete    | 2026-04-03 | - |
 | 45. Porter Control Plane | 2/2 | Complete    | 2026-04-03 | - |
-| 46. Project Monitoring | v6.0 | 0/3 | Not started | - |
+| 46. Project Monitoring | 1/3 | In Progress|  | - |
 | 47. Project Substrate | v6.0 | 0/TBD | Not started | - |
