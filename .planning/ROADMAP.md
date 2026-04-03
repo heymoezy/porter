@@ -66,6 +66,16 @@
 
 </details>
 
+### Phase 38: Adaptive Agent Context
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 37
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 38 to break down)
+
 ---
 
 ### v5.0 Living Skills (Active)
@@ -76,7 +86,7 @@
 - [x] **Phase 32: Skill Pack Explorer** — View/edit real .md files, quality diagnostics (completed 2026-04-02)
 - [x] **Phase 33: Runtime Skill Selector** — Rank skills per task, inject packs, log selection (completed 2026-04-02)
 - [x] **Phase 34: Feedback Telemetry** — Capture signals, effectiveness scoring (completed 2026-04-02)
-- [ ] **Phase 35: Agent Evolution Loop** — Recommendations, proposed changes, supervised apply
+- [x] **Phase 35: Agent Evolution Loop** — Recommendations, proposed changes, supervised apply (completed 2026-04-03)
 - [x] **Phase 36: Skill Quality Scoring** — Real quality tiers, audit job (completed 2026-04-03)
 - [ ] **Phase 37: Template Skill UX** — Assignment authoring, effectiveness display
 
@@ -158,7 +168,7 @@ Plans:
   3. Admin UI shows pending proposals with diffs (what would change) and approve/reject buttons
   4. Approving a proposal updates persona_skills, regenerates SKILLS.md, and logs the evolution event
   5. Evolution event log shows timeline of what changed, why, which feedback triggered it, and whether effectiveness improved after the change
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [x] 35-01-PLAN.md — Test scaffold + migration (evolution tables) + analyzer service + scheduler hook
 - [ ] 35-02-PLAN.md — Admin API endpoints (list/approve/reject proposals) + SKILLS.md regeneration
@@ -203,6 +213,6 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 32. Skill Pack Explorer | v5.0 | 4/4 | Complete | 2026-04-02 |
 | 33. Runtime Skill Selector | v5.0 | 2/2 | Complete | 2026-04-02 |
 | 34. Feedback Telemetry | 4/4 | Complete   | 2026-04-02 | - |
-| 35. Agent Evolution Loop | 2/3 | In Progress|  | - |
+| 35. Agent Evolution Loop | 3/3 | Complete   | 2026-04-03 | - |
 | 36. Skill Quality Scoring | v5.0 | Complete    | 2026-04-03 | - |
 | 37. Template Skill UX | v5.0 | 0/TBD | Not started | - |
