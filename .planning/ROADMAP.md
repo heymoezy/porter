@@ -185,7 +185,10 @@ Plans:
   3. Each skill on a template can be marked mandatory (always selected) or optional (subject to runtime auto-detection)
   4. Template detail shows aggregated skill effectiveness across all agents spawned from that template
   5. A "preview" feature shows which skills would be auto-selected for a sample task prompt
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 37-01-PLAN.md — DB migration (is_mandatory, assignment_rationale) + 5 admin API endpoints (CRUD + preview)
+- [ ] 37-02-PLAN.md — Frontend TemplateSkillsTab component + agent-detail.tsx wiring
 
 ### Phase 38: Adaptive Agent Context
 **Goal**: Dispatched agents interact intelligently with Porter's memory and context systems — querying directives/concepts on demand instead of receiving bulk injection, managing deep multi-turn execution without context decay, and compressing tool outputs to maximize effective token budget
@@ -197,7 +200,11 @@ Plans:
   3. Bridge supports 50+ turn agent sequences with automatic context summarization — tool call results beyond turn N are compressed to preserve token budget without losing key facts
   4. Verbose tool call results (>500 tokens) are automatically summarized before being appended to conversation history, with full results available via a recall mechanism if needed
   5. Context pressure metrics (tokens used, turns elapsed, compression events) are logged per dispatch in bridge_dispatch_log for observability
-**Plans**: TBD
+**Plans:** 0/3 plans
+Plans:
+- [ ] 38-01-PLAN.md — Context-aware directive injection (directive scoring, tags migration, selective Tier 2)
+- [ ] 38-02-PLAN.md — Deep execution & tool output compression (context-compressor service, 70%/85% triggers)
+- [ ] 38-03-PLAN.md — Context pressure observability (context_stats JSONB, admin UI charts)
 
 ## Progress
 
@@ -216,5 +223,5 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 34. Feedback Telemetry | 4/4 | Complete   | 2026-04-02 | - |
 | 35. Agent Evolution Loop | 3/3 | Complete    | 2026-04-03 | - |
 | 36. Skill Quality Scoring | v5.0 | Complete    | 2026-04-03 | - |
-| 37. Template Skill UX | v5.0 | 0/TBD | Not started | - |
-| 38. Adaptive Agent Context | v5.0 | 0/TBD | Not started | - |
+| 37. Template Skill UX | v5.0 | 0/2 | Not started | - |
+| 38. Adaptive Agent Context | v5.0 | 0/3 | Not started | - |
