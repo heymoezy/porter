@@ -1218,4 +1218,117 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
 
     return reply.send(ok({ events: rows, count: rows.length }));
   });
+
+  // GET /api/admin/bridge/dispatches/:id/context — ACX-05: Context pressure for a dispatch
+  fastify.get('/dispatches/:id/context', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const rows = await queryAll<{
+      id: string;
+      context_stats: Record<string, unknown> | null;
+      input_tokens: number | null;
+      output_tokens: number | null;
+    }>(
+      `SELECT id, context_stats, input_tokens, output_tokens
+       FROM bridge_dispatch_log WHERE id = $1`,
+      [id],
+    );
+
+    if (!rows.length) {
+      return reply.status(404).send(err('NOT_FOUND', `Dispatch ${id} not found`));
+    }
+
+    const row = rows[0];
+
+    // Return context_stats if present, or a zeroed-out fallback
+    const stats = row.context_stats ?? {
+      memory: { tiers_used: [], total_memory_tokens: 0, budget_tokens: 0 },
+      directives: { total_active: 0, injected: 0, skipped: 0, scoring_mode: 'all' },
+      skills: { candidates: 0, selected: 0, prompt_tokens: 0 },
+      compression: { tool_outputs_compressed: 0, conversation_turns_compressed: 0, tokens_saved: 0 },
+      session: { turn_number: 0, context_pct: 0, compression_events: 0, tokens_reclaimed: 0 },
+    };
+
+    return reply.send(ok({
+      dispatch_id: row.id,
+      context_stats: stats,
+      input_tokens: row.input_tokens,
+      output_tokens: row.output_tokens,
+    }));
+  });
+
+  // GET /api/admin/bridge/sessions/:id/context-pressure — ACX-05: Session pressure timeline
+  fastify.get('/sessions/:id/context-pressure', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const sessionRows = await queryAll<{
+      id: string;
+      chat_id: string | null;
+      agent_id: string | null;
+      created_at: number;
+    }>(
+      `SELECT id, chat_id, agent_id, created_at
+       FROM session_registry
+       WHERE id = $1 OR chat_id = $1
+       ORDER BY created_at DESC LIMIT 1`,
+      [id],
+    );
+
+    if (!sessionRows.length) {
+      return reply.status(404).send(err('NOT_FOUND', `Session ${id} not found`));
+    }
+
+    const session = sessionRows[0];
+
+    const filterClauses: string[] = [];
+    const params: unknown[] = [];
+
+    if (session.chat_id) {
+      params.push(session.chat_id);
+      filterClauses.push(`chat_id = $${params.length}`);
+    }
+    if (session.agent_id) {
+      params.push(session.agent_id);
+      filterClauses.push(`agent_id = $${params.length}`);
+    }
+
+    if (!filterClauses.length) {
+      return reply.send(ok({ session_id: id, turns: [] }));
+    }
+
+    params.push(session.created_at);
+    const timeFilter = `created_at >= $${params.length}`;
+
+    const dispatchRows = await queryAll<{
+      id: string;
+      context_stats: Record<string, unknown> | null;
+      created_at: number | null;
+    }>(
+      `SELECT id, context_stats, created_at
+       FROM bridge_dispatch_log
+       WHERE (${filterClauses.join(' OR ')}) AND ${timeFilter}
+       ORDER BY created_at ASC`,
+      params,
+    );
+
+    const turns = dispatchRows.map((row, idx) => {
+      const cs = row.context_stats as {
+        session?: { turn_number?: number; context_pct?: number; compression_events?: number };
+      } | null;
+      const s = cs?.session;
+      return {
+        turn: s?.turn_number ?? (idx + 1),
+        context_pct: s?.context_pct ?? null,
+        compression_event: (s?.compression_events ?? 0) > 0,
+        dispatch_id: row.id,
+        created_at: row.created_at,
+      };
+    });
+
+    return reply.send(ok({
+      session_id: session.id,
+      chat_id: session.chat_id,
+      turns,
+    }));
+  });
 }
