@@ -106,6 +106,26 @@ function statusIndicator(status: string): 'healthy' | 'degraded' | 'unavailable'
   return 'unknown';
 }
 
+/**
+ * GWC-01: Normalize gateway capabilities for frontend display.
+ * Returns both the structured record (if available) and a flat tag array for backward compat.
+ */
+function normalizeGatewayCapabilities(raw: unknown): {
+  capabilities: unknown;
+  capability_tags: string[];
+  capability_record: Record<string, unknown> | null;
+} {
+  if (Array.isArray(raw)) {
+    return { capabilities: raw, capability_tags: raw as string[], capability_record: null };
+  }
+  if (raw && typeof raw === 'object' && 'cost_tier' in raw) {
+    const rec = raw as Record<string, unknown>;
+    const tags = Array.isArray(rec.legacy_tags) ? (rec.legacy_tags as string[]) : [];
+    return { capabilities: raw, capability_tags: tags, capability_record: rec };
+  }
+  return { capabilities: raw ?? [], capability_tags: [], capability_record: null };
+}
+
 export default async function bridgeRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', fastify.requirePlatformAdmin);
 
@@ -126,11 +146,15 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
       ORDER BY g.priority ASC, g.created_at ASC
     `);
 
-    const gateways = rows.map(row => ({
-      ...row,
-      status_indicator: statusIndicator(row.status),
-      briefing_slot: null,
-    }));
+    const gateways = rows.map(row => {
+      const caps = normalizeGatewayCapabilities(row.capabilities);
+      return {
+        ...row,
+        ...caps,
+        status_indicator: statusIndicator(row.status),
+        briefing_slot: null,
+      };
+    });
 
     const summary = {
       total_gateways: gateways.length,
