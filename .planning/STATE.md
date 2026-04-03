@@ -4,7 +4,7 @@ milestone: v5.0
 milestone_name: Living Skills
 status: unknown
 stopped_at: Completed 35-03-PLAN.md
-last_updated: "2026-04-03T01:29:03.044Z"
+last_updated: "2026-04-03T01:35:22.731Z"
 progress:
   total_phases: 8
   completed_phases: 5
@@ -84,6 +84,10 @@ Plan: 2 of 3
 - [Phase 35-02]: regenSkillsManifest inlined to avoid cross-service coupling; config.personasDir used for path consistency; rewrite_prompt/enrich_examples flagged for manual follow-up; effectiveness_before captured before mutation
 - [Phase 35]: EvolutionPanel uses proposals list filtered to non-pending for history tab — avoids evolution_events join complexity since proposals already carry persona/skill names
 - [Phase 35]: SkillsStudio tab ternary wraps existing content in fragment — zero restructuring of existing skills rendering logic
+
+### Roadmap Evolution
+
+- Phase 38 added: Adaptive Agent Context — smart directive injection, agent self-querying of memory DB, 50+ turn deep execution, tool output compression. Inspired by Tasklet.ai patterns. Depends on Phase 35 + 36.
 
 ### Pending Todos
 

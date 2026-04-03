@@ -6,7 +6,7 @@
 - ✅ **v2.0 Backend Ready** — Phases 8-15 (shipped 2026-03-24)
 - ✅ **v3.0 Porter Bridge** — Phases 16-23 (shipped 2026-03-25) — AI gateway, model intelligence, smart routing
 - ⏸️ **v4.0 The Arena** — Phases 24-30 (6/7 shipped, Phase 28 Battle Arena deferred)
-- 🚧 **v5.0 Living Skills** — Phases 31-37 (active) — Skills as live behavioral modules
+- 🚧 **v5.0 Living Skills** — Phases 31-38 (active) — Skills as live behavioral modules
 
 ## Phases
 
@@ -66,18 +66,6 @@
 
 </details>
 
-### Phase 38: Adaptive Agent Context
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 37
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd:plan-phase 38 to break down)
-
----
-
 ### v5.0 Living Skills (Active)
 
 **Milestone Goal:** Transform skills from a static catalog into live behavioral modules that are selected at runtime, injected into dispatch prompts, measured for effectiveness, and evolved through feedback. Fix the broken source of truth, build real authoring UX, implement runtime selection, close the feedback loop, and replace fake quality tiers with real measurement.
@@ -89,6 +77,7 @@ Plans:
 - [x] **Phase 35: Agent Evolution Loop** — Recommendations, proposed changes, supervised apply (completed 2026-04-03)
 - [x] **Phase 36: Skill Quality Scoring** — Real quality tiers, audit job (completed 2026-04-03)
 - [ ] **Phase 37: Template Skill UX** — Assignment authoring, effectiveness display
+- [ ] **Phase 38: Adaptive Agent Context** — Smart directive injection, agent self-querying, deep execution, context compression
 
 ## Phase Details
 
@@ -198,10 +187,22 @@ Plans:
   5. A "preview" feature shows which skills would be auto-selected for a sample task prompt
 **Plans**: TBD
 
+### Phase 38: Adaptive Agent Context
+**Goal**: Dispatched agents interact intelligently with Porter's memory and context systems — querying directives/concepts on demand instead of receiving bulk injection, managing deep multi-turn execution without context decay, and compressing tool outputs to maximize effective token budget
+**Depends on**: Phase 35, Phase 36
+**Requirements**: ACX-01, ACX-02, ACX-03, ACX-04, ACX-05
+**Success Criteria** (what must be TRUE):
+  1. Agents can execute SQL queries against the concepts and directives tables during dispatch — retrieving task-relevant context on demand instead of receiving all directives in the system prompt
+  2. memory-injection.ts selects directives based on task type, active skills, and conversation context — injecting only the relevant subset (measured: avg injected directives < 50% of total active directives)
+  3. Bridge supports 50+ turn agent sequences with automatic context summarization — tool call results beyond turn N are compressed to preserve token budget without losing key facts
+  4. Verbose tool call results (>500 tokens) are automatically summarized before being appended to conversation history, with full results available via a recall mechanism if needed
+  5. Context pressure metrics (tokens used, turns elapsed, compression events) are logged per dispatch in bridge_dispatch_log for observability
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can parallel 36) → 36 → 37.
+Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can parallel 36) → 36 → 37 → 38.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -213,6 +214,7 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 32. Skill Pack Explorer | v5.0 | 4/4 | Complete | 2026-04-02 |
 | 33. Runtime Skill Selector | v5.0 | 2/2 | Complete | 2026-04-02 |
 | 34. Feedback Telemetry | 4/4 | Complete   | 2026-04-02 | - |
-| 35. Agent Evolution Loop | 3/3 | Complete   | 2026-04-03 | - |
+| 35. Agent Evolution Loop | 3/3 | Complete    | 2026-04-03 | - |
 | 36. Skill Quality Scoring | v5.0 | Complete    | 2026-04-03 | - |
 | 37. Template Skill UX | v5.0 | 0/TBD | Not started | - |
+| 38. Adaptive Agent Context | v5.0 | 0/TBD | Not started | - |
