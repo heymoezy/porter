@@ -12,6 +12,7 @@ import { SkillEditSheet } from "~/components/forge/skill-edit-sheet"
 import { SkillImportDialog } from "~/components/forge/skill-import-dialog"
 import { SkillsMarketplace } from "~/components/forge/skills-marketplace"
 import { SkillQualityBadge, type QualityTier } from "~/components/skill-quality-badge"
+import { EvolutionPanel } from "~/components/forge/evolution-panel"
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -56,6 +57,7 @@ const tierColors: Record<string, string> = {
 export function SkillsStudio() {
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState<"skills" | "evolution">("skills")
   const [search, setSearch] = useState("")
   const [activeCat, setActiveCat] = useState("all")
   const [activeTier, setActiveTier] = useState("all")
@@ -126,6 +128,34 @@ export function SkillsStudio() {
 
   return (
     <div className="space-y-2">
+      {/* Tab switcher */}
+      <div className="flex items-center gap-1 mb-2 border-b border-border pb-2">
+        <button
+          onClick={() => setActiveTab("skills")}
+          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+            activeTab === "skills"
+              ? "bg-surface text-text"
+              : "text-text3 hover:text-text"
+          }`}
+        >
+          Skills
+        </button>
+        <button
+          onClick={() => setActiveTab("evolution")}
+          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+            activeTab === "evolution"
+              ? "bg-surface text-text"
+              : "text-text3 hover:text-text"
+          }`}
+        >
+          Evolution
+        </button>
+      </div>
+
+      {activeTab === "evolution" ? (
+        <EvolutionPanel />
+      ) : (
+      <>
       {/* Stats + actions + search */}
       <div className="flex items-center gap-2">
         <Sparkles className="size-3 text-accent-porter" />
@@ -349,6 +379,8 @@ export function SkillsStudio() {
             <div className="py-6 text-center text-xs text-text3">{search ? "No skills match" : "No skills"}</div>
           )}
         </>
+      )}
+      </>
       )}
 
       {/* Dialogs */}
