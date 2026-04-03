@@ -1,6 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import { ok, err } from '../lib/envelope.js';
 import { execute, queryOne, queryAll } from '../db/pg.js';
+import { config } from '../config.js';
+import crypto from 'crypto';
+import fsp from 'fs/promises';
+import path from 'path';
 import {
   ensureSkillPack,
   getResearchNotes,
@@ -21,6 +25,63 @@ import {
 function toIntFlag(value: unknown, fallback: number) {
   if (value == null) return fallback;
   return value ? 1 : 0;
+}
+
+/**
+ * Regenerate SKILLS.md for a persona from their current persona_skills assignments.
+ * Inlined from backend/src/services/skills-manifest.ts — uses admin pg helpers and config.personasDir.
+ */
+async function regenSkillsManifest(personaId: string): Promise<void> {
+  const persona = await queryOne<{ name: string }>('SELECT name FROM personas WHERE id = $1', [personaId]);
+  if (!persona) return; // persona deleted, skip
+
+  const rows = await queryAll<{
+    skill_id: string; enabled: number; name: string; description: string; category: string;
+  }>(`
+    SELECT ps.skill_id, ps.enabled, s.name, s.description, s.category
+    FROM persona_skills ps
+    JOIN skills s ON s.id = ps.skill_id
+    WHERE ps.persona_id = $1 AND ps.skill_id IS NOT NULL
+    ORDER BY s.category, s.name
+  `, [personaId]);
+
+  const now = new Date().toISOString();
+  const active = rows.filter(r => r.enabled === 1 || (r.enabled as unknown) === true);
+  const disabled = rows.filter(r => r.enabled === 0 || (r.enabled as unknown) === false);
+
+  let md = `# SKILLS -- ${persona.name}\n\n`;
+  md += `> Auto-generated manifest. Do not edit manually.\n`;
+  md += `> Source: persona_skills table | Generated: ${now}\n\n`;
+
+  if (active.length === 0) {
+    md += `## Active Skills (0)\n\n_(no skills assigned)_\n`;
+  } else {
+    md += `## Active Skills (${active.length})\n\n`;
+    const byCategory = new Map<string, typeof active>();
+    for (const r of active) {
+      const cat = r.category || 'uncategorized';
+      if (!byCategory.has(cat)) byCategory.set(cat, []);
+      byCategory.get(cat)!.push(r);
+    }
+    for (const [cat, skills] of byCategory) {
+      md += `### ${cat}\n\n`;
+      for (const s of skills) {
+        md += `- **${s.skill_id}** -- ${s.name}${s.description ? `: ${s.description.slice(0, 120)}` : ''}\n`;
+        md += `  Pack: \`skills/${s.skill_id}/\`\n`;
+      }
+      md += `\n`;
+    }
+  }
+  if (disabled.length > 0) {
+    md += `## Disabled Skills (${disabled.length})\n\n`;
+    for (const s of disabled) md += `- ~~${s.skill_id}~~ -- ${s.name}\n`;
+    md += `\n`;
+  }
+  md += `_Last regenerated: ${now}_\n`;
+
+  const personaDir = path.join(config.personasDir, personaId);
+  await fsp.mkdir(personaDir, { recursive: true });
+  await fsp.writeFile(path.join(personaDir, 'SKILLS.md'), md, 'utf-8');
 }
 
 export default async function skillsRoutes(fastify: FastifyInstance) {
@@ -135,6 +196,119 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     );
     if (!row) { reply.status(404); return err('NOT_FOUND', 'Proposal not found'); }
     return ok({ proposal: row });
+  });
+
+  // POST /proposals/:proposalId/approve — apply change, regen SKILLS.md, log event
+  fastify.post('/proposals/:proposalId/approve', async (req, reply) => {
+    const { proposalId } = req.params as { proposalId: string };
+    const proposal = await queryOne<{
+      id: string; persona_id: string; skill_id: string; change_type: string;
+      proposed_change: Record<string, unknown>; reasoning: string;
+      triggering_feedback_ids: string[]; status: string;
+    }>(`SELECT * FROM skill_evolution_proposals WHERE id = $1 AND status = 'pending'`, [proposalId]);
+    if (!proposal) {
+      reply.status(404);
+      return err('NOT_FOUND', 'Proposal not found or already reviewed');
+    }
+
+    // Capture effectiveness_before from persona_skills
+    const psRow = await queryOne<{ effectiveness_score: number | null }>(
+      `SELECT effectiveness_score FROM persona_skills
+       WHERE persona_id = $1 AND (skill_id = $2 OR skill_name = $2)`,
+      [proposal.persona_id, proposal.skill_id]
+    );
+    const effectivenessBefore = psRow?.effectiveness_score ?? null;
+
+    // Apply change based on change_type
+    if (proposal.change_type === 'remove_skill') {
+      await execute(
+        `DELETE FROM persona_skills WHERE persona_id = $1 AND (skill_id = $2 OR skill_name = $2)`,
+        [proposal.persona_id, proposal.skill_id]
+      );
+    } else if (proposal.change_type === 'add_skill') {
+      await execute(
+        `INSERT INTO persona_skills (persona_id, skill_id, skill_name, enabled)
+         VALUES ($1, $2, $2, 1)
+         ON CONFLICT (persona_id, skill_id) DO NOTHING`,
+        [proposal.persona_id, proposal.skill_id]
+      );
+    }
+    // rewrite_prompt and enrich_examples are flagged for manual follow-up — no persona_skills mutation
+
+    // Regenerate SKILLS.md for this persona
+    await regenSkillsManifest(proposal.persona_id);
+
+    // Log evolution event
+    const eventId = crypto.randomUUID();
+    await execute(
+      `INSERT INTO skill_evolution_events
+         (id, persona_id, skill_id, proposal_id, change_type, change_detail,
+          triggered_by, effectiveness_before, effectiveness_after, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, EXTRACT(EPOCH FROM NOW()))`,
+      [
+        eventId,
+        proposal.persona_id,
+        proposal.skill_id,
+        proposal.id,
+        proposal.change_type,
+        JSON.stringify(proposal.proposed_change),
+        JSON.stringify(proposal.triggering_feedback_ids ?? []),
+        effectivenessBefore,
+      ]
+    );
+
+    // Mark proposal approved
+    const reviewer = (req as any).user?.username ?? 'admin';
+    await execute(
+      `UPDATE skill_evolution_proposals
+       SET status = 'approved', reviewed_at = EXTRACT(EPOCH FROM NOW()), reviewed_by = $2
+       WHERE id = $1`,
+      [proposalId, reviewer]
+    );
+
+    return ok({ approved: true, proposal_id: proposalId });
+  });
+
+  // POST /proposals/:proposalId/reject — mark rejected, log rejection event
+  fastify.post('/proposals/:proposalId/reject', async (req, reply) => {
+    const { proposalId } = req.params as { proposalId: string };
+    const body = (req.body ?? {}) as { reason?: string };
+    const proposal = await queryOne<{
+      id: string; persona_id: string; skill_id: string; change_type: string;
+      proposed_change: Record<string, unknown>; reasoning: string;
+      triggering_feedback_ids: string[]; status: string;
+    }>(`SELECT * FROM skill_evolution_proposals WHERE id = $1 AND status = 'pending'`, [proposalId]);
+    if (!proposal) {
+      reply.status(404);
+      return err('NOT_FOUND', 'Proposal not found or already reviewed');
+    }
+
+    const reviewer = (req as any).user?.username ?? 'admin';
+    await execute(
+      `UPDATE skill_evolution_proposals
+       SET status = 'rejected', reviewed_at = EXTRACT(EPOCH FROM NOW()), reviewed_by = $2
+       WHERE id = $1`,
+      [proposalId, reviewer]
+    );
+
+    // Log rejection event
+    const eventId = crypto.randomUUID();
+    await execute(
+      `INSERT INTO skill_evolution_events
+         (id, persona_id, skill_id, proposal_id, change_type, change_detail,
+          triggered_by, effectiveness_before, effectiveness_after, created_at)
+       VALUES ($1, $2, $3, $4, 'rejected', $5, $6, NULL, NULL, EXTRACT(EPOCH FROM NOW()))`,
+      [
+        eventId,
+        proposal.persona_id,
+        proposal.skill_id,
+        proposal.id,
+        JSON.stringify({ original_proposal: proposal.proposed_change, rejection_reason: body.reason ?? null }),
+        JSON.stringify(proposal.triggering_feedback_ids ?? []),
+      ]
+    );
+
+    return ok({ rejected: true, proposal_id: proposalId });
   });
 
   // PUT /:id/files/* — write a skill pack file back to disk
