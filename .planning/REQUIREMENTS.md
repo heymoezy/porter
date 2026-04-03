@@ -40,7 +40,7 @@
 - [x] **PMN-02**: Watcher types: web_search, email_monitor, rss_feed, custom (freeform prompt)
 - [ ] **PMN-03**: Watcher results appear in project activity feed with source badge, summary, expandable detail
 - [ ] **PMN-04**: Important findings trigger notifications (in-feed + optional email)
-- [ ] **PMN-05**: Admin ops view shows all active watchers across projects with last/next run and resource usage
+- [x] **PMN-05**: Admin ops view shows all active watchers across projects with last/next run and resource usage
 
 ### Project Substrate
 
@@ -115,7 +115,7 @@
 | PMN-02 | Phase 46 | Complete |
 | PMN-03 | Phase 46 | Pending |
 | PMN-04 | Phase 46 | Pending |
-| PMN-05 | Phase 46 | Pending |
+| PMN-05 | Phase 46 | Complete |
 | PSB-01 | Phase 47 | Pending |
 | PSB-02 | Phase 47 | Pending |
 | PSB-03 | Phase 47 | Pending |

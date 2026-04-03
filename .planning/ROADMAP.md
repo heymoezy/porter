@@ -94,7 +94,7 @@
 - [ ] **Phase 43: Inter-Agent Messaging** - Structured agent-to-agent delegation through Porter coordinator with full audit trail
 - [x] **Phase 44: Autonomous Job Queue** - Agent jobs pulled by best-matched agents, Porter self-dispatches scheduled work, admin visibility (completed 2026-04-03)
 - [x] **Phase 45: Porter Control Plane** - Porter enforces delegation doctrine, depth limits, and approval gates for high-risk actions (completed 2026-04-03)
-- [ ] **Phase 46: Project Monitoring** - Per-project watchers (web search, RSS, email, custom) run autonomously and surface findings in activity feed
+- [x] **Phase 46: Project Monitoring** - Per-project watchers (web search, RSS, email, custom) run autonomously and surface findings in activity feed (completed 2026-04-03)
 - [ ] **Phase 47: Project Substrate** - Every project has a canonical /_system/ directory, structured intake, intelligence ingress, and Atlas agent
 
 ## Phase Details
@@ -352,7 +352,7 @@ Plans:
   3. Watcher findings appear in the project activity feed with a source badge (web/rss/email/custom), summary text, and expandable detail — not a raw dump
   4. A finding marked as important triggers a notification visible in the in-app feed, and optionally sends an email if configured
   5. Admin ops view shows all active watchers across all projects with last run time, next run time, and resource usage
-**Plans:** 1/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 46-01-PLAN.md — Migration (project_watchers + watcher_findings) + watcher execution service + scheduler integration (PMN-01, PMN-02)
@@ -400,5 +400,5 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 43. Inter-Agent Messaging | 1/2 | In Progress|  | - |
 | 44. Autonomous Job Queue | 2/2 | Complete    | 2026-04-03 | - |
 | 45. Porter Control Plane | 2/2 | Complete    | 2026-04-03 | - |
-| 46. Project Monitoring | 1/3 | In Progress|  | - |
+| 46. Project Monitoring | 3/3 | Complete   | 2026-04-03 | - |
 | 47. Project Substrate | v6.0 | 0/TBD | Not started | - |
