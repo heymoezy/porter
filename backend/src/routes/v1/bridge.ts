@@ -432,6 +432,35 @@ export default async function bridgeV1Routes(
       return reply.code(400).send(err('MISSING_FIELD', 'message.task is required'));
     }
 
+    // ── Peer-to-peer guard (IAM-03) ────────────────────────────────────────
+    // All inter-agent messages must route through Porter as coordinator.
+    // If sourceAgent is set and is NOT 'porter' AND targetAgent is set,
+    // this is a direct peer-to-peer attempt. Block it and log violation.
+    const sourceAgent = message.sourceAgent ?? message.sourceGateway ?? 'unknown';
+    const isPorterCoordinated = sourceAgent === 'porter' || sourceAgent === 'porter-delegation';
+    const isPeerToPeer = !isPorterCoordinated && !!message.targetAgent && message.sourceAgent !== undefined;
+
+    if (isPeerToPeer) {
+      // Log violation to msg_bus_events for audit trail
+      try {
+        await logMsgBusEvent({
+          correlationId: message.correlationId,
+          sourceAgent: message.sourceAgent,
+          sourceGateway: message.sourceGateway,
+          targetAgent: message.targetAgent,
+          targetGateway: message.targetGateway,
+          intent: 'violation',
+          payload: { reason: 'PEER_TO_PEER_BLOCKED', task: message.task?.slice(0, 200) },
+          hopCount: hopCount,
+        });
+      } catch { /* non-critical */ }
+
+      return reply.code(403).send(err(
+        'PEER_TO_PEER_BLOCKED',
+        `Direct agent-to-agent routing is not allowed. All messages must be coordinated through Porter. source=${message.sourceAgent}, target=${message.targetAgent}`,
+      ));
+    }
+
     // ── Max-hops guard ─────────────────────────────────────────────────────
     if (hopCount >= MAX_AGENT_HOPS) {
       return reply.code(429).send(err(
