@@ -282,3 +282,33 @@ export interface AgentMessageLogContext {
   intent?: string;
   replyTo?: string;
 }
+
+// ── Task Dispatch types (Phase 39) ──────────────────────────────────────────
+
+export interface TaskRequest {
+  prompt: string;            // The task description
+  cwd: string;               // Working directory for the subprocess
+  timeoutMs?: number;        // Default: 300_000 (5 min), max: 600_000 (10 min)
+  tools?: string[];          // Optional tool allowlist (claude: --allowedTools)
+}
+
+export interface TaskEvent {
+  type: 'progress' | 'result' | 'error' | 'tool_use' | 'tool_result';
+  text?: string;             // Human-readable output chunk
+  tool?: string;             // Tool name (for tool_use events)
+  input?: unknown;           // Tool input (for tool_use events)
+  exitCode?: number;         // Final exit code (for result/error)
+  durationMs?: number;       // Total wall time (for result/error)
+}
+
+export interface TaskDispatchResult {
+  taskId: string;
+  gatewayType: string;
+  model: string;
+  status: 'complete' | 'failed' | 'cancelled';
+  output: string;            // Full concatenated text output (max 1MB)
+  durationMs: number;
+  exitCode: number | null;
+}
+
+export type TaskStatus = 'queued' | 'running' | 'complete' | 'failed' | 'cancelled';

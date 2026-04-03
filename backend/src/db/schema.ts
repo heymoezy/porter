@@ -1152,3 +1152,25 @@ export const intelligencePatterns = pgTable('intelligence_patterns', {
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
   reviewedAt: doublePrecision('reviewed_at'),
 });
+
+// ── Bridge Tasks (Phase 39) ─────────────────────────────────────────────────
+
+export const bridgeTasks = pgTable('bridge_tasks', {
+  id: text('id').primaryKey(),
+  gatewayType: text('gateway_type').notNull(),
+  modelName: text('model_name').notNull().default(''),
+  prompt: text('prompt').notNull(),
+  cwd: text('cwd').notNull(),
+  status: text('status').notNull().default('queued'),
+  output: text('output'),
+  error: text('error'),
+  exitCode: integer('exit_code'),
+  startedAt: doublePrecision('started_at'),
+  completedAt: doublePrecision('completed_at'),
+  durationMs: integer('duration_ms'),
+  agentId: text('agent_id'),
+  projectId: text('project_id'),
+  username: text('username'),
+  dispatchLogId: text('dispatch_log_id'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
