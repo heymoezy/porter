@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 37-01-PLAN.md
-last_updated: "2026-04-03T01:51:40.553Z"
+stopped_at: Completed 37-02-PLAN.md
+last_updated: "2026-04-03T01:57:51.508Z"
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 21
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Project State
@@ -87,6 +87,9 @@ Plan: 1 of 2
 - [Phase 37-01]: Preview endpoint uses /skills-preview hyphenated path to avoid Fastify param collision with /:id/skills/:skillId
 - [Phase 37-01]: scoreSkill replicated inline in admin backend — no cross-service import from backend/ into admin/backend/
 - [Phase 37-01]: Mandatory skills (is_mandatory=1) always included in preview selected list regardless of SCORE_THRESHOLD
+- [Phase 37-02]: TemplateSkillsTab is fully self-contained — parent passes only templateId, no prop drilling of query data
+- [Phase 37-02]: Removed unused templateEffectiveness useQuery from agent-detail.tsx parent — effectiveness now owned by TemplateSkillsTab
+- [Phase 37-02]: Template SKILLS tab (!isInstance) and born-agent SKILLS tab (hasApi) coexist with same label but different tab values
 
 ### Roadmap Evolution
 
@@ -104,6 +107,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T01:51:40.550Z
-Stopped at: Completed 37-01-PLAN.md
+Last session: 2026-04-03T01:57:51.505Z
+Stopped at: Completed 37-02-PLAN.md
 Resume file: None
