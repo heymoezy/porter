@@ -1,3 +1,8 @@
+## v5.0.0 (2026-04-03)
+
+- docs: update checkpoint — :5175 test fix already landed, cleanup committed
+
+
 ## v4.5.0 (2026-04-03)
 
 - fix: port all v5.0 skill routes from dead admin backend to Brain :3001
