@@ -122,6 +122,7 @@ export const projects = pgTable('projects', {
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
   updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
   deadline: text('deadline'),         // ISO date string YYYY-MM-DD
+  fsPath: text('fs_path'),            // Absolute path to project directory on disk
 });
 
 // ── Personas (Agents) ─────────────────────────────────────────────────────────

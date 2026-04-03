@@ -40,6 +40,7 @@ import { migrateAjqV1 } from './db/migrate-ajq-v1.js';
 import { migratePcpV1 } from './db/migrate-pcp-v1.js';
 import { migratePcpV2 } from './db/migrate-pcp-v2.js';
 import { migratePmnV1 } from './db/migrate-pmn-v1.js';
+import { migratePsbV1 } from './db/migrate-psb-v1.js';
 import { seedTemplates } from './db/seed-templates.js';
 import { detectAndUpsertGateways } from './services/bridge/startup-detector.js';
 import * as scheduler from './services/scheduler.js';
@@ -219,6 +220,7 @@ const start = async () => {
     await migratePcpV1(pool);
     await migratePcpV2(pool);
     await migratePmnV1(pool);
+    await migratePsbV1(pool);
     await seedTemplates();
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
