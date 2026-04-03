@@ -57,8 +57,8 @@
 
 ### Porter Control Plane
 
-- [ ] **PCP-01**: Porter persona enforces delegation doctrine — direct answer vs handoff vs parallel vs escalate
-- [ ] **PCP-02**: Subagent depth limits (max 2 hops) with tool restrictions on child dispatches
+- [x] **PCP-01**: Porter persona enforces delegation doctrine — direct answer vs handoff vs parallel vs escalate
+- [x] **PCP-02**: Subagent depth limits (max 2 hops) with tool restrictions on child dispatches
 - [ ] **PCP-03**: Approval gates for high-risk actions (code mutation, external API calls, file deletion)
 
 ## v7.0 Requirements (Deferred)
@@ -108,8 +108,8 @@
 | AJQ-02 | Phase 44 | Complete |
 | AJQ-03 | Phase 44 | Complete |
 | AJQ-04 | Phase 44 | Complete |
-| PCP-01 | Phase 45 | Pending |
-| PCP-02 | Phase 45 | Pending |
+| PCP-01 | Phase 45 | Complete |
+| PCP-02 | Phase 45 | Complete |
 | PCP-03 | Phase 45 | Pending |
 | PMN-01 | Phase 46 | Pending |
 | PMN-02 | Phase 46 | Pending |

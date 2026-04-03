@@ -336,7 +336,7 @@ Plans:
   1. Porter's persona applies the delegation doctrine on every dispatch — simple requests answer directly, complex requests delegate, ambiguous requests escalate — with the chosen strategy logged per dispatch
   2. A subagent that attempts to spawn another subagent at hop depth 3 is blocked — the request is rejected and the limit violation is recorded in the audit log
   3. A dispatch requesting a high-risk action (code mutation, external API call, file deletion) is paused pending user approval — the action does not execute until the approval event is received
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 45-01-PLAN.md — Delegation doctrine service + dispatch strategy logging + depth limit enforcement (PCP-01, PCP-02)
@@ -398,6 +398,6 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 42. Task Decomposition Engine | 4/4 | Complete    | 2026-04-03 | - |
 | 43. Inter-Agent Messaging | 1/2 | In Progress|  | - |
 | 44. Autonomous Job Queue | 2/2 | Complete    | 2026-04-03 | - |
-| 45. Porter Control Plane | v6.0 | 0/2 | Not started | - |
+| 45. Porter Control Plane | 1/2 | In Progress|  | - |
 | 46. Project Monitoring | v6.0 | 0/TBD | Not started | - |
 | 47. Project Substrate | v6.0 | 0/TBD | Not started | - |
