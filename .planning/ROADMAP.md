@@ -259,7 +259,11 @@ Plans:
   2. A task dispatch with explicit requirements (e.g., "needs tool support") routes to a gateway that satisfies those requirements, not just the default gateway
   3. Sending a tool schema to a gateway that does not support tools results in the schema being stripped before the request is sent — verified by observing the outgoing payload
   4. All 5 gateways successfully complete a sample task dispatch with tool execution through the unified task dispatch pathway
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 40-01-PLAN.md — Capability registry types, constant map, migration, startup-detector wiring (GWC-01)
+- [ ] 40-02-PLAN.md — Capability-aware dispatch, tool filtering, CLI allowlists, admin display (GWC-02, GWC-03, GWC-04)
 
 ### Phase 41: Session Intelligence
 **Goal**: Session memory is frozen at start and never mutated mid-session; agents can search across past sessions; dispatch outcomes feed back into routing confidence so Porter learns which gateways perform best
@@ -358,7 +362,7 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 37. Template Skill UX | v5.0 | 2/2 | Complete | 2026-04-03 |
 | 38. Adaptive Agent Context | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 39. Bridge Task Dispatch | v5.0 | 3/3 | Complete | 2026-04-03 |
-| 40. Gateway Capability Registry | v6.0 | 0/TBD | Not started | - |
+| 40. Gateway Capability Registry | v6.0 | 0/2 | Planned | - |
 | 41. Session Intelligence | v6.0 | 0/TBD | Not started | - |
 | 42. Task Decomposition Engine | v6.0 | 0/TBD | Not started | - |
 | 43. Inter-Agent Messaging | v6.0 | 0/TBD | Not started | - |
