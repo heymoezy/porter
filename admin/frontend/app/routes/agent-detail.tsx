@@ -17,6 +17,7 @@ import { CharacterCard, type RpgStats, type WorkshopData } from "~/components/ch
 import { VitalsBar } from "~/components/vitals-bar"
 import { PassiveTreeView } from "~/components/passive-tree-view"
 import { SkillEffectivenessBar } from "~/components/skill-effectiveness-bar"
+import { TemplateSkillsTab } from "~/components/template-skills-tab"
 
 // ── Types ────────────────────────────────────────────────
 
@@ -146,13 +147,7 @@ function AgentDetailContent() {
     retry: false,
   })
 
-  // FBK-04: Template skill effectiveness (aggregated across all spawned agents)
-  const { data: templateEffectiveness } = useQuery({
-    queryKey: ["template-skill-effectiveness", templateIdForLookup],
-    queryFn: () => fetch(`/api/admin/templates/${templateIdForLookup}/skill-effectiveness`, { credentials: "include" }).then(r => r.json()),
-    enabled: !!templateIdForLookup,
-    retry: false,
-  })
+
 
   const rpgStats = rpgData?.stats ?? null
   const workshop = workshopData ?? null
@@ -354,6 +349,12 @@ function AgentDetailContent() {
                   <Sparkles className="size-2.5" /> SKILLS
                 </TabsTrigger>
               )}
+              {/* Template skills tab — authoring for templates (non-instances) */}
+              {!isInstance && templateIdForLookup && (
+                <TabsTrigger value="template-skills-tab" className="gap-1">
+                  <Sparkles className="size-2.5" /> SKILLS
+                </TabsTrigger>
+              )}
               {/* Build tab — agent build with RPG stats */}
               <TabsTrigger value="build-tab" className="gap-1">
                 <Wrench className="size-2.5" /> BUILD
@@ -484,6 +485,13 @@ function AgentDetailContent() {
               </TabsContent>
           )}
 
+          {/* Template skills tab — authoring for templates (non-instances) */}
+          {!isInstance && templateIdForLookup && (
+            <TabsContent value="template-skills-tab" className="flex-1 min-h-0 mt-2 overflow-y-auto">
+              <TemplateSkillsTab templateId={templateIdForLookup} />
+            </TabsContent>
+          )}
+
           {/* Build tab — agent build with RPG stats */}
           <TabsContent value="build-tab" className="flex-1 min-h-0 mt-2">
             <div className="h-full overflow-y-auto">
@@ -513,30 +521,6 @@ function AgentDetailContent() {
                   </Card>
                 )}
 
-                {/* Skill Effectiveness — standalone section for templates */}
-                {!isInstance && (
-                  <div className="mt-2">
-                    <h3 className="text-sm font-medium text-text2 mb-3">Skill Effectiveness</h3>
-                    {!templateEffectiveness?.data?.skills?.length ? (
-                      <p className="text-xs text-text3">No feedback data yet</p>
-                    ) : (
-                      <div className="space-y-2">
-                        <p className="text-xs text-text3 mb-2">Aggregated across all spawned agents</p>
-                        {templateEffectiveness.data.skills.map((s: any) => (
-                          <div key={s.skill_id} className="flex items-center justify-between py-1">
-                            <span className="text-sm text-text2 truncate mr-4">{s.skill_name || s.skill_id}</span>
-                            <SkillEffectivenessBar
-                              positive={s.positive_count}
-                              negative={s.negative_count}
-                              score={s.effectiveness_score}
-                              timesSelected={s.times_selected}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           </TabsContent>
