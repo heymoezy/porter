@@ -41,9 +41,9 @@
 ### Agent Evolution
 
 - [x] **EVO-01**: A background job analyzes feedback patterns and generates skill recommendations (add, remove, rewrite prompt, enrich examples)
-- [ ] **EVO-02**: Recommendations are stored as proposed changes visible in admin UI with diffs
-- [ ] **EVO-03**: Admin can approve or reject proposed skill changes (supervised mutation)
-- [ ] **EVO-04**: Approved changes update persona_skills and regenerate SKILLS.md automatically
+- [x] **EVO-02**: Recommendations are stored as proposed changes visible in admin UI with diffs
+- [x] **EVO-03**: Admin can approve or reject proposed skill changes (supervised mutation)
+- [x] **EVO-04**: Approved changes update persona_skills and regenerate SKILLS.md automatically
 - [x] **EVO-05**: Evolution events are logged (what changed, why, which feedback cluster triggered it)
 
 ### Skill Quality
@@ -112,9 +112,9 @@
 | FBK-04 | Phase 34 | Complete |
 | FBK-05 | Phase 34 | Complete |
 | EVO-01 | Phase 35 | Complete |
-| EVO-02 | Phase 35 | Pending |
-| EVO-03 | Phase 35 | Pending |
-| EVO-04 | Phase 35 | Pending |
+| EVO-02 | Phase 35 | Complete |
+| EVO-03 | Phase 35 | Complete |
+| EVO-04 | Phase 35 | Complete |
 | EVO-05 | Phase 35 | Complete |
 | QLT-01 | Phase 36 | Pending |
 | QLT-02 | Phase 36 | Pending |

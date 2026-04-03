@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
-status: executing
-stopped_at: Completed 35-01-PLAN.md
-last_updated: "2026-04-03T01:17:45Z"
+status: unknown
+stopped_at: Completed 35-02-PLAN.md
+last_updated: "2026-04-03T01:24:12.419Z"
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 16
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -81,6 +81,7 @@ Plan: 2 of 3
 - [Phase 35-01]: analyzeSkillEvolution is a pure analytics function — reads feedback, writes proposals, no other side effects
 - [Phase 35-01]: Deduplication check on persona_id + skill_id + change_type + status=pending prevents proposal explosion across 6h analyzer runs
 - [Phase 35-01]: triggering_feedback_ids capped at 20 entries per proposal to avoid bloated JSONB
+- [Phase 35-02]: regenSkillsManifest inlined to avoid cross-service coupling; config.personasDir used for path consistency; rewrite_prompt/enrich_examples flagged for manual follow-up; effectiveness_before captured before mutation
 
 ### Pending Todos
 
@@ -94,6 +95,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T01:17:45Z
-Stopped at: Completed 35-01-PLAN.md
+Last session: 2026-04-03T01:24:12.417Z
+Stopped at: Completed 35-02-PLAN.md
 Resume file: None

@@ -158,7 +158,7 @@ Plans:
   3. Admin UI shows pending proposals with diffs (what would change) and approve/reject buttons
   4. Approving a proposal updates persona_skills, regenerates SKILLS.md, and logs the evolution event
   5. Evolution event log shows timeline of what changed, why, which feedback triggered it, and whether effectiveness improved after the change
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 Plans:
 - [x] 35-01-PLAN.md — Test scaffold + migration (evolution tables) + analyzer service + scheduler hook
 - [ ] 35-02-PLAN.md — Admin API endpoints (list/approve/reject proposals) + SKILLS.md regeneration
@@ -203,6 +203,6 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 32. Skill Pack Explorer | v5.0 | 4/4 | Complete | 2026-04-02 |
 | 33. Runtime Skill Selector | v5.0 | 2/2 | Complete | 2026-04-02 |
 | 34. Feedback Telemetry | 4/4 | Complete   | 2026-04-02 | - |
-| 35. Agent Evolution Loop | v5.0 | 1/3 | Executing | - |
+| 35. Agent Evolution Loop | 2/3 | In Progress|  | - |
 | 36. Skill Quality Scoring | v5.0 | Complete    | 2026-04-03 | - |
 | 37. Template Skill UX | v5.0 | 0/TBD | Not started | - |
