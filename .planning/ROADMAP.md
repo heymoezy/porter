@@ -325,8 +325,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 43-01-PLAN.md — Agent delegation service + peer-to-peer guard (IAM-01, IAM-02, IAM-03)
-- [ ] 43-02-PLAN.md — DAG executor delegation wiring + joiner synthesis integration (IAM-01, IAM-04)
+- [ ] 44-01-PLAN.md — Migration + job-assignment service + scheduler self-scheduling (AJQ-01, AJQ-02, AJQ-03)
+- [ ] 44-02-PLAN.md — Admin API endpoints + JobQueuePanel frontend (AJQ-04)
 
 ### Phase 45: Porter Control Plane
 **Goal**: Porter operates as master orchestrator with enforced boundaries — it decides between direct answer, handoff, parallel execution, or escalation, limits subagent recursion depth, and gates high-risk actions behind approval
@@ -397,7 +397,7 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 41. Session Intelligence | 3/3 | Complete    | 2026-04-03 | - |
 | 42. Task Decomposition Engine | 4/4 | Complete    | 2026-04-03 | - |
 | 43. Inter-Agent Messaging | 1/2 | In Progress|  | - |
-| 44. Autonomous Job Queue | v6.0 | 0/TBD | Not started | - |
+| 44. Autonomous Job Queue | v6.0 | 0/2 | Not started | - |
 | 45. Porter Control Plane | v6.0 | 0/TBD | Not started | - |
 | 46. Project Monitoring | v6.0 | 0/TBD | Not started | - |
 | 47. Project Substrate | v6.0 | 0/TBD | Not started | - |
