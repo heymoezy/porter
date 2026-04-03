@@ -161,6 +161,13 @@ export function EvolutionPanel() {
                     {/* Reasoning */}
                     <p className="text-xs text-text3">{proposal.reasoning}</p>
 
+                    {/* Triggering feedback */}
+                    {proposal.triggering_feedback_ids?.length > 0 && (
+                      <p className="text-2xs text-text3">
+                        Based on {proposal.triggering_feedback_ids.length} feedback event(s)
+                      </p>
+                    )}
+
                     {/* Proposed change diff */}
                     <pre className="bg-bg/50 rounded p-2 text-[10px] font-mono max-h-32 overflow-auto text-text2">
                       {JSON.stringify(proposal.proposed_change, null, 2)}
@@ -236,6 +243,17 @@ export function EvolutionPanel() {
                   <span className="ml-auto text-2xs text-text3">
                     {proposal.reviewed_at ? timeAgo(proposal.reviewed_at) : "—"}
                   </span>
+                  {/* Expandable reasoning + feedback IDs */}
+                  {proposal.reasoning && (
+                    <div className="w-full mt-1 text-2xs text-text3 italic">
+                      {proposal.reasoning}
+                    </div>
+                  )}
+                  {proposal.triggering_feedback_ids?.length > 0 && (
+                    <div className="w-full mt-0.5 text-2xs text-text3">
+                      Triggered by {proposal.triggering_feedback_ids.length} feedback event(s)
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

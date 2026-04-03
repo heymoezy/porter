@@ -229,4 +229,27 @@ export async function analyzeSkillEvolution(): Promise<void> {
   }
 
   console.log(`[evolution-analyzer] Generated ${generated} proposals (${skipped} skipped as duplicates)`);
+
+  // ── Backfill effectiveness_after on approved events older than 7 days ──────
+  // SC-5: "whether effectiveness improved after the change"
+  try {
+    const { rowCount } = await pool.query(`
+      UPDATE skill_evolution_events e
+      SET effectiveness_after = (
+        SELECT ps.effectiveness_score
+        FROM persona_skills ps
+        WHERE ps.persona_id = e.persona_id
+          AND COALESCE(ps.skill_id, ps.skill_name) = e.skill_id
+        LIMIT 1
+      )
+      WHERE e.effectiveness_after IS NULL
+        AND e.event_type = 'approved'
+        AND e.created_at < EXTRACT(EPOCH FROM NOW()) - 604800
+    `);
+    if (rowCount && rowCount > 0) {
+      console.log(`[evolution-analyzer] Backfilled effectiveness_after on ${rowCount} events`);
+    }
+  } catch (err) {
+    console.error('[evolution-analyzer] effectiveness_after backfill error:', err);
+  }
 }
