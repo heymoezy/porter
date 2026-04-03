@@ -7,6 +7,7 @@ import { buildAllGatewayPromptProfiles } from '../../services/admin/prompt-pipel
 import { emitAdminEvent } from '../../services/admin/admin-sse.js';
 import { getCapacitySnapshot } from '../../services/bridge/rate-limit-tracker.js';
 import { collectLocalUsage } from '../../services/bridge/usage-collector.js';
+import { getAllConfidenceScores } from '../../services/bridge/routing-confidence.js';
 
 type UserApiKeyRow = {
   id: string;
@@ -1354,5 +1355,11 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
       chat_id: session.chat_id,
       turns,
     }));
+  });
+
+  // GET /api/admin/bridge/confidence — per-gateway outcome confidence scores (SIN-03)
+  fastify.get('/confidence', async (_req, reply) => {
+    const confidence = await getAllConfidenceScores();
+    return reply.send(ok({ confidence }));
   });
 }

@@ -21,6 +21,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { awardXP } from '../rpg-engine.js';
 import { compressToolOutput, estimateTokens, COMPRESS_MODEL } from '../context-compressor.js';
 import { getLegacyTags, normalizeCapabilities } from './capability-registry.js';
+import { getGatewayConfidenceSync } from './routing-confidence.js';
 
 // Alias for use in compression stats metadata (avoids runtime import cycle confusion)
 const COMPRESS_MODEL_NAME = COMPRESS_MODEL;
@@ -880,23 +881,60 @@ export class RoutingEngine {
    * Select a gateway candidate by message complexity heuristic.
    * Complex messages prefer HTTP/remote gateways; simple messages prefer local.
    */
+  /**
+   * SIN-03: Select best candidate using priority + optional confidence nudge.
+   *
+   * Base score = 10 - priority (lower priority number = higher base score).
+   * Confidence bonus = (avgScore - 3.0) * confidence * 0.2
+   *   - avgScore 5.0, confidence 1.0 → +0.4 bonus
+   *   - avgScore 1.0, confidence 1.0 → -0.4 penalty
+   *   - No data (confidence 0) → no change
+   *
+   * This is a GENTLE nudge — priority still dominates.
+   * Complex messages get an additional bonus for gateways with 'reasoning' or 'strong' capability.
+   */
   private selectByHeuristic(message: string, candidates: GatewayCandidate[]): GatewayCandidate {
     const complex = isComplexMessage(message);
     const LOCAL_TYPES = new Set(['ollama', 'codex_cli', 'claude_cli', 'gemini_cli']);
 
-    let sorted: GatewayCandidate[];
-    if (complex) {
-      // Prefer HTTP/remote gateways with lower priority numbers (openclaw first)
-      sorted = [...candidates].sort((a, b) => a.row.priority - b.row.priority);
-    } else {
-      // Prefer local gateways — ollama and CLI types first, then by priority
-      sorted = [
-        ...candidates.filter(c => LOCAL_TYPES.has(c.row.type)).sort((a, b) => a.row.priority - b.row.priority),
-        ...candidates.filter(c => !LOCAL_TYPES.has(c.row.type)).sort((a, b) => a.row.priority - b.row.priority),
-      ];
-    }
+    // Compute composite score for each candidate
+    const scored = candidates.map(c => {
+      // Base score: lower priority number = higher base score (max priority ~10)
+      let score = 10 - c.row.priority;
 
-    return sorted[0];
+      // SIN-03: Apply confidence nudge from historical outcome data
+      const confidence = getGatewayConfidenceSync(c.row.type);
+      if (confidence && confidence.confidence > 0) {
+        score += (confidence.avgScore - 3.0) * confidence.confidence * 0.2;
+      }
+
+      // Complexity preference: boost capable gateways for complex messages
+      if (complex) {
+        const tags = Array.isArray(c.row.capabilities) ? c.row.capabilities as string[] : [];
+        if (tags.some(t => t === 'reasoning' || t === 'strong')) {
+          score += 0.5;
+        }
+        // Penalise local gateways for complex messages (less capable)
+        if (LOCAL_TYPES.has(c.row.type)) {
+          score -= 1.0;
+        }
+      } else {
+        // Boost local gateways for simple messages (faster + cheaper)
+        if (LOCAL_TYPES.has(c.row.type)) {
+          score += 1.0;
+        }
+      }
+
+      return { candidate: c, score };
+    });
+
+    // Sort by composite score DESC, fall back to priority ASC for ties
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.candidate.row.priority - b.candidate.row.priority;
+    });
+
+    return scored[0].candidate;
   }
 }
 
