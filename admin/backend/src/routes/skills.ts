@@ -95,6 +95,48 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     });
   });
 
+  // ── Evolution Proposals ──────────────────────────────────
+
+  // GET /proposals — list proposals with optional status/persona_id filters
+  fastify.get('/proposals', async (req) => {
+    const { status, persona_id } = req.query as { status?: string; persona_id?: string };
+    let sql = `
+      SELECT sep.*,
+             p.name AS persona_name,
+             s.name AS skill_name,
+             s.description AS skill_description
+      FROM skill_evolution_proposals sep
+      LEFT JOIN personas p ON p.id = sep.persona_id
+      LEFT JOIN skills s ON s.id = sep.skill_id
+    `;
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    if (status) { conditions.push(`sep.status = $${params.length + 1}`); params.push(status); }
+    if (persona_id) { conditions.push(`sep.persona_id = $${params.length + 1}`); params.push(persona_id); }
+    if (conditions.length) sql += ` WHERE ${conditions.join(' AND ')}`;
+    sql += ` ORDER BY sep.created_at DESC LIMIT 100`;
+    const rows = await queryAll(sql, params);
+    return ok({ proposals: rows });
+  });
+
+  // GET /proposals/:proposalId — single proposal with full detail
+  fastify.get('/proposals/:proposalId', async (req, reply) => {
+    const { proposalId } = req.params as { proposalId: string };
+    const row = await queryOne(
+      `SELECT sep.*,
+              p.name AS persona_name,
+              s.name AS skill_name,
+              s.description AS skill_description
+       FROM skill_evolution_proposals sep
+       LEFT JOIN personas p ON p.id = sep.persona_id
+       LEFT JOIN skills s ON s.id = sep.skill_id
+       WHERE sep.id = $1`,
+      [proposalId]
+    );
+    if (!row) { reply.status(404); return err('NOT_FOUND', 'Proposal not found'); }
+    return ok({ proposal: row });
+  });
+
   // PUT /:id/files/* — write a skill pack file back to disk
   fastify.put('/:id/files/*', async (req, reply) => {
     const { id, '*': relativePath } = req.params as { id: string; '*': string };
