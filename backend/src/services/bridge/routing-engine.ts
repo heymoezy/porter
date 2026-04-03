@@ -12,12 +12,17 @@ import { pool } from '../../db/client.js';
 import { createAdapter } from './adapters/index.js';
 import { calculateCostUsd } from './model-catalog.js';
 import { getQueue } from './dispatch-queues.js';
+import { buildContextStats } from '../context-stats-collector.js';
 import { getBreaker } from './circuit-breaker-registry.js';
 import { withRetry } from './retry.js';
 import { emitSSE } from '../scheduler.js';
 import { parseRateLimitHeaders, record429, hasCapacity } from './rate-limit-tracker.js';
 import { v4 as uuidv4 } from 'uuid';
 import { awardXP } from '../rpg-engine.js';
+import { compressToolOutput, estimateTokens, COMPRESS_MODEL } from '../context-compressor.js';
+
+// Alias for use in compression stats metadata (avoids runtime import cycle confusion)
+const COMPRESS_MODEL_NAME = COMPRESS_MODEL;
 import { upsertSession } from '../session-registry.js';
 import type {
   GatewayRow,
@@ -275,6 +280,7 @@ export class RoutingEngine {
     ctx: RoutingContext,
     result: BridgeDispatchResult,
     agentMsgCtx?: AgentMessageLogContext,
+    compressionStats?: { tool_outputs_compressed: number; tokens_saved: number; compression_model: string } | null,
   ): Promise<string> {
     const id = uuidv4();
 
@@ -317,10 +323,12 @@ export class RoutingEngine {
               correlation_id, source_agent, source_gateway,
               target_agent, target_gateway, intent, reply_to, is_agent_message,
               skills_used,
+              compression_stats,
               created_at)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
                    $18,$19,$20,$21,$22,$23,$24,$25,
                    $26,
+                   $27,
                    EXTRACT(EPOCH FROM NOW()))`,
           [
             id,
@@ -349,6 +357,7 @@ export class RoutingEngine {
             agentMsgCtx?.replyTo ?? null,
             agentMsgCtx ? 1 : null,
             ctx.skillsUsed ? JSON.stringify(ctx.skillsUsed) : null,
+            compressionStats ? JSON.stringify(compressionStats) : null,
           ],
         );
 
@@ -373,7 +382,11 @@ export class RoutingEngine {
           } catch { /* non-fatal — counter update must never block dispatch */ }
         }
 
-        // SES-01: Track per-session token usage
+        // SES-01: Track per-session token usage + ACX-05: write context_stats
+        let sessionContextPct = 0;
+        let sessionCompressionEvents = 0;
+        let sessionTokensReclaimed = 0;
+        let sessionTurnNumber = 0;
         try {
           const totalTokens = (result.inputTokens ?? 0) + (result.outputTokens ?? 0);
           if (totalTokens > 0 && (ctx.chatId || ctx.agentId)) {
@@ -387,7 +400,7 @@ export class RoutingEngine {
               tokenBudget = mrows[0]?.context_window ?? 0;
             } catch { /* non-fatal */ }
 
-            await upsertSession(
+            const sessionResult = await upsertSession(
               ctx.chatId ?? null,
               ctx.agentId ?? null,
               totalTokens,
@@ -395,7 +408,46 @@ export class RoutingEngine {
               decision.modelName,
               tokenBudget,
             );
+            sessionContextPct = sessionResult.contextPct;
+
+            // Fetch compression events and turn number from session_registry
+            try {
+              const { rows: srows } = await pool.query<{
+                compression_events: number | null;
+                tokens_reclaimed: number | null;
+                context_msgs: number;
+              }>(
+                `SELECT compression_events, tokens_reclaimed, context_msgs
+                 FROM session_registry WHERE id = $1`,
+                [sessionResult.sessionId],
+              );
+              if (srows.length > 0) {
+                sessionCompressionEvents = srows[0].compression_events ?? 0;
+                sessionTokensReclaimed = srows[0].tokens_reclaimed ?? 0;
+                sessionTurnNumber = srows[0].context_msgs;
+              }
+            } catch { /* non-fatal — context_stats still written with zeros */ }
           }
+        } catch { /* non-critical — never block dispatch */ }
+
+        // ACX-05: Write context_stats to dispatch log row (UPDATE after INSERT)
+        try {
+          const contextStats = buildContextStats({
+            skillsUsed: ctx.skillsUsed ?? null,
+            compressionStats: compressionStats ? {
+              tool_outputs_compressed: compressionStats.tool_outputs_compressed,
+              conversation_turns_compressed: 0,
+              tokens_saved: compressionStats.tokens_saved,
+            } : undefined,
+            sessionResult: { tokensUsed: 0, contextPct: sessionContextPct },
+            sessionCompressionEvents,
+            sessionTokensReclaimed,
+            turnNumber: sessionTurnNumber,
+          });
+          await pool.query(
+            `UPDATE bridge_dispatch_log SET context_stats = $1 WHERE id = $2`,
+            [JSON.stringify(contextStats), id],
+          );
         } catch { /* non-critical — never block dispatch */ }
 
         // INT-01: Memory V3 signal — agent learns model preferences
@@ -651,18 +703,37 @@ export class RoutingEngine {
         }
 
         // Stream finished successfully — calculate results and log dispatch
+        const rawOutputTokens = estimateTokens(fullResponse);
+        const inputTokens = estimateTokens(JSON.stringify(req.messages));
+
+        // Phase 38-02: Tool output compression — compress verbose responses before logging
+        let compressionStats: { tool_outputs_compressed: number; tokens_saved: number; compression_model: string } | null = null;
+        let loggedResponse = fullResponse;
+        try {
+          const compressed = await compressToolOutput(fullResponse);
+          if (compressed.compressed) {
+            loggedResponse = compressed.summary;
+            compressionStats = {
+              tool_outputs_compressed: 1,
+              tokens_saved: compressed.originalTokens - compressed.compressedTokens,
+              compression_model: COMPRESS_MODEL_NAME,
+            };
+          }
+        } catch {
+          // Non-fatal — compression failure must not block dispatch
+        }
+
         const result: BridgeDispatchResult = {
-          response: fullResponse,
+          response: loggedResponse,
           model: decision.modelName,
           latencyMs: Date.now() - start,
           cached: false,
-          // Estimate tokens if adapter doesn't provide them for streams
-          outputTokens: Math.ceil(fullResponse.length / 4),
-          inputTokens: Math.ceil(JSON.stringify(req.messages).length / 4),
+          outputTokens: rawOutputTokens,
+          inputTokens,
         };
 
         // Phase 34: capture dispatch ID and yield as metadata token for chat.ts to thread into SSE done event
-        const dispatchId = self.logDispatch(decision, ctx, result).catch(() => null as string | null);
+        const dispatchId = self.logDispatch(decision, ctx, result, undefined, compressionStats).catch(() => null as string | null);
         const resolvedId = await dispatchId;
         if (resolvedId) yield `__DISPATCH_META__${JSON.stringify({ dispatch_id: resolvedId })}`;
       } catch (err) {
