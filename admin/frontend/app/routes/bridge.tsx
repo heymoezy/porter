@@ -1103,6 +1103,169 @@ function OperatorActivityLog() {
   return <LLMTerminal lines={lines} title="Operator Activity" className="!h-full" />
 }
 
+// ── Job Queue Helpers ─────────────────────────────────
+
+interface JobRow {
+  id: string
+  agent_id: string
+  project_id: string | null
+  trigger_type: string
+  prompt: string | null
+  status: string
+  scheduled_for: number
+  started_at: number | null
+  completed_at: number | null
+  result_preview: string | null
+  error: string | null
+  source: string
+  required_skill: string | null
+  required_capability: string | null
+  assigned_gateway: string | null
+  assigned_agent_name: string | null
+  duration_ms: number | null
+  created_at: number
+}
+
+function formatDuration(ms: number | null): string {
+  if (ms == null) return "\u2014"
+  if (ms < 1000) return `${(ms / 1000).toFixed(1)}s`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  const mins = Math.floor(ms / 60000)
+  const secs = Math.round((ms % 60000) / 1000)
+  return `${mins}m ${secs}s`
+}
+
+function formatRelativeTime(epochSec: number): string {
+  const d = Date.now() / 1000 - epochSec
+  if (d < 60) return "just now"
+  if (d < 3600) return `${Math.floor(d / 60)}m ago`
+  if (d < 86400) return `${Math.floor(d / 3600)}h ago`
+  return `${Math.floor(d / 86400)}d ago`
+}
+
+function sourceBadgeVariant(source: string): string {
+  if (source === "agent") return "bg-purple-500/15 text-purple-400 border-0"
+  if (source === "human") return "bg-teal-500/15 text-teal-400 border-0"
+  return "bg-raised text-text3 border-0"  // system
+}
+
+function statusBadgeVariant(status: string): string {
+  if (status === "pending") return "bg-warning/15 text-warning border-0"
+  if (status === "running") return "bg-accent-porter/15 text-accent-porter border-0"
+  if (status === "complete") return "bg-success/15 text-success border-0"
+  if (status === "failed") return "bg-danger/15 text-danger border-0"
+  return "bg-raised text-text3 border-0"
+}
+
+// ── JobQueuePanel ─────────────────────────────────────
+
+function JobQueuePanel() {
+  const [jobTab, setJobTab] = useState("queue")
+
+  const { data: queueData, isLoading: queueLoading } = useQuery({
+    queryKey: ["admin", "jobs", "queue"],
+    queryFn: () => api<{ jobs: JobRow[] }>("/api/v1/admin/jobs/queue"),
+    refetchInterval: jobTab === "queue" ? 10_000 : false,
+    enabled: jobTab === "queue",
+  })
+
+  const { data: historyData, isLoading: historyLoading } = useQuery({
+    queryKey: ["admin", "jobs", "history"],
+    queryFn: () => api<{ jobs: JobRow[] }>("/api/v1/admin/jobs/history?limit=50"),
+    enabled: jobTab === "completed" || jobTab === "history",
+  })
+
+  const tabs = [
+    { key: "queue", label: "Queue" },
+    { key: "completed", label: "Completed" },
+    { key: "history", label: "History" },
+  ]
+
+  const activeJobs: JobRow[] =
+    jobTab === "queue"
+      ? queueData?.jobs ?? []
+      : jobTab === "completed"
+        ? (historyData?.jobs ?? []).filter(j => j.status === "complete")
+        : historyData?.jobs ?? []
+
+  const isLoading = jobTab === "queue" ? queueLoading : historyLoading
+
+  return (
+    <div className="rounded-xl border border-border bg-surface overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+        <h2 className="text-sm font-semibold text-text">Job Queue</h2>
+        <div className="flex items-center gap-1">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setJobTab(t.key)}
+              className={`px-2.5 py-1 text-2xs rounded-md font-medium transition-colors ${
+                jobTab === t.key
+                  ? "bg-accent-porter/15 text-accent-porter"
+                  : "text-text3 hover:text-text2 hover:bg-raised/50"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="px-4 py-6 flex items-center justify-center">
+          <RefreshCw className="size-4 text-text3 animate-spin" />
+          <span className="ml-2 text-xs text-text3">Loading jobs...</span>
+        </div>
+      ) : activeJobs.length === 0 ? (
+        <div className="px-4 py-6 text-center">
+          <p className="text-xs text-text3">
+            {jobTab === "queue" ? "No pending or running jobs" : "No job history yet"}
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border text-text3">
+                <th className="text-left font-medium px-4 py-2">Source</th>
+                <th className="text-left font-medium px-2 py-2">Type</th>
+                <th className="text-left font-medium px-2 py-2">Agent</th>
+                <th className="text-left font-medium px-2 py-2">Gateway</th>
+                <th className="text-left font-medium px-2 py-2">Status</th>
+                <th className="text-left font-medium px-2 py-2">Duration</th>
+                <th className="text-left font-medium px-2 py-2">Skill</th>
+                <th className="text-left font-medium px-2 py-2">Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activeJobs.map(job => (
+                <tr key={job.id} className="border-b border-border/50 hover:bg-raised/30 transition-colors">
+                  <td className="px-4 py-2">
+                    <Badge className={`text-2xs ${sourceBadgeVariant(job.source)}`}>
+                      {job.source}
+                    </Badge>
+                  </td>
+                  <td className="px-2 py-2 text-text2">{job.trigger_type}</td>
+                  <td className="px-2 py-2 text-text2">{job.assigned_agent_name || (job.agent_id === "system" ? "system" : job.agent_id?.slice(0, 8) || "\u2014")}</td>
+                  <td className="px-2 py-2 text-text2 font-mono text-2xs">{job.assigned_gateway || "\u2014"}</td>
+                  <td className="px-2 py-2">
+                    <Badge className={`text-2xs ${statusBadgeVariant(job.status)}`}>
+                      {job.status}
+                    </Badge>
+                  </td>
+                  <td className="px-2 py-2 text-text2 tabular-nums">{formatDuration(job.duration_ms)}</td>
+                  <td className="px-2 py-2 text-text3">{job.required_skill || "\u2014"}</td>
+                  <td className="px-2 py-2 text-text3">{job.created_at ? formatRelativeTime(job.created_at) : "\u2014"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Tab Content ───────────────────────────────────────
 
 // ── Page ────────────────────────────────────────────────
@@ -1150,8 +1313,9 @@ export default function BridgePage() {
     }
     return (
       <>
-        <div className="flex-1 min-h-0 overflow-y-auto pb-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pb-4 space-y-4">
           <GatewayGrid tickLog={tickLog} onOpenEditor={(id, mode) => setEditingGw({ id, mode })} />
+          <JobQueuePanel />
         </div>
         <div className="shrink-0 h-44">
           <OperatorActivityLog />
