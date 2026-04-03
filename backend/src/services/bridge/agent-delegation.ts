@@ -18,6 +18,7 @@
 import crypto from 'node:crypto';
 import { pool } from '../../db/client.js';
 import { logMsgBusEvent, updateMsgBusEvent } from '../msg-bus.js';
+import { classifyRisk, createApprovalRequest } from '../control-plane/approval-gate.js';
 import { routingEngine } from './routing-engine.js';
 import type { AgentMessageLogContext, RoutingContext } from './types.js';
 
@@ -124,6 +125,29 @@ export async function delegateToAgent(opts: DelegationRequest): Promise<Delegati
     } catch { /* non-critical */ }
 
     throw new Error(`Delegation depth limit exceeded (depth=${hopCount}, max=${MAX_DELEGATION_DEPTH})`);
+  }
+
+  // PCP-03: Approval gate for high-risk actions
+  const riskAssessment = classifyRisk(opts.task);
+  if (riskAssessment.level === 'high') {
+    // Create approval request and pause execution
+    const approval = await createApprovalRequest({
+      task: opts.task,
+      correlationId: opts.correlationId,
+      sourceAgent: source,
+      targetAgent: opts.targetAgent,
+      riskAssessment,
+      delegationRequest: opts,
+    });
+
+    // Do NOT execute — throw a typed error the caller can handle
+    const error = new Error(
+      `Action requires approval (id=${approval.id}): ${riskAssessment.reasons.join(', ')}`,
+    );
+    (error as any).code = 'APPROVAL_REQUIRED';
+    (error as any).approvalId = approval.id;
+    (error as any).riskReasons = riskAssessment.reasons;
+    throw error;
   }
 
   // ── Step 1: Log to msg_bus_events (non-blocking) ──────────────────────────
