@@ -25,7 +25,7 @@
 - [x] **AJQ-01**: agent_jobs table stores structured work items with status lifecycle (queued → assigned → running → complete/failed)
 - [x] **AJQ-02**: Job assignment engine matches jobs to best available agent based on skills, gateway capabilities, and cost tier
 - [x] **AJQ-03**: Porter can self-dispatch jobs (scheduled analysis, health checks, monitoring) without human trigger
-- [ ] **AJQ-04**: Admin can view job queue, running jobs, completed jobs, and assignment history
+- [x] **AJQ-04**: Admin can view job queue, running jobs, completed jobs, and assignment history
 
 ### Gateway Capabilities
 
@@ -107,7 +107,7 @@
 | AJQ-01 | Phase 44 | Complete |
 | AJQ-02 | Phase 44 | Complete |
 | AJQ-03 | Phase 44 | Complete |
-| AJQ-04 | Phase 44 | Pending |
+| AJQ-04 | Phase 44 | Complete |
 | PCP-01 | Phase 45 | Pending |
 | PCP-02 | Phase 45 | Pending |
 | PCP-03 | Phase 45 | Pending |

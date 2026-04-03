@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 44-01-PLAN.md
-last_updated: "2026-04-03T13:53:43.774Z"
+stopped_at: Completed 44-02-PLAN.md
+last_updated: "2026-04-03T14:00:00.780Z"
 progress:
   total_phases: 17
-  completed_phases: 12
+  completed_phases: 13
   total_plans: 37
-  completed_plans: 37
+  completed_plans: 38
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 ## Current Position
 
-Phase: 44 (Autonomous Job Queue) — EXECUTING
-Plan: 2 of 2
+Phase: 44 (Autonomous Job Queue) — COMPLETE
+Plan: 2 of 2 (all complete)
 
 ## Performance Metrics
 
@@ -74,6 +74,9 @@ Plan: 2 of 2
 - [Phase 44-01]: selectBestGateway uses JSONB ->> operator with field:value format for flexible capability matching
 - [Phase 44-01]: scheduleSystemJob dedup checks trigger_type + source='system' + status IN (pending, running)
 - [Phase 44-01]: Gateway assignment happens between job claim and executeJob in tick() — keeps claim logic unchanged
+- [Phase 44]: Used api() helper instead of raw fetch for JobQueuePanel — consistent auth/envelope handling
+- [Phase 44]: JobQueuePanel embedded in operator tab — fits existing bridge page layout hierarchy
+- [Phase 44]: Queue tab 10s refetchInterval via React Query; history tabs on-demand — balances freshness with resources
 
 ### Pending Todos
 
@@ -86,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T13:53:43.771Z
-Stopped at: Completed 44-01-PLAN.md
+Last session: 2026-04-03T14:00:00.777Z
+Stopped at: Completed 44-02-PLAN.md
 Resume file: None

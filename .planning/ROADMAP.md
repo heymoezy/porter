@@ -92,7 +92,7 @@
 - [x] **Phase 41: Session Intelligence** - Frozen memory snapshots, cross-session FTS search, and dispatch outcome feedback into routing confidence (completed 2026-04-03)
 - [x] **Phase 42: Task Decomposition Engine** - Complex requests classified, decomposed into DAGs, executed in parallel, synthesized into coherent responses (completed 2026-04-03)
 - [ ] **Phase 43: Inter-Agent Messaging** - Structured agent-to-agent delegation through Porter coordinator with full audit trail
-- [ ] **Phase 44: Autonomous Job Queue** - Agent jobs pulled by best-matched agents, Porter self-dispatches scheduled work, admin visibility
+- [x] **Phase 44: Autonomous Job Queue** - Agent jobs pulled by best-matched agents, Porter self-dispatches scheduled work, admin visibility (completed 2026-04-03)
 - [ ] **Phase 45: Porter Control Plane** - Porter enforces delegation doctrine, depth limits, and approval gates for high-risk actions
 - [ ] **Phase 46: Project Monitoring** - Per-project watchers (web search, RSS, email, custom) run autonomously and surface findings in activity feed
 - [ ] **Phase 47: Project Substrate** - Every project has a canonical /_system/ directory, structured intake, intelligence ingress, and Atlas agent
@@ -322,7 +322,7 @@ Plans:
   2. A job requiring a specific skill routes to an agent that has that skill assigned — a job requiring tool support routes to a gateway that supports tools
   3. Porter self-enqueues a scheduled job (e.g., health check, monitoring sweep) without any human-initiated request — verified by observing a job with source=system in the queue
   4. Admin can view the live job queue, running jobs, completed jobs, and assignment history with gateway, agent, duration, and outcome for each
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 44-01-PLAN.md — Migration + job-assignment service + scheduler self-scheduling (AJQ-01, AJQ-02, AJQ-03)
@@ -397,7 +397,7 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 41. Session Intelligence | 3/3 | Complete    | 2026-04-03 | - |
 | 42. Task Decomposition Engine | 4/4 | Complete    | 2026-04-03 | - |
 | 43. Inter-Agent Messaging | 1/2 | In Progress|  | - |
-| 44. Autonomous Job Queue | 1/2 | In Progress|  | - |
+| 44. Autonomous Job Queue | 2/2 | Complete   | 2026-04-03 | - |
 | 45. Porter Control Plane | v6.0 | 0/TBD | Not started | - |
 | 46. Project Monitoring | v6.0 | 0/TBD | Not started | - |
 | 47. Project Substrate | v6.0 | 0/TBD | Not started | - |
