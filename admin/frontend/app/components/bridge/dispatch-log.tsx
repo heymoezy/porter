@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
+import { SessionPressureChart } from "./session-pressure-chart"
 import { Card, CardContent } from "~/components/ui/card"
 import { Input } from "~/components/ui/input"
 import {
@@ -776,14 +777,21 @@ export function DispatchLog() {
                   </td>
                 </tr>
 
-                {/* Expanded row: session routing + context pressure */}
+                {/* Expanded row: context pressure + session pressure chart + session routing */}
                 {expandedRowId === entry.id && (
                   <tr>
                     <td colSpan={8} className="bg-raised/50 px-4 py-3">
                       <div className="space-y-4">
                         <ContextPanel dispatchId={entry.id} />
                         {entry.chat_id && (
-                          <SessionPanel chatId={entry.chat_id} />
+                          <>
+                            <div className="border-t border-border/20 pt-3">
+                              <SessionPressureChart chatId={entry.chat_id} />
+                            </div>
+                            <div className="border-t border-border/20 pt-3">
+                              <SessionPanel chatId={entry.chat_id} />
+                            </div>
+                          </>
                         )}
                       </div>
                     </td>
