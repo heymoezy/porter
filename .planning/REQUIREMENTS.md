@@ -86,17 +86,46 @@
 
 ## Traceability
 
-Updated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated by roadmapper) | | |
+| GWC-01 | Phase 40 | Pending |
+| GWC-02 | Phase 40 | Pending |
+| GWC-03 | Phase 40 | Pending |
+| GWC-04 | Phase 40 | Pending |
+| SIN-01 | Phase 41 | Pending |
+| SIN-02 | Phase 41 | Pending |
+| SIN-03 | Phase 41 | Pending |
+| TDE-01 | Phase 42 | Pending |
+| TDE-02 | Phase 42 | Pending |
+| TDE-03 | Phase 42 | Pending |
+| TDE-04 | Phase 42 | Pending |
+| TDE-05 | Phase 42 | Pending |
+| IAM-01 | Phase 43 | Pending |
+| IAM-02 | Phase 43 | Pending |
+| IAM-03 | Phase 43 | Pending |
+| IAM-04 | Phase 43 | Pending |
+| AJQ-01 | Phase 44 | Pending |
+| AJQ-02 | Phase 44 | Pending |
+| AJQ-03 | Phase 44 | Pending |
+| AJQ-04 | Phase 44 | Pending |
+| PCP-01 | Phase 45 | Pending |
+| PCP-02 | Phase 45 | Pending |
+| PCP-03 | Phase 45 | Pending |
+| PMN-01 | Phase 46 | Pending |
+| PMN-02 | Phase 46 | Pending |
+| PMN-03 | Phase 46 | Pending |
+| PMN-04 | Phase 46 | Pending |
+| PMN-05 | Phase 46 | Pending |
+| PSB-01 | Phase 47 | Pending |
+| PSB-02 | Phase 47 | Pending |
+| PSB-03 | Phase 47 | Pending |
+| PSB-04 | Phase 47 | Pending |
 
 **Coverage:**
 - v6.0 requirements: 30 total
-- Mapped to phases: 0
-- Unmapped: 30
+- Mapped to phases: 30
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-03 after v6.0 milestone definition*
+*Last updated: 2026-04-02 — traceability populated by roadmapper*

@@ -6,7 +6,8 @@
 - ✅ **v2.0 Backend Ready** — Phases 8-15 (shipped 2026-03-24)
 - ✅ **v3.0 Porter Bridge** — Phases 16-23 (shipped 2026-03-25) — AI gateway, model intelligence, smart routing
 - ⏸️ **v4.0 The Arena** — Phases 24-30 (6/7 shipped, Phase 28 Battle Arena deferred)
-- 🚧 **v5.0 Living Skills** — Phases 31-38 (active) — Skills as live behavioral modules
+- ✅ **v5.0 Living Skills** — Phases 31-39 (shipped 2026-04-03) — Skills as live behavioral modules, bridge task dispatch
+- 🚧 **v6.0 The Orchestration Platform** — Phases 40-47 (active) — Task decomposition, inter-agent messaging, autonomous job queues, project monitoring, project substrate
 
 ## Phases
 
@@ -66,22 +67,35 @@
 
 </details>
 
-### v5.0 Living Skills (Active)
+<details>
+<summary>v5.0 Living Skills (Phases 31-39) — SHIPPED 2026-04-03</summary>
 
-**Milestone Goal:** Transform skills from a static catalog into live behavioral modules that are selected at runtime, injected into dispatch prompts, measured for effectiveness, and evolved through feedback. Fix the broken source of truth, build real authoring UX, implement runtime selection, close the feedback loop, and replace fake quality tiers with real measurement.
+- [x] Phase 31: Source of Truth Cleanup — DB assignments canonical, SKILLS.md = generated manifest (completed 2026-04-02)
+- [x] Phase 32: Skill Pack Explorer — View/edit real .md files, quality diagnostics (completed 2026-04-02)
+- [x] Phase 33: Runtime Skill Selector — Rank skills per task, inject packs, log selection (completed 2026-04-02)
+- [x] Phase 34: Feedback Telemetry — Capture signals, effectiveness scoring (completed 2026-04-02)
+- [x] Phase 35: Agent Evolution Loop — Recommendations, proposed changes, supervised apply (completed 2026-04-03)
+- [x] Phase 36: Skill Quality Scoring — Real quality tiers, audit job (completed 2026-04-03)
+- [x] Phase 37: Template Skill UX — Assignment authoring, effectiveness display (completed 2026-04-03)
+- [x] Phase 38: Adaptive Agent Context — Smart directive injection, agent self-querying, deep execution, context compression (completed 2026-04-03)
+- [x] Phase 39: Bridge Task Dispatch — CLI gateways dispatch real tasks with tool access, lifecycle tracking, SSE streaming, admin visibility (completed 2026-04-03)
 
-- [x] **Phase 31: Source of Truth Cleanup** — DB assignments canonical, SKILLS.md = generated manifest (completed 2026-04-02)
-- [x] **Phase 32: Skill Pack Explorer** — View/edit real .md files, quality diagnostics (completed 2026-04-02)
-- [x] **Phase 33: Runtime Skill Selector** — Rank skills per task, inject packs, log selection (completed 2026-04-02)
-- [x] **Phase 34: Feedback Telemetry** — Capture signals, effectiveness scoring (completed 2026-04-02)
-- [x] **Phase 35: Agent Evolution Loop** — Recommendations, proposed changes, supervised apply (completed 2026-04-03)
-- [x] **Phase 36: Skill Quality Scoring** — Real quality tiers, audit job (completed 2026-04-03)
-- [x] **Phase 37: Template Skill UX** — Assignment authoring, effectiveness display (completed 2026-04-03)
-- [x] **Phase 38: Adaptive Agent Context** — Smart directive injection, agent self-querying, deep execution, context compression (completed 2026-04-03)
+30/30 requirements complete. Version v5.2.0.
 
-### Bridge Task Dispatch
+</details>
 
-- [x] **Phase 39: Bridge Task Dispatch** — CLI gateways dispatch real tasks with tool access, lifecycle tracking, SSE streaming, admin visibility (completed 2026-04-03)
+### v6.0 The Orchestration Platform (Active)
+
+**Milestone Goal:** Transform Porter from a chat router into a real multi-model orchestration platform. Task decomposition engine turns complex requests into parallel DAGs. Inter-agent messaging enables structured delegation. Autonomous job queues let Porter self-assign work. Gateway capabilities drive intelligent dispatch. Project monitoring watches the world per project. Project substrate gives every project a structured container.
+
+- [ ] **Phase 40: Gateway Capability Registry** - Per-gateway strengths, cost tiers, context windows, and tool support stored and queried at dispatch time
+- [ ] **Phase 41: Session Intelligence** - Frozen memory snapshots, cross-session FTS search, and dispatch outcome feedback into routing confidence
+- [ ] **Phase 42: Task Decomposition Engine** - Complex requests classified, decomposed into DAGs, executed in parallel, synthesized into coherent responses
+- [ ] **Phase 43: Inter-Agent Messaging** - Structured agent-to-agent delegation through Porter coordinator with full audit trail
+- [ ] **Phase 44: Autonomous Job Queue** - Agent jobs pulled by best-matched agents, Porter self-dispatches scheduled work, admin visibility
+- [ ] **Phase 45: Porter Control Plane** - Porter enforces delegation doctrine, depth limits, and approval gates for high-risk actions
+- [ ] **Phase 46: Project Monitoring** - Per-project watchers (web search, RSS, email, custom) run autonomously and surface findings in activity feed
+- [ ] **Phase 47: Project Substrate** - Every project has a canonical /_system/ directory, structured intake, intelligence ingress, and Atlas agent
 
 ## Phase Details
 
@@ -97,6 +111,7 @@
   5. Modifying a persona's skill assignments via API regenerates its SKILLS.md within the same request
   6. skills_text column is preserved for backwards compatibility but never read during instantiation
 **Plans:** 3/3 plans complete
+
 Plans:
 - [x] 31-01-PLAN.md — Schema update + migration script (template_skills population, persona_skills.skill_id)
 - [x] 31-02-PLAN.md — Instantiation rewrite + forge Station 2 + SKILLS.md manifest generator
@@ -113,6 +128,7 @@ Plans:
   4. Template and agent detail pages have a clickable link on each assigned skill that opens the pack explorer for that skill
   5. Missing or empty files are flagged with warnings in the file tree
 **Plans:** 4/4 plans complete
+
 Plans:
 - [x] 32-00-PLAN.md — Wave 0 test scaffold (Playwright tests for PKX-01 through PKX-05)
 - [x] 32-01-PLAN.md — Backend quality diagnostics + PUT file write endpoint
@@ -130,6 +146,7 @@ Plans:
   4. Every dispatch record in bridge_dispatch_log includes a skills_used JSONB column with candidate list, selected list, and scores
   5. An agent with no assigned skills or no relevant skills dispatches normally without skill injection
 **Plans:** 2/2 plans complete
+
 Plans:
 - [x] 33-01-PLAN.md — Migration (skills_used JSONB) + skill-selector.ts service (scoring, pack reading)
 - [x] 33-02-PLAN.md — Chat pipeline wiring + dispatch logging integration
@@ -145,11 +162,12 @@ Plans:
   4. Admin can view per-skill effectiveness on skill detail, agent detail, and template detail pages
   5. Effectiveness scores are queryable via API: GET /api/admin/skills/:id/effectiveness and GET /api/admin/agents/:id/skill-effectiveness
 **Plans:** 4/4 plans complete
+
 Plans:
 - [x] 34-00-PLAN.md — Playwright test scaffold for FBK-01 through FBK-05 (Wave 0)
-- [ ] 34-01-PLAN.md — Migration (skill_feedback_events + persona_skills counters) + dispatch_id lifecycle + times_selected
-- [ ] 34-02-PLAN.md — Feedback POST endpoint + chat thumbs-up/down UI
-- [ ] 34-03-PLAN.md — Admin effectiveness API endpoints + UI on detail pages
+- [x] 34-01-PLAN.md — Migration (skill_feedback_events + persona_skills counters) + dispatch_id lifecycle + times_selected
+- [x] 34-02-PLAN.md — Feedback POST endpoint + chat thumbs-up/down UI
+- [x] 34-03-PLAN.md — Admin effectiveness API endpoints + UI on detail pages
 
 ### Phase 35: Agent Evolution Loop
 **Goal**: Feedback patterns drive concrete skill recommendations that admin can review and approve — closing the loop from "skill was used" to "skill inventory changed because of measured performance"
@@ -162,10 +180,11 @@ Plans:
   4. Approving a proposal updates persona_skills, regenerates SKILLS.md, and logs the evolution event
   5. Evolution event log shows timeline of what changed, why, which feedback triggered it, and whether effectiveness improved after the change
 **Plans:** 3/3 plans complete
+
 Plans:
 - [x] 35-01-PLAN.md — Test scaffold + migration (evolution tables) + analyzer service + scheduler hook
-- [ ] 35-02-PLAN.md — Admin API endpoints (list/approve/reject proposals) + SKILLS.md regeneration
-- [ ] 35-03-PLAN.md — Admin UI Evolution tab (proposals list, diff view, approve/reject, event timeline)
+- [x] 35-02-PLAN.md — Admin API endpoints (list/approve/reject proposals) + SKILLS.md regeneration
+- [x] 35-03-PLAN.md — Admin UI Evolution tab (proposals list, diff view, approve/reject, event timeline)
 
 ### Phase 36: Skill Quality Scoring
 **Goal**: Every skill has a measurable quality score that distinguishes scaffold filler from production-ready content — admin can see at a glance which skills are real and which need work
@@ -177,7 +196,7 @@ Plans:
   3. Skills table and marketplace show quality tier badges with color coding instead of ready/partial/missing
   4. Admin can filter skills by quality tier in both table and grid views
   5. A quality audit API endpoint scores all skills and returns a report of scaffolds needing enrichment
-**Plans**: TBD
+**Plans:** 3/3 plans complete
 
 ### Phase 37: Template Skill UX
 **Goal**: Template detail view is the command center for skill configuration — showing what's assigned, why, how effective each skill is, and letting admin author the skill loadout with priorities and auto-detect settings
@@ -190,9 +209,10 @@ Plans:
   4. Template detail shows aggregated skill effectiveness across all agents spawned from that template
   5. A "preview" feature shows which skills would be auto-selected for a sample task prompt
 **Plans:** 2/2 plans complete
+
 Plans:
-- [ ] 37-01-PLAN.md — DB migration (is_mandatory, assignment_rationale) + 5 admin API endpoints (CRUD + preview)
-- [ ] 37-02-PLAN.md — Frontend TemplateSkillsTab component + agent-detail.tsx wiring
+- [x] 37-01-PLAN.md — DB migration (is_mandatory, assignment_rationale) + 5 admin API endpoints (CRUD + preview)
+- [x] 37-02-PLAN.md — Frontend TemplateSkillsTab component + agent-detail.tsx wiring
 
 ### Phase 38: Adaptive Agent Context
 **Goal**: Dispatched agents interact intelligently with Porter's memory and context systems — querying directives/concepts on demand instead of receiving bulk injection, managing deep multi-turn execution without context decay, and compressing tool outputs to maximize effective token budget
@@ -205,10 +225,11 @@ Plans:
   4. Verbose tool call results (>500 tokens) are automatically summarized before being appended to conversation history, with full results available via a recall mechanism if needed
   5. Context pressure metrics (tokens used, turns elapsed, compression events) are logged per dispatch in bridge_dispatch_log for observability
 **Plans:** 3/3 plans complete
+
 Plans:
-- [ ] 38-01-PLAN.md — Context-aware directive injection (directive scoring, tags migration, selective Tier 2)
-- [ ] 38-02-PLAN.md — Deep execution & tool output compression (context-compressor service, 70%/85% triggers)
-- [ ] 38-03-PLAN.md — Context pressure observability (context_stats JSONB, admin UI charts)
+- [x] 38-01-PLAN.md — Context-aware directive injection (directive scoring, tags migration, selective Tier 2)
+- [x] 38-02-PLAN.md — Deep execution & tool output compression (context-compressor service, 70%/85% triggers)
+- [x] 38-03-PLAN.md — Context pressure observability (context_stats JSONB, admin UI charts)
 
 ### Phase 39: Bridge Task Dispatch
 **Goal**: Bridge can dispatch real tasks to CLI gateways (Codex, Gemini, Claude) where the model has full tool access — reading files, running commands, editing code. Chat dispatch unchanged.
@@ -221,15 +242,106 @@ Plans:
   4. bridge_tasks table tracks full lifecycle (queued -> running -> complete/failed/cancelled) with output, duration, exit code, gateway used
   5. Admin can view running/completed tasks with output via GET /api/admin/bridge/tasks
 **Plans:** 3/3 plans complete
+
 Plans:
-- [ ] 39-01-PLAN.md — Types + DB schema + migration + TaskExecutor class
-- [ ] 39-02-PLAN.md — REST API routes (dispatch, poll, cancel, list) + SSE wiring
-- [ ] 39-03-PLAN.md — Admin bridge panel task visibility endpoints
+- [x] 39-01-PLAN.md — Types + DB schema + migration + TaskExecutor class
+- [x] 39-02-PLAN.md — REST API routes (dispatch, poll, cancel, list) + SSE wiring
+- [x] 39-03-PLAN.md — Admin bridge panel task visibility endpoints
+
+---
+
+### Phase 40: Gateway Capability Registry
+**Goal**: Every gateway has a structured capability record — strengths, cost tier, context window, tool support, agentic flag — so dispatch decisions are driven by what each gateway can actually do, not guess-work
+**Depends on**: Phase 39 (v5.0 complete)
+**Requirements**: GWC-01, GWC-02, GWC-03, GWC-04
+**Success Criteria** (what must be TRUE):
+  1. Every gateway (Claude CLI, Codex CLI, Gemini CLI, OpenClaw, Ollama) has a capabilities record with strengths, cost_tier, context_window, tool_support, and agentic flag queryable via API
+  2. A task dispatch with explicit requirements (e.g., "needs tool support") routes to a gateway that satisfies those requirements, not just the default gateway
+  3. Sending a tool schema to a gateway that does not support tools results in the schema being stripped before the request is sent — verified by observing the outgoing payload
+  4. All 5 gateways successfully complete a sample task dispatch with tool execution through the unified task dispatch pathway
+**Plans**: TBD
+
+### Phase 41: Session Intelligence
+**Goal**: Session memory is frozen at start and never mutated mid-session; agents can search across past sessions; dispatch outcomes feed back into routing confidence so Porter learns which gateways perform best
+**Depends on**: Phase 40
+**Requirements**: SIN-01, SIN-02, SIN-03
+**Success Criteria** (what must be TRUE):
+  1. System prompt injected at session start is identical at turn 1 and turn 50 of the same session — no mid-session memory mutations observed
+  2. An agent can issue a cross-session search query and receive ranked results from past sessions matching a keyword or topic
+  3. After 10 dispatches to a gateway with measurable outcomes, the routing confidence score for that gateway changes — queryable via admin API
+**Plans**: TBD
+
+### Phase 42: Task Decomposition Engine
+**Goal**: Complex requests are classified, broken into a dependency DAG, executed with parallelism where possible, and synthesized back into a single coherent response — the user sees one answer, Porter ran many agents
+**Depends on**: Phase 40
+**Requirements**: TDE-01, TDE-02, TDE-03, TDE-04, TDE-05
+**Success Criteria** (what must be TRUE):
+  1. A single-step request dispatches directly without decomposition; a multi-step request produces a task_nodes DAG before any subtask is executed
+  2. Two independent subtasks in a DAG execute in parallel — both start before either completes
+  3. A subtask that fails triggers the joiner to either retry that node, replan it with a different approach, or surface an escalation to the user — not silently drop the result
+  4. Completing all DAG nodes triggers a synthesis step that combines subtask outputs into one coherent response returned to the caller
+  5. Admin can inspect any decomposed task: see the full DAG, each node's status, assigned gateway, output, and duration
+**Plans**: TBD
+
+### Phase 43: Inter-Agent Messaging
+**Goal**: Agents can formally hand off work to other agents through Porter as the central coordinator — every message has a correlation ID, hop limit, and full audit trail, so delegation is transparent and bounded
+**Depends on**: Phase 40
+**Requirements**: IAM-01, IAM-02, IAM-03, IAM-04
+**Success Criteria** (what must be TRUE):
+  1. An agent can dispatch a structured work item to another agent via /api/v1/bridge/agent-message and receive a structured response back
+  2. Every inter-agent message chain has a correlation ID visible in the msg_bus_events table along with hop count and full message history
+  3. All inter-agent messages pass through Porter as coordinator — direct peer-to-peer routing is blocked and logged as a violation
+  4. A subtask response from a delegated agent is automatically fed back into the decomposition engine for inclusion in the final synthesis
+**Plans**: TBD
+
+### Phase 44: Autonomous Job Queue
+**Goal**: Porter maintains a persistent job queue where structured work items are matched to the best available agent by skills and gateway capabilities — and Porter can self-enqueue jobs without human trigger
+**Depends on**: Phase 42, Phase 43
+**Requirements**: AJQ-01, AJQ-02, AJQ-03, AJQ-04
+**Success Criteria** (what must be TRUE):
+  1. agent_jobs table stores work items with full status lifecycle (queued → assigned → running → complete/failed) visible in DB and via API
+  2. A job requiring a specific skill routes to an agent that has that skill assigned — a job requiring tool support routes to a gateway that supports tools
+  3. Porter self-enqueues a scheduled job (e.g., health check, monitoring sweep) without any human-initiated request — verified by observing a job with source=system in the queue
+  4. Admin can view the live job queue, running jobs, completed jobs, and assignment history with gateway, agent, duration, and outcome for each
+**Plans**: TBD
+
+### Phase 45: Porter Control Plane
+**Goal**: Porter operates as master orchestrator with enforced boundaries — it decides between direct answer, handoff, parallel execution, or escalation, limits subagent recursion depth, and gates high-risk actions behind approval
+**Depends on**: Phase 42, Phase 43
+**Requirements**: PCP-01, PCP-02, PCP-03
+**Success Criteria** (what must be TRUE):
+  1. Porter's persona applies the delegation doctrine on every dispatch — simple requests answer directly, complex requests delegate, ambiguous requests escalate — with the chosen strategy logged per dispatch
+  2. A subagent that attempts to spawn another subagent at hop depth 3 is blocked — the request is rejected and the limit violation is recorded in the audit log
+  3. A dispatch requesting a high-risk action (code mutation, external API call, file deletion) is paused pending user approval — the action does not execute until the approval event is received
+**Plans**: TBD
+
+### Phase 46: Project Monitoring
+**Goal**: Every project can have autonomous watchers — scheduled agents that monitor external sources (web, RSS, email) and surface relevant findings in the project's activity feed without manual polling
+**Depends on**: Phase 44
+**Requirements**: PMN-01, PMN-02, PMN-03, PMN-04, PMN-05
+**Success Criteria** (what must be TRUE):
+  1. Admin can create a watcher for a project by specifying type (web_search, rss_feed, email_monitor, custom), schedule, and config — watcher record persists in project_watchers table
+  2. All four watcher types execute on schedule and produce structured output — verified by seeing fresh watcher results in the DB after a scheduled run completes
+  3. Watcher findings appear in the project activity feed with a source badge (web/rss/email/custom), summary text, and expandable detail — not a raw dump
+  4. A finding marked as important triggers a notification visible in the in-app feed, and optionally sends an email if configured
+  5. Admin ops view shows all active watchers across all projects with last run time, next run time, and resource usage
+**Plans**: TBD
+
+### Phase 47: Project Substrate
+**Goal**: Every project folder is a structured container — a canonical /_system/ directory, defined intake and work directories, intelligent file ingress that classifies and routes uploads, and an Atlas agent watching for structural drift
+**Depends on**: Phase 46
+**Requirements**: PSB-01, PSB-02, PSB-03, PSB-04
+**Success Criteria** (what must be TRUE):
+  1. Creating a project automatically provisions a /_system/ directory containing project.md, checkpoint.md, memory.md, decisions.md, tasks.md, and agents.md
+  2. A new project folder has all canonical directories present: /_system/, /intake/, /context/, /work/, /outputs/, /archive/
+  3. Uploading a file to a project triggers the intelligence ingress pipeline: file is classified, moved to the correct directory, a signal is emitted to Memory V2, and the project context document is updated
+  4. Atlas agent detects and repairs structural drift — missing directories are recreated, misplaced files are flagged, and the repair is logged in project activity
+**Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can parallel 36) → 36 → 37 → 38 → 39.
+v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can parallel 42) → 44 → 45 (can parallel 44) → 46 → 47.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -240,9 +352,17 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 31. Source of Truth | v5.0 | 3/3 | Complete | 2026-04-02 |
 | 32. Skill Pack Explorer | v5.0 | 4/4 | Complete | 2026-04-02 |
 | 33. Runtime Skill Selector | v5.0 | 2/2 | Complete | 2026-04-02 |
-| 34. Feedback Telemetry | 4/4 | Complete   | 2026-04-02 | - |
-| 35. Agent Evolution Loop | 3/3 | Complete    | 2026-04-03 | - |
-| 36. Skill Quality Scoring | v5.0 | Complete    | 2026-04-03 | - |
-| 37. Template Skill UX | 2/2 | Complete    | 2026-04-03 | - |
-| 38. Adaptive Agent Context | 3/3 | Complete    | 2026-04-03 | - |
-| 39. Bridge Task Dispatch | 3/3 | Complete   | 2026-04-03 | - |
+| 34. Feedback Telemetry | v5.0 | 4/4 | Complete | 2026-04-02 |
+| 35. Agent Evolution Loop | v5.0 | 3/3 | Complete | 2026-04-03 |
+| 36. Skill Quality Scoring | v5.0 | 3/3 | Complete | 2026-04-03 |
+| 37. Template Skill UX | v5.0 | 2/2 | Complete | 2026-04-03 |
+| 38. Adaptive Agent Context | v5.0 | 3/3 | Complete | 2026-04-03 |
+| 39. Bridge Task Dispatch | v5.0 | 3/3 | Complete | 2026-04-03 |
+| 40. Gateway Capability Registry | v6.0 | 0/TBD | Not started | - |
+| 41. Session Intelligence | v6.0 | 0/TBD | Not started | - |
+| 42. Task Decomposition Engine | v6.0 | 0/TBD | Not started | - |
+| 43. Inter-Agent Messaging | v6.0 | 0/TBD | Not started | - |
+| 44. Autonomous Job Queue | v6.0 | 0/TBD | Not started | - |
+| 45. Porter Control Plane | v6.0 | 0/TBD | Not started | - |
+| 46. Project Monitoring | v6.0 | 0/TBD | Not started | - |
+| 47. Project Substrate | v6.0 | 0/TBD | Not started | - |
