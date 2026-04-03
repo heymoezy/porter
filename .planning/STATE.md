@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
-status: executing
-stopped_at: Completed 42-03-PLAN.md
-last_updated: "2026-04-03T10:32:26.000Z"
+status: unknown
+stopped_at: "Completed 42-04-PLAN.md (checkpoint:human-verify pending)"
+last_updated: "2026-04-03T10:37:45.594Z"
 progress:
   total_phases: 17
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 33
-  completed_plans: 32
+  completed_plans: 34
 ---
 
 # Project State
@@ -65,6 +65,8 @@ Plan: 3 of 4
 - [Phase 42-03]: decomposeAndExecute returns immediately after insertTaskTree — pipeline runs fire-and-forget to avoid blocking SSE response
 - [Phase 42-03]: Classifier gate in chat.ts has double try/catch — classifier errors and decomposition errors both fall through to direct dispatch
 - [Phase 42-03]: v1 replan marks root as failed with note; no automatic re-execution (bounded to prevent infinite loops)
+- [Phase 42-04]: Dependency detail resolution uses ANY($1::text[]) for batch fetch — single DB round-trip regardless of dep count
+- [Phase 42-04]: camelCase mapping done in JS (not SQL aliases) — consistent with TypeScript types in types.ts
 
 ### Pending Todos
 
@@ -77,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T10:32:26.000Z
-Stopped at: Completed 42-03-PLAN.md
+Last session: 2026-04-03T10:37:45.591Z
+Stopped at: Completed 42-04-PLAN.md (checkpoint:human-verify pending)
 Resume file: None
