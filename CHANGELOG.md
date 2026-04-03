@@ -1,3 +1,14 @@
+## v5.1.0 (2026-04-03)
+
+### Phase 38: Adaptive Agent Context
+- Context-aware directive injection — scores directives by task+skill relevance, injects only matches
+- Tool output compression — auto-compresses verbose tool results (>500 tokens) before storing in history
+- Conversation compression — mild (70%) and aggressive (85%) threshold-triggered summarization
+- Context pressure observability — unified context_stats JSONB on every dispatch
+- Admin ContextPanel on dispatch detail — token budget bars, directive selection, compression badges
+- SessionPressureChart — line chart of context usage vs turn number with compression event markers
+- Migration: tags on directives (GIN indexed), context_stats + compression_stats on dispatch log
+
 ## v5.0.1 (2026-04-03)
 
 ### Fixes
