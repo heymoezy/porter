@@ -21,7 +21,7 @@ import type { GatewayType, TaskEvent } from './types.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-export const TASK_CAPABLE_TYPES = new Set<GatewayType>(['claude_cli', 'gemini_cli', 'codex_cli']);
+export const TASK_CAPABLE_TYPES = new Set<GatewayType>(['claude_cli', 'gemini_cli', 'codex_cli', 'openclaw', 'ollama']);
 
 const DEFAULT_TIMEOUT_MS = 300_000;   // 5 minutes
 const MAX_TIMEOUT_MS = 600_000;       // 10 minutes

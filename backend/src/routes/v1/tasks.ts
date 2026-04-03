@@ -22,6 +22,11 @@ import {
   TASK_CAPABLE_TYPES,
   getTaskQueue,
 } from '../../services/bridge/task-executor.js';
+import {
+  executeHttpTask,
+  HTTP_TASK_CAPABLE_TYPES,
+  type HttpGatewayConfig,
+} from '../../services/bridge/http-task-executor.js';
 import { createAdapter } from '../../services/bridge/adapters/index.js';
 import type { GatewayType } from '../../services/bridge/types.js';
 
@@ -57,10 +62,167 @@ interface GatewayDbRow {
   last_health_at: number | null;
 }
 
+// ── HTTP config builder ───────────────────────────────────────────────────────
+
+const HTTP_DEFAULT_URLS: Record<string, string> = {
+  openclaw: 'http://127.0.0.1:18789',
+  ollama: 'http://127.0.0.1:11434',
+};
+
+const HTTP_DEFAULT_TOKENS: Record<string, string | undefined> = {
+  openclaw: process.env.OPENCLAW_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN ?? 'lobster-2026',
+  ollama: undefined, // no auth
+};
+
+const HTTP_DEFAULT_MODELS: Record<string, string> = {
+  openclaw: 'openai-codex/gpt-5.4',
+  ollama: 'qwen2.5-coder:1.5b',
+};
+
+/**
+ * Build an HttpGatewayConfig from a DB row for openclaw/ollama gateways.
+ */
+function buildHttpConfig(
+  type: string,
+  row: GatewayDbRow,
+  meta: Record<string, unknown>,
+  modelName: string,
+): HttpGatewayConfig {
+  const baseUrl = row.url ?? HTTP_DEFAULT_URLS[type] ?? `http://127.0.0.1`;
+  const token = (meta.token as string | undefined)
+    ?? HTTP_DEFAULT_TOKENS[type];
+  const model = (meta.default_model as string | undefined)
+    ?? HTTP_DEFAULT_MODELS[type]
+    ?? modelName;
+
+  return {
+    type: type as 'openclaw' | 'ollama',
+    baseUrl,
+    token,
+    model,
+  };
+}
+
 // ── Background execution ──────────────────────────────────────────────────────
 
 /**
- * Runs the task subprocess in background, streaming progress to SSE and
+ * Shared event-loop body — processes TaskEvent objects from either a CLI or
+ * HTTP generator and writes progress to SSE + DB.
+ */
+async function processTaskEvents(
+  taskId: string,
+  gatewayType: GatewayType,
+  startEpoch: number,
+  ac: AbortController,
+  eventSource: AsyncGenerator<import('../../services/bridge/types.js').TaskEvent>,
+): Promise<{ finalBroadcast: boolean }> {
+  let outputChunks: string[] = [];
+  let finalBroadcast = false;
+
+  try {
+    for await (const event of eventSource) {
+      if (event.type === 'progress' && event.text) {
+        outputChunks.push(event.text);
+        broadcast('bridge:task-progress', {
+          task_id: taskId,
+          type: 'progress',
+          text: event.text,
+          gateway_type: gatewayType,
+        });
+      } else if (event.type === 'tool_use') {
+        broadcast('bridge:task-progress', {
+          task_id: taskId,
+          type: 'tool_use',
+          tool: event.tool,
+          gateway_type: gatewayType,
+        });
+      } else if (event.type === 'tool_result') {
+        broadcast('bridge:task-progress', {
+          task_id: taskId,
+          type: 'tool_result',
+          tool: event.tool,
+          gateway_type: gatewayType,
+        });
+      } else if (event.type === 'result') {
+        const status = event.exitCode === 0 ? 'complete' : 'failed';
+        const durationMs = event.durationMs ?? Date.now() - startEpoch;
+        const output = outputChunks.join('');
+
+        await pool.query(
+          `UPDATE bridge_tasks
+             SET status = $1,
+                 output = $2,
+                 exit_code = $3,
+                 completed_at = EXTRACT(EPOCH FROM NOW()),
+                 duration_ms = $4
+           WHERE id = $5`,
+          [status, output, event.exitCode ?? null, durationMs, taskId],
+        );
+
+        broadcast('bridge:task-complete', {
+          task_id: taskId,
+          status,
+          exit_code: event.exitCode ?? null,
+          duration_ms: durationMs,
+        });
+        finalBroadcast = true;
+      } else if (event.type === 'error') {
+        const durationMs = event.durationMs ?? Date.now() - startEpoch;
+        const output = outputChunks.join('');
+        const errorText = event.text ?? undefined;
+
+        await pool.query(
+          `UPDATE bridge_tasks
+             SET status = 'failed',
+                 output = $1,
+                 error = $2,
+                 exit_code = $3,
+                 completed_at = EXTRACT(EPOCH FROM NOW()),
+                 duration_ms = $4
+           WHERE id = $5`,
+          [output, errorText ?? null, event.exitCode ?? null, durationMs, taskId],
+        );
+
+        broadcast('bridge:task-complete', {
+          task_id: taskId,
+          status: 'failed',
+          exit_code: event.exitCode ?? null,
+          duration_ms: durationMs,
+        });
+        finalBroadcast = true;
+      }
+    }
+  } catch (execErr) {
+    const durationMs = Date.now() - startEpoch;
+    const output = outputChunks.join('');
+    const errorMsg = execErr instanceof Error ? execErr.message : String(execErr);
+
+    await pool.query(
+      `UPDATE bridge_tasks
+         SET status = 'failed',
+             output = $1,
+             error = $2,
+             completed_at = EXTRACT(EPOCH FROM NOW()),
+             duration_ms = $3
+       WHERE id = $4`,
+      [output, errorMsg, durationMs, taskId],
+    );
+
+    if (!finalBroadcast) {
+      broadcast('bridge:task-complete', {
+        task_id: taskId,
+        status: 'failed',
+        duration_ms: durationMs,
+      });
+      finalBroadcast = true;
+    }
+  }
+
+  return { finalBroadcast };
+}
+
+/**
+ * Runs the task in background (CLI or HTTP), streaming progress to SSE and
  * persisting incremental + final output to bridge_tasks.
  */
 async function runTaskInBackground(
@@ -71,6 +233,7 @@ async function runTaskInBackground(
   cwd: string,
   timeoutMs: number | undefined,
   ac: AbortController,
+  httpConfig?: HttpGatewayConfig,
 ): Promise<void> {
   const startEpoch = Date.now();
 
@@ -86,100 +249,17 @@ async function runTaskInBackground(
     gateway_type: gatewayType,
   });
 
-  let outputChunks: string[] = [];
   let finalBroadcast = false;
 
   try {
     await getTaskQueue(gatewayType).add(async () => {
-      try {
-        for await (const event of executeTask(
-          binaryPath,
-          gatewayType,
-          prompt,
-          cwd,
-          ac.signal,
-          timeoutMs,
-        )) {
-          if (event.type === 'progress' && event.text) {
-            outputChunks.push(event.text);
-            broadcast('bridge:task-progress', {
-              task_id: taskId,
-              type: 'progress',
-              text: event.text,
-              gateway_type: gatewayType,
-            });
-          } else if (event.type === 'result') {
-            const status = event.exitCode === 0 ? 'complete' : 'failed';
-            const durationMs = event.durationMs ?? Date.now() - startEpoch;
-            const output = outputChunks.join('');
+      // ── Choose executor based on gateway type ──────────────────────────
+      const eventSource = HTTP_TASK_CAPABLE_TYPES.has(gatewayType) && httpConfig
+        ? executeHttpTask(httpConfig, prompt, cwd, ac.signal)
+        : executeTask(binaryPath, gatewayType, prompt, cwd, ac.signal, timeoutMs);
 
-            await pool.query(
-              `UPDATE bridge_tasks
-                 SET status = $1,
-                     output = $2,
-                     exit_code = $3,
-                     completed_at = EXTRACT(EPOCH FROM NOW()),
-                     duration_ms = $4
-               WHERE id = $5`,
-              [status, output, event.exitCode ?? null, durationMs, taskId],
-            );
-
-            broadcast('bridge:task-complete', {
-              task_id: taskId,
-              status,
-              exit_code: event.exitCode ?? null,
-              duration_ms: durationMs,
-            });
-            finalBroadcast = true;
-          } else if (event.type === 'error') {
-            const durationMs = event.durationMs ?? Date.now() - startEpoch;
-            const output = outputChunks.join('');
-
-            await pool.query(
-              `UPDATE bridge_tasks
-                 SET status = 'failed',
-                     output = $1,
-                     exit_code = $2,
-                     completed_at = EXTRACT(EPOCH FROM NOW()),
-                     duration_ms = $3
-               WHERE id = $4`,
-              [output, event.exitCode ?? null, durationMs, taskId],
-            );
-
-            broadcast('bridge:task-complete', {
-              task_id: taskId,
-              status: 'failed',
-              exit_code: event.exitCode ?? null,
-              duration_ms: durationMs,
-            });
-            finalBroadcast = true;
-          }
-        }
-      } catch (execErr) {
-        const durationMs = Date.now() - startEpoch;
-        const output = outputChunks.join('');
-        const errorMsg = execErr instanceof Error ? execErr.message : String(execErr);
-
-        await pool.query(
-          `UPDATE bridge_tasks
-             SET status = 'failed',
-                 output = $1,
-                 error = $2,
-                 completed_at = EXTRACT(EPOCH FROM NOW()),
-                 duration_ms = $3
-           WHERE id = $4`,
-          [output, errorMsg, durationMs, taskId],
-        );
-
-        if (!finalBroadcast) {
-          broadcast('bridge:task-complete', {
-            task_id: taskId,
-            status: 'failed',
-            duration_ms: durationMs,
-          });
-          finalBroadcast = true;
-        }
-      }
+      const result = await processTaskEvents(taskId, gatewayType, startEpoch, ac, eventSource);
+      finalBroadcast = result.finalBroadcast;
     });
   } finally {
     runningTasks.delete(taskId);
@@ -188,7 +268,12 @@ async function runTaskInBackground(
     if (!finalBroadcast) {
       const status = ac.signal.aborted ? 'cancelled' : 'complete';
       const durationMs = Date.now() - startEpoch;
-      const output = outputChunks.join('');
+
+      const { rows: taskRows } = await pool.query(
+        `SELECT output FROM bridge_tasks WHERE id = $1`,
+        [taskId],
+      );
+      const output = (taskRows[0] as { output: string | null })?.output ?? '';
 
       await pool.query(
         `UPDATE bridge_tasks
@@ -260,6 +345,7 @@ export default async function tasksV1Routes(
       let selectedGatewayType: GatewayType;
       let binaryPath: string;
       let modelName: string;
+      let httpConfig: HttpGatewayConfig | undefined;
 
       if (gateway) {
         // Explicit gateway requested — validate it's task-capable
@@ -296,6 +382,11 @@ export default async function tasksV1Routes(
         selectedGatewayType = raw.type as GatewayType;
         binaryPath = (meta.binary_path as string | undefined) ?? BINARY_DEFAULTS[raw.type] ?? raw.type;
         modelName = (meta.default_model as string | undefined) ?? raw.name;
+
+        // Build HTTP config for HTTP-type gateways
+        if (HTTP_TASK_CAPABLE_TYPES.has(selectedGatewayType)) {
+          httpConfig = buildHttpConfig(selectedGatewayType, raw, meta, modelName);
+        }
       } else {
         // Auto-select: pick highest-priority active task-capable gateway
         const { rows } = await pool.query<GatewayDbRow>(
@@ -311,7 +402,7 @@ export default async function tasksV1Routes(
 
         if (taskCapable.length === 0) {
           return reply.code(503).send(
-            err('NO_TASK_CAPABLE_GATEWAY', 'No active task-capable gateways available (need claude_cli, gemini_cli, or codex_cli)'),
+            err('NO_TASK_CAPABLE_GATEWAY', 'No active task-capable gateways available (need claude_cli, gemini_cli, codex_cli, openclaw, or ollama)'),
           );
         }
 
@@ -322,6 +413,11 @@ export default async function tasksV1Routes(
         selectedGatewayType = chosen.type as GatewayType;
         binaryPath = (meta.binary_path as string | undefined) ?? BINARY_DEFAULTS[chosen.type] ?? chosen.type;
         modelName = (meta.default_model as string | undefined) ?? chosen.name;
+
+        // Build HTTP config for HTTP-type gateways
+        if (HTTP_TASK_CAPABLE_TYPES.has(selectedGatewayType)) {
+          httpConfig = buildHttpConfig(selectedGatewayType, chosen, meta, modelName);
+        }
       }
 
       // ── Create task row ──────────────────────────────────────────────────
@@ -349,6 +445,7 @@ export default async function tasksV1Routes(
         cwd,
         timeoutMs,
         ac,
+        httpConfig,
       );
 
       return reply.code(202).send(
