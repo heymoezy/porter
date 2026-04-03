@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: executing
-stopped_at: Completed 42-02-PLAN.md
-last_updated: "2026-04-03T10:24:17.000Z"
+stopped_at: Completed 42-03-PLAN.md
+last_updated: "2026-04-03T10:32:26.000Z"
 progress:
   total_phases: 17
   completed_phases: 10
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 42 (Task Decomposition Engine) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 
 ## Performance Metrics
 
@@ -61,6 +61,10 @@ Plan: 2 of 4
 - [Phase 42-02]: insertTaskTree uses pool.connect() BEGIN/COMMIT transaction — atomicity for root+subtasks insertion
 - [Phase 42-02]: handleFailure: attempt < maxAttempts-1 retries; >50% tree failed triggers cancelTree
 - [Phase 42-02]: propagateResult uses JSONB @> containment operator to find tasks depending on completed task
+- [Phase 42-03]: joinResults uses 4-path decision tree: all complete -> synthesized, all failed -> failed, >50% complete -> partial, >50% failed -> replan
+- [Phase 42-03]: decomposeAndExecute returns immediately after insertTaskTree — pipeline runs fire-and-forget to avoid blocking SSE response
+- [Phase 42-03]: Classifier gate in chat.ts has double try/catch — classifier errors and decomposition errors both fall through to direct dispatch
+- [Phase 42-03]: v1 replan marks root as failed with note; no automatic re-execution (bounded to prevent infinite loops)
 
 ### Pending Todos
 
@@ -73,6 +77,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T10:24:17.000Z
-Stopped at: Completed 42-02-PLAN.md
+Last session: 2026-04-03T10:32:26.000Z
+Stopped at: Completed 42-03-PLAN.md
 Resume file: None
