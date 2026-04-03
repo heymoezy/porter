@@ -24,6 +24,8 @@ import memoryV1Routes from './memory.js';
 import bridgeV1Routes from './bridge.js';
 import feedbackV1Routes from './feedback.js';
 import tasksV1Routes from './tasks.js';
+import { dispatchOutcomeRoutes } from './dispatch-outcome.js';
+import sessionsV1Routes from './sessions.js';
 // TODO: admin routes need import path fixes + PG conversion before enabling
 // import adminV1Routes from './admin/index.js';
 
@@ -54,5 +56,7 @@ export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(bridgeV1Routes, { prefix: '/bridge' });
   fastify.register(feedbackV1Routes, { prefix: '/feedback' });
   fastify.register(tasksV1Routes, { prefix: '/tasks' });
+  fastify.register(dispatchOutcomeRoutes);
+  fastify.register(sessionsV1Routes, { prefix: '/sessions' });
   // fastify.register(adminV1Routes, { prefix: '/admin' });
 }

@@ -44,6 +44,7 @@ import adminAuthPlugin from './plugins/admin-auth.js';
 import adminRoutes from './routes/admin/index.js';
 import { addSSEClient } from './services/admin/admin-sse.js';
 import { probeAllGateways } from './services/admin/gateway-versions.js';
+import { initConfidenceCache } from './services/bridge/routing-confidence.js';
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -212,6 +213,9 @@ const start = async () => {
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
     scheduler.start();
+
+    // SIN-03: Warm routing confidence cache from historical outcome data
+    await initConfidenceCache();
 
     // Auto-detect AI gateways and bootstrap from env vars
     await detectAndUpsertGateways(pool);
