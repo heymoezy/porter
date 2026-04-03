@@ -2,8 +2,8 @@
 phase: 44
 slug: autonomous-job-queue
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-03
 ---
 
@@ -36,13 +36,12 @@ created: 2026-04-03
 
 ## Per-Task Verification Map
 
-| Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
-|---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 44-01-01 | 01 | 1 | AJQ-01 | integration | `psql -d porter -c "SELECT COUNT(*) FROM agent_jobs WHERE source IS NOT NULL"` | N/A | pending |
-| 44-01-02 | 01 | 1 | AJQ-02 | integration | `curl -s http://127.0.0.1:3001/api/v1/jobs/queue \| jq '.data.jobs[0].assigned_agent_id'` | N/A | pending |
-| 44-02-01 | 02 | 2 | AJQ-02 | unit | `grep -c "matchAgentBySkill\|matchGatewayByCapability" backend/src/services/job-assignment.ts` | N/A | pending |
-| 44-02-02 | 02 | 2 | AJQ-03 | integration | `psql -d porter -c "SELECT COUNT(*) FROM agent_jobs WHERE source = 'system'"` | N/A | pending |
-| 44-03-01 | 03 | 2 | AJQ-04 | integration | `curl -s http://127.0.0.1:3001/api/admin/jobs \| jq '.data.jobs \| length'` | N/A | pending |
+| Task ID | Plan | Wave | Requirement | Test Type | Automated Command | Status |
+|---------|------|------|-------------|-----------|-------------------|--------|
+| 44-01-01 | 01 | 1 | AJQ-01 | type-check | `cd backend && npx tsc --noEmit` | pending |
+| 44-01-02 | 01 | 1 | AJQ-02, AJQ-03 | type-check + grep | `cd backend && npx tsc --noEmit && grep -c 'selectBestAgent\|selectBestGateway\|assignJob' src/services/job-assignment.ts` | pending |
+| 44-02-01 | 02 | 2 | AJQ-04 | type-check | `cd backend && npx tsc --noEmit` | pending |
+| 44-02-02 | 02 | 2 | AJQ-04 | build | `cd admin/frontend && npx react-router build 2>&1 \| tail -5` | pending |
 
 *Status: pending / green / red / flaky*
 
@@ -54,21 +53,32 @@ created: 2026-04-03
 
 ---
 
+## Post-Deploy Verification
+
+| Behavior | Requirement | Automated Command |
+|----------|-------------|-------------------|
+| Migration applied | AJQ-01 | `psql -d porter -c "SELECT COUNT(*) FROM agent_jobs WHERE source IS NOT NULL"` |
+| Admin jobs endpoint live | AJQ-04 | `curl -s http://127.0.0.1:3001/api/v1/admin/jobs \| jq '.data.jobs \| length'` |
+| Queue endpoint live | AJQ-04 | `curl -s http://127.0.0.1:3001/api/v1/admin/jobs/queue \| jq '.data.jobs'` |
+| History endpoint live | AJQ-04 | `curl -s http://127.0.0.1:3001/api/v1/admin/jobs/history \| jq '.data.jobs'` |
+
+---
+
 ## Manual-Only Verifications
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| Self-enqueue timing | AJQ-03 | Requires scheduler tick | Restart service, wait 60s, check `SELECT * FROM agent_jobs WHERE source = 'system'` |
+| Self-enqueue timing | AJQ-03 | Requires scheduler tick interval to elapse | Restart service, wait 60s, check `SELECT * FROM agent_jobs WHERE source = 'system'` |
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved
