@@ -290,7 +290,7 @@ Plans:
   3. A subtask that fails triggers the joiner to either retry that node, replan it with a different approach, or surface an escalation to the user — not silently drop the result
   4. Completing all DAG nodes triggers a synthesis step that combines subtask outputs into one coherent response returned to the caller
   5. Admin can inspect any decomposed task: see the full DAG, each node's status, assigned gateway, output, and duration
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 - [ ] 42-01-PLAN.md — Migration (task_nodes table) + TDE types + task classifier (TDE-01)
@@ -375,7 +375,7 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 39. Bridge Task Dispatch | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 40. Gateway Capability Registry | v6.0 | 2/2 | Complete | 2026-04-03 |
 | 41. Session Intelligence | 3/3 | Complete    | 2026-04-03 | - |
-| 42. Task Decomposition Engine | 1/4 | In Progress|  | - |
+| 42. Task Decomposition Engine | 2/4 | In Progress|  | - |
 | 43. Inter-Agent Messaging | v6.0 | 0/TBD | Not started | - |
 | 44. Autonomous Job Queue | v6.0 | 0/TBD | Not started | - |
 | 45. Porter Control Plane | v6.0 | 0/TBD | Not started | - |

@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
-status: unknown
-stopped_at: Completed 42-01-PLAN.md
-last_updated: "2026-04-03T10:17:19.908Z"
+status: executing
+stopped_at: Completed 42-02-PLAN.md
+last_updated: "2026-04-03T10:24:17.000Z"
 progress:
   total_phases: 17
   completed_phases: 10
   total_plans: 33
-  completed_plans: 31
+  completed_plans: 32
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 42 (Task Decomposition Engine) — EXECUTING
-Plan: 1 of 4
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -56,6 +56,11 @@ Plan: 1 of 4
 - [Phase 41-session-intelligence]: Confidence nudge formula (avgScore - 3.0) * confidence * 0.2 keeps nudge gentle so priority still dominates gateway selection
 - [Phase 42]: classifyFast uses word count thresholds of 25 (simple) and 80 (complex) with conjunction/list heuristics for zero-cost classification
 - [Phase 42]: Classifier fail-safe: all errors return simple — classifier failures never block normal chat flow
+- [Phase 42-02]: validateDAG uses Kahn's algorithm (in-degree BFS) — detects all cycle types including self-deps and N-node rings
+- [Phase 42-02]: planTasks prefers ollama (cheap) with graceful fallback — retries once with error feedback on validation failure
+- [Phase 42-02]: insertTaskTree uses pool.connect() BEGIN/COMMIT transaction — atomicity for root+subtasks insertion
+- [Phase 42-02]: handleFailure: attempt < maxAttempts-1 retries; >50% tree failed triggers cancelTree
+- [Phase 42-02]: propagateResult uses JSONB @> containment operator to find tasks depending on completed task
 
 ### Pending Todos
 
@@ -68,6 +73,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T10:17:19.906Z
-Stopped at: Completed 42-01-PLAN.md
+Last session: 2026-04-03T10:24:17.000Z
+Stopped at: Completed 42-02-PLAN.md
 Resume file: None
