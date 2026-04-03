@@ -397,7 +397,7 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 41. Session Intelligence | 3/3 | Complete    | 2026-04-03 | - |
 | 42. Task Decomposition Engine | 4/4 | Complete    | 2026-04-03 | - |
 | 43. Inter-Agent Messaging | 1/2 | In Progress|  | - |
-| 44. Autonomous Job Queue | 2/2 | Complete   | 2026-04-03 | - |
+| 44. Autonomous Job Queue | 2/2 | Complete    | 2026-04-03 | - |
 | 45. Porter Control Plane | v6.0 | 0/TBD | Not started | - |
 | 46. Project Monitoring | v6.0 | 0/TBD | Not started | - |
 | 47. Project Substrate | v6.0 | 0/TBD | Not started | - |
