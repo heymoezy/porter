@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 46-02-PLAN.md
-last_updated: "2026-04-03T18:49:14.187Z"
+stopped_at: Completed 47-02-PLAN.md
+last_updated: "2026-04-03T19:04:23.489Z"
 progress:
   total_phases: 17
   completed_phases: 15
-  total_plans: 42
-  completed_plans: 43
+  total_plans: 45
+  completed_plans: 45
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
-**Current focus:** Phase 46 — Project Monitoring
+**Current focus:** Phase 47 — Project Substrate
 
 ## Current Position
 
-Phase: 46 (Project Monitoring) — EXECUTING
-Plan: 3 of 3
+Phase: 47 (Project Substrate) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -92,6 +92,9 @@ Plan: 3 of 3
 - [Phase 46-02]: logWatcherFinding kept internal (not exported) to encapsulate notification pipeline within watcher execution
 - [Phase 46-02]: Email notification failures are non-blocking -- finding already stored, email is best-effort
 - [Phase 46-02]: DELETE watcher cascades findings manually (no FK cascade) for explicit control
+- [Phase 47]: Classification is pure function (no LLM) -- instant extension-based lookup with ambiguous-extension config filename detection
+- [Phase 47]: Ingress pipeline is best-effort: errors logged but never block the upload response
+- [Phase 47]: Cross-device move fallback: fs.rename first, copy+unlink on EXDEV error
 
 ### Pending Todos
 
@@ -104,6 +107,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T18:44:50.013Z
-Stopped at: Completed 46-02-PLAN.md
+Last session: 2026-04-03T19:04:23.486Z
+Stopped at: Completed 47-02-PLAN.md
 Resume file: None

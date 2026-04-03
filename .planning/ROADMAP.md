@@ -368,7 +368,7 @@ Plans:
   2. A new project folder has all canonical directories present: /_system/, /intake/, /context/, /work/, /outputs/, /archive/
   3. Uploading a file to a project triggers the intelligence ingress pipeline: file is classified, moved to the correct directory, a signal is emitted to Memory V2, and the project context document is updated
   4. Atlas agent detects and repairs structural drift — missing directories are recreated, misplaced files are flagged, and the repair is logged in project activity
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 47-01-PLAN.md — Project substrate provisioning service + migration (PSB-01, PSB-02)
@@ -402,4 +402,4 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 44. Autonomous Job Queue | 2/2 | Complete    | 2026-04-03 | - |
 | 45. Porter Control Plane | 2/2 | Complete    | 2026-04-03 | - |
 | 46. Project Monitoring | 3/3 | Complete    | 2026-04-03 | - |
-| 47. Project Substrate | v6.0 | 0/3 | Not started | - |
+| 47. Project Substrate | 2/3 | In Progress|  | - |
