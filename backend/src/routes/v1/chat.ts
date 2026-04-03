@@ -10,6 +10,8 @@ import { buildMemoryContext } from '../../services/memory-injection.js';
 import { selectSkills } from '../../services/skill-selector.js';
 import type { RoutingContext } from '../../services/bridge/types.js';
 import type { ProjectRole } from '../../lib/roles.js';
+import { classify } from '../../services/task-decomposition/task-classifier.js';
+import { decomposeAndExecute } from '../../services/task-decomposition/decomposition-engine.js';
 
 // --- Schemas ----------------------------------------------------------------
 
@@ -328,6 +330,69 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
             : 'all') as 'task_aware' | 'all',
         }
       : undefined;
+
+    // Phase 42: Task Decomposition Engine — classify before dispatch
+    // Only classify for messages that have a chat context (not warm-up calls)
+    // and are not already in a decomposition context
+    try {
+      const classification = await classify(message);
+
+      if (classification.classification === 'complex') {
+        // Route to decomposition engine — async execution, immediate ack
+        try {
+          const { rootId, taskCount } = await decomposeAndExecute(message, {
+            projectId: projectId ?? undefined,
+            chatId: chatId ?? undefined,
+            userId: request.sessionUser!.username,
+          });
+
+          // Send decomposition acknowledgment as SSE
+          reply.raw.write(`data: ${JSON.stringify({
+            token: `[Decomposing into ${taskCount} subtasks...]\n`,
+            decomposition: true,
+            rootId,
+            taskCount,
+          })}\n\n`);
+
+          // Save user message to chat history
+          if (chatId) {
+            try {
+              const existingChat = (await pool.query('SELECT id FROM chats WHERE id = $1', [chatId])).rows[0] as { id: string } | undefined;
+              if (!existingChat) {
+                await pool.query(
+                  'INSERT INTO chats (id, title, model_id, username, project_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())',
+                  [chatId, message.slice(0, 50), 'porter-decompose', request.sessionUser!.username, projectId ?? null]
+                );
+              }
+              await pool.query(
+                'INSERT INTO chat_messages (chat_id, role, content, model_id, timestamp) VALUES ($1, $2, $3, $4, NOW())',
+                [chatId, 'user', message, null]
+              );
+            } catch {
+              // Chat persistence is best-effort — never block the response
+            }
+          }
+
+          // Signal done — the decomposition engine will send results via SSE events
+          reply.raw.write(`data: ${JSON.stringify({
+            done: true,
+            backend: 'porter-decompose',
+            full_response: `Decomposing into ${taskCount} subtasks... Progress will appear in real-time.`,
+            decomposition_root_id: rootId,
+          })}\n\n`);
+          reply.raw.end();
+          return reply;
+        } catch (decompErr) {
+          // Decomposition failed — fall through to normal dispatch
+          // Log but don't block the user
+          console.error('[TDE] Decomposition failed, falling through to direct dispatch:', decompErr);
+          // Continue to selectStreamBackend below
+        }
+      }
+    } catch {
+      // Classifier error — fall through to normal dispatch (fail-safe)
+    }
+    // If simple or decomposition failed, continue with existing direct dispatch flow...
 
     // STRM-02: prefer strong model for user chat, fall back to ollama if unavailable
     const streamBackend = await selectStreamBackend(message, backend ?? 'auto', {
