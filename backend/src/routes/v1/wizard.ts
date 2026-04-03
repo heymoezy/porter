@@ -6,6 +6,7 @@ import { featureFlags } from '../../config.js';
 import { dispatch } from '../../services/ai-router.js';
 import { z } from 'zod';
 import crypto from 'crypto';
+import { provisionProjectStructure } from '../../services/project-substrate.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -387,6 +388,15 @@ Respond with JSON only, matching this exact shape:
       } finally {
         client.release();
       }
+
+      // Provision filesystem (best-effort, after commit)
+      provisionProjectStructure({
+        projectId,
+        name: proposal.projectName,
+        slug,
+        type: proposal.projectType ?? 'custom',
+        description: proposal.explanation ?? '',
+      }).catch(e => console.error('[substrate] wizard provision failed:', e));
 
       const result: WizardApproveResult = { projectId, agentIds, jobIds };
       return reply.send(ok(result));

@@ -7,6 +7,7 @@ import { featureFlags } from '../../config.js';
 import { z } from 'zod';
 import crypto from 'crypto';
 import type { ProjectRole } from '../../lib/roles.js';
+import { provisionProjectStructure } from '../../services/project-substrate.js';
 
 function parseJsonField<T>(value: string | null | undefined, fallback: T): T {
   if (!value) return fallback;
@@ -31,6 +32,7 @@ function formatProject(row: typeof schema.projects.$inferSelect) {
     links: parseJsonField(row.links as string | null | undefined, [] as unknown[]),
     metadata: parseJsonField(row.metadata as string | null | undefined, {} as Record<string, unknown>),
     deadline: row.deadline,
+    fs_path: row.fsPath,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
   };
@@ -106,6 +108,15 @@ export default async function projectV1Routes(fastify: FastifyInstance, _options
       now,
       now,
     ]);
+
+    // Provision project filesystem structure (non-blocking on failure)
+    await provisionProjectStructure({
+      projectId: id,
+      name,
+      slug,
+      type: type ?? 'custom',
+      description: description ?? '',
+    });
 
     const [project] = await db.select().from(schema.projects)
       .where(eq(schema.projects.id, id));
