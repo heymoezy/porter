@@ -275,6 +275,12 @@ export async function rotateSession(sessionId: string): Promise<string> {
     [sessionId],
   );
 
+  // SIN-01: Clear frozen memory cache for rotated session
+  try {
+    const { clearSnapshot } = await import('./memory-snapshot.js');
+    clearSnapshot(sessionId);
+  } catch { /* non-fatal */ }
+
   // 3. Build summary from dispatch log — top 5 distinct intents (fallback to chosen_reason)
   let summaryText = `Session ${sessionId} ended.`;
   try {

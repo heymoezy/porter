@@ -7,7 +7,8 @@
 import { pool } from '../db/client.js';
 import { emitSSE } from './scheduler.js';
 import { routingEngine } from './bridge/routing-engine.js';
-import { buildMemoryContext } from './memory-injection.js';
+import { getOrBuildSnapshot } from './memory-snapshot.js';
+import { upsertSession } from './session-registry.js';
 import type { BridgeDispatchRequest } from './bridge/types.js';
 
 // ---------------------------------------------------------------------------
@@ -18,6 +19,7 @@ export interface DispatchRequest {
   agentId: string;
   message: string;
   projectId?: string | null;
+  chatId?: string | null;
   conversationHistory?: ConversationTurn[];
   tools?: ToolDefinition[];
   username?: string;
@@ -281,12 +283,27 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
     }
   }
 
-  // Memory V3: inject tiered memory context (directives, concepts, notes)
-  const memoryContext = await buildMemoryContext({
-    agentId: req.agentId,
-    projectId: req.projectId ?? undefined,
-    searchQuery: req.message,
-  });
+  // SIN-01: Frozen memory — same snapshot for entire session
+  // Resolve session ID first (0-token upsert = find-or-create, no side effects on token counts)
+  const sessionResult = await upsertSession(
+    req.chatId ?? null,
+    req.agentId ?? null,
+    0,
+    '',
+    '',
+    128000,
+  );
+  const { text: memoryContext, wasCached } = await getOrBuildSnapshot(
+    sessionResult.sessionId,
+    {
+      agentId: req.agentId,
+      projectId: req.projectId ?? undefined,
+      searchQuery: req.message,
+    },
+  );
+  if (!wasCached) {
+    console.log(`[ai-router] frozen memory snapshot built for session ${sessionResult.sessionId}`);
+  }
 
   // Augment user message with memory context (original message preserved in history)
   const augmentedMessage = memoryContext
