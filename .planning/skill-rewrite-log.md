@@ -81,3 +81,55 @@ Notes:
 - Tightened course-creator around backward design, assessment alignment, cognitive-load control, delivery-mode fit, and execution-ready instructional scaffolds.
 - Used lightweight web research to ground the rewrites in current copywriting structure, FinOps framing, and instructional-design best practices.
 - Advanced queue from `copywriter` to `creative-strategist`.
+
+2026-04-03T16:23:00Z | 42/207 | completed creative-strategist | next crypto-analyst
+2026-04-03T16:23:00Z | 43/207 | completed crypto-analyst | next customer-success-manager
+2026-04-03T16:23:00Z | 44/207 | completed customer-success-manager | next customer-support
+## 2026-04-03 16:23 UTC — batch rewrite
+
+Completed:
+- creative-strategist
+- crypto-analyst
+- customer-success-manager
+
+Notes:
+- Rewrote all five pack files for each skill: `SKILL.md`, `prompt.md`, `examples/README.md`, `guides/qa-checklist.md`, `meta/skill.json`.
+- Sharpened creative-strategist around tension finding, territory contrast, strategic handoff quality, and upstream boundaries versus copy, media, and visual execution.
+- Reframed crypto-analyst around value accrual, dilution, governance control, dependency risk, and fact-versus-narrative discipline instead of hype-led commentary.
+- Tightened customer-success-manager around value realization, leading indicators, root-cause diagnosis, stakeholder fragility, and action-ready retention planning.
+- Attempted lightweight web research, but the search endpoint returned bot-detection challenges, so the rewrites were completed from direct audit and domain knowledge.
+- Advanced queue from `creative-strategist` to `customer-support`.
+2026-04-03T17:28:00Z | 45/207 | completed customer-support | next dashboard-designer
+2026-04-03T17:29:00Z | 46/207 | completed dashboard-designer | next data-analyst
+2026-04-03T17:30:00Z | 47/207 | completed data-analyst | next data-engineer
+## 2026-04-03 17:30 UTC — batch rewrite
+
+Completed:
+- customer-support
+- dashboard-designer
+- data-analyst
+
+Notes:
+- Rewrote all five pack files for each skill: `SKILL.md`, `prompt.md`, `examples/README.md`, `guides/qa-checklist.md`, `meta/skill.json`.
+- Sharpened customer-support around first-contact resolution, effort reduction, incident clarity, and escalation packages that remove re-triage.
+- Reframed dashboard-designer around decision-first layout, operational-vs-analytical boundaries, strong visual encodings, and implementation-ready state design.
+- Tightened data-analyst around metric integrity, evidence-vs-interpretation discipline, causal restraint, and decision-ready synthesis with explicit confidence.
+- Used lightweight web research to ground the rewrites in dashboard comprehension principles, support communication practice, and causal-inference caution for observational analysis.
+- Advanced queue from `customer-support` to `data-engineer`.
+2026-04-03T18:30:00Z | 48/207 | completed data-engineer | next data-governance
+2026-04-03T18:30:00Z | 49/207 | completed data-governance | next data-journalist
+2026-04-03T18:30:00Z | 50/207 | completed data-journalist | next data-pipeline-architect
+## 2026-04-03 18:30 UTC — batch rewrite
+
+Completed:
+- data-engineer
+- data-governance
+- data-journalist
+
+Notes:
+- Rewrote all five pack files for each skill: `SKILL.md`, `prompt.md`, `examples/README.md`, `guides/qa-checklist.md`, `meta/skill.json`.
+- Sharpened data-engineer around data contracts, replay safety, schema drift, runbook-grade recovery, and operable batch/stream design.
+- Reframed data-governance around ownership, stewardship, enforceable controls, risk-based rigor, and practical operating cadence instead of ceremonial policy language.
+- Tightened data-journalist around supportable story angles, methodology transparency, claim-evidence-caveat discipline, and chart choices that inform without sensationalizing.
+- Attempted lightweight web research, but the search endpoint returned bot-detection challenges, so the rewrites were completed from direct audit and established best practice.
+- Advanced queue from `data-engineer` to `data-pipeline-architect`.
