@@ -3,7 +3,7 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v5.1.0
+version: v5.2.0
 updated: 2026-04-03
 updated_by: claude-opus-4.6
 
@@ -43,7 +43,7 @@ All 8 phases shipped, 36+ requirements verified:
 ## Recent Session Notes (2026-04-03)
 - v5.0.1: Fixed all routes on Brain :3001 (were in dead admin backend)
 - v5.0.1: 560MB dead code removed, full repo cleanup
-- v5.1.0: Phase 38 Adaptive Agent Context shipped
-- Full changelog restored (v1.0.0-v5.1.0)
+- v5.2.0: Phase 38 Adaptive Agent Context shipped
+- Full changelog restored (v1.0.0-v5.2.0)
 - Skills Curator agent created
 - OpenClaw feedback: Phases 32-34, 37 accepted; 35-36 had issues (now fixed)

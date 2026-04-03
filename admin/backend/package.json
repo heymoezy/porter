@@ -1,6 +1,6 @@
 {
   "name": "porter-admin",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "description": "Porter SaaS Admin — platform control plane",
   "type": "module",
   "main": "dist/index.js",

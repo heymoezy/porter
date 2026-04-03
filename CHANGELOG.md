@@ -1,3 +1,15 @@
+## v5.2.0 (2026-04-03)
+
+### Phase 39: Bridge Task Dispatch
+- POST /api/v1/tasks/dispatch — dispatch real tasks to CLI gateways with tool access
+- TaskExecutor spawns Gemini/Claude/Codex CLIs as subprocesses with file read, bash, code edit
+- Per-gateway task queues (concurrency=1), CWD allowlist validation, 1MB output cap
+- SSE events: bridge:task-progress (incremental), bridge:task-complete (final)
+- bridge_tasks table tracks full lifecycle (queued → running → complete/failed)
+- GET /api/v1/tasks/:id poll endpoint, DELETE /:id/cancel with SIGTERM/SIGKILL
+- Admin endpoints: GET /api/admin/bridge/tasks (paginated list), GET .../tasks/:id (full detail)
+- VERIFIED LIVE: Gemini dispatched, read CHECKPOINT.md, ran curl, returned correct result
+
 ## v5.1.0 (2026-04-03)
 
 ### Phase 38: Adaptive Agent Context

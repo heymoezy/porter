@@ -54,5 +54,5 @@ porter/
 
 - **Type:** Software product
 - **Status:** Active -- Alpha
-- **Version:** v5.1.0
+- **Version:** v5.2.0
 - **Start date:** Feb 18, 2026
