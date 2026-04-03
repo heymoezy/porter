@@ -32,6 +32,82 @@ export interface WatcherFinding {
   importance: 'normal' | 'important' | 'critical';
 }
 
+// ── Activity + notification pipeline ────────────────────────────────────────
+
+/**
+ * Log a watcher finding to the project activity feed, push SSE events,
+ * and optionally send email for important/critical findings.
+ */
+async function logWatcherFinding(
+  finding: { id: string; title: string; summary: string; importance: string; source_type: string },
+  watcher: { id: string; name: string; project_id: string; notify_email: string | null },
+  jobId: string,
+): Promise<void> {
+  // 1. Insert into agent_activity for project feed
+  const sourceBadge = `[${finding.source_type}]`;
+  const activitySummary = `${sourceBadge} ${finding.title}`;
+  const activityDetail = JSON.stringify({
+    finding_id: finding.id,
+    watcher_id: watcher.id,
+    watcher_name: watcher.name,
+    summary: finding.summary,
+    source_type: finding.source_type,
+    importance: finding.importance,
+  });
+
+  await pool.query(
+    `INSERT INTO agent_activity (agent_id, job_id, project_id, event_type, summary, detail)
+     VALUES ('system', $1, $2, $3, $4, $5)`,
+    [jobId, watcher.project_id, `watcher_finding_${finding.source_type}`, activitySummary, activityDetail],
+  );
+
+  // 2. SSE push for real-time feed updates
+  const { emitSSE } = await import('./scheduler.js');
+  await emitSSE('project:activity', {
+    agent_id: 'system',
+    job_id: jobId,
+    project_id: watcher.project_id,
+    event_type: `watcher_finding_${finding.source_type}`,
+    summary: activitySummary,
+    detail: activityDetail,
+    created_at: Date.now() / 1000,
+  }).catch(() => {});
+
+  // 3. Notification for important/critical findings
+  if (finding.importance === 'important' || finding.importance === 'critical') {
+    // In-app notification via SSE
+    await emitSSE('watcher:important-finding', {
+      finding_id: finding.id,
+      watcher_id: watcher.id,
+      watcher_name: watcher.name,
+      project_id: watcher.project_id,
+      title: finding.title,
+      summary: finding.summary,
+      source_type: finding.source_type,
+      importance: finding.importance,
+    }).catch(() => {});
+
+    // Optional email notification
+    if (watcher.notify_email) {
+      try {
+        const { sendEmail } = await import('./email.js');
+        await sendEmail({
+          to: watcher.notify_email,
+          subject: `[Porter] ${finding.importance === 'critical' ? 'CRITICAL' : 'Important'}: ${finding.title}`,
+          body: `<h3>${finding.title}</h3>
+                 <p>${finding.summary}</p>
+                 <p><strong>Watcher:</strong> ${watcher.name}</p>
+                 <p><strong>Source:</strong> ${finding.source_type}</p>
+                 <p><em>View in Porter for full details.</em></p>`,
+        });
+      } catch (emailErr) {
+        console.error('[watcher] email notification failed:', emailErr instanceof Error ? emailErr.message : emailErr);
+        // Email failure is non-blocking — finding is already stored
+      }
+    }
+  }
+}
+
 // ── Main executor ────────────────────────────────────────────────────────────
 
 /**
@@ -78,13 +154,14 @@ export async function executeWatcher(watcherId: string, jobId: string): Promise<
         findings = [];
     }
 
-    // Insert findings
+    // Insert findings + log to activity feed + notify
     for (const f of findings) {
+      const findingId = crypto.randomUUID();
       await pool.query(
         `INSERT INTO watcher_findings (id, watcher_id, project_id, source_type, title, summary, detail, importance, job_id, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, EXTRACT(EPOCH FROM NOW()))`,
         [
-          crypto.randomUUID(),
+          findingId,
           watcher.id,
           watcher.project_id,
           watcher.watcher_type,
@@ -94,6 +171,13 @@ export async function executeWatcher(watcherId: string, jobId: string): Promise<
           f.importance,
           jobId,
         ],
+      );
+
+      // Log to project activity feed + trigger notifications
+      await logWatcherFinding(
+        { id: findingId, title: f.title, summary: f.summary, importance: f.importance, source_type: watcher.watcher_type },
+        { id: watcher.id, name: watcher.name, project_id: watcher.project_id, notify_email: watcher.notify_email },
+        jobId,
       );
     }
 
