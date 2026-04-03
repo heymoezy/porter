@@ -879,6 +879,8 @@ export const templateSkills = pgTable('template_skills', {
   templateId: text('template_id').notNull(),
   skillId: text('skill_id').notNull(),
   sortOrder: integer('sort_order').default(0),
+  isMandatory: integer('is_mandatory').default(0),
+  assignmentRationale: text('assignment_rationale').default(''),
   // ── RPG Fields (v4.0) ────────────────────────────────────────────────────
   successRate30d: doublePrecision('success_rate_30d').default(0),
   totalUses: integer('total_uses').default(0),
