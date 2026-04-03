@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 37-02-PLAN.md
-last_updated: "2026-04-03T02:02:09.765Z"
+stopped_at: Completed 38-02-PLAN.md
+last_updated: "2026-04-03T04:10:58.231Z"
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 21
-  completed_plans: 19
+  completed_plans: 20
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Skills must be live behavioral modules — selected at runtime, injected into prompts, measured, and evolved through feedback.
-**Current focus:** Phase 37 — Template Skill UX
+**Current focus:** Phase 38 — Adaptive Agent Context
 
 ## Current Position
 
-Phase: 37 (Template Skill UX) — EXECUTING
-Plan: 1 of 2
+Phase: 38 (Adaptive Agent Context) — EXECUTING
+Plan: 1 of 3
 
 ## Performance Metrics
 
@@ -90,6 +90,8 @@ Plan: 1 of 2
 - [Phase 37-02]: TemplateSkillsTab is fully self-contained — parent passes only templateId, no prop drilling of query data
 - [Phase 37-02]: Removed unused templateEffectiveness useQuery from agent-detail.tsx parent — effectiveness now owned by TemplateSkillsTab
 - [Phase 37-02]: Template SKILLS tab (!isInstance) and born-agent SKILLS tab (hasApi) coexist with same label but different tab values
+- [Phase 38]: dispatchCompression uses internal Bridge HTTP — avoids circular imports and reuses gateway selection
+- [Phase 38]: triggerCompression is fire-and-forget from upsertSession — zero latency cost on dispatch hot path
 
 ### Roadmap Evolution
 
@@ -107,6 +109,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T01:57:51.505Z
-Stopped at: Completed 37-02-PLAN.md
+Last session: 2026-04-03T04:10:58.228Z
+Stopped at: Completed 38-02-PLAN.md
 Resume file: None
