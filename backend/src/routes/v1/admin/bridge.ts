@@ -690,6 +690,75 @@ export default async function adminBridgeRoutes(fastify: FastifyInstance) {
     }));
   });
 
+  // ── GET /tasks — BTD-05: List bridge tasks ──────────────────────────────────
+  fastify.get('/tasks', async (request, reply) => {
+    const query = request.query as Record<string, string>;
+    const status = query.status || null;     // optional filter
+    const gatewayType = query.gateway_type || null;
+    const limit = Math.min(parseInt(query.limit) || 50, 200);
+    const offset = parseInt(query.offset) || 0;
+
+    // Build WHERE clause dynamically
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    let paramIdx = 1;
+
+    if (status) {
+      conditions.push(`status = $${paramIdx++}`);
+      params.push(status);
+    }
+    if (gatewayType) {
+      conditions.push(`gateway_type = $${paramIdx++}`);
+      params.push(gatewayType);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // Count total
+    const countResult = await pool.query(
+      `SELECT COUNT(*) AS total FROM bridge_tasks ${where}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0]?.total) || 0;
+
+    // Fetch page — truncate prompt and output for list view
+    const { rows } = await pool.query(
+      `SELECT id, gateway_type, model_name,
+              LEFT(prompt, 200) AS prompt_preview,
+              cwd, status, error, exit_code,
+              LEFT(output, 500) AS output_preview,
+              started_at, completed_at, duration_ms,
+              agent_id, project_id, username, created_at
+       FROM bridge_tasks ${where}
+       ORDER BY created_at DESC
+       LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
+      [...params, limit, offset]
+    );
+
+    return reply.send(ok({
+      tasks: rows,
+      total,
+      limit,
+      offset,
+    }));
+  });
+
+  // ── GET /tasks/:taskId — BTD-05: Task detail with full output ───────────────
+  fastify.get('/tasks/:taskId', async (request, reply) => {
+    const { taskId } = request.params as { taskId: string };
+
+    const { rows } = await pool.query(
+      `SELECT * FROM bridge_tasks WHERE id = $1`,
+      [taskId]
+    );
+
+    if (rows.length === 0) {
+      return reply.code(404).send(err('TASK_NOT_FOUND', `Task ${taskId} not found`));
+    }
+
+    return reply.send(ok(rows[0]));
+  });
+
   // ── POST /speed-test — Latency benchmark across one or all gateways ──────────
   // Body: { gateway_id?: string }
   // Tests each gateway by dispatching a minimal "Hi" message and measuring latency.
