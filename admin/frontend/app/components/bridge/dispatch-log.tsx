@@ -12,7 +12,7 @@ import {
   SelectContent,
   SelectItem,
 } from "~/components/ui/select"
-import { XCircle, ChevronDown, ChevronRight, GitBranch, Zap } from "lucide-react"
+import { XCircle, ChevronDown, ChevronRight, GitBranch, Zap, Layers, BookOpen, Cpu } from "lucide-react"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -325,6 +325,183 @@ function AgentStats({ agentId }: { agentId: string }) {
   )
 }
 
+// ── ContextStats types ────────────────────────────────────
+
+interface ContextStatsMemory {
+  tiers_used: string[]
+  total_memory_tokens: number
+  budget_tokens: number
+}
+
+interface ContextStatsDirectives {
+  total_active: number
+  injected: number
+  skipped: number
+  scoring_mode: string
+}
+
+interface ContextStatsSkills {
+  candidates: number
+  selected: number
+  prompt_tokens: number
+}
+
+interface ContextStatsCompression {
+  tool_outputs_compressed: number
+  conversation_turns_compressed: number
+  tokens_saved: number
+}
+
+interface ContextStatsSession {
+  turn_number: number
+  context_pct: number
+  compression_events: number
+  tokens_reclaimed: number
+}
+
+interface ContextStatsData {
+  dispatch_id: string
+  context_stats: {
+    memory: ContextStatsMemory
+    directives: ContextStatsDirectives
+    skills: ContextStatsSkills
+    compression: ContextStatsCompression
+    session: ContextStatsSession
+  }
+  input_tokens: number | null
+  output_tokens: number | null
+}
+
+// ── ContextBar helpers ────────────────────────────────────
+
+function ContextBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-2xs text-text3 w-20 shrink-0">{label}</span>
+      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-2xs tabular-nums text-text2 w-10 text-right">{value.toLocaleString()}</span>
+    </div>
+  )
+}
+
+// ── ContextPanel ──────────────────────────────────────────
+
+function ContextPanel({ dispatchId }: { dispatchId: string }) {
+  const q = useQuery({
+    queryKey: ["bridge", "dispatch-context", dispatchId],
+    queryFn: () => api<ContextStatsData>(`/api/admin/bridge/dispatches/${dispatchId}/context`),
+    staleTime: 60_000,
+  })
+
+  if (q.isLoading) {
+    return (
+      <div className="space-y-1.5 py-1">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="h-3 rounded bg-muted animate-pulse w-3/4" />
+        ))}
+      </div>
+    )
+  }
+
+  if (q.isError || !q.data) {
+    return <span className="text-xs text-text3">No context data</span>
+  }
+
+  const { context_stats: cs, input_tokens, output_tokens } = q.data
+  const totalDispatchTokens = (input_tokens ?? 0) + (output_tokens ?? 0)
+  const totalBudget = cs.memory.budget_tokens || Math.max(cs.memory.total_memory_tokens + totalDispatchTokens, 1)
+  const contextPctDisplay = Math.round(cs.session.context_pct * 100)
+
+  const hasCompression =
+    cs.compression.tool_outputs_compressed > 0 ||
+    cs.compression.conversation_turns_compressed > 0 ||
+    cs.compression.tokens_saved > 0
+
+  return (
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="flex items-center gap-1.5">
+        <Layers className="size-3 text-accent-porter" />
+        <span className="text-2xs font-semibold uppercase text-text3">Context Pressure</span>
+        {contextPctDisplay > 0 && (
+          <span className={`text-2xs font-semibold ml-1 ${contextPctDisplay >= 85 ? "text-danger" : contextPctDisplay >= 70 ? "text-warning" : "text-success"}`}>
+            {contextPctDisplay}% context used
+          </span>
+        )}
+      </div>
+
+      {/* Token budget breakdown */}
+      {(cs.memory.total_memory_tokens > 0 || totalDispatchTokens > 0) && (
+        <div className="space-y-1">
+          {cs.memory.total_memory_tokens > 0 && (
+            <ContextBar label="Memory" value={cs.memory.total_memory_tokens} max={totalBudget} color="bg-accent-porter" />
+          )}
+          {totalDispatchTokens > 0 && (
+            <ContextBar label="Dispatch" value={totalDispatchTokens} max={totalBudget} color="bg-blue-400" />
+          )}
+        </div>
+      )}
+
+      {/* Directive selection */}
+      {cs.directives.total_active > 0 && (
+        <div className="flex items-center gap-1.5 text-2xs">
+          <BookOpen className="size-3 text-text3" />
+          <span className="text-text2">
+            <span className="font-semibold text-text">{cs.directives.injected}/{cs.directives.total_active}</span>
+            {" "}directives injected
+          </span>
+          {cs.directives.skipped > 0 && (
+            <span className="text-text3">({cs.directives.skipped} skipped)</span>
+          )}
+          <span className="text-text3 ml-1">· {cs.directives.scoring_mode}</span>
+        </div>
+      )}
+
+      {/* Skills */}
+      {cs.skills.selected > 0 && (
+        <div className="flex items-center gap-1.5 text-2xs">
+          <Cpu className="size-3 text-text3" />
+          <span className="text-text2">
+            <span className="font-semibold text-text">{cs.skills.selected}/{cs.skills.candidates}</span>
+            {" "}skills selected
+          </span>
+          {cs.skills.prompt_tokens > 0 && (
+            <span className="text-text3">· {cs.skills.prompt_tokens} tokens</span>
+          )}
+        </div>
+      )}
+
+      {/* Compression badge */}
+      {hasCompression && (
+        <div className="flex items-center gap-1.5">
+          <Badge className="text-2xs bg-success/15 text-success border-0">
+            {cs.compression.tool_outputs_compressed > 0 && `${cs.compression.tool_outputs_compressed} output${cs.compression.tool_outputs_compressed > 1 ? "s" : ""} compressed`}
+            {cs.compression.conversation_turns_compressed > 0 && ` · ${cs.compression.conversation_turns_compressed} turns compressed`}
+            {cs.compression.tokens_saved > 0 && ` · ${(cs.compression.tokens_saved / 1000).toFixed(1)}K tokens saved`}
+          </Badge>
+        </div>
+      )}
+
+      {/* Session turn */}
+      {cs.session.turn_number > 0 && (
+        <div className="text-2xs text-text3">
+          Turn {cs.session.turn_number}
+          {cs.session.compression_events > 0 && ` · ${cs.session.compression_events} compression event${cs.session.compression_events > 1 ? "s" : ""}`}
+          {cs.session.tokens_reclaimed > 0 && ` · ${(cs.session.tokens_reclaimed / 1000).toFixed(1)}K reclaimed`}
+        </div>
+      )}
+
+      {/* Zero state */}
+      {!hasCompression && cs.directives.total_active === 0 && cs.skills.selected === 0 && cs.session.turn_number === 0 && (
+        <span className="text-2xs text-text3 italic">Context pressure not yet recorded for this dispatch</span>
+      )}
+    </div>
+  )
+}
+
 // ── DispatchLog main component ────────────────────────────
 
 export function DispatchLog() {
@@ -585,27 +762,30 @@ export function DispatchLog() {
                     <span className="text-2xs text-text3">{fmtTime(entry.created_at)}</span>
                   </td>
 
-                  {/* Expand toggle — only for entries with a chat_id */}
+                  {/* Expand toggle — always available */}
                   <td
                     className="px-3 py-2 cursor-pointer"
                     onClick={() => {
-                      if (!entry.chat_id) return
                       setExpandedRowId(prev => (prev === entry.id ? null : entry.id))
                     }}
                   >
-                    {entry.chat_id ? (
-                      expandedRowId === entry.id
-                        ? <ChevronDown className="size-3.5 text-text3" />
-                        : <ChevronRight className="size-3.5 text-text3" />
-                    ) : null}
+                    {expandedRowId === entry.id
+                      ? <ChevronDown className="size-3.5 text-text3" />
+                      : <ChevronRight className="size-3.5 text-text3" />
+                    }
                   </td>
                 </tr>
 
-                {/* Session expansion row */}
-                {expandedRowId === entry.id && entry.chat_id && (
+                {/* Expanded row: session routing + context pressure */}
+                {expandedRowId === entry.id && (
                   <tr>
                     <td colSpan={8} className="bg-raised/50 px-4 py-3">
-                      <SessionPanel chatId={entry.chat_id} />
+                      <div className="space-y-4">
+                        <ContextPanel dispatchId={entry.id} />
+                        {entry.chat_id && (
+                          <SessionPanel chatId={entry.chat_id} />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )}
