@@ -307,7 +307,11 @@ Plans:
   2. Every inter-agent message chain has a correlation ID visible in the msg_bus_events table along with hop count and full message history
   3. All inter-agent messages pass through Porter as coordinator — direct peer-to-peer routing is blocked and logged as a violation
   4. A subtask response from a delegated agent is automatically fed back into the decomposition engine for inclusion in the final synthesis
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 43-01-PLAN.md — Agent delegation service + peer-to-peer guard (IAM-01, IAM-02, IAM-03)
+- [ ] 43-02-PLAN.md — DAG executor delegation wiring + joiner synthesis integration (IAM-01, IAM-04)
 
 ### Phase 44: Autonomous Job Queue
 **Goal**: Porter maintains a persistent job queue where structured work items are matched to the best available agent by skills and gateway capabilities — and Porter can self-enqueue jobs without human trigger
@@ -318,7 +322,11 @@ Plans:
   2. A job requiring a specific skill routes to an agent that has that skill assigned — a job requiring tool support routes to a gateway that supports tools
   3. Porter self-enqueues a scheduled job (e.g., health check, monitoring sweep) without any human-initiated request — verified by observing a job with source=system in the queue
   4. Admin can view the live job queue, running jobs, completed jobs, and assignment history with gateway, agent, duration, and outcome for each
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 43-01-PLAN.md — Agent delegation service + peer-to-peer guard (IAM-01, IAM-02, IAM-03)
+- [ ] 43-02-PLAN.md — DAG executor delegation wiring + joiner synthesis integration (IAM-01, IAM-04)
 
 ### Phase 45: Porter Control Plane
 **Goal**: Porter operates as master orchestrator with enforced boundaries — it decides between direct answer, handoff, parallel execution, or escalation, limits subagent recursion depth, and gates high-risk actions behind approval
@@ -328,7 +336,11 @@ Plans:
   1. Porter's persona applies the delegation doctrine on every dispatch — simple requests answer directly, complex requests delegate, ambiguous requests escalate — with the chosen strategy logged per dispatch
   2. A subagent that attempts to spawn another subagent at hop depth 3 is blocked — the request is rejected and the limit violation is recorded in the audit log
   3. A dispatch requesting a high-risk action (code mutation, external API call, file deletion) is paused pending user approval — the action does not execute until the approval event is received
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 43-01-PLAN.md — Agent delegation service + peer-to-peer guard (IAM-01, IAM-02, IAM-03)
+- [ ] 43-02-PLAN.md — DAG executor delegation wiring + joiner synthesis integration (IAM-01, IAM-04)
 
 ### Phase 46: Project Monitoring
 **Goal**: Every project can have autonomous watchers — scheduled agents that monitor external sources (web, RSS, email) and surface relevant findings in the project's activity feed without manual polling
@@ -340,7 +352,11 @@ Plans:
   3. Watcher findings appear in the project activity feed with a source badge (web/rss/email/custom), summary text, and expandable detail — not a raw dump
   4. A finding marked as important triggers a notification visible in the in-app feed, and optionally sends an email if configured
   5. Admin ops view shows all active watchers across all projects with last run time, next run time, and resource usage
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 43-01-PLAN.md — Agent delegation service + peer-to-peer guard (IAM-01, IAM-02, IAM-03)
+- [ ] 43-02-PLAN.md — DAG executor delegation wiring + joiner synthesis integration (IAM-01, IAM-04)
 
 ### Phase 47: Project Substrate
 **Goal**: Every project folder is a structured container — a canonical /_system/ directory, defined intake and work directories, intelligent file ingress that classifies and routes uploads, and an Atlas agent watching for structural drift
@@ -351,7 +367,11 @@ Plans:
   2. A new project folder has all canonical directories present: /_system/, /intake/, /context/, /work/, /outputs/, /archive/
   3. Uploading a file to a project triggers the intelligence ingress pipeline: file is classified, moved to the correct directory, a signal is emitted to Memory V2, and the project context document is updated
   4. Atlas agent detects and repairs structural drift — missing directories are recreated, misplaced files are flagged, and the repair is logged in project activity
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 43-01-PLAN.md — Agent delegation service + peer-to-peer guard (IAM-01, IAM-02, IAM-03)
+- [ ] 43-02-PLAN.md — DAG executor delegation wiring + joiner synthesis integration (IAM-01, IAM-04)
 
 ## Progress
 
