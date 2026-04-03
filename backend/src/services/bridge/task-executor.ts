@@ -104,9 +104,7 @@ export function buildTaskArgs(
           '--dangerously-skip-permissions',
           '--output-format', 'stream-json',
           '--verbose',
-          '--include-partial-messages',
           '--no-session-persistence',
-          '--bare',
         ],
         stdinPrompt: prompt,
         spawnCwd: cwd,
@@ -116,7 +114,6 @@ export function buildTaskArgs(
       return {
         args: [
           '-p', prompt,
-          '--output-format', 'stream-json',
           '--yolo',
         ],
         stdinPrompt: null,
@@ -231,13 +228,38 @@ export async function* executeTask(
       if (signal.aborted) break;
       if (!line.trim()) continue;
 
-      let event: Record<string, unknown>;
+      let event: Record<string, unknown> | null = null;
       try {
         event = JSON.parse(line) as Record<string, unknown>;
       } catch {
-        // Non-JSON line (bwrap warnings from Codex, etc.) — skip silently
+        // Non-JSON line — for Codex/Gemini this IS the output (plain text)
+        // Filter out known noise lines
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        if (trimmed.startsWith('warning:')) continue;
+        if (trimmed.startsWith('OpenAI Codex')) continue;
+        if (trimmed === '--------') continue;
+        if (trimmed.startsWith('workdir:') || trimmed.startsWith('model:') || trimmed.startsWith('provider:')) continue;
+        if (trimmed.startsWith('approval:') || trimmed.startsWith('sandbox:') || trimmed.startsWith('reasoning')) continue;
+        if (trimmed.startsWith('session id:') || trimmed.startsWith('mcp startup:')) continue;
+        if (trimmed === 'user' || trimmed === 'codex' || trimmed === 'exec') continue;
+        if (trimmed.startsWith('tokens used')) continue;
+
+        // Capture as output text
+        if (!outputTruncated) {
+          const text = trimmed + '\n';
+          outputBytes += Buffer.byteLength(text, 'utf8');
+          if (outputBytes > MAX_OUTPUT_BYTES) {
+            outputTruncated = true;
+            yield { type: 'progress' as const, text: '\n[output truncated at 1MB]' };
+          } else {
+            yield { type: 'progress' as const, text };
+          }
+        }
         continue;
       }
+
+      if (!event) continue;
 
       // ── Claude CLI parsing ──────────────────────────────────────────────────
       if (gatewayType === 'claude_cli') {
@@ -314,15 +336,42 @@ export async function* executeTask(
         }
       }
 
-      // ── Codex CLI parsing ───────────────────────────────────────────────────
-      if (gatewayType === 'codex_cli') {
-        if (
-          event.type === 'item.completed' &&
-          (event.item as Record<string, unknown>)?.type === 'message'
-        ) {
-          const content = (event.item as Record<string, unknown>).content as Array<
-            Record<string, unknown>
-          >;
+      // ── Codex CLI parsing (--json JSONL format) ─────────────────────────────
+      if (gatewayType === 'codex_cli' && event.type === 'item.completed') {
+        const item = event.item as Record<string, unknown> | undefined;
+        if (!item) continue;
+
+        // Agent message: {"item":{"type":"agent_message","text":"..."}}
+        if (item.type === 'agent_message' && item.text) {
+          const text = (item.text as string) + '\n';
+          if (!outputTruncated) {
+            outputBytes += Buffer.byteLength(text, 'utf8');
+            if (outputBytes > MAX_OUTPUT_BYTES) {
+              outputTruncated = true;
+              yield { type: 'progress', text: '\n[output truncated at 1MB]' };
+            } else {
+              yield { type: 'progress', text };
+            }
+          }
+        }
+
+        // Command execution: {"item":{"type":"command_execution","aggregated_output":"...","exit_code":0}}
+        if (item.type === 'command_execution' && item.aggregated_output) {
+          const text = (item.aggregated_output as string);
+          if (!outputTruncated) {
+            outputBytes += Buffer.byteLength(text, 'utf8');
+            if (outputBytes > MAX_OUTPUT_BYTES) {
+              outputTruncated = true;
+              yield { type: 'progress', text: '\n[output truncated at 1MB]' };
+            } else {
+              yield { type: 'progress', text };
+            }
+          }
+        }
+
+        // Legacy: message with content[].output_text
+        if (item.type === 'message') {
+          const content = item.content as Array<Record<string, unknown>> | undefined;
           if (Array.isArray(content)) {
             for (const c of content) {
               if (c.type === 'output_text' && c.text && !outputTruncated) {
