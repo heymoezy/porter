@@ -42,6 +42,5 @@ Single monorepo (heymoezy/porter). One Fastify process on :3001. API metering bu
 
 ## Resume Instructions
 1. Verify Phase 34 (run verifier, mark complete)
-2. Fix :5175 references in tests/skill-feedback.spec.js and tests/skill-pack-explorer.spec.js → :3001
-3. Push all local commits to remote
-4. Continue with Phase 35 (or delegate to Codex/OpenClaw via Bridge)
+2. Push all local commits to remote — already done (2026-04-02 cleanup commit)
+3. Continue with Phase 35 (or delegate to Codex/OpenClaw via Bridge)
