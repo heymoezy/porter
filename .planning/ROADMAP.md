@@ -185,7 +185,7 @@ Plans:
   3. Each skill on a template can be marked mandatory (always selected) or optional (subject to runtime auto-detection)
   4. Template detail shows aggregated skill effectiveness across all agents spawned from that template
   5. A "preview" feature shows which skills would be auto-selected for a sample task prompt
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 - [ ] 37-01-PLAN.md — DB migration (is_mandatory, assignment_rationale) + 5 admin API endpoints (CRUD + preview)
 - [ ] 37-02-PLAN.md — Frontend TemplateSkillsTab component + agent-detail.tsx wiring
@@ -223,5 +223,5 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 34. Feedback Telemetry | 4/4 | Complete   | 2026-04-02 | - |
 | 35. Agent Evolution Loop | 3/3 | Complete    | 2026-04-03 | - |
 | 36. Skill Quality Scoring | v5.0 | Complete    | 2026-04-03 | - |
-| 37. Template Skill UX | v5.0 | 0/2 | Not started | - |
+| 37. Template Skill UX | 1/2 | In Progress|  | - |
 | 38. Adaptive Agent Context | v5.0 | 0/3 | Not started | - |

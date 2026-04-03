@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Living Skills
 status: unknown
-stopped_at: Completed 35-03-PLAN.md
-last_updated: "2026-04-03T01:35:22.731Z"
+stopped_at: Completed 37-01-PLAN.md
+last_updated: "2026-04-03T01:51:40.553Z"
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 16
-  completed_plans: 17
+  total_plans: 21
+  completed_plans: 18
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Skills must be live behavioral modules — selected at runtime, injected into prompts, measured, and evolved through feedback.
-**Current focus:** Phase 35 — Agent Evolution Loop
+**Current focus:** Phase 37 — Template Skill UX
 
 ## Current Position
 
-Phase: 35 (Agent Evolution Loop) — EXECUTING
-Plan: 2 of 3
+Phase: 37 (Template Skill UX) — EXECUTING
+Plan: 1 of 2
 
 ## Performance Metrics
 
@@ -84,6 +84,9 @@ Plan: 2 of 3
 - [Phase 35-02]: regenSkillsManifest inlined to avoid cross-service coupling; config.personasDir used for path consistency; rewrite_prompt/enrich_examples flagged for manual follow-up; effectiveness_before captured before mutation
 - [Phase 35]: EvolutionPanel uses proposals list filtered to non-pending for history tab — avoids evolution_events join complexity since proposals already carry persona/skill names
 - [Phase 35]: SkillsStudio tab ternary wraps existing content in fragment — zero restructuring of existing skills rendering logic
+- [Phase 37-01]: Preview endpoint uses /skills-preview hyphenated path to avoid Fastify param collision with /:id/skills/:skillId
+- [Phase 37-01]: scoreSkill replicated inline in admin backend — no cross-service import from backend/ into admin/backend/
+- [Phase 37-01]: Mandatory skills (is_mandatory=1) always included in preview selected list regardless of SCORE_THRESHOLD
 
 ### Roadmap Evolution
 
@@ -101,6 +104,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T01:28:59.700Z
-Stopped at: Completed 35-03-PLAN.md
+Last session: 2026-04-03T01:51:40.550Z
+Stopped at: Completed 37-01-PLAN.md
 Resume file: None

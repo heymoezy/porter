@@ -56,11 +56,11 @@
 
 ### Template Skill UX
 
-- [ ] **TUX-01**: Template detail view shows assigned skills from template_skills with why each is attached
-- [ ] **TUX-02**: Admin can attach, detach, and reorder skills on a template from the template detail page
-- [ ] **TUX-03**: Template authoring supports marking skills as mandatory vs optional and setting priority
+- [x] **TUX-01**: Template detail view shows assigned skills from template_skills with why each is attached
+- [x] **TUX-02**: Admin can attach, detach, and reorder skills on a template from the template detail page
+- [x] **TUX-03**: Template authoring supports marking skills as mandatory vs optional and setting priority
 - [ ] **TUX-04**: Template detail shows recent skill effectiveness across all spawned agents using that template
-- [ ] **TUX-05**: Template detail shows what runtime auto-detection will select for sample task prompts
+- [x] **TUX-05**: Template detail shows what runtime auto-detection will select for sample task prompts
 
 ## v6.0 Requirements (Deferred)
 
@@ -121,11 +121,11 @@
 | QLT-03 | Phase 36 | Pending |
 | QLT-04 | Phase 36 | Pending |
 | QLT-05 | Phase 36 | Pending |
-| TUX-01 | Phase 37 | Pending |
-| TUX-02 | Phase 37 | Pending |
-| TUX-03 | Phase 37 | Pending |
+| TUX-01 | Phase 37 | Complete |
+| TUX-02 | Phase 37 | Complete |
+| TUX-03 | Phase 37 | Complete |
 | TUX-04 | Phase 37 | Pending |
-| TUX-05 | Phase 37 | Pending |
+| TUX-05 | Phase 37 | Complete |
 
 **Coverage:**
 - v5.0 requirements: 36 total
