@@ -62,6 +62,24 @@
 - [x] **TUX-04**: Template detail shows recent skill effectiveness across all spawned agents using that template
 - [x] **TUX-05**: Template detail shows what runtime auto-detection will select for sample task prompts
 
+### Adaptive Agent Context
+
+- [x] **ACX-01**: Agents can execute SQL queries against concepts/directives during dispatch for on-demand context retrieval
+- [x] **ACX-02**: memory-injection.ts selects directives based on task type, skills, and conversation context (avg injected < 50% of total)
+- [x] **ACX-03**: Bridge supports 50+ turn sequences with automatic context summarization
+- [x] **ACX-04**: Verbose tool results (>500 tokens) auto-summarized before appending to history
+- [x] **ACX-05**: Context pressure metrics logged per dispatch in bridge_dispatch_log
+
+## Bridge Task Dispatch (Phase 39)
+
+### Task Dispatch
+
+- [ ] **BTD-01**: POST /api/v1/tasks/dispatch accepts a task prompt, optional gateway, optional cwd, and returns a task ID with 202 status
+- [ ] **BTD-02**: CLI adapters (Codex, Gemini, Claude) implement task execution via TaskExecutor that spawns the CLI with tool access in the specified working directory
+- [ ] **BTD-03**: Task output streams back via SSE events (bridge:task-progress with incremental output, bridge:task-complete with full result)
+- [ ] **BTD-04**: bridge_tasks table tracks lifecycle (queued → running → complete → failed) with output, duration, gateway used
+- [ ] **BTD-05**: Admin can view running/completed tasks with output in the Bridge panel
+
 ## v6.0 Requirements (Deferred)
 
 ### Battle Arena
@@ -126,12 +144,22 @@
 | TUX-03 | Phase 37 | Complete |
 | TUX-04 | Phase 37 | Complete |
 | TUX-05 | Phase 37 | Complete |
+| ACX-01 | Phase 38 | Complete |
+| ACX-02 | Phase 38 | Complete |
+| ACX-03 | Phase 38 | Complete |
+| ACX-04 | Phase 38 | Complete |
+| ACX-05 | Phase 38 | Complete |
+| BTD-01 | Phase 39 | Pending |
+| BTD-02 | Phase 39 | Pending |
+| BTD-03 | Phase 39 | Pending |
+| BTD-04 | Phase 39 | Pending |
+| BTD-05 | Phase 39 | Pending |
 
 **Coverage:**
-- v5.0 requirements: 36 total
-- Mapped to phases: 36
-- Unmapped: 0 ✓
+- v5.0 requirements: 41 total (36 Living Skills + 5 Bridge Task Dispatch)
+- Mapped to phases: 41
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-02*
-*Last updated: 2026-04-02 after milestone v5.0 definition*
+*Last updated: 2026-04-03 after Phase 39 Bridge Task Dispatch definition*

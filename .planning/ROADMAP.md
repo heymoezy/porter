@@ -79,6 +79,10 @@
 - [x] **Phase 37: Template Skill UX** — Assignment authoring, effectiveness display (completed 2026-04-03)
 - [x] **Phase 38: Adaptive Agent Context** — Smart directive injection, agent self-querying, deep execution, context compression (completed 2026-04-03)
 
+### Bridge Task Dispatch
+
+- [ ] **Phase 39: Bridge Task Dispatch** — CLI gateways dispatch real tasks with tool access, lifecycle tracking, SSE streaming, admin visibility
+
 ## Phase Details
 
 ### Phase 31: Source of Truth Cleanup
@@ -206,10 +210,26 @@ Plans:
 - [ ] 38-02-PLAN.md — Deep execution & tool output compression (context-compressor service, 70%/85% triggers)
 - [ ] 38-03-PLAN.md — Context pressure observability (context_stats JSONB, admin UI charts)
 
+### Phase 39: Bridge Task Dispatch
+**Goal**: Bridge can dispatch real tasks to CLI gateways (Codex, Gemini, Claude) where the model has full tool access — reading files, running commands, editing code. Chat dispatch unchanged.
+**Depends on**: Phase 38 (v5.0 complete)
+**Requirements**: BTD-01, BTD-02, BTD-03, BTD-04, BTD-05
+**Success Criteria** (what must be TRUE):
+  1. POST /api/v1/tasks/dispatch accepts prompt + cwd + optional gateway, validates cwd against allowlist, returns 202 with task_id
+  2. CLI adapters (Claude, Gemini, Codex) execute tasks via TaskExecutor with correct tool-access flags (--bare --dangerously-skip-permissions, --yolo, --dangerously-bypass-approvals-and-sandbox)
+  3. Task output streams via SSE events (bridge:task-progress for incremental output, bridge:task-complete for final result)
+  4. bridge_tasks table tracks full lifecycle (queued -> running -> complete/failed/cancelled) with output, duration, exit code, gateway used
+  5. Admin can view running/completed tasks with output via GET /api/admin/bridge/tasks
+**Plans:** 3 plans
+Plans:
+- [ ] 39-01-PLAN.md — Types + DB schema + migration + TaskExecutor class
+- [ ] 39-02-PLAN.md — REST API routes (dispatch, poll, cancel, list) + SSE wiring
+- [ ] 39-03-PLAN.md — Admin bridge panel task visibility endpoints
+
 ## Progress
 
 **Execution Order:**
-Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can parallel 36) → 36 → 37 → 38.
+Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can parallel 36) → 36 → 37 → 38 → 39.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -225,3 +245,4 @@ Phases execute in order: 31 → 32 → 33 (can parallel 32) → 34 → 35 (can p
 | 36. Skill Quality Scoring | v5.0 | Complete    | 2026-04-03 | - |
 | 37. Template Skill UX | 2/2 | Complete    | 2026-04-03 | - |
 | 38. Adaptive Agent Context | 3/3 | Complete    | 2026-04-03 | - |
+| 39. Bridge Task Dispatch | - | 0/3 | Planning | - |
