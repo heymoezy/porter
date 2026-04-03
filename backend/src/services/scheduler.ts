@@ -14,6 +14,7 @@ import { extractIntelligencePatterns } from './intelligence-loop.js';
 import { analyzeSkillEvolution } from './evolution-analyzer.js';
 import { assignJob } from './job-assignment.js';
 import { executeWatcher, scheduleWatcherRuns } from './watcher-service.js';
+import { scheduleAtlasRuns } from './atlas-agent.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -28,6 +29,7 @@ const EVO_ANALYSIS_INTERVAL = 10800; // 10800 ticks x 2s = 6h
 const SYSTEM_JOB_INTERVAL = 1800;    // 1800 ticks x 2s = 60 min
 const GATEWAY_CHECK_INTERVAL = 900;  // 900 ticks x 2s = 30 min
 const WATCHER_SCHEDULE_INTERVAL = 30; // 30 ticks x 2s = 60s — check for due watchers every minute
+const ATLAS_CHECK_INTERVAL = 900;     // 900 ticks x 2s = 30 min — check project structure every 30 minutes
 const CONTEXT_PRESSURE_THRESHOLD = 0.8;
 const CONTEXT_ROTATION_THRESHOLD = 0.95;
 const WORKER_ID = crypto.randomUUID();
@@ -379,6 +381,12 @@ async function tick() {
     if (tickCount > 0 && tickCount % WATCHER_SCHEDULE_INTERVAL === 0) {
       scheduleWatcherRuns().catch(err =>
         console.error('[scheduler:watcher] schedule error', err));
+    }
+
+    // PSB: Atlas structural health check every 30 min
+    if (tickCount > 0 && tickCount % ATLAS_CHECK_INTERVAL === 0) {
+      scheduleAtlasRuns().catch(err =>
+        console.error('[scheduler:atlas] check error', err));
     }
 
     // ── Agent jobs — require agentScheduling flag ──────────────────────────
