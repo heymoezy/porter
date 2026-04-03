@@ -434,6 +434,12 @@ export class RoutingEngine {
         try {
           const contextStats = buildContextStats({
             skillsUsed: ctx.skillsUsed ?? null,
+            directiveStats: ctx.directiveStats ? {
+              total_active: ctx.directiveStats.total,
+              injected: ctx.directiveStats.injected,
+              skipped: ctx.directiveStats.skipped,
+              scoring_mode: ctx.directiveStats.scoring_mode,
+            } : undefined,
             compressionStats: compressionStats ? {
               tool_outputs_compressed: compressionStats.tool_outputs_compressed,
               conversation_turns_compressed: 0,

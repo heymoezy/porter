@@ -295,14 +295,17 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     }
 
     // Memory V3: inject tiered memory context before streaming
-    // Phase 38: pass taskText + skillTags for context-aware directive selection
-    const memoryContext = await buildMemoryContext({
+    // Phase 38: use returnMeta to capture directive_selection stats for dispatch logging
+    const memoryResult = await buildMemoryContext({
       agentId: agentId,
       projectId: projectId,
       searchQuery: message,
       taskText: message,
       skillTags: selectedSkillTags,
+      returnMeta: true,
     });
+    const memoryContext = memoryResult.text;
+    const directiveSelectionStats = memoryResult.directive_selection;
 
     // Injection order: [identity prefix] → [memory context] → [user message]
     // Only the original user message is persisted to chat history (not augmented content)
@@ -314,6 +317,18 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       augmentedMessage = identityPrefix + augmentedMessage;
     }
 
+    // Build directive stats for dispatch log context_stats
+    const directiveStats = directiveSelectionStats
+      ? {
+          total: directiveSelectionStats.total,
+          injected: directiveSelectionStats.injected,
+          skipped: directiveSelectionStats.skipped,
+          scoring_mode: (selectedSkillTags.length > 0 || message.length > 0
+            ? 'task_aware'
+            : 'all') as 'task_aware' | 'all',
+        }
+      : undefined;
+
     // STRM-02: prefer strong model for user chat, fall back to ollama if unavailable
     const streamBackend = await selectStreamBackend(message, backend ?? 'auto', {
       agentId,
@@ -321,6 +336,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       projectId,
       username: request.sessionUser!.username,
       skillsUsed,  // Phase 33: skill selection telemetry for dispatch logging
+      directiveStats,  // Phase 38: directive selection stats for context_stats logging
     });
     let fullResponse = '';
     // Phase 34: capture dispatch_id yielded by routing-engine as __DISPATCH_META__ token
