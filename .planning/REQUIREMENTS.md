@@ -52,7 +52,7 @@
 ### Session Intelligence
 
 - [x] **SIN-01**: Memory frozen at session start — injected in system prompt, never mutated mid-session
-- [ ] **SIN-02**: FTS5 cross-session search — agents can query past sessions for relevant context
+- [x] **SIN-02**: FTS5 cross-session search — agents can query past sessions for relevant context
 - [ ] **SIN-03**: Dispatch outcome scoring feeds back into routing confidence — Porter learns which gateways work best
 
 ### Porter Control Plane
@@ -93,7 +93,7 @@
 | GWC-03 | Phase 40 | Complete |
 | GWC-04 | Phase 40 | Complete |
 | SIN-01 | Phase 41 | Complete |
-| SIN-02 | Phase 41 | Pending |
+| SIN-02 | Phase 41 | Complete |
 | SIN-03 | Phase 41 | Pending |
 | TDE-01 | Phase 42 | Pending |
 | TDE-02 | Phase 42 | Pending |

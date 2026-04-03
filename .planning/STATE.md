@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 41-01-PLAN.md
-last_updated: "2026-04-03T09:52:06.642Z"
+stopped_at: Completed 41-02-PLAN.md
+last_updated: "2026-04-03T09:58:31.392Z"
 progress:
   total_phases: 17
   completed_phases: 9
   total_plans: 29
-  completed_plans: 28
+  completed_plans: 29
 ---
 
 # Project State
@@ -51,6 +51,7 @@ Plan: 1 of 3
 - [Phase 41]: Used dynamic import() for clearSnapshot in rotateSession to avoid circular dependency between session-registry and memory-snapshot
 - [Phase 41]: upsertSession called with 0 tokens in ai-router to resolve session ID before snapshot lookup — idempotent, no token side-effects
 - [Phase 41]: getOrBuildSnapshot uses two-layer cache: in-memory LRU Map first, DB fallback on process restart
+- [Phase 41]: Route registered in v1/index.ts barrel (not index.ts directly) — matches all other v1 routes pattern
 
 ### Pending Todos
 
@@ -63,6 +64,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T09:52:06.639Z
-Stopped at: Completed 41-01-PLAN.md
+Last session: 2026-04-03T09:58:31.389Z
+Stopped at: Completed 41-02-PLAN.md
 Resume file: None
