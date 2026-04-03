@@ -23,6 +23,7 @@ import { migrateBridgeV3 } from './db/migrate-bridge-v3.js';
 import { migrateBridgeV4 } from './db/migrate-bridge-v4.js';
 import { migrateBridgeV5 } from './db/migrate-bridge-v5.js';
 import { migrateBridgeV6 } from './db/migrate-bridge-v6.js';
+import { migrateBridgeV7 } from './db/migrate-bridge-v7.js';
 import { migrateRateLimits } from './db/migrate-rate-limits.js';
 import { migrateRpgV1 } from './db/migrate-rpg-v1.js';
 import { migrateSotV1 } from './db/migrate-sot-v1.js';
@@ -194,6 +195,7 @@ const start = async () => {
     await migrateBridgeV4(pool);
     await migrateBridgeV5(pool);
     await migrateBridgeV6(pool);
+    await migrateBridgeV7(pool);
     await migrateRateLimits(pool);
     await migrateRpgV1(pool);
     await migrateSotV1(pool);

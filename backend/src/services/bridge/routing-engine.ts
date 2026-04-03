@@ -20,6 +20,7 @@ import { parseRateLimitHeaders, record429, hasCapacity } from './rate-limit-trac
 import { v4 as uuidv4 } from 'uuid';
 import { awardXP } from '../rpg-engine.js';
 import { compressToolOutput, estimateTokens, COMPRESS_MODEL } from '../context-compressor.js';
+import { getLegacyTags, normalizeCapabilities } from './capability-registry.js';
 
 // Alias for use in compression stats metadata (avoids runtime import cycle confusion)
 const COMPRESS_MODEL_NAME = COMPRESS_MODEL;
@@ -941,7 +942,8 @@ function mapGatewayRow(raw: GatewayDbRow): GatewayRow {
     status: raw.status as GatewayRow['status'],
     source: raw.source as GatewayRow['source'],
     priority: raw.priority,
-    capabilities: Array.isArray(raw.capabilities) ? (raw.capabilities as string[]) : [],
+    capabilities: getLegacyTags(raw.capabilities),
+    capabilityRecord: (normalizeCapabilities(raw.capabilities) ?? undefined) as Record<string, unknown> | undefined,
     metadata: (typeof raw.metadata === 'object' && raw.metadata !== null ? raw.metadata : {}) as Record<string, unknown>,
     enabled: raw.enabled,
     maskedDisplay: raw.masked_display,

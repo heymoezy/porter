@@ -16,6 +16,7 @@ import { encryptCredential, validatePorterSecret } from '../../lib/credential-cr
 import { refreshAllGateways } from './model-catalog.js';
 import { createAdapter } from './adapters/index.js';
 import type { GatewayType, GatewayAuthMethod, GatewayRow } from './types.js';
+import { GATEWAY_CAPABILITY_REGISTRY, getLegacyTags, normalizeCapabilities } from './capability-registry.js';
 
 // ── Detection report types ────────────────────────────────────────────────────
 
@@ -65,7 +66,8 @@ function mapRawToGatewayRow(raw: any): GatewayRow {
     status: raw.status,
     source: raw.source,
     priority: raw.priority,
-    capabilities: Array.isArray(raw.capabilities) ? raw.capabilities : [],
+    capabilities: getLegacyTags(raw.capabilities),
+    capabilityRecord: (normalizeCapabilities(raw.capabilities) ?? undefined) as Record<string, unknown> | undefined,
     metadata: (typeof raw.metadata === 'object' && raw.metadata !== null ? raw.metadata : {}) as Record<string, unknown>,
     enabled: raw.enabled,
     maskedDisplay: raw.masked_display ?? '',
@@ -137,7 +139,7 @@ export async function detectAndUpsertGateways(pool: pg.Pool): Promise<DetectionR
           authMethod: 'none',
           source: 'auto_detected',
           status: 'active',
-          capabilities: cli.capabilities,
+          capabilities: GATEWAY_CAPABILITY_REGISTRY[cli.type] ?? cli.capabilities,
           metadata: { binary_path: binaryPath },
         });
         console.log(`[bridge] ✓ ${cli.binary} detected at ${binaryPath}`);
@@ -190,7 +192,7 @@ async function bootstrapEnvGateways(pool: pg.Pool): Promise<GatewayDetectionResu
     authMethod: 'none',
     source: 'env_bootstrap',
     status: 'active',
-    capabilities: ['chat', 'code', 'streaming'],
+    capabilities: GATEWAY_CAPABILITY_REGISTRY.ollama,
     metadata: { binary_path: await which('ollama').catch(() => null) },
   });
 
@@ -211,7 +213,7 @@ async function bootstrapEnvGateways(pool: pg.Pool): Promise<GatewayDetectionResu
       authMethod: 'bearer_token',
       source: 'env_bootstrap',
       status: 'active',
-      capabilities: ['chat', 'code', 'streaming'],
+      capabilities: GATEWAY_CAPABILITY_REGISTRY.openclaw,
       metadata: {
         gateway_roles: ['ai_dispatch', 'messaging_gateway'],
         messaging_protocols: ['whatsapp', 'telegram'],
@@ -247,7 +249,8 @@ interface UpsertGatewayParams {
   authMethod: GatewayAuthMethod;
   source: 'auto_detected' | 'env_bootstrap';
   status: 'active' | 'stale';
-  capabilities: string[];
+  /** Accepts both legacy string[] and structured GatewayCapabilityRecord objects */
+  capabilities: unknown;
   metadata: Record<string, unknown>;
 }
 
