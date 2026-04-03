@@ -339,8 +339,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 43-01-PLAN.md — Agent delegation service + peer-to-peer guard (IAM-01, IAM-02, IAM-03)
-- [ ] 43-02-PLAN.md — DAG executor delegation wiring + joiner synthesis integration (IAM-01, IAM-04)
+- [ ] 45-01-PLAN.md — Delegation doctrine service + dispatch strategy logging + depth limit enforcement (PCP-01, PCP-02)
+- [ ] 45-02-PLAN.md — Approval gates for high-risk actions + REST endpoints + delegation pipeline integration (PCP-03)
 
 ### Phase 46: Project Monitoring
 **Goal**: Every project can have autonomous watchers — scheduled agents that monitor external sources (web, RSS, email) and surface relevant findings in the project's activity feed without manual polling
@@ -398,6 +398,6 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 42. Task Decomposition Engine | 4/4 | Complete    | 2026-04-03 | - |
 | 43. Inter-Agent Messaging | 1/2 | In Progress|  | - |
 | 44. Autonomous Job Queue | 2/2 | Complete    | 2026-04-03 | - |
-| 45. Porter Control Plane | v6.0 | 0/TBD | Not started | - |
+| 45. Porter Control Plane | v6.0 | 0/2 | Not started | - |
 | 46. Project Monitoring | v6.0 | 0/TBD | Not started | - |
 | 47. Project Substrate | v6.0 | 0/TBD | Not started | - |
