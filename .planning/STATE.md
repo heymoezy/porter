@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 47-02-PLAN.md
-last_updated: "2026-04-03T19:04:23.489Z"
+stopped_at: Completed 47-01-PLAN.md
+last_updated: "2026-04-03T19:05:01.751Z"
 progress:
   total_phases: 17
   completed_phases: 15
@@ -95,6 +95,10 @@ Plan: 2 of 3
 - [Phase 47]: Classification is pure function (no LLM) -- instant extension-based lookup with ambiguous-extension config filename detection
 - [Phase 47]: Ingress pipeline is best-effort: errors logged but never block the upload response
 - [Phase 47]: Cross-device move fallback: fs.rename first, copy+unlink on EXDEV error
+- [Phase 47]: provisionProjectStructure is non-blocking: errors log but never throw, so provisioning failure does not prevent project creation
+- [Phase 47]: Wizard provisioning is fire-and-forget (after COMMIT) to avoid rolling back DB on filesystem errors
+- [Phase 47]: Existing _system/ files preserved on re-provisioning (idempotent)
+- [Phase 47]: Project root resolved from porter_config.json projects mount with fallback to dataDir/projects
 
 ### Pending Todos
 
@@ -107,6 +111,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T19:04:23.486Z
-Stopped at: Completed 47-02-PLAN.md
+Last session: 2026-04-03T19:05:01.747Z
+Stopped at: Completed 47-01-PLAN.md
 Resume file: None
