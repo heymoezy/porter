@@ -276,27 +276,48 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
   });
 
   // POST /api/v1/files/upload — multipart file upload
+  // Uses request.parts() for order-independent multipart parsing.
   fastify.post('/upload', {
     preHandler: [fastify.requireAuth],
   }, async (request, reply) => {
-    let data: any;
+    let fileBuffer: Buffer | null = null;
+    let filename = '';
+    let root = '';
+    let relPath = '';
+
     try {
-      data = await request.file();
+      const parts = request.parts({ limits: { fileSize: 100 * 1024 * 1024 } });
+      for await (const part of parts) {
+        if (part.type === 'field') {
+          const val = typeof part.value === 'string' ? part.value : '';
+          if (part.fieldname === 'root') root = val;
+          else if (part.fieldname === 'path') relPath = val;
+        } else if (part.type === 'file' && part.fieldname === 'file') {
+          filename = part.filename;
+          const chunks: Buffer[] = [];
+          for await (const chunk of part.file) {
+            chunks.push(chunk);
+          }
+          fileBuffer = Buffer.concat(chunks);
+        }
+      }
     } catch {
       return reply.code(400).send(err('INVALID_INPUT', 'Multipart file expected'));
     }
 
-    if (!data) {
+    if (!fileBuffer || !filename) {
       return reply.code(400).send(err('NO_FILE', 'No file uploaded'));
+    }
+
+    // Enforce 100MB limit
+    if (fileBuffer.length > 100 * 1024 * 1024) {
+      return reply.code(413).send(err('FILE_TOO_LARGE', 'File exceeds 100MB limit'));
     }
 
     const dirs = getServeDirs();
     const rootKeys = Object.keys(dirs);
 
-    const rootField = data.fields.root as any;
-    const pathField = data.fields.path as any;
-    const root = rootField?.value || rootKeys[0] || 'documents';
-    const relPath = pathField?.value || '';
+    if (!root) root = rootKeys[0] || 'documents';
 
     const rootPath = dirs[root];
     if (!rootPath) {
@@ -320,27 +341,16 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
       return reply.code(404).send(err('NOT_FOUND', 'Target directory not found'));
     }
 
-    const filename = safeName(data.filename);
-    if (!filename) {
+    const sanitized = safeName(filename);
+    if (!sanitized) {
       return reply.code(400).send(err('INVALID_NAME', 'Invalid filename'));
     }
 
-    const destPath = path.join(targetDir, filename);
+    const destPath = path.join(targetDir, sanitized);
 
     try {
-      const chunks: Buffer[] = [];
-      for await (const chunk of data.file) {
-        chunks.push(chunk);
-      }
-      const buffer = Buffer.concat(chunks);
-
-      // Enforce 100MB limit
-      if (buffer.length > 100 * 1024 * 1024) {
-        return reply.code(413).send(err('FILE_TOO_LARGE', 'File exceeds 100MB limit'));
-      }
-
-      await fs.writeFile(destPath, buffer);
-      return reply.send(ok({ uploaded: true, filename, size: buffer.length }));
+      await fs.writeFile(destPath, fileBuffer);
+      return reply.send(ok({ uploaded: true, filename: sanitized, size: fileBuffer.length }));
     } catch (e: any) {
       return reply.code(500).send(err('UPLOAD_ERROR', e.message ?? 'Failed to save file'));
     }

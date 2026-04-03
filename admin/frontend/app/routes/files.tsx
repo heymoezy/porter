@@ -298,9 +298,9 @@ export default function FilesPage() {
       }
       xhr.onerror = () => reject(new Error("Network error"))
       const form = new FormData()
-      form.append("file", file)
       form.append("root", root)
       form.append("path", path)
+      form.append("file", file)
       xhr.send(form)
     })
   }
