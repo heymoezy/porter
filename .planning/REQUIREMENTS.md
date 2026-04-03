@@ -15,9 +15,9 @@
 
 ### Inter-Agent Messaging
 
-- [ ] **IAM-01**: Agents can dispatch structured work to other agents via the existing /api/v1/bridge/agent-message endpoint
-- [ ] **IAM-02**: Message chains track correlation IDs, hop counts, and full audit trail via msg_bus_events table
-- [ ] **IAM-03**: Porter acts as coordinator — all inter-agent messages route through Porter, not peer-to-peer
+- [x] **IAM-01**: Agents can dispatch structured work to other agents via the existing /api/v1/bridge/agent-message endpoint
+- [x] **IAM-02**: Message chains track correlation IDs, hop counts, and full audit trail via msg_bus_events table
+- [x] **IAM-03**: Porter acts as coordinator — all inter-agent messages route through Porter, not peer-to-peer
 - [ ] **IAM-04**: Agent responses feed back through the decomposition engine for synthesis
 
 ### Autonomous Job Queue
@@ -100,9 +100,9 @@
 | TDE-03 | Phase 42 | Complete |
 | TDE-04 | Phase 42 | Complete |
 | TDE-05 | Phase 42 | Complete |
-| IAM-01 | Phase 43 | Pending |
-| IAM-02 | Phase 43 | Pending |
-| IAM-03 | Phase 43 | Pending |
+| IAM-01 | Phase 43 | Complete |
+| IAM-02 | Phase 43 | Complete |
+| IAM-03 | Phase 43 | Complete |
 | IAM-04 | Phase 43 | Pending |
 | AJQ-01 | Phase 44 | Pending |
 | AJQ-02 | Phase 44 | Pending |

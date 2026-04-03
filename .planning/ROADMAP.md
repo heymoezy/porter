@@ -307,7 +307,7 @@ Plans:
   2. Every inter-agent message chain has a correlation ID visible in the msg_bus_events table along with hop count and full message history
   3. All inter-agent messages pass through Porter as coordinator — direct peer-to-peer routing is blocked and logged as a violation
   4. A subtask response from a delegated agent is automatically fed back into the decomposition engine for inclusion in the final synthesis
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 43-01-PLAN.md — Agent delegation service + peer-to-peer guard (IAM-01, IAM-02, IAM-03)
@@ -396,7 +396,7 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 40. Gateway Capability Registry | v6.0 | 2/2 | Complete | 2026-04-03 |
 | 41. Session Intelligence | 3/3 | Complete    | 2026-04-03 | - |
 | 42. Task Decomposition Engine | 4/4 | Complete    | 2026-04-03 | - |
-| 43. Inter-Agent Messaging | v6.0 | 0/TBD | Not started | - |
+| 43. Inter-Agent Messaging | 1/2 | In Progress|  | - |
 | 44. Autonomous Job Queue | v6.0 | 0/TBD | Not started | - |
 | 45. Porter Control Plane | v6.0 | 0/TBD | Not started | - |
 | 46. Project Monitoring | v6.0 | 0/TBD | Not started | - |

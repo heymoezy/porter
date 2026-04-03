@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
-status: unknown
-stopped_at: "Completed 42-04-PLAN.md (checkpoint:human-verify pending)"
-last_updated: "2026-04-03T10:38:57.317Z"
+status: executing
+stopped_at: "Completed 43-01-PLAN.md"
+last_updated: "2026-04-03T10:48:00Z"
 progress:
   total_phases: 17
   completed_phases: 11
-  total_plans: 33
-  completed_plans: 34
+  total_plans: 35
+  completed_plans: 35
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
-**Current focus:** Phase 42 — Task Decomposition Engine
+**Current focus:** Phase 43 — Inter-Agent Messaging
 
 ## Current Position
 
-Phase: 42 (Task Decomposition Engine) — EXECUTING
-Plan: 3 of 4
+Phase: 43 (Inter-Agent Messaging) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -67,6 +67,9 @@ Plan: 3 of 4
 - [Phase 42-03]: v1 replan marks root as failed with note; no automatic re-execution (bounded to prevent infinite loops)
 - [Phase 42-04]: Dependency detail resolution uses ANY($1::text[]) for batch fetch — single DB round-trip regardless of dep count
 - [Phase 42-04]: camelCase mapping done in JS (not SQL aliases) — consistent with TypeScript types in types.ts
+- [Phase 43-01]: porter-delegation used as routing username in RoutingContext to distinguish in-process delegation from HTTP agent-message calls
+- [Phase 43-01]: Peer-to-peer guard checks sourceAgent !== undefined to allow admin-UI/direct API calls (no sourceAgent) through unblocked — only explicit non-Porter agents with targetAgent are blocked
+- [Phase 43-01]: violation intent in msg_bus_events is the audit-trail pattern for all policy enforcement decisions in the Bridge layer
 
 ### Pending Todos
 
