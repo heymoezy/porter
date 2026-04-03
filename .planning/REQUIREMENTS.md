@@ -7,7 +7,7 @@
 
 ### Task Decomposition
 
-- [ ] **TDE-01**: Complex requests are classified (simple vs multi-step) before dispatch — simple go direct, complex get decomposed
+- [x] **TDE-01**: Complex requests are classified (simple vs multi-step) before dispatch — simple go direct, complex get decomposed
 - [ ] **TDE-02**: Complex tasks produce a dependency DAG (task_nodes table) with parallel and sequential relationships
 - [ ] **TDE-03**: DAG executor dispatches ready tasks in parallel, respects dependencies, tracks completion
 - [ ] **TDE-04**: When a subtask fails, the joiner decides: retry, replan the subtask, or escalate to user
@@ -95,7 +95,7 @@
 | SIN-01 | Phase 41 | Complete |
 | SIN-02 | Phase 41 | Complete |
 | SIN-03 | Phase 41 | Complete |
-| TDE-01 | Phase 42 | Pending |
+| TDE-01 | Phase 42 | Complete |
 | TDE-02 | Phase 42 | Pending |
 | TDE-03 | Phase 42 | Pending |
 | TDE-04 | Phase 42 | Pending |
