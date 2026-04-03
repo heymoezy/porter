@@ -13,6 +13,7 @@ import { getActiveSessions, rotateSession } from './session-registry.js';
 import { extractIntelligencePatterns } from './intelligence-loop.js';
 import { analyzeSkillEvolution } from './evolution-analyzer.js';
 import { assignJob } from './job-assignment.js';
+import { executeWatcher, scheduleWatcherRuns } from './watcher-service.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -26,6 +27,7 @@ const INTEL_EXTRACTION_INTERVAL = 10800; // 10800 ticks × 2s = 6h
 const EVO_ANALYSIS_INTERVAL = 10800; // 10800 ticks x 2s = 6h
 const SYSTEM_JOB_INTERVAL = 1800;    // 1800 ticks x 2s = 60 min
 const GATEWAY_CHECK_INTERVAL = 900;  // 900 ticks x 2s = 30 min
+const WATCHER_SCHEDULE_INTERVAL = 30; // 30 ticks x 2s = 60s — check for due watchers every minute
 const CONTEXT_PRESSURE_THRESHOLD = 0.8;
 const CONTEXT_ROTATION_THRESHOLD = 0.95;
 const WORKER_ID = crypto.randomUUID();
@@ -371,6 +373,12 @@ async function tick() {
     if (tickCount > 0 && tickCount % GATEWAY_CHECK_INTERVAL === 0) {
       scheduleSystemJob('gateway_check', {}).catch(err =>
         console.error('[scheduler:system] gateway_check enqueue error', err));
+    }
+
+    // PMN: Schedule due watcher runs every 60s
+    if (tickCount > 0 && tickCount % WATCHER_SCHEDULE_INTERVAL === 0) {
+      scheduleWatcherRuns().catch(err =>
+        console.error('[scheduler:watcher] schedule error', err));
     }
 
     // ── Agent jobs — require agentScheduling flag ──────────────────────────
@@ -734,6 +742,27 @@ async function executeJob(job: JobRow): Promise<void> {
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e);
       await markJobFailed(job.id, errMsg);
+    }
+    return;
+  }
+
+  // PMN: Watcher run execution
+  if (job.trigger_type === 'watcher_run') {
+    const data = (typeof job.trigger_data === 'string' ? JSON.parse(job.trigger_data) : job.trigger_data) as { watcher_id?: string };
+    if (!data.watcher_id) {
+      await markJobFailed(job.id, 'Missing watcher_id in watcher_run trigger_data');
+      return;
+    }
+    try {
+      await executeWatcher(data.watcher_id, job.id);
+      await markJobComplete(job.id, JSON.stringify({ watcher_id: data.watcher_id, status: 'ok' }));
+      await logActivity('system', job.id, job.project_id, 'watcher_complete',
+        `Watcher ${data.watcher_id.slice(0, 8)} completed`, '{}');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await markJobFailed(job.id, msg);
+      await logActivity('system', job.id, job.project_id, 'watcher_failed',
+        `Watcher ${data.watcher_id.slice(0, 8)} failed: ${msg.slice(0, 200)}`, '{}');
     }
     return;
   }
