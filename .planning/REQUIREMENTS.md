@@ -30,9 +30,9 @@
 ### Gateway Capabilities
 
 - [x] **GWC-01**: Each gateway has a capabilities registry (strengths, cost_tier, context_window, tool_support, agentic flag)
-- [ ] **GWC-02**: Task dispatch selects gateway based on task requirements matched against capabilities
-- [ ] **GWC-03**: Dynamic tool schema — only send tools that the target gateway actually supports
-- [ ] **GWC-04**: All 5 gateways (Claude CLI, Codex CLI, Gemini CLI, OpenClaw, Ollama) work through task dispatch with tool execution
+- [x] **GWC-02**: Task dispatch selects gateway based on task requirements matched against capabilities
+- [x] **GWC-03**: Dynamic tool schema — only send tools that the target gateway actually supports
+- [x] **GWC-04**: All 5 gateways (Claude CLI, Codex CLI, Gemini CLI, OpenClaw, Ollama) work through task dispatch with tool execution
 
 ### Project Monitoring
 
@@ -89,9 +89,9 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | GWC-01 | Phase 40 | Complete |
-| GWC-02 | Phase 40 | Pending |
-| GWC-03 | Phase 40 | Pending |
-| GWC-04 | Phase 40 | Pending |
+| GWC-02 | Phase 40 | Complete |
+| GWC-03 | Phase 40 | Complete |
+| GWC-04 | Phase 40 | Complete |
 | SIN-01 | Phase 41 | Pending |
 | SIN-02 | Phase 41 | Pending |
 | SIN-03 | Phase 41 | Pending |

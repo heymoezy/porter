@@ -88,7 +88,7 @@
 
 **Milestone Goal:** Transform Porter from a chat router into a real multi-model orchestration platform. Task decomposition engine turns complex requests into parallel DAGs. Inter-agent messaging enables structured delegation. Autonomous job queues let Porter self-assign work. Gateway capabilities drive intelligent dispatch. Project monitoring watches the world per project. Project substrate gives every project a structured container.
 
-- [ ] **Phase 40: Gateway Capability Registry** - Per-gateway strengths, cost tiers, context windows, and tool support stored and queried at dispatch time
+- [x] **Phase 40: Gateway Capability Registry** - Per-gateway strengths, cost tiers, context windows, and tool support stored and queried at dispatch time (completed 2026-04-03)
 - [ ] **Phase 41: Session Intelligence** - Frozen memory snapshots, cross-session FTS search, and dispatch outcome feedback into routing confidence
 - [ ] **Phase 42: Task Decomposition Engine** - Complex requests classified, decomposed into DAGs, executed in parallel, synthesized into coherent responses
 - [ ] **Phase 43: Inter-Agent Messaging** - Structured agent-to-agent delegation through Porter coordinator with full audit trail
@@ -362,7 +362,7 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 37. Template Skill UX | v5.0 | 2/2 | Complete | 2026-04-03 |
 | 38. Adaptive Agent Context | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 39. Bridge Task Dispatch | v5.0 | 3/3 | Complete | 2026-04-03 |
-| 40. Gateway Capability Registry | 1/2 | In Progress|  | - |
+| 40. Gateway Capability Registry | 2/2 | Complete   | 2026-04-03 | - |
 | 41. Session Intelligence | v6.0 | 0/TBD | Not started | - |
 | 42. Task Decomposition Engine | v6.0 | 0/TBD | Not started | - |
 | 43. Inter-Agent Messaging | v6.0 | 0/TBD | Not started | - |

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 40-01-PLAN.md
-last_updated: "2026-04-03T09:26:00.411Z"
+stopped_at: Completed 40-02-PLAN.md
+last_updated: "2026-04-03T09:35:53.694Z"
 progress:
   total_phases: 17
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 26
-  completed_plans: 26
+  completed_plans: 27
 ---
 
 # Project State
@@ -46,6 +46,8 @@ Plan: 2 of 2 (Plan 01 complete)
 - [v5.0]: Bridge task dispatch complete — CLI subprocess + HTTP agent loop verified for Claude, Codex, Gemini
 - [Phase 40]: GatewayRow.capabilities kept as string[] — getLegacyTags() bridges old and new without touching all callers
 - [Phase 40]: Migration uses jsonb_typeof = 'array' guard for idempotency — rows already structured by startup-detector are untouched
+- [Phase 40]: normalizeCapabilities called on each row in auto-select path — cheap type check, O(n) but n<=10 gateways
+- [Phase 40]: admin/backend/src/routes/bridge.ts is legacy dead code — active route is backend/src/routes/admin/bridge.ts
 
 ### Pending Todos
 
@@ -58,6 +60,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T09:26:00.409Z
-Stopped at: Completed 40-01-PLAN.md
+Last session: 2026-04-03T09:35:53.691Z
+Stopped at: Completed 40-02-PLAN.md
 Resume file: None
