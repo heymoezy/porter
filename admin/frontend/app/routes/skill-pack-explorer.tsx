@@ -224,9 +224,9 @@ export default function SkillPackExplorer() {
   if (!skill) return <div className="p-4 text-text3">Skill not found</div>
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-border text-xs">
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Breadcrumb — fixed */}
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border text-xs shrink-0">
         <Link to="/skills" className="text-text3 hover:text-text transition-colors">Skills</Link>
         <span className="text-text3">/</span>
         <span className="text-text font-medium">{skill.name}</span>
@@ -237,38 +237,15 @@ export default function SkillPackExplorer() {
         </Button>
       </div>
 
-      {/* Diagnostics summary */}
-      <div className="px-4 py-2">
-        <DiagnosticsSummary diagnostics={skill.diagnostics} />
-      </div>
-
-      {/* Skill Effectiveness */}
-      <div className="px-4 py-2 border-b border-border">
-        <h3 className="text-sm font-medium text-text2 mb-2">Skill Effectiveness</h3>
-        {!effectivenessData?.data?.agents?.length ? (
-          <p className="text-xs text-text3">No feedback data yet</p>
-        ) : (
-          <div className="space-y-1.5">
-            <p className="text-xs text-text3 mb-1">Effectiveness by agent</p>
-            {effectivenessData.data.agents.map((a: any) => (
-              <div key={a.persona_id} className="flex items-center justify-between py-0.5">
-                <span className="text-sm text-text2 truncate mr-4">{a.persona_name || a.persona_id}</span>
-                <SkillEffectivenessBar
-                  positive={a.positive_count}
-                  negative={a.negative_count}
-                  score={a.effectiveness_score}
-                  timesSelected={a.times_selected}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Split pane */}
+      {/* Split pane — fills remaining space */}
       <div className="flex flex-1 min-h-0">
-        {/* File tree */}
+        {/* Left sidebar: file tree + diagnostics + effectiveness (scrollable) */}
         <div className="w-[250px] border-r border-border overflow-y-auto shrink-0">
+          {/* Diagnostics summary */}
+          <div className="px-3 py-2 border-b border-border">
+            <DiagnosticsSummary diagnostics={skill.diagnostics} />
+          </div>
+          {/* File tree */}
           <FileTree
             files={skill.files}
             diagnostics={skill.diagnostics}
@@ -279,6 +256,28 @@ export default function SkillPackExplorer() {
               setIsDirty(false)
             }}
           />
+
+          {/* Effectiveness */}
+          <div className="px-3 py-2 border-t border-border">
+            <h3 className="text-xs font-medium text-text2 mb-1.5">Effectiveness</h3>
+            {!effectivenessData?.data?.agents?.length ? (
+              <p className="text-2xs text-text3">No data yet</p>
+            ) : (
+              <div className="space-y-1">
+                {effectivenessData.data.agents.map((a: any) => (
+                  <div key={a.persona_id} className="flex items-center justify-between py-0.5">
+                    <span className="text-2xs text-text2 truncate mr-2">{a.persona_name || a.persona_id}</span>
+                    <SkillEffectivenessBar
+                      positive={a.positive_count}
+                      negative={a.negative_count}
+                      score={a.effectiveness_score}
+                      timesSelected={a.times_selected}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Editor */}
@@ -306,7 +305,7 @@ export default function SkillPackExplorer() {
               </div>
 
               {/* CodeMirror */}
-              <div className="flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-auto">
                 {fileFetching ? (
                   <div className="flex items-center justify-center h-full">
                     <Loader2 className="size-5 animate-spin text-text3" />
