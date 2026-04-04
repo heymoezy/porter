@@ -10,7 +10,8 @@ import {
   Monitor, FolderOpen, Eye,
   Route, BookOpen,
   Code2, Palette, Network, Flame, Lightbulb,
-  Shield, GitBranch,
+  Shield, GitBranch, DollarSign, Swords, ScrollText,
+  Radio, Dna, Wrench, GraduationCap, Activity,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -32,15 +33,21 @@ const groups = [
   { label: "Business", items: [
     { icon: Users, label: "Customers", path: "/users" },
     { icon: CreditCard, label: "Revenue", path: "/billing" },
+    { icon: DollarSign, label: "Costs", path: "/costs" },
   ]},
   { label: "Agents", items: [
     { icon: Flame, label: "Forge", path: "/forge" },
     { icon: Network, label: "Org Chart", path: "/org-chart" },
     { icon: Mail, label: "Email", path: "/email" },
+    { icon: Swords, label: "Battle Arena", path: "/battles" },
+    { icon: Dna, label: "Evolution", path: "/evolution" },
   ]},
   { label: "Ops", items: [
     { icon: Route, label: "Bridge", path: "/bridge" },
     { icon: BookOpen, label: "Recall", path: "/recall" },
+    { icon: Radio, label: "Message Bus", path: "/msg-bus" },
+    { icon: Activity, label: "Sessions", path: "/sessions" },
+    { icon: ScrollText, label: "Decisions", path: "/decisions" },
     { icon: MailCheck, label: "Mail Ops", path: "/mail-admin" },
     { icon: Eye, label: "Watchers", path: "/watchers" },
     { icon: Shield, label: "Approvals", path: "/approvals" },
@@ -49,6 +56,8 @@ const groups = [
     { icon: Monitor, label: "System", path: "/system" },
   ]},
   { label: "Dev", items: [
+    { icon: Wrench, label: "Env Tools", path: "/env-tools" },
+    { icon: GraduationCap, label: "Learnings", path: "/learnings" },
     { icon: Palette, label: "Design System", path: "/design-system" },
     { icon: Code2, label: "Architecture", path: "/architecture" },
   ]},
