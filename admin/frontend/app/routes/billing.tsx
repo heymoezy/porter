@@ -1,4 +1,5 @@
 import { AgentPresenceSummary } from "~/components/agent-presence"
+import { Link } from "react-router"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
@@ -94,8 +95,9 @@ function BillingContent() {
       {/* Token cost breakdown */}
       {r.tokenUsage.length > 0 && (
         <div className="rounded-xl border border-border overflow-hidden">
-          <div className="px-3 py-2 bg-surface border-b border-border">
+          <div className="px-3 py-2 bg-surface border-b border-border flex items-center justify-between">
             <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Token Cost Breakdown</span>
+            <Link to="/costs" className="text-xs text-accent-porter hover:underline">Full Cost Analytics →</Link>
           </div>
           <table className="w-full">
             <thead>

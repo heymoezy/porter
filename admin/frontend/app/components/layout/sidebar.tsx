@@ -11,7 +11,7 @@ import {
   Route, BookOpen,
   Code2, Palette, Network, Flame, Lightbulb,
   Shield, GitBranch, DollarSign, Swords, ScrollText,
-  Radio, Dna, Wrench, GraduationCap, Activity,
+  Radio, Wrench, GraduationCap, Activity,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -40,7 +40,6 @@ const groups = [
     { icon: Network, label: "Org Chart", path: "/org-chart" },
     { icon: Mail, label: "Email", path: "/email" },
     { icon: Swords, label: "Battle Arena", path: "/battles" },
-    { icon: Dna, label: "Evolution", path: "/evolution" },
   ]},
   { label: "Ops", items: [
     { icon: Route, label: "Bridge", path: "/bridge" },
