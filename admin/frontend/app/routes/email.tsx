@@ -122,6 +122,7 @@ function EmailContent() {
   const [smtpForm, setSmtpForm] = useState<Record<string, string>>({})
   const [replyText, setReplyText] = useState("")
   const [replyingToId, setReplyingToId] = useState<string | null>(null)
+  const [mailboxSearch, setMailboxSearch] = useState("")
   const editorRef = useRef<HTMLDivElement>(null)
 
   // ── SMTP config (separate concern, keep) ──────────────────────────
@@ -356,7 +357,6 @@ function EmailContent() {
     )
   }
 
-  const [mailboxSearch, setMailboxSearch] = useState("")
   const filteredMailboxes = mailboxSearch.trim()
     ? mailboxes.filter(mb => {
         const q = mailboxSearch.toLowerCase()
