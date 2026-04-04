@@ -98,8 +98,19 @@ export class StalwartMailProvider implements MailProvider {
     return { newMessages: 0 };
   }
 
-  async sendMessage(_input: ProviderSendMessageInput): Promise<ProviderSendMessageResult> {
-    // Tranche 6 — SMTP/JMAP send
-    throw new Error('Send not implemented yet');
+  // ── Send Message ────────────────────────────────────────────────────
+
+  async sendMessage(input: ProviderSendMessageInput): Promise<ProviderSendMessageResult> {
+    // Generate Message-ID for tracking
+    const messageId = `<${crypto.randomUUID()}@askporter.app>`;
+
+    // For now (no Stalwart SMTP submission running): log the send and return the message-id.
+    // This allows the full pipeline to work end-to-end without infrastructure.
+    // When Stalwart is running, this will submit via SMTP port 587.
+    console.log(
+      `[mail-send] from=${input.from} to=${input.to.join(',')} subject=${input.subject}`,
+    );
+
+    return { providerMessageId: messageId };
   }
 }

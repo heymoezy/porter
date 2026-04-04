@@ -1,29 +1,15 @@
 /**
  * Mail admin routes — platform admin mail management.
- * Handles domain lifecycle, mailbox listing, and mail config.
+ * Handles domain lifecycle, mailbox listing, mail config, and delivery diagnostics.
  */
 
 import { FastifyInstance } from 'fastify';
 import { ok, err } from '../../lib/envelope.js';
 import { config } from '../../config.js';
-import { pool } from '../../db/client.js';
-import { StalwartMailProvider } from '../../services/mail/stalwart-provider.js';
+import { getProvider } from '../../services/mail/provider-factory.js';
 import * as domainService from '../../services/mail/domain-service.js';
 import * as mailboxService from '../../services/mail/mailbox-service.js';
-
-// ── Lazy provider singleton ────────────────────────────────────────────
-
-let _provider: StalwartMailProvider | null | undefined;
-
-function getProvider(): StalwartMailProvider | null {
-  if (_provider !== undefined) return _provider;
-  if (!config.mail.stalwartApiKey) {
-    _provider = null;
-    return null;
-  }
-  _provider = new StalwartMailProvider(config.mail.stalwartUrl, config.mail.stalwartApiKey);
-  return _provider;
-}
+import * as deliveryService from '../../services/mail/delivery-service.js';
 
 // ── Routes ─────────────────────────────────────────────────────────────
 
@@ -205,5 +191,15 @@ export default async function mailAdminRoutes(fastify: FastifyInstance) {
       const message = e instanceof Error ? e.message : String(e);
       return reply.status(500).send(err('PROVISION_FAILED', message));
     }
+  });
+
+  // GET /deliveries — recent delivery records (admin diagnostics)
+  fastify.get('/deliveries', async (request, reply) => {
+    const query = request.query as { status?: string; limit?: string };
+    const deliveries = await deliveryService.getRecentDeliveries({
+      status: query.status,
+      limit: query.limit ? parseInt(query.limit, 10) : undefined,
+    });
+    return reply.send(ok({ deliveries }));
   });
 }

@@ -7,6 +7,7 @@ import { ok, err } from '../../lib/envelope.js';
 import * as mailboxService from '../../services/mail/mailbox-service.js';
 import * as threadService from '../../services/mail/thread-service.js';
 import * as messageService from '../../services/mail/message-service.js';
+import { sendMail, createDraft, replyToMessage } from '../../services/mail/send-service.js';
 
 export default async function mailRoutes(fastify: FastifyInstance) {
   // GET /api/v1/mail — list agent identities for compose picker
@@ -108,5 +109,118 @@ export default async function mailRoutes(fastify: FastifyInstance) {
     }
     await messageService.markMessageRead(id);
     return reply.send(ok({ messageId: id, read: true }));
+  });
+
+  // ── Send / Draft / Reply ──────────────────────────────────────────────
+
+  // POST /api/v1/mail/messages/send — send an outbound message
+  fastify.post('/messages/send', async (request, reply) => {
+    const body = request.body as {
+      mailboxId?: string;
+      to?: string[];
+      cc?: string[];
+      bcc?: string[];
+      subject?: string;
+      textBody?: string;
+      htmlBody?: string;
+      inReplyTo?: string;
+      referencesHeader?: string;
+    } | undefined;
+
+    if (!body?.mailboxId || !body?.to?.length || !body?.subject || !body?.textBody) {
+      return reply.status(400).send(
+        err('MISSING_FIELDS', 'mailboxId, to, subject, and textBody are required'),
+      );
+    }
+
+    try {
+      const result = await sendMail({
+        mailboxId: body.mailboxId,
+        to: body.to,
+        cc: body.cc,
+        bcc: body.bcc,
+        subject: body.subject,
+        textBody: body.textBody,
+        htmlBody: body.htmlBody,
+        inReplyTo: body.inReplyTo,
+        referencesHeader: body.referencesHeader,
+      });
+      return reply.status(201).send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('not found')) {
+        return reply.status(404).send(err('NOT_FOUND', message));
+      }
+      return reply.status(500).send(err('SEND_FAILED', message));
+    }
+  });
+
+  // POST /api/v1/mail/drafts — create a draft message
+  fastify.post('/drafts', async (request, reply) => {
+    const body = request.body as {
+      mailboxId?: string;
+      to?: string[];
+      cc?: string[];
+      subject?: string;
+      textBody?: string;
+      htmlBody?: string;
+      inReplyTo?: string;
+      referencesHeader?: string;
+    } | undefined;
+
+    if (!body?.mailboxId) {
+      return reply.status(400).send(err('MISSING_FIELDS', 'mailboxId is required'));
+    }
+
+    try {
+      const result = await createDraft({
+        mailboxId: body.mailboxId,
+        to: body.to,
+        cc: body.cc,
+        subject: body.subject,
+        textBody: body.textBody,
+        htmlBody: body.htmlBody,
+        inReplyTo: body.inReplyTo,
+        referencesHeader: body.referencesHeader,
+      });
+      return reply.status(201).send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('not found')) {
+        return reply.status(404).send(err('NOT_FOUND', message));
+      }
+      return reply.status(500).send(err('DRAFT_FAILED', message));
+    }
+  });
+
+  // POST /api/v1/mail/messages/:id/reply — reply to an existing message
+  fastify.post('/messages/:id/reply', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as {
+      textBody?: string;
+      htmlBody?: string;
+      to?: string[];
+      cc?: string[];
+    } | undefined;
+
+    if (!body?.textBody) {
+      return reply.status(400).send(err('MISSING_FIELDS', 'textBody is required'));
+    }
+
+    try {
+      const result = await replyToMessage(id, {
+        textBody: body.textBody,
+        htmlBody: body.htmlBody,
+        to: body.to,
+        cc: body.cc,
+      });
+      return reply.status(201).send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('not found')) {
+        return reply.status(404).send(err('NOT_FOUND', message));
+      }
+      return reply.status(500).send(err('REPLY_FAILED', message));
+    }
   });
 }
