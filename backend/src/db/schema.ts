@@ -1255,3 +1255,151 @@ export const watcherFindings = pgTable('watcher_findings', {
   jobId: text('job_id'),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
+
+// ── Mail Subsystem ──────────────────────────────────────────────────────────
+
+export const mailDomains = pgTable('mail_domains', {
+  id: text('id').primaryKey(),
+  domain: text('domain').unique().notNull(),
+  provider: text('provider').notNull().default('stalwart'),
+  status: text('status').notNull().default('pending_dns'),
+  isPrimary: integer('is_primary').notNull().default(0),
+  dkimSelector: text('dkim_selector'),
+  dkimPublicKey: text('dkim_public_key'),
+  returnPathDomain: text('return_path_domain'),
+  dnsLastCheckedAt: doublePrecision('dns_last_checked_at'),
+  dnsStatusJson: jsonb('dns_status_json').default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const mailboxes = pgTable('mailboxes', {
+  id: text('id').primaryKey(),
+  domainId: text('domain_id').notNull(),
+  providerMailboxId: text('provider_mailbox_id'),
+  address: text('address').unique().notNull(),
+  localPart: text('local_part').notNull(),
+  displayName: text('display_name').notNull().default(''),
+  mailboxType: text('mailbox_type').notNull().default('agent'),
+  status: text('status').notNull().default('active'),
+  authType: text('auth_type').notNull().default('managed_password'),
+  secretRef: text('secret_ref'),
+  quotaBytes: text('quota_bytes').default('0'),  // bigint stored as text for JS safety
+  lastSyncAt: doublePrecision('last_sync_at'),
+  lastError: text('last_error'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const agentMailboxes = pgTable('agent_mailboxes', {
+  agentId: text('agent_id').notNull(),
+  mailboxId: text('mailbox_id').notNull(),
+  role: text('role').notNull().default('primary'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+// Note: Composite unique (agent_id, mailbox_id) defined in migration DDL
+
+export const mailAliases = pgTable('mail_aliases', {
+  id: text('id').primaryKey(),
+  mailboxId: text('mailbox_id').notNull(),
+  aliasAddress: text('alias_address').unique().notNull(),
+  receiveEnabled: integer('receive_enabled').notNull().default(1),
+  sendAsEnabled: integer('send_as_enabled').notNull().default(1),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const mailThreads = pgTable('mail_threads', {
+  id: text('id').primaryKey(),
+  mailboxId: text('mailbox_id').notNull(),
+  providerThreadId: text('provider_thread_id'),
+  conversationId: text('conversation_id'),
+  subjectCanonical: text('subject_canonical').notNull().default(''),
+  lastMessageAt: doublePrecision('last_message_at'),
+  messageCount: integer('message_count').notNull().default(0),
+  participantsJson: jsonb('participants_json').default(sql`'[]'::jsonb`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const mailMessages = pgTable('mail_messages', {
+  id: text('id').primaryKey(),
+  mailboxId: text('mailbox_id').notNull(),
+  threadId: text('thread_id'),
+  providerMessageId: text('provider_message_id'),
+  internetMessageId: text('internet_message_id'),
+  inReplyTo: text('in_reply_to'),
+  referencesHeader: text('references_header'),
+  direction: text('direction').notNull(),
+  folder: text('folder').notNull(),
+  status: text('status').notNull(),
+  fromAddress: text('from_address').notNull(),
+  fromName: text('from_name').notNull().default(''),
+  toAddressesJson: jsonb('to_addresses_json').default(sql`'[]'::jsonb`),
+  ccAddressesJson: jsonb('cc_addresses_json').default(sql`'[]'::jsonb`),
+  bccAddressesJson: jsonb('bcc_addresses_json').default(sql`'[]'::jsonb`),
+  replyToAddressesJson: jsonb('reply_to_addresses_json').default(sql`'[]'::jsonb`),
+  subject: text('subject').notNull().default(''),
+  snippet: text('snippet').notNull().default(''),
+  textBody: text('text_body').notNull().default(''),
+  htmlBody: text('html_body').notNull().default(''),
+  headersJson: jsonb('headers_json').default(sql`'{}'::jsonb`),
+  attachmentsJson: jsonb('attachments_json').default(sql`'[]'::jsonb`),
+  providerRawRef: text('provider_raw_ref'),
+  receivedAt: doublePrecision('received_at'),
+  sentAt: doublePrecision('sent_at'),
+  readAt: doublePrecision('read_at'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const mailDeliveries = pgTable('mail_deliveries', {
+  id: text('id').primaryKey(),
+  messageId: text('message_id').notNull(),
+  recipient: text('recipient').notNull(),
+  attempt: integer('attempt').notNull().default(1),
+  status: text('status').notNull(),
+  smtpResponse: text('smtp_response'),
+  remoteMx: text('remote_mx'),
+  queuedAt: doublePrecision('queued_at'),
+  completedAt: doublePrecision('completed_at'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const newsletterSources = pgTable('newsletter_sources', {
+  id: text('id').primaryKey(),
+  mailboxId: text('mailbox_id'),
+  sourceType: text('source_type').notNull(),
+  sourceKey: text('source_key').notNull(),
+  senderPattern: text('sender_pattern'),
+  displayName: text('display_name').notNull().default(''),
+  trustLevel: text('trust_level').notNull().default('review'),
+  topicTagsJson: jsonb('topic_tags_json').default(sql`'[]'::jsonb`),
+  metadataJson: jsonb('metadata_json').default(sql`'{}'::jsonb`),
+  active: integer('active').notNull().default(1),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const newsletterSubscriptions = pgTable('newsletter_subscriptions', {
+  id: text('id').primaryKey(),
+  agentId: text('agent_id').notNull(),
+  mailboxId: text('mailbox_id').notNull(),
+  sourceId: text('source_id').notNull(),
+  status: text('status').notNull().default('active'),
+  deliveryMode: text('delivery_mode').notNull().default('digest'),
+  lastReceivedAt: doublePrecision('last_received_at'),
+  lastProcessedAt: doublePrecision('last_processed_at'),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+export const mailLearningEvents = pgTable('mail_learning_events', {
+  id: text('id').primaryKey(),
+  messageId: text('message_id').notNull(),
+  agentId: text('agent_id'),
+  skillId: text('skill_id'),
+  eventType: text('event_type').notNull(),
+  payloadJson: jsonb('payload_json').default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
