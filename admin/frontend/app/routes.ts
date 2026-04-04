@@ -42,5 +42,10 @@ export default [
     route("msg-bus", "routes/msg-bus.tsx"),
     route("env-tools", "routes/env-tools.tsx"),
     route("learnings", "routes/learnings.tsx"),
+    route("customer-scores", "routes/customer-scores.tsx"),
+    route("skill-feedback", "routes/skill-feedback.tsx"),
+    route("calendar", "routes/calendar.tsx"),
+    route("forge-runs", "routes/forge-runs.tsx"),
+    route("routing", "routes/routing.tsx"),
   ]),
 ] satisfies RouteConfig

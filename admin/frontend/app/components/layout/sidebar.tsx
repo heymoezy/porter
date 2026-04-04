@@ -11,7 +11,8 @@ import {
   Route, BookOpen,
   Code2, Palette, Network, Flame, Lightbulb,
   Shield, GitBranch, DollarSign, Swords, ScrollText,
-  Radio, Wrench, GraduationCap, Activity,
+  Radio, Wrench, GraduationCap, Activity, CalendarDays,
+  Factory, Compass, HeartPulse, MessageCircle,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -32,17 +33,22 @@ const groups = [
   ]},
   { label: "Business", items: [
     { icon: Users, label: "Customers", path: "/users" },
+    { icon: HeartPulse, label: "Scores", path: "/customer-scores" },
     { icon: CreditCard, label: "Revenue", path: "/billing" },
     { icon: DollarSign, label: "Costs", path: "/costs" },
+    { icon: CalendarDays, label: "Calendar", path: "/calendar" },
   ]},
   { label: "Agents", items: [
     { icon: Flame, label: "Forge", path: "/forge" },
+    { icon: Factory, label: "Pipeline", path: "/forge-runs" },
     { icon: Network, label: "Org Chart", path: "/org-chart" },
     { icon: Mail, label: "Email", path: "/email" },
     { icon: Swords, label: "Battle Arena", path: "/battles" },
+    { icon: MessageCircle, label: "Skill Feedback", path: "/skill-feedback" },
   ]},
   { label: "Ops", items: [
     { icon: Route, label: "Bridge", path: "/bridge" },
+    { icon: Compass, label: "Routing", path: "/routing" },
     { icon: BookOpen, label: "Recall", path: "/recall" },
     { icon: Radio, label: "Message Bus", path: "/msg-bus" },
     { icon: Activity, label: "Sessions", path: "/sessions" },
