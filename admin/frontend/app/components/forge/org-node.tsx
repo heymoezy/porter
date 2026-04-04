@@ -9,7 +9,7 @@ interface OrgNodeAgent {
   name: string
   role: string
   template?: string
-  team: "forge" | "product" | "admin" | "marketing"
+  team: string
   appearance?: {
     skin?: string
     hair?: string

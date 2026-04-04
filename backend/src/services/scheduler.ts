@@ -26,8 +26,6 @@ const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
 const RPG_RECALC_INTERVAL = 150; // 150 ticks × 2s = 300s = 5 minutes
 const INTEL_EXTRACTION_INTERVAL = 10800; // 10800 ticks × 2s = 6h
 const EVO_ANALYSIS_INTERVAL = 10800; // 10800 ticks x 2s = 6h
-const SYSTEM_JOB_INTERVAL = 1800;    // 1800 ticks x 2s = 60 min
-const GATEWAY_CHECK_INTERVAL = 900;  // 900 ticks x 2s = 30 min
 const WATCHER_SCHEDULE_INTERVAL = 30; // 30 ticks x 2s = 60s — check for due watchers every minute
 const ATLAS_CHECK_INTERVAL = 900;     // 900 ticks x 2s = 30 min — check project structure every 30 minutes
 const CONTEXT_PRESSURE_THRESHOLD = 0.8;
@@ -365,16 +363,6 @@ async function tick() {
     // Skill evolution analysis — every 6h
     if (tickCount > 0 && tickCount % EVO_ANALYSIS_INTERVAL === 0) {
       analyzeSkillEvolution().catch(err => console.error('[scheduler:evo] analysis error:', err));
-    }
-
-    // AJQ-03: Self-scheduled system jobs
-    if (tickCount > 0 && tickCount % SYSTEM_JOB_INTERVAL === 0) {
-      scheduleSystemJob('health_sweep', {}).catch(err =>
-        console.error('[scheduler:system] health_sweep enqueue error', err));
-    }
-    if (tickCount > 0 && tickCount % GATEWAY_CHECK_INTERVAL === 0) {
-      scheduleSystemJob('gateway_check', {}).catch(err =>
-        console.error('[scheduler:system] gateway_check enqueue error', err));
     }
 
     // PMN: Schedule due watcher runs every 60s
@@ -723,33 +711,6 @@ async function executeJob(job: JobRow): Promise<void> {
         await logActivity(job.agent_id, job.id, job.project_id, 'job_failed',
           `External call failed after ${MAX_ATTEMPTS} attempts: ${errMsg}`, '{}');
       }
-    }
-    return;
-  }
-
-  // AJQ-03: System health sweep
-  if (job.trigger_type === 'health_sweep') {
-    try {
-      const probeResult = await runHealthProbe();
-      const summary = typeof probeResult === 'object' ? JSON.stringify(probeResult) : String(probeResult);
-      await markJobComplete(job.id, summary.slice(0, 2000));
-      await logActivity('system', job.id, null, 'health_sweep_complete', 'System health sweep completed', summary.slice(0, 500));
-    } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e);
-      await markJobFailed(job.id, errMsg);
-    }
-    return;
-  }
-
-  // AJQ-03: Gateway check
-  if (job.trigger_type === 'gateway_check') {
-    try {
-      await refreshAllGateways(pool);
-      await markJobComplete(job.id, JSON.stringify({ checked_at: Date.now() / 1000 }));
-      await logActivity('system', job.id, null, 'gateway_check_complete', 'Gateway check completed', '{}');
-    } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e);
-      await markJobFailed(job.id, errMsg);
     }
     return;
   }

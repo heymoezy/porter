@@ -8,7 +8,7 @@ import { Input } from "~/components/ui/input"
 import {
   Brain, Search, Filter, ChevronDown, ChevronRight,
   Lightbulb, BookOpen, Clock, Zap, Shield,
-  RefreshCw, Archive, Star, Eye,
+  RefreshCw, Archive, Star, Eye, MessageSquare,
 } from "lucide-react"
 import { getAgentsByTeam } from "~/lib/agent-registry"
 
@@ -106,6 +106,89 @@ function ConceptCard({ concept }: { concept: Concept }) {
   )
 }
 
+// ── Session Search ────────────────────────────────────
+
+interface SessionResult {
+  snippet: string
+  score: number
+  timestamp: string
+  session_id?: string
+}
+
+function SessionSearch() {
+  const [query, setQuery] = useState("")
+  const [debouncedQuery, setDebouncedQuery] = useState("")
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 400)
+    return () => clearTimeout(t)
+  }, [query])
+
+  const results = useQuery({
+    queryKey: ["recall", "session-search", debouncedQuery],
+    queryFn: () =>
+      api<{ results: SessionResult[] }>(`/api/v1/sessions/search?q=${encodeURIComponent(debouncedQuery)}`).catch(() => ({ results: [] })),
+    enabled: debouncedQuery.length > 0,
+  })
+
+  const items = results.data?.results ?? []
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2">
+        <MessageSquare className="size-4 text-accent-porter shrink-0" />
+        <div className="flex-1">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-text3" />
+            <Input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search sessions..."
+              className="pl-8 h-8 text-xs"
+            />
+          </div>
+        </div>
+      </div>
+
+      {debouncedQuery && (
+        <div className="space-y-1.5">
+          {results.isLoading ? (
+            <div className="flex items-center justify-center py-6">
+              <div className="size-4 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
+            </div>
+          ) : items.length === 0 ? (
+            <div className="rounded-lg border border-border bg-surface py-6 text-center">
+              <p className="text-2xs text-text3">No sessions match "{debouncedQuery}"</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-2xs text-text3 px-1">{items.length} session result{items.length !== 1 ? "s" : ""}</p>
+              {items.map((r, i) => (
+                <div
+                  key={`${r.session_id ?? i}`}
+                  className="rounded-lg border border-border/60 bg-card px-3 py-2.5 animate-list-stagger-in"
+                  style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
+                >
+                  <div className="flex items-start gap-2">
+                    <MessageSquare className="size-3.5 text-text3 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-text2 line-clamp-3 whitespace-pre-wrap">{r.snippet}</p>
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <span className="text-2xs text-text3 tabular-nums">{fmtRel(r.timestamp)}</span>
+                        <span className="text-2xs text-text3 tabular-nums">score: {typeof r.score === "number" ? r.score.toFixed(2) : r.score}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main ───────────────────────────────────────────────
 
 function RecallContent() {
@@ -193,6 +276,9 @@ function RecallContent() {
           })}
         </div>
       </div>
+
+      {/* ── Session Search ── */}
+      <SessionSearch />
 
       {/* ── Search + Filters ── */}
       <div className="flex items-center gap-2">

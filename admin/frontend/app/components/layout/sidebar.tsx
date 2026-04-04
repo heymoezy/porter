@@ -10,6 +10,7 @@ import {
   Monitor, FolderOpen, Eye,
   Route, BookOpen,
   Code2, Palette, Network, Flame, Lightbulb,
+  Shield, GitBranch,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -41,6 +42,8 @@ const groups = [
     { icon: Route, label: "Bridge", path: "/bridge" },
     { icon: BookOpen, label: "Recall", path: "/recall" },
     { icon: Eye, label: "Watchers", path: "/watchers" },
+    { icon: Shield, label: "Approvals", path: "/approvals" },
+    { icon: GitBranch, label: "Decomposition", path: "/decomposition" },
     { icon: Lightbulb, label: "Intelligence", path: "/intelligence" },
     { icon: Monitor, label: "System", path: "/system" },
   ]},
