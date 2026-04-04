@@ -38,15 +38,15 @@ const folders: Array<{ id: Folder; label: string; icon: React.ElementType }> = [
   { id: "trash", label: "Trash", icon: Trash2 },
 ]
 
-const senders = [
-  { id: "porter", name: "Porter", email: "porter@askporter.app", role: "System" },
-  { id: "growth", name: "Growth", email: "growth@askporter.app", role: "Agent" },
-  { id: "retention", name: "Retention", email: "retention@askporter.app", role: "Agent" },
-  { id: "security", name: "Security", email: "security@askporter.app", role: "Agent" },
-  { id: "billing", name: "Billing", email: "billing@askporter.app", role: "Staff" },
-  { id: "support", name: "Support", email: "support@askporter.app", role: "Staff" },
-  { id: "moe", name: "Moe", email: "moe@askporter.app", role: "Admin" },
-]
+interface MailIdentity {
+  mailboxId: string
+  address: string
+  displayName: string
+  agentId: string
+  agentName: string
+  role: string
+  isPrimary: boolean
+}
 
 function fmtDate(ts: number | null) {
   if (!ts) return ""
@@ -71,7 +71,7 @@ function EmailContent() {
   const [activeFolder, setActiveFolder] = useState<Folder>("inbox")
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [composing, setComposing] = useState(false)
-  const [composeData, setComposeData] = useState({ from: "porter", to: "", subject: "", body: "" })
+  const [composeData, setComposeData] = useState({ from: "", to: "", subject: "", body: "" })
   const [showFromPicker, setShowFromPicker] = useState(false)
   const [showSmtp, setShowSmtp] = useState(false)
   const [smtpForm, setSmtpForm] = useState<Record<string, string>>({})
@@ -81,6 +81,19 @@ function EmailContent() {
     queryKey: ["admin", "email", "config"],
     queryFn: () => api<{ configured: boolean; host: string; port: number; user: string; hasPassword: boolean; fromName: string; fromEmail: string; replyTo: string }>("/api/admin/email/config"),
   })
+
+  const identitiesQuery = useQuery({
+    queryKey: ["mail", "identities"],
+    queryFn: () => api<{ identities: MailIdentity[] }>("/api/v1/mail"),
+  })
+
+  const senders = (identitiesQuery.data?.identities ?? []).map(i => ({
+    id: i.mailboxId,
+    name: i.displayName || i.agentName,
+    email: i.address,
+    role: i.role || "Agent",
+    agentId: i.agentId,
+  }))
 
   const saveSmtp = useMutation({
     mutationFn: (data: Record<string, string>) => api("/api/admin/email/config", { method: "PUT", json: data }),
@@ -103,7 +116,7 @@ function EmailContent() {
       api("/api/admin/email/messages", { method: "POST", json: data }),
     onSuccess: () => {
       setComposing(false)
-      setComposeData({ from: "porter", to: "", subject: "", body: "" })
+      setComposeData({ from: "", to: "", subject: "", body: "" })
       qc.invalidateQueries({ queryKey: ["admin", "email"] })
     },
   })
@@ -115,7 +128,9 @@ function EmailContent() {
 
   const messages = listData?.messages ?? []
   const counts = listData?.folderCounts ?? {}
-  const activeSender = senders.find(s => s.id === composeData.from) || senders[0]
+  const primaryIdentity = identitiesQuery.data?.identities?.find(i => i.isPrimary)
+  const defaultSenderId = primaryIdentity?.mailboxId ?? senders[0]?.id ?? ""
+  const activeSender = senders.find(s => s.id === (composeData.from || defaultSenderId)) ?? senders[0]
 
   function execFormat(cmd: string, value?: string) {
     document.execCommand(cmd, false, value)
@@ -123,6 +138,7 @@ function EmailContent() {
   }
 
   function handleSend(asDraft: boolean) {
+    if (!activeSender) return
     const html = editorRef.current?.innerHTML || ""
     const text = editorRef.current?.textContent || ""
     sendMessage.mutate({
@@ -229,21 +245,33 @@ function EmailContent() {
                 <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Compose</span>
               </div>
               <div className="flex gap-1">
-                <Button variant="outline" size="sm" className="h-6 text-2xs" onClick={() => handleSend(true)}>Draft</Button>
-                <Button size="sm" className="h-6 text-2xs gap-1" onClick={() => handleSend(false)}><Send className="size-2.5" /> Send</Button>
+                <Button variant="outline" size="sm" className="h-6 text-2xs" onClick={() => handleSend(true)} disabled={!activeSender}>Draft</Button>
+                <Button size="sm" className="h-6 text-2xs gap-1" onClick={() => handleSend(false)} disabled={!activeSender}><Send className="size-2.5" /> Send</Button>
               </div>
             </div>
 
-            {/* From */}
+            {/* From — loading / empty / picker */}
+            {identitiesQuery.isLoading ? (
+              <div className="px-3 py-2 border-b border-border/50 flex items-center gap-2">
+                <span className="text-2xs text-text3 w-10">From</span>
+                <div className="size-3.5 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
+                <span className="text-2xs text-text3">Loading mailboxes...</span>
+              </div>
+            ) : senders.length === 0 ? (
+              <div className="px-3 py-3 border-b border-border/50 flex items-center gap-2">
+                <AlertTriangle className="size-3.5 text-warning shrink-0" />
+                <span className="text-xs text-text3">No mailboxes provisioned. Go to <strong className="text-text2">Admin &gt; Mail</strong> to set up agent mailboxes.</span>
+              </div>
+            ) : (
             <div className="px-3 py-1 border-b border-border/50 flex items-center gap-2 relative">
               <span className="text-2xs text-text3 w-10">From</span>
               <button
                 onClick={() => setShowFromPicker(!showFromPicker)}
                 className="flex items-center gap-1.5 rounded px-2 py-0.5 text-xs hover:bg-raised transition-colors"
               >
-                <Badge className="text-2xs bg-accent-porter/15 text-accent-porter border-0">{activeSender.role}</Badge>
-                <span className="font-medium text-text">{activeSender.name}</span>
-                <span className="text-text3">&lt;{activeSender.email}&gt;</span>
+                <Badge className="text-2xs bg-accent-porter/15 text-accent-porter border-0">{activeSender?.role}</Badge>
+                <span className="font-medium text-text">{activeSender?.name}</span>
+                <span className="text-text3">&lt;{activeSender?.email}&gt;</span>
                 <ChevronDown className="size-2.5 text-text3" />
               </button>
               {showFromPicker && (
@@ -252,7 +280,7 @@ function EmailContent() {
                     <button
                       key={s.id}
                       onClick={() => { setComposeData(d => ({ ...d, from: s.id })); setShowFromPicker(false) }}
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-raised transition-colors ${s.id === composeData.from ? "bg-accent-porter/10" : ""}`}
+                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-raised transition-colors ${s.id === (composeData.from || defaultSenderId) ? "bg-accent-porter/10" : ""}`}
                     >
                       <Badge className="text-2xs bg-text3/15 text-text3 border-0 w-12 justify-center">{s.role}</Badge>
                       <span className="font-medium text-text">{s.name}</span>
@@ -262,6 +290,7 @@ function EmailContent() {
                 </div>
               )}
             </div>
+            )}
 
             {/* To */}
             <div className="px-3 py-1 border-b border-border/50 flex items-center gap-2">
