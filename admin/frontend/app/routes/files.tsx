@@ -454,15 +454,22 @@ export default function FilesPage() {
     setDragging(false)
     if (!activeRoot || !dirWritable) return
 
-    // Use webkitGetAsEntry to support folder drops
+    // Collect all entries SYNCHRONOUSLY before any await — the
+    // dataTransfer object is cleared by the browser after the
+    // event handler yields.
+    const entries: FileSystemEntry[] = []
     const items = e.dataTransfer.items
     if (items && items.length > 0) {
-      const allFiles: File[] = []
       for (let i = 0; i < items.length; i++) {
         const entry = items[i].webkitGetAsEntry?.()
-        if (entry) {
-          allFiles.push(...await readEntryRecursive(entry, ""))
-        }
+        if (entry) entries.push(entry)
+      }
+    }
+
+    if (entries.length > 0) {
+      const allFiles: File[] = []
+      for (const entry of entries) {
+        allFiles.push(...await readEntryRecursive(entry, ""))
       }
       if (allFiles.length > 0) {
         uploadFilesWithPaths(allFiles)
