@@ -19,6 +19,7 @@ import customersRoutes from './customers.js';
 import intelligenceRoutes from './intelligence.js';
 import jobsRoutes from '../v1/admin/jobs.js';
 import watchersRoutes from '../v1/admin/watchers.js';
+import mailAdminRoutes from '../v1/mail-admin.js';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(healthRoutes, { prefix: '/health' });
@@ -41,4 +42,5 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(intelligenceRoutes, { prefix: '/intelligence' });
   fastify.register(jobsRoutes, { prefix: '/jobs' });
   fastify.register(watchersRoutes, { prefix: '/watchers' });
+  fastify.register(mailAdminRoutes, { prefix: '/mail' });
 }
