@@ -17,6 +17,8 @@ import settingsRoutes from './settings.js';
 import chatRoutes from './chat.js';
 import customersRoutes from './customers.js';
 import intelligenceRoutes from './intelligence.js';
+import jobsRoutes from '../v1/admin/jobs.js';
+import watchersRoutes from '../v1/admin/watchers.js';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(healthRoutes, { prefix: '/health' });
@@ -37,4 +39,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(settingsRoutes, { prefix: '/settings' });
   fastify.register(chatRoutes, { prefix: '/porter' });
   fastify.register(intelligenceRoutes, { prefix: '/intelligence' });
+  fastify.register(jobsRoutes, { prefix: '/jobs' });
+  fastify.register(watchersRoutes, { prefix: '/watchers' });
 }
