@@ -11,7 +11,7 @@ import { PixelPortrait } from "~/components/pixel-portrait"
 import { Link } from "react-router"
 import {
   FolderKanban, Bot, Check, Sparkles, BarChart2,
-  ArrowRight, TrendingUp, Clock, Zap,
+  ArrowRight, TrendingUp, Clock, Zap, DollarSign,
   Monitor, Loader2, Shield, Activity,
 } from "lucide-react"
 
@@ -58,6 +58,12 @@ interface DashboardData {
   tokens: { input: number; output: number; requests: number }
   learnings: number; skills: number; version: string
   recentActivity: Array<{ ts: number; actor: string; action: string; target: string }>
+}
+interface CostData {
+  totals: { total_cost: number; total_dispatches: number; total_input: string; total_output: string; total_cached: string }
+  byGateway: Array<{ gateway_name: string; dispatches: number; total_cost: number; total_input: string; total_output: string; avg_latency: number }>
+  byModel: Array<{ model_name: string; dispatches: number; total_cost: number }>
+  daily: Array<{ date: string; cost: number; dispatches: number; input_tokens: string; output_tokens: string }>
 }
 interface SystemData {
   memory: { pct: number }; disk: { pct: number }
@@ -183,6 +189,11 @@ function DashboardContent() {
     queryFn: () => api<SystemData>("/api/admin/system"),
     refetchInterval: 60_000,
   })
+  const { data: costs } = useQuery({
+    queryKey: ["admin", "costs"],
+    queryFn: () => api<CostData>("/api/admin/costs"),
+    refetchInterval: 60_000,
+  })
 
   if (!d) return (
     <div className="flex items-center justify-center py-20">
@@ -281,8 +292,9 @@ function DashboardContent() {
 
           {/* Bottom metrics row */}
           <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border/20">
-            <span className="flex items-center gap-1.5 text-2xs"><Zap className="h-3.5 w-3.5 text-warning" /><span className="font-bold text-warning">$148k</span><span className="text-text3/50">value created</span></span>
-            <span className="flex items-center gap-1.5 text-2xs"><Clock className="h-3.5 w-3.5 text-chart-2" /><span className="font-bold text-chart-2">2,840h</span><span className="text-text3/50">saved</span></span>
+            <Link to="/costs" className="flex items-center gap-1.5 text-2xs hover:opacity-80 transition-opacity"><DollarSign className="h-3.5 w-3.5 text-success" /><span className="font-bold text-success">${costs?.totals.total_cost?.toFixed(4) ?? "0.00"}</span><span className="text-text3/50">spent</span></Link>
+            <Link to="/costs" className="flex items-center gap-1.5 text-2xs hover:opacity-80 transition-opacity"><Zap className="h-3.5 w-3.5 text-warning" /><span className="font-bold text-warning">{costs?.totals.total_dispatches ?? 0}</span><span className="text-text3/50">dispatches</span></Link>
+            <span className="flex items-center gap-1.5 text-2xs"><BarChart2 className="h-3.5 w-3.5 text-chart-2" /><span className="font-bold text-chart-2">{costs ? `${((parseInt(costs.totals.total_input) + parseInt(costs.totals.total_output)) / 1000).toFixed(1)}k` : "0"}</span><span className="text-text3/50">tokens</span></span>
             <span className="flex items-center gap-1.5 text-2xs"><Bot className="h-3.5 w-3.5 text-accent-porter" /><span className="font-bold text-foreground">{d?.agents ?? 0}</span><span className="text-text3/50">agents</span></span>
             <span className="flex items-center gap-1.5 text-2xs"><FolderKanban className="h-3.5 w-3.5 text-accent-porter" /><span className="font-bold text-foreground">{d?.projects.total ?? 0}</span><span className="text-text3/50">projects</span></span>
             <span className="flex items-center gap-1.5 text-2xs"><Check className="h-3.5 w-3.5 text-success" /><span className="font-bold text-foreground"><AnimCount to={d?.tasks ?? 0} duration={2000} /></span><span className="text-text3/50">tasks done</span></span>

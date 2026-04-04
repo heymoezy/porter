@@ -58,6 +58,8 @@ function usePreloader() {
           queryClient.prefetchQuery({ queryKey: ["recall", "concepts", "all", "all", ""], queryFn: () => api("/api/v1/memory/concepts?limit=100").catch(() => ({ concepts: [], count: 0 })) }),
           // Forge
           queryClient.prefetchQuery({ queryKey: ["forge", "state"], queryFn: () => api("/api/admin/forge").catch(() => ({})) }),
+          // Costs
+          queryClient.prefetchQuery({ queryKey: ["admin", "costs"], queryFn: () => api("/api/admin/costs").catch(() => ({ totals: {}, byGateway: [], byModel: [], daily: [] })) }),
         ]
 
         await Promise.all(prefetches)
