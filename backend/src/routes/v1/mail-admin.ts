@@ -12,6 +12,7 @@ import * as mailboxService from '../../services/mail/mailbox-service.js';
 import * as deliveryService from '../../services/mail/delivery-service.js';
 import * as learningService from '../../services/mail/mail-learning-service.js';
 import { syncMailbox } from '../../services/mail/sync-service.js';
+import { checkGmailHealth } from '../../services/mail/gmail-connector.js';
 
 // ── Routes ─────────────────────────────────────────────────────────────
 
@@ -28,11 +29,15 @@ export default async function mailAdminRoutes(fastify: FastifyInstance) {
         stalwartReachable = false;
       }
     }
+    const gmailStatus = await checkGmailHealth();
     return reply.send(ok({
       provider: config.mail.provider,
       defaultDomain: config.mail.defaultDomain,
       stalwartConfigured: !!config.mail.stalwartApiKey,
       stalwartReachable,
+      connectors: {
+        gmail: gmailStatus,
+      },
     }));
   });
 

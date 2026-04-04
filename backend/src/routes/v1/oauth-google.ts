@@ -142,8 +142,10 @@ export default async function oauthGoogleRoutes(fastify: FastifyInstance) {
         display_name: userEmail,
       }).catch(() => {});
 
-      // Start IMAP IDLE immediately after successful OAuth
-      // Dynamic import avoids circular dependency at module load time
+      // LEGACY: auto-start IMAP IDLE — this is the old Gmail-as-core pattern
+      // New architecture: Gmail is a connector, not the primary mail system
+      // Stalwart is the primary mail backend; Gmail is an optional import path
+      // IMAP IDLE will be removed in Tranche 12
       const { startImapIdle } = await import('../../services/email.js');
       startImapIdle().catch((err: Error) => {
         console.error('[email] IMAP IDLE start after OAuth failed:', err.message);

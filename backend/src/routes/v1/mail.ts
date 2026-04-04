@@ -13,6 +13,7 @@ import { processInboundEmail, type InboundEmailPayload } from '../../services/ma
 import { handleStalwartWebhook, type StalwartWebhookEvent } from '../../services/mail/stalwart-webhooks.js';
 import * as newsletterService from '../../services/mail/newsletter-service.js';
 import * as learningService from '../../services/mail/mail-learning-service.js';
+import { checkGmailHealth, getGmailConnector, importFromGmail } from '../../services/mail/gmail-connector.js';
 
 export default async function mailRoutes(fastify: FastifyInstance) {
   // GET /api/v1/mail — list agent identities for compose picker
@@ -417,5 +418,48 @@ export default async function mailRoutes(fastify: FastifyInstance) {
       limit: query.limit ? parseInt(query.limit, 10) : undefined,
     });
     return reply.send(ok({ events }));
+  });
+
+  // ── Gmail Connector ────────────────────────────────────────────────────
+  // Gmail is an optional external connector, NOT the primary mail backend.
+  // These endpoints allow importing from Gmail into Porter's hosted mail system.
+
+  // GET /api/v1/mail/connectors/gmail/status — check Gmail connector health
+  fastify.get('/connectors/gmail/status', async (_request, reply) => {
+    const status = await checkGmailHealth();
+    return reply.send(ok(status));
+  });
+
+  // POST /api/v1/mail/import/gmail — import messages from Gmail
+  fastify.post('/import/gmail', async (request, reply) => {
+    const body = request.body as {
+      mailboxId?: string;
+      since?: number;
+      maxResults?: number;
+    } | undefined;
+
+    if (!body?.mailboxId) {
+      return reply.status(400).send(err('MISSING_FIELDS', 'mailboxId is required'));
+    }
+
+    const connector = await getGmailConnector();
+    if (!connector) {
+      return reply.status(404).send(
+        err('NO_CONNECTOR', 'No Gmail connector configured — connect via Google OAuth first'),
+      );
+    }
+
+    try {
+      const result = await importFromGmail({
+        connector,
+        mailboxId: body.mailboxId,
+        since: body.since,
+        maxResults: body.maxResults,
+      });
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('IMPORT_FAILED', message));
+    }
   });
 }
