@@ -9,6 +9,7 @@ import { pool } from '../../db/client.js';
 import { createMessage } from './message-service.js';
 import { getMailboxByAddress } from './mailbox-service.js';
 import { broadcast } from '../sse-hub.js';
+import { isLikelyNewsletter, detectOrCreateSource } from './newsletter-service.js';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -108,6 +109,18 @@ export async function processInboundEmail(payload: InboundEmailPayload): Promise
     attachments: payload.attachments,
     receivedAt: payload.receivedAt ?? Math.floor(Date.now() / 1000),
   });
+
+  // 3b. Newsletter detection — auto-create source if this looks like a newsletter
+  if (isLikelyNewsletter({ fromAddress: payload.from, headers: payload.headers, subject: payload.subject })) {
+    try {
+      await detectOrCreateSource({
+        mailboxId,
+        fromAddress: payload.from,
+        fromName: payload.fromName || '',
+        headers: payload.headers,
+      });
+    } catch { /* non-critical — don't block inbound processing */ }
+  }
 
   // 4. Broadcast SSE event
   broadcast('mail:inbound', {

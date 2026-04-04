@@ -11,6 +11,8 @@ import * as messageService from '../../services/mail/message-service.js';
 import { sendMail, createDraft, replyToMessage } from '../../services/mail/send-service.js';
 import { processInboundEmail, type InboundEmailPayload } from '../../services/mail/inbound-processor.js';
 import { handleStalwartWebhook, type StalwartWebhookEvent } from '../../services/mail/stalwart-webhooks.js';
+import * as newsletterService from '../../services/mail/newsletter-service.js';
+import * as learningService from '../../services/mail/mail-learning-service.js';
 
 export default async function mailRoutes(fastify: FastifyInstance) {
   // GET /api/v1/mail — list agent identities for compose picker
@@ -279,5 +281,141 @@ export default async function mailRoutes(fastify: FastifyInstance) {
       console.error('[mail] Webhook processing error:', message);
       return reply.status(500).send(err('WEBHOOK_FAILED', message));
     }
+  });
+
+  // ── Newsletter Sources ──────────────────────────────────────────────────
+
+  // GET /api/v1/mail/newsletters/sources — list all newsletter sources
+  fastify.get('/newsletters/sources', async (request, reply) => {
+    const query = request.query as { mailboxId?: string; active?: string };
+    const sources = await newsletterService.listSources({
+      mailboxId: query.mailboxId,
+      active: query.active !== undefined ? query.active === 'true' : undefined,
+    });
+    return reply.send(ok({ sources }));
+  });
+
+  // POST /api/v1/mail/newsletters/sources — create a newsletter source
+  fastify.post('/newsletters/sources', async (request, reply) => {
+    const body = request.body as {
+      sourceType?: string;
+      sourceKey?: string;
+      displayName?: string;
+      mailboxId?: string;
+      senderPattern?: string;
+      trustLevel?: string;
+      topicTags?: string[];
+    } | undefined;
+
+    if (!body?.sourceType || !body?.sourceKey || !body?.displayName) {
+      return reply.status(400).send(
+        err('MISSING_FIELDS', 'sourceType, sourceKey, and displayName are required'),
+      );
+    }
+
+    const result = await newsletterService.createSource({
+      sourceType: body.sourceType,
+      sourceKey: body.sourceKey,
+      displayName: body.displayName,
+      mailboxId: body.mailboxId,
+      senderPattern: body.senderPattern,
+      trustLevel: body.trustLevel,
+      topicTags: body.topicTags,
+    });
+    return reply.status(201).send(ok(result));
+  });
+
+  // PATCH /api/v1/mail/newsletters/sources/:id — update a newsletter source
+  fastify.patch('/newsletters/sources/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as {
+      displayName?: string;
+      trustLevel?: string;
+      topicTags?: string[];
+      active?: boolean;
+    } | undefined;
+
+    const existing = await newsletterService.getSourceById(id);
+    if (!existing) {
+      return reply.status(404).send(err('NOT_FOUND', `Newsletter source not found: ${id}`));
+    }
+
+    await newsletterService.updateSource(id, body ?? {});
+    return reply.send(ok({ id, updated: true }));
+  });
+
+  // DELETE /api/v1/mail/newsletters/sources/:id — delete a newsletter source
+  fastify.delete('/newsletters/sources/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const existing = await newsletterService.getSourceById(id);
+    if (!existing) {
+      return reply.status(404).send(err('NOT_FOUND', `Newsletter source not found: ${id}`));
+    }
+
+    await newsletterService.deleteSource(id);
+    return reply.send(ok({ id, deleted: true }));
+  });
+
+  // ── Newsletter Subscriptions ────────────────────────────────────────────
+
+  // POST /api/v1/mail/newsletters/subscribe — create a subscription
+  fastify.post('/newsletters/subscribe', async (request, reply) => {
+    const body = request.body as {
+      agentId?: string;
+      mailboxId?: string;
+      sourceId?: string;
+      deliveryMode?: string;
+    } | undefined;
+
+    if (!body?.agentId || !body?.mailboxId || !body?.sourceId) {
+      return reply.status(400).send(
+        err('MISSING_FIELDS', 'agentId, mailboxId, and sourceId are required'),
+      );
+    }
+
+    const result = await newsletterService.subscribe({
+      agentId: body.agentId,
+      mailboxId: body.mailboxId,
+      sourceId: body.sourceId,
+      deliveryMode: body.deliveryMode,
+    });
+    return reply.status(201).send(ok(result));
+  });
+
+  // POST /api/v1/mail/newsletters/unsubscribe — cancel a subscription
+  fastify.post('/newsletters/unsubscribe', async (request, reply) => {
+    const body = request.body as { subscriptionId?: string } | undefined;
+    if (!body?.subscriptionId) {
+      return reply.status(400).send(err('MISSING_FIELDS', 'subscriptionId is required'));
+    }
+
+    await newsletterService.unsubscribe(body.subscriptionId);
+    return reply.send(ok({ subscriptionId: body.subscriptionId, status: 'cancelled' }));
+  });
+
+  // GET /api/v1/mail/agents/:agentId/subscriptions — get agent subscriptions
+  fastify.get('/agents/:agentId/subscriptions', async (request, reply) => {
+    const { agentId } = request.params as { agentId: string };
+    const subscriptions = await newsletterService.getAgentSubscriptions(agentId);
+    return reply.send(ok({ subscriptions }));
+  });
+
+  // ── Learning Events ─────────────────────────────────────────────────────
+
+  // GET /api/v1/mail/newsletters/learning-events — query learning audit trail
+  fastify.get('/newsletters/learning-events', async (request, reply) => {
+    const query = request.query as {
+      agentId?: string;
+      messageId?: string;
+      eventType?: string;
+      limit?: string;
+    };
+    const events = await learningService.getLearningEvents({
+      agentId: query.agentId,
+      messageId: query.messageId,
+      eventType: query.eventType,
+      limit: query.limit ? parseInt(query.limit, 10) : undefined,
+    });
+    return reply.send(ok({ events }));
   });
 }
