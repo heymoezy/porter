@@ -37,6 +37,14 @@ export const config = {
   // Persona file storage (admin agents/templates routes)
   personasDir: process.env.PORTER_PERSONAS_DIR || path.join(process.env.PORTER_DATA_DIR || path.join(process.env.HOME || os.homedir(), '.porter'), 'personas'),
 
+  // Mail subsystem (Stalwart or other provider) — agent mailboxes, newsletters, etc.
+  mail: {
+    provider: process.env.MAIL_PROVIDER || 'stalwart',
+    stalwartUrl: process.env.STALWART_URL || 'http://127.0.0.1:443',
+    stalwartApiKey: process.env.STALWART_API_KEY || '',
+    defaultDomain: process.env.MAIL_DEFAULT_DOMAIN || 'askporter.app',
+  },
+
   // SMTP config (admin email routes) — all optional, email features disabled when absent.
   smtp: {
     host: process.env.SMTP_HOST ?? '',
