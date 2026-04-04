@@ -4,6 +4,8 @@
  */
 
 import crypto from 'node:crypto';
+import nodemailer from 'nodemailer';
+import { config } from '../../config.js';
 import { StalwartAdminClient } from './stalwart-admin-client.js';
 import type { MailProvider } from './provider-interface.js';
 import type {
@@ -101,16 +103,36 @@ export class StalwartMailProvider implements MailProvider {
   // ── Send Message ────────────────────────────────────────────────────
 
   async sendMessage(input: ProviderSendMessageInput): Promise<ProviderSendMessageResult> {
-    // Generate Message-ID for tracking
     const messageId = `<${crypto.randomUUID()}@askporter.app>`;
 
-    // For now (no Stalwart SMTP submission running): log the send and return the message-id.
-    // This allows the full pipeline to work end-to-end without infrastructure.
-    // When Stalwart is running, this will submit via SMTP port 587.
-    console.log(
-      `[mail-send] from=${input.from} to=${input.to.join(',')} subject=${input.subject}`,
-    );
+    // Auth as the sending mailbox — look up password from Stalwart
+    const localPart = input.from.split('@')[0];
+    const account = await this.client.getAccount(localPart) as { data?: { secrets?: string[] } } | null;
+    const password = account?.data?.secrets?.[0];
+    if (!password) throw new Error(`No credentials for mailbox ${input.from}`);
 
-    return { providerMessageId: messageId };
+    const transport = nodemailer.createTransport({
+      host: '127.0.0.1',
+      port: 465,
+      secure: true,
+      auth: { user: localPart, pass: password },
+      tls: { rejectUnauthorized: false },
+    });
+
+    const info = await transport.sendMail({
+      from: input.from,
+      to: input.to.join(', '),
+      cc: input.cc?.join(', ') || undefined,
+      bcc: input.bcc?.join(', ') || undefined,
+      subject: input.subject,
+      text: input.textBody,
+      html: input.htmlBody || undefined,
+      messageId,
+      inReplyTo: input.inReplyTo || undefined,
+      references: input.references || undefined,
+    });
+
+    console.log(`[mail-send] sent from=${input.from} to=${input.to.join(',')} msgId=${info.messageId}`);
+    return { providerMessageId: info.messageId || messageId };
   }
 }

@@ -80,6 +80,7 @@ export class StalwartAdminClient {
       name: opts.name,
       emails: [opts.email],
       secrets: [opts.password],
+      roles: ['user'],
     };
     if (opts.quota !== undefined) {
       body.quota = opts.quota;
