@@ -339,7 +339,16 @@ export default async function filesV1Routes(fastify: FastifyInstance, _opts: Fas
         return reply.code(403).send(err('READ_ONLY', 'Directory is read-only'));
       }
     } catch {
-      return reply.code(404).send(err('NOT_FOUND', 'Target directory not found'));
+      // Auto-create subdirectories for folder uploads — verify the root is writable first
+      try {
+        const rootStat = await fs.stat(rootPath);
+        if (rootStat.uid !== process.getuid!()) {
+          return reply.code(403).send(err('READ_ONLY', 'Directory is read-only'));
+        }
+        await fs.mkdir(targetDir, { recursive: true });
+      } catch {
+        return reply.code(404).send(err('NOT_FOUND', 'Target directory not found'));
+      }
     }
 
     const sanitized = safeName(filename);

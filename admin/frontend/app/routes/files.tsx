@@ -340,6 +340,37 @@ export default function FilesPage() {
     setTimeout(() => setUploadQueue(prev => prev.filter(item => item.status !== "done")), 1500)
   }
 
+  async function uploadFilesWithPaths(files: File[]) {
+    setUploadError(null)
+    const root = activeRootRef.current
+    const basePath = currentPathRef.current
+    const queue = files.map(f => ({ name: (f as any)._relativePath || f.name, status: "pending" as const, pct: 0 }))
+    setUploadQueue(queue)
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const relPath = (file as any)._relativePath || file.name
+      // Compute the upload directory (everything except the filename)
+      const parts = relPath.split("/")
+      const fileName = parts.pop()!
+      const subDir = parts.length > 0 ? (basePath ? `${basePath}/${parts.join("/")}` : parts.join("/")) : basePath
+
+      setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "uploading", pct: 0 } : item))
+      try {
+        // Upload with the subdirectory path — backend will auto-create dirs
+        await uploadOneFile(file, root, subDir, (pct) => {
+          setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, pct } : item))
+        })
+        setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "done", pct: 100 } : item))
+      } catch (e) {
+        setUploadError((e as Error).message)
+        setUploadQueue(prev => prev.map((item, idx) => idx === i ? { ...item, status: "error" } : item))
+        break
+      }
+    }
+    qc.invalidateQueries({ queryKey: ["files", "list"] })
+    setTimeout(() => setUploadQueue(prev => prev.filter(item => item.status !== "done")), 1500)
+  }
+
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (files && files.length > 0) uploadFiles(files)
@@ -384,14 +415,64 @@ export default function FilesPage() {
     e.preventDefault()
   }
 
-  function handleDrop(e: React.DragEvent) {
+  async function readEntryRecursive(entry: FileSystemEntry, basePath: string): Promise<File[]> {
+    if (entry.isFile) {
+      return new Promise((resolve) => {
+        (entry as FileSystemFileEntry).file(f => {
+          // Attach relative path so uploadFiles can place it correctly
+          Object.defineProperty(f, '_relativePath', { value: basePath ? `${basePath}/${f.name}` : f.name })
+          resolve([f])
+        }, () => resolve([]))
+      })
+    }
+    if (entry.isDirectory) {
+      const reader = (entry as FileSystemDirectoryEntry).createReader()
+      const entries = await new Promise<FileSystemEntry[]>((resolve) => {
+        const all: FileSystemEntry[] = []
+        const readBatch = () => {
+          reader.readEntries(batch => {
+            if (batch.length === 0) { resolve(all); return }
+            all.push(...batch)
+            readBatch()
+          }, () => resolve(all))
+        }
+        readBatch()
+      })
+      const subPath = basePath ? `${basePath}/${entry.name}` : entry.name
+      const files: File[] = []
+      for (const sub of entries) {
+        files.push(...await readEntryRecursive(sub, subPath))
+      }
+      return files
+    }
+    return []
+  }
+
+  async function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     dragCounter.current = 0
     setDragging(false)
-    const files = e.dataTransfer.files
-    if (files.length > 0 && activeRoot && dirWritable) {
-      uploadFiles(files)
+    if (!activeRoot || !dirWritable) return
+
+    // Use webkitGetAsEntry to support folder drops
+    const items = e.dataTransfer.items
+    if (items && items.length > 0) {
+      const allFiles: File[] = []
+      for (let i = 0; i < items.length; i++) {
+        const entry = items[i].webkitGetAsEntry?.()
+        if (entry) {
+          allFiles.push(...await readEntryRecursive(entry, ""))
+        }
+      }
+      if (allFiles.length > 0) {
+        uploadFilesWithPaths(allFiles)
+        return
+      }
     }
+
+    // Fallback for browsers without webkitGetAsEntry
+    const files = e.dataTransfer.files
+    if (files.length > 0) uploadFiles(files)
   }
 
   const isLoading = rootsLoading || dirLoading
