@@ -1,7 +1,12 @@
 import { useState, useMemo } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
+import { Button } from "~/components/ui/button"
+import { Input } from "~/components/ui/input"
+import { Label } from "~/components/ui/label"
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "~/components/ui/select"
+import { Plus, RotateCw, Trash2, Pencil, X, Check } from "lucide-react"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -204,6 +209,75 @@ export default function MailAdminPage() {
     queryKey: ["admin", "mail", "mailbox-health", selectedMailboxId],
     queryFn: () => api<MailboxHealth>(`/api/admin/mail/mailboxes/${selectedMailboxId}/health`),
     enabled: !!selectedMailboxId,
+  })
+
+  // ── Mailbox CRUD ────────────────────────────────────
+  const qc = useQueryClient()
+
+  // Agents list for bind-to-agent dropdown
+  const agentsQuery = useQuery({
+    queryKey: ["admin", "agents"],
+    queryFn: () => api<{ agents: Array<{ id: string; name: string; role: string; status: string }> }>("/api/admin/agents"),
+    enabled: tab === "mailboxes",
+  })
+
+  // Mailbox management state
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [createForm, setCreateForm] = useState({ localPart: "", displayName: "", mailboxType: "agent", agentId: "" })
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState("")
+
+  // Primary domain ID — use first domain from domains query
+  const primaryDomain = useMemo(() => {
+    const doms = domains.data?.domains ?? []
+    return doms.find(d => d.is_primary) ?? doms[0] ?? null
+  }, [domains.data])
+
+  // Agents without mailboxes
+  const unboundAgents = useMemo(() => {
+    const agents = agentsQuery.data?.agents ?? []
+    const boundIds = new Set(
+      (mailboxes.data?.mailboxes ?? [])
+        .filter(m => m.mailbox_type === "agent")
+        .map(m => m.address.split("@")[0]) // rough filter
+    )
+    // More precise: check agent_mailboxes, but for now just show all agents
+    return agents
+  }, [agentsQuery.data, mailboxes.data])
+
+  const createMailboxMutation = useMutation({
+    mutationFn: (data: { domainId: string; localPart: string; displayName: string; mailboxType: string; agentId?: string }) =>
+      api("/api/admin/mail/mailboxes", { method: "POST", json: data }),
+    onSuccess: () => {
+      setShowCreateForm(false)
+      setCreateForm({ localPart: "", displayName: "", mailboxType: "agent", agentId: "" })
+      qc.invalidateQueries({ queryKey: ["admin", "mail", "mailboxes"] })
+      qc.invalidateQueries({ queryKey: ["admin", "mail", "stats"] })
+    },
+  })
+
+  const updateMailboxMutation = useMutation({
+    mutationFn: (data: { id: string; displayName: string }) =>
+      api(`/api/admin/mail/mailboxes/${data.id}`, { method: "PATCH", json: { displayName: data.displayName } }),
+    onSuccess: () => {
+      setEditingId(null)
+      setEditName("")
+      qc.invalidateQueries({ queryKey: ["admin", "mail", "mailboxes"] })
+    },
+  })
+
+  const rotateCredentialMutation = useMutation({
+    mutationFn: (id: string) =>
+      api<{ password: string }>(`/api/admin/mail/mailboxes/${id}/rotate-credential`, { method: "POST" }),
+  })
+
+  const deactivateMailboxMutation = useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/admin/mail/mailboxes/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "mail", "mailboxes"] })
+      qc.invalidateQueries({ queryKey: ["admin", "mail", "stats"] })
+    },
   })
 
   const s = stats.data
@@ -491,6 +565,114 @@ export default function MailAdminPage() {
       {/* ── Mailboxes Tab ────────────────────────────── */}
       {tab === "mailboxes" && (
         <div className="space-y-4">
+          {/* Create button + inline form */}
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-foreground">
+              {(mailboxes.data?.mailboxes?.length ?? 0)} mailbox{(mailboxes.data?.mailboxes?.length ?? 0) !== 1 ? "es" : ""}
+            </p>
+            {!showCreateForm && (
+              <Button size="sm" className="gap-1 h-7 text-xs" onClick={() => setShowCreateForm(true)} disabled={!primaryDomain}>
+                <Plus className="size-3" /> Create Mailbox
+              </Button>
+            )}
+          </div>
+
+          {/* Create form */}
+          {showCreateForm && primaryDomain && (
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-text3">New Mailbox</p>
+                <button onClick={() => setShowCreateForm(false)} className="text-text3 hover:text-text2">
+                  <X className="size-3.5" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <Label className="text-2xs text-text3">Local part</Label>
+                  <div className="flex items-center gap-1 mt-1">
+                    <Input
+                      className="h-7 text-xs"
+                      value={createForm.localPart}
+                      onChange={e => setCreateForm(f => ({ ...f, localPart: e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, "") }))}
+                      placeholder="name"
+                    />
+                    <span className="text-xs text-text3 shrink-0">@{primaryDomain.domain}</span>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-2xs text-text3">Display name</Label>
+                  <Input
+                    className="h-7 text-xs mt-1"
+                    value={createForm.displayName}
+                    onChange={e => setCreateForm(f => ({ ...f, displayName: e.target.value }))}
+                    placeholder="Display Name"
+                  />
+                </div>
+                <div>
+                  <Label className="text-2xs text-text3">Type</Label>
+                  <Select value={createForm.mailboxType} onValueChange={v => setCreateForm(f => ({ ...f, mailboxType: v }))}>
+                    <SelectTrigger className="h-7 text-xs mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="agent">Agent</SelectItem>
+                      <SelectItem value="system">System</SelectItem>
+                      <SelectItem value="human">Human</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-2xs text-text3">Bind to agent</Label>
+                  <Select value={createForm.agentId || "__none__"} onValueChange={v => setCreateForm(f => ({ ...f, agentId: v === "__none__" ? "" : v }))}>
+                    <SelectTrigger className="h-7 text-xs mt-1">
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {(agentsQuery.data?.agents ?? []).map(a => (
+                        <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-3">
+                <Button
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={!createForm.localPart || !createForm.displayName || createMailboxMutation.isPending}
+                  onClick={() => {
+                    createMailboxMutation.mutate({
+                      domainId: primaryDomain.id,
+                      localPart: createForm.localPart,
+                      displayName: createForm.displayName,
+                      mailboxType: createForm.mailboxType,
+                      agentId: createForm.agentId || undefined,
+                    })
+                  }}
+                >
+                  {createMailboxMutation.isPending ? "Creating..." : "Create"}
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowCreateForm(false)}>Cancel</Button>
+                {createMailboxMutation.isError && (
+                  <span className="text-2xs text-red-400">{(createMailboxMutation.error as Error)?.message || "Failed"}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Rotate credential result */}
+          {rotateCredentialMutation.isSuccess && rotateCredentialMutation.data && (
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 flex items-center gap-2">
+              <Check className="size-3.5 text-emerald-400 shrink-0" />
+              <span className="text-xs text-emerald-400">New password:</span>
+              <code className="text-xs font-mono text-foreground bg-raised px-2 py-0.5 rounded select-all">
+                {rotateCredentialMutation.data.password}
+              </code>
+              <span className="text-2xs text-text3">Copy now — won't be shown again</span>
+            </div>
+          )}
+
           {mailboxes.isLoading && (
             <div className="flex items-center justify-center py-20">
               <div className="size-5 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
@@ -512,15 +694,38 @@ export default function MailAdminPage() {
                       <th className="text-left font-medium text-text3 px-4 py-2.5">Type</th>
                       <th className="text-left font-medium text-text3 px-4 py-2.5">Status</th>
                       <th className="text-left font-medium text-text3 px-4 py-2.5">Last Sync</th>
-                      <th className="text-left font-medium text-text3 px-4 py-2.5">Error</th>
-                      <th className="text-left font-medium text-text3 px-4 py-2.5">Health</th>
+                      <th className="text-right font-medium text-text3 px-4 py-2.5">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {mailboxes.data!.mailboxes.map(mb => (
                       <tr key={mb.id} className="border-b border-border/50 hover:bg-surface/30 transition-colors">
                         <td className="px-4 py-2.5 font-medium text-foreground font-mono text-xs">{mb.address}</td>
-                        <td className="px-4 py-2.5 text-foreground">{mb.display_name}</td>
+                        <td className="px-4 py-2.5">
+                          {editingId === mb.id ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                className="h-6 text-xs w-32"
+                                value={editName}
+                                onChange={e => setEditName(e.target.value)}
+                                onKeyDown={e => { if (e.key === "Enter") updateMailboxMutation.mutate({ id: mb.id, displayName: editName }) }}
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => updateMailboxMutation.mutate({ id: mb.id, displayName: editName })}
+                                className="text-emerald-400 hover:text-emerald-300"
+                                disabled={updateMailboxMutation.isPending}
+                              >
+                                <Check className="size-3" />
+                              </button>
+                              <button onClick={() => setEditingId(null)} className="text-text3 hover:text-text2">
+                                <X className="size-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-foreground">{mb.display_name}</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2.5">
                           <Badge variant="outline" className="text-2xs bg-zinc-500/15 text-zinc-400 border-zinc-500/20">
                             {mb.mailbox_type}
@@ -529,21 +734,42 @@ export default function MailAdminPage() {
                         <td className="px-4 py-2.5">{statusBadge(mb.status)}</td>
                         <td className="px-4 py-2.5 text-text3 tabular-nums">{fmtRelative(mb.last_sync_at)}</td>
                         <td className="px-4 py-2.5">
-                          {mb.last_error ? (
-                            <span className="text-xs text-red-400 truncate max-w-[200px] inline-block" title={mb.last_error}>
-                              {mb.last_error.slice(0, 60)}{mb.last_error.length > 60 ? "..." : ""}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-text3">-</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <button
-                            onClick={() => setSelectedMailboxId(mb.id === selectedMailboxId ? null : mb.id)}
-                            className="text-xs text-accent-porter hover:underline"
-                          >
-                            {selectedMailboxId === mb.id ? "Hide" : "Check"}
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            {/* Edit name */}
+                            <button
+                              onClick={() => { setEditingId(mb.id); setEditName(mb.display_name) }}
+                              className="flex items-center justify-center size-6 rounded text-text3 hover:text-text2 hover:bg-raised transition-colors"
+                              title="Edit name"
+                            >
+                              <Pencil className="size-3" />
+                            </button>
+                            {/* Rotate credential */}
+                            <button
+                              onClick={() => rotateCredentialMutation.mutate(mb.id)}
+                              className="flex items-center justify-center size-6 rounded text-text3 hover:text-text2 hover:bg-raised transition-colors"
+                              title="Rotate credential"
+                              disabled={rotateCredentialMutation.isPending}
+                            >
+                              <RotateCw className={`size-3 ${rotateCredentialMutation.isPending ? "animate-spin" : ""}`} />
+                            </button>
+                            {/* Health check */}
+                            <button
+                              onClick={() => setSelectedMailboxId(mb.id === selectedMailboxId ? null : mb.id)}
+                              className="text-xs text-accent-porter hover:underline px-1"
+                            >
+                              {selectedMailboxId === mb.id ? "Hide" : "Health"}
+                            </button>
+                            {/* Deactivate */}
+                            {mb.status !== "deactivated" && (
+                              <button
+                                onClick={() => { if (window.confirm(`Deactivate ${mb.address}?`)) deactivateMailboxMutation.mutate(mb.id) }}
+                                className="flex items-center justify-center size-6 rounded text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                title="Deactivate"
+                              >
+                                <Trash2 className="size-3" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}

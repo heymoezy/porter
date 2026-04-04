@@ -165,6 +165,66 @@ export async function getMailboxByAddress(address: string): Promise<MailboxRow |
   return rows[0] ?? null;
 }
 
+// ── Update Mailbox ────────────────────────────────────────────────────
+
+export async function updateMailbox(
+  id: string,
+  updates: { displayName?: string; status?: string },
+): Promise<{ id: string; address: string; displayName: string; status: string }> {
+  const mailbox = await getMailboxById(id);
+  if (!mailbox) {
+    throw new Error(`Mailbox not found: ${id}`);
+  }
+
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  let idx = 1;
+
+  if (updates.displayName !== undefined) {
+    sets.push(`display_name = $${idx++}`);
+    params.push(updates.displayName);
+  }
+  if (updates.status !== undefined) {
+    sets.push(`status = $${idx++}`);
+    params.push(updates.status);
+  }
+
+  sets.push(`updated_at = $${idx++}`);
+  params.push(Date.now() / 1000);
+  params.push(id);
+
+  await pool.query(
+    `UPDATE mailboxes SET ${sets.join(', ')} WHERE id = $${idx}`,
+    params,
+  );
+
+  return {
+    id,
+    address: mailbox.address,
+    displayName: updates.displayName ?? mailbox.display_name,
+    status: updates.status ?? mailbox.status,
+  };
+}
+
+// ── Deactivate Mailbox ────────────────────────────────────────────────
+
+export async function deactivateMailbox(
+  id: string,
+): Promise<{ id: string; address: string; status: string }> {
+  const mailbox = await getMailboxById(id);
+  if (!mailbox) {
+    throw new Error(`Mailbox not found: ${id}`);
+  }
+
+  const now = Date.now() / 1000;
+  await pool.query(
+    `UPDATE mailboxes SET status = 'deactivated', updated_at = $1 WHERE id = $2`,
+    [now, id],
+  );
+
+  return { id, address: mailbox.address, status: 'deactivated' };
+}
+
 // ── Create Alias ───────────────────────────────────────────────────────
 
 export async function createMailboxAlias(

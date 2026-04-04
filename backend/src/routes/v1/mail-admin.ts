@@ -183,6 +183,46 @@ export default async function mailAdminRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // PATCH /mailboxes/:id — update mailbox display_name and/or status
+  fastify.patch('/mailboxes/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as { displayName?: string; status?: string } | undefined;
+
+    if (!body?.displayName && !body?.status) {
+      return reply.status(400).send(err('MISSING_FIELDS', 'At least one of displayName or status is required'));
+    }
+
+    try {
+      const result = await mailboxService.updateMailbox(id, {
+        displayName: body.displayName,
+        status: body.status,
+      });
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('not found')) {
+        return reply.status(404).send(err('NOT_FOUND', message));
+      }
+      return reply.status(500).send(err('UPDATE_FAILED', message));
+    }
+  });
+
+  // DELETE /mailboxes/:id — soft-delete (deactivate) a mailbox
+  fastify.delete('/mailboxes/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    try {
+      const result = await mailboxService.deactivateMailbox(id);
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('not found')) {
+        return reply.status(404).send(err('NOT_FOUND', message));
+      }
+      return reply.status(500).send(err('DELETE_FAILED', message));
+    }
+  });
+
   // POST /provision-agents — bulk provision mailboxes for all unbound agents
   fastify.post('/provision-agents', async (request, reply) => {
     const body = request.body as { domainId?: string } | undefined;
