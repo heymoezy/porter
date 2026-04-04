@@ -9,6 +9,7 @@ import { config } from '../../config.js';
 import { pool } from '../../db/client.js';
 import { StalwartMailProvider } from '../../services/mail/stalwart-provider.js';
 import * as domainService from '../../services/mail/domain-service.js';
+import * as mailboxService from '../../services/mail/mailbox-service.js';
 
 // ── Lazy provider singleton ────────────────────────────────────────────
 
@@ -100,10 +101,109 @@ export default async function mailAdminRoutes(fastify: FastifyInstance) {
   });
 
   // GET /mailboxes — list all mailboxes (admin view)
-  fastify.get('/mailboxes', async (_request, reply) => {
-    const { rows } = await pool.query(
-      `SELECT * FROM mailboxes ORDER BY created_at DESC`,
-    );
-    return reply.send(ok({ mailboxes: rows }));
+  fastify.get('/mailboxes', async (request, reply) => {
+    const query = request.query as { domainId?: string; status?: string };
+    const mailboxes = await mailboxService.listMailboxes({
+      domainId: query.domainId,
+      status: query.status,
+    });
+    return reply.send(ok({ mailboxes }));
+  });
+
+  // POST /mailboxes — create a new mailbox
+  fastify.post('/mailboxes', async (request, reply) => {
+    const body = request.body as {
+      domainId?: string;
+      localPart?: string;
+      displayName?: string;
+      mailboxType?: string;
+      agentId?: string;
+    } | undefined;
+
+    if (!body?.domainId || !body?.localPart || !body?.displayName) {
+      return reply.status(400).send(
+        err('MISSING_FIELDS', 'domainId, localPart, and displayName are required'),
+      );
+    }
+
+    const provider = getProvider();
+    try {
+      const result = await mailboxService.createMailbox(provider, {
+        domainId: body.domainId,
+        localPart: body.localPart,
+        displayName: body.displayName,
+        mailboxType: body.mailboxType,
+        agentId: body.agentId,
+      });
+      return reply.status(201).send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('already exists')) {
+        return reply.status(409).send(err('MAILBOX_EXISTS', message));
+      }
+      if (message.includes('not found')) {
+        return reply.status(404).send(err('NOT_FOUND', message));
+      }
+      return reply.status(500).send(err('CREATE_FAILED', message));
+    }
+  });
+
+  // POST /mailboxes/:id/aliases — create an alias for a mailbox
+  fastify.post('/mailboxes/:id/aliases', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as { aliasAddress?: string } | undefined;
+
+    if (!body?.aliasAddress) {
+      return reply.status(400).send(err('MISSING_FIELDS', 'aliasAddress is required'));
+    }
+
+    const provider = getProvider();
+    try {
+      const result = await mailboxService.createMailboxAlias(provider, {
+        mailboxId: id,
+        aliasAddress: body.aliasAddress,
+      });
+      return reply.status(201).send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('not found')) {
+        return reply.status(404).send(err('NOT_FOUND', message));
+      }
+      return reply.status(500).send(err('CREATE_FAILED', message));
+    }
+  });
+
+  // POST /mailboxes/:id/rotate-credential — generate new password
+  fastify.post('/mailboxes/:id/rotate-credential', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const provider = getProvider();
+    try {
+      const result = await mailboxService.rotateCredential(provider, id);
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('not found')) {
+        return reply.status(404).send(err('NOT_FOUND', message));
+      }
+      return reply.status(500).send(err('ROTATE_FAILED', message));
+    }
+  });
+
+  // POST /provision-agents — bulk provision mailboxes for all unbound agents
+  fastify.post('/provision-agents', async (request, reply) => {
+    const body = request.body as { domainId?: string } | undefined;
+
+    if (!body?.domainId) {
+      return reply.status(400).send(err('MISSING_FIELDS', 'domainId is required'));
+    }
+
+    const provider = getProvider();
+    try {
+      const result = await mailboxService.bulkProvisionAgentMailboxes(provider, body.domainId);
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('PROVISION_FAILED', message));
+    }
   });
 }
