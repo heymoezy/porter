@@ -106,6 +106,20 @@ export default async function mailRoutes(fastify: FastifyInstance) {
     return reply.send(ok({ messageId: id, folder: 'trash' }));
   });
 
+  // DELETE /api/v1/mail/messages/:id — permanently delete (from trash only)
+  fastify.delete('/messages/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const message = await messageService.getMessageById(id);
+    if (!message) {
+      return reply.status(404).send(err('NOT_FOUND', `Message not found: ${id}`));
+    }
+    if (message.folder !== 'trash') {
+      return reply.status(400).send(err('NOT_IN_TRASH', 'Only trashed messages can be permanently deleted'));
+    }
+    await messageService.deleteMessagePermanently(id);
+    return reply.send(ok({ messageId: id, deleted: true }));
+  });
+
   // POST /api/v1/mail/messages/:id/read — mark as read
   fastify.post('/messages/:id/read', async (request, reply) => {
     const { id } = request.params as { id: string };

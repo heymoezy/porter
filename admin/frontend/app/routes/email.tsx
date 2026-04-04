@@ -8,7 +8,7 @@ import {
   Inbox, Send, FileText, Trash2, Plus, ArrowLeft, Mail,
   Bold, Italic, Link, List, ListOrdered, Code, Heading,
   ChevronDown, Settings, Check, AlertTriangle, Archive,
-  Reply, CornerUpLeft,
+  Reply, CornerUpLeft, Search,
 } from "lucide-react"
 import { Label } from "~/components/ui/label"
 
@@ -122,6 +122,7 @@ function EmailContent() {
   const [smtpForm, setSmtpForm] = useState<Record<string, string>>({})
   const [replyText, setReplyText] = useState("")
   const [replyingToId, setReplyingToId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
   const editorRef = useRef<HTMLDivElement>(null)
 
   // ── SMTP config (separate concern, keep) ──────────────────────────
@@ -183,7 +184,14 @@ function EmailContent() {
     refetchInterval: activeFolder === "inbox" ? 15_000 : undefined,
   })
 
-  const threads = threadsQuery.data?.threads ?? []
+  const allThreads = threadsQuery.data?.threads ?? []
+  const threads = searchQuery.trim()
+    ? allThreads.filter(t => {
+        const q = searchQuery.toLowerCase()
+        return (t.subject_canonical || "").toLowerCase().includes(q)
+          || threadParticipants(t).toLowerCase().includes(q)
+      })
+    : allThreads
 
   // ── Thread messages ───────────────────────────────────────────────
   const threadMessagesQuery = useQuery({
@@ -221,6 +229,7 @@ function EmailContent() {
       setComposing(false)
       setComposeData({ from: "", to: "", subject: "", body: "" })
       if (editorRef.current) editorRef.current.innerHTML = ""
+      setActiveFolder("sent")
       qc.invalidateQueries({ queryKey: ["mail"] })
     },
   })
@@ -261,6 +270,16 @@ function EmailContent() {
   const trashMutation = useMutation({
     mutationFn: (messageId: string) =>
       api(`/api/v1/mail/messages/${messageId}/trash`, { method: "POST" }),
+    onSuccess: () => {
+      setSelectedThreadId(null)
+      qc.invalidateQueries({ queryKey: ["mail"] })
+    },
+  })
+
+  // ── Permanent delete (from trash) ──────────────────────────────────
+  const deleteMutation = useMutation({
+    mutationFn: (messageId: string) =>
+      api(`/api/v1/mail/messages/${messageId}`, { method: "DELETE" }),
     onSuccess: () => {
       setSelectedThreadId(null)
       qc.invalidateQueries({ queryKey: ["mail"] })
@@ -326,6 +345,14 @@ function EmailContent() {
     setSelectedThreadId(null)
   }
 
+  function handleDeleteThread() {
+    // Permanently delete all messages in the thread
+    for (const msg of threadMessages) {
+      deleteMutation.mutate(msg.id)
+    }
+    setSelectedThreadId(null)
+  }
+
   // ── Loading state ─────────────────────────────────────────────────
   if (mailboxesQuery.isLoading) {
     return (
@@ -382,7 +409,54 @@ function EmailContent() {
       )}
 
       {/* ── Left sidebar ──────────────────────────────────────────── */}
-      <div className="w-[180px] shrink-0 flex flex-col border-r border-border pr-2 mr-0">
+      <div className="w-[200px] shrink-0 flex flex-col border-r border-border pr-2 mr-0">
+        {/* Mailbox picker — top, prominent */}
+        <div className="relative mb-2">
+          <button
+            onClick={() => setShowMailboxPicker(!showMailboxPicker)}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-text bg-raised/50 hover:bg-raised transition-colors"
+          >
+            <Mail className="size-4 text-accent-porter shrink-0" />
+            <span className="truncate flex-1 text-left">
+              {activeMailbox?.display_name || activeMailbox?.local_part || "Select mailbox"}
+            </span>
+            <ChevronDown className="size-3 text-text3 shrink-0" />
+          </button>
+          <span className="text-2xs text-text3 px-3 mt-0.5 block truncate">{activeMailbox?.address ?? ""}</span>
+          {showMailboxPicker && (
+            <div className="absolute top-full left-0 z-50 mt-1 w-full min-w-[220px] rounded-lg border border-border bg-surface shadow-lg py-1 max-h-[320px] overflow-y-auto">
+              {mailboxes.length === 0 ? (
+                <p className="px-3 py-2 text-2xs text-text3">No mailboxes</p>
+              ) : (
+                mailboxes.map(mb => (
+                  <button
+                    key={mb.id}
+                    onClick={() => { setSelectedMailboxId(mb.id); setShowMailboxPicker(false); setSelectedThreadId(null) }}
+                    className={`flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-raised transition-colors ${mb.id === activeMailboxId ? "bg-accent-porter/10" : ""}`}
+                  >
+                    <Mail className={`size-3.5 mt-0.5 shrink-0 ${mb.id === activeMailboxId ? "text-accent-porter" : "text-text3"}`} />
+                    <div className="min-w-0">
+                      <span className={`text-xs block truncate ${mb.id === activeMailboxId ? "font-semibold text-accent-porter" : "text-text"}`}>{mb.display_name || mb.local_part}</span>
+                      <span className="text-2xs text-text3 block truncate">{mb.address}</span>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Search */}
+        <div className="relative mb-2 px-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3 text-text3" />
+          <Input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="h-7 text-xs pl-7 bg-transparent"
+            placeholder="Search mail..."
+          />
+        </div>
+
         {/* Compose button */}
         <Button
           className="w-full gap-2 mb-3 h-9 text-sm font-medium"
@@ -425,40 +499,8 @@ function EmailContent() {
           })}
         </nav>
 
-        {/* Bottom: separator + mailbox picker + SMTP settings */}
-        <div className="mt-auto pt-2 border-t border-border/50 flex flex-col gap-1">
-          {/* Mailbox picker */}
-          <div className="relative">
-            <button
-              onClick={() => setShowMailboxPicker(!showMailboxPicker)}
-              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-text2 hover:bg-raised transition-colors"
-            >
-              <Mail className="size-3.5 text-accent-porter shrink-0" />
-              <span className="truncate flex-1 text-left text-2xs">
-                {activeMailbox?.address ?? "No mailbox"}
-              </span>
-              <ChevronDown className="size-2.5 text-text3 shrink-0" />
-            </button>
-            {showMailboxPicker && (
-              <div className="absolute bottom-full left-0 z-50 mb-1 w-full min-w-[200px] rounded-lg border border-border bg-surface shadow-lg py-1">
-                {mailboxes.length === 0 ? (
-                  <p className="px-3 py-2 text-2xs text-text3">No mailboxes</p>
-                ) : (
-                  mailboxes.map(mb => (
-                    <button
-                      key={mb.id}
-                      onClick={() => { setSelectedMailboxId(mb.id); setShowMailboxPicker(false); setSelectedThreadId(null) }}
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-raised transition-colors ${mb.id === activeMailboxId ? "bg-accent-porter/10 font-medium" : ""}`}
-                    >
-                      <span className="truncate text-text2">{mb.display_name || mb.address}</span>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* SMTP settings link */}
+        {/* Bottom: SMTP settings only */}
+        <div className="mt-auto pt-2 border-t border-border/50">
           <button
             onClick={() => setShowSmtp(!showSmtp)}
             className="flex items-center gap-1.5 rounded-md px-2 py-1 text-2xs text-text3 hover:text-text2 hover:bg-raised transition-colors"
@@ -642,12 +684,20 @@ function EmailContent() {
             <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-surface">
               <p className="text-sm font-bold text-text truncate">{selectedThread.subject_canonical || "(no subject)"}</p>
               <div className="flex gap-1 shrink-0">
-                <Button variant="ghost" size="sm" className="h-6 text-2xs" onClick={handleArchiveThread}>
-                  <Archive className="size-2.5 mr-1" /> Archive
-                </Button>
-                <Button variant="ghost" size="sm" className="h-6 text-2xs text-danger" onClick={handleTrashThread}>
-                  <Trash2 className="size-2.5 mr-1" /> Trash
-                </Button>
+                {activeFolder === "trash" ? (
+                  <Button variant="ghost" size="sm" className="h-6 text-2xs text-danger" onClick={handleDeleteThread}>
+                    <Trash2 className="size-2.5 mr-1" /> Delete forever
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="ghost" size="sm" className="h-6 text-2xs" onClick={handleArchiveThread}>
+                      <Archive className="size-2.5 mr-1" /> Archive
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-6 text-2xs text-danger" onClick={handleTrashThread}>
+                      <Trash2 className="size-2.5 mr-1" /> Trash
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
 

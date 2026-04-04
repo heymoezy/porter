@@ -160,6 +160,11 @@ export async function updateMessageFolder(messageId: string, folder: string): Pr
   );
 }
 
+export async function deleteMessagePermanently(messageId: string): Promise<void> {
+  await pool.query(`DELETE FROM mail_deliveries WHERE message_id = $1`, [messageId]);
+  await pool.query(`DELETE FROM mail_messages WHERE id = $1`, [messageId]);
+}
+
 export async function markMessageRead(messageId: string): Promise<void> {
   const now = Date.now() / 1000;
   await pool.query(
