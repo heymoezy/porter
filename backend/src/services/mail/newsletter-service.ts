@@ -6,6 +6,7 @@
 
 import crypto from 'node:crypto';
 import { pool } from '../../db/client.js';
+import { processDigestForLearning } from './learning-policy.js';
 
 // ── Newsletter Detection Heuristics ─────────────────────────────────────
 
@@ -368,6 +369,26 @@ export async function generateDigest(opts: {
      WHERE agent_id = $2 AND source_id = $3 AND status = 'active'`,
     [now, opts.agentId, opts.sourceId],
   );
+
+  // 6. Feed learning pipeline — promote to memory / suggest skill improvements
+  const topicTags: string[] = Array.isArray(source.topic_tags_json)
+    ? (source.topic_tags_json as string[])
+    : [];
+  try {
+    await processDigestForLearning({
+      messageId: messages[0].id,
+      agentId: opts.agentId,
+      sourceId: opts.sourceId,
+      trustLevel: source.trust_level,
+      subject: messages[0].subject || 'Newsletter digest',
+      summary,
+      topicTags,
+      sourceDisplayName: source.display_name,
+    });
+  } catch (e) {
+    // Non-critical — digest was already created; learning failure shouldn't break flow
+    console.error('[newsletter] learning pipeline error for digest %s:', digestId, e);
+  }
 
   return { digestId, messageCount: messages.length, summary };
 }

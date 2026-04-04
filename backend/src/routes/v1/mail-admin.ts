@@ -10,6 +10,7 @@ import { getProvider } from '../../services/mail/provider-factory.js';
 import * as domainService from '../../services/mail/domain-service.js';
 import * as mailboxService from '../../services/mail/mailbox-service.js';
 import * as deliveryService from '../../services/mail/delivery-service.js';
+import * as learningService from '../../services/mail/mail-learning-service.js';
 import { syncMailbox } from '../../services/mail/sync-service.js';
 
 // ── Routes ─────────────────────────────────────────────────────────────
@@ -218,5 +219,20 @@ export default async function mailAdminRoutes(fastify: FastifyInstance) {
       }
       return reply.status(500).send(err('SYNC_FAILED', message));
     }
+  });
+
+  // GET /learning-events — full audit trail of learning pipeline decisions
+  fastify.get('/learning-events', async (request, reply) => {
+    const query = request.query as {
+      agentId?: string;
+      eventType?: string;
+      limit?: string;
+    };
+    const events = await learningService.getLearningEvents({
+      agentId: query.agentId,
+      eventType: query.eventType,
+      limit: query.limit ? parseInt(query.limit, 10) : undefined,
+    });
+    return reply.send(ok({ events }));
   });
 }
