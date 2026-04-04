@@ -14,8 +14,10 @@ export class StalwartAdminClient {
   // ── Helpers ──────────────────────────────────────────────────────────
 
   private headers(): Record<string, string> {
+    // Stalwart uses HTTP Basic Auth (user:password format in apiKey)
+    const encoded = Buffer.from(this.apiKey).toString('base64');
     return {
-      Authorization: `Bearer ${this.apiKey}`,
+      Authorization: `Basic ${encoded}`,
       'Content-Type': 'application/json',
     };
   }

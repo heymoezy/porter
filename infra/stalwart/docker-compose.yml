@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  stalwart:
+    image: stalwartlabs/stalwart:latest
+    container_name: stalwart-mail
+    hostname: mail.askporter.app
+    restart: unless-stopped
+    ports:
+      - "25:25"      # SMTP
+      - "465:465"    # SMTPS
+      - "587:587"    # Submission
+      - "993:993"    # IMAPS
+      - "4190:4190"  # ManageSieve
+      - "8443:443"   # HTTPS/JMAP/Admin (mapped to avoid conflict)
+    volumes:
+      - stalwart-data:/opt/stalwart-mail
+    environment:
+      - STALWART_ADMIN_PASSWORD=porter-mail-admin-2026
+
+volumes:
+  stalwart-data:
