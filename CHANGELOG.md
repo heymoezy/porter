@@ -1,3 +1,25 @@
+## v6.1.0 (2026-04-04)
+
+### Porter Mail Platform — 14 Tranches
+
+Self-hosted email system for @askporter.app with one mailbox per agent.
+
+- 10 new database tables (mail_domains, mailboxes, agent_mailboxes, mail_aliases, mail_threads, mail_messages, mail_deliveries, newsletter_sources, newsletter_subscriptions, mail_learning_events)
+- Stalwart mail provider abstraction with admin client
+- Domain management with DNS health monitoring
+- Mailbox provisioning and agent identity binding (9 agent + 3 system mailboxes)
+- Dynamic sender identities replacing hardcoded addresses
+- Thread/message storage with RFC threading (In-Reply-To, References)
+- Outbound send pipeline with per-recipient delivery tracking
+- Inbound processing with dedup, webhook support, and agent job routing
+- Admin email page rewritten: mailbox switcher, thread list, compose, reply, archive/trash
+- Newsletter source registry with trust levels (trusted/review/untrusted)
+- Agent subscriptions with digest delivery mode
+- Safe learning pipeline: memory promotion (medium trust) + skill suggestions (pending review)
+- Gmail refactored to optional connector/import path (no longer core)
+- Legacy IMAP IDLE auto-start removed, old routes deprecated
+- Mail Ops admin page: stats, queue, bounces, domain health, mailbox health, newsletter overview
+
 ## v6.0.0 (2026-04-04)
 
 ### The Orchestration Platform — 8 Phases, 21 Plans, All Verified

@@ -139,7 +139,24 @@ startBrainUI().catch(err => console.error('[brain-ui] Failed to start:', err));
 
 // Health check
 fastify.get('/health', async () => {
-  return { status: 'ok', engine: 'fastify', version: '6.0.0' };
+  // Mail system status — lightweight count query
+  let mailboxCount = 0;
+  try {
+    const { rows } = await pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM mailboxes WHERE status = \'active\'');
+    mailboxCount = parseInt(rows[0]?.count ?? '0', 10);
+  } catch { /* table may not exist yet */ }
+
+  return {
+    status: 'ok',
+    engine: 'fastify',
+    version: '6.1.0',
+    mail: {
+      provider: config.mail.provider,
+      domain: config.mail.defaultDomain,
+      mailboxes: mailboxCount,
+      stalwartConfigured: !!config.mail.stalwartApiKey,
+    },
+  };
 });
 
 // Serve OpenAPI spec — public, no auth
