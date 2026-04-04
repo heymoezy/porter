@@ -495,7 +495,14 @@ function MonitorTab() {
             <div className="flex justify-between"><span className="text-text3">Concurrent</span><span className="text-text2 tabular-nums">{s?.sessions.concurrent ?? 0}</span></div>
             <div className="flex justify-between"><span className="text-text3">Platform</span><span className="text-text2">{s?.platform.os ?? "-"}/{s?.platform.arch ?? "-"}</span></div>
           </div>
+          <Link to="/sessions" className="text-xs text-accent-porter hover:underline mt-2 block">View Active Sessions →</Link>
         </div>
+      </div>
+
+      {/* ── Quick Links ── */}
+      <div className="flex items-center gap-4 mt-1">
+        <Link to="/msg-bus" className="text-xs text-accent-porter hover:underline">View Message Bus →</Link>
+        <Link to="/decisions" className="text-xs text-accent-porter hover:underline">View Decisions →</Link>
       </div>
     </div>
   )

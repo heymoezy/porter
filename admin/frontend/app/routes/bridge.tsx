@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react"
-import { useNavigate } from "react-router"
+import { useNavigate, Link } from "react-router"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
@@ -1381,8 +1381,8 @@ export default function BridgePage() {
       {/* ── Content ── */}
       <div className={`flex-1 min-h-0 px-5 py-4 ${activeTab === "operator" ? "flex flex-col" : "overflow-y-auto"}`}>
         {activeTab === "operator" && renderOperatorTab()}
-        {activeTab === "routing" && <div className="space-y-6"><ModelCatalog /><DispatchLog /><RoutingRules /></div>}
-        {activeTab === "controller" && <div className="space-y-6"><CostAnalytics /><UserKeyManager /><WorkspaceGatewayOverrides /></div>}
+        {activeTab === "routing" && <div className="space-y-6"><ModelCatalog /><DispatchLog /><div className="flex justify-end"><Link to="/sessions" className="text-xs text-accent-porter hover:underline">View Sessions →</Link></div><RoutingRules /></div>}
+        {activeTab === "controller" && <div className="space-y-6"><CostAnalytics /><div className="flex justify-end"><Link to="/costs" className="text-xs text-accent-porter hover:underline">Full Cost Analytics →</Link></div><UserKeyManager /><WorkspaceGatewayOverrides /></div>}
       </div>
     </div>
   )

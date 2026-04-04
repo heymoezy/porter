@@ -306,6 +306,10 @@ export default function ForgePage() {
               <TabsTrigger value="arena" className="text-xs gap-1.5 opacity-50" disabled>
                 <span className="text-xs leading-none">⚔️</span> Arena
               </TabsTrigger>
+              <div className="ml-auto flex items-center gap-3 pr-2">
+                <Link to="/battles" className="text-xs text-accent-porter hover:underline">Battle Arena →</Link>
+                <Link to="/evolution" className="text-xs text-accent-porter hover:underline">Skill Evolution →</Link>
+              </div>
             </TabsList>
 
             {/* Templates — existing forge content */}
