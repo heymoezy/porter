@@ -498,16 +498,7 @@ export default function FilesPage() {
               setDragging(false)
             }
           }}
-          onDrop={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            dragCounter.current = 0
-            setDragging(false)
-            const files = e.dataTransfer.files
-            if (files.length > 0 && activeRoot && dirWritable) {
-              uploadFiles(files)
-            }
-          }}
+          onDrop={handleDrop}
         >
           <div className="text-center pointer-events-none">
             <Upload className="size-10 text-accent-porter mx-auto mb-2" />
@@ -660,7 +651,7 @@ export default function FilesPage() {
             )}
 
             {/* File list */}
-            <ScrollArea className="flex-1">
+            <div className="flex-1 overflow-y-auto min-h-0">
               <div className="py-0.5">
                 {/* Loading skeleton */}
                 {isLoading && !error && (
@@ -920,7 +911,7 @@ export default function FilesPage() {
                   </>
                 )}
               </div>
-            </ScrollArea>
+            </div>
 
             {/* Footer stats */}
             {!isLoading && !error && entries.length > 0 && (
