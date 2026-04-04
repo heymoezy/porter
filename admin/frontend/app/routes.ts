@@ -33,5 +33,6 @@ export default [
     route("watchers", "routes/watchers.tsx"),
     route("approvals", "routes/approvals.tsx"),
     route("decomposition", "routes/decomposition.tsx"),
+    route("mail-admin", "routes/mail-admin.tsx"),
   ]),
 ] satisfies RouteConfig

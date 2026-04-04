@@ -5,7 +5,7 @@ import { PixelPortrait } from "~/components/pixel-portrait"
 import { Badge } from "~/components/ui/badge"
 import { Separator } from "~/components/ui/separator"
 import {
-  Users, Mail, CreditCard, LayoutDashboard,
+  Users, Mail, MailCheck, CreditCard, LayoutDashboard,
   ChevronLeft, ChevronRight, Settings, LogOut,
   Monitor, FolderOpen, Eye,
   Route, BookOpen,
@@ -41,6 +41,7 @@ const groups = [
   { label: "Ops", items: [
     { icon: Route, label: "Bridge", path: "/bridge" },
     { icon: BookOpen, label: "Recall", path: "/recall" },
+    { icon: MailCheck, label: "Mail Ops", path: "/mail-admin" },
     { icon: Eye, label: "Watchers", path: "/watchers" },
     { icon: Shield, label: "Approvals", path: "/approvals" },
     { icon: GitBranch, label: "Decomposition", path: "/decomposition" },

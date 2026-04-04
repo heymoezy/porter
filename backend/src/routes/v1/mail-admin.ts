@@ -6,6 +6,7 @@
 import { FastifyInstance } from 'fastify';
 import { ok, err } from '../../lib/envelope.js';
 import { config } from '../../config.js';
+import { pool } from '../../db/client.js';
 import { getProvider } from '../../services/mail/provider-factory.js';
 import * as domainService from '../../services/mail/domain-service.js';
 import * as mailboxService from '../../services/mail/mailbox-service.js';
@@ -239,5 +240,211 @@ export default async function mailAdminRoutes(fastify: FastifyInstance) {
       limit: query.limit ? parseInt(query.limit, 10) : undefined,
     });
     return reply.send(ok({ events }));
+  });
+
+  // ── Tranche 13: Deliverability & Ops Visibility ─────────────────────────
+
+  // GET /stats — aggregate mail stats
+  fastify.get('/stats', async (_request, reply) => {
+    // Mailbox counts by status
+    const { rows: mbxCounts } = await pool.query<{ status: string; count: string }>(
+      `SELECT status, COUNT(*)::text AS count FROM mailboxes GROUP BY status`,
+    );
+
+    // Message counts by direction
+    const { rows: msgCounts } = await pool.query<{ direction: string; count: string }>(
+      `SELECT direction, COUNT(*)::text AS count FROM mail_messages GROUP BY direction`,
+    );
+
+    // Delivery counts by status
+    const { rows: dlvCounts } = await pool.query<{ status: string; count: string }>(
+      `SELECT status, COUNT(*)::text AS count FROM mail_deliveries GROUP BY status`,
+    );
+
+    // Newsletter source counts by trust level
+    const { rows: srcCounts } = await pool.query<{ trust_level: string; count: string }>(
+      `SELECT trust_level, COUNT(*)::text AS count FROM newsletter_sources GROUP BY trust_level`,
+    );
+
+    // Subscription counts (active vs cancelled via status column)
+    const { rows: subCounts } = await pool.query<{ active: string; cancelled: string }>(
+      `SELECT
+         COUNT(*) FILTER (WHERE status = 'active')::text AS active,
+         COUNT(*) FILTER (WHERE status != 'active')::text AS cancelled
+       FROM newsletter_subscriptions`,
+    );
+
+    // Learning event counts by type
+    const { rows: learnCounts } = await pool.query<{ event_type: string; count: string }>(
+      `SELECT event_type, COUNT(*)::text AS count FROM mail_learning_events GROUP BY event_type`,
+    );
+
+    return reply.send(ok({
+      mailboxes: Object.fromEntries(mbxCounts.map(r => [r.status, parseInt(r.count, 10)])),
+      messages: Object.fromEntries(msgCounts.map(r => [r.direction, parseInt(r.count, 10)])),
+      deliveries: Object.fromEntries(dlvCounts.map(r => [r.status, parseInt(r.count, 10)])),
+      newsletterSources: Object.fromEntries(srcCounts.map(r => [r.trust_level, parseInt(r.count, 10)])),
+      subscriptions: {
+        active: parseInt(subCounts[0]?.active ?? '0', 10),
+        cancelled: parseInt(subCounts[0]?.cancelled ?? '0', 10),
+      },
+      learningEvents: Object.fromEntries(learnCounts.map(r => [r.event_type, parseInt(r.count, 10)])),
+    }));
+  });
+
+  // GET /queue — outbound queue (queued/deferred deliveries)
+  fastify.get('/queue', async (_request, reply) => {
+    const { rows } = await pool.query<{
+      delivery_id: string;
+      message_id: string;
+      from_address: string;
+      recipient: string;
+      subject: string;
+      status: string;
+      queued_at: number | null;
+      attempt: number;
+    }>(
+      `SELECT
+         d.id AS delivery_id,
+         d.message_id,
+         m.from_address,
+         d.recipient,
+         m.subject,
+         d.status,
+         d.queued_at,
+         d.attempt
+       FROM mail_deliveries d
+       LEFT JOIN mail_messages m ON m.id = d.message_id
+       WHERE d.status IN ('queued', 'deferred')
+       ORDER BY d.queued_at ASC
+       LIMIT 100`,
+    );
+
+    return reply.send(ok({
+      queue: rows.map(r => ({
+        deliveryId: r.delivery_id,
+        messageId: r.message_id,
+        from: r.from_address ?? '',
+        to: r.recipient,
+        subject: r.subject ?? '',
+        status: r.status,
+        queuedAt: r.queued_at,
+        attempts: r.attempt,
+      })),
+    }));
+  });
+
+  // GET /bounces — recent bounced/failed deliveries
+  fastify.get('/bounces', async (_request, reply) => {
+    const { rows } = await pool.query<{
+      id: string;
+      message_id: string;
+      recipient: string;
+      status: string;
+      smtp_response: string | null;
+      remote_mx: string | null;
+      completed_at: number | null;
+    }>(
+      `SELECT id, message_id, recipient, status, smtp_response, remote_mx, completed_at
+       FROM mail_deliveries
+       WHERE status IN ('bounced', 'failed')
+       ORDER BY completed_at DESC
+       LIMIT 100`,
+    );
+
+    return reply.send(ok({
+      bounces: rows.map(r => ({
+        deliveryId: r.id,
+        messageId: r.message_id,
+        recipient: r.recipient,
+        status: r.status,
+        smtpResponse: r.smtp_response,
+        remoteMx: r.remote_mx,
+        completedAt: r.completed_at,
+      })),
+    }));
+  });
+
+  // GET /domains/:id/health — domain health check with issue detection
+  fastify.get('/domains/:id/health', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const provider = getProvider();
+    try {
+      const dns = await domainService.getDomainDns(provider, id);
+      const domain = await domainService.getDomainById(id);
+      if (!domain) {
+        return reply.status(404).send(err('NOT_FOUND', `Domain not found: ${id}`));
+      }
+
+      // Detect issues from DNS records
+      const issues: string[] = [];
+      const records = dns.records as Array<{ type?: string; valid?: boolean; name?: string }>;
+      if (!records || records.length === 0) {
+        issues.push('No DNS records found — provider may not be configured');
+      } else {
+        const types = records.map(r => r.type?.toUpperCase?.());
+        if (!types.includes('MX')) issues.push('Missing MX record');
+        if (!types.includes('SPF') && !types.includes('TXT')) issues.push('Missing SPF/TXT record');
+        if (!types.includes('DKIM')) issues.push('Missing DKIM record');
+        if (!types.includes('DMARC')) issues.push('Missing DMARC record');
+        // Check for invalid records
+        const invalid = records.filter(r => r.valid === false);
+        for (const r of invalid) {
+          issues.push(`Invalid ${r.type ?? 'unknown'} record: ${r.name ?? '(unnamed)'}`);
+        }
+      }
+
+      return reply.send(ok({
+        domain: domain.domain,
+        status: domain.status,
+        dnsRecords: dns.records,
+        lastChecked: domain.dns_last_checked_at,
+        issues,
+      }));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('not found')) {
+        return reply.status(404).send(err('NOT_FOUND', message));
+      }
+      return reply.status(500).send(err('HEALTH_CHECK_FAILED', message));
+    }
+  });
+
+  // GET /mailboxes/:id/health — mailbox sync health
+  fastify.get('/mailboxes/:id/health', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const mailbox = await mailboxService.getMailboxById(id);
+      if (!mailbox) {
+        return reply.status(404).send(err('NOT_FOUND', `Mailbox not found: ${id}`));
+      }
+
+      // Count messages for this mailbox
+      const { rows: msgCountRows } = await pool.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM mail_messages WHERE mailbox_id = $1`,
+        [id],
+      );
+
+      // Count queued deliveries associated with messages from this mailbox
+      const { rows: queuedRows } = await pool.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count
+         FROM mail_deliveries d
+         JOIN mail_messages m ON m.id = d.message_id
+         WHERE m.mailbox_id = $1 AND d.status IN ('queued', 'deferred')`,
+        [id],
+      );
+
+      return reply.send(ok({
+        address: mailbox.address,
+        status: mailbox.status,
+        lastSyncAt: mailbox.last_sync_at,
+        lastError: mailbox.last_error,
+        messageCount: parseInt(msgCountRows[0]?.count ?? '0', 10),
+        queuedDeliveries: parseInt(queuedRows[0]?.count ?? '0', 10),
+      }));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('HEALTH_CHECK_FAILED', message));
+    }
   });
 }
