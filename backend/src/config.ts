@@ -43,6 +43,7 @@ export const config = {
     stalwartUrl: process.env.STALWART_URL || 'http://127.0.0.1:443',
     stalwartApiKey: process.env.STALWART_API_KEY || '',
     defaultDomain: process.env.MAIL_DEFAULT_DOMAIN || 'askporter.app',
+    webhookSecret: process.env.MAIL_WEBHOOK_SECRET || '',
   },
 
   // SMTP config (admin email routes) — all optional, email features disabled when absent.

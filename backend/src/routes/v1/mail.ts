@@ -4,10 +4,13 @@
 
 import { FastifyInstance } from 'fastify';
 import { ok, err } from '../../lib/envelope.js';
+import { config } from '../../config.js';
 import * as mailboxService from '../../services/mail/mailbox-service.js';
 import * as threadService from '../../services/mail/thread-service.js';
 import * as messageService from '../../services/mail/message-service.js';
 import { sendMail, createDraft, replyToMessage } from '../../services/mail/send-service.js';
+import { processInboundEmail, type InboundEmailPayload } from '../../services/mail/inbound-processor.js';
+import { handleStalwartWebhook, type StalwartWebhookEvent } from '../../services/mail/stalwart-webhooks.js';
 
 export default async function mailRoutes(fastify: FastifyInstance) {
   // GET /api/v1/mail — list agent identities for compose picker
@@ -221,6 +224,60 @@ export default async function mailRoutes(fastify: FastifyInstance) {
         return reply.status(404).send(err('NOT_FOUND', message));
       }
       return reply.status(500).send(err('REPLY_FAILED', message));
+    }
+  });
+
+  // ── Inbound ─────────────────────────────────────────────────────────────
+
+  // POST /api/v1/mail/inbound — manually ingest an inbound email (requires auth)
+  fastify.post('/inbound', async (request, reply) => {
+    const body = request.body as InboundEmailPayload | undefined;
+
+    if (!body?.from || !body?.to?.length || !body?.subject || !body?.textBody || !body?.internetMessageId) {
+      return reply.status(400).send(
+        err('MISSING_FIELDS', 'from, to, subject, textBody, and internetMessageId are required'),
+      );
+    }
+
+    try {
+      const result = await processInboundEmail(body);
+      const status = result.isNew ? 201 : 200;
+      return reply.status(status).send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('No mailbox found')) {
+        return reply.status(404).send(err('NO_MAILBOX', message));
+      }
+      return reply.status(500).send(err('INBOUND_FAILED', message));
+    }
+  });
+
+  // ── Webhooks ────────────────────────────────────────────────────────────
+
+  // POST /api/v1/mail/webhooks/stalwart — Stalwart mail server webhook
+  // No auth required (called by external service), but webhook secret checked
+  fastify.post('/webhooks/stalwart', async (request, reply) => {
+    // Verify webhook secret if configured
+    const secret = config.mail.webhookSecret;
+    if (secret) {
+      const provided = request.headers['x-webhook-secret'] as string | undefined;
+      if (provided !== secret) {
+        return reply.status(401).send(err('UNAUTHORIZED', 'Invalid webhook secret'));
+      }
+    }
+
+    const body = request.body as StalwartWebhookEvent | undefined;
+    if (!body?.type || !body?.data) {
+      return reply.status(400).send(err('INVALID_PAYLOAD', 'type and data are required'));
+    }
+
+    try {
+      const result = await handleStalwartWebhook(body);
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error('[mail] Webhook processing error:', message);
+      return reply.status(500).send(err('WEBHOOK_FAILED', message));
     }
   });
 }

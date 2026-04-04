@@ -10,6 +10,7 @@ import { getProvider } from '../../services/mail/provider-factory.js';
 import * as domainService from '../../services/mail/domain-service.js';
 import * as mailboxService from '../../services/mail/mailbox-service.js';
 import * as deliveryService from '../../services/mail/delivery-service.js';
+import { syncMailbox } from '../../services/mail/sync-service.js';
 
 // ── Routes ─────────────────────────────────────────────────────────────
 
@@ -201,5 +202,21 @@ export default async function mailAdminRoutes(fastify: FastifyInstance) {
       limit: query.limit ? parseInt(query.limit, 10) : undefined,
     });
     return reply.send(ok({ deliveries }));
+  });
+
+  // POST /sync/:mailboxId — trigger manual mailbox sync
+  fastify.post('/sync/:mailboxId', async (request, reply) => {
+    const { mailboxId } = request.params as { mailboxId: string };
+
+    try {
+      const result = await syncMailbox(mailboxId);
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes('not found')) {
+        return reply.status(404).send(err('NOT_FOUND', message));
+      }
+      return reply.status(500).send(err('SYNC_FAILED', message));
+    }
   });
 }
