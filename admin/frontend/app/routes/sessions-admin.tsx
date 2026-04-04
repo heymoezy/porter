@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Link } from "react-router"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Activity, Pause, Database, MessageSquare } from "lucide-react"
@@ -187,8 +188,22 @@ export default function SessionsAdminPage() {
             {sessions.map(s => (
               <tr key={s.id} className="border-b border-border/50 hover:bg-raised/50">
                 <td className="py-2 pr-4 text-text3 font-mono text-xs">{s.id.slice(0, 8)}</td>
-                <td className="py-2 pr-4 text-text">{s.agent_name ?? (s.agent_id?.slice(0, 8) || s.username || "--")}</td>
-                <td className="py-2 pr-4 text-text2">{s.gateway_type ?? "--"}</td>
+                <td className="py-2 pr-4 text-text">
+                  {s.agent_id ? (
+                    <Link to={`/agents/${s.agent_id}`} className="text-accent-porter hover:underline">
+                      {s.agent_name ?? s.agent_id.slice(0, 8)}
+                    </Link>
+                  ) : (
+                    s.username || "--"
+                  )}
+                </td>
+                <td className="py-2 pr-4 text-text2">
+                  {s.gateway_type ? (
+                    <Link to="/bridge" className="text-accent-porter hover:underline">
+                      {s.gateway_type}
+                    </Link>
+                  ) : "--"}
+                </td>
                 <td className="py-2 pr-4"><StatusBadge status={s.status} /></td>
                 <td className="py-2 pr-4"><TokenBar used={s.tokens_used} budget={s.token_budget} /></td>
                 <td className="py-2 pr-4 text-right text-text2">{s.context_msgs}</td>

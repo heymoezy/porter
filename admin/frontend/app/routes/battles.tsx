@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { Link } from "react-router"
 import { api } from "~/lib/api"
 import {
   Swords, Trophy, Users, ChevronDown, ChevronRight,
@@ -253,8 +254,8 @@ function BattlesTab() {
                 <td className="py-2 pr-2 text-text3">
                   {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
                 </td>
-                <td className="py-2 pr-4 text-text">{b.challenger_name ?? b.challenger_id?.slice(0, 8)}</td>
-                <td className="py-2 pr-4 text-text">{b.defender_name ?? b.defender_id?.slice(0, 8)}</td>
+                <td className="py-2 pr-4 text-text"><Link to={`/agents/${b.challenger_id}`} className="text-accent-porter hover:underline">{b.challenger_name ?? b.challenger_id?.slice(0, 8)}</Link></td>
+                <td className="py-2 pr-4 text-text"><Link to={`/agents/${b.defender_id}`} className="text-accent-porter hover:underline">{b.defender_name ?? b.defender_id?.slice(0, 8)}</Link></td>
                 <td className="py-2 pr-4 text-text2">{b.domain}</td>
                 <td className="py-2 pr-4"><StatusBadge status={b.status} /></td>
                 <td className="py-2 pr-4 text-right"><EloDelta before={b.challenger_elo_before} after={b.challenger_elo_after} /></td>
@@ -313,7 +314,7 @@ function LeaderboardTab() {
         {rows.map((r, i) => (
           <tr key={r.template_id} className="border-b border-border/50 hover:bg-raised/50">
             <td className="py-2 pr-4 text-text3 font-mono">{i + 1}</td>
-            <td className="py-2 pr-4 text-text font-medium">{r.agent_name ?? r.template_id.slice(0, 8)}</td>
+            <td className="py-2 pr-4 text-text font-medium"><Link to={`/agents/${r.template_id}`} className="text-accent-porter hover:underline">{r.agent_name ?? r.template_id.slice(0, 8)}</Link></td>
             <td className="py-2 pr-4 text-right text-text font-mono">{r.elo}</td>
             <td className="py-2 pr-4 text-right text-text2">{r.level}</td>
             <td className="py-2 pr-4 text-right text-text3">{r.xp.toLocaleString()}</td>
@@ -366,8 +367,8 @@ function BondsTab() {
       <tbody>
         {bonds.map(b => (
           <tr key={b.id} className="border-b border-border/50 hover:bg-raised/50">
-            <td className="py-2 pr-4 text-text font-medium">{b.agent_a_name ?? b.agent_a_id.slice(0, 8)}</td>
-            <td className="py-2 pr-4 text-text font-medium">{b.agent_b_name ?? b.agent_b_id.slice(0, 8)}</td>
+            <td className="py-2 pr-4 text-text font-medium"><Link to={`/agents/${b.agent_a_id}`} className="text-accent-porter hover:underline">{b.agent_a_name ?? b.agent_a_id.slice(0, 8)}</Link></td>
+            <td className="py-2 pr-4 text-text font-medium"><Link to={`/agents/${b.agent_b_id}`} className="text-accent-porter hover:underline">{b.agent_b_name ?? b.agent_b_id.slice(0, 8)}</Link></td>
             <td className="py-2 pr-4 text-right text-text2">{b.chain_count}</td>
             <td className="py-2 pr-4 text-right text-text2">{b.success_count}</td>
             <td className="py-2 pr-4 text-right text-accent-porter font-mono">{b.combo_score.toFixed(1)}</td>

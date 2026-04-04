@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Link } from "react-router"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
@@ -160,7 +161,9 @@ export default function EvolutionPage() {
                       const isPending = p.status === "pending"
                       return (
                         <tr key={p.id} className="border-b border-border/50 hover:bg-surface/30 transition-colors">
-                          <td className="px-4 py-2.5 text-foreground font-medium">{p.skill_name}</td>
+                          <td className="px-4 py-2.5 font-medium">
+                            <Link to="/skills" className="text-accent-porter hover:underline">{p.skill_name}</Link>
+                          </td>
                           <td className="px-4 py-2.5">
                             <Badge variant="outline" className={`text-2xs ${TYPE_BADGE[p.change_type] ?? "bg-text3/15 text-text3"}`}>
                               {p.change_type}
@@ -252,7 +255,9 @@ export default function EvolutionPage() {
                       const deltaPositive = delta != null && parseFloat(delta) >= 0
                       return (
                         <tr key={e.id} className="border-b border-border/50 hover:bg-surface/30 transition-colors">
-                          <td className="px-4 py-2.5 text-foreground font-medium">{e.skill_name}</td>
+                          <td className="px-4 py-2.5 font-medium">
+                            <Link to="/skills" className="text-accent-porter hover:underline">{e.skill_name}</Link>
+                          </td>
                           <td className="px-4 py-2.5">
                             <Badge variant="outline" className={`text-2xs ${TYPE_BADGE[e.change_type] ?? "bg-text3/15 text-text3"}`}>
                               {e.change_type}

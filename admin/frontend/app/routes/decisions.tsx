@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { Link } from "react-router"
 import { api } from "~/lib/api"
 import { ChevronDown, ChevronRight, Search } from "lucide-react"
 
@@ -185,7 +186,7 @@ export default function DecisionsPage() {
                       {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
                     </td>
                     <td className="py-2 pr-4 text-text3 text-xs whitespace-nowrap">{formatDate(d.created_at)}</td>
-                    <td className="py-2 pr-4 text-text">{d.agent_name ?? (d.agent_id?.slice(0, 8) || "system")}</td>
+                    <td className="py-2 pr-4 text-text">{d.agent_id ? <Link to={`/agents/${d.agent_id}`} className="text-accent-porter hover:underline">{d.agent_name ?? d.agent_id.slice(0, 8)}</Link> : "system"}</td>
                     <td className="py-2 pr-4"><TypeBadge type={d.decision_type} /></td>
                     <td className="py-2 pr-4 text-text max-w-[200px] truncate">{d.chosen}</td>
                     <td className="py-2 pr-4 text-text2 max-w-[300px] truncate">{d.reasoning}</td>

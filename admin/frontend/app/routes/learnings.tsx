@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Link } from "react-router"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
@@ -174,8 +175,10 @@ export default function LearningsPage() {
                     <td className="px-4 py-2.5 text-text2 text-xs max-w-lg">
                       <p className="whitespace-pre-wrap break-words">{l.learnings}</p>
                     </td>
-                    <td className="px-4 py-2.5 text-text3 text-xs font-mono">
-                      {l.session_id.slice(0, 8)}
+                    <td className="px-4 py-2.5 text-xs font-mono">
+                      <Link to="/sessions" className="text-accent-porter hover:underline">
+                        {l.session_id.slice(0, 8)}
+                      </Link>
                     </td>
                   </tr>
                 ))}

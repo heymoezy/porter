@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { Link } from "react-router"
 import { api } from "~/lib/api"
 
 // --- Types ---
@@ -192,7 +193,7 @@ function BreakdownTable({
   rows,
 }: {
   title: string
-  columns: { key: string; label: string; align?: "right" | "left"; format?: (v: unknown) => string }[]
+  columns: { key: string; label: string; align?: "right" | "left"; format?: (v: unknown) => string; render?: (v: unknown, row: Record<string, unknown>) => React.ReactNode }[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   rows: any[]
 }) {
@@ -228,7 +229,7 @@ function BreakdownTable({
                     c.align === "right" ? "text-right text-text2" : "text-text font-medium"
                   }`}
                 >
-                  {c.format ? c.format(row[c.key]) : String(row[c.key] ?? "-")}
+                  {c.render ? c.render(row[c.key], row) : c.format ? c.format(row[c.key]) : String(row[c.key] ?? "-")}
                 </td>
               ))}
             </tr>
@@ -263,7 +264,7 @@ function OverviewTab({ data }: { data: CostSummary }) {
       <BreakdownTable
         title="Cost by Gateway"
         columns={[
-          { key: "gateway_name", label: "Gateway" },
+          { key: "gateway_name", label: "Gateway", render: (v) => <Link to="/bridge" className="text-accent-porter hover:underline">{String(v ?? "-")}</Link> },
           { key: "dispatches", label: "Dispatches", align: "right", format: (v) => Number(v).toLocaleString() },
           { key: "total_cost", label: "Cost", align: "right", format: (v) => fmtCost(v as number) },
           { key: "avg_latency", label: "Avg Latency", align: "right", format: (v) => fmtMs(v as number) },
@@ -292,7 +293,7 @@ function GatewayTab({ data }: { data: GatewayRow[] }) {
     <BreakdownTable
       title="Cost by Gateway"
       columns={[
-        { key: "gateway_name", label: "Gateway" },
+        { key: "gateway_name", label: "Gateway", render: (v) => <Link to="/bridge" className="text-accent-porter hover:underline">{String(v ?? "-")}</Link> },
         { key: "gateway_id", label: "ID" },
         { key: "dispatches", label: "Dispatches", align: "right", format: (v) => Number(v).toLocaleString() },
         { key: "total_cost", label: "Total Cost", align: "right", format: (v) => fmtCost(v as number) },
@@ -339,7 +340,7 @@ function AgentTab() {
     <BreakdownTable
       title="Cost by Agent"
       columns={[
-        { key: "agent_id", label: "Agent" },
+        { key: "agent_id", label: "Agent", render: (v, row) => <Link to={`/agents/${String(v)}`} className="text-accent-porter hover:underline">{String((row as Record<string, unknown>).source_agent ?? v ?? "-")}</Link> },
         { key: "dispatches", label: "Dispatches", align: "right", format: (v) => Number(v).toLocaleString() },
         { key: "total_cost", label: "Total Cost", align: "right", format: (v) => fmtCost(v as number) },
         { key: "total_input", label: "Input Tokens", align: "right", format: (v) => fmtTokens(v as number) },
@@ -368,7 +369,7 @@ function ProjectTab() {
     <BreakdownTable
       title="Cost by Project"
       columns={[
-        { key: "project_name", label: "Project" },
+        { key: "project_name", label: "Project", render: (v) => <Link to="/files" className="text-accent-porter hover:underline">{String(v ?? "-")}</Link> },
         { key: "dispatches", label: "Dispatches", align: "right", format: (v) => Number(v).toLocaleString() },
         { key: "total_cost", label: "Total Cost", align: "right", format: (v) => fmtCost(v as number) },
         { key: "total_input", label: "Input Tokens", align: "right", format: (v) => fmtTokens(v as number) },
@@ -454,7 +455,7 @@ function DispatchesTab() {
               <tr key={d.id} className="border-b border-border/30 last:border-0 hover:bg-surface/50">
                 <td className="px-3 py-1.5 text-xs text-text2 whitespace-nowrap">{fmtDate(d.created_at)}</td>
                 <td className="px-3 py-1.5 text-xs font-medium text-text">{d.model_name}</td>
-                <td className="px-3 py-1.5 text-xs text-text2">{d.gateway_id}</td>
+                <td className="px-3 py-1.5 text-xs text-text2"><Link to="/bridge" className="text-accent-porter hover:underline">{d.gateway_id}</Link></td>
                 <td className="px-3 py-1.5 text-xs text-text2 text-right font-mono">
                   {fmtCost(d.estimated_cost_usd)}
                 </td>
@@ -463,7 +464,7 @@ function DispatchesTab() {
                 </td>
                 <td className="px-3 py-1.5 text-xs text-text2 text-right">{fmtMs(d.latency_ms)}</td>
                 <td className="px-3 py-1.5 text-xs text-text3 truncate max-w-[120px]">{d.intent || "-"}</td>
-                <td className="px-3 py-1.5 text-xs text-text3">{d.username || "-"}</td>
+                <td className="px-3 py-1.5 text-xs text-text3">{d.username ? <Link to={`/users/${d.username}`} className="text-accent-porter hover:underline">{d.username}</Link> : "-"}</td>
               </tr>
             ))}
           </tbody>

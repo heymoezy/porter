@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Link } from "react-router"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
@@ -185,14 +186,26 @@ export default function MsgBusPage() {
                           {fmtDate(ev.created_at)}
                         </td>
                         <td className="px-4 py-2.5 text-xs">
-                          <span className="text-foreground font-medium">{ev.source_agent ?? "?"}</span>
+                          {ev.source_agent ? (
+                            <Link to={`/agents/${ev.source_agent}`} className="text-accent-porter hover:underline font-medium">
+                              {ev.source_agent}
+                            </Link>
+                          ) : (
+                            <span className="text-foreground font-medium">?</span>
+                          )}
                           {ev.source_gateway && (
                             <Badge variant="outline" className="ml-1 text-2xs bg-text3/10 text-text3 border-text3/20">
                               {ev.source_gateway}
                             </Badge>
                           )}
                           <span className="mx-1.5 text-text3">&rarr;</span>
-                          <span className="text-foreground font-medium">{ev.target_agent ?? "?"}</span>
+                          {ev.target_agent ? (
+                            <Link to={`/agents/${ev.target_agent}`} className="text-accent-porter hover:underline font-medium">
+                              {ev.target_agent}
+                            </Link>
+                          ) : (
+                            <span className="text-foreground font-medium">?</span>
+                          )}
                           {ev.target_gateway && (
                             <Badge variant="outline" className="ml-1 text-2xs bg-text3/10 text-text3 border-text3/20">
                               {ev.target_gateway}
