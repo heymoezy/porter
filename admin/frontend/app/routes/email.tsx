@@ -8,35 +8,53 @@ import { Input } from "~/components/ui/input"
 import {
   Inbox, Send, FileText, Trash2, Plus, ArrowLeft, Mail,
   Bold, Italic, Link, List, ListOrdered, Code, Heading,
-  ChevronDown, Settings, Check, AlertTriangle,
+  ChevronDown, Settings, Check, AlertTriangle, Archive,
+  Reply, CornerUpLeft,
 } from "lucide-react"
 import { Label } from "~/components/ui/label"
 
-interface EmailMessage {
-  id: number
-  folder: string
-  from_email: string
-  from_name: string
-  to_email: string
-  to_name: string
-  subject: string
+// ── Types matching backend row shapes ──────────────────────────────────
+
+interface Mailbox {
+  id: string
+  domain_id: string
+  address: string
+  local_part: string
+  display_name: string
+  mailbox_type: string
   status: string
-  body?: string
-  body_html?: string
-  preview?: string
-  sent_at: number | null
-  read_at: number | null
-  created_at: number
+  last_sync_at: number | null
 }
 
-type Folder = "inbox" | "sent" | "drafts" | "trash"
+interface ThreadRow {
+  id: string
+  mailbox_id: string
+  subject_canonical: string
+  last_message_at: number | null
+  message_count: number
+  participants_json: string[] | unknown
+  created_at: number | null
+}
 
-const folders: Array<{ id: Folder; label: string; icon: React.ElementType }> = [
-  { id: "inbox", label: "Inbox", icon: Inbox },
-  { id: "sent", label: "Sent", icon: Send },
-  { id: "drafts", label: "Drafts", icon: FileText },
-  { id: "trash", label: "Trash", icon: Trash2 },
-]
+interface MessageRow {
+  id: string
+  mailbox_id: string
+  thread_id: string | null
+  direction: string
+  folder: string
+  status: string
+  from_address: string
+  from_name: string
+  to_addresses_json: string[] | unknown
+  cc_addresses_json: string[] | unknown
+  subject: string
+  snippet: string
+  text_body: string
+  html_body: string
+  read_at: number | null
+  sent_at: number | null
+  created_at: number | null
+}
 
 interface MailIdentity {
   mailboxId: string
@@ -48,6 +66,18 @@ interface MailIdentity {
   isPrimary: boolean
 }
 
+type Folder = "inbox" | "sent" | "drafts" | "trash" | "archive"
+
+const folderDefs: Array<{ id: Folder; label: string; icon: React.ElementType }> = [
+  { id: "inbox", label: "Inbox", icon: Inbox },
+  { id: "sent", label: "Sent", icon: Send },
+  { id: "drafts", label: "Drafts", icon: FileText },
+  { id: "archive", label: "Archive", icon: Archive },
+  { id: "trash", label: "Trash", icon: Trash2 },
+]
+
+// ── Helpers ────────────────────────────────────────────────────────────
+
 function fmtDate(ts: number | null) {
   if (!ts) return ""
   const d = new Date(ts * 1000)
@@ -56,7 +86,6 @@ function fmtDate(ts: number | null) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
 
-/** Strip dangerous HTML: script tags, event handlers, javascript: URLs */
 function sanitizeHtml(html: string): string {
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
@@ -66,22 +95,48 @@ function sanitizeHtml(html: string): string {
     .replace(/src\s*=\s*["']javascript:[^"']*["']/gi, 'src=""')
 }
 
+function parseJsonArray(val: unknown): string[] {
+  if (Array.isArray(val)) return val as string[]
+  if (typeof val === "string") { try { return JSON.parse(val) } catch { return [] } }
+  return []
+}
+
+function threadParticipants(thread: ThreadRow): string {
+  const arr = parseJsonArray(thread.participants_json)
+  if (arr.length === 0) return "Unknown"
+  if (arr.length === 1) return arr[0]
+  return `${arr[0]} +${arr.length - 1}`
+}
+
+// ── Main component ─────────────────────────────────────────────────────
+
 function EmailContent() {
   const qc = useQueryClient()
+  const [selectedMailboxId, setSelectedMailboxId] = useState<string | null>(null)
   const [activeFolder, setActiveFolder] = useState<Folder>("inbox")
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   const [composing, setComposing] = useState(false)
   const [composeData, setComposeData] = useState({ from: "", to: "", subject: "", body: "" })
   const [showFromPicker, setShowFromPicker] = useState(false)
+  const [showMailboxPicker, setShowMailboxPicker] = useState(false)
   const [showSmtp, setShowSmtp] = useState(false)
   const [smtpForm, setSmtpForm] = useState<Record<string, string>>({})
+  const [replyText, setReplyText] = useState("")
+  const [replyingToId, setReplyingToId] = useState<string | null>(null)
   const editorRef = useRef<HTMLDivElement>(null)
 
+  // ── SMTP config (separate concern, keep) ──────────────────────────
   const { data: smtpData } = useQuery({
     queryKey: ["admin", "email", "config"],
     queryFn: () => api<{ configured: boolean; host: string; port: number; user: string; hasPassword: boolean; fromName: string; fromEmail: string; replyTo: string }>("/api/admin/email/config"),
   })
 
+  const saveSmtp = useMutation({
+    mutationFn: (data: Record<string, string>) => api("/api/admin/email/config", { method: "PUT", json: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "email", "config"] }),
+  })
+
+  // ── Identities (for compose picker) ───────────────────────────────
   const identitiesQuery = useQuery({
     queryKey: ["mail", "identities"],
     queryFn: () => api<{ identities: MailIdentity[] }>("/api/v1/mail"),
@@ -95,42 +150,125 @@ function EmailContent() {
     agentId: i.agentId,
   }))
 
-  const saveSmtp = useMutation({
-    mutationFn: (data: Record<string, string>) => api("/api/admin/email/config", { method: "PUT", json: data }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "email", "config"] }),
-  })
-
-  const { data: listData, isLoading } = useQuery({
-    queryKey: ["admin", "email", "messages", activeFolder],
-    queryFn: () => api<{ messages: EmailMessage[]; folderCounts: Record<string, number> }>(`/api/admin/email/messages?folder=${activeFolder}`),
-  })
-
-  const { data: msgData } = useQuery({
-    queryKey: ["admin", "email", "message", selectedId],
-    queryFn: () => api<EmailMessage>(`/api/admin/email/messages/${selectedId}`),
-    enabled: !!selectedId,
-  })
-
-  const sendMessage = useMutation({
-    mutationFn: (data: { from_name: string; from_email: string; to_email: string; subject: string; body: string; body_html: string; send: string }) =>
-      api("/api/admin/email/messages", { method: "POST", json: data }),
-    onSuccess: () => {
-      setComposing(false)
-      setComposeData({ from: "", to: "", subject: "", body: "" })
-      qc.invalidateQueries({ queryKey: ["admin", "email"] })
-    },
-  })
-
-  const deleteMessage = useMutation({
-    mutationFn: (id: number) => api(`/api/admin/email/messages/${id}`, { method: "DELETE" }),
-    onSuccess: () => { setSelectedId(null); qc.invalidateQueries({ queryKey: ["admin", "email"] }) },
-  })
-
-  const messages = listData?.messages ?? []
-  const counts = listData?.folderCounts ?? {}
   const primaryIdentity = identitiesQuery.data?.identities?.find(i => i.isPrimary)
   const defaultSenderId = primaryIdentity?.mailboxId ?? senders[0]?.id ?? ""
   const activeSender = senders.find(s => s.id === (composeData.from || defaultSenderId)) ?? senders[0]
+
+  // ── Mailboxes ─────────────────────────────────────────────────────
+  const mailboxesQuery = useQuery({
+    queryKey: ["mail", "mailboxes"],
+    queryFn: () => api<{ mailboxes: Mailbox[] }>("/api/v1/mail/mailboxes"),
+  })
+
+  const mailboxes = mailboxesQuery.data?.mailboxes ?? []
+
+  // Auto-select first mailbox
+  const activeMailboxId = selectedMailboxId ?? mailboxes[0]?.id ?? null
+  const activeMailbox = mailboxes.find(m => m.id === activeMailboxId)
+
+  // ── Folder counts ─────────────────────────────────────────────────
+  const foldersQuery = useQuery({
+    queryKey: ["mail", "folders", activeMailboxId],
+    queryFn: () => api<{ mailboxId: string; folders: Record<string, number> }>(`/api/v1/mail/mailboxes/${activeMailboxId}/folders`),
+    enabled: !!activeMailboxId,
+    refetchInterval: 30_000,
+  })
+
+  const folderCounts = foldersQuery.data?.folders ?? {}
+
+  // ── Threads ───────────────────────────────────────────────────────
+  const threadsQuery = useQuery({
+    queryKey: ["mail", "threads", activeMailboxId, activeFolder],
+    queryFn: () => api<{ threads: ThreadRow[]; total: number }>(`/api/v1/mail/mailboxes/${activeMailboxId}/threads?folder=${activeFolder}&limit=50`),
+    enabled: !!activeMailboxId,
+    refetchInterval: activeFolder === "inbox" ? 15_000 : undefined,
+  })
+
+  const threads = threadsQuery.data?.threads ?? []
+
+  // ── Thread messages ───────────────────────────────────────────────
+  const threadMessagesQuery = useQuery({
+    queryKey: ["mail", "thread-messages", selectedThreadId],
+    queryFn: () => api<{ messages: MessageRow[] }>(`/api/v1/mail/threads/${selectedThreadId}/messages`),
+    enabled: !!selectedThreadId,
+  })
+
+  const threadMessages = threadMessagesQuery.data?.messages ?? []
+  const selectedThread = threads.find(t => t.id === selectedThreadId)
+
+  // ── Mark read on view ─────────────────────────────────────────────
+  const markReadMutation = useMutation({
+    mutationFn: (messageId: string) => api(`/api/v1/mail/messages/${messageId}/read`, { method: "POST" }),
+  })
+
+  // Auto-mark unread messages as read when thread is viewed
+  const markThreadMessagesRead = (messages: MessageRow[]) => {
+    for (const msg of messages) {
+      if (!msg.read_at && msg.direction === "inbound") {
+        markReadMutation.mutate(msg.id, {
+          onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["mail", "folders", activeMailboxId] })
+          },
+        })
+      }
+    }
+  }
+
+  // ── Send ──────────────────────────────────────────────────────────
+  const sendMutation = useMutation({
+    mutationFn: (data: { mailboxId: string; to: string[]; subject: string; textBody: string; htmlBody?: string }) =>
+      api("/api/v1/mail/messages/send", { method: "POST", json: data }),
+    onSuccess: () => {
+      setComposing(false)
+      setComposeData({ from: "", to: "", subject: "", body: "" })
+      if (editorRef.current) editorRef.current.innerHTML = ""
+      qc.invalidateQueries({ queryKey: ["mail"] })
+    },
+  })
+
+  // ── Draft ─────────────────────────────────────────────────────────
+  const draftMutation = useMutation({
+    mutationFn: (data: { mailboxId: string; to?: string[]; subject?: string; textBody?: string; htmlBody?: string }) =>
+      api("/api/v1/mail/drafts", { method: "POST", json: data }),
+    onSuccess: () => {
+      setComposing(false)
+      setComposeData({ from: "", to: "", subject: "", body: "" })
+      if (editorRef.current) editorRef.current.innerHTML = ""
+      qc.invalidateQueries({ queryKey: ["mail"] })
+    },
+  })
+
+  // ── Reply ─────────────────────────────────────────────────────────
+  const replyMutation = useMutation({
+    mutationFn: (data: { messageId: string; textBody: string }) =>
+      api(`/api/v1/mail/messages/${data.messageId}/reply`, { method: "POST", json: { textBody: data.textBody } }),
+    onSuccess: () => {
+      setReplyText("")
+      setReplyingToId(null)
+      qc.invalidateQueries({ queryKey: ["mail"] })
+    },
+  })
+
+  // ── Archive ───────────────────────────────────────────────────────
+  const archiveMutation = useMutation({
+    mutationFn: (messageId: string) =>
+      api(`/api/v1/mail/messages/${messageId}/archive`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["mail"] })
+    },
+  })
+
+  // ── Trash ─────────────────────────────────────────────────────────
+  const trashMutation = useMutation({
+    mutationFn: (messageId: string) =>
+      api(`/api/v1/mail/messages/${messageId}/trash`, { method: "POST" }),
+    onSuccess: () => {
+      setSelectedThreadId(null)
+      qc.invalidateQueries({ queryKey: ["mail"] })
+    },
+  })
+
+  // ── Handlers ──────────────────────────────────────────────────────
 
   function execFormat(cmd: string, value?: string) {
     document.execCommand(cmd, false, value)
@@ -139,20 +277,58 @@ function EmailContent() {
 
   function handleSend(asDraft: boolean) {
     if (!activeSender) return
+    const mailboxId = activeSender.id
     const html = editorRef.current?.innerHTML || ""
     const text = editorRef.current?.textContent || ""
-    sendMessage.mutate({
-      from_name: activeSender.name,
-      from_email: activeSender.email,
-      to_email: composeData.to,
-      subject: composeData.subject,
-      body: text,
-      body_html: html,
-      send: asDraft ? "false" : "true",
-    })
+    const toList = composeData.to.split(",").map(s => s.trim()).filter(Boolean)
+
+    if (asDraft) {
+      draftMutation.mutate({
+        mailboxId,
+        to: toList.length > 0 ? toList : undefined,
+        subject: composeData.subject || undefined,
+        textBody: text || undefined,
+        htmlBody: html || undefined,
+      })
+    } else {
+      if (!toList.length || !composeData.subject || !text) return
+      sendMutation.mutate({ mailboxId, to: toList, subject: composeData.subject, textBody: text, htmlBody: html })
+    }
   }
 
-  if (isLoading) {
+  function handleReply(messageId: string) {
+    if (!replyText.trim()) return
+    replyMutation.mutate({ messageId, textBody: replyText.trim() })
+  }
+
+  function handleSelectThread(threadId: string) {
+    setSelectedThreadId(threadId)
+    setComposing(false)
+    // Mark messages read after a short delay to allow query to populate
+    setTimeout(() => {
+      const cached = qc.getQueryData<{ messages: MessageRow[] }>(["mail", "thread-messages", threadId])
+      if (cached?.messages) markThreadMessagesRead(cached.messages)
+    }, 500)
+  }
+
+  function handleArchiveThread() {
+    // Archive all messages in the thread
+    for (const msg of threadMessages) {
+      if (msg.folder !== "archive") archiveMutation.mutate(msg.id)
+    }
+    setSelectedThreadId(null)
+  }
+
+  function handleTrashThread() {
+    // Trash all messages in the thread
+    for (const msg of threadMessages) {
+      if (msg.folder !== "trash") trashMutation.mutate(msg.id)
+    }
+    setSelectedThreadId(null)
+  }
+
+  // ── Loading state ─────────────────────────────────────────────────
+  if (mailboxesQuery.isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="size-6 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
@@ -214,208 +390,356 @@ function EmailContent() {
       )}
 
       <div className="flex gap-2 flex-1 min-h-0">
-      {/* Folder sidebar */}
-      <div className="w-[140px] shrink-0 space-y-0.5">
-        <Button size="sm" className="w-full gap-1 mb-2 h-7 text-xs" onClick={() => { setComposing(true); setSelectedId(null) }}>
-          <Plus className="size-3" /> Compose
-        </Button>
-        {folders.map(f => (
-          <button
-            key={f.id}
-            onClick={() => { setActiveFolder(f.id); setSelectedId(null); setComposing(false) }}
-            className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
-              activeFolder === f.id ? "bg-accent-porter/15 text-accent-porter font-medium" : "text-text3 hover:text-text2 hover:bg-raised"
-            }`}
-          >
-            <f.icon className="size-3" />
-            <span className="flex-1 text-left">{f.label}</span>
-            {(counts[f.id] ?? 0) > 0 && <span className="text-2xs text-text3">{counts[f.id]}</span>}
-          </button>
-        ))}
-      </div>
-
-      {/* Main */}
-      <div className="flex-1 min-w-0 rounded-xl border border-border overflow-hidden flex flex-col">
-        {composing ? (
-          <div className="flex-1 flex flex-col">
-            {/* Compose header */}
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-surface">
-              <div className="flex items-center gap-2">
-                <button onClick={() => setComposing(false)} className="text-text3 hover:text-text2"><ArrowLeft className="size-3" /></button>
-                <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Compose</span>
-              </div>
-              <div className="flex gap-1">
-                <Button variant="outline" size="sm" className="h-6 text-2xs" onClick={() => handleSend(true)} disabled={!activeSender}>Draft</Button>
-                <Button size="sm" className="h-6 text-2xs gap-1" onClick={() => handleSend(false)} disabled={!activeSender}><Send className="size-2.5" /> Send</Button>
-              </div>
-            </div>
-
-            {/* From — loading / empty / picker */}
-            {identitiesQuery.isLoading ? (
-              <div className="px-3 py-2 border-b border-border/50 flex items-center gap-2">
-                <span className="text-2xs text-text3 w-10">From</span>
-                <div className="size-3.5 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
-                <span className="text-2xs text-text3">Loading mailboxes...</span>
-              </div>
-            ) : senders.length === 0 ? (
-              <div className="px-3 py-3 border-b border-border/50 flex items-center gap-2">
-                <AlertTriangle className="size-3.5 text-warning shrink-0" />
-                <span className="text-xs text-text3">No mailboxes provisioned. Go to <strong className="text-text2">Admin &gt; Mail</strong> to set up agent mailboxes.</span>
-              </div>
-            ) : (
-            <div className="px-3 py-1 border-b border-border/50 flex items-center gap-2 relative">
-              <span className="text-2xs text-text3 w-10">From</span>
-              <button
-                onClick={() => setShowFromPicker(!showFromPicker)}
-                className="flex items-center gap-1.5 rounded px-2 py-0.5 text-xs hover:bg-raised transition-colors"
-              >
-                <Badge className="text-2xs bg-accent-porter/15 text-accent-porter border-0">{activeSender?.role}</Badge>
-                <span className="font-medium text-text">{activeSender?.name}</span>
-                <span className="text-text3">&lt;{activeSender?.email}&gt;</span>
-                <ChevronDown className="size-2.5 text-text3" />
-              </button>
-              {showFromPicker && (
-                <div className="absolute top-full left-12 z-50 mt-1 rounded-lg border border-border bg-surface shadow-lg py-1 w-[280px]">
-                  {senders.map(s => (
+        {/* Left sidebar: Mailbox selector + Compose + Folders */}
+        <div className="w-[160px] shrink-0 space-y-0.5">
+          {/* Mailbox dropdown */}
+          <div className="relative mb-2">
+            <button
+              onClick={() => setShowMailboxPicker(!showMailboxPicker)}
+              className="flex w-full items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs hover:bg-raised transition-colors"
+            >
+              <Mail className="size-3 text-accent-porter shrink-0" />
+              <span className="flex-1 text-left truncate font-medium text-text">
+                {activeMailbox ? (activeMailbox.display_name || activeMailbox.address) : "No mailbox"}
+              </span>
+              <ChevronDown className="size-2.5 text-text3 shrink-0" />
+            </button>
+            {showMailboxPicker && (
+              <div className="absolute top-full left-0 z-50 mt-1 w-full rounded-lg border border-border bg-surface shadow-lg py-1">
+                {mailboxes.length === 0 ? (
+                  <p className="px-3 py-2 text-2xs text-text3">No mailboxes</p>
+                ) : (
+                  mailboxes.map(mb => (
                     <button
-                      key={s.id}
-                      onClick={() => { setComposeData(d => ({ ...d, from: s.id })); setShowFromPicker(false) }}
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-raised transition-colors ${s.id === (composeData.from || defaultSenderId) ? "bg-accent-porter/10" : ""}`}
+                      key={mb.id}
+                      onClick={() => { setSelectedMailboxId(mb.id); setShowMailboxPicker(false); setSelectedThreadId(null) }}
+                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-raised transition-colors ${mb.id === activeMailboxId ? "bg-accent-porter/10" : ""}`}
                     >
-                      <Badge className="text-2xs bg-text3/15 text-text3 border-0 w-12 justify-center">{s.role}</Badge>
-                      <span className="font-medium text-text">{s.name}</span>
-                      <span className="text-text3 text-2xs">{s.email}</span>
+                      <span className="truncate text-text2">{mb.display_name || mb.address}</span>
                     </button>
-                  ))}
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Compose button */}
+          <Button size="sm" className="w-full gap-1 mb-2 h-7 text-xs" onClick={() => { setComposing(true); setSelectedThreadId(null) }}>
+            <Plus className="size-3" /> Compose
+          </Button>
+
+          {/* Folder list */}
+          {folderDefs.map(f => (
+            <button
+              key={f.id}
+              onClick={() => { setActiveFolder(f.id); setSelectedThreadId(null); setComposing(false) }}
+              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
+                activeFolder === f.id ? "bg-accent-porter/15 text-accent-porter font-medium" : "text-text3 hover:text-text2 hover:bg-raised"
+              }`}
+            >
+              <f.icon className="size-3" />
+              <span className="flex-1 text-left">{f.label}</span>
+              {(folderCounts[f.id] ?? 0) > 0 && <span className="text-2xs text-text3">{folderCounts[f.id]}</span>}
+            </button>
+          ))}
+
+          {/* Settings */}
+          <button
+            onClick={() => setShowSmtp(!showSmtp)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-text3 hover:text-text2 hover:bg-raised mt-2 transition-colors"
+          >
+            <Settings className="size-3" />
+            <span className="flex-1 text-left">SMTP</span>
+          </button>
+        </div>
+
+        {/* Center + Right */}
+        <div className="flex-1 min-w-0 rounded-xl border border-border overflow-hidden flex">
+          {composing ? (
+            /* ── Compose view ─────────────────────────────────── */
+            <div className="flex-1 flex flex-col">
+              {/* Compose header */}
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-surface">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setComposing(false)} className="text-text3 hover:text-text2"><ArrowLeft className="size-3" /></button>
+                  <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Compose</span>
+                </div>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="sm" className="h-6 text-2xs" onClick={() => handleSend(true)} disabled={!activeSender || draftMutation.isPending}>
+                    {draftMutation.isPending ? "Saving..." : "Draft"}
+                  </Button>
+                  <Button size="sm" className="h-6 text-2xs gap-1" onClick={() => handleSend(false)} disabled={!activeSender || sendMutation.isPending}>
+                    <Send className="size-2.5" /> {sendMutation.isPending ? "Sending..." : "Send"}
+                  </Button>
+                </div>
+              </div>
+
+              {/* From — loading / empty / picker */}
+              {identitiesQuery.isLoading ? (
+                <div className="px-3 py-2 border-b border-border/50 flex items-center gap-2">
+                  <span className="text-2xs text-text3 w-10">From</span>
+                  <div className="size-3.5 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
+                  <span className="text-2xs text-text3">Loading mailboxes...</span>
+                </div>
+              ) : senders.length === 0 ? (
+                <div className="px-3 py-3 border-b border-border/50 flex items-center gap-2">
+                  <AlertTriangle className="size-3.5 text-warning shrink-0" />
+                  <span className="text-xs text-text3">No mailboxes provisioned. Set up agent mailboxes first.</span>
+                </div>
+              ) : (
+                <div className="px-3 py-1 border-b border-border/50 flex items-center gap-2 relative">
+                  <span className="text-2xs text-text3 w-10">From</span>
+                  <button
+                    onClick={() => setShowFromPicker(!showFromPicker)}
+                    className="flex items-center gap-1.5 rounded px-2 py-0.5 text-xs hover:bg-raised transition-colors"
+                  >
+                    <Badge className="text-2xs bg-accent-porter/15 text-accent-porter border-0">{activeSender?.role}</Badge>
+                    <span className="font-medium text-text">{activeSender?.name}</span>
+                    <span className="text-text3">&lt;{activeSender?.email}&gt;</span>
+                    <ChevronDown className="size-2.5 text-text3" />
+                  </button>
+                  {showFromPicker && (
+                    <div className="absolute top-full left-12 z-50 mt-1 rounded-lg border border-border bg-surface shadow-lg py-1 w-[280px]">
+                      {senders.map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => { setComposeData(d => ({ ...d, from: s.id })); setShowFromPicker(false) }}
+                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-raised transition-colors ${s.id === (composeData.from || defaultSenderId) ? "bg-accent-porter/10" : ""}`}
+                        >
+                          <Badge className="text-2xs bg-text3/15 text-text3 border-0 w-12 justify-center">{s.role}</Badge>
+                          <span className="font-medium text-text">{s.name}</span>
+                          <span className="text-text3 text-2xs">{s.email}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-            )}
 
-            {/* To */}
-            <div className="px-3 py-1 border-b border-border/50 flex items-center gap-2">
-              <span className="text-2xs text-text3 w-10">To</span>
-              <Input
-                value={composeData.to}
-                onChange={e => setComposeData(d => ({ ...d, to: e.target.value }))}
-                className="h-6 text-xs bg-transparent border-0 focus-visible:ring-0 p-0"
-                placeholder="recipient@email.com"
+              {/* To */}
+              <div className="px-3 py-1 border-b border-border/50 flex items-center gap-2">
+                <span className="text-2xs text-text3 w-10">To</span>
+                <Input
+                  value={composeData.to}
+                  onChange={e => setComposeData(d => ({ ...d, to: e.target.value }))}
+                  className="h-6 text-xs bg-transparent border-0 focus-visible:ring-0 p-0"
+                  placeholder="recipient@email.com"
+                />
+              </div>
+
+              {/* Subject */}
+              <div className="px-3 py-1 border-b border-border/50 flex items-center gap-2">
+                <span className="text-2xs text-text3 w-10">Subject</span>
+                <Input
+                  value={composeData.subject}
+                  onChange={e => setComposeData(d => ({ ...d, subject: e.target.value }))}
+                  className="h-6 text-xs bg-transparent border-0 focus-visible:ring-0 p-0"
+                  placeholder="Subject"
+                />
+              </div>
+
+              {/* Formatting toolbar */}
+              <div className="flex items-center gap-0.5 px-3 py-1 border-b border-border/50 bg-background/50">
+                {[
+                  { icon: Bold, cmd: "bold" },
+                  { icon: Italic, cmd: "italic" },
+                  { icon: Code, cmd: "insertHTML", val: "<code>" },
+                  { icon: Heading, cmd: "formatBlock", val: "h3" },
+                  { icon: List, cmd: "insertUnorderedList" },
+                  { icon: ListOrdered, cmd: "insertOrderedList" },
+                  { icon: Link, cmd: "createLink", val: "prompt" },
+                ].map(({ icon: Icon, cmd, val }) => (
+                  <button
+                    key={cmd + (val || "")}
+                    onClick={() => {
+                      if (cmd === "createLink") {
+                        const url = window.prompt("URL:")
+                        if (url) execFormat(cmd, url)
+                      } else {
+                        execFormat(cmd, val)
+                      }
+                    }}
+                    className="flex size-6 items-center justify-center rounded text-text3 hover:bg-raised hover:text-text2 transition-colors"
+                  >
+                    <Icon className="size-3" />
+                  </button>
+                ))}
+              </div>
+
+              {/* Rich editor */}
+              <div
+                ref={editorRef}
+                contentEditable
+                className="flex-1 p-3 text-xs text-text bg-background resize-none focus:outline-none overflow-y-auto [&_h3]:text-sm [&_h3]:font-bold [&_h3]:mb-1 [&_code]:bg-raised [&_code]:px-1 [&_code]:rounded [&_a]:text-accent-porter [&_a]:underline [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4"
+                suppressContentEditableWarning
+                data-placeholder="Write your message..."
               />
             </div>
+          ) : selectedThreadId && selectedThread ? (
+            /* ── Thread detail view ───────────────────────────── */
+            <div className="flex-1 flex flex-col">
+              {/* Thread header */}
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-surface">
+                <button onClick={() => setSelectedThreadId(null)} className="flex items-center gap-1 text-xs text-text3 hover:text-text2">
+                  <ArrowLeft className="size-3" /> Back
+                </button>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="sm" className="h-6 text-2xs" onClick={handleArchiveThread}>
+                    <Archive className="size-2.5 mr-1" /> Archive
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-6 text-2xs text-danger" onClick={handleTrashThread}>
+                    <Trash2 className="size-2.5 mr-1" /> Trash
+                  </Button>
+                </div>
+              </div>
 
-            {/* Subject */}
-            <div className="px-3 py-1 border-b border-border/50 flex items-center gap-2">
-              <span className="text-2xs text-text3 w-10">Subject</span>
-              <Input
-                value={composeData.subject}
-                onChange={e => setComposeData(d => ({ ...d, subject: e.target.value }))}
-                className="h-6 text-xs bg-transparent border-0 focus-visible:ring-0 p-0"
-                placeholder="Subject"
-              />
-            </div>
+              {/* Thread subject */}
+              <div className="px-3 py-2 border-b border-border/50">
+                <p className="text-sm font-bold text-text">{selectedThread.subject_canonical || "(no subject)"}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-2xs text-text3">{selectedThread.message_count} message{selectedThread.message_count !== 1 ? "s" : ""}</span>
+                  <span className="text-2xs text-text3">{threadParticipants(selectedThread)}</span>
+                </div>
+              </div>
 
-            {/* Formatting toolbar */}
-            <div className="flex items-center gap-0.5 px-3 py-1 border-b border-border/50 bg-background/50">
-              {[
-                { icon: Bold, cmd: "bold" },
-                { icon: Italic, cmd: "italic" },
-                { icon: Code, cmd: "insertHTML", val: "<code>" },
-                { icon: Heading, cmd: "formatBlock", val: "h3" },
-                { icon: List, cmd: "insertUnorderedList" },
-                { icon: ListOrdered, cmd: "insertOrderedList" },
-                { icon: Link, cmd: "createLink", val: "prompt" },
-              ].map(({ icon: Icon, cmd, val }) => (
-                <button
-                  key={cmd + (val || "")}
-                  onClick={() => {
-                    if (cmd === "createLink") {
-                      const url = window.prompt("URL:")
-                      if (url) execFormat(cmd, url)
-                    } else {
-                      execFormat(cmd, val)
+              {/* Messages list */}
+              <div className="flex-1 overflow-y-auto">
+                {threadMessagesQuery.isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="size-4 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
+                  </div>
+                ) : threadMessages.length === 0 ? (
+                  <div className="px-3 py-8 text-center text-xs text-text3">No messages in this thread</div>
+                ) : (
+                  threadMessages.map((msg, idx) => (
+                    <div key={msg.id} className={`px-3 py-3 ${idx > 0 ? "border-t border-border/30" : ""}`}>
+                      {/* Message header */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge className={`text-2xs border-0 ${msg.direction === "inbound" ? "bg-blue-500/15 text-blue-400" : "bg-emerald-500/15 text-emerald-400"}`}>
+                          {msg.direction === "inbound" ? "In" : "Out"}
+                        </Badge>
+                        <span className="text-xs font-medium text-text">{msg.from_name || msg.from_address}</span>
+                        <span className="text-2xs text-text3">&lt;{msg.from_address}&gt;</span>
+                        <span className="text-2xs text-text3 ml-auto">{fmtDate(msg.sent_at || msg.created_at)}</span>
+                      </div>
+                      {/* To line */}
+                      <div className="flex items-center gap-1 mb-2 text-2xs text-text3">
+                        <span>To:</span>
+                        <span className="text-text2">{parseJsonArray(msg.to_addresses_json).join(", ") || "—"}</span>
+                      </div>
+                      {/* Body */}
+                      {msg.html_body ? (
+                        <div className="text-xs text-text2 leading-relaxed [&_h3]:text-sm [&_h3]:font-bold [&_code]:bg-raised [&_code]:px-1 [&_code]:rounded [&_a]:text-accent-porter" dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.html_body) }} />
+                      ) : (
+                        <div className="text-xs text-text2 leading-relaxed whitespace-pre-wrap">{msg.text_body || "(empty)"}</div>
+                      )}
+                      {/* Per-message reply button */}
+                      {msg.direction === "inbound" && (
+                        <div className="mt-2">
+                          {replyingToId === msg.id ? (
+                            <div className="flex gap-2 items-end">
+                              <Input
+                                value={replyText}
+                                onChange={e => setReplyText(e.target.value)}
+                                className="h-7 text-xs flex-1"
+                                placeholder="Type your reply..."
+                                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReply(msg.id) } }}
+                              />
+                              <Button size="sm" className="h-7 text-2xs gap-1" onClick={() => handleReply(msg.id)} disabled={replyMutation.isPending || !replyText.trim()}>
+                                <Send className="size-2.5" /> {replyMutation.isPending ? "..." : "Reply"}
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-7 text-2xs" onClick={() => { setReplyingToId(null); setReplyText("") }}>Cancel</Button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setReplyingToId(msg.id); setReplyText("") }}
+                              className="flex items-center gap-1 text-2xs text-text3 hover:text-accent-porter transition-colors"
+                            >
+                              <CornerUpLeft className="size-2.5" /> Reply
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Bottom reply bar */}
+              <div className="shrink-0 border-t border-border bg-surface px-3 py-2 flex gap-2 items-center">
+                <Reply className="size-3 text-text3 shrink-0" />
+                <Input
+                  value={replyText}
+                  onChange={e => setReplyText(e.target.value)}
+                  className="h-7 text-xs flex-1"
+                  placeholder="Quick reply..."
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault()
+                      // Reply to last inbound message, or last message overall
+                      const target = [...threadMessages].reverse().find(m => m.direction === "inbound") ?? threadMessages[threadMessages.length - 1]
+                      if (target && replyText.trim()) handleReply(target.id)
                     }
                   }}
-                  className="flex size-6 items-center justify-center rounded text-text3 hover:bg-raised hover:text-text2 transition-colors"
+                />
+                <Button
+                  size="sm"
+                  className="h-7 text-2xs gap-1"
+                  disabled={replyMutation.isPending || !replyText.trim()}
+                  onClick={() => {
+                    const target = [...threadMessages].reverse().find(m => m.direction === "inbound") ?? threadMessages[threadMessages.length - 1]
+                    if (target) handleReply(target.id)
+                  }}
                 >
-                  <Icon className="size-3" />
-                </button>
-              ))}
-            </div>
-
-            {/* Rich editor */}
-            <div
-              ref={editorRef}
-              contentEditable
-              className="flex-1 p-3 text-xs text-text bg-background resize-none focus:outline-none overflow-y-auto [&_h3]:text-sm [&_h3]:font-bold [&_h3]:mb-1 [&_code]:bg-raised [&_code]:px-1 [&_code]:rounded [&_a]:text-accent-porter [&_a]:underline [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4"
-              suppressContentEditableWarning
-              data-placeholder="Write your message..."
-            />
-          </div>
-        ) : selectedId && msgData ? (
-          /* Message detail */
-          <div className="flex-1 flex flex-col">
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-surface">
-              <button onClick={() => setSelectedId(null)} className="flex items-center gap-1 text-xs text-text3 hover:text-text2">
-                <ArrowLeft className="size-3" /> Back
-              </button>
-              <Button variant="ghost" size="sm" className="h-6 text-2xs text-danger" onClick={() => deleteMessage.mutate(selectedId)}>
-                <Trash2 className="size-2.5 mr-1" /> Delete
-              </Button>
-            </div>
-            <div className="px-3 py-2 border-b border-border/50">
-              <p className="text-sm font-bold text-text">{msgData.subject || "(no subject)"}</p>
-              <div className="flex items-center gap-2 mt-1 text-2xs">
-                <Badge className="text-2xs bg-accent-porter/15 text-accent-porter border-0">{msgData.from_name || "Porter"}</Badge>
-                <span className="text-text3">{msgData.from_email}</span>
-                <span className="text-text3">→</span>
-                <span className="text-text2">{msgData.to_name || msgData.to_email}</span>
-                <span className="ml-auto text-text3">{fmtDate(msgData.sent_at || msgData.created_at)}</span>
+                  <Send className="size-2.5" /> Reply
+                </Button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-3">
-              {msgData.body_html ? (
-                <div className="text-xs text-text2 leading-relaxed [&_h3]:text-sm [&_h3]:font-bold [&_code]:bg-raised [&_code]:px-1 [&_code]:rounded [&_a]:text-accent-porter" dangerouslySetInnerHTML={{ __html: sanitizeHtml(msgData.body_html) }} />
-              ) : (
-                <div className="text-xs text-text2 leading-relaxed whitespace-pre-wrap">{msgData.body || "(empty)"}</div>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* Message list */
-          <>
-            <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-surface">
-              <Mail className="size-3 text-accent-porter" />
-              <span className="text-2xs font-semibold uppercase tracking-wide text-text3">{activeFolder} ({messages.length})</span>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {messages.length === 0 ? (
-                <div className="px-3 py-8 text-center text-xs text-text3">No messages</div>
-              ) : (
-                messages.map(msg => (
-                  <button
-                    key={msg.id}
-                    onClick={() => setSelectedId(msg.id)}
-                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left border-b border-border/20 hover:bg-surface/60 transition-colors ${
-                      !msg.read_at && msg.folder === "inbox" ? "bg-accent-porter/5" : ""
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <Badge className="text-2xs bg-text3/15 text-text3 border-0 shrink-0">{msg.from_name || "Porter"}</Badge>
-                        <span className={`text-xs truncate ${!msg.read_at && msg.folder === "inbox" ? "font-bold text-text" : "text-text2"}`}>
-                          {msg.folder === "sent" ? `→ ${msg.to_email}` : msg.from_email}
-                        </span>
-                        <span className="text-2xs text-text3 ml-auto shrink-0">{fmtDate(msg.sent_at || msg.created_at)}</span>
+          ) : (
+            /* ── Thread list ──────────────────────────────────── */
+            <>
+              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-surface">
+                <Mail className="size-3 text-accent-porter" />
+                <span className="text-2xs font-semibold uppercase tracking-wide text-text3">
+                  {activeFolder} {threadsQuery.data ? `(${threadsQuery.data.total})` : ""}
+                </span>
+                {threadsQuery.isFetching && (
+                  <div className="size-2.5 animate-spin rounded-full border border-accent-porter border-t-transparent ml-auto" />
+                )}
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {threadsQuery.isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="size-4 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
+                  </div>
+                ) : !activeMailboxId ? (
+                  <div className="px-3 py-8 text-center text-xs text-text3">No mailbox selected</div>
+                ) : threads.length === 0 ? (
+                  <div className="px-3 py-8 text-center text-xs text-text3">No threads in {activeFolder}</div>
+                ) : (
+                  threads.map(thread => (
+                    <button
+                      key={thread.id}
+                      onClick={() => handleSelectThread(thread.id)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left border-b border-border/20 hover:bg-surface/60 transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-text truncate">{threadParticipants(thread)}</span>
+                          {thread.message_count > 1 && (
+                            <Badge className="text-2xs bg-text3/15 text-text3 border-0 shrink-0">{thread.message_count}</Badge>
+                          )}
+                          <span className="text-2xs text-text3 ml-auto shrink-0">{fmtDate(thread.last_message_at)}</span>
+                        </div>
+                        <p className="text-xs text-text2 truncate mt-0.5">{thread.subject_canonical || "(no subject)"}</p>
                       </div>
-                      <p className="text-2xs text-text3 truncate">{msg.subject || "(no subject)"}</p>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </>
-        )}
-      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )
