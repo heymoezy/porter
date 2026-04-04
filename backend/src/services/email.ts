@@ -1,3 +1,14 @@
+/**
+ * DEPRECATED: Gmail-specific email service.
+ * Use services/mail/* for the new hosted mail system (Stalwart backend).
+ * This module remains only for the Gmail connector import path.
+ *
+ * - sendEmail(): Gmail OAuth2 outbound — use services/mail/send-service.ts instead
+ * - routeInboundEmail(): Gmail-specific routing — use services/mail/inbound-processor.ts instead
+ * - startImapIdle() / stopImapIdle(): DISABLED in Tranche 12 — no longer auto-started
+ * - findOrCreateEmailContact/Conversation(): Still used by Gmail connector inbound path
+ */
+
 import nodemailer from 'nodemailer';
 import { ImapFlow } from 'imapflow';
 import { decryptCredential } from '../lib/credential-crypto.js';
@@ -213,14 +224,15 @@ async function insertEmailJob(
   ]);
 }
 
-// ── IMAP IDLE ─────────────────────────────────────────────────────────────────
+// ── IMAP IDLE (DEPRECATED — no longer auto-started) ─────────────────────────
+// Tranche 12: IMAP IDLE is disabled. Stalwart webhooks handle inbound mail.
+// These functions remain exported for type compatibility but should not be called.
 
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 /**
- * Start listening for inbound emails via IMAP IDLE.
- * Automatically reconnects on disconnect (up to MAX_CONSECUTIVE_FAILURES).
- * Fire-and-forget — caller should not await this indefinitely.
+ * @deprecated IMAP IDLE is no longer auto-started. Stalwart handles inbound mail.
+ * Kept for connector-only use case (manual Gmail import). Not called at boot.
  */
 export async function startImapIdle(connectionId?: string): Promise<void> {
   if (imapRunning) {
@@ -358,8 +370,8 @@ export async function startImapIdle(connectionId?: string): Promise<void> {
 }
 
 /**
- * Cleanly stop the IMAP IDLE connection.
- * Called during server shutdown via Fastify onClose hook.
+ * @deprecated IMAP IDLE shutdown hook removed in Tranche 12.
+ * Kept for API compatibility.
  */
 export function stopImapIdle(): void {
   if (imapClient) {

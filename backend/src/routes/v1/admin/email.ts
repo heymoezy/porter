@@ -1,3 +1,13 @@
+/**
+ * DEPRECATED: Use /api/v1/mail/* and /api/admin/mail/* instead.
+ * These routes remain for backward compatibility only.
+ *
+ * The SMTP config routes (/config GET/PUT) are still actively used by
+ * the Settings page and transactional-email.ts for auth emails.
+ * The message CRUD routes operate on the legacy email_messages table
+ * and should be migrated to the new mail_messages table.
+ */
+
 import { FastifyInstance } from 'fastify';
 import { ok, err } from '../../../lib/envelope.js';
 import { pool } from '../../../db/client.js';
@@ -86,7 +96,9 @@ export default async function emailRoutes(fastify: FastifyInstance) {
   });
 
   // POST /api/admin/email/messages — create/send message
+  // DEPRECATED: Use POST /api/v1/mail/messages/send or POST /api/v1/mail/drafts instead
   fastify.post('/messages', async (req) => {
+    console.warn('[DEPRECATED] POST /api/admin/email/messages called — migrate to /api/v1/mail/messages/send');
     const { from_email, from_name, to_email, to_name, subject, body, body_html, folder = 'drafts', send } = req.body as Record<string, string>;
     const fromEmail = from_email || await getSetting('smtp_from_email') || config.smtp.fromEmail || 'porter@askporter.app';
     const fromName = from_name || await getSetting('smtp_from_name') || config.smtp.fromName || 'Porter';
@@ -105,7 +117,9 @@ export default async function emailRoutes(fastify: FastifyInstance) {
   });
 
   // PUT /api/admin/email/messages/:id — update message (draft editing, move folder)
+  // DEPRECATED: Use the new mail API for message operations
   fastify.put('/messages/:id', async (req) => {
+    console.warn('[DEPRECATED] PUT /api/admin/email/messages/:id called — migrate to /api/v1/mail/*');
     const { id } = req.params as { id: string };
     const updates = req.body as Record<string, string>;
     const allowed = ['to_email', 'to_name', 'subject', 'body', 'body_html', 'folder', 'status'];

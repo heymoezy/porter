@@ -45,7 +45,8 @@ import { migrateMailV1 } from './db/migrate-mail-v1.js';
 import { seedTemplates } from './db/seed-templates.js';
 import { detectAndUpsertGateways } from './services/bridge/startup-detector.js';
 import * as scheduler from './services/scheduler.js';
-import { startImapIdle, stopImapIdle } from './services/email.js';
+// DEPRECATED: IMAP IDLE auto-start removed in Tranche 12. Gmail is a connector, not the primary mail system.
+// import { startImapIdle, stopImapIdle } from './services/email.js';
 import { pool } from './db/client.js';
 import adminAuthPlugin from './plugins/admin-auth.js';
 import adminRoutes from './routes/admin/index.js';
@@ -187,10 +188,7 @@ if (fs.existsSync(adminFrontendDist)) {
   });
 }
 
-// Clean shutdown: stop IMAP IDLE when Fastify closes
-fastify.addHook('onClose', async () => {
-  stopImapIdle();
-});
+// DEPRECATED: IMAP IDLE shutdown hook removed in Tranche 12 (no longer auto-started)
 
 const start = async () => {
   try {
@@ -243,20 +241,9 @@ const start = async () => {
       console.error('Gateway probe failed:', err instanceof Error ? err.message : err);
     });
 
-    // Auto-start IMAP IDLE if a connected email connection exists
-    try {
-      const { rows } = await pool.query(
-        "SELECT id FROM workspace_connections WHERE provider = 'email' AND status = 'connected' LIMIT 1"
-      );
-      if (rows[0]) {
-        startImapIdle(rows[0].id).catch((err: unknown) => {
-          console.error('[email] IMAP IDLE auto-start failed:', err instanceof Error ? err.message : err);
-        });
-        console.log('[email] IMAP IDLE auto-started for existing connection');
-      }
-    } catch (err) {
-      console.error('[email] Failed to check email connection on startup:', err);
-    }
+    // DEPRECATED: IMAP IDLE auto-start removed in Tranche 12.
+    // Gmail is now an optional connector; Stalwart is the primary mail backend.
+    // See services/mail/* for the new hosted mail system.
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

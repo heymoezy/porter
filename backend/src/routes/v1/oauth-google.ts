@@ -142,14 +142,8 @@ export default async function oauthGoogleRoutes(fastify: FastifyInstance) {
         display_name: userEmail,
       }).catch(() => {});
 
-      // LEGACY: auto-start IMAP IDLE — this is the old Gmail-as-core pattern
-      // New architecture: Gmail is a connector, not the primary mail system
-      // Stalwart is the primary mail backend; Gmail is an optional import path
-      // IMAP IDLE will be removed in Tranche 12
-      const { startImapIdle } = await import('../../services/email.js');
-      startImapIdle().catch((err: Error) => {
-        console.error('[email] IMAP IDLE start after OAuth failed:', err.message);
-      });
+      // Tranche 12: IMAP IDLE auto-start removed. Gmail is a connector, not the primary mail system.
+      // Tokens are stored above for the Gmail connector + Google Calendar. No IMAP listener needed.
 
       return reply.redirect(`/v2/?tab=connections&connected=google`);
     } catch (err) {
