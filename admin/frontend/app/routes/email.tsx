@@ -389,23 +389,23 @@ function EmailContent() {
         </div>
       )}
 
-      <div className="flex gap-2 flex-1 min-h-0">
-        {/* Left sidebar: Mailbox selector + Compose + Folders */}
-        <div className="w-[160px] shrink-0 space-y-0.5">
+      <div className="flex flex-col flex-1 min-h-0">
+        {/* Top bar: Mailbox picker + Folder tabs + Compose + Settings */}
+        <div className="shrink-0 flex items-center gap-2 rounded-lg border border-border bg-surface px-2 py-1.5 mb-2">
           {/* Mailbox dropdown */}
-          <div className="relative mb-2">
+          <div className="relative">
             <button
               onClick={() => setShowMailboxPicker(!showMailboxPicker)}
-              className="flex w-full items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs hover:bg-raised transition-colors"
+              className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-raised transition-colors"
             >
               <Mail className="size-3 text-accent-porter shrink-0" />
-              <span className="flex-1 text-left truncate font-medium text-text">
+              <span className="truncate font-medium text-text max-w-[120px]">
                 {activeMailbox ? (activeMailbox.display_name || activeMailbox.address) : "No mailbox"}
               </span>
               <ChevronDown className="size-2.5 text-text3 shrink-0" />
             </button>
             {showMailboxPicker && (
-              <div className="absolute top-full left-0 z-50 mt-1 w-full rounded-lg border border-border bg-surface shadow-lg py-1">
+              <div className="absolute top-full left-0 z-50 mt-1 min-w-[180px] rounded-lg border border-border bg-surface shadow-lg py-1">
                 {mailboxes.length === 0 ? (
                   <p className="px-3 py-2 text-2xs text-text3">No mailboxes</p>
                 ) : (
@@ -423,37 +423,43 @@ function EmailContent() {
             )}
           </div>
 
+          {/* Divider */}
+          <div className="h-4 w-px bg-border shrink-0" />
+
+          {/* Folder tabs */}
+          <div className="flex items-center gap-0.5 flex-1 min-w-0">
+            {folderDefs.map(f => (
+              <button
+                key={f.id}
+                onClick={() => { setActiveFolder(f.id); setSelectedThreadId(null); setComposing(false) }}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors whitespace-nowrap ${
+                  activeFolder === f.id ? "bg-accent-porter/15 text-accent-porter font-medium" : "text-text3 hover:text-text2 hover:bg-raised"
+                }`}
+              >
+                {f.label}
+                {(folderCounts[f.id] ?? 0) > 0 && (
+                  <Badge className="text-2xs h-4 min-w-[16px] px-1 bg-text3/15 text-text3 border-0">{folderCounts[f.id]}</Badge>
+                )}
+              </button>
+            ))}
+          </div>
+
           {/* Compose button */}
-          <Button size="sm" className="w-full gap-1 mb-2 h-7 text-xs" onClick={() => { setComposing(true); setSelectedThreadId(null) }}>
+          <Button size="sm" className="gap-1 h-7 text-xs shrink-0" onClick={() => { setComposing(true); setSelectedThreadId(null) }}>
             <Plus className="size-3" /> Compose
           </Button>
 
-          {/* Folder list */}
-          {folderDefs.map(f => (
-            <button
-              key={f.id}
-              onClick={() => { setActiveFolder(f.id); setSelectedThreadId(null); setComposing(false) }}
-              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
-                activeFolder === f.id ? "bg-accent-porter/15 text-accent-porter font-medium" : "text-text3 hover:text-text2 hover:bg-raised"
-              }`}
-            >
-              <f.icon className="size-3" />
-              <span className="flex-1 text-left">{f.label}</span>
-              {(folderCounts[f.id] ?? 0) > 0 && <span className="text-2xs text-text3">{folderCounts[f.id]}</span>}
-            </button>
-          ))}
-
-          {/* Settings */}
+          {/* SMTP settings gear */}
           <button
             onClick={() => setShowSmtp(!showSmtp)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-text3 hover:text-text2 hover:bg-raised mt-2 transition-colors"
+            className="flex items-center justify-center size-7 rounded-md text-text3 hover:text-text2 hover:bg-raised transition-colors shrink-0"
+            title="SMTP settings"
           >
-            <Settings className="size-3" />
-            <span className="flex-1 text-left">SMTP</span>
+            <Settings className="size-3.5" />
           </button>
         </div>
 
-        {/* Center + Right */}
+        {/* Thread list + Thread detail */}
         <div className="flex-1 min-w-0 rounded-xl border border-border overflow-hidden flex">
           {composing ? (
             /* ── Compose view ─────────────────────────────────── */
