@@ -72,69 +72,14 @@ interface SystemData {
 }
 interface LogLine { text: string; color: string }
 
-/* ── Seed data (swap for real endpoints later) ── */
-const SEED_PROJECTS = [
-  { name: "Marketing Site", status: "active", progress: 65, agents: 3, spark: [3,5,8,4,7,9,6,8], task: "Hero section design review" },
-  { name: "Brand Guide", status: "active", progress: 30, agents: 2, spark: [1,2,4,3,5,2,3,4], task: "Color palette finalization" },
-  { name: "API Docs", status: "paused", progress: 80, agents: 1, spark: [6,4,2,1,1,0,0,1], task: "Waiting for endpoint changes" },
-  { name: "Mobile App", status: "active", progress: 12, agents: 4, spark: [0,0,1,3,5,7,9,11], task: "Wireframe first 3 screens" },
-]
+/* ── Dispatch Activity Types ── */
+interface DispatchEntry {
+  id: string; model_name: string; input_tokens: number; output_tokens: number
+  latency_ms: number; created_at: number; source_agent: string | null
+  username: string | null
+}
 
-const SEED_ACTIVITY_TEMPLATES = [
-  { agent: "Moe", action: "logged in from Singapore", status: "complete" as const },
-  { agent: "Jacob", action: "created project 'Brand Guide'", status: "complete" as const },
-  { agent: "Sarah", action: "assigned 3 agents to Marketing Site", status: "complete" as const },
-  { agent: "Moe", action: "edited Porter's Soul.md", status: "complete" as const },
-  { agent: "John", action: "signed up (trial)", status: "complete" as const },
-  { agent: "Porter", action: "auto-assigned SEO Specialist to Brand Guide", status: "working" as const },
-  { agent: "Sarah", action: "sent welcome email to john@acme.com", status: "complete" as const },
-  { agent: "Jacob", action: "viewed Agent Templates", status: "complete" as const },
-  { agent: "Porter", action: "generated weekly report for Marketing Site", status: "complete" as const },
-  { agent: "Moe", action: "updated billing plan to Cloud", status: "complete" as const },
-  { agent: "Sarah", action: "deployed API Docs to staging", status: "complete" as const },
-  { agent: "Porter", action: "resolved 3 task conflicts in Mobile App", status: "complete" as const },
-  { agent: "John", action: "invited team member lisa@acme.com", status: "complete" as const },
-  { agent: "Jacob", action: "reviewed Brand Guide deliverables", status: "complete" as const },
-  { agent: "Porter", action: "learned new skill: competitor analysis", status: "working" as const },
-  { agent: "Sarah", action: "created project 'Q2 Campaign'", status: "complete" as const },
-  { agent: "Moe", action: "configured webhook for Slack notifications", status: "complete" as const },
-  { agent: "Porter", action: "auto-scaled agents for Marketing Site sprint", status: "complete" as const },
-  { agent: "John", action: "completed onboarding checklist", status: "complete" as const },
-  { agent: "Jacob", action: "exported Brand Guide assets to Figma", status: "complete" as const },
-  { agent: "Porter", action: "summarized 12 tasks for daily standup", status: "complete" as const },
-  { agent: "Sarah", action: "ran A/B test on landing hero", status: "complete" as const },
-  { agent: "Moe", action: "approved Brand Guide color palette", status: "complete" as const },
-  { agent: "Porter", action: "detected anomaly in API response times", status: "working" as const },
-  { agent: "John", action: "uploaded brand assets to shared drive", status: "complete" as const },
-  { agent: "Jacob", action: "scheduled deployment for Mobile App v0.2", status: "complete" as const },
-  { agent: "Sarah", action: "closed 5 support tickets", status: "complete" as const },
-  { agent: "Porter", action: "retrained sentiment model on new feedback", status: "complete" as const },
-  { agent: "Moe", action: "reviewed Q1 revenue dashboard", status: "complete" as const },
-  { agent: "John", action: "connected Stripe integration", status: "complete" as const },
-  { agent: "Porter", action: "migrated 3 agents to new skill format", status: "complete" as const },
-  { agent: "Sarah", action: "published blog post 'AI Agents in 2026'", status: "complete" as const },
-  { agent: "Jacob", action: "fixed broken webhook for Slack", status: "complete" as const },
-  { agent: "Moe", action: "set up monitoring alerts for uptime", status: "complete" as const },
-  { agent: "Porter", action: "auto-resolved merge conflict in Brand Guide", status: "complete" as const },
-  { agent: "John", action: "added 2FA to account", status: "complete" as const },
-  { agent: "Sarah", action: "onboarded new client workspace", status: "complete" as const },
-  { agent: "Porter", action: "pruned 8 stale agent sessions", status: "complete" as const },
-  { agent: "Jacob", action: "benchmarked API response under load", status: "complete" as const },
-  { agent: "Moe", action: "renamed project 'MVP' to 'Mobile App'", status: "complete" as const },
-  { agent: "Porter", action: "generated accessibility audit for Marketing Site", status: "working" as const },
-  { agent: "Sarah", action: "synced CRM contacts from HubSpot", status: "complete" as const },
-  { agent: "John", action: "submitted feedback on onboarding flow", status: "complete" as const },
-  { agent: "Jacob", action: "tagged release v0.2.8 for admin panel", status: "complete" as const },
-  { agent: "Porter", action: "cached 200 embeddings for knowledge base", status: "complete" as const },
-  { agent: "Moe", action: "archived project 'Legacy Docs'", status: "complete" as const },
-  { agent: "Sarah", action: "created email template for trial expiry", status: "complete" as const },
-  { agent: "Porter", action: "routed 14 queries to specialized agents", status: "complete" as const },
-  { agent: "John", action: "upgraded workspace to Cloud plan", status: "complete" as const },
-  { agent: "Jacob", action: "reviewed Porter's weekly learning summary", status: "complete" as const },
-]
-const SEED_ACTIVITY = SEED_ACTIVITY_TEMPLATES.map((e, i) => ({ ...e, _sec: i * 180 }))
-
-// Growth curves (fake seed — hockey stick growth)
+// Revenue/customer curves — placeholder until billing pipeline populates real data
 const REVENUE_CURVE = [0,0,0,200,450,800,1200,1800,2400,3200,4500,5800,7200,8500,9800,11500,13200,15800,18500,22000,26500,32000,38500]
 const CUSTOMER_CURVE = [0,1,2,4,7,12,18,28,42,58,78,105,138,175,220,275,340,420,510,620,750,900,1080]
 
@@ -165,8 +110,21 @@ const STAT_TILES = [
 /* ── Component ── */
 function DashboardContent() {
   const [mounted, setMounted] = useState(false)
-  const timeline = SEED_ACTIVITY.map((e, i) => ({ ...e, _key: i }))
-  const projectTimeline = SEED_PROJECTS.map((p, i) => ({ ...p, _key: i }))
+  // Real dispatch activity from costs API
+  const { data: dispatchData } = useQuery({
+    queryKey: ["admin", "costs", "dispatches"],
+    queryFn: () => api<{ dispatches: DispatchEntry[] }>("/api/admin/costs/dispatches?limit=30"),
+    refetchInterval: 30_000,
+  })
+  const dispatches = dispatchData?.dispatches ?? []
+
+  // Real projects
+  const { data: projectsData } = useQuery({
+    queryKey: ["admin", "projects-list"],
+    queryFn: () => api<Array<{ id: string; name: string; status: string; tasks_total?: number; tasks_done?: number }>>("/api/v1/projects").catch(() => []),
+    refetchInterval: 60_000,
+  })
+  const realProjects = (Array.isArray(projectsData) ? projectsData : []).slice(0, 6)
 
   // Mount animation trigger
   useMountEffect(() => { requestAnimationFrame(() => setMounted(true)) })
@@ -313,31 +271,27 @@ function DashboardContent() {
           <AgentSupervisor agent="project-mgr" name="Project Manager" desc="Tracking progress, assigning agents, reporting blockers" accent="text-accent-porter" activity={`Monitoring ${d?.projects.total ?? 0} projects · ${d?.projects.byStatus.find(s => s.status === "active")?.cnt ?? 0} active sprints`} />
           <div className="flex items-center justify-between mb-2 shrink-0">
             <h2 className="text-xs font-bold text-foreground uppercase tracking-wide">Projects</h2>
-            <button className="text-2xs text-text3 hover:text-accent-porter transition-colors">all &rarr;</button>
+            <Link to="/files" className="text-2xs text-text3 hover:text-accent-porter transition-colors">all &rarr;</Link>
           </div>
           <div className="flex-1 overflow-y-auto space-y-2 min-h-0 scrollbar-thin pt-px">
-            {projectTimeline.map((p, i) => (
-              <div
-                key={p._key}
-                className={`group rounded-lg border border-border bg-surface p-3 cursor-pointer transition-all duration-[var(--duration-fast)] hover:border-accent-porter/30 hover:shadow-[var(--shadow-card)] hover:-translate-y-px ${mounted ? "animate-card-deal-in" : "opacity-0"}`}
+            {realProjects.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-8 text-text3">
+                <FolderKanban className="size-6 mb-2 opacity-30" />
+                <p className="text-xs">No projects yet</p>
+              </div>
+            )}
+            {realProjects.map((p, i) => (
+              <Link
+                key={p.id}
+                to="/files"
+                className={`group block rounded-lg border border-border bg-surface p-3 cursor-pointer transition-all duration-[var(--duration-fast)] hover:border-accent-porter/30 hover:shadow-[var(--shadow-card)] hover:-translate-y-px ${mounted ? "animate-card-deal-in" : "opacity-0"}`}
                 style={{ animationDelay: `calc(var(--duration-normal) + ${i} * var(--stagger-delay) * 2)`, animationFillMode: "both" }}
               >
                 <div className="flex items-center gap-2">
                   <p className="text-xs font-bold text-foreground truncate flex-1 min-w-0">{p.name}</p>
-                  <Sparkline values={p.spark} />
-                  <Badge className={`text-2xs px-1.5 py-0 ${p.status === "active" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{p.status}</Badge>
+                  <Badge className={`text-2xs px-1.5 py-0 ${p.status === "active" ? "bg-success/15 text-success" : p.status === "completed" ? "bg-chart-2/15 text-chart-2" : "bg-warning/15 text-warning"}`}>{p.status}</Badge>
                 </div>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <div className="flex-1 h-1 rounded-full bg-raised overflow-hidden">
-                    <div className="h-full rounded-full bg-accent-porter transition-all duration-[var(--duration-chart)] ease-out" style={{ width: `${p.progress}%` }} />
-                  </div>
-                  <span className="text-2xs text-text3 tabular-nums w-8 text-right">{p.progress}%</span>
-                </div>
-                <div className="mt-1.5 flex items-center justify-between gap-2">
-                  <p className="text-2xs text-text3 truncate min-w-0"><span className="text-text2">Next:</span> {p.task}</p>
-                  <span className="text-2xs text-text3 shrink-0">{p.agents} agents</span>
-                </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -347,25 +301,38 @@ function DashboardContent() {
           <AgentSupervisor agent="ops" name="Operations" desc="Monitoring all platform activity, detecting patterns" accent="text-success" activity={`Processed ${d?.decisions ?? 0} decisions · ${d?.tasks ?? 0} tasks completed today`} />
           <div className="flex items-center justify-between mb-2 shrink-0">
             <h2 className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
-              Activity
-              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-badge" />
+              Dispatch Feed
+              {dispatches.length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-badge" />}
             </h2>
-            <Link to="/activity" className="text-2xs text-text3 hover:text-accent-porter transition-colors">all &rarr;</Link>
+            <Link to="/costs" className="text-2xs text-text3 hover:text-accent-porter transition-colors">all &rarr;</Link>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin">
-            {timeline.map((e, i) => (
-              <div
-                key={e._key}
-                className={`flex items-center gap-2 rounded-md py-1.5 px-2 cursor-pointer hover:bg-raised/50 transition-all duration-[var(--duration-slow)] ease-out ${i === 0 ? "animate-slide-down" : ""}`}
-              >
-                <div className={`h-2 w-2 rounded-full shrink-0 ${e.status === "working" ? "bg-accent-porter animate-pulse-badge" : "bg-success"}`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-2xs text-foreground break-words"><span className="font-bold">{e.agent}</span> {e.action}</p>
-                </div>
-                {e.status === "working" && <Loader2 className="h-2.5 w-2.5 animate-spin text-accent-porter shrink-0" />}
-                <span className="text-2xs text-text3 shrink-0">{i === 0 ? "now" : timeAgo(e._sec)}</span>
+            {dispatches.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-8 text-text3">
+                <Activity className="size-6 mb-2 opacity-30" />
+                <p className="text-xs">No dispatches yet</p>
               </div>
-            ))}
+            )}
+            {dispatches.map((e, i) => {
+              const secsAgo = Math.floor((Date.now() / 1000) - e.created_at)
+              const tokensK = ((e.input_tokens + e.output_tokens) / 1000).toFixed(1)
+              return (
+                <div
+                  key={e.id}
+                  className={`flex items-center gap-2 rounded-md py-1.5 px-2 cursor-pointer hover:bg-raised/50 transition-all duration-[var(--duration-slow)] ease-out ${i === 0 ? "animate-slide-down" : ""}`}
+                >
+                  <div className="h-2 w-2 rounded-full shrink-0 bg-success" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-2xs text-foreground break-words">
+                      <span className="font-bold">{e.model_name}</span>
+                      {" "}{tokensK}k tokens · {Math.round(e.latency_ms / 1000)}s
+                      {e.source_agent && <span className="text-text3"> · {e.source_agent}</span>}
+                    </p>
+                  </div>
+                  <span className="text-2xs text-text3 shrink-0">{timeAgo(secsAgo)}</span>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
