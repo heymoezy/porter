@@ -1,3 +1,55 @@
+## v6.0.0 (2026-04-04)
+
+### The Orchestration Platform — 8 Phases, 21 Plans, All Verified
+
+**Phase 40: Gateway Capability Registry**
+- Per-gateway capabilities JSONB (strengths, cost_tier, context_window, tool_support, agentic)
+- Capability-aware dispatch — tool schemas stripped for non-tool gateways
+- Startup auto-detection normalizes legacy string arrays to structured JSONB
+
+**Phase 41: Session Intelligence**
+- Frozen memory snapshots at session start (immutable through session lifetime)
+- Cross-session FTS search via /api/v1/sessions/search
+- Dispatch outcome scoring feeds routing confidence per gateway
+
+**Phase 42: Task Decomposition Engine**
+- classifyFast heuristic (word count + conjunction detection) — zero-cost, no LLM
+- Task planner generates validated DAGs with Kahn's cycle detection
+- DAG executor dispatches subtasks in parallel (MAX_CONCURRENT=3)
+- Task joiner synthesizes results (4 paths: synthesized/partial/replan/failed)
+- Admin REST endpoints for DAG inspection
+
+**Phase 43: Inter-Agent Messaging**
+- In-process delegateToAgent() with correlation tracking and msg_bus audit trail
+- Peer-to-peer guard blocks direct agent-to-agent routing (Porter-only coordination)
+- DAG executor routes assigned agents through delegation service
+- Joiner loads delegation audit from msg_bus_events for synthesis context
+
+**Phase 44: Autonomous Job Queue**
+- agent_jobs extended with source, required_skill, required_capability, assigned_gateway
+- job-assignment.ts matches agents by skill effectiveness, gateways by JSONB capability
+- Porter self-enqueues health_sweep (60min) and gateway_check (30min) with dedup
+- Admin endpoints + JobQueuePanel on bridge page with React Query auto-refresh
+
+**Phase 45: Porter Control Plane**
+- Delegation doctrine: decideDoctrine() classifies every dispatch (direct/delegate/parallel/escalate)
+- dispatch_strategy logged on every bridge_dispatch_log row
+- Hop depth enforcement: MAX_AGENT_HOPS=3 with depth_violation audit logging
+- Approval gates: classifyRisk() detects 5 high-risk action categories, pauses pending approval
+- REST endpoints for approval lifecycle (list/get/approve/reject)
+
+**Phase 46: Project Monitoring**
+- project_watchers + watcher_findings tables with 4 watcher types (web_search, rss_feed, email_monitor, custom)
+- Scheduler polls for due watchers, creates watcher_run jobs with dedup
+- Activity feed integration with source badges, expandable detail
+- Notification pipeline: SSE for all findings, email for important/critical
+- Admin CRUD API (7 endpoints) + WatchersPage ops panel
+
+**Phase 47: Project Substrate**
+- provisionProjectStructure creates /_system/ (6 .md files) + 6 canonical dirs on project creation
+- Intelligence ingress pipeline: classifyFile (extension-based) + routeFile + memory signal + project.md update
+- Atlas structural health agent: 30-minute scans, auto-repairs missing dirs, flags drift, logs to activity feed
+
 ## v5.2.0 (2026-04-03)
 
 ### Phase 39: Bridge Task Dispatch

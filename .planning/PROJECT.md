@@ -84,7 +84,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 
 ## Context
 
-Porter has been in development since Feb 18, 2026. Current version is v5.2.0. Single monorepo, single Fastify process on :3001.
+Porter has been in development since Feb 18, 2026. Current version is v6.0.0. Single monorepo, single Fastify process on :3001.
 
 **Backend** (`backend/src/`): TypeScript, Fastify 5, Drizzle ORM, PostgreSQL. Brain + Admin merged. All routes on :3001.
 
