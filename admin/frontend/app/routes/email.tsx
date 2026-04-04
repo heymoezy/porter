@@ -122,7 +122,6 @@ function EmailContent() {
   const [smtpForm, setSmtpForm] = useState<Record<string, string>>({})
   const [replyText, setReplyText] = useState("")
   const [replyingToId, setReplyingToId] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState("")
   const editorRef = useRef<HTMLDivElement>(null)
 
   // ── SMTP config (separate concern, keep) ──────────────────────────
@@ -184,14 +183,7 @@ function EmailContent() {
     refetchInterval: activeFolder === "inbox" ? 15_000 : undefined,
   })
 
-  const allThreads = threadsQuery.data?.threads ?? []
-  const threads = searchQuery.trim()
-    ? allThreads.filter(t => {
-        const q = searchQuery.toLowerCase()
-        return (t.subject_canonical || "").toLowerCase().includes(q)
-          || threadParticipants(t).toLowerCase().includes(q)
-      })
-    : allThreads
+  const threads = threadsQuery.data?.threads ?? []
 
   // ── Thread messages ───────────────────────────────────────────────
   const threadMessagesQuery = useQuery({
@@ -223,13 +215,15 @@ function EmailContent() {
 
   // ── Send ──────────────────────────────────────────────────────────
   const sendMutation = useMutation({
-    mutationFn: (data: { mailboxId: string; to: string[]; subject: string; textBody: string; htmlBody?: string }) =>
-      api("/api/v1/mail/messages/send", { method: "POST", json: data }),
+    mutationFn: (data: { mailboxId: string; to: string[]; subject: string; textBody: string; htmlBody?: string }) => {
+      // Sync selected mailbox to the one we're sending from
+      setSelectedMailboxId(data.mailboxId)
+      return api("/api/v1/mail/messages/send", { method: "POST", json: data })
+    },
     onSuccess: () => {
       setComposing(false)
       setComposeData({ from: "", to: "", subject: "", body: "" })
       if (editorRef.current) editorRef.current.innerHTML = ""
-      setActiveFolder("sent")
       qc.invalidateQueries({ queryKey: ["mail"] })
     },
   })
@@ -362,8 +356,85 @@ function EmailContent() {
     )
   }
 
+  const [mailboxSearch, setMailboxSearch] = useState("")
+  const filteredMailboxes = mailboxSearch.trim()
+    ? mailboxes.filter(mb => {
+        const q = mailboxSearch.toLowerCase()
+        return mb.display_name.toLowerCase().includes(q) || mb.address.toLowerCase().includes(q) || mb.local_part.toLowerCase().includes(q)
+      })
+    : mailboxes
+
   return (
-    <div className="flex h-[calc(100vh-var(--header-height)-2rem)] px-4 pb-4">
+    <div className="flex flex-col h-[calc(100vh-var(--header-height)-2rem)] px-4 pb-4">
+      {/* ── Top bar: mailbox picker + search ────────────────────── */}
+      <div className="flex items-center gap-3 pb-2 mb-0 shrink-0">
+        {/* Mailbox picker */}
+        <div className="relative">
+          <button
+            onClick={() => { setShowMailboxPicker(!showMailboxPicker); setMailboxSearch("") }}
+            className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm hover:bg-raised transition-colors border border-border/50"
+          >
+            <Mail className="size-3.5 text-accent-porter shrink-0" />
+            <span className="font-medium text-text max-w-[180px] truncate">{activeMailbox?.display_name || activeMailbox?.local_part || "Select mailbox"}</span>
+            <span className="text-2xs text-text3 max-w-[160px] truncate hidden sm:inline">{activeMailbox?.address ?? ""}</span>
+            <ChevronDown className="size-3 text-text3 shrink-0" />
+          </button>
+          {showMailboxPicker && (
+            <div className="absolute top-full left-0 z-50 mt-1 w-[280px] rounded-lg border border-border bg-surface shadow-lg overflow-hidden">
+              <div className="p-2 border-b border-border/50">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-text3" />
+                  <Input
+                    value={mailboxSearch}
+                    onChange={e => setMailboxSearch(e.target.value)}
+                    className="h-7 text-xs pl-7"
+                    placeholder="Search mailboxes..."
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div className="max-h-[320px] overflow-y-auto py-1">
+                {filteredMailboxes.length === 0 ? (
+                  <p className="px-3 py-2 text-2xs text-text3">{mailboxSearch ? "No matches" : "No mailboxes"}</p>
+                ) : (
+                  filteredMailboxes.map(mb => (
+                    <button
+                      key={mb.id}
+                      onClick={() => { setSelectedMailboxId(mb.id); setShowMailboxPicker(false); setSelectedThreadId(null); setMailboxSearch("") }}
+                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-raised transition-colors ${mb.id === activeMailboxId ? "bg-accent-porter/10" : ""}`}
+                    >
+                      <Mail className={`size-3 shrink-0 ${mb.id === activeMailboxId ? "text-accent-porter" : "text-text3"}`} />
+                      <div className="min-w-0 flex-1">
+                        <span className={`text-xs block truncate ${mb.id === activeMailboxId ? "font-semibold text-accent-porter" : "text-text"}`}>{mb.display_name || mb.local_part}</span>
+                        <span className="text-2xs text-text3 block truncate">{mb.address}</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1" />
+
+        {/* SMTP config */}
+        {smtpData && !smtpData.configured && (
+          <button onClick={() => setShowSmtp(true)} className="flex items-center gap-1.5 rounded-md px-2 py-1 bg-warning/5 border border-warning/20 text-warning text-2xs hover:bg-warning/10 transition-colors">
+            <AlertTriangle className="size-3 shrink-0" />
+            <span>SMTP</span>
+          </button>
+        )}
+        <button
+          onClick={() => setShowSmtp(!showSmtp)}
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-2xs text-text3 hover:text-text2 hover:bg-raised transition-colors"
+        >
+          <Settings className="size-3.5" />
+        </button>
+      </div>
+
+      {/* ── Three-column layout ──────────────────────────────────── */}
+      <div className="flex flex-1 min-h-0">
       {/* SMTP config overlay */}
       {showSmtp && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/40" onClick={() => setShowSmtp(false)}>
@@ -408,55 +479,8 @@ function EmailContent() {
         </div>
       )}
 
-      {/* ── Left sidebar ──────────────────────────────────────────── */}
-      <div className="w-[200px] shrink-0 flex flex-col border-r border-border pr-2 mr-0">
-        {/* Mailbox picker — top, prominent */}
-        <div className="relative mb-2">
-          <button
-            onClick={() => setShowMailboxPicker(!showMailboxPicker)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-text bg-raised/50 hover:bg-raised transition-colors"
-          >
-            <Mail className="size-4 text-accent-porter shrink-0" />
-            <span className="truncate flex-1 text-left">
-              {activeMailbox?.display_name || activeMailbox?.local_part || "Select mailbox"}
-            </span>
-            <ChevronDown className="size-3 text-text3 shrink-0" />
-          </button>
-          <span className="text-2xs text-text3 px-3 mt-0.5 block truncate">{activeMailbox?.address ?? ""}</span>
-          {showMailboxPicker && (
-            <div className="absolute top-full left-0 z-50 mt-1 w-full min-w-[220px] rounded-lg border border-border bg-surface shadow-lg py-1 max-h-[320px] overflow-y-auto">
-              {mailboxes.length === 0 ? (
-                <p className="px-3 py-2 text-2xs text-text3">No mailboxes</p>
-              ) : (
-                mailboxes.map(mb => (
-                  <button
-                    key={mb.id}
-                    onClick={() => { setSelectedMailboxId(mb.id); setShowMailboxPicker(false); setSelectedThreadId(null) }}
-                    className={`flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-raised transition-colors ${mb.id === activeMailboxId ? "bg-accent-porter/10" : ""}`}
-                  >
-                    <Mail className={`size-3.5 mt-0.5 shrink-0 ${mb.id === activeMailboxId ? "text-accent-porter" : "text-text3"}`} />
-                    <div className="min-w-0">
-                      <span className={`text-xs block truncate ${mb.id === activeMailboxId ? "font-semibold text-accent-porter" : "text-text"}`}>{mb.display_name || mb.local_part}</span>
-                      <span className="text-2xs text-text3 block truncate">{mb.address}</span>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Search */}
-        <div className="relative mb-2 px-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3 text-text3" />
-          <Input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="h-7 text-xs pl-7 bg-transparent"
-            placeholder="Search mail..."
-          />
-        </div>
-
+      {/* ── Left sidebar (folders only) ────────────────────────────── */}
+      <div className="w-[160px] shrink-0 flex flex-col border-r border-border pr-2 mr-0">
         {/* Compose button */}
         <Button
           className="w-full gap-2 mb-3 h-9 text-sm font-medium"
@@ -464,14 +488,6 @@ function EmailContent() {
         >
           <Plus className="size-4" /> Compose
         </Button>
-
-        {/* SMTP warning (inline, compact) */}
-        {smtpData && !smtpData.configured && (
-          <button onClick={() => setShowSmtp(true)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 mb-2 bg-warning/5 border border-warning/20 text-warning text-2xs hover:bg-warning/10 transition-colors">
-            <AlertTriangle className="size-3 shrink-0" />
-            <span>SMTP not set up</span>
-          </button>
-        )}
 
         {/* Folder list */}
         <nav className="flex flex-col gap-0.5 flex-1 min-h-0">
@@ -498,17 +514,6 @@ function EmailContent() {
             )
           })}
         </nav>
-
-        {/* Bottom: SMTP settings only */}
-        <div className="mt-auto pt-2 border-t border-border/50">
-          <button
-            onClick={() => setShowSmtp(!showSmtp)}
-            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-2xs text-text3 hover:text-text2 hover:bg-raised transition-colors"
-          >
-            <Settings className="size-3.5 shrink-0" />
-            <span>SMTP</span>
-          </button>
-        </div>
       </div>
 
       {/* ── Thread list panel ─────────────────────────────────────── */}
@@ -809,6 +814,7 @@ function EmailContent() {
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }
