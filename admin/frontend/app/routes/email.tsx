@@ -7,7 +7,7 @@ import { Input } from "~/components/ui/input"
 import {
   Inbox, Send, FileText, Trash2, Plus, ArrowLeft, Mail,
   Bold, Italic, Link, List, ListOrdered, Code, Heading,
-  ChevronDown, Settings, Check, AlertTriangle, Archive,
+  Settings, Check, AlertTriangle, Archive,
   Reply, CornerUpLeft, Search, Paperclip, X, Download,
 } from "lucide-react"
 import { Label } from "~/components/ui/label"
@@ -137,12 +137,10 @@ function EmailContent() {
   const [composing, setComposing] = useState(false)
   const [composeData, setComposeData] = useState({ from: "", to: "", subject: "", body: "" })
   const [showFromPicker, setShowFromPicker] = useState(false)
-  const [showMailboxPicker, setShowMailboxPicker] = useState(false)
   const [showSmtp, setShowSmtp] = useState(false)
   const [smtpForm, setSmtpForm] = useState<Record<string, string>>({})
   const [replyText, setReplyText] = useState("")
   const [replyingToId, setReplyingToId] = useState<string | null>(null)
-  const [mailboxSearch, setMailboxSearch] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const editorRef = useRef<HTMLDivElement>(null)
 
@@ -183,8 +181,9 @@ function EmailContent() {
 
   const mailboxes = mailboxesQuery.data?.mailboxes ?? []
 
-  // Auto-select first mailbox
-  const activeMailboxId = selectedMailboxId ?? mailboxes[0]?.id ?? null
+  // Auto-select porter mailbox, fall back to first
+  const porterMailbox = mailboxes.find(m => m.local_part === "porter")
+  const activeMailboxId = selectedMailboxId ?? porterMailbox?.id ?? mailboxes[0]?.id ?? null
   const activeMailbox = mailboxes.find(m => m.id === activeMailboxId)
 
   // ── Folder counts ─────────────────────────────────────────────────
@@ -406,13 +405,6 @@ function EmailContent() {
     )
   }
 
-  const filteredMailboxes = mailboxSearch.trim()
-    ? mailboxes.filter(mb => {
-        const q = mailboxSearch.toLowerCase()
-        return mb.display_name.toLowerCase().includes(q) || mb.address.toLowerCase().includes(q) || mb.local_part.toLowerCase().includes(q)
-      })
-    : mailboxes
-
   return (
     <div className="flex h-[calc(100vh-var(--header-height)-2rem)] px-4 pb-4">
       {/* SMTP config overlay */}
@@ -459,8 +451,8 @@ function EmailContent() {
         </div>
       )}
 
-      {/* ── Left sidebar (folders only) ────────────────────────────── */}
-      <div className="w-[160px] shrink-0 flex flex-col border-r border-border pr-2 mr-0">
+      {/* ── Left sidebar (mailboxes) ──────────────────────────────── */}
+      <div className="w-[180px] shrink-0 flex flex-col border-r border-border pr-2 mr-0">
         {/* Compose button */}
         <Button
           className="w-full gap-2 mb-3 h-9 text-sm font-medium"
@@ -469,8 +461,43 @@ function EmailContent() {
           <Plus className="size-4" /> Compose
         </Button>
 
-        {/* Folder list */}
+        {/* Mailbox list */}
         <nav className="flex flex-col gap-0.5 flex-1 min-h-0">
+          {mailboxes.map(mb => {
+            const isActive = mb.id === activeMailboxId
+            const unread = folderCounts.inbox ?? 0
+            return (
+              <button
+                key={mb.id}
+                onClick={() => { setSelectedMailboxId(mb.id); setSelectedThreadId(null); setComposing(false); setActiveFolder("inbox") }}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
+                  isActive
+                    ? "bg-accent-porter/10 text-accent-porter"
+                    : "text-text2 hover:bg-raised"
+                }`}
+              >
+                <Mail className={`size-3.5 shrink-0 ${isActive ? "text-accent-porter" : "text-text3"}`} />
+                <div className="flex-1 min-w-0 text-left">
+                  <span className={`text-sm block truncate ${isActive ? "font-semibold" : ""}`}>
+                    {mb.display_name || mb.local_part}
+                  </span>
+                  <span className="text-2xs text-text3 block truncate">{mb.address}</span>
+                </div>
+                {isActive && unread > 0 && (
+                  <span className="text-2xs font-semibold bg-accent-porter text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+                    {unread}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
+      </div>
+
+      {/* ── Main content area ─────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Folder tabs (top nav) */}
+        <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 border-b border-border bg-surface">
           {folderDefs.map(f => {
             const count = folderCounts[f.id] ?? 0
             const isActive = activeFolder === f.id
@@ -479,93 +506,38 @@ function EmailContent() {
               <button
                 key={f.id}
                 onClick={() => { setActiveFolder(f.id); setSelectedThreadId(null); setComposing(false) }}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs transition-colors ${
                   isActive
                     ? "bg-accent-porter/10 text-accent-porter font-semibold"
-                    : "text-text2 hover:bg-raised"
+                    : "text-text3 hover:text-text2 hover:bg-raised"
                 }`}
               >
-                <Icon className="size-4 shrink-0" />
-                <span className="flex-1 text-left">{f.label}</span>
+                <Icon className="size-3.5" />
+                <span>{f.label}</span>
                 {count > 0 && (
-                  <span className={`text-xs ${isActive ? "text-accent-porter" : "text-text3"}`}>{count}</span>
+                  <span className={`text-2xs ${isActive ? "text-accent-porter" : "text-text3"}`}>{count}</span>
                 )}
               </button>
             )
           })}
-        </nav>
-      </div>
-
-      {/* ── Thread list panel ─────────────────────────────────────── */}
-      <div className="flex-1 min-w-[280px] max-w-[400px] border-r border-border overflow-y-auto">
-        {/* Mailbox picker */}
-        <div className="sticky top-0 z-20 border-b border-border bg-surface">
-          <div className="relative px-3 py-2">
-            <button
-              onClick={() => { setShowMailboxPicker(!showMailboxPicker); setMailboxSearch("") }}
-              className="flex w-full items-center gap-2 text-left"
-            >
-              <Mail className="size-3.5 text-accent-porter shrink-0" />
-              <span className="text-sm font-semibold text-text truncate flex-1">{activeMailbox?.display_name || activeMailbox?.local_part || "Select mailbox"}</span>
-              <ChevronDown className="size-3 text-text3 shrink-0" />
-            </button>
-            <span className="text-2xs text-text3 pl-5.5 block truncate mt-0.5 ml-[22px]">{activeMailbox?.address ?? ""}</span>
-            {showMailboxPicker && (
-              <div className="absolute top-full left-0 z-50 w-full rounded-b-lg border border-border border-t-0 bg-surface shadow-lg overflow-hidden">
-                <div className="p-2 border-b border-border/50">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-text3" />
-                    <Input
-                      value={mailboxSearch}
-                      onChange={e => setMailboxSearch(e.target.value)}
-                      className="h-7 text-xs pl-7"
-                      placeholder="Search mailboxes..."
-                      autoFocus
-                    />
-                  </div>
-                </div>
-                <div className="max-h-[320px] overflow-y-auto py-1">
-                  {filteredMailboxes.length === 0 ? (
-                    <p className="px-3 py-2 text-2xs text-text3">{mailboxSearch ? "No matches" : "No mailboxes"}</p>
-                  ) : (
-                    filteredMailboxes.map(mb => (
-                      <button
-                        key={mb.id}
-                        onClick={() => { setSelectedMailboxId(mb.id); setShowMailboxPicker(false); setSelectedThreadId(null); setMailboxSearch("") }}
-                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-raised transition-colors ${mb.id === activeMailboxId ? "bg-accent-porter/10" : ""}`}
-                      >
-                        <Mail className={`size-3 shrink-0 ${mb.id === activeMailboxId ? "text-accent-porter" : "text-text3"}`} />
-                        <div className="min-w-0 flex-1">
-                          <span className={`text-xs block truncate ${mb.id === activeMailboxId ? "font-semibold text-accent-porter" : "text-text"}`}>{mb.display_name || mb.local_part}</span>
-                          <span className="text-2xs text-text3 block truncate">{mb.address}</span>
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
+          <div className="ml-auto relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-text3" />
+            <Input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="h-6 text-2xs pl-6 w-[160px] bg-transparent"
+              placeholder="Search..."
+            />
           </div>
-
-          {/* Search + folder label */}
-          <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border/30">
-            <span className="text-xs font-semibold text-text capitalize">{activeFolder}</span>
-            {threadsQuery.data && <span className="text-2xs text-text3">({threadsQuery.data.total})</span>}
-            {threadsQuery.isFetching && (
-              <div className="size-2.5 animate-spin rounded-full border border-accent-porter border-t-transparent" />
-            )}
-            <div className="ml-auto relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-text3" />
-              <Input
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="h-6 text-2xs pl-6 w-[140px] bg-transparent"
-                placeholder="Search..."
-              />
-            </div>
-          </div>
+          {threadsQuery.isFetching && (
+            <div className="size-2.5 animate-spin rounded-full border border-accent-porter border-t-transparent" />
+          )}
         </div>
 
+        {/* Thread list + detail split */}
+        <div className="flex-1 flex min-h-0">
+      {/* ── Thread list panel ─────────────────────────────────────── */}
+      <div className="w-[320px] shrink-0 border-r border-border overflow-y-auto">
         {/* Thread rows */}
         {threadsQuery.isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -909,6 +881,8 @@ function EmailContent() {
           </div>
         )}
       </div>
+        </div>{/* end thread list + detail split */}
+      </div>{/* end main content area */}
     </div>
   )
 }
