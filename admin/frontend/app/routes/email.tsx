@@ -7,7 +7,7 @@ import { Input } from "~/components/ui/input"
 import {
   Inbox, Send, FileText, Trash2, Plus, ArrowLeft, Mail,
   Bold, Italic, Link, List, ListOrdered, Code, Heading,
-  Settings, Check, AlertTriangle, Archive,
+  ChevronDown, Settings, Check, AlertTriangle, Archive,
   Reply, CornerUpLeft, Search, Paperclip, X, Download,
 } from "lucide-react"
 import { Label } from "~/components/ui/label"
