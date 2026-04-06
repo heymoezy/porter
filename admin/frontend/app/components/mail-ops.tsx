@@ -289,7 +289,7 @@ export function MailOps() {
   const totalMailboxes = s ? sumValues(s.mailboxes) : 0
   const totalMessages = s ? sumValues(s.messages) : 0
   const totalDeliveries = s ? sumValues(s.deliveries) : 0
-  const deliveredCount = s?.deliveries?.delivered ?? 0
+  const deliveredCount = (s?.deliveries?.delivered ?? 0) + (s?.deliveries?.sent ?? 0)
   const bouncedCount = (s?.deliveries?.bounced ?? 0) + (s?.deliveries?.failed ?? 0)
   const successRate = totalDeliveries > 0 ? ((deliveredCount / totalDeliveries) * 100).toFixed(1) : "-"
   const bounceRate = totalDeliveries > 0 ? ((bouncedCount / totalDeliveries) * 100).toFixed(1) : "-"
