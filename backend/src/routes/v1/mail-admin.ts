@@ -418,16 +418,18 @@ export default async function mailAdminRoutes(fastify: FastifyInstance) {
 
       // Detect issues from DNS records
       const issues: string[] = [];
-      const records = dns.records as Array<{ type?: string; valid?: boolean; name?: string }>;
+      const records = dns.records as Array<{ type?: string; valid?: boolean; name?: string; content?: string }>;
       if (!records || records.length === 0) {
         issues.push('No DNS records found — provider may not be configured');
       } else {
-        const types = records.map(r => r.type?.toUpperCase?.());
-        if (!types.includes('MX')) issues.push('Missing MX record');
-        if (!types.includes('SPF') && !types.includes('TXT')) issues.push('Missing SPF/TXT record');
-        if (!types.includes('DKIM')) issues.push('Missing DKIM record');
-        if (!types.includes('DMARC')) issues.push('Missing DMARC record');
-        // Check for invalid records
+        const hasMx = records.some(r => r.type?.toUpperCase() === 'MX');
+        const hasSpf = records.some(r => r.content?.startsWith('v=spf1'));
+        const hasDkim = records.some(r => r.content?.startsWith('v=DKIM1') || r.name?.includes('_domainkey'));
+        const hasDmarc = records.some(r => r.content?.startsWith('v=DMARC1') || r.name?.includes('_dmarc'));
+        if (!hasMx) issues.push('Missing MX record');
+        if (!hasSpf) issues.push('Missing SPF record');
+        if (!hasDkim) issues.push('Missing DKIM record');
+        if (!hasDmarc) issues.push('Missing DMARC record');
         const invalid = records.filter(r => r.valid === false);
         for (const r of invalid) {
           issues.push(`Invalid ${r.type ?? 'unknown'} record: ${r.name ?? '(unnamed)'}`);
