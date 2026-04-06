@@ -207,12 +207,26 @@ export default async function mailAdminRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // DELETE /mailboxes/:id — soft-delete (deactivate) a mailbox
+  // DELETE /mailboxes/:id — permanently delete mailbox from Stalwart + PostgreSQL
   fastify.delete('/mailboxes/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     try {
-      const result = await mailboxService.deactivateMailbox(id);
+      // Look up address before deleting from DB
+      const mailbox = await mailboxService.getMailboxById(id);
+      if (!mailbox) {
+        return reply.status(404).send(err('NOT_FOUND', `Mailbox not found: ${id}`));
+      }
+
+      // Delete from Stalwart
+      const provider = getProvider();
+      if (provider) {
+        const localPart = mailbox.address.split('@')[0];
+        try { await provider.adminClient.deleteAccount(localPart); } catch { /* may already be gone */ }
+      }
+
+      // Delete from PostgreSQL (cascades messages, threads, deliveries)
+      const result = await mailboxService.deleteMailboxPermanently(id);
       return reply.send(ok(result));
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);

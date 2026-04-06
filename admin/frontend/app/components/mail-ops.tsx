@@ -160,6 +160,7 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 
 export function MailOps() {
   const [tab, setTab] = useState<TabId>("overview")
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; address: string } | null>(null)
 
   // ── Data Fetches ────────────────────────────────────
 
@@ -271,12 +272,14 @@ export function MailOps() {
       api<{ password: string }>(`/api/v1/mail-admin/mailboxes/${id}/rotate-credential`, { method: "POST" }),
   })
 
-  const deactivateMailboxMutation = useMutation({
+  const deleteMailboxMutation = useMutation({
     mutationFn: (id: string) =>
       api(`/api/v1/mail-admin/mailboxes/${id}`, { method: "DELETE" }),
     onSuccess: () => {
+      setDeleteTarget(null)
       qc.invalidateQueries({ queryKey: ["admin", "mail", "mailboxes"] })
       qc.invalidateQueries({ queryKey: ["admin", "mail", "stats"] })
+      qc.invalidateQueries({ queryKey: ["mail"] })
     },
   })
 
@@ -296,6 +299,39 @@ export function MailOps() {
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
+      {/* Delete confirmation dialog */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDeleteTarget(null)}>
+          <div className="rounded-lg border border-red-500/30 bg-surface p-5 w-[400px] shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center justify-center size-8 rounded-full bg-red-500/15">
+                <Trash2 className="size-4 text-red-400" />
+              </div>
+              <h3 className="text-sm font-bold text-foreground">Delete mailbox permanently?</h3>
+            </div>
+            <p className="text-xs text-text2 mb-1">
+              You're about to delete <span className="font-mono font-semibold text-foreground">{deleteTarget.address}</span>
+            </p>
+            <p className="text-xs text-red-400 mb-4">
+              All emails in this mailbox will be permanently deleted. This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="h-7 text-xs bg-red-500 hover:bg-red-600 text-white border-0"
+                onClick={() => deleteMailboxMutation.mutate(deleteTarget.id)}
+                disabled={deleteMailboxMutation.isPending}
+              >
+                {deleteMailboxMutation.isPending ? "Deleting..." : "Delete permanently"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-xl font-bold text-foreground">Mail Ops</h1>
@@ -663,13 +699,15 @@ export function MailOps() {
 
           {/* Rotate credential result */}
           {rotateCredentialMutation.isSuccess && rotateCredentialMutation.data && (
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 flex items-center gap-2">
-              <Check className="size-3.5 text-emerald-400 shrink-0" />
-              <span className="text-xs text-emerald-400">New password:</span>
-              <code className="text-xs font-mono text-foreground bg-raised px-2 py-0.5 rounded select-all">
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Check className="size-3.5 text-emerald-400 shrink-0" />
+                <span className="text-xs font-semibold text-emerald-400">SMTP credential rotated</span>
+              </div>
+              <p className="text-2xs text-text3 mb-2">This is the new SMTP password for this mailbox. Copy it now — Porter won't show it again.</p>
+              <code className="text-xs font-mono text-foreground bg-raised px-3 py-1.5 rounded block select-all">
                 {rotateCredentialMutation.data.password}
               </code>
-              <span className="text-2xs text-text3">Copy now — won't be shown again</span>
             </div>
           )}
 
@@ -759,16 +797,14 @@ export function MailOps() {
                             >
                               {selectedMailboxId === mb.id ? "Hide" : "Health"}
                             </button>
-                            {/* Deactivate */}
-                            {mb.status !== "deactivated" && (
-                              <button
-                                onClick={() => { if (window.confirm(`Deactivate ${mb.address}?`)) deactivateMailboxMutation.mutate(mb.id) }}
-                                className="flex items-center justify-center size-6 rounded text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                title="Deactivate"
-                              >
-                                <Trash2 className="size-3" />
-                              </button>
-                            )}
+                            {/* Delete */}
+                            <button
+                              onClick={() => setDeleteTarget({ id: mb.id, address: mb.address })}
+                              className="flex items-center justify-center size-6 rounded text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                              title="Delete mailbox"
+                            >
+                              <Trash2 className="size-3" />
+                            </button>
                           </div>
                         </td>
                       </tr>

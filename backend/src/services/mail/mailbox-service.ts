@@ -225,6 +225,27 @@ export async function deactivateMailbox(
   return { id, address: mailbox.address, status: 'deactivated' };
 }
 
+// ── Hard Delete Mailbox ───────────────────────────────────────────────
+
+export async function deleteMailboxPermanently(
+  id: string,
+): Promise<{ id: string; address: string; deleted: true }> {
+  const mailbox = await getMailboxById(id);
+  if (!mailbox) {
+    throw new Error(`Mailbox not found: ${id}`);
+  }
+
+  // Delete all related data
+  await pool.query(`DELETE FROM agent_mailboxes WHERE mailbox_id = $1`, [id]);
+  await pool.query(`DELETE FROM mail_aliases WHERE mailbox_id = $1`, [id]);
+  await pool.query(`DELETE FROM mail_deliveries WHERE message_id IN (SELECT id FROM mail_messages WHERE mailbox_id = $1)`, [id]);
+  await pool.query(`DELETE FROM mail_messages WHERE mailbox_id = $1`, [id]);
+  await pool.query(`DELETE FROM mail_threads WHERE mailbox_id = $1`, [id]);
+  await pool.query(`DELETE FROM mailboxes WHERE id = $1`, [id]);
+
+  return { id, address: mailbox.address, deleted: true };
+}
+
 // ── Create Alias ───────────────────────────────────────────────────────
 
 export async function createMailboxAlias(
