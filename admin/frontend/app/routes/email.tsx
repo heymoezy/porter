@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useState, useRef, lazy, Suspense } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
@@ -8,7 +8,7 @@ import {
   Inbox, Send, FileText, Trash2, Plus, ArrowLeft, Mail,
   Bold, Italic, Link, List, ListOrdered, Code, Heading,
   ChevronDown, Settings, Check, AlertTriangle, Archive,
-  Reply, CornerUpLeft, Search,
+  Reply, CornerUpLeft, Search, Paperclip, X, Download,
 } from "lucide-react"
 import { Label } from "~/components/ui/label"
 
@@ -35,6 +35,13 @@ interface ThreadRow {
   created_at: number | null
 }
 
+interface AttachmentMeta {
+  blobId: string
+  name: string
+  type: string
+  size: number
+}
+
 interface MessageRow {
   id: string
   mailbox_id: string
@@ -53,6 +60,7 @@ interface MessageRow {
   read_at: number | null
   sent_at: number | null
   created_at: number | null
+  attachments_json: AttachmentMeta[] | unknown
 }
 
 interface MailIdentity {
@@ -105,6 +113,18 @@ function threadParticipants(thread: ThreadRow): string {
   if (arr.length === 0) return "Unknown"
   if (arr.length === 1) return arr[0]
   return `${arr[0]} +${arr.length - 1}`
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+function parseAttachments(val: unknown): AttachmentMeta[] {
+  if (Array.isArray(val)) return val as AttachmentMeta[]
+  if (typeof val === "string") { try { return JSON.parse(val) } catch { return [] } }
+  return []
 }
 
 // ── Main component ─────────────────────────────────────────────────────
@@ -196,9 +216,9 @@ function EmailContent() {
 
   // ── Thread messages ───────────────────────────────────────────────
   const threadMessagesQuery = useQuery({
-    queryKey: ["mail", "thread-messages", selectedThreadId],
-    queryFn: () => api<{ messages: MessageRow[] }>(`/api/v1/mail/threads/${selectedThreadId}/messages`),
-    enabled: !!selectedThreadId,
+    queryKey: ["mail", "thread-messages", selectedThreadId, activeMailboxId],
+    queryFn: () => api<{ messages: MessageRow[] }>(`/api/v1/mail/threads/${selectedThreadId}/messages?mailboxId=${activeMailboxId}`),
+    enabled: !!selectedThreadId && !!activeMailboxId,
   })
 
   const threadMessages = threadMessagesQuery.data?.messages ?? []
@@ -206,7 +226,7 @@ function EmailContent() {
 
   // ── Mark read on view ─────────────────────────────────────────────
   const markReadMutation = useMutation({
-    mutationFn: (messageId: string) => api(`/api/v1/mail/messages/${messageId}/read`, { method: "POST" }),
+    mutationFn: (messageId: string) => api(`/api/v1/mail/messages/${messageId}/read`, { method: "POST", json: { mailboxId: activeMailboxId } }),
   })
 
   // Auto-mark unread messages as read when thread is viewed
@@ -222,16 +242,33 @@ function EmailContent() {
     }
   }
 
+  // ── Attachment state ───────────────────────────────────────────────
+  const [pendingAttachments, setPendingAttachments] = useState<AttachmentMeta[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("mailboxId", activeSender?.id ?? activeMailboxId ?? "")
+      const res = await fetch("/api/v1/mail/attachments/upload", { method: "POST", body: formData, credentials: "include" })
+      if (!res.ok) throw new Error("Upload failed")
+      const json = await res.json()
+      return json.data as AttachmentMeta
+    },
+    onSuccess: (att) => setPendingAttachments(prev => [...prev, att]),
+  })
+
   // ── Send ──────────────────────────────────────────────────────────
   const sendMutation = useMutation({
-    mutationFn: (data: { mailboxId: string; to: string[]; subject: string; textBody: string; htmlBody?: string }) => {
-      // Sync selected mailbox to the one we're sending from
+    mutationFn: (data: { mailboxId: string; to: string[]; subject: string; textBody: string; htmlBody?: string; attachments?: AttachmentMeta[] }) => {
       setSelectedMailboxId(data.mailboxId)
       return api("/api/v1/mail/messages/send", { method: "POST", json: data })
     },
     onSuccess: () => {
       setComposing(false)
       setComposeData({ from: "", to: "", subject: "", body: "" })
+      setPendingAttachments([])
       if (editorRef.current) editorRef.current.innerHTML = ""
       qc.invalidateQueries({ queryKey: ["mail"] })
     },
@@ -244,6 +281,7 @@ function EmailContent() {
     onSuccess: () => {
       setComposing(false)
       setComposeData({ from: "", to: "", subject: "", body: "" })
+      setPendingAttachments([])
       if (editorRef.current) editorRef.current.innerHTML = ""
       qc.invalidateQueries({ queryKey: ["mail"] })
     },
@@ -252,7 +290,7 @@ function EmailContent() {
   // ── Reply ─────────────────────────────────────────────────────────
   const replyMutation = useMutation({
     mutationFn: (data: { messageId: string; textBody: string }) =>
-      api(`/api/v1/mail/messages/${data.messageId}/reply`, { method: "POST", json: { textBody: data.textBody } }),
+      api(`/api/v1/mail/messages/${data.messageId}/reply`, { method: "POST", json: { mailboxId: activeMailboxId, textBody: data.textBody } }),
     onSuccess: () => {
       setReplyText("")
       setReplyingToId(null)
@@ -263,7 +301,7 @@ function EmailContent() {
   // ── Archive ───────────────────────────────────────────────────────
   const archiveMutation = useMutation({
     mutationFn: (messageId: string) =>
-      api(`/api/v1/mail/messages/${messageId}/archive`, { method: "POST" }),
+      api(`/api/v1/mail/messages/${messageId}/archive`, { method: "POST", json: { mailboxId: activeMailboxId } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["mail"] })
     },
@@ -272,7 +310,7 @@ function EmailContent() {
   // ── Trash ─────────────────────────────────────────────────────────
   const trashMutation = useMutation({
     mutationFn: (messageId: string) =>
-      api(`/api/v1/mail/messages/${messageId}/trash`, { method: "POST" }),
+      api(`/api/v1/mail/messages/${messageId}/trash`, { method: "POST", json: { mailboxId: activeMailboxId } }),
     onSuccess: () => {
       setSelectedThreadId(null)
       qc.invalidateQueries({ queryKey: ["mail"] })
@@ -282,7 +320,7 @@ function EmailContent() {
   // ── Permanent delete (from trash) ──────────────────────────────────
   const deleteMutation = useMutation({
     mutationFn: (messageId: string) =>
-      api(`/api/v1/mail/messages/${messageId}`, { method: "DELETE" }),
+      api(`/api/v1/mail/messages/${messageId}?mailboxId=${activeMailboxId}`, { method: "DELETE" }),
     onSuccess: () => {
       setSelectedThreadId(null)
       qc.invalidateQueries({ queryKey: ["mail"] })
@@ -313,7 +351,10 @@ function EmailContent() {
       })
     } else {
       if (!toList.length || !composeData.subject || !text) return
-      sendMutation.mutate({ mailboxId, to: toList, subject: composeData.subject, textBody: text, htmlBody: html })
+      sendMutation.mutate({
+        mailboxId, to: toList, subject: composeData.subject, textBody: text, htmlBody: html,
+        attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+      })
     }
   }
 
@@ -669,7 +710,45 @@ function EmailContent() {
                   <Icon className="size-3" />
                 </button>
               ))}
+              <div className="w-px h-4 bg-border/50 mx-1" />
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                multiple
+                onChange={e => {
+                  const files = e.target.files
+                  if (files) for (const f of Array.from(files)) uploadMutation.mutate(f)
+                  e.target.value = ""
+                }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex size-6 items-center justify-center rounded text-text3 hover:bg-raised hover:text-text2 transition-colors"
+                title="Attach file"
+              >
+                <Paperclip className="size-3" />
+              </button>
+              {uploadMutation.isPending && (
+                <div className="size-3 animate-spin rounded-full border border-accent-porter border-t-transparent ml-1" />
+              )}
             </div>
+
+            {/* Pending attachments */}
+            {pendingAttachments.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 px-3 py-1.5 border-b border-border/50 bg-background/30">
+                {pendingAttachments.map((att, i) => (
+                  <span key={att.blobId + i} className="flex items-center gap-1 px-2 py-0.5 rounded border border-border text-2xs text-text2 bg-raised">
+                    <Paperclip className="size-2.5 text-text3" />
+                    <span className="max-w-[120px] truncate">{att.name}</span>
+                    <span className="text-text3">({formatFileSize(att.size)})</span>
+                    <button onClick={() => setPendingAttachments(prev => prev.filter((_, j) => j !== i))} className="text-text3 hover:text-danger">
+                      <X className="size-2.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Rich editor */}
             <div
@@ -740,6 +819,24 @@ function EmailContent() {
                       <div className="text-xs text-text2 leading-relaxed [&_h3]:text-sm [&_h3]:font-bold [&_code]:bg-raised [&_code]:px-1 [&_code]:rounded [&_a]:text-accent-porter" dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.html_body) }} />
                     ) : (
                       <div className="text-xs text-text2 leading-relaxed whitespace-pre-wrap">{msg.text_body || "(empty)"}</div>
+                    )}
+                    {/* Attachments */}
+                    {parseAttachments(msg.attachments_json).length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {parseAttachments(msg.attachments_json).map((att, ai) => (
+                          <a
+                            key={att.blobId + ai}
+                            href={`/api/v1/mail/attachments/${msg.mailbox_id}/${encodeURIComponent(att.blobId)}/${encodeURIComponent(att.name || "attachment")}`}
+                            target="_blank"
+                            rel="noopener"
+                            className="flex items-center gap-1.5 px-2 py-1 rounded border border-border text-2xs text-text2 hover:bg-raised transition-colors"
+                          >
+                            <Download className="size-3 text-text3" />
+                            <span className="max-w-[160px] truncate">{att.name || "attachment"}</span>
+                            <span className="text-text3">({formatFileSize(att.size)})</span>
+                          </a>
+                        ))}
+                      </div>
                     )}
                     {/* Per-message reply button */}
                     {msg.direction === "inbound" && (
@@ -816,6 +913,27 @@ function EmailContent() {
   )
 }
 
+const LazyMailOps = lazy(() => import("~/components/mail-ops").then(m => ({ default: m.MailOps })))
+
 export default function EmailPage() {
-  return <EmailContent />
+  const [view, setView] = useState<"email" | "ops">("email")
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <div className="shrink-0 flex items-center gap-1 px-4 py-1.5 border-b border-border bg-background">
+        <button onClick={() => setView("email")} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${view === "email" ? "bg-accent-porter/10 text-accent-porter" : "text-text3 hover:text-text2"}`}>
+          Email
+        </button>
+        <button onClick={() => setView("ops")} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${view === "ops" ? "bg-accent-porter/10 text-accent-porter" : "text-text3 hover:text-text2"}`}>
+          Mail Ops
+        </button>
+      </div>
+      {view === "email" ? (
+        <EmailContent />
+      ) : (
+        <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="size-5 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" /></div>}>
+          <LazyMailOps />
+        </Suspense>
+      )}
+    </div>
+  )
 }

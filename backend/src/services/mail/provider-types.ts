@@ -73,3 +73,83 @@ export interface ProviderSendMessageInput {
 export interface ProviderSendMessageResult {
   providerMessageId: string;
 }
+
+// ── JMAP types ────────────────────────────────────────────────────────────
+
+export interface JmapAuth {
+  username: string;
+  password: string;
+}
+
+export interface JmapEmailAddress {
+  name?: string;
+  email: string;
+}
+
+export interface JmapMailboxInfo {
+  id: string;
+  name: string;
+  role: string | null;
+  totalEmails: number;
+  unreadEmails: number;
+  totalThreads: number;
+  parentId: string | null;
+  sortOrder: number;
+}
+
+export interface JmapAttachment {
+  blobId: string;
+  name: string | null;
+  type: string;
+  size: number;
+  cid?: string | null;
+  disposition?: string;
+}
+
+export interface JmapEmailSummary {
+  id: string;
+  blobId: string;
+  threadId: string;
+  mailboxIds: Record<string, boolean>;
+  from: JmapEmailAddress[] | null;
+  to: JmapEmailAddress[] | null;
+  cc: JmapEmailAddress[] | null;
+  replyTo: JmapEmailAddress[] | null;
+  subject: string;
+  receivedAt: string;
+  sentAt: string | null;
+  preview: string;
+  hasAttachment: boolean;
+  keywords: Record<string, boolean>;
+  size: number;
+  messageId: string[] | null;
+  inReplyTo: string[] | null;
+  references: string[] | null;
+}
+
+export interface JmapEmailFull extends JmapEmailSummary {
+  textBody: Array<{ partId: string; blobId: string; type: string }>;
+  htmlBody: Array<{ partId: string; blobId: string; type: string }>;
+  attachments: JmapAttachment[];
+  bodyValues: Record<string, { value: string; isEncodingProblem?: boolean }>;
+}
+
+export interface JmapSession {
+  accounts: Record<string, { name: string; isPersonal: boolean; accountCapabilities: Record<string, unknown> }>;
+  primaryAccounts: Record<string, string>;
+  uploadUrl: string;
+  downloadUrl: string;
+  state: string;
+}
+
+export type JmapMethodCall = [string, Record<string, unknown>, string];
+
+export interface JmapRequest {
+  using: string[];
+  methodCalls: JmapMethodCall[];
+}
+
+export interface JmapResponse {
+  methodResponses: [string, Record<string, unknown>, string][];
+  sessionState: string;
+}

@@ -7,8 +7,11 @@ import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
 import { config } from '../../config.js';
 import { StalwartAdminClient } from './stalwart-admin-client.js';
+import { JmapClient } from './jmap-client.js';
 import type { MailProvider } from './provider-interface.js';
 import type {
+  JmapAuth,
+  JmapSession,
   CreateDomainInput,
   CreateDomainResult,
   DnsRecord,
@@ -24,16 +27,72 @@ import type {
   ProviderSendMessageResult,
 } from './provider-types.js';
 
+interface CachedCred { password: string; cachedAt: number }
+interface CachedSession { accountId: string; identityId: string; cachedAt: number }
+
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 export class StalwartMailProvider implements MailProvider {
   private client: StalwartAdminClient;
+  private _jmap: JmapClient;
+  private credCache = new Map<string, CachedCred>();
+  private sessionCache = new Map<string, CachedSession>();
 
   constructor(baseUrl: string, apiKey: string) {
     this.client = new StalwartAdminClient(baseUrl, apiKey);
+    this._jmap = new JmapClient(baseUrl);
   }
 
   /** Expose the underlying client for direct health-checks etc. */
   get adminClient(): StalwartAdminClient {
     return this.client;
+  }
+
+  /** Expose JMAP client for direct use by routes. */
+  get jmap(): JmapClient {
+    return this._jmap;
+  }
+
+  // ── JMAP Auth Resolution ────────────────────────────────────────────
+
+  async getJmapAuth(mailboxAddress: string): Promise<JmapAuth> {
+    const localPart = mailboxAddress.split('@')[0];
+    const now = Date.now();
+
+    const cached = this.credCache.get(localPart);
+    if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
+      return { username: localPart, password: cached.password };
+    }
+
+    const account = await this.client.getAccount(localPart) as { data?: { secrets?: string[] } } | null;
+    const password = account?.data?.secrets?.[0];
+    if (!password) throw new Error(`No credentials for mailbox ${mailboxAddress}`);
+
+    this.credCache.set(localPart, { password, cachedAt: now });
+    return { username: localPart, password };
+  }
+
+  async getJmapSession(mailboxAddress: string): Promise<{ auth: JmapAuth; accountId: string; identityId: string }> {
+    const auth = await this.getJmapAuth(mailboxAddress);
+    const now = Date.now();
+
+    const cached = this.sessionCache.get(auth.username);
+    if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
+      return { auth, accountId: cached.accountId, identityId: cached.identityId };
+    }
+
+    const session = await this._jmap.getSession(auth);
+    const accountId = session.primaryAccounts?.['urn:ietf:params:jmap:mail']
+      || Object.keys(session.accounts)[0];
+    if (!accountId) throw new Error(`No JMAP account for ${mailboxAddress}`);
+
+    // Resolve identity
+    const identities = await this._jmap.getIdentities(auth, accountId);
+    const identity = identities.find(i => i.email === mailboxAddress) || identities[0];
+    const identityId = identity?.id || '';
+
+    this.sessionCache.set(auth.username, { accountId, identityId, cachedAt: now });
+    return { auth, accountId, identityId };
   }
 
   // ── Domain ───────────────────────────────────────────────────────────

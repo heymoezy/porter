@@ -1,5 +1,6 @@
 /**
  * Send service — orchestrates outbound mail: compose, send via provider, persist, track delivery.
+ * Uses JMAP when attachments are present, nodemailer for simple sends.
  */
 
 import crypto from 'node:crypto';
@@ -7,6 +8,7 @@ import { createMessage, getMessageById } from './message-service.js';
 import { createDelivery } from './delivery-service.js';
 import { getMailboxById } from './mailbox-service.js';
 import { getProvider } from './provider-factory.js';
+import type { JmapAttachment } from './provider-types.js';
 
 // ── Send Mail ───────────────────────────────────────────────────────────
 
@@ -20,40 +22,79 @@ export async function sendMail(opts: {
   htmlBody?: string;
   inReplyTo?: string;       // internet_message_id of the message being replied to
   referencesHeader?: string; // accumulated References header
+  attachments?: Array<{ blobId: string; name: string; type: string; size: number }>;
 }): Promise<{ messageId: string; threadId: string; deliveries: number }> {
   // 1. Look up the sending mailbox
   const mailbox = await getMailboxById(opts.mailboxId);
   if (!mailbox) throw new Error('Mailbox not found');
 
-  // 2. Generate RFC Message-ID
-  const domain = mailbox.address.split('@')[1] || 'askporter.app';
-  const internetMessageId = `<${crypto.randomUUID()}@${domain}>`;
+  const provider = getProvider();
 
-  // 3. Build References header for reply chains
+  // 2. Build References header for reply chains
   let references = opts.referencesHeader || '';
   if (opts.inReplyTo && !references.includes(opts.inReplyTo)) {
     references = references ? `${references} ${opts.inReplyTo}` : opts.inReplyTo;
   }
 
-  // 4. Send via provider (or log-only fallback)
-  const provider = getProvider();
-  let providerMessageId = internetMessageId;
-  if (provider) {
-    const result = await provider.sendMessage({
-      from: mailbox.address,
-      to: opts.to,
-      cc: opts.cc,
-      bcc: opts.bcc,
-      subject: opts.subject,
-      textBody: opts.textBody,
-      htmlBody: opts.htmlBody,
-      inReplyTo: opts.inReplyTo,
-      references,
-    });
-    providerMessageId = result.providerMessageId;
+  let providerMessageId: string;
+
+  // 3. Send via JMAP (when attachments) or nodemailer (simple)
+  if (opts.attachments?.length && provider) {
+    // JMAP path — create email with blob refs + submit
+    const session = await provider.getJmapSession(mailbox.address);
+    const sentMbId = await provider.jmap.findMailboxByRole(session.auth, session.accountId, 'sent');
+
+    const jmapAttachments: JmapAttachment[] = opts.attachments.map(a => ({
+      blobId: a.blobId,
+      name: a.name,
+      type: a.type,
+      size: a.size,
+    }));
+
+    const emailId = await provider.jmap.sendEmail(
+      session.auth,
+      session.accountId,
+      session.identityId,
+      {
+        mailboxIds: { [sentMbId]: true },
+        from: [{ email: mailbox.address, name: mailbox.display_name || '' }],
+        to: opts.to.map(e => ({ email: e })),
+        cc: opts.cc?.map(e => ({ email: e })),
+        bcc: opts.bcc?.map(e => ({ email: e })),
+        subject: opts.subject,
+        textBody: opts.textBody,
+        htmlBody: opts.htmlBody,
+        attachments: jmapAttachments,
+        inReplyTo: opts.inReplyTo ? [opts.inReplyTo] : undefined,
+        references: references ? references.split(/\s+/) : undefined,
+      },
+    );
+
+    providerMessageId = emailId;
+    console.log(`[mail-send] JMAP sent from=${mailbox.address} to=${opts.to.join(',')} id=${emailId}`);
+  } else {
+    // Nodemailer path — simple sends without attachments
+    const domain = mailbox.address.split('@')[1] || 'askporter.app';
+    const internetMessageId = `<${crypto.randomUUID()}@${domain}>`;
+    providerMessageId = internetMessageId;
+
+    if (provider) {
+      const result = await provider.sendMessage({
+        from: mailbox.address,
+        to: opts.to,
+        cc: opts.cc,
+        bcc: opts.bcc,
+        subject: opts.subject,
+        textBody: opts.textBody,
+        htmlBody: opts.htmlBody,
+        inReplyTo: opts.inReplyTo,
+        references,
+      });
+      providerMessageId = result.providerMessageId;
+    }
   }
 
-  // 5. Persist outbound message
+  // 4. Persist outbound message in PostgreSQL cache
   const msg = await createMessage({
     mailboxId: opts.mailboxId,
     direction: 'outbound',
@@ -67,14 +108,14 @@ export async function sendMail(opts: {
     subject: opts.subject,
     textBody: opts.textBody,
     htmlBody: opts.htmlBody,
-    internetMessageId,
     inReplyTo: opts.inReplyTo,
     referencesHeader: references || undefined,
     providerMessageId,
+    attachments: opts.attachments,
     sentAt: Math.floor(Date.now() / 1000),
   });
 
-  // 6. Create delivery records per recipient
+  // 5. Create delivery records per recipient
   const allRecipients = [...opts.to, ...(opts.cc || []), ...(opts.bcc || [])];
   for (const recipient of allRecipients) {
     await createDelivery({
