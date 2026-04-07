@@ -686,8 +686,7 @@ function EmailContent() {
                 <div className="flex items-center justify-between px-5 py-3 border-b border-border">
                   <div className="flex items-center gap-3 min-w-0">
                     <button onClick={() => setSelectedThreadId(null)} className="text-text3 hover:text-text shrink-0 lg:hidden"><ArrowLeft className="size-4" /></button>
-                    <h2 className="text-lg font-semibold text-text truncate">{selectedThread.subject_canonical || "(no subject)"}</h2>
-                    <span className="text-xs text-text3 shrink-0">{selectedThread.message_count} message{selectedThread.message_count !== 1 ? "s" : ""}</span>
+                    <h2 className="text-sm font-semibold text-text truncate">{selectedThread.subject_canonical || "(no subject)"}</h2>
                   </div>
                   <div className="flex gap-1 shrink-0">
                     {activeFolder === "trash" ? (
@@ -720,7 +719,11 @@ function EmailContent() {
                         const initial = senderName[0]?.toUpperCase() || "?"
                         const isOut = msg.direction === "outbound"
                         return (
-                          <div key={msg.id} className="rounded-lg border border-border/60 bg-surface overflow-hidden">
+                          <div key={msg.id} className={`rounded-lg border overflow-hidden ${
+                            isOut
+                              ? "border-accent-porter/20 bg-accent-porter/[0.03] border-l-2 border-l-accent-porter/40"
+                              : "border-border/60 bg-surface"
+                          }`}>
                             {/* Message header */}
                             <div className="flex items-center gap-3 px-4 py-3">
                               <div className={`size-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
