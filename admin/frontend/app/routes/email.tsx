@@ -696,38 +696,36 @@ function EmailContent() {
             ) : selectedThreadId && selectedThread ? (
               /* ── Thread detail ───────────────────────────────── */
               <div className="flex-1 flex flex-col">
-                {/* Subject header */}
-                <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <button onClick={() => setSelectedThreadId(null)} className="text-text3 hover:text-text shrink-0 lg:hidden"><ArrowLeft className="size-4" /></button>
-                    <h2 className="text-sm font-semibold text-text truncate">{selectedThread.subject_canonical || "(no subject)"}</h2>
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    {activeFolder === "trash" ? (
-                      <Button variant="ghost" size="sm" className="text-danger" onClick={handleDeleteThread}>
-                        <Trash2 className="size-3.5 mr-1" /> Delete
-                      </Button>
-                    ) : (
-                      <>
-                        <Button variant="ghost" size="sm" onClick={handleArchiveThread}>
-                          <Archive className="size-3.5 mr-1" /> Archive
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-danger" onClick={handleTrashThread}>
-                          <Trash2 className="size-3.5 mr-1" /> Trash
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
 
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto">
+                {/* Messages (scrollable) */}
+                <div className="flex-1 overflow-y-auto min-h-0">
                   {threadMessagesQuery.isLoading ? (
                     <div className="flex items-center justify-center py-12">
                       <div className="size-5 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
                     </div>
                   ) : (
                     <div className="max-w-3xl mx-auto py-4 px-5 space-y-4">
+                      {/* Subject + actions */}
+                      <div className="flex items-start justify-between gap-3">
+                        <h2 className="text-base font-semibold text-text">{selectedThread.subject_canonical || "(no subject)"}</h2>
+                        <div className="flex gap-1 shrink-0">
+                          {activeFolder === "trash" ? (
+                            <Button variant="ghost" size="sm" className="text-danger" onClick={handleDeleteThread}>
+                              <Trash2 className="size-3.5 mr-1" /> Delete
+                            </Button>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="sm" onClick={handleArchiveThread}>
+                                <Archive className="size-3.5 mr-1" /> Archive
+                              </Button>
+                              <Button variant="ghost" size="sm" className="text-danger" onClick={handleTrashThread}>
+                                <Trash2 className="size-3.5 mr-1" /> Trash
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
                       {threadMessages.map((msg) => {
                         const senderName = msg.from_name || msg.from_address.split("@")[0]
                         const initial = senderName[0]?.toUpperCase() || "?"
@@ -795,63 +793,64 @@ function EmailContent() {
                         )
                       })}
 
-                      {/* Reply box at bottom of thread (Gmail-style) */}
-                      {(() => {
-                        const targetMsg = replyingToId
-                          ? threadMessages.find(m => m.id === replyingToId)
-                          : null
-                        const replyToName = targetMsg
-                          ? (targetMsg.from_name || targetMsg.from_address.split("@")[0])
-                          : null
-                        const effectiveTarget = targetMsg ?? replyTarget
-                        return (
-                      <div className="rounded-lg border border-border/60 bg-surface overflow-hidden">
-                        {replyToName && (
-                          <div className="px-4 pt-2 pb-0 flex items-center gap-2">
-                            <CornerUpLeft className="size-3 text-text3" />
-                            <span className="text-xs text-text3">Replying to <span className="font-medium text-text2">{replyToName}</span></span>
-                            <button onClick={() => setReplyingToId(null)} className="text-text3 hover:text-text ml-auto"><X className="size-3" /></button>
-                          </div>
-                        )}
-                        <div className="px-4 py-3 flex items-start gap-3">
-                          <div className="size-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-accent-porter/15 text-accent-porter mt-0.5">
-                            {(activeMailbox?.display_name || "P")[0].toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <textarea
-                              value={replyText}
-                              onChange={e => setReplyText(e.target.value)}
-                              placeholder="Reply..."
-                              rows={replyText ? 3 : 1}
-                              className="w-full text-sm text-text bg-transparent resize-none focus:outline-none placeholder:text-text3/50"
-                              onFocus={e => { if (e.target.rows === 1) e.target.rows = 2 }}
-                              onKeyDown={e => {
-                                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                                  e.preventDefault()
-                                  if (effectiveTarget && replyText.trim()) handleReply(effectiveTarget.id)
-                                }
-                              }}
-                            />
-                            {replyText.trim() && (
-                              <div className="flex justify-end gap-2 mt-2">
-                                <Button variant="ghost" size="sm" onClick={() => { setReplyText(""); setReplyingToId(null) }}>Discard</Button>
-                                <Button
-                                  size="sm"
-                                  className="gap-1.5"
-                                  disabled={replyMutation.isPending || !replyText.trim()}
-                                  onClick={() => { if (effectiveTarget) handleReply(effectiveTarget.id) }}
-                                >
-                                  <Send className="size-3.5" /> {replyMutation.isPending ? "Sending..." : "Send"}
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                        )
-                      })()}
                     </div>
                   )}
+                </div>
+
+                {/* Reply box (fixed at bottom) */}
+                <div className="shrink-0 border-t border-border bg-surface">
+                  <div className="max-w-3xl mx-auto px-5 py-3">
+                    {(() => {
+                      const targetMsg = replyingToId ? threadMessages.find(m => m.id === replyingToId) : null
+                      const replyToName = targetMsg ? (targetMsg.from_name || targetMsg.from_address.split("@")[0]) : null
+                      const effectiveTarget = targetMsg ?? replyTarget
+                      return (
+                        <>
+                          {replyToName && (
+                            <div className="flex items-center gap-2 mb-2">
+                              <CornerUpLeft className="size-3 text-text3" />
+                              <span className="text-xs text-text3">Replying to <span className="font-medium text-text2">{replyToName}</span></span>
+                              <button onClick={() => setReplyingToId(null)} className="text-text3 hover:text-text ml-auto"><X className="size-3" /></button>
+                            </div>
+                          )}
+                          <div className="flex items-start gap-3">
+                            <div className="size-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-accent-porter/15 text-accent-porter">
+                              {(activeMailbox?.display_name || "P")[0].toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <textarea
+                                value={replyText}
+                                onChange={e => setReplyText(e.target.value)}
+                                placeholder="Reply..."
+                                rows={replyText ? 3 : 1}
+                                className="w-full text-sm text-text bg-transparent resize-none focus:outline-none placeholder:text-text3/50"
+                                onFocus={e => { if (e.target.rows === 1) e.target.rows = 2 }}
+                                onKeyDown={e => {
+                                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                                    e.preventDefault()
+                                    if (effectiveTarget && replyText.trim()) handleReply(effectiveTarget.id)
+                                  }
+                                }}
+                              />
+                              {replyText.trim() && (
+                                <div className="flex justify-end gap-2 mt-2">
+                                  <Button variant="ghost" size="sm" onClick={() => { setReplyText(""); setReplyingToId(null) }}>Discard</Button>
+                                  <Button
+                                    size="sm"
+                                    className="gap-1.5"
+                                    disabled={replyMutation.isPending || !replyText.trim()}
+                                    onClick={() => { if (effectiveTarget) handleReply(effectiveTarget.id) }}
+                                  >
+                                    <Send className="size-3.5" /> {replyMutation.isPending ? "Sending..." : "Send"}
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )
+                    })()}
+                  </div>
                 </div>
               </div>
             ) : (
