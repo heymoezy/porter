@@ -140,7 +140,6 @@ function EmailContent() {
   const [showSmtp, setShowSmtp] = useState(false)
   const [smtpForm, setSmtpForm] = useState<Record<string, string>>({})
   const [replyText, setReplyText] = useState("")
-  const [replyingToId, setReplyingToId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const editorRef = useRef<HTMLDivElement>(null)
 
@@ -405,64 +404,21 @@ function EmailContent() {
     )
   }
 
-  return (
-    <div className="flex h-[calc(100vh-var(--header-height)-2rem)] px-4 pb-4">
-      {/* SMTP config overlay */}
-      {showSmtp && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/40" onClick={() => setShowSmtp(false)}>
-          <div className="rounded-lg border border-border bg-card p-4 w-[480px] shadow-xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-bold uppercase tracking-wider text-text3">SMTP Configuration</p>
-              <Button variant="ghost" size="xs" onClick={() => setShowSmtp(false)}>Close</Button>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-2xs text-text3">Host</Label>
-                <Input className="h-7 text-xs mt-1" defaultValue={smtpData?.host} onChange={e => setSmtpForm(p => ({ ...p, smtp_host: e.target.value }))} placeholder="smtp.gmail.com" />
-              </div>
-              <div>
-                <Label className="text-2xs text-text3">Port</Label>
-                <Input className="h-7 text-xs mt-1" defaultValue={String(smtpData?.port ?? 587)} onChange={e => setSmtpForm(p => ({ ...p, smtp_port: e.target.value }))} placeholder="587" />
-              </div>
-              <div>
-                <Label className="text-2xs text-text3">Username</Label>
-                <Input className="h-7 text-xs mt-1" defaultValue={smtpData?.user} onChange={e => setSmtpForm(p => ({ ...p, smtp_user: e.target.value }))} placeholder="user@domain.com" />
-              </div>
-              <div>
-                <Label className="text-2xs text-text3">Password {smtpData?.hasPassword && <Check className="inline size-2.5 text-success" />}</Label>
-                <Input className="h-7 text-xs mt-1" type="password" onChange={e => setSmtpForm(p => ({ ...p, smtp_pass: e.target.value }))} placeholder={smtpData?.hasPassword ? "••••••••" : "password"} />
-              </div>
-              <div>
-                <Label className="text-2xs text-text3">From Name</Label>
-                <Input className="h-7 text-xs mt-1" defaultValue={smtpData?.fromName} onChange={e => setSmtpForm(p => ({ ...p, smtp_from_name: e.target.value }))} placeholder="Porter" />
-              </div>
-              <div>
-                <Label className="text-2xs text-text3">From Email</Label>
-                <Input className="h-7 text-xs mt-1" defaultValue={smtpData?.fromEmail} onChange={e => setSmtpForm(p => ({ ...p, smtp_from_email: e.target.value }))} placeholder="porter@domain.com" />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 mt-3">
-              <Button size="sm" onClick={() => { saveSmtp.mutate(smtpForm); setShowSmtp(false) }} disabled={saveSmtp.isPending}>
-                {saveSmtp.isPending ? "Saving..." : "Save"}
-              </Button>
-              <span className="text-2xs text-text3">Settings stored in database, override env vars</span>
-            </div>
-          </div>
-        </div>
-      )}
+  // Resolve reply target — last inbound or last message
+  const replyTarget = [...threadMessages].reverse().find(m => m.direction === "inbound") ?? threadMessages[threadMessages.length - 1]
 
+  return (
+    <div className="flex h-[calc(100vh-var(--header-height)-2rem)]">
       {/* ── Left sidebar (mailboxes) ──────────────────────────────── */}
-      <div className="w-[180px] shrink-0 flex flex-col border-r border-border pr-2 mr-0">
-        {/* Compose button */}
+      <div className="w-[200px] shrink-0 flex flex-col border-r border-border bg-background px-3 py-3">
         <Button
-          className="w-full gap-2 mb-3 h-9 text-sm font-medium"
+          className="w-full gap-2 mb-4 h-10 text-sm font-semibold rounded-2xl shadow-sm"
           onClick={() => { setComposing(true); setSelectedThreadId(null) }}
         >
           <Plus className="size-4" /> Compose
         </Button>
 
-        {/* Mailbox list */}
-        <nav className="flex flex-col gap-0.5 flex-1 min-h-0">
+        <nav className="flex flex-col gap-1 flex-1 min-h-0">
           {mailboxes.map(mb => {
             const isActive = mb.id === activeMailboxId
             const unread = folderCounts.inbox ?? 0
@@ -470,21 +426,23 @@ function EmailContent() {
               <button
                 key={mb.id}
                 onClick={() => { setSelectedMailboxId(mb.id); setSelectedThreadId(null); setComposing(false); setActiveFolder("inbox") }}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${
-                  isActive
-                    ? "bg-accent-porter/10 text-accent-porter"
-                    : "text-text2 hover:bg-raised"
+                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-colors ${
+                  isActive ? "bg-accent-porter/10" : "hover:bg-raised"
                 }`}
               >
-                <Mail className={`size-3.5 shrink-0 ${isActive ? "text-accent-porter" : "text-text3"}`} />
+                <div className={`size-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                  isActive ? "bg-accent-porter text-white" : "bg-raised text-text3"
+                }`}>
+                  {(mb.display_name || mb.local_part)[0].toUpperCase()}
+                </div>
                 <div className="flex-1 min-w-0 text-left">
-                  <span className={`text-sm block truncate ${isActive ? "font-semibold" : ""}`}>
+                  <span className={`text-sm block truncate ${isActive ? "font-semibold text-accent-porter" : "text-text"}`}>
                     {mb.display_name || mb.local_part}
                   </span>
-                  <span className="text-2xs text-text3 block truncate">{mb.address}</span>
+                  <span className="text-2xs text-text3 block truncate">{mb.local_part}@</span>
                 </div>
                 {isActive && unread > 0 && (
-                  <span className="text-2xs font-semibold bg-accent-porter text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+                  <span className="text-2xs font-bold bg-accent-porter text-white rounded-full size-5 flex items-center justify-center">
                     {unread}
                   </span>
                 )}
@@ -496,8 +454,8 @@ function EmailContent() {
 
       {/* ── Main content area ─────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Folder tabs (top nav) */}
-        <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 border-b border-border bg-surface">
+        {/* Folder tabs */}
+        <div className="shrink-0 flex items-center px-4 py-2 border-b border-border bg-surface gap-0.5">
           {folderDefs.map(f => {
             const count = folderCounts[f.id] ?? 0
             const isActive = activeFolder === f.id
@@ -506,383 +464,365 @@ function EmailContent() {
               <button
                 key={f.id}
                 onClick={() => { setActiveFolder(f.id); setSelectedThreadId(null); setComposing(false) }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs transition-colors ${
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm transition-colors ${
                   isActive
                     ? "bg-accent-porter/10 text-accent-porter font-semibold"
                     : "text-text3 hover:text-text2 hover:bg-raised"
                 }`}
               >
-                <Icon className="size-3.5" />
+                <Icon className="size-4" />
                 <span>{f.label}</span>
                 {count > 0 && (
-                  <span className={`text-2xs ${isActive ? "text-accent-porter" : "text-text3"}`}>{count}</span>
+                  <span className={`text-xs tabular-nums ${isActive ? "text-accent-porter" : "text-text3"}`}>{count}</span>
                 )}
               </button>
             )
           })}
           <div className="ml-auto relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-text3" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-text3" />
             <Input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="h-6 text-2xs pl-6 w-[160px] bg-transparent"
-              placeholder="Search..."
+              className="h-8 text-xs pl-8 w-[200px] rounded-lg"
+              placeholder="Search mail..."
             />
           </div>
-          {threadsQuery.isFetching && (
-            <div className="size-2.5 animate-spin rounded-full border border-accent-porter border-t-transparent" />
-          )}
         </div>
 
         {/* Thread list + detail split */}
         <div className="flex-1 flex min-h-0">
-      {/* ── Thread list panel ─────────────────────────────────────── */}
-      <div className="w-[320px] shrink-0 border-r border-border overflow-y-auto">
-        {/* Thread rows */}
-        {threadsQuery.isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="size-4 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
-          </div>
-        ) : !activeMailboxId ? (
-          <div className="px-3 py-8 text-center text-xs text-text3">No mailbox selected</div>
-        ) : threads.length === 0 ? (
-          <div className="px-3 py-8 text-center text-xs text-text3">No threads in {activeFolder}</div>
-        ) : (
-          threads.map(thread => (
-            <button
-              key={thread.id}
-              onClick={() => handleSelectThread(thread.id)}
-              className={`flex w-full items-start gap-2 px-3 py-2 text-left border-b border-border/30 hover:bg-raised/50 transition-colors ${
-                thread.id === selectedThreadId ? "bg-accent-porter/5" : ""
-              }`}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-text truncate">{threadParticipants(thread)}</span>
-                  {thread.message_count > 1 && (
-                    <span className="text-2xs text-text3 shrink-0">({thread.message_count})</span>
-                  )}
-                  <span className="text-2xs text-text3 ml-auto shrink-0">{fmtDate(thread.last_message_at)}</span>
-                </div>
-                <p className="text-xs text-text2 truncate mt-0.5">{thread.subject_canonical || "(no subject)"}</p>
+          {/* ── Thread list ──────────────────────────────────── */}
+          <div className="w-[360px] shrink-0 border-r border-border overflow-y-auto">
+            {threadsQuery.isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="size-5 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
               </div>
-            </button>
-          ))
-        )}
-      </div>
-
-      {/* ── Thread detail / Compose / Empty state ─────────────────── */}
-      <div className="flex-1 overflow-y-auto flex flex-col min-w-0">
-        {composing ? (
-          /* ── Compose view ─────────────────────────────────── */
-          <div className="flex-1 flex flex-col">
-            {/* Compose header */}
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-surface">
-              <div className="flex items-center gap-2">
-                <button onClick={() => setComposing(false)} className="text-text3 hover:text-text2"><ArrowLeft className="size-3" /></button>
-                <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Compose</span>
-              </div>
-              <div className="flex gap-1">
-                <Button variant="outline" size="sm" className="h-6 text-2xs" onClick={() => handleSend(true)} disabled={!activeSender || draftMutation.isPending}>
-                  {draftMutation.isPending ? "Saving..." : "Draft"}
-                </Button>
-                <Button size="sm" className="h-6 text-2xs gap-1" onClick={() => handleSend(false)} disabled={!activeSender || sendMutation.isPending}>
-                  <Send className="size-2.5" /> {sendMutation.isPending ? "Sending..." : "Send"}
-                </Button>
-              </div>
-            </div>
-
-            {/* From — loading / empty / picker */}
-            {identitiesQuery.isLoading ? (
-              <div className="px-3 py-2 border-b border-border/50 flex items-center gap-2">
-                <span className="text-2xs text-text3 w-10">From</span>
-                <div className="size-3.5 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
-                <span className="text-2xs text-text3">Loading mailboxes...</span>
-              </div>
-            ) : senders.length === 0 ? (
-              <div className="px-3 py-3 border-b border-border/50 flex items-center gap-2">
-                <AlertTriangle className="size-3.5 text-warning shrink-0" />
-                <span className="text-xs text-text3">No mailboxes provisioned. Set up agent mailboxes first.</span>
+            ) : !activeMailboxId ? (
+              <div className="px-4 py-12 text-center text-sm text-text3">No mailbox selected</div>
+            ) : threads.length === 0 ? (
+              <div className="px-4 py-12 text-center">
+                <Mail className="size-10 text-text3/20 mx-auto mb-3" />
+                <p className="text-sm text-text3">No messages in {activeFolder}</p>
               </div>
             ) : (
-              <div className="px-3 py-1 border-b border-border/50 flex items-center gap-2 relative">
-                <span className="text-2xs text-text3 w-10">From</span>
-                <button
-                  onClick={() => setShowFromPicker(!showFromPicker)}
-                  className="flex items-center gap-1.5 rounded px-2 py-0.5 text-xs hover:bg-raised transition-colors"
-                >
-                  <Badge className="text-2xs bg-accent-porter/15 text-accent-porter border-0">{activeSender?.role}</Badge>
-                  <span className="font-medium text-text">{activeSender?.name}</span>
-                  <span className="text-text3">&lt;{activeSender?.email}&gt;</span>
-                  <ChevronDown className="size-2.5 text-text3" />
-                </button>
-                {showFromPicker && (
-                  <div className="absolute top-full left-12 z-50 mt-1 rounded-lg border border-border bg-surface shadow-lg py-1 w-[280px]">
-                    {senders.map(s => (
+              threads.map(thread => {
+                const isSelected = thread.id === selectedThreadId
+                const sender = threadParticipants(thread)
+                const initial = sender[0]?.toUpperCase() || "?"
+                return (
+                  <button
+                    key={thread.id}
+                    onClick={() => handleSelectThread(thread.id)}
+                    className={`flex w-full items-center gap-3 px-4 py-3 text-left border-b border-border/20 transition-colors ${
+                      isSelected ? "bg-accent-porter/8" : "hover:bg-raised/50"
+                    }`}
+                  >
+                    <div className={`size-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                      isSelected ? "bg-accent-porter text-white" : "bg-raised text-text3"
+                    }`}>
+                      {initial}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-text truncate">{sender}</span>
+                        <span className="text-xs text-text3 ml-auto shrink-0">{fmtDate(thread.last_message_at)}</span>
+                      </div>
+                      <p className="text-sm text-text2 truncate">{thread.subject_canonical || "(no subject)"}</p>
+                    </div>
+                    {thread.message_count > 1 && (
+                      <span className="text-xs text-text3 bg-raised rounded-full px-1.5 py-0.5 shrink-0">{thread.message_count}</span>
+                    )}
+                  </button>
+                )
+              })
+            )}
+          </div>
+
+          {/* ── Thread detail / Compose / Empty ──────────────── */}
+          <div className="flex-1 overflow-y-auto flex flex-col min-w-0">
+            {composing ? (
+              /* ── Compose ─────────────────────────────────────── */
+              <div className="flex-1 flex flex-col">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setComposing(false)} className="text-text3 hover:text-text"><ArrowLeft className="size-4" /></button>
+                    <span className="text-base font-semibold text-text">New Message</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleSend(true)} disabled={!activeSender || draftMutation.isPending}>
+                      {draftMutation.isPending ? "Saving..." : "Save Draft"}
+                    </Button>
+                    <Button size="sm" className="gap-1.5" onClick={() => handleSend(false)} disabled={!activeSender || sendMutation.isPending}>
+                      <Send className="size-3.5" /> {sendMutation.isPending ? "Sending..." : "Send"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex-1 flex flex-col max-w-3xl w-full mx-auto">
+                  {/* From */}
+                  {senders.length > 0 && (
+                    <div className="px-5 py-2.5 border-b border-border/40 flex items-center gap-3 relative">
+                      <span className="text-sm text-text3 w-12">From</span>
                       <button
-                        key={s.id}
-                        onClick={() => { setComposeData(d => ({ ...d, from: s.id })); setShowFromPicker(false) }}
-                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-raised transition-colors ${s.id === (composeData.from || defaultSenderId) ? "bg-accent-porter/10" : ""}`}
+                        onClick={() => setShowFromPicker(!showFromPicker)}
+                        className="flex items-center gap-1.5 text-sm hover:bg-raised rounded px-2 py-1 transition-colors"
                       >
-                        <Badge className="text-2xs bg-text3/15 text-text3 border-0 w-12 justify-center">{s.role}</Badge>
-                        <span className="font-medium text-text">{s.name}</span>
-                        <span className="text-text3 text-2xs">{s.email}</span>
+                        <span className="font-medium text-text">{activeSender?.name}</span>
+                        <span className="text-text3">&lt;{activeSender?.email}&gt;</span>
+                        <ChevronDown className="size-3 text-text3" />
+                      </button>
+                      {showFromPicker && (
+                        <div className="absolute top-full left-16 z-50 mt-1 rounded-lg border border-border bg-surface shadow-lg py-1 w-[300px]">
+                          {senders.map(s => (
+                            <button
+                              key={s.id}
+                              onClick={() => { setComposeData(d => ({ ...d, from: s.id })); setShowFromPicker(false) }}
+                              className={`flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-raised transition-colors ${s.id === (composeData.from || defaultSenderId) ? "bg-accent-porter/10" : ""}`}
+                            >
+                              <span className="font-medium text-text">{s.name}</span>
+                              <span className="text-text3 text-xs">{s.email}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* To */}
+                  <div className="px-5 py-2.5 border-b border-border/40 flex items-center gap-3">
+                    <span className="text-sm text-text3 w-12">To</span>
+                    <Input
+                      value={composeData.to}
+                      onChange={e => setComposeData(d => ({ ...d, to: e.target.value }))}
+                      className="text-sm bg-transparent border-0 focus-visible:ring-0 p-0 h-auto"
+                      placeholder="Recipients"
+                    />
+                  </div>
+
+                  {/* Subject */}
+                  <div className="px-5 py-2.5 border-b border-border/40 flex items-center gap-3">
+                    <span className="text-sm text-text3 w-12">Subject</span>
+                    <Input
+                      value={composeData.subject}
+                      onChange={e => setComposeData(d => ({ ...d, subject: e.target.value }))}
+                      className="text-sm bg-transparent border-0 focus-visible:ring-0 p-0 h-auto"
+                      placeholder="Subject"
+                    />
+                  </div>
+
+                  {/* Toolbar */}
+                  <div className="flex items-center gap-1 px-5 py-2 border-b border-border/40">
+                    {[
+                      { icon: Bold, cmd: "bold" },
+                      { icon: Italic, cmd: "italic" },
+                      { icon: Code, cmd: "insertHTML", val: "<code>" },
+                      { icon: List, cmd: "insertUnorderedList" },
+                      { icon: ListOrdered, cmd: "insertOrderedList" },
+                      { icon: Link, cmd: "createLink", val: "prompt" },
+                    ].map(({ icon: Icon, cmd, val }) => (
+                      <button
+                        key={cmd + (val || "")}
+                        onClick={() => {
+                          if (cmd === "createLink") {
+                            const url = window.prompt("URL:")
+                            if (url) execFormat(cmd, url)
+                          } else {
+                            execFormat(cmd, val)
+                          }
+                        }}
+                        className="flex size-8 items-center justify-center rounded-md text-text3 hover:bg-raised hover:text-text transition-colors"
+                      >
+                        <Icon className="size-4" />
                       </button>
                     ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* To */}
-            <div className="px-3 py-1 border-b border-border/50 flex items-center gap-2">
-              <span className="text-2xs text-text3 w-10">To</span>
-              <Input
-                value={composeData.to}
-                onChange={e => setComposeData(d => ({ ...d, to: e.target.value }))}
-                className="h-6 text-xs bg-transparent border-0 focus-visible:ring-0 p-0"
-                placeholder="recipient@email.com"
-              />
-            </div>
-
-            {/* Subject */}
-            <div className="px-3 py-1 border-b border-border/50 flex items-center gap-2">
-              <span className="text-2xs text-text3 w-10">Subject</span>
-              <Input
-                value={composeData.subject}
-                onChange={e => setComposeData(d => ({ ...d, subject: e.target.value }))}
-                className="h-6 text-xs bg-transparent border-0 focus-visible:ring-0 p-0"
-                placeholder="Subject"
-              />
-            </div>
-
-            {/* Formatting toolbar */}
-            <div className="flex items-center gap-0.5 px-3 py-1 border-b border-border/50 bg-background/50">
-              {[
-                { icon: Bold, cmd: "bold" },
-                { icon: Italic, cmd: "italic" },
-                { icon: Code, cmd: "insertHTML", val: "<code>" },
-                { icon: Heading, cmd: "formatBlock", val: "h3" },
-                { icon: List, cmd: "insertUnorderedList" },
-                { icon: ListOrdered, cmd: "insertOrderedList" },
-                { icon: Link, cmd: "createLink", val: "prompt" },
-              ].map(({ icon: Icon, cmd, val }) => (
-                <button
-                  key={cmd + (val || "")}
-                  onClick={() => {
-                    if (cmd === "createLink") {
-                      const url = window.prompt("URL:")
-                      if (url) execFormat(cmd, url)
-                    } else {
-                      execFormat(cmd, val)
-                    }
-                  }}
-                  className="flex size-6 items-center justify-center rounded text-text3 hover:bg-raised hover:text-text2 transition-colors"
-                >
-                  <Icon className="size-3" />
-                </button>
-              ))}
-              <div className="w-px h-4 bg-border/50 mx-1" />
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                multiple
-                onChange={e => {
-                  const files = e.target.files
-                  if (files) for (const f of Array.from(files)) uploadMutation.mutate(f)
-                  e.target.value = ""
-                }}
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex size-6 items-center justify-center rounded text-text3 hover:bg-raised hover:text-text2 transition-colors"
-                title="Attach file"
-              >
-                <Paperclip className="size-3" />
-              </button>
-              {uploadMutation.isPending && (
-                <div className="size-3 animate-spin rounded-full border border-accent-porter border-t-transparent ml-1" />
-              )}
-            </div>
-
-            {/* Pending attachments */}
-            {pendingAttachments.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 px-3 py-1.5 border-b border-border/50 bg-background/30">
-                {pendingAttachments.map((att, i) => (
-                  <span key={att.blobId + i} className="flex items-center gap-1 px-2 py-0.5 rounded border border-border text-2xs text-text2 bg-raised">
-                    <Paperclip className="size-2.5 text-text3" />
-                    <span className="max-w-[120px] truncate">{att.name}</span>
-                    <span className="text-text3">({formatFileSize(att.size)})</span>
-                    <button onClick={() => setPendingAttachments(prev => prev.filter((_, j) => j !== i))} className="text-text3 hover:text-danger">
-                      <X className="size-2.5" />
+                    <div className="w-px h-5 bg-border/50 mx-1" />
+                    <input ref={fileInputRef} type="file" className="hidden" multiple onChange={e => {
+                      const files = e.target.files
+                      if (files) for (const f of Array.from(files)) uploadMutation.mutate(f)
+                      e.target.value = ""
+                    }} />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex size-8 items-center justify-center rounded-md text-text3 hover:bg-raised hover:text-text transition-colors"
+                      title="Attach file"
+                    >
+                      <Paperclip className="size-4" />
                     </button>
-                  </span>
-                ))}
-              </div>
-            )}
+                    {uploadMutation.isPending && (
+                      <div className="size-4 animate-spin rounded-full border-2 border-accent-porter border-t-transparent ml-1" />
+                    )}
+                  </div>
 
-            {/* Rich editor */}
-            <div
-              ref={editorRef}
-              contentEditable
-              className="flex-1 p-3 text-xs text-text bg-background resize-none focus:outline-none overflow-y-auto [&_h3]:text-sm [&_h3]:font-bold [&_h3]:mb-1 [&_code]:bg-raised [&_code]:px-1 [&_code]:rounded [&_a]:text-accent-porter [&_a]:underline [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4"
-              suppressContentEditableWarning
-              data-placeholder="Write your message..."
-            />
-          </div>
-        ) : selectedThreadId && selectedThread ? (
-          /* ── Thread detail view ───────────────────────────── */
-          <div className="flex-1 flex flex-col">
-            {/* Thread header */}
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-surface">
-              <p className="text-sm font-bold text-text truncate">{selectedThread.subject_canonical || "(no subject)"}</p>
-              <div className="flex gap-1 shrink-0">
-                {activeFolder === "trash" ? (
-                  <Button variant="ghost" size="sm" className="h-6 text-2xs text-danger" onClick={handleDeleteThread}>
-                    <Trash2 className="size-2.5 mr-1" /> Delete forever
-                  </Button>
-                ) : (
-                  <>
-                    <Button variant="ghost" size="sm" className="h-6 text-2xs" onClick={handleArchiveThread}>
-                      <Archive className="size-2.5 mr-1" /> Archive
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-6 text-2xs text-danger" onClick={handleTrashThread}>
-                      <Trash2 className="size-2.5 mr-1" /> Trash
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
+                  {/* Attachments */}
+                  {pendingAttachments.length > 0 && (
+                    <div className="flex flex-wrap gap-2 px-5 py-2 border-b border-border/40">
+                      {pendingAttachments.map((att, i) => (
+                        <span key={att.blobId + i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border text-xs text-text2 bg-raised">
+                          <Paperclip className="size-3 text-text3" />
+                          <span className="max-w-[140px] truncate">{att.name}</span>
+                          <span className="text-text3">({formatFileSize(att.size)})</span>
+                          <button onClick={() => setPendingAttachments(prev => prev.filter((_, j) => j !== i))} className="text-text3 hover:text-danger ml-0.5">
+                            <X className="size-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
-            {/* Thread meta */}
-            <div className="px-3 py-1.5 border-b border-border/50 flex items-center gap-2">
-              <span className="text-2xs text-text3">{selectedThread.message_count} message{selectedThread.message_count !== 1 ? "s" : ""}</span>
-              <span className="text-2xs text-text3">{threadParticipants(selectedThread)}</span>
-            </div>
-
-            {/* Messages list */}
-            <div className="flex-1 overflow-y-auto">
-              {threadMessagesQuery.isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="size-4 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
+                  {/* Editor */}
+                  <div
+                    ref={editorRef}
+                    contentEditable
+                    className="flex-1 px-5 py-4 text-sm text-text leading-relaxed focus:outline-none overflow-y-auto [&_code]:bg-raised [&_code]:px-1 [&_code]:rounded [&_a]:text-accent-porter [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                    suppressContentEditableWarning
+                    data-placeholder="Write your message..."
+                  />
                 </div>
-              ) : threadMessages.length === 0 ? (
-                <div className="px-3 py-8 text-center text-xs text-text3">No messages in this thread</div>
-              ) : (
-                threadMessages.map((msg, idx) => (
-                  <div key={msg.id} className={`px-3 py-3 ${idx > 0 ? "border-t border-border/30" : ""}`}>
-                    {/* Message header */}
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge className={`text-2xs border-0 ${msg.direction === "inbound" ? "bg-blue-500/15 text-blue-400" : "bg-emerald-500/15 text-emerald-400"}`}>
-                        {msg.direction === "inbound" ? "In" : "Out"}
-                      </Badge>
-                      <span className="text-xs font-medium text-text">{msg.from_name || msg.from_address}</span>
-                      <span className="text-2xs text-text3">&lt;{msg.from_address}&gt;</span>
-                      <span className="text-2xs text-text3 ml-auto">{fmtDate(msg.sent_at || msg.created_at)}</span>
-                    </div>
-                    {/* To line */}
-                    <div className="flex items-center gap-1 mb-2 text-2xs text-text3">
-                      <span>To:</span>
-                      <span className="text-text2">{parseJsonArray(msg.to_addresses_json).join(", ") || "—"}</span>
-                    </div>
-                    {/* Body */}
-                    {msg.html_body ? (
-                      <div className="text-xs text-text2 leading-relaxed [&_h3]:text-sm [&_h3]:font-bold [&_code]:bg-raised [&_code]:px-1 [&_code]:rounded [&_a]:text-accent-porter" dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.html_body) }} />
+              </div>
+            ) : selectedThreadId && selectedThread ? (
+              /* ── Thread detail ───────────────────────────────── */
+              <div className="flex-1 flex flex-col">
+                {/* Subject header */}
+                <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <button onClick={() => setSelectedThreadId(null)} className="text-text3 hover:text-text shrink-0 lg:hidden"><ArrowLeft className="size-4" /></button>
+                    <h2 className="text-lg font-semibold text-text truncate">{selectedThread.subject_canonical || "(no subject)"}</h2>
+                    <span className="text-xs text-text3 shrink-0">{selectedThread.message_count} message{selectedThread.message_count !== 1 ? "s" : ""}</span>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    {activeFolder === "trash" ? (
+                      <Button variant="ghost" size="sm" className="text-danger" onClick={handleDeleteThread}>
+                        <Trash2 className="size-3.5 mr-1" /> Delete
+                      </Button>
                     ) : (
-                      <div className="text-xs text-text2 leading-relaxed whitespace-pre-wrap">{msg.text_body || "(empty)"}</div>
+                      <>
+                        <Button variant="ghost" size="sm" onClick={handleArchiveThread}>
+                          <Archive className="size-3.5 mr-1" /> Archive
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-danger" onClick={handleTrashThread}>
+                          <Trash2 className="size-3.5 mr-1" /> Trash
+                        </Button>
+                      </>
                     )}
-                    {/* Attachments */}
-                    {parseAttachments(msg.attachments_json).length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {parseAttachments(msg.attachments_json).map((att, ai) => (
-                          <a
-                            key={att.blobId + ai}
-                            href={`/api/v1/mail/attachments/${msg.mailbox_id}/${encodeURIComponent(att.blobId)}/${encodeURIComponent(att.name || "attachment")}`}
-                            target="_blank"
-                            rel="noopener"
-                            className="flex items-center gap-1.5 px-2 py-1 rounded border border-border text-2xs text-text2 hover:bg-raised transition-colors"
-                          >
-                            <Download className="size-3 text-text3" />
-                            <span className="max-w-[160px] truncate">{att.name || "attachment"}</span>
-                            <span className="text-text3">({formatFileSize(att.size)})</span>
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                    {/* Per-message reply button */}
-                    {msg.direction === "inbound" && (
-                      <div className="mt-2">
-                        {replyingToId === msg.id ? (
-                          <div className="flex gap-2 items-end">
-                            <Input
+                  </div>
+                </div>
+
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto">
+                  {threadMessagesQuery.isLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="size-5 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
+                    </div>
+                  ) : (
+                    <div className="max-w-3xl mx-auto py-4 px-5 space-y-4">
+                      {threadMessages.map((msg) => {
+                        const senderName = msg.from_name || msg.from_address.split("@")[0]
+                        const initial = senderName[0]?.toUpperCase() || "?"
+                        const isOut = msg.direction === "outbound"
+                        return (
+                          <div key={msg.id} className="rounded-lg border border-border/60 bg-surface overflow-hidden">
+                            {/* Message header */}
+                            <div className="flex items-center gap-3 px-4 py-3">
+                              <div className={`size-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                isOut ? "bg-accent-porter/15 text-accent-porter" : "bg-raised text-text3"
+                              }`}>
+                                {initial}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-semibold text-text">{senderName}</span>
+                                  <span className="text-xs text-text3">&lt;{msg.from_address}&gt;</span>
+                                </div>
+                                <div className="text-xs text-text3">
+                                  to {parseJsonArray(msg.to_addresses_json).join(", ") || "—"}
+                                </div>
+                              </div>
+                              <span className="text-xs text-text3 shrink-0">{fmtDate(msg.sent_at || msg.created_at)}</span>
+                            </div>
+                            {/* Body */}
+                            <div className="px-4 pb-4 pt-1">
+                              {msg.html_body ? (
+                                <div className="text-sm text-text2 leading-relaxed [&_code]:bg-raised [&_code]:px-1 [&_code]:rounded [&_a]:text-accent-porter [&_a]:underline" dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.html_body) }} />
+                              ) : (
+                                <div className="text-sm text-text2 leading-relaxed whitespace-pre-wrap">{msg.text_body || "(empty)"}</div>
+                              )}
+                              {/* Attachments */}
+                              {parseAttachments(msg.attachments_json).length > 0 && (
+                                <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border/40">
+                                  {parseAttachments(msg.attachments_json).map((att, ai) => (
+                                    <a
+                                      key={att.blobId + ai}
+                                      href={`/api/v1/mail/attachments/${msg.mailbox_id}/${encodeURIComponent(att.blobId)}/${encodeURIComponent(att.name || "attachment")}`}
+                                      target="_blank"
+                                      rel="noopener"
+                                      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs text-text2 hover:bg-raised transition-colors"
+                                    >
+                                      <Download className="size-3.5 text-text3" />
+                                      <span className="max-w-[180px] truncate">{att.name || "attachment"}</span>
+                                      <span className="text-text3">({formatFileSize(att.size)})</span>
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+
+                      {/* Reply box at bottom of thread (Gmail-style) */}
+                      <div className="rounded-lg border border-border/60 bg-surface overflow-hidden">
+                        <div className="px-4 py-3 flex items-start gap-3">
+                          <div className="size-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-accent-porter/15 text-accent-porter mt-0.5">
+                            {(activeMailbox?.display_name || "P")[0].toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <textarea
                               value={replyText}
                               onChange={e => setReplyText(e.target.value)}
-                              className="h-7 text-xs flex-1"
-                              placeholder="Type your reply..."
-                              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReply(msg.id) } }}
+                              placeholder="Reply..."
+                              rows={replyText ? 4 : 1}
+                              className="w-full text-sm text-text bg-transparent resize-none focus:outline-none placeholder:text-text3/50"
+                              onFocus={e => { if (e.target.rows === 1) e.target.rows = 4 }}
+                              onKeyDown={e => {
+                                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                                  e.preventDefault()
+                                  if (replyTarget && replyText.trim()) handleReply(replyTarget.id)
+                                }
+                              }}
                             />
-                            <Button size="sm" className="h-7 text-2xs gap-1" onClick={() => handleReply(msg.id)} disabled={replyMutation.isPending || !replyText.trim()}>
-                              <Send className="size-2.5" /> {replyMutation.isPending ? "..." : "Reply"}
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-7 text-2xs" onClick={() => { setReplyingToId(null); setReplyText("") }}>Cancel</Button>
+                            {replyText.trim() && (
+                              <div className="flex justify-end gap-2 mt-2">
+                                <Button variant="ghost" size="sm" onClick={() => setReplyText("")}>Discard</Button>
+                                <Button
+                                  size="sm"
+                                  className="gap-1.5"
+                                  disabled={replyMutation.isPending || !replyText.trim()}
+                                  onClick={() => { if (replyTarget) handleReply(replyTarget.id) }}
+                                >
+                                  <Send className="size-3.5" /> {replyMutation.isPending ? "Sending..." : "Send"}
+                                </Button>
+                              </div>
+                            )}
                           </div>
-                        ) : (
-                          <button
-                            onClick={() => { setReplyingToId(msg.id); setReplyText("") }}
-                            className="flex items-center gap-1 text-2xs text-text3 hover:text-accent-porter transition-colors"
-                          >
-                            <CornerUpLeft className="size-2.5" /> Reply
-                          </button>
-                        )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Bottom reply bar */}
-            <div className="shrink-0 border-t border-border bg-surface px-3 py-2 flex gap-2 items-center">
-              <Reply className="size-3 text-text3 shrink-0" />
-              <Input
-                value={replyText}
-                onChange={e => setReplyText(e.target.value)}
-                className="h-7 text-xs flex-1"
-                placeholder="Quick reply..."
-                onKeyDown={e => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault()
-                    const target = [...threadMessages].reverse().find(m => m.direction === "inbound") ?? threadMessages[threadMessages.length - 1]
-                    if (target && replyText.trim()) handleReply(target.id)
-                  }
-                }}
-              />
-              <Button
-                size="sm"
-                className="h-7 text-2xs gap-1"
-                disabled={replyMutation.isPending || !replyText.trim()}
-                onClick={() => {
-                  const target = [...threadMessages].reverse().find(m => m.direction === "inbound") ?? threadMessages[threadMessages.length - 1]
-                  if (target) handleReply(target.id)
-                }}
-              >
-                <Send className="size-2.5" /> Reply
-              </Button>
-            </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* ── Empty state ────────────────────────────────── */
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                  <Mail className="size-12 text-text3/15 mx-auto mb-3" />
+                  <p className="text-base text-text3">Select a conversation</p>
+                  <p className="text-sm text-text3/60 mt-1">Choose from the thread list to read</p>
+                </div>
+              </div>
+            )}
           </div>
-        ) : (
-          /* ── Empty state ────────────────────────────────────── */
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <Mail className="size-8 text-text3/30 mx-auto mb-2" />
-              <p className="text-sm text-text3">Select a conversation</p>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
-        </div>{/* end thread list + detail split */}
-      </div>{/* end main content area */}
     </div>
   )
 }
