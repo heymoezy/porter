@@ -179,7 +179,12 @@ function EmailContent() {
     queryFn: () => api<{ mailboxes: Mailbox[] }>("/api/v1/mail/mailboxes"),
   })
 
-  const mailboxes = mailboxesQuery.data?.mailboxes ?? []
+  // Sort: noreply/system mailboxes go to bottom
+  const mailboxes = [...(mailboxesQuery.data?.mailboxes ?? [])].sort((a, b) => {
+    const aSystem = a.mailbox_type === "system" ? 1 : 0
+    const bSystem = b.mailbox_type === "system" ? 1 : 0
+    return aSystem - bSystem
+  })
 
   // Auto-select porter mailbox, fall back to first
   const porterMailbox = mailboxes.find(m => m.local_part === "porter")
@@ -443,9 +448,11 @@ function EmailContent() {
                   <span className={`text-sm block truncate ${isActive ? "font-semibold text-accent-porter" : "text-text"}`}>
                     {mb.display_name || mb.local_part}
                   </span>
-                  <span className="text-2xs text-text3 block truncate">{mb.local_part}@</span>
+                  <span className="text-2xs text-text3 block truncate">
+                    {mb.mailbox_type === "system" ? "send only" : `${mb.local_part}@`}
+                  </span>
                 </div>
-                {isActive && unread > 0 && (
+                {isActive && unread > 0 && mb.mailbox_type !== "system" && (
                   <span className="text-2xs font-bold bg-accent-porter text-white rounded-full size-5 flex items-center justify-center">
                     {unread}
                   </span>
@@ -553,7 +560,7 @@ function EmailContent() {
           </div>
 
           {/* ── Thread detail / Compose / Empty ──────────────── */}
-          <div className="flex-1 overflow-y-auto flex flex-col min-w-0">
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {composing ? (
               /* ── Compose ─────────────────────────────────────── */
               <div className="flex-1 flex flex-col">
