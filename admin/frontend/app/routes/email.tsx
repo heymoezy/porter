@@ -12,6 +12,18 @@ import {
 } from "lucide-react"
 import { Label } from "~/components/ui/label"
 
+function PorterAvatar({ size = 32 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 34 34" fill="none" className="shrink-0 rounded-full">
+      <rect width="34" height="34" rx="17" className="fill-accent-porter" />
+      <rect x="10" y="9" width="4" height="16" rx="1.5" fill="white" />
+      <rect x="10" y="9" width="10" height="4" rx="1.5" fill="white" />
+      <rect x="10" y="16" width="10" height="4" rx="1.5" fill="white" />
+      <rect x="20" y="9" width="4" height="11" rx="1.5" fill="white" />
+    </svg>
+  )
+}
+
 // ── Types matching backend row shapes ──────────────────────────────────
 
 interface Mailbox {
@@ -439,11 +451,15 @@ function EmailContent() {
                   isActive ? "bg-accent-porter/10" : "hover:bg-raised"
                 }`}
               >
-                <div className={`size-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                  isActive ? "bg-accent-porter text-white" : "bg-raised text-text3"
-                }`}>
-                  {(mb.display_name || mb.local_part)[0].toUpperCase()}
-                </div>
+                {mb.local_part === "porter" ? (
+                  <PorterAvatar size={32} />
+                ) : (
+                  <div className={`size-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                    isActive ? "bg-accent-porter text-white" : "bg-raised text-text3"
+                  }`}>
+                    {(mb.display_name || mb.local_part)[0].toUpperCase()}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0 text-left">
                   <span className={`text-sm block truncate ${isActive ? "font-semibold text-accent-porter" : "text-text"}`}>
                     {mb.display_name || mb.local_part}
@@ -745,11 +761,13 @@ function EmailContent() {
                           }`}>
                             {/* Message header */}
                             <div className="flex items-center gap-3 px-4 py-3">
-                              <div className={`size-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                                isOut ? "bg-accent-porter/15 text-accent-porter" : "bg-raised text-text3"
-                              }`}>
-                                {initial}
-                              </div>
+                              {isOut ? (
+                                <PorterAvatar size={36} />
+                              ) : (
+                                <div className="size-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-raised text-text3">
+                                  {initial}
+                                </div>
+                              )}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                   <span className="text-sm font-semibold text-text">{senderName}</span>
@@ -821,17 +839,14 @@ function EmailContent() {
                             </div>
                           )}
                           <div className="flex items-start gap-3">
-                            <div className="size-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-accent-porter/15 text-accent-porter">
-                              {(activeMailbox?.display_name || "P")[0].toUpperCase()}
-                            </div>
+                            <PorterAvatar size={32} />
                             <div className="flex-1 min-w-0">
                               <textarea
                                 value={replyText}
                                 onChange={e => setReplyText(e.target.value)}
                                 placeholder="Reply..."
-                                rows={replyText ? 3 : 1}
+                                rows={replyText ? 3 : 2}
                                 className="w-full text-sm text-text bg-transparent resize-none focus:outline-none placeholder:text-text3/50"
-                                onFocus={e => { if (e.target.rows === 1) e.target.rows = 2 }}
                                 onKeyDown={e => {
                                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                                     e.preventDefault()
