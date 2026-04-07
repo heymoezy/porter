@@ -8,7 +8,7 @@ import {
   Inbox, Send, FileText, Trash2, Plus, ArrowLeft, Mail,
   Bold, Italic, Link, List, ListOrdered, Code, Heading,
   ChevronDown, Settings, Check, AlertTriangle, Archive,
-  Reply, CornerUpLeft, Search, Paperclip, X, Download,
+  Reply, CornerUpLeft, Search, Paperclip, X, Download, RotateCw,
 } from "lucide-react"
 import { Label } from "~/components/ui/label"
 
@@ -478,14 +478,23 @@ function EmailContent() {
               </button>
             )
           })}
-          <div className="ml-auto relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-text3" />
-            <Input
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="h-8 text-xs pl-8 w-[200px] rounded-lg"
-              placeholder="Search mail..."
-            />
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => { qc.invalidateQueries({ queryKey: ["mail"] }) }}
+              className={`flex size-8 items-center justify-center rounded-lg text-text3 hover:text-text hover:bg-raised transition-colors ${threadsQuery.isFetching ? "pointer-events-none" : ""}`}
+              title="Refresh"
+            >
+              <RotateCw className={`size-4 ${threadsQuery.isFetching ? "animate-spin" : ""}`} />
+            </button>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-text3" />
+              <Input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="h-8 text-xs pl-8 w-[200px] rounded-lg"
+                placeholder="Search mail..."
+              />
+            </div>
           </div>
         </div>
 
