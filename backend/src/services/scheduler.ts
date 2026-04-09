@@ -16,6 +16,7 @@ import { assignJob } from './job-assignment.js';
 import { executeWatcher, scheduleWatcherRuns } from './watcher-service.js';
 import { scheduleAtlasRuns } from './atlas-agent.js';
 import { runDigestCycle } from './mail/newsletter-service.js';
+import { runMemoryValidation } from './intellect/memory-validator.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -30,6 +31,7 @@ const EVO_ANALYSIS_INTERVAL = 10800; // 10800 ticks x 2s = 6h
 const WATCHER_SCHEDULE_INTERVAL = 30; // 30 ticks x 2s = 60s — check for due watchers every minute
 const ATLAS_CHECK_INTERVAL = 900;     // 900 ticks x 2s = 30 min — check project structure every 30 minutes
 const NEWSLETTER_DIGEST_INTERVAL = 10800; // 10800 ticks x 2s = 6h — run newsletter digest cycle
+const MEMORY_VALIDATION_INTERVAL = 900;  // 900 ticks x 2s = 30 min — validate memory references
 const CONTEXT_PRESSURE_THRESHOLD = 0.8;
 const CONTEXT_ROTATION_THRESHOLD = 0.95;
 const WORKER_ID = crypto.randomUUID();
@@ -383,6 +385,12 @@ async function tick() {
     if (tickCount > 0 && tickCount % NEWSLETTER_DIGEST_INTERVAL === 0) {
       runDigestCycle().catch(err =>
         console.error('[scheduler:digest] cycle error', err));
+    }
+
+    // Intellect memory validation — every 30 min
+    if (tickCount > 0 && tickCount % MEMORY_VALIDATION_INTERVAL === 0) {
+      runMemoryValidation().catch(err =>
+        console.error('[scheduler:intellect] memory validation error', err));
     }
 
     // ── Agent jobs — require agentScheduling flag ──────────────────────────
