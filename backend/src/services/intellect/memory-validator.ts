@@ -98,10 +98,20 @@ async function validateAllReferences(): Promise<{
       } catch { /* ignore search errors */ }
 
       if (newPath) {
-        await pool.query(
-          `UPDATE memory_references SET ref_value = $1, status = 'valid', last_validated_at = $2 WHERE id = $3`,
-          [newPath, now, ref.id],
+        // Check if another reference already points to the corrected path for this memory
+        const existingCheck = await pool.query(
+          `SELECT id FROM memory_references WHERE memory_table = $1 AND memory_id = $2 AND ref_type = 'file' AND ref_value = $3 AND id != $4 LIMIT 1`,
+          [ref.memory_table, ref.memory_id, newPath, ref.id],
         );
+        if (existingCheck.rowCount && existingCheck.rowCount > 0) {
+          // A valid reference already exists for this path — just delete this stale one
+          await pool.query(`DELETE FROM memory_references WHERE id = $1`, [ref.id]);
+        } else {
+          await pool.query(
+            `UPDATE memory_references SET ref_value = $1, status = 'valid', last_validated_at = $2 WHERE id = $3`,
+            [newPath, now, ref.id],
+          );
+        }
         await logIntellectEvent('memory_auto_fixed', 'validator', {
           action: 'path_corrected',
           oldPath: ref.ref_value,
