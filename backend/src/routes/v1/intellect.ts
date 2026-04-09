@@ -11,6 +11,11 @@ import { FastifyInstance } from 'fastify';
 import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
 import { runMemoryValidation } from '../../services/intellect/memory-validator.js';
+import { processCorrection } from '../../services/intellect/correction-detector.js';
+import { analyzeAndStoreSession } from '../../services/intellect/session-analyzer.js';
+import { runMemoryPromotion } from '../../services/intellect/memory-promoter.js';
+import { runDispatchScoring } from '../../services/intellect/dispatch-scorer.js';
+import { emitEvent } from '../../services/intellect/workflow-engine.js';
 
 interface DirectiveRow {
   id: string;
@@ -234,6 +239,175 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // ── POST /correction — submit user message for correction detection ──
+
+  fastify.post('/correction', async (request, reply) => {
+    const body = request.body as {
+      sessionId?: string;
+      project?: string | null;
+      userMessage?: string;
+      gateway?: string | null;
+    };
+    if (!body?.sessionId || !body?.userMessage) {
+      return reply.status(400).send(err('BAD_REQUEST', 'sessionId and userMessage required'));
+    }
+    try {
+      const result = await processCorrection({
+        sessionId: body.sessionId,
+        project: body.project ?? null,
+        userMessage: body.userMessage,
+        gateway: body.gateway ?? null,
+      });
+      if (result.detected) {
+        // Fire the correction.detected event so the workflow engine can
+        // immediately run the promoter (which catches reinforcement bursts).
+        emitEvent('correction.detected', {
+          sessionId: body.sessionId,
+          project: body.project ?? null,
+          gateway: body.gateway ?? null,
+        }).catch(e => console.error('[intellect:correction] event emit failed:', e));
+      }
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('CORRECTION_FAILED', message));
+    }
+  });
+
+  // ── POST /session-end — session finished, create episode ────────────
+
+  fastify.post('/session-end', async (request, reply) => {
+    const body = request.body as {
+      sessionId?: string;
+      project?: string | null;
+      gateway?: string | null;
+    };
+    if (!body?.sessionId) {
+      return reply.status(400).send(err('BAD_REQUEST', 'sessionId required'));
+    }
+    try {
+      // Direct call AND emit the event — so any other workflows listening
+      // for session.end also fire.
+      const episode = await analyzeAndStoreSession({
+        sessionId: body.sessionId,
+        project: body.project ?? null,
+        gateway: body.gateway ?? null,
+      });
+      emitEvent('session.end', {
+        sessionId: body.sessionId,
+        project: body.project ?? null,
+        gateway: body.gateway ?? null,
+      }).catch(e => console.error('[intellect:session-end] event emit failed:', e));
+      return reply.send(ok({ episode }));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('SESSION_END_FAILED', message));
+    }
+  });
+
+  // ── POST /promote — run the memory promoter manually ────────────────
+
+  fastify.post('/promote', async (_request, reply) => {
+    try {
+      const result = await runMemoryPromotion();
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('PROMOTE_FAILED', message));
+    }
+  });
+
+  // ── POST /score-dispatches — run dispatch scorer manually ───────────
+
+  fastify.post('/score-dispatches', async (_request, reply) => {
+    try {
+      const result = await runDispatchScoring();
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('SCORE_FAILED', message));
+    }
+  });
+
+  // ── GET /candidates — list pending directive candidates ─────────────
+
+  fastify.get('/candidates', async (_request, reply) => {
+    const { rows } = await pool.query<{
+      id: string;
+      scope: string;
+      scope_id: string | null;
+      content: string;
+      priority: number;
+      source_session_id: string | null;
+      created_at: number;
+      updated_at: number;
+    }>(
+      `SELECT id, scope, scope_id, content, priority, source_session_id, created_at, updated_at
+       FROM directives
+       WHERE status = 'candidate'
+       ORDER BY priority DESC, updated_at DESC
+       LIMIT 50`
+    );
+    return reply.send(ok({ candidates: rows, count: rows.length }));
+  });
+
+  // ── POST /candidates/:id/accept ─ manual promotion override ─────────
+
+  fastify.post('/candidates/:id/accept', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { rowCount } = await pool.query(
+      `UPDATE directives
+       SET status = 'active',
+           priority = GREATEST(priority, 90),
+           verified_at = EXTRACT(EPOCH FROM NOW()),
+           updated_at = EXTRACT(EPOCH FROM NOW())
+       WHERE id = $1 AND status = 'candidate'`,
+      [id]
+    );
+    if (!rowCount) return reply.status(404).send(err('NOT_FOUND', 'candidate not found'));
+    return reply.send(ok({ promoted: true, id }));
+  });
+
+  // ── POST /candidates/:id/reject ─ dismiss a candidate ──────────────
+
+  fastify.post('/candidates/:id/reject', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { rowCount } = await pool.query(
+      `UPDATE directives
+       SET status = 'archived', updated_at = EXTRACT(EPOCH FROM NOW())
+       WHERE id = $1 AND status = 'candidate'`,
+      [id]
+    );
+    if (!rowCount) return reply.status(404).send(err('NOT_FOUND', 'candidate not found'));
+    return reply.send(ok({ rejected: true, id }));
+  });
+
+  // ── GET /episodes — recent session episodes ─────────────────────────
+
+  fastify.get('/episodes', async (request, reply) => {
+    const { project, limit = '20' } = request.query as { project?: string; limit?: string };
+    const lim = Math.min(parseInt(limit, 10) || 20, 100);
+    const { rows } = project
+      ? await pool.query(
+          `SELECT id, scope, scope_id, session_id, gateway, summary,
+                  corrections_json, files_changed_json, duration_seconds, created_at
+           FROM episodes
+           WHERE scope_id = $1
+           ORDER BY created_at DESC
+           LIMIT $2`,
+          [project, lim]
+        )
+      : await pool.query(
+          `SELECT id, scope, scope_id, session_id, gateway, summary,
+                  corrections_json, files_changed_json, duration_seconds, created_at
+           FROM episodes
+           ORDER BY created_at DESC
+           LIMIT $1`,
+          [lim]
+        );
+    return reply.send(ok({ episodes: rows, count: rows.length }));
+  });
+
   // ── GET /stats — Intellect system stats ──────────────────────────────
 
   fastify.get('/stats', async (_request, reply) => {
@@ -262,10 +436,33 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       `SELECT COUNT(*)::text AS count FROM episodes`
     );
 
+    const { rows: candidateCount } = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM directives WHERE status = 'candidate'`
+    );
+
+    const { rows: activeDirectives } = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM directives WHERE status = 'active'`
+    );
+
+    const { rows: workflowStats } = await pool.query<{
+      total: string;
+      enabled: string;
+    }>(
+      `SELECT COUNT(*)::text AS total,
+              COUNT(*) FILTER (WHERE enabled = true)::text AS enabled
+       FROM workflows`
+    );
+
     return reply.send(ok({
       references: memStats[0] || { total: '0', valid: '0', broken: '0', stale: '0' },
       events24h: eventStats,
       episodes: parseInt(episodeCount[0]?.count || '0', 10),
+      candidates: parseInt(candidateCount[0]?.count || '0', 10),
+      activeDirectives: parseInt(activeDirectives[0]?.count || '0', 10),
+      workflows: {
+        total: parseInt(workflowStats[0]?.total || '0', 10),
+        enabled: parseInt(workflowStats[0]?.enabled || '0', 10),
+      },
     }));
   });
 }

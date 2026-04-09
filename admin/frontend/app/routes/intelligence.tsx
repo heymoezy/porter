@@ -49,6 +49,33 @@ interface IntellectStats {
   references: { total: string; valid: string; broken: string; stale: string }
   events24h: Array<{ event_type: string; count: string }>
   episodes: number
+  candidates?: number
+  activeDirectives?: number
+  workflows?: { total: number; enabled: number }
+}
+
+interface DirectiveCandidate {
+  id: string
+  scope: string
+  scope_id: string | null
+  content: string
+  priority: number
+  source_session_id: string | null
+  created_at: number
+  updated_at: number
+}
+
+interface IntellectEpisode {
+  id: string
+  scope: string
+  scope_id: string | null
+  session_id: string
+  gateway: string | null
+  summary: string
+  corrections_json: string[]
+  files_changed_json: string[]
+  duration_seconds: number
+  created_at: number
 }
 
 // ── Constants ──────────────────────────────────────────
@@ -122,6 +149,31 @@ export default function IntelligencePage() {
     },
   })
 
+  const intellectCandidates = useQuery({
+    queryKey: ["intellect", "candidates"],
+    queryFn: () => api<{ candidates: DirectiveCandidate[]; count: number }>("/api/v1/intellect/candidates"),
+    refetchInterval: 15_000,
+  })
+
+  const intellectEpisodes = useQuery({
+    queryKey: ["intellect", "episodes"],
+    queryFn: () => api<{ episodes: IntellectEpisode[]; count: number }>("/api/v1/intellect/episodes?limit=10"),
+    refetchInterval: 15_000,
+  })
+
+  const acceptCandidate = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/intellect/candidates/${id}/accept`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["intellect"] }),
+  })
+  const rejectCandidate = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/intellect/candidates/${id}/reject`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["intellect"] }),
+  })
+  const promoteNow = useMutation({
+    mutationFn: () => api("/api/v1/intellect/promote", { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["intellect"] }),
+  })
+
   const createEntry = useMutation({
     mutationFn: (d: { entry_type: string; title: string; body: string }) =>
       api("/api/admin/intelligence", { method: "POST", json: d }),
@@ -147,6 +199,8 @@ export default function IntelligencePage() {
 
   const istats = intellectStats.data
   const ievents = intellectEvents.data?.events ?? []
+  const icandidates = intellectCandidates.data?.candidates ?? []
+  const iepisodes = intellectEpisodes.data?.episodes ?? []
 
   function describeIntellectEvent(ev: IntellectEvent): string {
     const d = ev.details_json as Record<string, any>
@@ -158,7 +212,21 @@ export default function IntelligencePage() {
       case "validation_sweep":
         return `Validation sweep: ${d.valid || 0} valid, ${d.broken || 0} broken, ${d.fixed || 0} fixed, ${d.newReferences || 0} new`
       case "correction_detected":
-        return `Correction detected: ${String(d.content || "").substring(0, 80)}`
+        return `Correction captured: ${String(d.rule || d.content || "").substring(0, 90)}`
+      case "correction_reinforced":
+        return `Correction reinforced (×): ${(d.similarity ? Math.round(Number(d.similarity) * 100) + "% match" : "")}`
+      case "directive_promoted":
+        return `Directive promoted → active: ${String(d.content || "").substring(0, 80)}`
+      case "directive_archived":
+        return `Candidate archived: ${String(d.content || "").substring(0, 80)}`
+      case "episode_created":
+        return `Episode stored (${d.dispatchCount || 0} dispatches${d.corrections ? `, ${d.corrections} corrections` : ""})`
+      case "dispatch_scored":
+        return `Dispatches scored: +${d.positive || 0} / −${d.negative || 0} / =${d.neutral || 0}`
+      case "workflow_ran":
+        return `Workflow: ${d.name || d.actionType || "ran"} (${d.durationMs || 0}ms)`
+      case "workflow_failed":
+        return `Workflow failed: ${d.name || d.actionType}${d.error ? " — " + d.error : ""}`
       case "directive_created":
         return `New directive: ${String(d.content || "").substring(0, 80)}`
       case "memory_pruned":
@@ -174,6 +242,13 @@ export default function IntelligencePage() {
       case "memory_auto_fixed": return FileCheck
       case "validation_sweep": return Activity
       case "correction_detected": return AlertTriangle
+      case "correction_reinforced": return AlertTriangle
+      case "directive_promoted": return Zap
+      case "directive_archived": return FileX
+      case "episode_created": return BookOpen
+      case "dispatch_scored": return Target
+      case "workflow_ran": return Activity
+      case "workflow_failed": return AlertTriangle
       case "directive_created": return Zap
       default: return Brain
     }
@@ -185,6 +260,13 @@ export default function IntelligencePage() {
       case "memory_auto_fixed": return "text-success"
       case "validation_sweep": return "text-accent-porter"
       case "correction_detected": return "text-warning"
+      case "correction_reinforced": return "text-warning"
+      case "directive_promoted": return "text-success"
+      case "directive_archived": return "text-text3"
+      case "episode_created": return "text-chart-2"
+      case "dispatch_scored": return "text-accent-porter"
+      case "workflow_ran": return "text-accent-porter"
+      case "workflow_failed": return "text-danger"
       case "directive_created": return "text-accent-porter"
       default: return "text-text3"
     }
@@ -211,9 +293,9 @@ export default function IntelligencePage() {
         </div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-4 gap-2 mb-4">
+        <div className="grid grid-cols-6 gap-2 mb-4">
           <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
-            <p className="text-2xs text-text3">Memory references</p>
+            <p className="text-2xs text-text3">Refs</p>
             <p className="text-lg font-bold text-foreground tabular-nums">{istats?.references.total ?? "—"}</p>
           </div>
           <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
@@ -227,10 +309,83 @@ export default function IntelligencePage() {
             </p>
           </div>
           <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+            <p className="text-2xs text-text3">Directives</p>
+            <p className="text-lg font-bold text-foreground tabular-nums">{istats?.activeDirectives ?? "—"}</p>
+          </div>
+          <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+            <p className="text-2xs text-text3">Candidates</p>
+            <p className={`text-lg font-bold tabular-nums ${(istats?.candidates ?? 0) > 0 ? "text-warning" : "text-text3"}`}>
+              {istats?.candidates ?? "—"}
+            </p>
+          </div>
+          <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
             <p className="text-2xs text-text3">Episodes</p>
             <p className="text-lg font-bold text-foreground tabular-nums">{istats?.episodes ?? "—"}</p>
           </div>
         </div>
+
+        {/* Directive candidates (pending corrections) */}
+        {icandidates.length > 0 && (
+          <div className="mb-4 rounded-md border border-warning/20 bg-warning/[0.04] p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="size-3 text-warning" />
+              <span className="text-2xs font-semibold uppercase tracking-wide text-warning">Directive candidates</span>
+              <span className="text-2xs text-text3">{icandidates.length} pending</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="ml-auto h-6 text-2xs"
+                onClick={() => promoteNow.mutate()}
+                disabled={promoteNow.isPending}
+              >
+                Run promoter
+              </Button>
+            </div>
+            <div className="space-y-1 max-h-[180px] overflow-y-auto">
+              {icandidates.map(c => (
+                <div key={c.id} className="flex items-start gap-2 px-2 py-1.5 rounded hover:bg-raised/50 text-xs">
+                  <span className="rounded bg-raised text-2xs px-1.5 py-0.5 shrink-0 text-text2 tabular-nums">p{c.priority}</span>
+                  <span className="rounded bg-raised text-2xs px-1.5 py-0.5 shrink-0 text-text3">{c.scope}{c.scope_id ? `:${c.scope_id}` : ""}</span>
+                  <span className="text-text2 flex-1 min-w-0 break-words">{c.content}</span>
+                  <span className="text-2xs text-text3 shrink-0">{fmtRel(c.updated_at)}</span>
+                  <Button
+                    size="sm" variant="outline"
+                    className="h-6 text-2xs px-2 shrink-0"
+                    onClick={() => acceptCandidate.mutate(c.id)}
+                    disabled={acceptCandidate.isPending}
+                  >Accept</Button>
+                  <Button
+                    size="sm" variant="outline"
+                    className="h-6 text-2xs px-2 shrink-0 text-text3"
+                    onClick={() => rejectCandidate.mutate(c.id)}
+                    disabled={rejectCandidate.isPending}
+                  >Dismiss</Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recent episodes */}
+        {iepisodes.length > 0 && (
+          <div className="mb-4 rounded-md border border-border/50 bg-surface p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <BookOpen className="size-3 text-chart-2" />
+              <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Recent episodes</span>
+            </div>
+            <div className="space-y-1 max-h-[180px] overflow-y-auto">
+              {iepisodes.map(ep => (
+                <div key={ep.id} className="flex items-start gap-2 px-2 py-1 text-xs">
+                  <span className="rounded bg-raised text-2xs px-1.5 py-0.5 shrink-0 text-text3">
+                    {ep.scope_id ?? ep.scope}
+                  </span>
+                  <span className="text-text2 flex-1 min-w-0">{ep.summary}</span>
+                  <span className="text-2xs text-text3 shrink-0">{fmtRel(ep.created_at)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Event stream */}
         <div className="space-y-1">

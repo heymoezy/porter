@@ -121,18 +121,63 @@ Pre-assigned roles HURT performance with capable models. Kill fixed-role persona
 + capable model. Porter's job = choose the right PROTOCOL per task. Agent memory
 tracks emergent patterns, not assigned identities.
 
-**Phase 2 NEXT — Learning (corrections → directives, dispatches → patterns):**
-1. Correction detector: pattern match on session events ("don't", "never", "always")
-2. Session analyzer: create episodes at session end
-3. Memory promoter: repeated corrections → promoted directives
-4. Dispatch scoring: quality signals from Bridge outcomes
-5. Workflow engine: event-triggered agent tasks stored in DB
-6. Enhanced activity log hook: capture correction signals, not just tool names
-7. SessionEnd hook: trigger session analysis automatically
+## Porter Intellect — Phase 2 SHIPPED (2026-04-09)
+
+**Learning layer live. Porter now learns from every CLI session.**
+
+- **Correction Detector** (intellect/correction-detector.ts): pattern-matches user
+  messages ("never", "don't", "always", "stop", "wrong", "instead"). Noise filter
+  rejects questions. Creates directive candidates (status='candidate', priority=60).
+  Similarity dedupe (shared significant words ≥70%) reinforces existing candidates
+  with +10 priority instead of duplicating.
+- **Session Analyzer** (intellect/session-analyzer.ts): creates episodes from
+  bridge_dispatch_log + intellect_events. Synthesizes summary (project, dispatch
+  count, duration, top tools, corrections, files changed). Idempotent per session.
+  sweepStaleSessions() catches sessions that ended without a SessionEnd hook.
+- **Memory Promoter** (intellect/memory-promoter.ts): promotes candidates at
+  priority ≥ 80 (= 2 reinforcements) to status='active' with verified_at timestamp.
+  Archives unreinforced candidates older than 14 days.
+- **Dispatch Scorer** (intellect/dispatch-scorer.ts): heuristic outcome scoring
+  for unscored dispatches. Latency + token ratio + correction proximity (−1.0 if
+  a correction fired within 90s after the dispatch). Warms routing-confidence
+  cache after each pass. Ran clean on first pass: 500 scored (482/8/10).
+- **Workflow Engine** (intellect/workflow-engine.ts): minimal event-driven runner.
+  Reads workflows table, fires on emitEvent() or runScheduledWorkflows(tag).
+  6 built-in workflows seeded at startup: session_analyze, sweep_stale_sessions,
+  memory_validate, memory_promote, dispatch_score, correction→promote.
+- **Phase 2 API endpoints** (/api/v1/intellect):
+  - POST /correction — submit user message for detection
+  - POST /session-end — create episode + emit session.end event
+  - POST /promote — run memory promoter manually
+  - POST /score-dispatches — run dispatch scorer manually
+  - GET /candidates — list pending directive candidates
+  - POST /candidates/:id/accept — manual promotion (priority=90, status=active)
+  - POST /candidates/:id/reject — archive candidate
+  - GET /episodes — recent episodes (optional project filter)
+- **New CLI hooks** in ~/.claude/settings.json:
+  - UserPromptSubmit → porter-user-prompt.js → POST /correction
+  - SessionEnd → porter-session-end.js → POST /session-end
+- **Intelligence UI**: Intellect section extended with
+  - 6-cell stats row (refs/valid/broken/directives/candidates/episodes)
+  - Directive candidates list (accept/dismiss inline, Run promoter button)
+  - Recent episodes list
+  - Event stream recognizes new event types (correction_detected/reinforced,
+    directive_promoted/archived, episode_created, dispatch_scored, workflow_ran/failed)
+
+**Verified end-to-end (2026-04-09):**
+1. POST correction → candidate created (priority 60)
+2. Reinforcement POST → priority bumped to 70
+3. Reinforcement POST → priority 80 → correction.detected event →
+   memory_promote workflow fired → candidate promoted to active in one loop
+4. dispatch-scorer ran: 500 dispatches scored, routing-confidence cache refreshed
+
+**Phase 3 NEXT — Autonomy:**
 
 **Phase 3 — Autonomy:**
-Memory pruner, agent evolution (NOT role-based — pattern-based per MIPT),
-pattern mining, workflow engine, self-monitoring.
+Memory pruner (daily cleanup), agent evolution (NOT role-based — pattern-based
+per MIPT), pattern mining from promoted corrections, custom workflow
+composition, Intellect self-monitoring (are memories getting used? are
+corrections decreasing over time?).
 
 **Phase 4 — Dashboard overhaul (LAST):**
 Replace static dashboard with living intelligence view.

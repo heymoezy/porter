@@ -17,6 +17,8 @@ import { executeWatcher, scheduleWatcherRuns } from './watcher-service.js';
 import { scheduleAtlasRuns } from './atlas-agent.js';
 import { runDigestCycle } from './mail/newsletter-service.js';
 import { runMemoryValidation } from './intellect/memory-validator.js';
+import { runScheduledWorkflows } from './intellect/workflow-engine.js';
+import { runDispatchScoring } from './intellect/dispatch-scorer.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -32,6 +34,7 @@ const WATCHER_SCHEDULE_INTERVAL = 30; // 30 ticks x 2s = 60s — check for due w
 const ATLAS_CHECK_INTERVAL = 900;     // 900 ticks x 2s = 30 min — check project structure every 30 minutes
 const NEWSLETTER_DIGEST_INTERVAL = 10800; // 10800 ticks x 2s = 6h — run newsletter digest cycle
 const MEMORY_VALIDATION_INTERVAL = 900;  // 900 ticks x 2s = 30 min — validate memory references
+const DISPATCH_SCORING_INTERVAL = 10800; // 10800 ticks x 2s = 6h — auto-score recent dispatches
 const CONTEXT_PRESSURE_THRESHOLD = 0.8;
 const CONTEXT_ROTATION_THRESHOLD = 0.95;
 const WORKER_ID = crypto.randomUUID();
@@ -391,6 +394,18 @@ async function tick() {
     if (tickCount > 0 && tickCount % MEMORY_VALIDATION_INTERVAL === 0) {
       runMemoryValidation().catch(err =>
         console.error('[scheduler:intellect] memory validation error', err));
+      // Fire any workflow registered under `every_30m` (memory_promote,
+      // sweep_stale_sessions, etc.).
+      runScheduledWorkflows('every_30m').catch(err =>
+        console.error('[scheduler:intellect] every_30m workflows error', err));
+    }
+
+    // Intellect dispatch scoring — every 6h
+    if (tickCount > 0 && tickCount % DISPATCH_SCORING_INTERVAL === 0) {
+      runDispatchScoring().catch(err =>
+        console.error('[scheduler:intellect] dispatch scoring error', err));
+      runScheduledWorkflows('every_6h').catch(err =>
+        console.error('[scheduler:intellect] every_6h workflows error', err));
     }
 
     // ── Agent jobs — require agentScheduling flag ──────────────────────────
