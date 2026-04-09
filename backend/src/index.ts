@@ -43,6 +43,7 @@ import { migratePmnV1 } from './db/migrate-pmn-v1.js';
 import { migratePsbV1 } from './db/migrate-psb-v1.js';
 import { migrateMailV1 } from './db/migrate-mail-v1.js';
 import { migrateIntellectV1 } from './db/migrate-intellect-v1.js';
+import { startFileWatcher } from './services/intellect/file-watcher.js';
 import { seedTemplates } from './db/seed-templates.js';
 import { detectAndUpsertGateways } from './services/bridge/startup-detector.js';
 import * as scheduler from './services/scheduler.js';
@@ -244,6 +245,10 @@ const start = async () => {
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
     scheduler.start();
+
+    // Start Intellect file watcher on project directories
+    const projectDirs = ['/home/lobster/projects'];
+    startFileWatcher(projectDirs);
 
     // SIN-03: Warm routing confidence cache from historical outcome data
     await initConfidenceCache();
