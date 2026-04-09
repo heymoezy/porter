@@ -4,7 +4,7 @@
 
 project: porter
 version: v6.3.0
-updated: 2026-04-04
+updated: 2026-04-09
 updated_by: claude-opus-4.6
 
 ## Architecture
@@ -58,7 +58,88 @@ Every database table now has a corresponding admin UI page. Zero hidden data.
 - v6.0-v6.1: Orchestration Platform (8 phases)
 - Mail system: 13 tranches (full SMTP via Stalwart)
 
-## Queued Work
+## Email/JMAP Wiring (2026-04-06)
+
+Fully functional webmail backed by Stalwart JMAP:
+- DKIM DNS record live (default._domainkey.askporter.app)
+- SPF + DKIM + DMARC all configured
+- New `jmap-client.ts` — typed JMAP HTTP client for Stalwart
+- All mail read endpoints (folders, threads, messages) wired to JMAP
+- Message actions (read, archive, trash, delete) via JMAP Email/set
+- Sending: nodemailer for simple, JMAP EmailSubmission for attachments
+- Attachment upload/download via Stalwart blob API
+- Frontend: file picker in compose, attachment chips, download links
+- 12 mailboxes operational (porter, postmaster, anvil, atlas, etc.)
+
+Key detail: Stalwart requires `Host: mail.askporter.app` header for JMAP routing.
+
+## Porter Intellect — Phase 1 SHIPPED (2026-04-09)
+
+**What Porter IS:** Not a UI, not an admin panel. Porter is the invisible intelligence
+that sits behind every CLI session, watches, learns, validates memory, and evolves.
+The admin is for observability. Real product = the autonomous brain.
+
+**Three Pillars:**
+- **Brain** = what Porter knows (memory: directives, concepts, project notes, agent notes, episodes)
+- **Bridge** = how Porter acts (routing + dispatch + protocol selection — already partial)
+- **Intellect** = how Porter gets smarter (NEW — analysis, validation, pruning, evolution)
+
+**Phase 1 Complete — Foundation:**
+- Schema: episodes, memory_references, intellect_events, workflows tables
+- Memory extensions: references_json, verified_at, supersedes_id on all memory tables
+- Fixed 3 stale /documents/ paths in existing memory
+- **File Watcher** (chokidar, in-process): watches /home/lobster/projects recursively,
+  debounced 500ms, ignores node_modules/.git/build. On delete → marks refs broken.
+  On add → fuzzy-match auto-fix of broken refs.
+- **Memory Validator**: extracts file paths from memory content via regex, registers
+  in memory_references, validates against filesystem every 30 min. Auto-corrects
+  renamed files via recursive search (depth 3). UNIQUE constraint prevents dupes.
+- **Intellect API** (/api/v1/intellect/*):
+  - GET /context?project=X — scoped memory for CLI injection (markdown)
+  - GET /events — recent Intellect decisions
+  - GET /stream — SSE live stream
+  - POST /validate — manual trigger
+  - GET /stats — ref counts + event counts + episodes
+- **Session Hook Fixed** (~/.claude/hooks/porter-session-start.js): queries Intellect
+  API directly, detects project from cwd, no more stale paths.
+- **UI**: Intellect section on Intelligence page (/intelligence in sidebar under Ops)
+  — stats cards, live event stream (polls every 5s), manual validate button.
+
+**Key files:**
+- backend/src/services/intellect/file-watcher.ts
+- backend/src/services/intellect/memory-validator.ts
+- backend/src/routes/v1/intellect.ts
+- backend/src/db/migrate-intellect-v1.ts
+- admin/frontend/app/routes/intelligence.tsx (added Porter Intellect section at top)
+- ~/.claude/hooks/porter-session-start.js
+
+**MIPT Research Insight (critical for Phase 2+):**
+Protocol choice explains 44% of quality variation. Model choice only 14%.
+Sequential protocol (agents see predecessor outputs, choose own roles) beats all.
+Pre-assigned roles HURT performance with capable models. Kill fixed-role personas
+(Vigil, Compass, etc.) as coordination model. 3-ingredient recipe: mission + protocol
++ capable model. Porter's job = choose the right PROTOCOL per task. Agent memory
+tracks emergent patterns, not assigned identities.
+
+**Phase 2 NEXT — Learning (corrections → directives, dispatches → patterns):**
+1. Correction detector: pattern match on session events ("don't", "never", "always")
+2. Session analyzer: create episodes at session end
+3. Memory promoter: repeated corrections → promoted directives
+4. Dispatch scoring: quality signals from Bridge outcomes
+5. Workflow engine: event-triggered agent tasks stored in DB
+6. Enhanced activity log hook: capture correction signals, not just tool names
+7. SessionEnd hook: trigger session analysis automatically
+
+**Phase 3 — Autonomy:**
+Memory pruner, agent evolution (NOT role-based — pattern-based per MIPT),
+pattern mining, workflow engine, self-monitoring.
+
+**Phase 4 — Dashboard overhaul (LAST):**
+Replace static dashboard with living intelligence view.
+
+**Plan file:** /home/lobster/.claude/plans/rosy-frolicking-hedgehog.md
+
+## Queued Work (from pre-Intellect era — lower priority now)
 1. Lifecycle hook system (Pre/PostDispatch events for automation)
 2. Concurrent tool execution for workers
 3. Notification folding + priority queue
