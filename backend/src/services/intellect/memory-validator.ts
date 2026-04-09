@@ -34,18 +34,14 @@ async function registerReferencesForTable(tableName: string): Promise<number> {
   for (const row of rows) {
     const paths = extractFilePaths(row.content);
     for (const filePath of paths) {
-      // Skip if already registered
-      const existing = await pool.query(
-        `SELECT 1 FROM memory_references WHERE memory_table = $1 AND memory_id = $2 AND ref_value = $3 LIMIT 1`,
-        [tableName, row.id, filePath],
-      );
-      if (existing.rowCount && existing.rowCount > 0) continue;
-
-      await pool.query(
-        `INSERT INTO memory_references (id, memory_table, memory_id, ref_type, ref_value) VALUES ($1, $2, $3, 'file', $4)`,
+      // Insert with ON CONFLICT to handle duplicates safely
+      const result = await pool.query(
+        `INSERT INTO memory_references (id, memory_table, memory_id, ref_type, ref_value)
+         VALUES ($1, $2, $3, 'file', $4)
+         ON CONFLICT (memory_table, memory_id, ref_type, ref_value) DO NOTHING`,
         [randomUUID(), tableName, row.id, filePath],
       );
-      registered++;
+      if (result.rowCount && result.rowCount > 0) registered++;
     }
   }
   return registered;

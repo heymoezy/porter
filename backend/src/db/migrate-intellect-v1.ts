@@ -68,6 +68,14 @@ export async function migrateIntellectV1(pool: pg.Pool): Promise<void> {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_memrefs_value ON memory_references(ref_value)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_memrefs_memory ON memory_references(memory_table, memory_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_memrefs_status ON memory_references(status)`);
+    // Prevent duplicate references for the same memory
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'memory_references_unique') THEN
+          ALTER TABLE memory_references ADD CONSTRAINT memory_references_unique UNIQUE (memory_table, memory_id, ref_type, ref_value);
+        END IF;
+      END $$;
+    `);
 
     // ── Intellect events (audit trail) ───────────────────────────────────────
 
