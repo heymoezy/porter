@@ -13,7 +13,7 @@ import {
 } from "~/components/ui/select"
 import {
   Lightbulb, AlertTriangle, Zap, Target, BookOpen,
-  Plus, Search, X, Clock, Archive,
+  Plus, Search, X, Clock, Archive, Activity, FileCheck, FileX, RefreshCw, Brain,
 } from "lucide-react"
 
 // ── Types ──────────────────────────────────────────────
@@ -33,6 +33,22 @@ interface IntelResponse {
     byType: Record<string, number>
     byAgent: Record<string, number>
   }
+}
+
+// ── Porter Intellect (autonomous system) types ─────────────────────────
+
+interface IntellectEvent {
+  id: string
+  event_type: string
+  source_type: string
+  details_json: Record<string, unknown>
+  created_at: number
+}
+
+interface IntellectStats {
+  references: { total: string; valid: string; broken: string; stale: string }
+  events24h: Array<{ event_type: string; count: string }>
+  episodes: number
 }
 
 // ── Constants ──────────────────────────────────────────
@@ -86,6 +102,26 @@ export default function IntelligencePage() {
     },
   })
 
+  // ── Porter Intellect (autonomous) ────────────────────────────────────
+  const intellectStats = useQuery({
+    queryKey: ["intellect", "stats"],
+    queryFn: () => api<IntellectStats>("/api/v1/intellect/stats"),
+    refetchInterval: 10_000,
+  })
+
+  const intellectEvents = useQuery({
+    queryKey: ["intellect", "events"],
+    queryFn: () => api<{ events: IntellectEvent[]; count: number }>("/api/v1/intellect/events?limit=20"),
+    refetchInterval: 5_000,
+  })
+
+  const validateNow = useMutation({
+    mutationFn: () => api("/api/v1/intellect/validate", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["intellect"] })
+    },
+  })
+
   const createEntry = useMutation({
     mutationFn: (d: { entry_type: string; title: string; body: string }) =>
       api("/api/admin/intelligence", { method: "POST", json: d }),
@@ -109,8 +145,122 @@ export default function IntelligencePage() {
   const entries = data?.entries ?? []
   const counts = data?.counts ?? { total: 0, byStatus: {}, byType: {}, byAgent: {} }
 
+  const istats = intellectStats.data
+  const ievents = intellectEvents.data?.events ?? []
+
+  function describeIntellectEvent(ev: IntellectEvent): string {
+    const d = ev.details_json as Record<string, any>
+    switch (ev.event_type) {
+      case "memory_stale":
+        return `Memory stale: ${d.filePath || d.action || "reference broken"}`
+      case "memory_auto_fixed":
+        return `Auto-fixed: ${d.oldPath?.split('/').pop() || ''} → ${d.newPath?.split('/').pop() || 'new path'}`
+      case "validation_sweep":
+        return `Validation sweep: ${d.valid || 0} valid, ${d.broken || 0} broken, ${d.fixed || 0} fixed, ${d.newReferences || 0} new`
+      case "correction_detected":
+        return `Correction detected: ${String(d.content || "").substring(0, 80)}`
+      case "directive_created":
+        return `New directive: ${String(d.content || "").substring(0, 80)}`
+      case "memory_pruned":
+        return `Pruned: ${d.reason || "stale"} (${d.count || 1})`
+      default:
+        return ev.event_type.replace(/_/g, " ")
+    }
+  }
+
+  function eventIcon(eventType: string) {
+    switch (eventType) {
+      case "memory_stale": return FileX
+      case "memory_auto_fixed": return FileCheck
+      case "validation_sweep": return Activity
+      case "correction_detected": return AlertTriangle
+      case "directive_created": return Zap
+      default: return Brain
+    }
+  }
+
+  function eventColor(eventType: string): string {
+    switch (eventType) {
+      case "memory_stale": return "text-warning"
+      case "memory_auto_fixed": return "text-success"
+      case "validation_sweep": return "text-accent-porter"
+      case "correction_detected": return "text-warning"
+      case "directive_created": return "text-accent-porter"
+      default: return "text-text3"
+    }
+  }
+
   return (
-    <div className="overflow-y-auto p-4 flex-1 space-y-3">
+    <div className="overflow-y-auto p-4 flex-1 space-y-4">
+      {/* ── Porter Intellect (autonomous system) ─────────────────── */}
+      <div className="rounded-lg border border-accent-porter/20 bg-accent-porter/[0.03] p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Brain className="size-4 text-accent-porter" />
+          <span className="text-sm font-bold text-foreground">Porter Intellect</span>
+          <span className="text-2xs text-text3">autonomous memory validation + learning</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto h-7 text-2xs gap-1"
+            onClick={() => validateNow.mutate()}
+            disabled={validateNow.isPending}
+          >
+            <RefreshCw className={`size-3 ${validateNow.isPending ? "animate-spin" : ""}`} />
+            Run validation
+          </Button>
+        </div>
+
+        {/* Stats row */}
+        <div className="grid grid-cols-4 gap-2 mb-4">
+          <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+            <p className="text-2xs text-text3">Memory references</p>
+            <p className="text-lg font-bold text-foreground tabular-nums">{istats?.references.total ?? "—"}</p>
+          </div>
+          <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+            <p className="text-2xs text-text3">Valid</p>
+            <p className="text-lg font-bold text-success tabular-nums">{istats?.references.valid ?? "—"}</p>
+          </div>
+          <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+            <p className="text-2xs text-text3">Broken</p>
+            <p className={`text-lg font-bold tabular-nums ${(parseInt(istats?.references.broken ?? "0", 10) > 0) ? "text-danger" : "text-text3"}`}>
+              {istats?.references.broken ?? "—"}
+            </p>
+          </div>
+          <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+            <p className="text-2xs text-text3">Episodes</p>
+            <p className="text-lg font-bold text-foreground tabular-nums">{istats?.episodes ?? "—"}</p>
+          </div>
+        </div>
+
+        {/* Event stream */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 mb-2">
+            <Activity className="size-3 text-text3" />
+            <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Recent decisions</span>
+            {intellectEvents.isFetching && <div className="size-2 animate-pulse rounded-full bg-accent-porter" />}
+          </div>
+          {ievents.length === 0 ? (
+            <p className="text-xs text-text3 px-2 py-4">No Intellect events yet. File changes and memory updates will appear here.</p>
+          ) : (
+            <div className="space-y-0.5 max-h-[240px] overflow-y-auto">
+              {ievents.map(ev => {
+                const Icon = eventIcon(ev.event_type)
+                const color = eventColor(ev.event_type)
+                return (
+                  <div key={ev.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-raised/50 transition-colors text-xs">
+                    <Icon className={`size-3 shrink-0 ${color}`} />
+                    <span className="text-text2 flex-1 truncate">{describeIntellectEvent(ev)}</span>
+                    <span className="text-2xs text-text3 shrink-0">{fmtRel(ev.created_at)}</span>
+                    <span className="text-2xs text-text3/60 shrink-0">{ev.source_type}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Intelligence Feed (agent submissions) ────────────────── */}
       {/* Header */}
       <div className="flex items-center gap-3">
         <Lightbulb className="size-4 text-accent-porter" />
