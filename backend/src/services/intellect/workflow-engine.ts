@@ -32,6 +32,7 @@ import { runMemoryPruning } from './memory-pruner.js';
 import { runSelfMonitor } from './self-monitor.js';
 import { runPatternMining } from './pattern-miner.js';
 import { runToolDetection } from './tool-detector.js';
+import { runSkillEvolution } from './skill-evolver.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ export type WorkflowActionType =
   | 'self_monitor'
   | 'pattern_mine'
   | 'tool_detect'
+  | 'skill_evolve'
   | 'noop';
 
 export interface WorkflowRow {
@@ -91,6 +93,7 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
   self_monitor: async () => runSelfMonitor(),
   pattern_mine: async () => runPatternMining(),
   tool_detect: async () => runToolDetection(),
+  skill_evolve: async () => runSkillEvolution(),
   noop: async () => null,
 };
 
@@ -267,6 +270,12 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_type: 'schedule',
     trigger_value: 'every_6h',
     action_type: 'tool_detect',
+  },
+  {
+    name: 'Evolve skill quality from telemetry',
+    trigger_type: 'schedule',
+    trigger_value: 'every_24h',
+    action_type: 'skill_evolve',
   },
 ];
 
