@@ -93,7 +93,13 @@ export default function DecisionsPage() {
 
   return (
     <div className="flex-1 overflow-auto p-6 space-y-6">
-      <h1 className="text-xl font-semibold text-text">Decision Log</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold text-text">Decision Log</h1>
+        <div className="flex items-center gap-3 text-xs">
+          <Link to="/sessions-admin" className="text-accent-porter hover:underline">Sessions →</Link>
+          <Link to="/intelligence" className="text-accent-porter hover:underline">Intellect events →</Link>
+        </div>
+      </div>
 
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">

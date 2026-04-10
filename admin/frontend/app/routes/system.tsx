@@ -244,11 +244,20 @@ function BrainAgentCard({ agent, detail }: { agent: AgentDef; detail?: string })
 // TAB 1: Monitor (from brain.tsx)
 // ══════════════════════════════════════════════════════════
 
+interface IntellectHealthData {
+  corrections: { last7d: number; prev7d: number; trend: "improving" | "flat" | "rising" | "unknown" }
+  validator: { autoFixed7d: number; stale7d: number; accuracyRatio: number }
+  workflows: Array<{ name: string; runCount: number; failures7d: number; health: "healthy" | "idle" | "failing" | "unknown" }>
+  promotion: { candidates: number; promoted7d: number; velocity: number }
+  episodes: { created7d: number; uniqueSessions7d: number; coverageRatio: number }
+}
+
 function MonitorTab() {
   const system = useQuery({ queryKey: ["brain", "system"], queryFn: () => api<SystemData>("/api/admin/system"), refetchInterval: 30_000 })
   const diag = useQuery({ queryKey: ["brain", "diagnostics"], queryFn: () => api<{ errors: unknown[]; stats: DiagStats }>("/api/admin/diagnostics"), refetchInterval: 30_000 })
   const dashboard = useQuery({ queryKey: ["brain", "dashboard"], queryFn: () => api<DashboardData>("/api/admin/health/dashboard"), refetchInterval: 30_000 })
   const logs = useQuery({ queryKey: ["brain", "logs"], queryFn: () => api<{ logs: LogEntry[] }>("/api/admin/health/logs?limit=30"), refetchInterval: 30_000 })
+  const intellectHealth = useQuery({ queryKey: ["intellect", "health"], queryFn: () => api<IntellectHealthData>("/api/v1/intellect/health"), refetchInterval: 60_000 })
 
   const s = system.data
   const diagStats = diag.data?.stats
@@ -300,6 +309,71 @@ function MonitorTab() {
           <RefreshCw className="size-3" />
         </Button>
       </div>
+
+      {/* ── Intellect Status (Phase 3 self-monitor) ── */}
+      {intellectHealth.data && (() => {
+        const ih = intellectHealth.data
+        const failingWf = ih.workflows.filter(w => w.health === "failing").length
+        const healthyWf = ih.workflows.filter(w => w.health === "healthy").length
+        const totalWf = ih.workflows.length
+        const trendColor =
+          ih.corrections.trend === "improving" ? "text-success" :
+          ih.corrections.trend === "rising" ? "text-warning" : "text-text3"
+        const trendLabel =
+          ih.corrections.trend === "improving" ? "↓ improving" :
+          ih.corrections.trend === "rising" ? "↑ rising" :
+          ih.corrections.trend === "flat" ? "→ flat" : "—"
+        return (
+          <div className="rounded-xl border border-accent-porter/20 bg-accent-porter/[0.04] p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="size-3.5 text-accent-porter" />
+              <Link to="/intelligence" className="text-2xs font-semibold uppercase tracking-wide text-accent-porter hover:underline">
+                Intellect (autonomous brain)
+              </Link>
+              {failingWf > 0 && (
+                <Badge variant="outline" className="text-2xs text-danger border-danger/40">{failingWf} failing</Badge>
+              )}
+              <span className="ml-auto text-2xs text-text3">Phase 3 self-monitor · refreshed every 60s</span>
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+                <p className="text-2xs text-text3">Corrections /7d</p>
+                <p className={`text-base font-bold tabular-nums ${trendColor}`}>
+                  {ih.corrections.last7d}
+                  <span className="text-2xs text-text3 ml-1">{trendLabel}</span>
+                </p>
+              </div>
+              <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+                <p className="text-2xs text-text3">Validator accuracy</p>
+                <p className="text-base font-bold tabular-nums text-foreground">
+                  {(ih.validator.accuracyRatio * 100).toFixed(0)}%
+                </p>
+              </div>
+              <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+                <p className="text-2xs text-text3">Episode coverage</p>
+                <p className="text-base font-bold tabular-nums text-foreground">
+                  {(ih.episodes.coverageRatio * 100).toFixed(0)}%
+                  <span className="text-2xs text-text3 ml-1">{ih.episodes.created7d}/{ih.episodes.uniqueSessions7d}</span>
+                </p>
+              </div>
+              <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+                <p className="text-2xs text-text3">Pending rules</p>
+                <p className={`text-base font-bold tabular-nums ${ih.promotion.candidates > 0 ? "text-warning" : "text-text3"}`}>
+                  {ih.promotion.candidates}
+                  <span className="text-2xs text-text3 ml-1">+{ih.promotion.promoted7d}/7d</span>
+                </p>
+              </div>
+              <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+                <p className="text-2xs text-text3">Workflows</p>
+                <p className="text-base font-bold tabular-nums text-foreground">
+                  {healthyWf}/{totalWf}
+                  <span className="text-2xs text-text3 ml-1">healthy</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Brain Agents + Actions ── */}
       <div className="grid grid-cols-12 gap-3">

@@ -505,7 +505,8 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
 
       {/* Usage limits — Session/Daily + Weekly, with token details */}
       {capacity && (() => {
-        const allLimits = capacity.models.flatMap(m => m.limits)
+        // Only show limits that have an actual limit_value — no bars for unlimited local models
+        const allLimits = capacity.models.flatMap(m => m.limits).filter(l => l.limit !== null && l.limit > 0)
         if (allLimits.length === 0) return null
 
         // Group limits by period
@@ -1284,6 +1285,18 @@ export default function BridgePage() {
     queryFn: () => api<{ gateways: BridgeGateway[]; summary: { healthy: number; degraded: number; unavailable: number } }>("/api/admin/bridge"),
     staleTime: 30_000,
   })
+
+  // Intellect dispatch confidence — surfaces dispatch_scorer outcomes per gateway
+  const confidenceQuery = useQuery({
+    queryKey: ["bridge", "confidence"],
+    queryFn: () => api<{ confidence: Array<{ gatewayType: string; avgScore: number; totalRated: number; recentTrend: string }> }>("/api/admin/bridge/confidence"),
+    staleTime: 60_000,
+  })
+  const confidenceList = confidenceQuery.data?.confidence ?? []
+  const totalRated = confidenceList.reduce((s, c) => s + (c.totalRated ?? 0), 0)
+  const weightedAvg = totalRated > 0
+    ? confidenceList.reduce((s, c) => s + (c.avgScore ?? 0) * (c.totalRated ?? 0), 0) / totalRated
+    : 0
   const promptsQuery = useQuery({
     queryKey: ["bridge", "prompts"],
     queryFn: () => api<{ profiles: GatewayPromptProfile[] }>("/api/admin/bridge/prompts"),
@@ -1347,6 +1360,21 @@ export default function BridgePage() {
           <span className="text-text3">·</span>
           <span><strong className="text-text tabular-nums">{totalModels}</strong> models</span>
           {openCircuits > 0 && <span><strong className="text-danger tabular-nums">{openCircuits}</strong> circuits open</span>}
+          {totalRated > 0 && (
+            <>
+              <span className="text-text3">·</span>
+              <Link to="/intelligence" className="flex items-center gap-1 hover:text-accent-porter transition-colors" title="Intellect dispatch quality (avg outcome score)">
+                <span className={
+                  weightedAvg >= 4 ? "text-success" :
+                  weightedAvg >= 3 ? "text-text2" :
+                  "text-warning"
+                }>
+                  Quality <strong className="tabular-nums">{weightedAvg.toFixed(1)}</strong>/5
+                </span>
+                <span className="text-text3">({totalRated.toLocaleString()} scored)</span>
+              </Link>
+            </>
+          )}
         </div>
       </div>
 

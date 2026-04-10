@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Link } from "react-router"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
-import { Activity, Pause, Database, MessageSquare } from "lucide-react"
+import { Activity, Pause, Database, MessageSquare, BookOpen } from "lucide-react"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -120,6 +120,29 @@ export default function SessionsAdminPage() {
   const stats = statsData ?? { active: 0, paused: 0, total: 0, totalTokens: 0, avgContext: 0, byStatus: [] }
   const sessions = data?.sessions ?? []
 
+  // Intellect episodes — used to badge sessions that have been analyzed.
+  // Single fetch (limit 200), build a Set of session_ids on the client.
+  const { data: episodesData } = useQuery({
+    queryKey: ["intellect", "episodes-for-sessions"],
+    queryFn: () =>
+      api<{ data: { episodes: Array<{ session_id: string }> } }>(
+        "/api/v1/intellect/episodes?limit=200",
+      ).then(r => r.data),
+    refetchInterval: 60_000,
+  })
+  const episodeSessionIds = new Set(
+    (episodesData?.episodes ?? []).map(e => e.session_id),
+  )
+
+  // Intellect coverage stat — sessions seen by Intellect
+  const sessionsWithEpisodes = sessions.filter(s => {
+    const sid = s.chat_id || s.id
+    return episodeSessionIds.has(sid)
+  }).length
+  const coveragePct = sessions.length > 0
+    ? Math.round((sessionsWithEpisodes / sessions.length) * 100)
+    : 0
+
   // Extract unique agents for filter
   const uniqueAgents = [...new Map(
     sessions
@@ -132,11 +155,18 @@ export default function SessionsAdminPage() {
       <h1 className="text-xl font-semibold text-text">Sessions</h1>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard icon={Activity} label="Active Sessions" value={stats.active} />
         <StatCard icon={Database} label="Total Tokens" value={formatTokens(stats.totalTokens)} />
         <StatCard icon={MessageSquare} label="Avg Context" value={`${stats.avgContext} msgs`} />
         <StatCard icon={Pause} label="Paused" value={stats.paused} />
+        <Link to="/intelligence" className="block">
+          <StatCard
+            icon={BookOpen}
+            label="Intellect coverage"
+            value={`${coveragePct}% (${sessionsWithEpisodes}/${sessions.length})`}
+          />
+        </Link>
       </div>
 
       {/* Filters */}
@@ -177,6 +207,7 @@ export default function SessionsAdminPage() {
               <th className="text-left py-2 pr-4">Agent</th>
               <th className="text-left py-2 pr-4">Gateway</th>
               <th className="text-left py-2 pr-4">Status</th>
+              <th className="text-left py-2 pr-4">Episode</th>
               <th className="text-left py-2 pr-4">Tokens</th>
               <th className="text-right py-2 pr-4">Context</th>
               <th className="text-left py-2 pr-4">Model</th>
@@ -185,7 +216,10 @@ export default function SessionsAdminPage() {
             </tr>
           </thead>
           <tbody>
-            {sessions.map(s => (
+            {sessions.map(s => {
+              const sid = s.chat_id || s.id
+              const hasEpisode = episodeSessionIds.has(sid)
+              return (
               <tr key={s.id} className="border-b border-border/50 hover:bg-raised/50">
                 <td className="py-2 pr-4 text-text3 font-mono text-xs">{s.id.slice(0, 8)}</td>
                 <td className="py-2 pr-4 text-text">
@@ -205,13 +239,23 @@ export default function SessionsAdminPage() {
                   ) : "--"}
                 </td>
                 <td className="py-2 pr-4"><StatusBadge status={s.status} /></td>
+                <td className="py-2 pr-4">
+                  {hasEpisode ? (
+                    <Link to="/intelligence" className="inline-flex items-center gap-1 text-xs text-accent-porter hover:underline" title="Intellect has analyzed this session">
+                      <BookOpen className="size-3" /> yes
+                    </Link>
+                  ) : (
+                    <span className="text-text3 text-xs">—</span>
+                  )}
+                </td>
                 <td className="py-2 pr-4"><TokenBar used={s.tokens_used} budget={s.token_budget} /></td>
                 <td className="py-2 pr-4 text-right text-text2">{s.context_msgs}</td>
                 <td className="py-2 pr-4 text-text3 text-xs">{s.model_name ?? "--"}</td>
                 <td className="py-2 pr-4 text-right text-text3 text-xs whitespace-nowrap">{formatDate(s.created_at)}</td>
                 <td className="py-2 text-right text-text3 text-xs whitespace-nowrap">{formatDate(s.last_active_at)}</td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
 

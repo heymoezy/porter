@@ -262,12 +262,69 @@ function ConfidenceTab() {
 
 // --- Main Page ---
 
+// ── Intellect themes for routing context ───────────────
+
+interface PatternMineResult {
+  themeClusters: Array<{ theme: string[]; scope: string; scopeId: string | null; members: Array<{ id: string; preview: string; priority: number }> }>
+  totals: { directivesScanned: number; clustersFound: number }
+}
+
+function IntellectThemes() {
+  const { data } = useQuery({
+    queryKey: ["intellect", "patterns"],
+    queryFn: () => api<PatternMineResult>("/api/v1/intellect/patterns"),
+    refetchInterval: 120_000,
+  })
+
+  if (!data) return null
+
+  // Filter to global/workspace-scoped clusters — relevant to routing decisions
+  const clusters = data.themeClusters.filter(c => c.scope === "workspace" || c.scope === "global")
+
+  return (
+    <div className="rounded-xl border border-chart-2/20 bg-chart-2/[0.04] p-3">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-2xs font-semibold uppercase tracking-wide text-chart-2">Routing themes (Intellect)</span>
+        <span className="text-2xs text-text3">
+          {data.totals.clustersFound} clusters from {data.totals.directivesScanned} directives
+        </span>
+        <Link to="/intelligence" className="ml-auto text-2xs text-accent-porter hover:underline">Open Intellect →</Link>
+      </div>
+      {clusters.length === 0 ? (
+        <p className="text-2xs text-text3 py-2">
+          No global theme clusters yet. Patterns emerge as Porter accumulates directives.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {clusters.slice(0, 4).map((c, i) => (
+            <div key={i} className="rounded bg-surface border border-border/50 p-2">
+              <div className="flex flex-wrap items-center gap-1 mb-1">
+                {c.theme.map(t => (
+                  <span key={t} className="rounded bg-chart-2/15 text-chart-2 text-2xs px-1.5 py-0.5">{t}</span>
+                ))}
+                <span className="text-2xs text-text3 ml-auto">{c.members.length} rules</span>
+              </div>
+              <p className="text-2xs text-text2 line-clamp-2">{c.members[0]?.preview}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function RoutingPage() {
   const [tab, setTab] = useState<Tab>("Decisions")
 
   return (
-    <div className="flex-1 overflow-auto p-6 space-y-6">
-      <h1 className="text-xl font-semibold text-text">Routing History</h1>
+    <div className="flex-1 overflow-auto p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold text-text">Routing History</h1>
+        <Link to="/bridge" className="text-xs text-accent-porter hover:underline">Bridge gateways →</Link>
+      </div>
+
+      {/* Intellect themes — connect routing to learned patterns */}
+      <IntellectThemes />
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border pb-0">
