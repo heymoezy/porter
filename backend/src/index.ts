@@ -111,7 +111,17 @@ fastify.register(openapiPlugin);
 // Auth plugin (session resolution)
 fastify.register(authPlugin);
 
-// Root — served by SPA catch-all below
+// Landing page: intercept root request before @fastify/static serves the SPA
+fastify.addHook('onRequest', async (request, reply) => {
+  if (request.url !== '/' || request.method !== 'GET') return;
+  const cookies = request.cookies as Record<string, string> | undefined;
+  const hasSession = cookies?.porter_session || cookies?.porter_admin_session;
+  if (hasSession) return; // let SPA handle authenticated users
+  const landingPath = path.join(adminFrontendDist, 'landing.html');
+  if (fs.existsSync(landingPath)) {
+    reply.type('text/html').send(fs.readFileSync(landingPath, 'utf8'));
+  }
+});
 
 // V1 routes (Fastify-native, with response envelope)
 fastify.register(v1Routes, { prefix: '/api/v1' });
@@ -199,6 +209,17 @@ if (fs.existsSync(adminFrontendDist)) {
   fastify.setNotFoundHandler(async (request, reply) => {
     // Only serve SPA for non-API, non-asset GET requests
     if (request.method === 'GET' && !request.url.startsWith('/api/') && !request.url.startsWith('/v2/')) {
+      // Landing page: serve landing.html for unauthenticated visitors at root
+      if (request.url === '/' || request.url === '') {
+        const cookies = request.cookies as Record<string, string> | undefined;
+        const hasSession = cookies?.porter_session || cookies?.porter_admin_session;
+        if (!hasSession) {
+          const landingPath = path.join(adminFrontendDist, 'landing.html');
+          if (fs.existsSync(landingPath)) {
+            return reply.type('text/html').send(fs.readFileSync(landingPath, 'utf8'));
+          }
+        }
+      }
       const indexPath = path.join(adminFrontendDist, 'index.html');
       if (fs.existsSync(indexPath)) {
         const html = fs.readFileSync(indexPath, 'utf8');

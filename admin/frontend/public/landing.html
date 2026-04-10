@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Porter — Every AI CLI session, smarter than the last</title>
+<meta name="description" content="Porter sits invisibly behind your AI CLIs — Claude, GPT-5, Codex, Gemini, Ollama — and makes every session smarter. Persistent memory, learned corrections, multi-CLI coherence.">
+<meta property="og:title" content="Porter — Your AI Mission Control">
+<meta property="og:description" content="Make every AI CLI session smarter — automatically.">
+<meta property="og:url" content="https://askporter.app">
+<meta property="og:image" content="https://askporter.app/og-preview.png">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0f1219;--surface:#1a2030;--raised:#242d3f;--border:#2e3a4e;--text:#f0f3f8;--text2:#b0bdd0;--text3:#6b7a90;--accent:#6366f1;--accent2:#818cf8;--success:#22c55e;--glow:rgba(99,102,241,.15)}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
+a{color:var(--accent2);text-decoration:none}a:hover{text-decoration:underline}
+.container{max-width:1080px;margin:0 auto;padding:0 24px}
+
+/* Nav */
+nav{padding:16px 0;border-bottom:1px solid var(--border)}
+nav .inner{display:flex;align-items:center;gap:12px}
+nav .logo{font-size:18px;font-weight:800;letter-spacing:-.02em;color:var(--text)}
+nav .logo span{color:var(--accent)}
+nav .spacer{flex:1}
+nav a.btn{background:var(--accent);color:#fff;padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600}
+nav a.btn:hover{background:var(--accent2);text-decoration:none}
+
+/* Hero */
+.hero{text-align:center;padding:80px 0 60px}
+.hero h1{font-size:clamp(32px,5vw,56px);font-weight:800;line-height:1.1;letter-spacing:-.03em;margin-bottom:20px}
+.hero h1 em{font-style:normal;color:var(--accent2)}
+.hero .sub{font-size:18px;color:var(--text2);max-width:640px;margin:0 auto 32px}
+.hero .install{display:inline-block;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 28px;font-family:'SF Mono',Consolas,monospace;font-size:15px;color:var(--accent2);cursor:pointer;transition:border-color .2s}
+.hero .install:hover{border-color:var(--accent)}
+.hero .install::before{content:'$ ';color:var(--text3)}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;padding:32px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.stat{text-align:center;padding:16px}
+.stat .num{font-size:28px;font-weight:700;color:var(--accent2);font-variant-numeric:tabular-nums}
+.stat .label{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
+
+/* Pain */
+.pain{padding:60px 0;text-align:center}
+.pain h2{font-size:28px;font-weight:700;margin-bottom:12px}
+.pain .sub{color:var(--text2);margin-bottom:40px}
+.pain-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;text-align:left}
+.pain-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px}
+.pain-card h3{font-size:15px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.pain-card h3 .icon{width:28px;height:28px;background:var(--glow);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.pain-card p{font-size:14px;color:var(--text2);line-height:1.5}
+
+/* How */
+.how{padding:60px 0;border-top:1px solid var(--border)}
+.how h2{text-align:center;font-size:28px;font-weight:700;margin-bottom:40px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.step{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;position:relative}
+.step .num{position:absolute;top:-12px;left:20px;background:var(--accent);color:#fff;width:24px;height:24px;border-radius:50%;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.step h3{font-size:15px;font-weight:700;margin-bottom:8px;margin-top:4px}
+.step p{font-size:14px;color:var(--text2);line-height:1.5}
+
+/* Features */
+.features{padding:60px 0;border-top:1px solid var(--border)}
+.features h2{text-align:center;font-size:28px;font-weight:700;margin-bottom:40px}
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.feat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px}
+.feat .tag{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:6px}
+.feat h3{font-size:14px;font-weight:700;margin-bottom:4px}
+.feat p{font-size:13px;color:var(--text3);line-height:1.4}
+
+/* CTA */
+.cta{padding:60px 0;text-align:center;border-top:1px solid var(--border)}
+.cta h2{font-size:24px;font-weight:700;margin-bottom:12px}
+.cta p{color:var(--text2);margin-bottom:24px}
+.cta .btn{display:inline-block;background:var(--accent);color:#fff;padding:12px 32px;border-radius:10px;font-size:15px;font-weight:600}
+.cta .btn:hover{background:var(--accent2);text-decoration:none}
+
+/* Footer */
+footer{padding:24px 0;border-top:1px solid var(--border);text-align:center;font-size:12px;color:var(--text3)}
+
+@media(max-width:768px){.steps{grid-template-columns:1fr}.hero{padding:48px 0 40px}}
+</style>
+</head>
+<body>
+<nav><div class="container inner">
+  <div class="logo"><span>Porter</span></div>
+  <div class="spacer"></div>
+  <a href="https://github.com/heymoezy/porter">GitHub</a>
+  <a href="/login" class="btn">Sign in</a>
+</div></nav>
+
+<section class="hero"><div class="container">
+  <h1>Every AI CLI session,<br><em>smarter than the last</em></h1>
+  <p class="sub">Porter sits invisibly behind Claude, GPT-5, Codex, Gemini, and Ollama. It watches, learns corrections, scores quality, and injects the right context into every session. You never "use" Porter — it just makes everything better.</p>
+  <div class="install" title="Coming soon">pip install porter-cli</div>
+</div></section>
+
+<section class="stats"><div class="container stats" id="live-stats">
+  <div class="stat"><div class="num" id="s-workflows">12</div><div class="label">Autonomous workflows</div></div>
+  <div class="stat"><div class="num" id="s-skills">207</div><div class="label">Built-in skills</div></div>
+  <div class="stat"><div class="num" id="s-agents">19</div><div class="label">AI agents</div></div>
+  <div class="stat"><div class="num" id="s-tools">21</div><div class="label">Detected tools</div></div>
+  <div class="stat"><div class="num" id="s-gateways">5</div><div class="label">CLI gateways</div></div>
+</div></section>
+
+<section class="pain"><div class="container">
+  <h2>Your CLIs forget everything</h2>
+  <p class="sub">Every session starts cold. Porter fixes that.</p>
+  <div class="pain-grid">
+    <div class="pain-card">
+      <h3><span class="icon">🔄</span> No session memory</h3>
+      <p>You told Claude "never use native selects" yesterday. Today it does it again. Porter captures corrections and turns them into permanent rules.</p>
+    </div>
+    <div class="pain-card">
+      <h3><span class="icon">🏝️</span> Siloed CLIs</h3>
+      <p>A lesson learned in Claude stays in Claude. GPT-5 and Codex don't benefit. Porter shares knowledge across all 5 gateways.</p>
+    </div>
+    <div class="pain-card">
+      <h3><span class="icon">📉</span> No quality signal</h3>
+      <p>Which gateway produces better code? Which model hallucinates less? Porter scores every dispatch and improves routing automatically.</p>
+    </div>
+  </div>
+</div></section>
+
+<section class="how"><div class="container">
+  <h2>How it works</h2>
+  <div class="steps">
+    <div class="step"><div class="num">1</div>
+      <h3>Install once</h3>
+      <p>One command. Porter registers session hooks with your CLIs and starts its background service. Zero workflow changes.</p>
+    </div>
+    <div class="step"><div class="num">2</div>
+      <h3>Use your CLIs normally</h3>
+      <p>Keep using Claude, GPT-5, Codex, Gemini, Ollama exactly as before. Porter watches invisibly — capturing corrections, logging sessions, detecting patterns.</p>
+    </div>
+    <div class="step"><div class="num">3</div>
+      <h3>Everything gets smarter</h3>
+      <p>After a week, your CLIs know your codebase rules. After a month, they stop making the same mistakes. 12 autonomous workflows continuously improve quality.</p>
+    </div>
+  </div>
+</div></section>
+
+<section class="features"><div class="container">
+  <h2>Built for developers who ship</h2>
+  <div class="feat-grid">
+    <div class="feat"><div class="tag">Memory</div><h3>Persistent context</h3><p>Directives, episodes, and concepts survive across sessions</p></div>
+    <div class="feat"><div class="tag">Learning</div><h3>Correction detection</h3><p>Say it once. Porter turns corrections into permanent rules</p></div>
+    <div class="feat"><div class="tag">Routing</div><h3>Smart dispatch</h3><p>Tasks auto-route to the best gateway based on learned quality scores</p></div>
+    <div class="feat"><div class="tag">Skills</div><h3>207 skill packs</h3><p>Backend, frontend, DevOps, security, writing — matched to your task</p></div>
+    <div class="feat"><div class="tag">Agents</div><h3>Forge pipeline</h3><p>Agents born from templates with skills, tools, and email addresses</p></div>
+    <div class="feat"><div class="tag">Evolution</div><h3>Self-improving</h3><p>Skills evolve from telemetry. Tools auto-detected. External feeds ingested</p></div>
+  </div>
+</div></section>
+
+<section class="cta"><div class="container">
+  <h2>Ready to stop repeating yourself?</h2>
+  <p>Porter is open source and free to self-host.</p>
+  <a href="https://github.com/heymoezy/porter" class="btn">View on GitHub</a>
+</div></section>
+
+<footer><div class="container">
+  Porter v6.5.0 — Built by <a href="https://themozaic.com">The Mozaic</a> — askporter.app
+</div></footer>
+
+<script>
+// Pull live stats from Porter API (best-effort, fallback to static values)
+fetch('/api/v1/intellect/stats')
+  .then(r => r.json())
+  .then(d => {
+    if (!d.ok) return;
+    const s = d.data;
+    const el = id => document.getElementById(id);
+    if (s.workflows) el('s-workflows').textContent = s.workflows.total || 12;
+    if (s.activeDirectives) el('s-agents').textContent = s.activeDirectives;
+  })
+  .catch(() => {});
+</script>
+</body>
+</html>
