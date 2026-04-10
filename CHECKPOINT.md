@@ -261,14 +261,14 @@ Replace static dashboard with living intelligence view.
 |--------|-------|-----------|
 | Skills | 207 synced, well-written (~1.8KB avg), injection works via Bridge | Recommendations in session hook: ✅ |
 | Tools | 12 env tools detected. Basic detection only | Needs expansion + auto-update |
-| Forge | 107 templates, 9 personas exist (manually created). Pipeline UI built | Zero agents "forged" from templates |
+| Forge | 107 templates. Pipeline OPERATIONAL. 10 agents forged from templates with skills + email | Station 1 fixed: direct DB persona creation + Stalwart mailbox provisioning |
 | Bridge | All 5 adapters working. 10-step dispatch with 6-tier memory injection | Cross-gateway context: only Claude CLI has hooks |
 | Intellect | Phase 1-3 complete. 22 episodes, 1501 scored dispatches | Self-monitoring: 98% validator accuracy |
 
 ### In-Progress Operational Roadmap (research/operational-roadmap.md)
 **Phase A: Skills** — DONE (skills are well-written, synced, recommendations work)
 **Phase B: Tools** — TODO (expand from 12 to comprehensive registry, auto-detect, auto-update)
-**Phase C: Forge Activation** — TODO (birth 10 core agents from templates with skills+tools+email)
+**Phase C: Forge Activation** — DONE (10 agents born: Backend Dev, Frontend Dev, DevOps, Security, QA, Fullstack, Product Manager, Growth Strategist, Competitive Intelligence, Technical Writer. All with @askporter.app email.)
 **Phase D: Cross-Gateway** — TODO (OpenClaw/Codex/Gemini/Ollama context injection)
 **Phase E: Autonomous Evolution** — TODO (agent subscriptions, skill evolution, routing auto-gen)
 **Phase F: Marketing** — TODO (landing page, demo, positioning)
