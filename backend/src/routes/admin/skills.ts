@@ -10,7 +10,7 @@ import { writeSkillsManifest } from '../../services/skills-manifest.js';
 
 // ── Quality scoring (ported from admin/backend/src/services/skill-library.ts) ──
 
-const SKILLS_ROOT = path.resolve(process.env.PORTER_SKILLS_DIR || '/home/lobster/projects/porter/skills');
+const SKILLS_ROOT = path.resolve(process.env.PORTER_SKILLS_DIR || '/home/lobster/projects/Porter/skills');
 
 const EXPECTED_PACK_FILES = ['SKILL.md', 'prompt.md', 'guides/qa-checklist.md', 'examples/README.md', 'meta/skill.json'];
 
