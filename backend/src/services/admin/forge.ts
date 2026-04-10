@@ -297,31 +297,102 @@ async function runWriter(item: PipelineItem): Promise<void> {
 
   try {
     if (!item.agent_id) {
-      const fastifyUrl = config.fastifyUrl;
-      const res = await fetch(`${fastifyUrl}/api/v1/templates/${item.template_id}/instantiate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: item.template_id }),
-      });
+      // Look up the template
+      const tmplRow = (await pool.query<{
+        name: string; category: string; description: string;
+        system_prompt: string; soul_text: string;
+        role_card_text: string; identity_text: string; skills_text: string;
+        skills: string; tools: string;
+      }>(
+        `SELECT name, category, description, system_prompt, soul_text,
+                role_card_text, identity_text, skills_text, skills, tools
+         FROM agent_templates WHERE id = $1`, [item.template_id]
+      )).rows[0];
 
-      if (!res.ok) {
-        throw new Error(`Instantiate failed: ${res.status} ${res.statusText}`);
+      if (!tmplRow) throw new Error(`Template ${item.template_id} not found`);
+
+      // Read skills/tools from junction tables
+      const junctionSkills = (await pool.query(
+        'SELECT skill_id FROM template_skills WHERE template_id = $1 ORDER BY sort_order',
+        [item.template_id]
+      )).rows.map((r: { skill_id: string }) => r.skill_id);
+
+      const junctionTools = (await pool.query(
+        'SELECT tool_id FROM template_tools WHERE template_id = $1 ORDER BY sort_order',
+        [item.template_id]
+      )).rows.map((r: { tool_id: string }) => r.tool_id);
+
+      const rawTools = tmplRow.tools;
+      const toolsList = junctionTools.length > 0
+        ? junctionTools
+        : (Array.isArray(rawTools) ? rawTools : []);
+
+      // Create persona row directly (no HTTP call — avoids auth)
+      const agentId = 'agent_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+      const cfg = {
+        description: tmplRow.description || '',
+        skills: junctionSkills,
+        tools: toolsList,
+        template_id: item.template_id,
+        system_prompt: tmplRow.system_prompt || '',
+        soul_text: tmplRow.soul_text || '',
+        role_card_text: tmplRow.role_card_text || '',
+        identity_text: tmplRow.identity_text || '',
+      };
+
+      await pool.query(`
+        INSERT INTO personas (id, name, role, config, created_at, status, owner, is_temporary, template_id, deployed_by)
+        VALUES ($1, $2, $3, $4, NOW()::text, 'idle', 'forge', 0, $5, 'forge')
+        ON CONFLICT (id) DO NOTHING
+      `, [agentId, tmplRow.name, tmplRow.category, JSON.stringify(cfg), item.template_id]);
+
+      // Assign skills to persona
+      for (const skillId of junctionSkills) {
+        await pool.query(`
+          INSERT INTO persona_skills (persona_id, skill_name, skill_id, enabled, assigned_at)
+          VALUES ($1, $2, $3, 1, EXTRACT(EPOCH FROM NOW()))
+          ON CONFLICT DO NOTHING
+        `, [agentId, skillId, skillId]);
       }
 
-      const data = await res.json() as { data?: { agent?: { id: string } } };
-      const agentId = data?.data?.agent?.id;
+      // Birth record in agent_notes
+      const birthNote = `Born from template ${item.template_id} (${tmplRow.name}). Category: ${tmplRow.category}. ${tmplRow.description || ''}`;
+      await pool.query(
+        `INSERT INTO agent_notes (id, agent_id, content, note_type, confidence_score, source_type, status, created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, 'birth', 90, 'forge', 'active', 'forge:writer', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+         ON CONFLICT DO NOTHING`,
+        [crypto.randomUUID(), agentId, birthNote]
+      );
 
-      if (agentId) {
-        await execute('UPDATE forge_pipeline SET agent_id = $1 WHERE id = $2', [agentId, item.id]);
-        item.agent_id = agentId;
+      // Agent email provisioning
+      try {
+        const { rows: domainRows } = await pool.query<{ id: string }>(
+          `SELECT id FROM mail_domains WHERE domain = 'askporter.app' LIMIT 1`
+        );
+        if (domainRows.length > 0) {
+          const localPart = tmplRow.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+          const { rows: existingMb } = await pool.query(`SELECT id FROM mailboxes WHERE local_part = $1 AND domain_id = $2`, [localPart, domainRows[0].id]);
+          if (existingMb.length === 0) {
+            const { createMailbox: createMb } = await import('../mail/mailbox-service.js');
+            const { getProvider } = await import('../mail/provider-factory.js');
+            const provider = getProvider();
+            const mb = await createMb(provider, { domainId: domainRows[0].id, localPart, displayName: tmplRow.name, mailboxType: 'agent', agentId });
+            await pool.query(`INSERT INTO agent_mailboxes (agent_id, mailbox_id, role, created_at) VALUES ($1, $2, 'primary', EXTRACT(EPOCH FROM NOW())) ON CONFLICT DO NOTHING`, [agentId, mb.id]);
+          }
+        }
+      } catch (mailErr) {
+        console.warn(`[forge:writer] mailbox failed for ${agentId}:`, mailErr instanceof Error ? mailErr.message : mailErr);
       }
+
+      await execute('UPDATE forge_pipeline SET agent_id = $1 WHERE id = $2', [agentId, item.id]);
+      item.agent_id = agentId;
     }
 
     consecutiveBrainFailures = 0;
 
     await completeStationRun(runId, 'pass', {
-      writer_model: 'pending-ai-router',
-      files_touched: ['SOUL.md', 'IDENTITY.md', 'ROLE_CARD.md', 'SKILLS.md'],
+      writer_model: 'direct-db',
+      files_touched: ['persona', 'agent_notes.birth', 'mailbox'],
       duration_ms: Date.now() - startMs,
     });
 

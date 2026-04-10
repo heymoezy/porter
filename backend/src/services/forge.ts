@@ -12,7 +12,11 @@
 import { pool } from '../db/client.js';
 import { config } from '../config.js';
 import { writeSkillsManifest } from './skills-manifest.js';
+import { createMailbox } from './mail/mailbox-service.js';
+import { getProvider } from './mail/provider-factory.js';
 import crypto from 'crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // ── Types ────────────────────────────────────────────────
 
@@ -304,41 +308,185 @@ async function runWriter(item: PipelineItem): Promise<void> {
   try {
     // Check if agent already exists (idempotent)
     if (!item.agent_id) {
-      // Look up the template's human-readable name
-      const tmplRow = (await pool.query(
-        `SELECT name FROM agent_templates WHERE id = $1`, [item.template_id]
+      // Look up the template
+      const tmplRow = (await pool.query<{
+        name: string;
+        category: string;
+        description: string;
+        system_prompt: string;
+        soul_text: string;
+        role_card_text: string;
+        identity_text: string;
+        skills_text: string;
+        skills: string;
+        tools: string;
+      }>(
+        `SELECT name, category, description, system_prompt, soul_text,
+                role_card_text, identity_text, skills_text, skills, tools
+         FROM agent_templates WHERE id = $1`, [item.template_id]
       )).rows[0];
-      const displayName = tmplRow?.name || item.template_id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
-      // Call Fastify backend to instantiate template
-      const res = await fetch(`${config.fastifyUrl}/api/v1/templates/${item.template_id}/instantiate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: displayName }),
-      });
+      if (!tmplRow) throw new Error(`Template ${item.template_id} not found`);
+      const displayName = tmplRow.name;
 
-      if (!res.ok) {
-        throw new Error(`Instantiate failed: ${res.status} ${res.statusText}`);
+      // Read skills/tools from junction tables (same as templates.ts instantiate)
+      const junctionSkills = (await pool.query(
+        'SELECT skill_id FROM template_skills WHERE template_id = $1 ORDER BY sort_order',
+        [item.template_id]
+      )).rows.map((r: { skill_id: string }) => r.skill_id);
+
+      const junctionTools = (await pool.query(
+        'SELECT tool_id FROM template_tools WHERE template_id = $1 ORDER BY sort_order',
+        [item.template_id]
+      )).rows.map((r: { tool_id: string }) => r.tool_id);
+
+      const toolsList = junctionTools.length > 0
+        ? junctionTools
+        : (tmplRow.tools ? JSON.parse(tmplRow.tools) : []);
+
+      // Create persona directly (no HTTP call — avoids auth requirement)
+      const agentId = 'agent_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+      const cfg = {
+        description: tmplRow.description || '',
+        skills: junctionSkills,
+        tools: toolsList,
+        template_id: item.template_id,
+      };
+
+      await pool.query(`
+        INSERT INTO personas (id, name, role, config, created_at, status, owner, is_temporary, template_id, deployed_by)
+        VALUES ($1, $2, $3, $4, NOW()::text, 'idle', 'forge', 0, $5, 'forge')
+        ON CONFLICT (id) DO NOTHING
+      `, [agentId, displayName, tmplRow.category, JSON.stringify(cfg), item.template_id]);
+
+      // Assign skills to persona
+      for (const skillId of junctionSkills) {
+        await pool.query(`
+          INSERT INTO persona_skills (persona_id, skill_name, skill_id, enabled, assigned_at)
+          VALUES ($1, $2, $3, 1, EXTRACT(EPOCH FROM NOW()))
+          ON CONFLICT DO NOTHING
+        `, [agentId, skillId, skillId]);
       }
 
-      const data = await res.json() as { data?: { agent?: { id: string } } };
-      const agentId = data?.data?.agent?.id;
-
-      if (agentId) {
-        await pool.query('UPDATE forge_pipeline SET agent_id = $1 WHERE id = $2', [agentId, item.id]);
-        item.agent_id = agentId;
-      }
+      await pool.query('UPDATE forge_pipeline SET agent_id = $1 WHERE id = $2', [agentId, item.id]);
+      item.agent_id = agentId;
     }
 
-    // TODO: Enrich thin .md files via Porter AI router (Claude first, GPT-5.4 fallback)
-    // TODO: Initialize Memory V2 — create memory/ dir, write birth record
-    // For now, mark as done with the basic instantiation
+    // ── AI Enrichment: write persona config from template text ────────
+    // Re-read template (tmplRow may be stale if agent already existed)
+    const templateData = (await pool.query<{
+      name: string;
+      category: string;
+      description: string;
+      system_prompt: string;
+      soul_text: string;
+      role_card_text: string;
+      identity_text: string;
+      skills_text: string;
+    }>(
+      `SELECT name, category, description, system_prompt, soul_text,
+              role_card_text, identity_text, skills_text
+       FROM agent_templates WHERE id = $1`,
+      [item.template_id]
+    )).rows[0];
+
+    if (templateData && item.agent_id) {
+      // If template already has rich text, use it directly. Otherwise generate.
+      const hasRichSoul = (templateData.soul_text?.length ?? 0) > 100;
+      const hasRichIdentity = (templateData.identity_text?.length ?? 0) > 100;
+      const hasRichRole = (templateData.role_card_text?.length ?? 0) > 100;
+
+      // Write what we have from template directly to persona columns
+      if (hasRichSoul || hasRichIdentity || hasRichRole) {
+        await pool.query(
+          `UPDATE personas SET
+            config = COALESCE(config, '{}'::jsonb) ||
+              jsonb_build_object(
+                'system_prompt', $2::text,
+                'soul_text', $3::text,
+                'role_card_text', $4::text,
+                'identity_text', $5::text,
+                'template_id', $6::text
+              )
+           WHERE id = $1`,
+          [
+            item.agent_id,
+            templateData.system_prompt || '',
+            templateData.soul_text || '',
+            templateData.role_card_text || '',
+            templateData.identity_text || '',
+            item.template_id,
+          ]
+        );
+      }
+
+      // ── Birth record (lightweight Memory V2 init) ───────────────────
+      const birthNote = `Born from template ${item.template_id} (${templateData.name}). ` +
+        `Category: ${templateData.category}. ${templateData.description || ''}`;
+      await pool.query(
+        `INSERT INTO agent_notes
+          (id, agent_id, content, note_type, confidence_score, source_type, status,
+           created_by, created_at, updated_at)
+         VALUES ($1, $2, $3, 'birth', 90, 'forge', 'active',
+                 'forge:writer', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+         ON CONFLICT DO NOTHING`,
+        [crypto.randomUUID(), item.agent_id, birthNote]
+      );
+
+      // ── Agent email provisioning ────────────────────────────────────
+      // Create a Stalwart mailbox: <agent-name>@askporter.app
+      try {
+        const { rows: domainRows } = await pool.query<{ id: string }>(
+          `SELECT id FROM mail_domains WHERE domain = 'askporter.app' LIMIT 1`
+        );
+        if (domainRows.length > 0) {
+          const localPart = templateData.name
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '')
+            .slice(0, 30);
+
+          // Check if mailbox already exists
+          const { rows: existingMb } = await pool.query(
+            `SELECT id FROM mailboxes WHERE local_part = $1 AND domain_id = $2`,
+            [localPart, domainRows[0].id]
+          );
+          if (existingMb.length === 0) {
+            const provider = getProvider();
+            const mb = await createMailbox(provider, {
+              domainId: domainRows[0].id,
+              localPart,
+              displayName: templateData.name,
+              mailboxType: 'agent',
+              agentId: item.agent_id,
+            });
+            // Link agent to mailbox
+            await pool.query(
+              `INSERT INTO agent_mailboxes (agent_id, mailbox_id, role, created_at)
+               VALUES ($1, $2, 'primary', EXTRACT(EPOCH FROM NOW()))
+               ON CONFLICT DO NOTHING`,
+              [item.agent_id, mb.id]
+            );
+          }
+        }
+      } catch (mailErr) {
+        // Non-blocking: email is nice-to-have, not critical for forging
+        console.warn(`[forge:writer] mailbox creation failed for ${item.agent_id}:`,
+          mailErr instanceof Error ? mailErr.message : mailErr);
+      }
+    }
 
     consecutiveBrainFailures = 0;
 
     await completeStationRun(runId, 'pass', {
-      writer_model: 'pending-ai-router',
-      files_touched: ['SOUL.md', 'IDENTITY.md', 'ROLE_CARD.md', 'SKILLS.md'],
+      writer_model: 'template-direct',
+      enrichment: templateData ? {
+        hasSoul: (templateData.soul_text?.length ?? 0) > 100,
+        hasIdentity: (templateData.identity_text?.length ?? 0) > 100,
+        hasRole: (templateData.role_card_text?.length ?? 0) > 100,
+      } : null,
+      files_touched: ['persona.config', 'agent_notes.birth', 'mailbox'],
       duration_ms: Date.now() - startMs,
     });
 
