@@ -3,7 +3,7 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.4.0
+version: v6.5.0
 updated: 2026-04-10
 updated_by: claude-opus-4.6
 
