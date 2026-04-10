@@ -31,6 +31,7 @@ import { runDispatchScoring } from './dispatch-scorer.js';
 import { runMemoryPruning } from './memory-pruner.js';
 import { runSelfMonitor } from './self-monitor.js';
 import { runPatternMining } from './pattern-miner.js';
+import { runToolDetection } from './tool-detector.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ export type WorkflowActionType =
   | 'memory_prune'
   | 'self_monitor'
   | 'pattern_mine'
+  | 'tool_detect'
   | 'noop';
 
 export interface WorkflowRow {
@@ -88,6 +90,7 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
   memory_prune: async () => runMemoryPruning(),
   self_monitor: async () => runSelfMonitor(),
   pattern_mine: async () => runPatternMining(),
+  tool_detect: async () => runToolDetection(),
   noop: async () => null,
 };
 
@@ -258,6 +261,12 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_type: 'schedule',
     trigger_value: 'every_24h',
     action_type: 'pattern_mine',
+  },
+  {
+    name: 'Detect available tools',
+    trigger_type: 'schedule',
+    trigger_value: 'every_6h',
+    action_type: 'tool_detect',
   },
 ];
 

@@ -19,6 +19,7 @@ import { emitEvent } from '../../services/intellect/workflow-engine.js';
 import { runMemoryPruning } from '../../services/intellect/memory-pruner.js';
 import { runSelfMonitor } from '../../services/intellect/self-monitor.js';
 import { runPatternMining } from '../../services/intellect/pattern-miner.js';
+import { runToolDetection } from '../../services/intellect/tool-detector.js';
 
 interface DirectiveRow {
   id: string;
@@ -490,6 +491,18 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       return reply.status(500).send(err('PATTERN_MINE_FAILED', message));
+    }
+  });
+
+  // ── POST /detect-tools — run tool detection scan ────────────────────
+
+  fastify.post('/detect-tools', async (_request, reply) => {
+    try {
+      const result = await runToolDetection();
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('TOOL_DETECTION_FAILED', message));
     }
   });
 
