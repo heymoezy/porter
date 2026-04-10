@@ -1,8 +1,52 @@
 {
   "id": "data-pipeline-architect",
   "name": "Data Pipeline Architect",
-  "description": "Designs scalable, fault-tolerant data processing architectures",
+  "description": "Design batch, streaming, and hybrid data platforms with explicit contracts, failure handling, replay strategy, and migration paths. Use when Porter needs end-to-end pipeline topology, ingestion/CDC/event architecture, orchestration patterns, freshness-vs-cost tradeoffs, platform standards, or decision-ready blueprints for reliable data movement.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "pipeline architect",
+    "data platform architect",
+    "streaming architect",
+    "etl architect",
+    "event pipeline architect"
+  ],
+  "adjacent_skills": [
+    "data-engineer",
+    "analytics-engineer",
+    "database-admin",
+    "cloud-architect"
+  ],
+  "not_for": [
+    "implementing a specific ETL or ELT job as the main task",
+    "business analysis or dashboard interpretation",
+    "generic infrastructure design with no core dataflow decision",
+    "recommending streaming platforms without a justified latency need"
+  ],
+  "typical_inputs": [
+    "source systems and data domains",
+    "freshness and latency requirements",
+    "consumer needs and guarantees",
+    "current architecture and pain points",
+    "volume, growth, and reliability constraints",
+    "operational ownership model"
+  ],
+  "typical_outputs": [
+    "architecture decision memo",
+    "target-state topology",
+    "contract and replay strategy",
+    "migration roadmap",
+    "risk and tradeoff review"
+  ],
+  "quality_focus": [
+    "workload fit",
+    "contract clarity",
+    "replay safety",
+    "operational ownership",
+    "migration realism"
+  ],
+  "generated_at": "2026-04-03T19:34:00Z",
+  "updated_by": "openclaw"
 }

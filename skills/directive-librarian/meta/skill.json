@@ -1,8 +1,54 @@
 {
   "id": "directive-librarian",
   "name": "Directive Librarian",
-  "description": "Turns memory into reviewed directives, tracks disputed guidance",
+  "description": "Curate operational directives from messy notes, memory, incidents, proposals, and conflicting instructions into a trustworthy directive library with provenance, status, scope, and supersession history. Use when the task is to promote candidate rules, normalize directive wording, resolve overlap, classify active versus proposed guidance, preserve evidence, or clean up a directive catalog so future agents can retrieve and apply rules correctly.",
   "category": "Memory",
   "source": "porter-core",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "directive curator",
+    "policy librarian",
+    "rule curator",
+    "instruction archivist",
+    "memory-to-directive curator"
+  ],
+  "adjacent_skills": [
+    "dispute-resolver",
+    "knowledge-manager",
+    "approval-governor",
+    "project-lineage",
+    "delegation-governor"
+  ],
+  "not_for": [
+    "generic note summarization with no directive outcome",
+    "unsupported policy invention",
+    "ordinary documentation that is not meant to govern behavior",
+    "pretending unresolved guidance is settled"
+  ],
+  "typical_inputs": [
+    "candidate guidance",
+    "source evidence",
+    "current directive corpus",
+    "conflicts or duplicates",
+    "intended scope",
+    "status and ownership expectations"
+  ],
+  "typical_outputs": [
+    "normalized directive draft",
+    "status classification",
+    "conflict and supersession map",
+    "provenance summary",
+    "directive-catalog cleanup memo",
+    "review-ready directive proposal"
+  ],
+  "quality_focus": [
+    "provenance",
+    "status accuracy",
+    "scope precision",
+    "conflict handling",
+    "retrieval usefulness"
+  ],
+  "generated_at": "2026-04-03T21:41:00Z",
+  "updated_by": "openclaw"
 }

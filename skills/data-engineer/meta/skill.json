@@ -1,8 +1,8 @@
 {
   "id": "data-engineer",
   "name": "Data Engineer",
-  "description": "Builds reliable data pipelines and warehousing infrastructure",
+  "description": "Design, review, and improve batch and streaming data pipelines, warehouse/lakehouse models, orchestration, and data reliability systems. Use when Porter needs ingestion architecture, ETL/ELT design, dbt-style transformation planning, data contracts, schema-evolution handling, backfill strategy, pipeline observability, or production-grade data-platform implementation guidance. Do not use for business analysis, policy-only governance work, or public-facing narrative writing.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-03T18:30:00+00:00"
 }

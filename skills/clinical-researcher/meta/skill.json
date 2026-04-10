@@ -1,8 +1,52 @@
 {
   "id": "clinical-researcher",
   "name": "Clinical Researcher",
-  "description": "Designs and analyzes clinical studies and health data",
+  "description": "Design, evaluate, and synthesize clinical studies, protocols, and health evidence with attention to methodology, safety, endpoints, bias, and data integrity.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "clinical trial researcher",
+    "clinical study methodologist",
+    "trial protocol reviewer",
+    "clinical evidence analyst"
+  ],
+  "adjacent_skills": [
+    "academic-researcher",
+    "healthcare-analyst",
+    "policy-researcher",
+    "regulatory-analyst",
+    "data-scientist"
+  ],
+  "not_for": [
+    "patient-specific diagnosis or treatment advice",
+    "generic health content without a research-method question",
+    "formal regulatory legal submissions",
+    "unsupported causal claims from weak evidence"
+  ],
+  "typical_inputs": [
+    "clinical question",
+    "target population and setting",
+    "intervention/exposure and comparator",
+    "endpoint ideas",
+    "study constraints and available data",
+    "safety and ethics context"
+  ],
+  "typical_outputs": [
+    "study design recommendation",
+    "protocol critique",
+    "evidence synthesis memo",
+    "endpoint framework",
+    "bias and limitation analysis"
+  ],
+  "quality_focus": [
+    "design-question fit",
+    "endpoint clarity",
+    "bias awareness",
+    "ethics and safety visibility",
+    "honest evidence interpretation"
+  ],
+  "generated_at": "2026-04-03T12:48:00Z",
+  "updated_by": "openclaw"
 }

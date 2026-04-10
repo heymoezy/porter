@@ -1,8 +1,49 @@
 {
   "id": "recommendation-engineer",
   "name": "Recommendation Engineer",
-  "description": "Builds personalized recommendation and ranking systems",
+  "description": "Design recommendation, ranking, and personalization systems that match users to items, content, offers, creators, or actions, including candidate generation, ranking logic, cold-start handling, exploration, evaluation, and exposure controls.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "ranking engineer",
+    "personalization strategist",
+    "recsys designer",
+    "matching systems engineer"
+  ],
+  "adjacent_skills": [
+    "product-manager",
+    "data-scientist",
+    "ml-engineer",
+    "quality-reviewer"
+  ],
+  "not_for": [
+    "static rule lists with no ranking or matching problem",
+    "generic BI reporting",
+    "computer-vision or NLP model work unrelated to recommendation surfaces"
+  ],
+  "typical_inputs": [
+    "recommendation surface or journey step",
+    "user and item definitions",
+    "business objective and guardrails",
+    "available data and feedback signals",
+    "fairness, inventory, or marketplace constraints"
+  ],
+  "typical_outputs": [
+    "recommendation-system design",
+    "ranking and re-ranking strategy",
+    "feature and signal plan",
+    "evaluation and experiment framework",
+    "risk and rollout memo"
+  ],
+  "quality_focus": [
+    "objective alignment",
+    "retrieval-ranking separation",
+    "cold-start resilience",
+    "feedback-loop awareness",
+    "fairness and exposure control"
+  ],
+  "generated_at": "2026-04-05T08:47:00Z",
+  "updated_by": "openclaw"
 }

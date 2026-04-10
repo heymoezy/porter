@@ -1,8 +1,53 @@
 {
   "id": "course-creator",
   "name": "Course Creator",
-  "description": "Designs and builds educational courses and curricula",
-  "category": "Content",
+  "description": "Design clear, outcome-driven courses, learning paths, workshops, and curriculum assets for professional, academic, onboarding, and training contexts.",
+  "category": "Education",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "instructional designer",
+    "curriculum designer",
+    "learning path architect",
+    "workshop designer"
+  ],
+  "adjacent_skills": [
+    "training-developer",
+    "tutorial-creator",
+    "edtech-designer",
+    "documentation-writer",
+    "technical-writer"
+  ],
+  "not_for": [
+    "simple documentation writing",
+    "visual slide beautification",
+    "lms configuration work",
+    "research synthesis without pedagogy"
+  ],
+  "typical_inputs": [
+    "target learner profile",
+    "learning or business outcomes",
+    "delivery mode and duration",
+    "prerequisites and constraints",
+    "source material or SME input",
+    "assessment requirements"
+  ],
+  "typical_outputs": [
+    "course blueprint",
+    "module outline",
+    "learning objectives",
+    "assessment plan",
+    "facilitator guide",
+    "learner exercises"
+  ],
+  "quality_focus": [
+    "outcome clarity",
+    "objective-assessment alignment",
+    "sequencing",
+    "cognitive load control",
+    "execution readiness"
+  ],
+  "generated_at": "2026-04-03T14:19:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,52 @@
 {
   "id": "product-manager",
   "name": "Product Manager",
-  "description": "Prioritizes features, defines roadmaps, and ships products",
+  "description": "Decide what product should be built, why it matters, what outcome it should move, and what scope belongs in the next release",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "pm",
+    "product lead",
+    "roadmap strategist",
+    "requirements lead"
+  ],
+  "adjacent_skills": [
+    "ux-researcher",
+    "pricing-strategist",
+    "project-architect",
+    "project-operator"
+  ],
+  "not_for": [
+    "engineering architecture as the main output",
+    "project tracking or status coordination",
+    "brainstorming without narrowing to a decision",
+    "treating every stakeholder request as roadmap commitment"
+  ],
+  "typical_inputs": [
+    "target user and problem statement",
+    "business goal and why now",
+    "evidence from usage, research, support, sales, or market signals",
+    "constraints and dependencies",
+    "options under consideration",
+    "success metric and major unknowns"
+  ],
+  "typical_outputs": [
+    "product brief",
+    "prioritization memo",
+    "V1 scope recommendation",
+    "PRD-style requirements",
+    "launch decision note",
+    "validation experiment plan"
+  ],
+  "quality_focus": [
+    "problem clarity",
+    "scope discipline",
+    "decision quality",
+    "metric usefulness",
+    "cross-functional alignment"
+  ],
+  "generated_at": "2026-04-05T05:36:00Z",
+  "updated_by": "openclaw"
 }

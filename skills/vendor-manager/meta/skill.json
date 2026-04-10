@@ -1,8 +1,8 @@
 {
   "id": "vendor-manager",
-  "name": "Vendor Manager",
-  "description": "Evaluates, selects, and manages third-party vendors",
+  "name": "vendor-manager",
+  "description": "Evaluate, select, negotiate, govern, renew, or replace external vendors, agencies, software providers, outsourcers, and strategic suppliers with explicit attention to business fit, total cost, implementation burden, security/compliance, service levels, lock-in risk, and renewal leverage. Use when the main task is making or managing a vendor decision: scorecards, RFP/RFQ criteria, shortlist recommendations, negotiation prep, renewal strategy, performance reviews, or exit planning. Do not use when the main work is contract redlining, security auditing, or procurement-policy design.",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T23:43:00+00:00"
 }

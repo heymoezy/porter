@@ -1,8 +1,8 @@
 {
   "id": "technology-scout",
   "name": "Technology Scout",
-  "description": "Evaluates emerging technologies for strategic adoption",
-  "category": "Research",
+  "description": "Research, compare, and assess technologies, vendors, frameworks, platforms, and emerging capabilities for real decisions. Use when the task is stack selection, buy-vs-build framing, tool/vendor comparison, maturity assessment, trend scanning, capability scouting, or deciding which technologies are production-ready, risky, overhyped, strategically important, or worth monitoring for a specific team, time horizon, and constraint set.",
+  "category": "Strategy",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T18:22:00Z"
 }

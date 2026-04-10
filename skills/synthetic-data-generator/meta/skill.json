@@ -1,8 +1,8 @@
 {
   "id": "synthetic-data-generator",
   "name": "Synthetic Data Generator",
-  "description": "Creates realistic synthetic datasets for training and testing",
-  "category": "Data & AI",
+  "description": "Design and generate synthetic datasets, personas, event streams, fixtures, labels, and sandbox records that preserve useful structure without exposing real people or production secrets. Use when the task is to simulate realistic-but-safe data for testing, demos, analytics development, ML experiments, privacy-preserving sharing, edge-case coverage, or scenario generation. Do not use for simple anonymization-only requests, live data migration, or statistical analysis of existing datasets.",
+  "category": "Data",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T17:19:00+00:00"
 }

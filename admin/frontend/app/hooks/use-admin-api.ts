@@ -274,22 +274,6 @@ export function useHealth() {
   })
 }
 
-// ── Billing ────────────────────────────────────────────
-
-export function useBillingSubscriptions() {
-  return useQuery({
-    queryKey: ["admin", "billing", "subscriptions"],
-    queryFn: () => api<{ subscriptions: Array<Record<string, unknown>> }>("/api/admin/billing/subscriptions"),
-  })
-}
-
-export function useBillingStats() {
-  return useQuery({
-    queryKey: ["admin", "billing", "stats"],
-    queryFn: () => api<{ total: number; active: number; trialing: number }>("/api/admin/billing/stats"),
-  })
-}
-
 // ── Email ──────────────────────────────────────────────
 
 export function useEmailConfig() {

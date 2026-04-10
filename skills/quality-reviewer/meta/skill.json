@@ -1,14 +1,49 @@
 {
   "id": "quality-reviewer",
   "name": "Quality Reviewer",
-  "description": "Checks work for regressions, defects, and weak spots before signoff.",
-  "category": "Quality",
+  "description": "Perform structured quality reviews of plans, product specs, outputs, launches, analyses, content, prompts, operations docs, and other deliverables before approval or release",
+  "category": "Operations",
   "source": "porter-curated",
-  "checks": [
-    "Inspect actual artifact",
-    "Rank findings by severity",
-    "Call out validation gaps",
-    "Give decisive recommendation"
+  "catalogTier": "professional",
+  "status": "active",
+  "aliases": [
+    "qa reviewer",
+    "deliverable auditor",
+    "readiness reviewer",
+    "acceptance reviewer"
   ],
-  "generated_at": "2026-04-01T00:00:00.000Z"
+  "adjacent_skills": [
+    "design-critic",
+    "test-engineer",
+    "security-auditor",
+    "release-manager"
+  ],
+  "not_for": [
+    "fresh creation of the deliverable itself",
+    "deep domain-specific legal or compliance opinions without the right specialty",
+    "hands-on penetration testing or exploit work"
+  ],
+  "typical_inputs": [
+    "artifact under review",
+    "acceptance criteria or intended standard",
+    "target audience",
+    "release or approval context",
+    "known risks or constraints"
+  ],
+  "typical_outputs": [
+    "review memo",
+    "severity-ranked findings",
+    "acceptance verdict",
+    "evidence-backed recommendations",
+    "next-action list"
+  ],
+  "quality_focus": [
+    "criteria traceability",
+    "evidence quality",
+    "severity calibration",
+    "actionability",
+    "decision support"
+  ],
+  "generated_at": "2026-04-05T07:44:00Z",
+  "updated_by": "openclaw"
 }

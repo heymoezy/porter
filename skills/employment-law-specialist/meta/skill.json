@@ -1,8 +1,52 @@
 {
   "id": "employment-law-specialist",
   "name": "Employment Law Specialist",
-  "description": "Advises on employment law, contracts, and HR compliance",
+  "description": "Analyze workplace scenarios, employment policies, HR decisions, and people-risk questions to identify likely employment-law issues, missing facts, safer process steps, and escalation points.",
   "category": "Legal",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "labor law specialist",
+    "workplace law analyst",
+    "employment compliance analyst",
+    "hr legal risk specialist"
+  ],
+  "adjacent_skills": [
+    "compliance-officer",
+    "contract-reviewer",
+    "dispute-resolver",
+    "policy-drafter",
+    "risk-assessor"
+  ],
+  "not_for": [
+    "definitive jurisdiction-specific legal advice",
+    "litigation strategy or attorney-of-record work",
+    "final legal signoff on high-risk actions without counsel",
+    "drafting binding legal instruments as a substitute for attorney review"
+  ],
+  "typical_inputs": [
+    "jurisdiction and worker location",
+    "worker status and relationship details",
+    "facts, chronology, and available documentation",
+    "relevant policy language, contracts, or obligations",
+    "business objective, timing, and risk tolerance"
+  ],
+  "typical_outputs": [
+    "employment-law issue-spotting memo",
+    "HR risk summary",
+    "policy review with legal flags",
+    "fact checklist for counsel",
+    "decision options with cautions",
+    "manager guidance annotated with risk notes"
+  ],
+  "quality_focus": [
+    "issue spotting",
+    "factual precision",
+    "retaliation and protected-activity awareness",
+    "process-risk reduction",
+    "safe escalation boundaries"
+  ],
+  "generated_at": "2026-04-04T00:53:00Z",
+  "updated_by": "openclaw"
 }

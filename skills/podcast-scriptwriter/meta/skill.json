@@ -1,8 +1,55 @@
 {
   "id": "podcast-scriptwriter",
   "name": "Podcast Scriptwriter",
-  "description": "Writes structured, engaging podcast scripts",
+  "description": "Write podcast episodes, host reads, interview outlines, beat sheets, intros, outros, sponsor segments, and narrative audio scripts that sound natural when spoken.",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "podcast writer",
+    "audio scriptwriter",
+    "podcast rundown writer",
+    "host scriptwriter",
+    "podcast outline writer"
+  ],
+  "adjacent_skills": [
+    "podcast-producer",
+    "copywriter",
+    "story-editor",
+    "speech-writer",
+    "content-writer"
+  ],
+  "not_for": [
+    "designing the overall podcast production system or release workflow",
+    "blog posts or essays meant mainly for reading instead of listening",
+    "technical audio editing or mixing guidance",
+    "screenplay or non-podcast voiceover work as the primary deliverable"
+  ],
+  "typical_inputs": [
+    "show format, audience, and host voice",
+    "episode objective and required listener payoff",
+    "target runtime and desired script tightness",
+    "guest details, research notes, or source material",
+    "required segments, sponsor reads, CTAs, or disclaimers",
+    "examples of previous episodes or tonal references"
+  ],
+  "typical_outputs": [
+    "full episode script",
+    "beat sheet or rundown",
+    "interview question architecture",
+    "intro / outro package",
+    "sponsor-read variants",
+    "spoken-flow revision notes"
+  ],
+  "quality_focus": [
+    "spoken clarity",
+    "listener momentum",
+    "voice authenticity",
+    "runtime control",
+    "smooth transitions",
+    "recordability"
+  ],
+  "generated_at": "2026-04-05T02:24:00Z",
+  "updated_by": "openclaw"
 }

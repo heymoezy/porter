@@ -1,8 +1,8 @@
 {
   "id": "technical-writer",
   "name": "Technical Writer",
-  "description": "Produces clear, accurate technical documentation",
+  "description": "Explain complex technical systems, APIs, architecture, release changes, and operating procedures with high precision and reader-first clarity. Use when the main task is translating technical reality into trustworthy documentation: developer guides, runbooks, API explanations, migration notes, release notes, onboarding docs, incident explainers, or operational procedures where correctness, caveats, and execution safety matter more than persuasion, brand voice, or documentation IA work.",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T18:22:00Z"
 }

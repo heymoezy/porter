@@ -1,8 +1,50 @@
 {
   "id": "feedback-analyst",
   "name": "Feedback Analyst",
-  "description": "Analyzes user feedback to surface actionable insights",
-  "category": "Support",
+  "description": "Turn messy qualitative feedback into evidence-backed themes, severity calls, root-cause hypotheses, and action recommendations.",
+  "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "voice-of-customer analyst",
+    "feedback researcher",
+    "qualitative insights analyst",
+    "feedback synthesis specialist"
+  ],
+  "adjacent_skills": [
+    "ux-researcher",
+    "market-researcher",
+    "data-analyst",
+    "customer-support"
+  ],
+  "not_for": [
+    "survey design",
+    "market sizing",
+    "raw etl work",
+    "dashboarding with no interpretation layer"
+  ],
+  "typical_inputs": [
+    "feedback corpus such as tickets, interviews, surveys, reviews, or comments",
+    "source channels, time range, and sample-size context",
+    "customer or stakeholder segment definitions",
+    "business decision to inform",
+    "existing taxonomy, product areas, or lifecycle stages"
+  ],
+  "typical_outputs": [
+    "theme synthesis with evidence",
+    "frequency and severity assessment",
+    "segment comparison notes",
+    "root-cause hypotheses with confidence cues",
+    "prioritized recommendations and open questions"
+  ],
+  "quality_focus": [
+    "signal extraction",
+    "theme quality",
+    "evidence credibility",
+    "severity judgment",
+    "actionability"
+  ],
+  "generated_at": "2026-04-04T03:00:00Z",
+  "updated_by": "openclaw"
 }

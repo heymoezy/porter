@@ -1,8 +1,51 @@
 {
   "id": "service-level-monitor",
   "name": "Service Level Monitor",
-  "description": "Tracks SLA compliance and service quality metrics",
-  "category": "Support",
+  "description": "Translate uptime, latency, error, queue, response, and resolution data into clear SLA or SLO posture, burn rate, breach risk, and action-ready reporting.",
+  "category": "Operations",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "slo monitor",
+    "sla analyst",
+    "service quality monitor",
+    "error budget reporter"
+  ],
+  "adjacent_skills": [
+    "site-reliability",
+    "runtime-auditor",
+    "operations-manager",
+    "risk-assessor"
+  ],
+  "not_for": [
+    "inventing targets after the fact",
+    "masking poor service with selective reporting windows",
+    "incident root-cause deep-dives better handled elsewhere",
+    "dashboard updates with no operational action path"
+  ],
+  "typical_inputs": [
+    "service target definitions and windows",
+    "availability, latency, error, queue, or support-response data",
+    "measurement clocks, exclusions, and source-of-truth details",
+    "recent incidents, trends, and open degradations",
+    "customer commitments, penalties, or escalation rules"
+  ],
+  "typical_outputs": [
+    "sla/slo status report",
+    "breach-risk alert",
+    "error-budget summary",
+    "trend memo",
+    "customer-facing service update",
+    "target-definition clarification note"
+  ],
+  "quality_focus": [
+    "target integrity",
+    "measurement discipline",
+    "burn-rate awareness",
+    "actionability",
+    "stakeholder trust"
+  ],
+  "generated_at": "2026-04-05T11:59:00Z",
+  "updated_by": "openclaw"
 }

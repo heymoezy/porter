@@ -1,8 +1,8 @@
 {
   "id": "investment-analyst",
   "name": "Investment Analyst",
-  "description": "Evaluates investment opportunities and portfolio allocation",
-  "category": "Business",
+  "description": "Evaluate companies, markets, and investment opportunities with disciplined, assumption-aware financial reasoning. Use when work involves diligence memos, business quality assessment, unit economics, market sizing, competitive positioning, scenario analysis, valuation framing, portfolio monitoring, or investment committee preparation. Do not use for personalized investment advice, legal or tax advice, regulated securities recommendations, or fabricated market or financial data.",
+  "category": "Finance",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T13:41:00+00:00"
 }

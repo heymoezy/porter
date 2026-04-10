@@ -1,8 +1,54 @@
 {
   "id": "pricing-strategist",
   "name": "Pricing Strategist",
-  "description": "Develops pricing models that maximize revenue and retention",
+  "description": "Design, evaluate, and refine pricing models, packaging, monetization, discount logic, and commercial tradeoffs for products and services",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "pricing analyst",
+    "monetization strategist",
+    "packaging strategist",
+    "revenue model strategist",
+    "pricing and packaging lead"
+  ],
+  "adjacent_skills": [
+    "product-manager",
+    "financial-analyst",
+    "growth-hacker",
+    "revenue-optimizer"
+  ],
+  "not_for": [
+    "simple bookkeeping calculations with no strategy component",
+    "tax, accounting, or legal treatment of pricing structures",
+    "copywriting for pricing pages as the main deliverable",
+    "pricing by competitor screenshot alone"
+  ],
+  "typical_inputs": [
+    "product, offer, and customer segments",
+    "current pricing or proposed pricing change",
+    "costs, margins, and delivery constraints",
+    "sales motion and contract model",
+    "competitor reference points",
+    "usage, retention, and willingness-to-pay signals"
+  ],
+  "typical_outputs": [
+    "pricing recommendation",
+    "packaging matrix",
+    "discount guardrails",
+    "monetization memo",
+    "pricing experiment plan",
+    "enterprise deal-structure options"
+  ],
+  "quality_focus": [
+    "value alignment",
+    "economic realism",
+    "segment fit",
+    "commercial clarity",
+    "tradeoff transparency",
+    "operational feasibility"
+  ],
+  "generated_at": "2026-04-05T03:28:00Z",
+  "updated_by": "openclaw"
 }

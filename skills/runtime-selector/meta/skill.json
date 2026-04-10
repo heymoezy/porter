@@ -1,8 +1,51 @@
 {
   "id": "runtime-selector",
   "name": "Runtime Selector",
-  "description": "Chooses the right runtime for each job",
+  "description": "Select the best runtime or model path for a task by balancing capability, latency, cost, reliability, context fit, policy constraints, and fallback behavior.",
   "category": "Infrastructure",
   "source": "porter-core",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "catalogTier": "system",
+  "status": "active",
+  "aliases": [
+    "model router strategist",
+    "execution path selector",
+    "runtime routing specialist",
+    "workload-to-runtime matcher"
+  ],
+  "adjacent_skills": [
+    "runtime-auditor",
+    "roster-curator",
+    "site-reliability",
+    "security-auditor"
+  ],
+  "not_for": [
+    "choosing by benchmark prestige or personal preference alone",
+    "ignoring runtime health, quotas, or policy constraints",
+    "routing sensitive work to non-compliant paths",
+    "postmortem-style auditing of live runtime failures"
+  ],
+  "typical_inputs": [
+    "task type, complexity, and quality target",
+    "latency and cost requirements",
+    "context length, tool use, or multimodal needs",
+    "runtime health, quota state, and fallback options",
+    "privacy, security, and policy constraints"
+  ],
+  "typical_outputs": [
+    "runtime recommendation memo",
+    "routing policy",
+    "fallback chain",
+    "tradeoff summary",
+    "degraded-mode routing adjustment",
+    "policy-safe execution-path choice"
+  ],
+  "quality_focus": [
+    "workload classification",
+    "constraint balancing",
+    "cost discipline",
+    "fallback design",
+    "operational explainability"
+  ],
+  "generated_at": "2026-04-05T10:55:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,49 @@
 {
   "id": "regulatory-analyst",
   "name": "Regulatory Analyst",
-  "description": "Analyzes regulatory requirements and impact assessments",
-  "category": "Legal",
+  "description": "Analyze laws, regulations, regulator guidance, enforcement materials, and compliance obligations, then translate them into jurisdiction-aware operational requirements, applicability assessments, obligation maps, and change-impact analyses.",
+  "category": "Legal & Compliance",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "compliance analyst",
+    "policy analyst",
+    "regulatory researcher",
+    "obligations mapper"
+  ],
+  "adjacent_skills": [
+    "policy-researcher",
+    "risk-assessor",
+    "research-analyst",
+    "quality-reviewer"
+  ],
+  "not_for": [
+    "formal legal representation or privileged legal advice",
+    "contract redlining or negotiation",
+    "litigation strategy"
+  ],
+  "typical_inputs": [
+    "jurisdiction and regulator",
+    "regulation, rule text, or guidance",
+    "business model or operating process",
+    "effective dates, thresholds, and exemptions",
+    "current controls or compliance posture"
+  ],
+  "typical_outputs": [
+    "applicability analysis",
+    "obligations matrix",
+    "control and evidence mapping",
+    "change-impact memo",
+    "questions for counsel"
+  ],
+  "quality_focus": [
+    "source fidelity",
+    "jurisdiction precision",
+    "deadline and threshold accuracy",
+    "operational translation",
+    "disciplined uncertainty handling"
+  ],
+  "generated_at": "2026-04-05T08:47:00Z",
+  "updated_by": "openclaw"
 }

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router"
 import {
   Bell, Moon, Sun, ArrowLeft, X,
-  LayoutDashboard, CreditCard, Users,
+  LayoutDashboard, Users,
   Sparkles, Wrench, Activity, Bug, Monitor, Mail, FileText, Settings, Network, Flame, Route,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -27,7 +27,6 @@ const detailPrefixes = ["/users/", "/agents/"]
 const pageTitles: Array<{ path: string; exact?: boolean; label: string; icon: LucideIcon }> = [
   { path: "/", exact: true, label: "Dashboard", icon: LayoutDashboard },
   { path: "/dashboard", exact: true, label: "Dashboard", icon: LayoutDashboard },
-  { path: "/billing", label: "Revenue", icon: CreditCard },
   { path: "/users", label: "Customers", icon: Users },
   { path: "/forge", label: "Agent Forge", icon: Flame },
   { path: "/skills", label: "Skills", icon: Sparkles },

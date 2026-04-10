@@ -1,8 +1,53 @@
 {
   "id": "ai-safety-reviewer",
   "name": "AI Safety Reviewer",
-  "description": "Evaluates AI outputs for bias, toxicity, and alignment risks",
+  "description": "Review AI systems and outputs for safety, misuse, reliability, bias, privacy, security, and governance risks.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "ai risk reviewer",
+    "llm safety reviewer",
+    "model safety auditor",
+    "ai red team reviewer",
+    "alignment reviewer"
+  ],
+  "adjacent_skills": [
+    "security-auditor",
+    "model-evaluator",
+    "compliance-officer",
+    "prompt-architect",
+    "runtime-auditor"
+  ],
+  "not_for": [
+    "generic ML training tasks",
+    "accuracy benchmarking with no safety angle",
+    "vague ethics discussion with no system to assess",
+    "non-AI security reviews"
+  ],
+  "typical_inputs": [
+    "system description",
+    "deployment context",
+    "model capabilities",
+    "tool and data access",
+    "policy constraints",
+    "known incidents or failure cases"
+  ],
+  "typical_outputs": [
+    "risk review memo",
+    "red-team plan",
+    "risk register",
+    "release gate assessment",
+    "mitigation roadmap"
+  ],
+  "quality_focus": [
+    "real failure modes",
+    "model vs system risk separation",
+    "severity clarity",
+    "adversarial testing realism",
+    "actionable mitigations"
+  ],
+  "generated_at": "2026-04-03T12:08:00Z",
+  "updated_by": "openclaw"
 }

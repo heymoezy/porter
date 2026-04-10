@@ -84,7 +84,7 @@ export class OllamaAdapter implements GatewayAdapter {
     const start = Date.now();
 
     const body: Record<string, unknown> = {
-      model: req.model ?? 'qwen2.5-coder:1.5b',
+      model: req.model ?? 'gemma4:e4b',
       messages: req.messages,
       stream: false,
     };
@@ -140,7 +140,7 @@ export class OllamaAdapter implements GatewayAdapter {
 
   async *stream(req: BridgeDispatchRequest, signal: AbortSignal): AsyncIterable<string> {
     const body: Record<string, unknown> = {
-      model: req.model ?? 'qwen2.5-coder:1.5b',
+      model: req.model ?? 'gemma4:e4b',
       messages: req.messages,
       stream: true,
     };

@@ -1,8 +1,8 @@
 {
   "id": "monitoring-specialist",
   "name": "Monitoring Specialist",
-  "description": "Implements observability, alerting, and logging systems",
+  "description": "Design and improve production observability systems. Use when the main task is choosing what to instrument, how metrics/logs/traces should correlate, how dashboards should support triage, what should page versus ticket, how to add synthetic checks, or how to cut alert noise and telemetry cost without losing detection quality.",
   "category": "Infrastructure",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T22:08:00Z"
 }

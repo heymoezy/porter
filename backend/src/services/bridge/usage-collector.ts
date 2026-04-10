@@ -592,56 +592,51 @@ async function collectOllamaUsage(gatewayId: string): Promise<void> {
 async function collectGeminiUsage(gatewayId: string): Promise<void> {
   const nowSec = Date.now() / 1000;
   const hourCutoff = nowSec - ONE_HOUR_SEC;
+  const dayCutoff = nowSec - 86400;
 
   try {
-    // 1. Hourly % — Calculate from Porter's own dispatch log
-    // We assume 50 requests/hour for the free-tier as a stable baseline
-    const { rows } = await pool.query<{ cnt: string }>(`
+    // Hourly requests from Porter dispatch log
+    const { rows: hourRows } = await pool.query<{ cnt: string }>(`
       SELECT COUNT(*)::text AS cnt
       FROM bridge_dispatch_log
       WHERE gateway_id = $1 AND created_at >= $2
     `, [gatewayId, hourCutoff]);
 
-    const hourCount = parseInt(rows[0]?.cnt || '0', 10);
-    const hourLimit = 50; // Stable baseline for free-tier
+    const hourCount = parseInt(hourRows[0]?.cnt || '0', 10);
+    const hourLimit = 50;
     const hourResetAt = Math.floor(nowSec / 3600) * 3600 + 3600;
+    await upsertUsage(gatewayId, 'requests', 'hourly', hourCount, hourLimit, hourResetAt, nowSec);
 
-    // Map Hourly to 'session' period for UI
-    await upsertUsage(gatewayId, 'requests', 'session', hourCount, hourLimit, hourResetAt, nowSec);
+    // Daily requests from Porter dispatch log
+    const { rows: dayRows } = await pool.query<{ cnt: string }>(`
+      SELECT COUNT(*)::text AS cnt
+      FROM bridge_dispatch_log
+      WHERE gateway_id = $1 AND created_at >= $2
+    `, [gatewayId, dayCutoff]);
 
-    // 2. Daily % — Fetch real quota from Google API
-    if (fs.existsSync(GEMINI_OAUTH_PATH)) {
-      const oauth = JSON.parse(fs.readFileSync(GEMINI_OAUTH_PATH, 'utf-8'));
-      const accessToken = oauth.access_token;
+    const dayCount = parseInt(dayRows[0]?.cnt || '0', 10);
+    const dayLimit = 500;
+    const dayResetAt = Math.floor(nowSec / 86400) * 86400 + 86400;
+    await upsertUsage(gatewayId, 'requests', 'daily', dayCount, dayLimit, dayResetAt, nowSec);
 
-      if (accessToken) {
-        const resp = await fetch(GEMINI_QUOTA_URL, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ project: 'cloudaicompanion-project-id' }),
-          signal: AbortSignal.timeout(10000),
-        });
+    // Per-model daily token usage from dispatch log
+    const { rows: modelRows } = await pool.query<{ model_name: string; req_count: string; total_in: string; total_out: string }>(`
+      SELECT model_name, COUNT(*)::text AS req_count,
+             COALESCE(SUM(input_tokens), 0)::text AS total_in,
+             COALESCE(SUM(output_tokens), 0)::text AS total_out
+      FROM bridge_dispatch_log
+      WHERE gateway_id = $1 AND created_at >= $2 AND model_name IS NOT NULL
+      GROUP BY model_name
+    `, [gatewayId, dayCutoff]);
 
-        if (resp.ok) {
-          const data = await resp.json() as { buckets?: any[] };
-          // Find the bucket for our active model (Flash or Pro)
-          const bucket = data.buckets?.find(b => b.modelId === 'gemini-2.5-flash' || b.modelId === 'gemini-2.5-pro' || b.modelId === 'gemini-3-flash-preview');
-
-          if (bucket && bucket.remainingFraction != null) {
-            const usedPct = Math.round((1 - bucket.remainingFraction) * 10000) / 100;
-            const resetAt = bucket.resetTime ? Math.floor(new Date(bucket.resetTime).getTime() / 1000) : null;
-
-            await upsertUsageProvider(gatewayId, 'requests', 'daily', usedPct, 100, resetAt, nowSec);
-
-            console.log('[usage-collector] Gemini usage: session(hourly)=%d/%d daily=%s%%',
-              hourCount, hourLimit, usedPct.toFixed(1));
-          }
-        }
-      }
+    for (const m of modelRows) {
+      const tokens = parseInt(m.total_in, 10) + parseInt(m.total_out, 10);
+      await upsertUsage(gatewayId, 'tokens', 'daily', tokens, null, dayResetAt, nowSec, m.model_name);
+      await upsertUsage(gatewayId, 'requests', 'daily', parseInt(m.req_count, 10), null, dayResetAt, nowSec, m.model_name);
     }
+
+    console.log('[usage-collector] Gemini: hourly=%d/%d daily=%d/%d models=%d',
+      hourCount, hourLimit, dayCount, dayLimit, modelRows.length);
   } catch (err) {
     console.error('[usage-collector] gemini quota error:', err instanceof Error ? err.message : err);
   }
@@ -850,11 +845,12 @@ async function upsertUsage(
   limitValue: number | null,
   resetAt: number | null,
   now: number,
+  modelName: string | null = null,
 ): Promise<void> {
   await pool.query(
     `INSERT INTO gateway_rate_limits
        (id, gateway_id, model_name, limit_type, period, limit_value, current_value, reset_at, source, updated_at)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, 'collected', $8)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'collected', $9)
      ON CONFLICT (gateway_id, COALESCE(model_name, ''), limit_type, period) DO UPDATE SET
        current_value = EXCLUDED.current_value,
        reset_at = COALESCE(EXCLUDED.reset_at, gateway_rate_limits.reset_at),
@@ -864,7 +860,7 @@ async function upsertUsage(
          ELSE EXCLUDED.source
        END,
        updated_at = EXCLUDED.updated_at`,
-    [uuidv4(), gatewayId, limitType, period, limitValue, currentValue, resetAt, now],
+    [uuidv4(), gatewayId, modelName, limitType, period, limitValue, currentValue, resetAt, now],
   );
 }
 

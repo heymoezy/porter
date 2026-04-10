@@ -1,8 +1,8 @@
 {
   "id": "market-analyst",
   "name": "Market Analyst",
-  "description": "Analyzes market trends, sizing, and competitive landscape",
+  "description": "Analyze market size, structure, growth, demand drivers, competitive dynamics, and strategic whitespace for decision-makers. Use when work involves TAM/SAM/SOM, market definition, segment attractiveness, category structure, adoption drivers, substitute analysis, pricing context, market-entry logic, or investor/leadership market narratives. Do not use for primary-research execution, usability research, or hype-led trend commentary with no definitional rigor.",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T17:54:00+00:00"
 }

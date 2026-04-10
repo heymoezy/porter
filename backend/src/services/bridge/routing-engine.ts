@@ -713,9 +713,10 @@ export class RoutingEngine {
           yield token;
         }
 
-        // Stream finished successfully — calculate results and log dispatch
-        const rawOutputTokens = estimateTokens(fullResponse);
-        const inputTokens = estimateTokens(JSON.stringify(req.messages));
+        // Stream finished — use actual token counts from adapter if available, otherwise estimate
+        const adapterTokens = (decision.adapter as any).lastStreamTokens as { inputTokens?: number; outputTokens?: number } | null;
+        const rawOutputTokens = adapterTokens?.outputTokens ?? estimateTokens(fullResponse);
+        const inputTokens = adapterTokens?.inputTokens ?? estimateTokens(JSON.stringify(req.messages));
 
         // Phase 38-02: Tool output compression — compress verbose responses before logging
         let compressionStats: { tool_outputs_compressed: number; tokens_saved: number; compression_model: string } | null = null;

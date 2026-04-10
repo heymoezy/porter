@@ -1,8 +1,8 @@
 {
   "id": "data-governance",
-  "name": "Data Governance Specialist",
-  "description": "Enforces data quality, lineage, and compliance standards",
+  "name": "Data Governance",
+  "description": "Define and improve data ownership, stewardship, quality policy, metadata, lineage, access, retention, and control models for trustworthy enterprise data use. Use when Porter needs governance frameworks, stewardship operating models, classification schemes, data-quality accountability, metadata policy, access-control matrices, retention rules, or compliance-aware guidance for treating data as a managed asset. Do not use for low-level pipeline implementation, dashboard analysis, or public-facing storytelling.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-03T18:30:00+00:00"
 }

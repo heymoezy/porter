@@ -1,8 +1,53 @@
 {
   "id": "crypto-analyst",
   "name": "Crypto Analyst",
-  "description": "Evaluates blockchain projects, tokenomics, and DeFi protocols",
+  "description": "Analyze crypto assets, blockchain protocols, tokenomics, governance, ecosystem traction, and structural risk for investment, treasury, integration, and diligence work.",
   "category": "Domain",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "token analyst",
+    "defi analyst",
+    "protocol diligence analyst",
+    "blockchain risk analyst"
+  ],
+  "adjacent_skills": [
+    "security-auditor",
+    "financial-analyst",
+    "investment-analyst",
+    "regulatory-analyst",
+    "market-analyst"
+  ],
+  "not_for": [
+    "full smart-contract audits",
+    "short-term trading calls",
+    "legal or tax advice",
+    "generic market commentary without asset-specific diligence"
+  ],
+  "typical_inputs": [
+    "asset or protocol name",
+    "chain and category",
+    "tokenomics data",
+    "governance details",
+    "traction or usage metrics",
+    "decision context and time horizon"
+  ],
+  "typical_outputs": [
+    "diligence memo",
+    "tokenomics teardown",
+    "comparison table",
+    "risk register",
+    "governance review",
+    "scenario analysis"
+  ],
+  "quality_focus": [
+    "fact-vs-narrative discipline",
+    "value-accrual clarity",
+    "control-surface awareness",
+    "dependency analysis",
+    "falsifiable thesis framing"
+  ],
+  "generated_at": "2026-04-03T16:23:00Z",
+  "updated_by": "openclaw"
 }

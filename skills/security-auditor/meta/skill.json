@@ -1,8 +1,51 @@
 {
   "id": "security-auditor",
   "name": "Security Auditor",
-  "description": "Identifies vulnerabilities and enforces security best practices",
+  "description": "Assess applications, infrastructure, configurations, data flows, and operating practices for realistic security weaknesses, attack paths, control gaps, and unsafe defaults, then prioritize remediations and verification steps.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "security reviewer",
+    "application security auditor",
+    "threat-model reviewer",
+    "security posture analyst"
+  ],
+  "adjacent_skills": [
+    "risk-assessor",
+    "site-reliability",
+    "runtime-auditor",
+    "privacy-specialist"
+  ],
+  "not_for": [
+    "active exploitation against unauthorized targets",
+    "compliance-only reviews presented as security proof",
+    "generic best-practice dumping without system context",
+    "final legal, audit, or certification signoff"
+  ],
+  "typical_inputs": [
+    "system or architecture scope",
+    "assets, trust boundaries, and attacker assumptions",
+    "authn/authz, secret handling, and network exposure details",
+    "configuration, deployment, and dependency context",
+    "known incidents, scanner findings, or launch concerns"
+  ],
+  "typical_outputs": [
+    "security review memo",
+    "prioritized findings list",
+    "attack-path analysis",
+    "remediation plan",
+    "hardening checklist",
+    "fix verification plan"
+  ],
+  "quality_focus": [
+    "threat modeling",
+    "severity calibration",
+    "attack-path reasoning",
+    "remediation leverage",
+    "verification readiness"
+  ],
+  "generated_at": "2026-04-05T11:59:00Z",
+  "updated_by": "openclaw"
 }

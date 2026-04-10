@@ -1,8 +1,51 @@
 {
   "id": "etl-developer",
   "name": "ETL Developer",
-  "description": "Designs extract-transform-load workflows for data integration",
-  "category": "Data & AI",
+  "description": "Design, build, debug, and harden ETL and ELT pipelines so data moves correctly, repeatably, and observably between systems.",
+  "category": "Data",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "etl engineer",
+    "elt developer",
+    "data ingestion engineer",
+    "pipeline reliability engineer"
+  ],
+  "adjacent_skills": [
+    "data-engineer",
+    "analytics-engineer",
+    "data-pipeline-architect",
+    "database-admin"
+  ],
+  "not_for": [
+    "dashboard or BI interpretation",
+    "warehouse semantic modeling with no pipeline work",
+    "database administration unrelated to data movement",
+    "high-level tool comparison without operational design detail"
+  ],
+  "typical_inputs": [
+    "source systems, schemas, and extraction constraints",
+    "destination models and consumer requirements",
+    "cadence, freshness, latency, and volume expectations",
+    "business rules for deduplication, deletes, and identity resolution",
+    "current failures such as drift, duplicates, or stale loads"
+  ],
+  "typical_outputs": [
+    "ETL or ELT design memo",
+    "source-to-target mapping specification",
+    "incremental or CDC strategy recommendation",
+    "backfill and replay plan",
+    "quality-check and observability suite",
+    "pipeline diagnosis and hardening plan"
+  ],
+  "quality_focus": [
+    "correctness",
+    "idempotence",
+    "observability",
+    "recoverability",
+    "maintainability"
+  ],
+  "generated_at": "2026-04-04T01:56:00Z",
+  "updated_by": "openclaw"
 }

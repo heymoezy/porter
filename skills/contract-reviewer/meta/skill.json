@@ -1,8 +1,52 @@
 {
   "id": "contract-reviewer",
   "name": "Contract Reviewer",
-  "description": "Reviews contracts for risks, obligations, and compliance",
+  "description": "Review contracts, terms, MSAs, SOWs, NDAs, DPAs, procurement documents, and clause drafts for risk, obligations, ambiguity, negotiation leverage, and operational impact.",
   "category": "Legal",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "contract analyst",
+    "redline reviewer",
+    "commercial contracts reviewer",
+    "agreement risk reviewer"
+  ],
+  "adjacent_skills": [
+    "compliance-officer",
+    "legal-researcher",
+    "privacy-specialist",
+    "procurement-specialist"
+  ],
+  "not_for": [
+    "formal legal advice",
+    "attorney-client privileged work",
+    "litigation strategy",
+    "definitive jurisdiction-specific legal opinions without counsel"
+  ],
+  "typical_inputs": [
+    "contract text or excerpts",
+    "contract type and transaction context",
+    "party posture",
+    "governing law if known",
+    "business priorities and redlines",
+    "incorporated documents or exhibits"
+  ],
+  "typical_outputs": [
+    "contract summary",
+    "key terms table",
+    "risk-ranked issue list",
+    "redline recommendations",
+    "negotiation memo",
+    "counsel escalation note"
+  ],
+  "quality_focus": [
+    "deal-structure clarity",
+    "risk prioritization",
+    "asymmetry detection",
+    "business-impact translation",
+    "legal-boundary discipline"
+  ],
+  "generated_at": "2026-04-03T13:15:00Z",
+  "updated_by": "openclaw"
 }

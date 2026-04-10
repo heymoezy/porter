@@ -1,8 +1,50 @@
 {
   "id": "fullstack-dev",
   "name": "Fullstack Developer",
-  "description": "Delivers end-to-end features spanning UI through database",
+  "description": "Deliver product changes that require substantial, coupled work across frontend, backend, API contracts, data flow, and persistence in the same task.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "full-stack engineer",
+    "end-to-end developer",
+    "product fullstack engineer",
+    "cross-layer implementer"
+  ],
+  "adjacent_skills": [
+    "backend-dev",
+    "frontend-dev",
+    "feature-engineer",
+    "qa-engineer"
+  ],
+  "not_for": [
+    "frontend-led work with only incidental backend edits",
+    "backend-led work with only trivial UI changes",
+    "infrastructure or platform-only changes",
+    "architecture planning without a defined implementation slice"
+  ],
+  "typical_inputs": [
+    "user journey or product bug",
+    "existing UI/API/data boundaries",
+    "request and response semantics",
+    "persistence and rollout constraints",
+    "verification paths across unit, API, integration, and browser levels"
+  ],
+  "typical_outputs": [
+    "coordinated frontend and backend implementation",
+    "contract or state-model updates",
+    "tests and end-to-end verification notes",
+    "migration or rollout risks",
+    "follow-up recommendations"
+  ],
+  "quality_focus": [
+    "cross-layer coherence",
+    "truthful user outcomes",
+    "clear contract ownership",
+    "safe integration and rollout",
+    "ship-ready verification"
+  ],
+  "generated_at": "2026-04-04T05:08:00Z",
+  "updated_by": "openclaw"
 }

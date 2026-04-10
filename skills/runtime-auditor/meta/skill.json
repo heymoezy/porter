@@ -1,8 +1,51 @@
 {
   "id": "runtime-auditor",
   "name": "Runtime Auditor",
-  "description": "Inspects runtime state, routing pressure, failures",
+  "description": "Audit Porter runtime behavior to explain health, degradation, fallback pressure, latency, errors, queueing, and cost anomalies across model paths.",
   "category": "Infrastructure",
   "source": "porter-internal",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "catalogTier": "system",
+  "status": "active",
+  "aliases": [
+    "runtime health auditor",
+    "execution-path auditor",
+    "routing observability analyst",
+    "runtime incident diagnostician"
+  ],
+  "adjacent_skills": [
+    "runtime-selector",
+    "site-reliability",
+    "service-level-monitor",
+    "security-auditor"
+  ],
+  "not_for": [
+    "making production changes without authorization",
+    "guessing at root cause without evidence",
+    "debugging unrelated application features without runtime signals",
+    "long-term architecture redesign in place of current-state diagnosis"
+  ],
+  "typical_inputs": [
+    "runtime metrics, logs, traces, and alerts",
+    "latency, timeout, error, fallback, and queue signals",
+    "routing decisions and model-path health",
+    "recent deploys, config edits, or traffic shifts",
+    "baseline comparisons and user-impact reports"
+  ],
+  "typical_outputs": [
+    "runtime audit memo",
+    "health or incident summary",
+    "failure-mode diagnosis",
+    "bottleneck analysis",
+    "stabilization recommendation",
+    "escalation note"
+  ],
+  "quality_focus": [
+    "evidence discipline",
+    "timeline reconstruction",
+    "failure isolation",
+    "blast-radius clarity",
+    "operational judgment"
+  ],
+  "generated_at": "2026-04-05T10:55:00Z",
+  "updated_by": "openclaw"
 }

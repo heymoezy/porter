@@ -1,8 +1,8 @@
 {
   "id": "system-architect",
   "name": "System Architect",
-  "description": "Defines high-level system design and technology selection",
+  "description": "Design software system architecture, service boundaries, interaction patterns, data ownership, reliability posture, and migration shape for evolving platforms. Use when the main task is to decide how a system should be structured: monolith vs modular monolith vs services, sync vs async flows, platform decomposition, integration boundaries, scaling strategy, resilience design, or staged architecture evolution. Do not use for project-phase planning, narrow API contract design, or routine implementation inside an already chosen architecture.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T17:19:00+00:00"
 }

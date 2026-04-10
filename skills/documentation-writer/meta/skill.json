@@ -1,8 +1,53 @@
 {
   "id": "documentation-writer",
   "name": "Documentation Writer",
-  "description": "Produces clear technical documentation, READMEs, and API docs",
-  "category": "Engineering",
+  "description": "Write, restructure, and improve technical documentation, READMEs, API docs, runbooks, migration guides, onboarding docs, architecture notes, and internal knowledge pages so real readers can find answers and complete tasks reliably. Use when the core problem is explanation, information architecture, procedural clarity, documentation maintenance, or turning rough source material into accurate, scannable docs.",
+  "category": "Writing",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "technical documentation writer",
+    "docs specialist",
+    "README and runbook writer",
+    "developer docs writer",
+    "documentation editor"
+  ],
+  "adjacent_skills": [
+    "technical-writer",
+    "api-designer",
+    "knowledge-manager",
+    "product-manager",
+    "content-writer"
+  ],
+  "not_for": [
+    "marketing or campaign copy",
+    "legal drafting that needs specialist authority",
+    "implementation work without a documentation deliverable",
+    "pure UX microcopy tuning"
+  ],
+  "typical_inputs": [
+    "target audience and reader goals",
+    "source material such as code, specs, tickets, logs, or SME notes",
+    "doc type and required level of detail",
+    "version, environment, and permission constraints",
+    "existing docs, gaps, and known failure points"
+  ],
+  "typical_outputs": [
+    "documentation rewrite",
+    "README or quick-start guide",
+    "API or integration reference",
+    "runbook or operational guide",
+    "migration guide",
+    "documentation audit and restructure plan"
+  ],
+  "quality_focus": [
+    "reader success",
+    "accuracy",
+    "scannability",
+    "actionability",
+    "maintainability"
+  ],
+  "generated_at": "2026-04-03T22:45:00Z",
+  "updated_by": "openclaw"
 }

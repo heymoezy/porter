@@ -1,8 +1,8 @@
 {
   "id": "user-researcher",
-  "name": "User Researcher",
-  "description": "Conducts interviews, surveys, and usability studies",
+  "name": "user-researcher",
+  "description": "Plan and synthesize discovery research that explains users' goals, behaviors, constraints, motivations, decision criteria, workarounds, and unmet needs across the customer journey. Use when the main question is who the users are, what progress they are trying to make, why they choose current alternatives, where unmet needs or segment differences matter, or what evidence should shape product, messaging, onboarding, or go-to-market decisions. Do not use for narrow interface usability testing of a specific screen, flow, or prototype.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T22:39:00+00:00"
 }

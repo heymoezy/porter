@@ -1,8 +1,51 @@
 {
   "id": "gog",
   "name": "GoG",
-  "description": "Fast retrieval and structured lookup for docs and assets",
-  "category": "Research",
-  "source": "runtime",
-  "generated_at": "2026-04-02T04:10:02+00:00"
+  "description": "Operate Google Workspace through the gog / Google Workspace CLI for Gmail, Calendar, Drive, Docs, Sheets, Contacts, and related workspace actions.",
+  "category": "Operations",
+  "source": "porter-curated",
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "google workspace cli",
+    "gmail drive calendar operator",
+    "workspace automation operator",
+    "gog cli"
+  ],
+  "adjacent_skills": [
+    "email-writer",
+    "knowledge-manager",
+    "research-analyst",
+    "operations-manager"
+  ],
+  "not_for": [
+    "generic web research",
+    "non-Google file system work",
+    "deep analytical synthesis as the main task",
+    "unverified broad writes across workspace objects"
+  ],
+  "typical_inputs": [
+    "workspace app and account context",
+    "target object type and lookup criteria",
+    "read-only vs write intent",
+    "content to create, update, or retrieve",
+    "safety and traceability requirements"
+  ],
+  "typical_outputs": [
+    "gmail thread or draft summary",
+    "calendar event result",
+    "drive file shortlist with canonical links",
+    "docs or sheets update report",
+    "workspace automation summary",
+    "permission or ambiguity diagnosis"
+  ],
+  "quality_focus": [
+    "object accuracy",
+    "safe scoped operations",
+    "traceability",
+    "operational clarity",
+    "handoff usefulness"
+  ],
+  "generated_at": "2026-04-04T07:17:00Z",
+  "updated_by": "openclaw"
 }

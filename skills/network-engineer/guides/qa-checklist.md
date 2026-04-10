@@ -1,7 +1,9 @@
 # QA Checklist — Network Engineer
 
-- Changes follow infrastructure-as-code principles
-- Rollback plan is documented and tested
-- Security groups and access controls are reviewed
-- Monitoring and alerting cover the new components
-- Cost impact is estimated and acceptable
+- Traffic path, return path, and trust boundaries are explicit.
+- DNS, routing, firewall, NAT, MTU, TLS, and backend-health concerns are separated clearly.
+- Recommendations favor segmentation, least privilege, and simple topology where possible.
+- Change plans include blast radius, validation, and rollback steps.
+- Output names concrete evidence sources or commands for confirming hypotheses.
+- Documentation gaps are called out when they block safe operation or supportability.
+- Response is concise, concrete, and free of filler.

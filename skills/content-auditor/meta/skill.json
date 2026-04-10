@@ -1,8 +1,53 @@
 {
   "id": "content-auditor",
   "name": "Content Auditor",
-  "description": "Reviews existing content for accuracy, gaps, and quality",
+  "description": "Audit published or draft content for factual accuracy, structural weakness, messaging gaps, SEO issues, compliance risk, and conversion friction.",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "editorial auditor",
+    "content quality reviewer",
+    "copy audit specialist",
+    "content QA editor"
+  ],
+  "adjacent_skills": [
+    "content-writer",
+    "copywriter",
+    "seo-specialist",
+    "quality-reviewer",
+    "compliance-officer"
+  ],
+  "not_for": [
+    "writing net-new content from scratch",
+    "formal legal or compliance approval",
+    "technical SEO implementation",
+    "analytics-only reporting without content analysis"
+  ],
+  "typical_inputs": [
+    "content artifact or draft",
+    "target audience and channel",
+    "business goal or CTA",
+    "style or brand constraints",
+    "performance context if available",
+    "claims needing verification"
+  ],
+  "typical_outputs": [
+    "content audit summary",
+    "prioritized issue list",
+    "annotated rewrite plan",
+    "content scorecard",
+    "gap analysis",
+    "fix-now / fix-later plan"
+  ],
+  "quality_focus": [
+    "purpose alignment",
+    "issue prioritization",
+    "factual discipline",
+    "structural clarity",
+    "actionable recommendations"
+  ],
+  "generated_at": "2026-04-03T13:15:00Z",
+  "updated_by": "openclaw"
 }

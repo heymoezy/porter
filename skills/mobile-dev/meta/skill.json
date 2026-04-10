@@ -1,8 +1,21 @@
 {
   "id": "mobile-dev",
   "name": "Mobile Developer",
-  "description": "Creates native and cross-platform mobile applications",
+  "description": "Build, debug, and improve native or cross-platform mobile apps for iOS, Android, React Native, Flutter, Kotlin Multiplatform, or adjacent mobile stacks. Use when work involves mobile implementation, architecture, device APIs, push notifications, offline sync, startup and rendering performance, app-store readiness, release hardening, or production bug fixing.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "aliases": [
+    "ios-dev",
+    "android-dev",
+    "react-native-dev",
+    "flutter-dev",
+    "mobile-engineer"
+  ],
+  "adjacent_skills": [
+    "mobile-designer",
+    "frontend-dev",
+    "backend-dev",
+    "test-engineer"
+  ],
+  "generated_at": "2026-04-04T21:05:00+00:00"
 }

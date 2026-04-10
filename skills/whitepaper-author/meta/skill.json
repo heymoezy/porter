@@ -1,8 +1,55 @@
 {
   "id": "whitepaper-author",
   "name": "Whitepaper Author",
-  "description": "Writes authoritative whitepapers and research reports",
+  "description": "Plan, research, outline, draft, and refine authoritative whitepapers, research reports, and problem-solution thought-leadership documents for technical, policy, enterprise, or market topics.",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "white paper writer",
+    "research report writer",
+    "thought leadership writer",
+    "policy paper writer",
+    "executive whitepaper writer"
+  ],
+  "adjacent_skills": [
+    "technical-writer",
+    "market-researcher",
+    "policy-researcher",
+    "research-analyst",
+    "web-search"
+  ],
+  "not_for": [
+    "short-form ad copy",
+    "casual blog posts",
+    "seo filler disguised as research",
+    "unsupported opinion pieces",
+    "formal academic-journal submission workflows"
+  ],
+  "typical_inputs": [
+    "topic and thesis",
+    "target audience",
+    "available sources",
+    "document objective",
+    "length and citation expectations",
+    "tone and advocacy level"
+  ],
+  "typical_outputs": [
+    "working outline",
+    "executive summary",
+    "full or partial draft",
+    "argument map",
+    "citation plan",
+    "revision memo"
+  ],
+  "quality_focus": [
+    "argument clarity",
+    "credible sourcing",
+    "executive readability",
+    "claim discipline",
+    "persuasive structure"
+  ],
+  "generated_at": "2026-04-06T00:47:00Z",
+  "updated_by": "openclaw"
 }

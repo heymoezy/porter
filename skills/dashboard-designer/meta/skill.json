@@ -1,8 +1,8 @@
 {
   "id": "dashboard-designer",
   "name": "Dashboard Designer",
-  "description": "Designs data-rich dashboards that communicate clearly",
+  "description": "Design or critique dashboards, KPI layouts, analytics surfaces, and monitoring views that let users understand status at a glance and know what to do next. Use when Porter needs dashboard information architecture, metric hierarchy, chart selection, wireframes, responsive behavior, annotation strategy, or redesign guidance for operational or analytical dashboards. Do not use for deep statistical analysis, raw data engineering, or generic visual-brand mockups detached from decision-making.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-03T17:27:00+00:00"
 }

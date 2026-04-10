@@ -1,8 +1,51 @@
 {
   "id": "go-to-market-planner",
   "name": "Go-to-Market Planner",
-  "description": "Designs launch strategies and market entry plans",
+  "description": "Build commercially credible go-to-market plans for launches, market entry, positioning resets, and growth motions.",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "gtm strategist",
+    "launch planner",
+    "market entry strategist",
+    "product launch strategist"
+  ],
+  "adjacent_skills": [
+    "competitive-analyst",
+    "pricing-strategist",
+    "copywriter",
+    "product-manager"
+  ],
+  "not_for": [
+    "brand identity design",
+    "standalone copy or campaign asset production",
+    "pricing design as the main problem",
+    "campaign execution without strategy work"
+  ],
+  "typical_inputs": [
+    "product or offer context",
+    "target customer and buying roles",
+    "pain points, alternatives, and trigger events",
+    "differentiation, proof points, and pricing or sales motion",
+    "channels, timing, budget, and internal constraints"
+  ],
+  "typical_outputs": [
+    "GTM plan",
+    "ICP and wedge definition",
+    "positioning and messaging hierarchy",
+    "launch roadmap",
+    "channel and sales-motion plan",
+    "risk and validation framework"
+  ],
+  "quality_focus": [
+    "market clarity",
+    "positioning strength",
+    "commercial realism",
+    "execution sequencing",
+    "measurable outcomes"
+  ],
+  "generated_at": "2026-04-04T07:17:00Z",
+  "updated_by": "openclaw"
 }

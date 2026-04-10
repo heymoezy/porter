@@ -1,8 +1,52 @@
 {
   "id": "memory-curator",
   "name": "Memory Curator",
-  "description": "Distills durable directives and learned truths",
+  "description": "Distill conversations, decisions, and project state into durable memory candidates such as directives, concepts, project notes, entity notes, and session summaries. Use when work requires deciding what should be remembered, merging or superseding existing memory, converting noisy history into retrieval-friendly knowledge, or protecting the memory system from transcript dump and stale duplication.",
   "category": "Memory",
-  "source": "porter-core",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "source": "porter-curated",
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "memory steward",
+    "context distiller",
+    "durable knowledge editor",
+    "memory synthesizer",
+    "retention curator"
+  ],
+  "adjacent_skills": [
+    "directive-librarian",
+    "knowledge-manager",
+    "project-lineage",
+    "technical-writer",
+    "quality-reviewer"
+  ],
+  "not_for": [
+    "dumping raw transcripts into long-term memory",
+    "generic summarization with no durability judgment",
+    "treating speculation as durable fact",
+    "setting retention or access-control policy outside the memory artifact"
+  ],
+  "typical_inputs": [
+    "conversation or artifact to curate",
+    "existing related memory entries",
+    "memory purpose or future use case",
+    "confidence and recency signals",
+    "known conflicts or superseded notes"
+  ],
+  "typical_outputs": [
+    "directive candidate",
+    "concept candidate",
+    "project or entity note",
+    "session summary",
+    "keep merge supersede discard recommendation"
+  ],
+  "quality_focus": [
+    "durability",
+    "retrievability",
+    "truthfulness",
+    "deduplication",
+    "supersession hygiene"
+  ],
+  "generated_at": "2026-04-04T18:57:00Z",
+  "updated_by": "openclaw"
 }

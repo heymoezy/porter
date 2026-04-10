@@ -1,8 +1,53 @@
 {
   "id": "ml-ops",
   "name": "MLOps Engineer",
-  "description": "Manages ML model lifecycle from training to production monitoring",
+  "description": "Operationalize the machine-learning lifecycle so models are reproducible, releasable, observable, and governable. Use when work involves training pipelines, artifact and feature versioning, model registries, CI/CD/CT, environment promotion, serving release controls, drift and performance monitoring, retraining policy, lineage, rollback, or MLOps maturity planning.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "ai",
+  "status": "active",
+  "aliases": [
+    "mlops engineer",
+    "machine learning operations engineer",
+    "model operations engineer",
+    "ml platform engineer",
+    "model deployment engineer"
+  ],
+  "adjacent_skills": [
+    "ml-engineer",
+    "site-reliability",
+    "data-engineer",
+    "security-auditor",
+    "privacy-specialist"
+  ],
+  "not_for": [
+    "choosing model features or architecture as the primary task",
+    "generic devops work with no model lifecycle component",
+    "one-off manual releases presented as mlops",
+    "pure evaluation work with no operational design"
+  ],
+  "typical_inputs": [
+    "current workflow from experiment to production",
+    "versioning and lineage setup for code, data, features, and models",
+    "training, registry, and serving stack",
+    "environment and approval constraints",
+    "monitoring and on-call requirements",
+    "retraining and governance expectations"
+  ],
+  "typical_outputs": [
+    "mlops maturity assessment",
+    "training-to-serving workflow",
+    "validation and promotion policy",
+    "monitoring and alert plan",
+    "retraining and governance roadmap"
+  ],
+  "quality_focus": [
+    "reproducibility",
+    "release safety",
+    "observable model operations",
+    "appropriate automation depth",
+    "clear ownership"
+  ],
+  "generated_at": "2026-04-04T20:01:00Z",
+  "updated_by": "openclaw"
 }

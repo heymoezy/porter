@@ -1,8 +1,8 @@
 {
   "id": "trend-forecaster",
-  "name": "Trend Forecaster",
-  "description": "Identifies emerging trends and future scenarios",
+  "name": "trend-forecaster",
+  "description": "Detect, evaluate, and explain emerging market, product, consumer, regulatory, and cultural shifts using signal gathering, pattern synthesis, scenario framing, and implication mapping. Use when work involves horizon scanning, weak-signal analysis, category evolution, innovation planning, scenario development, foresight briefs, or separating durable shifts from hype. Do not use for timeless strategy advice that does not depend on change over time.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T20:29:00+00:00"
 }

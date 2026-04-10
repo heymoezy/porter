@@ -1,8 +1,55 @@
 {
   "id": "policy-drafter",
   "name": "Policy Drafter",
-  "description": "Writes clear organizational policies and procedures",
-  "category": "Legal",
+  "description": "Draft, rewrite, and structure internal or public-facing policies that are clear, enforceable, auditable, and understandable by the people expected to follow them.",
+  "category": "Operations",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "policy writer",
+    "governance drafter",
+    "internal policy specialist",
+    "plain-language policy writer",
+    "policy rewrite specialist"
+  ],
+  "adjacent_skills": [
+    "legal-researcher",
+    "compliance-officer",
+    "operations-manager",
+    "technical-writer",
+    "risk-assessor"
+  ],
+  "not_for": [
+    "final legal advice or attorney sign-off",
+    "step-by-step SOPs or work instructions as the main deliverable",
+    "unsupported regulatory interpretation beyond supplied sources",
+    "marketing or culture copy disguised as policy"
+  ],
+  "typical_inputs": [
+    "policy objective, audience, and risk context",
+    "source requirements from laws, standards, contracts, or internal decisions",
+    "current draft, known issues, or policy gaps",
+    "scope boundaries, roles, and enforcement context",
+    "exception path, approval rights, and review cadence",
+    "related procedures, controls, or records requirements"
+  ],
+  "typical_outputs": [
+    "policy draft",
+    "plain-language rewrite",
+    "policy framework",
+    "policy gap analysis",
+    "roles and responsibilities section",
+    "exceptions and governance section"
+  ],
+  "quality_focus": [
+    "clarity",
+    "enforceability",
+    "scope discipline",
+    "plain language",
+    "governance completeness",
+    "auditability"
+  ],
+  "generated_at": "2026-04-05T02:24:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,53 @@
 {
   "id": "cost-optimizer",
   "name": "Cost Optimizer",
-  "description": "Reduces cloud and infrastructure spending without sacrificing quality",
-  "category": "Infrastructure",
+  "description": "Reduce infrastructure, cloud, SaaS, vendor, and operational spend without breaking service quality or business goals.",
+  "category": "Operations",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "finops analyst",
+    "cloud cost optimizer",
+    "spend efficiency specialist",
+    "saas cost rationalizer"
+  ],
+  "adjacent_skills": [
+    "cloud-architect",
+    "capacity-planner",
+    "financial-analyst",
+    "procurement-specialist",
+    "site-reliability"
+  ],
+  "not_for": [
+    "incident response as the main task",
+    "vendor contract legal review",
+    "accounting or tax treatment",
+    "pure architecture design without cost focus"
+  ],
+  "typical_inputs": [
+    "spend data by category and period",
+    "resource or vendor inventory",
+    "utilization metrics",
+    "service constraints and SLAs",
+    "commitments and discounts",
+    "business priorities and growth assumptions"
+  ],
+  "typical_outputs": [
+    "ranked savings plan",
+    "waste findings",
+    "cost-driver breakdown",
+    "effort-risk tradeoff table",
+    "unit economics view",
+    "governance recommendations"
+  ],
+  "quality_focus": [
+    "evidence quality",
+    "prioritization",
+    "tradeoff honesty",
+    "business-value alignment",
+    "sustainable accountability"
+  ],
+  "generated_at": "2026-04-03T14:19:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,8 @@
 {
   "id": "tutorial-creator",
-  "name": "Tutorial Creator",
-  "description": "Writes step-by-step tutorials with examples and exercises",
+  "name": "tutorial-creator",
+  "description": "Design task-based tutorials, walkthroughs, quickstarts, onboarding guides, and teach-by-doing learning content that helps a defined audience complete a concrete outcome safely and successfully. Use when work involves step-by-step instruction, docs-to-tutorial conversion, first-run success flows, procedural learning assets, product education walkthroughs, or guided examples with checkpoints and troubleshooting. Do not use for broader curriculum architecture that requires full training-program design.",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T20:29:00+00:00"
 }

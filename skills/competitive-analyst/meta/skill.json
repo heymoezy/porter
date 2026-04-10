@@ -1,8 +1,52 @@
 {
   "id": "competitive-analyst",
   "name": "Competitive Analyst",
-  "description": "Monitors competitors and identifies strategic opportunities",
+  "description": "Analyze competitors, adjacent alternatives, and market moves to help teams position products, anticipate threats, and spot strategic opportunities.",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "competitor analyst",
+    "competition analyst",
+    "battlecard analyst",
+    "competitive strategy analyst"
+  ],
+  "adjacent_skills": [
+    "market-analyst",
+    "competitive-intelligence",
+    "pricing-strategist",
+    "product-manager",
+    "go-to-market-planner"
+  ],
+  "not_for": [
+    "broad market sizing without a competitor lens",
+    "deep financial valuation as the primary task",
+    "internal roadmap ownership without external analysis",
+    "generic web summaries with no strategic implication"
+  ],
+  "typical_inputs": [
+    "focal product and buyer segment",
+    "named competitors and substitutes",
+    "recent launches, pricing, messaging, or partnership changes",
+    "win-loss notes or sales objections",
+    "decision context such as positioning, packaging, or roadmap response"
+  ],
+  "typical_outputs": [
+    "competitive landscape memo",
+    "comparison matrix",
+    "battlecard",
+    "threat and opportunity brief",
+    "pricing comparison",
+    "monitoring summary"
+  ],
+  "quality_focus": [
+    "evidence clarity",
+    "comparative rigor",
+    "buyer relevance",
+    "strategic implication",
+    "signal-to-noise discipline"
+  ],
+  "generated_at": "2026-04-03T12:56:00Z",
+  "updated_by": "openclaw"
 }

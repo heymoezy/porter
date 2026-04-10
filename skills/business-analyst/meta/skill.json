@@ -1,8 +1,53 @@
 {
   "id": "business-analyst",
   "name": "Business Analyst",
-  "description": "Translates business needs into actionable requirements",
+  "description": "Diagnose business problems, clarify stakeholder needs, and turn messy objectives into actionable requirements, process improvements, and decision-ready recommendations.",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "requirements analyst",
+    "process analyst",
+    "operations analyst",
+    "business requirements analyst"
+  ],
+  "adjacent_skills": [
+    "product-manager",
+    "data-analyst",
+    "operations-manager",
+    "project-architect",
+    "financial-analyst"
+  ],
+  "not_for": [
+    "finance-first valuation or modeling tasks",
+    "pure product UI or UX design work",
+    "implementation-only coding or build tasks",
+    "status reporting with no analysis component"
+  ],
+  "typical_inputs": [
+    "business objective and decision context",
+    "stakeholder roles, needs, and conflicts",
+    "current workflows, systems, and business rules",
+    "operational metrics, tickets, interviews, or customer feedback",
+    "constraints such as budget, timing, regulation, or policy",
+    "desired outcomes and success metrics"
+  ],
+  "typical_outputs": [
+    "business problem statement",
+    "stakeholder and process analysis",
+    "requirements brief",
+    "current-state and future-state comparison",
+    "options memo with recommendation",
+    "KPI and success-metric framework"
+  ],
+  "quality_focus": [
+    "problem framing",
+    "evidence quality",
+    "requirement clarity",
+    "stakeholder alignment",
+    "decision usefulness"
+  ],
+  "generated_at": "2026-04-03T12:38:00Z",
+  "updated_by": "openclaw"
 }

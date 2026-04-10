@@ -1,8 +1,8 @@
 {
   "id": "knowledge-manager",
   "name": "Knowledge Manager",
-  "description": "Organizes and maintains institutional knowledge systems",
-  "category": "Support",
+  "description": "Design and improve knowledge operations so institutional knowledge stays findable, trusted, current, and owned. Use when the work involves taxonomy and metadata design, repository rationalization, knowledge governance, review cadences, content lifecycle rules, ownership models, contribution workflows, search/findability improvement, or reducing repeat questions across teams. Do not use for writing a single article, deep search-engine implementation, or ontology/graph modeling as the primary task.",
+  "category": "Operations",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T14:44:00+00:00"
 }

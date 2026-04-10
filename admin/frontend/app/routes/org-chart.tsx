@@ -26,6 +26,7 @@ interface Agent {
   status: string
   is_system: number
   is_master: number
+  soul_hash: string | null
   appearance_spec: Record<string, unknown> | null
 }
 
@@ -258,7 +259,7 @@ export default function OrgChartPage() {
                         return (
                           <div key={tmpl.id} className="flex flex-col items-center gap-1">
                             <div onMouseEnter={() => setHovered(node)} onMouseLeave={() => setHovered(null)}>
-                              <OrgNode agent={node} state="born" href={`/agents/${tmpl.id}`} />
+                              <OrgNode agent={node} state="ghost" href={`/agents/${tmpl.id}`} />
                             </div>
                             {/* Instance count badge */}
                             <span className={`text-2xs font-bold px-1.5 py-0.5 rounded-full ${style.color} bg-raised`}>
@@ -267,6 +268,7 @@ export default function OrgChartPage() {
                             {/* Instances nested underneath */}
                             <div className="flex items-start gap-0.5 flex-wrap justify-center">
                               {tmpl.instances.map(inst => {
+                                const instBorn = !!inst.soul_hash
                                 const instNode: OrgNodeAgent = {
                                   id: inst.id,
                                   name: inst.name,
@@ -276,7 +278,7 @@ export default function OrgChartPage() {
                                 }
                                 return (
                                   <div key={inst.id} onMouseEnter={() => setHovered(instNode)} onMouseLeave={() => setHovered(null)}>
-                                    <OrgNode agent={instNode} state="born" href={`/agents/${inst.id}`} />
+                                    <OrgNode agent={instNode} state={instBorn ? "born" : "ghost"} href={`/agents/${inst.id}`} />
                                   </div>
                                 )
                               })}

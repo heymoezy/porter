@@ -1,8 +1,52 @@
 {
   "id": "community-manager",
   "name": "Community Manager",
-  "description": "Grows and moderates engaged user communities",
+  "description": "Grow, moderate, and strengthen online communities through onboarding, engagement programming, moderation policy, conflict handling, feedback loops, and community health management.",
   "category": "Support",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "community lead",
+    "community moderator",
+    "community growth manager",
+    "member experience manager"
+  ],
+  "adjacent_skills": [
+    "customer-support",
+    "helpdesk-agent",
+    "social-media-manager",
+    "feedback-analyst",
+    "product-manager"
+  ],
+  "not_for": [
+    "one-off support troubleshooting with no community angle",
+    "pure marketing campaign planning disconnected from community stewardship",
+    "legal or HR escalation work outside community operations",
+    "generic social posting without community-health goals"
+  ],
+  "typical_inputs": [
+    "community platform and audience",
+    "health metrics and pain points",
+    "current rules and moderation practices",
+    "onboarding and activation flow",
+    "engagement history",
+    "business or product goals"
+  ],
+  "typical_outputs": [
+    "community strategy",
+    "moderation playbook",
+    "engagement system plan",
+    "community health diagnostic",
+    "insight summary and action recommendations"
+  ],
+  "quality_focus": [
+    "trust and safety",
+    "repeatable participation",
+    "moderation consistency",
+    "onboarding quality",
+    "community health metrics"
+  ],
+  "generated_at": "2026-04-03T12:51:00Z",
+  "updated_by": "openclaw"
 }

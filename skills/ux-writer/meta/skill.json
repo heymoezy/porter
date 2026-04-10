@@ -1,8 +1,8 @@
 {
   "id": "ux-writer",
-  "name": "UX Writer",
-  "description": "Crafts microcopy, tooltips, and interface text that guides users",
-  "category": "Creative",
+  "name": "ux-writer",
+  "description": "Write and refine product microcopy that helps people understand, decide, and recover across interfaces, flows, and system states with clear, concise, context-aware language. Use when the main task is button labels, form labels and helper text, onboarding copy, confirmations, warnings, error messages, empty states, notification text, terminology systems, or a microcopy critique for a product experience. Do not use when the main task is broad brand messaging, long-form marketing copy, or product strategy without interface-context writing.",
+  "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T22:39:00+00:00"
 }

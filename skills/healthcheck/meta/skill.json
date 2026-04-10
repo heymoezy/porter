@@ -1,8 +1,51 @@
 {
   "id": "healthcheck",
   "name": "Healthcheck",
-  "description": "Runtime, service, and environment verification",
+  "description": "Audit host, service, runtime, network, dependency, and environment health to produce a fast operational readout, risk scan, or remediation plan.",
   "category": "Infrastructure",
-  "source": "porter-internal",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "source": "porter-curated",
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "system health reviewer",
+    "operational diagnostics lead",
+    "runtime health auditor",
+    "service health checker"
+  ],
+  "adjacent_skills": [
+    "incident-responder",
+    "security-auditor",
+    "site-reliability",
+    "devops-engineer"
+  ],
+  "not_for": [
+    "feature implementation",
+    "pure compliance paperwork",
+    "architecture strategy detached from current system evidence",
+    "time-critical incident coordination as the primary job"
+  ],
+  "typical_inputs": [
+    "system or environment in scope",
+    "reported symptom or health decision needed",
+    "logs, metrics, service status, config, and recent changes",
+    "capacity, dependency, and exposure signals",
+    "operational constraints and rollback options"
+  ],
+  "typical_outputs": [
+    "incident triage summary",
+    "environment health review",
+    "service-by-service risk scan",
+    "deployment readiness assessment",
+    "host hardening checklist",
+    "remediation and verification plan"
+  ],
+  "quality_focus": [
+    "evidence quality",
+    "root-cause accuracy",
+    "component-level clarity",
+    "prioritized actionability",
+    "safe remediation sequencing"
+  ],
+  "generated_at": "2026-04-04T09:25:00Z",
+  "updated_by": "openclaw"
 }

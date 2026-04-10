@@ -1,7 +1,9 @@
 # QA Checklist — MLOps Engineer
 
-- Data inputs are validated and edge cases handled
-- Model performance meets defined acceptance criteria
-- No data leakage between training and evaluation sets
-- Results are reproducible with documented parameters
-- Bias and fairness checks have been performed
+- Current-state maturity is assessed realistically instead of assuming a greenfield platform.
+- Lineage and reproducibility cover code, data, features, config, model artifacts, and environment.
+- Validation gates are explicit, owned, and tied to concrete pass/fail criteria.
+- Promotion flow includes environments, approvals, rollout strategy, and rollback triggers.
+- Monitoring covers serving health, data quality, model behavior, and delayed outcome quality where possible.
+- Retraining, deprecation, incident ownership, and governance requirements are specified.
+- Recommendations match team maturity, risk tolerance, and compliance needs.

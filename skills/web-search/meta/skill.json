@@ -1,8 +1,52 @@
 {
   "id": "web-search",
   "name": "Web Search",
-  "description": "Searches the web for current information",
+  "description": "Research the live web for current facts, official documentation, recent announcements, source verification, market context, and evidence-backed answers.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:10:02+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "web researcher",
+    "internet researcher",
+    "fact checker",
+    "source verifier",
+    "current-events researcher"
+  ],
+  "adjacent_skills": [
+    "competitive-analyst",
+    "market-researcher",
+    "research-analyst",
+    "technical-writer",
+    "whitepaper-author"
+  ],
+  "not_for": [
+    "purely internal file analysis",
+    "fabricated citations or URLs",
+    "weak single-source proof for contested claims",
+    "large-scale scraping better handled by structured data tools"
+  ],
+  "typical_inputs": [
+    "research question or claim",
+    "freshness requirement",
+    "preferred source types",
+    "expected deliverable format",
+    "decision context"
+  ],
+  "typical_outputs": [
+    "evidence-backed answer",
+    "claim-verification summary",
+    "source-ranked memo",
+    "comparison table with citations",
+    "confidence note"
+  ],
+  "quality_focus": [
+    "source authority",
+    "freshness",
+    "corroboration",
+    "citation integrity",
+    "concise synthesis"
+  ],
+  "generated_at": "2026-04-06T00:47:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,52 @@
 {
   "id": "grant-writer",
   "name": "Grant Writer",
-  "description": "Writes compelling grant proposals and funding applications",
+  "description": "Write competitive, evidence-based grant applications that align tightly to funder priorities, eligibility rules, scoring criteria, program design, evaluation plans, and budget logic.",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "grant proposal writer",
+    "grant narrative specialist",
+    "funding application writer",
+    "nonprofit grant writer"
+  ],
+  "adjacent_skills": [
+    "government-specialist",
+    "proposal-writer",
+    "proposal-manager",
+    "nonprofit-advisor",
+    "financial-analyst"
+  ],
+  "not_for": [
+    "fabricated claims or fictional impact",
+    "invented budgets or unsupported budget logic",
+    "definitive legal or tax advice",
+    "generic donor marketing outside a grant application process"
+  ],
+  "typical_inputs": [
+    "grant notice, NOFO, or application prompt set",
+    "eligibility rules, scoring criteria, and submission limits",
+    "applicant mission, capacity, staffing, and track record",
+    "need evidence, target population, and geography",
+    "program design, outcomes, timeline, partners, and budget constraints"
+  ],
+  "typical_outputs": [
+    "pursue / defer recommendation",
+    "application requirement matrix",
+    "prompt-by-prompt outline",
+    "grant narrative draft",
+    "outcomes and evaluation section",
+    "budget narrative support notes"
+  ],
+  "quality_focus": [
+    "funder alignment",
+    "reviewer trust",
+    "prompt compliance",
+    "measurable outcomes",
+    "implementation credibility"
+  ],
+  "generated_at": "2026-04-04T08:22:00Z",
+  "updated_by": "openclaw"
 }

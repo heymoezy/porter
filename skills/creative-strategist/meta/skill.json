@@ -1,8 +1,53 @@
 {
   "id": "creative-strategist",
   "name": "Creative Strategist",
-  "description": "Develops creative briefs and campaign concepts",
+  "description": "Develop positioning angles, creative briefs, campaign territories, messaging platforms, launch concepts, and narrative systems before copy or design execution starts.",
   "category": "Creative",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "creative planner",
+    "campaign strategist",
+    "messaging strategist",
+    "brand narrative strategist"
+  ],
+  "adjacent_skills": [
+    "copywriter",
+    "content-writer",
+    "brand-designer",
+    "art-director",
+    "go-to-market-planner"
+  ],
+  "not_for": [
+    "final copy execution when strategy is already decided",
+    "media buying or channel operations",
+    "pure visual identity work",
+    "general brainstorming with no business objective"
+  ],
+  "typical_inputs": [
+    "business objective",
+    "target audience",
+    "offer or product truth",
+    "category context",
+    "proof points",
+    "brand and channel constraints"
+  ],
+  "typical_outputs": [
+    "creative brief",
+    "territory options",
+    "messaging hierarchy",
+    "launch concept recommendation",
+    "hook bank",
+    "content pillar framework"
+  ],
+  "quality_focus": [
+    "strategic clarity",
+    "audience relevance",
+    "differentiation",
+    "concept scalability",
+    "handoff usefulness"
+  ],
+  "generated_at": "2026-04-03T16:23:00Z",
+  "updated_by": "openclaw"
 }

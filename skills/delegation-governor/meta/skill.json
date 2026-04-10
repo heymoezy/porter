@@ -1,8 +1,54 @@
 {
   "id": "delegation-governor",
   "name": "Delegation Governor",
-  "description": "Decides what to delegate vs handle directly",
+  "description": "Decide whether work should stay with the primary agent or be split across specialists, and define the delegation plan if it should. Use when the task involves decomposition, routing, handoff design, merge planning, parallel-versus-sequential execution, context minimization, or protecting sensitive work from over-delegation.",
   "category": "Orchestration",
   "source": "porter-core",
-  "generated_at": "2026-04-02T04:10:00+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "delegation planner",
+    "routing governor",
+    "subtask router",
+    "handoff planner",
+    "task split strategist"
+  ],
+  "adjacent_skills": [
+    "approval-governor",
+    "chat-orchestrator",
+    "project-operator",
+    "directive-librarian",
+    "operations-manager"
+  ],
+  "not_for": [
+    "authorization or approval policy decisions",
+    "performing the delegated specialist work itself",
+    "generic project management with no routing choice",
+    "sharing broad sensitive context without boundaries"
+  ],
+  "typical_inputs": [
+    "final user outcome",
+    "deadline or latency constraint",
+    "available specialists or execution lanes",
+    "dependency map",
+    "sensitivity constraints",
+    "merge and accountability requirements"
+  ],
+  "typical_outputs": [
+    "delegate-versus-direct recommendation",
+    "subtask map",
+    "handoff contracts",
+    "parallelization plan",
+    "merge plan",
+    "delegation risk assessment"
+  ],
+  "quality_focus": [
+    "bounded delegation",
+    "mergeability",
+    "specialist fit",
+    "context discipline",
+    "accountability preservation"
+  ],
+  "generated_at": "2026-04-03T20:38:00Z",
+  "updated_by": "openclaw"
 }

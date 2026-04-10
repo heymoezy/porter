@@ -5,7 +5,7 @@
 project: porter
 version: v6.5.0
 updated: 2026-04-10
-updated_by: claude-opus-4.6
+updated_by: codex-gpt-5.4
 
 ## Architecture
 
@@ -218,6 +218,12 @@ tracks emergent patterns, not assigned identities.
 - Mine memory for patterns         (every_24h)
 
 Scheduler now has an `every_24h` tag (43200 ticks × 2s).
+
+## Session Notes (2026-04-10)
+
+- Verified from Disney investor relations and SEC materials: Justin Warbrooke is a real Disney executive and is listed as Executive Vice President and Head of Corporate Development.
+- Verified scope: Disney identifies Warbrooke as the executive responsible for M&A strategy and execution, including acquisitions, divestitures, and joint ventures.
+- Verified adjacent leadership change: Benjamin Swinburne became Executive Vice President of Investor Relations and Corporate Strategy on January 30, 2026.
 
 **UI extensions** on Intelligence page Intellect section:
 - Self-Monitor card with 4 stat tiles + 14-day correction sparkline +

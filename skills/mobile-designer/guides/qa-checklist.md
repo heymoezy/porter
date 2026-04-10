@@ -1,7 +1,9 @@
 # QA Checklist — Mobile Designer
 
-- Design follows the established design system
-- Accessibility standards (WCAG 2.1 AA) are met
-- Responsive behavior is defined for all breakpoints
-- Interactive states are specified (hover, focus, disabled)
-- Design tokens and specs are developer-ready
+- Flow is task-first and minimizes taps, typing, and context switching.
+- Navigation model matches platform expectations and stays consistent across the feature.
+- All critical states exist: first-run, empty, loading, error, offline, permission, destructive confirmation, and success.
+- Touch targets, contrast, typography scaling, screen-reader support, and reduced-motion considerations are addressed.
+- iOS and Android differences are called out where platform behavior should diverge.
+- Handoff includes layout structure, component states, content rules, motion notes, and edge-case behavior.
+- Output is concise, specific, and implementation-ready.

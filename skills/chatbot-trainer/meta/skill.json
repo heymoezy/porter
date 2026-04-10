@@ -1,8 +1,53 @@
 {
   "id": "chatbot-trainer",
   "name": "Chatbot Trainer",
-  "description": "Trains and refines conversational AI systems",
+  "description": "Improve chatbot behavior through prompt tuning, policy refinement, knowledge shaping, conversation review, rubric design, and training-data feedback loops.",
   "category": "Support",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "conversational ai trainer",
+    "chatbot improvement specialist",
+    "bot behavior analyst",
+    "assistant quality trainer"
+  ],
+  "adjacent_skills": [
+    "model-evaluator",
+    "prompt-engineer",
+    "customer-support",
+    "knowledge-base-author",
+    "nlp-specialist"
+  ],
+  "not_for": [
+    "building ML training infrastructure from scratch",
+    "academic NLP work without a product chatbot objective",
+    "handling support tickets when there is no training or evaluation goal",
+    "inventing unapproved policies or knowledge"
+  ],
+  "typical_inputs": [
+    "chatbot purpose, audience, and success criteria",
+    "current prompts, policies, and knowledge sources",
+    "representative strong and weak transcripts",
+    "failure patterns and escalation issues",
+    "brand, compliance, and safety requirements",
+    "current metrics and evaluation process"
+  ],
+  "typical_outputs": [
+    "transcript review and failure taxonomy",
+    "prioritized improvement plan",
+    "prompt or policy revision recommendations",
+    "evaluation rubric and conversation test set",
+    "knowledge-gap analysis",
+    "validation plan with regression risks"
+  ],
+  "quality_focus": [
+    "root-cause precision",
+    "behavior quality",
+    "evaluation rigor",
+    "safety",
+    "repeatability"
+  ],
+  "generated_at": "2026-04-03T12:43:00Z",
+  "updated_by": "openclaw"
 }

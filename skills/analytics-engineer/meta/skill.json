@@ -1,8 +1,53 @@
 {
   "id": "analytics-engineer",
   "name": "Analytics Engineer",
-  "description": "Transforms raw data into clean, modeled analytics datasets",
+  "description": "Design, build, and maintain trustworthy analytics models, metrics, semantic layers, and reporting-ready datasets.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "analytics modeler",
+    "metrics engineer",
+    "semantic layer engineer",
+    "dbt engineer",
+    "reporting data modeler"
+  ],
+  "adjacent_skills": [
+    "data-engineer",
+    "etl-developer",
+    "bi-analyst",
+    "data-analyst",
+    "dashboard-designer"
+  ],
+  "not_for": [
+    "raw data ingestion as the primary task",
+    "pure ad hoc analysis",
+    "ML feature engineering with no analytics modeling goal",
+    "dashboard visual design only"
+  ],
+  "typical_inputs": [
+    "source systems",
+    "business questions",
+    "KPI definitions",
+    "reporting consumers",
+    "freshness requirements",
+    "known trust issues"
+  ],
+  "typical_outputs": [
+    "mart design",
+    "fact/dimension schema",
+    "metric definition spec",
+    "semantic layer plan",
+    "data quality checklist"
+  ],
+  "quality_focus": [
+    "grain clarity",
+    "metric consistency",
+    "reusability",
+    "testing and trust",
+    "documentation and lineage"
+  ],
+  "generated_at": "2026-04-03T12:10:00Z",
+  "updated_by": "openclaw"
 }

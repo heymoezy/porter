@@ -1,8 +1,8 @@
 {
   "id": "hospitality-consultant",
   "name": "Hospitality Consultant",
-  "description": "Advises on hotel, restaurant, and tourism operations",
-  "category": "Domain",
+  "description": "Advise hotels, resorts, restaurants, clubs, and hospitality operators on guest experience, service design, positioning, pricing, revenue performance, and operating execution. Use when auditing the guest journey, improving occupancy/ADR/RevPAR or spend per guest, fixing review-score problems, redesigning service standards, evaluating concepts, or turning hospitality complaints into practical operating changes.",
+  "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T10:29:00+00:00"
 }

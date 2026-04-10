@@ -78,8 +78,8 @@ const MODEL_METADATA: Record<string, ModelMetadata> = {
     pricingOutputPerM: 0.30,
     benchmarkScores: {},
   },
-  'qwen2.5-coder:1.5b': {
-    capabilities: ['coding'],
+  'gemma4:e4b': {
+    capabilities: ['chat', 'coding', 'reasoning'],
     contextWindow: 32768,
     pricingInputPerM: 0.0,
     pricingOutputPerM: 0.0,

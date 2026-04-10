@@ -1,8 +1,51 @@
 {
   "id": "github",
   "name": "GitHub",
-  "description": "Repository, branch, and pull request coordination",
+  "description": "Operate GitHub repositories through repository state, pull requests, reviews, checks, releases, and metadata using gh or the GitHub API.",
   "category": "Development",
-  "source": "runtime",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "source": "porter-curated",
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "repo operator",
+    "pull request coordinator",
+    "github maintainer assistant",
+    "gh workflow operator"
+  ],
+  "adjacent_skills": [
+    "gh-issues",
+    "code-reviewer",
+    "release-manager",
+    "site-reliability"
+  ],
+  "not_for": [
+    "implementing code as the main task",
+    "deep issue queue or program triage",
+    "non-GitHub deployment debugging",
+    "broad product planning detached from repo state"
+  ],
+  "typical_inputs": [
+    "repository and branch or PR context",
+    "review state and requested reviewers",
+    "check runs and branch protection status",
+    "linked issues, milestones, or releases",
+    "the decision to make or operation to perform"
+  ],
+  "typical_outputs": [
+    "merge-readiness verdict",
+    "branch comparison summary",
+    "CI/check triage",
+    "release summary",
+    "reviewer or ownership recommendation",
+    "GitHub metadata operation guidance"
+  ],
+  "quality_focus": [
+    "state accuracy",
+    "workflow fit",
+    "risk-ranked blockers",
+    "ownership clarity",
+    "decisive next steps"
+  ],
+  "generated_at": "2026-04-04T07:17:00Z",
+  "updated_by": "openclaw"
 }

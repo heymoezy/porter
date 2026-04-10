@@ -1,8 +1,52 @@
 {
   "id": "prompt-engineer",
   "name": "Prompt Engineer",
-  "description": "Crafts effective prompts and prompt chains for LLM applications",
+  "description": "Design prompts, prompt chains, prompt libraries, and evaluation-oriented prompt patterns for LLM products and internal workflows",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "llm prompt designer",
+    "prompt systems designer",
+    "instruction reliability engineer",
+    "prompt workflow designer"
+  ],
+  "adjacent_skills": [
+    "prompt-architect",
+    "runtime-selector",
+    "quality-reviewer",
+    "recommendation-engineer"
+  ],
+  "not_for": [
+    "one-off prompt cleanup",
+    "model failures caused mainly by missing data or broken tools",
+    "generic copywriting unrelated to model behavior",
+    "infrastructure tuning outside the prompt layer"
+  ],
+  "typical_inputs": [
+    "product or workflow goal",
+    "target models and tools",
+    "context-window, cost, and latency constraints",
+    "source inputs and schema needs",
+    "failure examples and edge cases",
+    "success metrics"
+  ],
+  "typical_outputs": [
+    "prompt strategy memo",
+    "prompt set or chain",
+    "output contract",
+    "evaluation cases",
+    "iteration plan",
+    "known limitations summary"
+  ],
+  "quality_focus": [
+    "reliability",
+    "controllability",
+    "schema fidelity",
+    "token discipline",
+    "testability"
+  ],
+  "generated_at": "2026-04-05T06:40:00Z",
+  "updated_by": "openclaw"
 }

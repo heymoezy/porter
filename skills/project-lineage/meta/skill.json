@@ -1,8 +1,52 @@
 {
   "id": "project-lineage",
   "name": "Project Lineage",
-  "description": "Keeps context attached to the right project lane over time",
-  "category": "Orchestration",
-  "source": "porter-core",
-  "generated_at": "2026-04-02T04:10:00+00:00"
+  "description": "Reconstruct how a project, requirement, dataset, workflow, or decision reached its current state by tracing origins, changes, handoffs, dependencies, and downstream effects",
+  "category": "Operations",
+  "source": "porter-curated",
+  "catalogTier": "specialist",
+  "status": "active",
+  "aliases": [
+    "lineage analyst",
+    "provenance mapper",
+    "history tracer",
+    "traceability analyst"
+  ],
+  "adjacent_skills": [
+    "project-architect",
+    "analytics-engineer",
+    "runtime-auditor",
+    "knowledge-manager"
+  ],
+  "not_for": [
+    "generic project status reporting",
+    "speculative historical storytelling presented as certainty",
+    "debugging current behavior when provenance is irrelevant",
+    "greenfield planning with no lineage or audit question"
+  ],
+  "typical_inputs": [
+    "artifact, requirement, decision, or dataset to trace",
+    "available evidence sources",
+    "time window and anchor events",
+    "reason lineage matters now",
+    "stakeholders and required depth",
+    "known conflicts or missing records"
+  ],
+  "typical_outputs": [
+    "lineage map",
+    "chronology table",
+    "source-of-truth memo",
+    "handoff reconstruction",
+    "downstream impact summary",
+    "evidence-gap list"
+  ],
+  "quality_focus": [
+    "traceability",
+    "evidence fidelity",
+    "causal discipline",
+    "source-of-truth clarity",
+    "current decision usefulness"
+  ],
+  "generated_at": "2026-04-05T05:36:00Z",
+  "updated_by": "openclaw"
 }

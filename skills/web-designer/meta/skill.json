@@ -1,8 +1,54 @@
 {
   "id": "web-designer",
   "name": "Web Designer",
-  "description": "Creates visually compelling, responsive web layouts",
+  "description": "Design or critique websites, landing pages, product pages, dashboards, and responsive web flows with strong hierarchy, conversion logic, visual coherence, and implementation-ready layout guidance.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "website designer",
+    "landing page designer",
+    "responsive web designer",
+    "conversion-focused web designer",
+    "page layout designer"
+  ],
+  "adjacent_skills": [
+    "ui-designer",
+    "brand-designer",
+    "ux-writer",
+    "frontend-dev",
+    "accessibility-specialist"
+  ],
+  "not_for": [
+    "frontend-only implementation",
+    "brand-strategy-only work",
+    "accessibility-led audits as the primary task",
+    "illustration or custom asset production"
+  ],
+  "typical_inputs": [
+    "page goal",
+    "target audience",
+    "current page or screenshots",
+    "content blocks and priorities",
+    "brand or design-system constraints",
+    "breakpoint or device constraints"
+  ],
+  "typical_outputs": [
+    "page diagnosis",
+    "layout direction",
+    "section sequencing",
+    "responsive behavior notes",
+    "simplification recommendations",
+    "design rationale"
+  ],
+  "quality_focus": [
+    "visual hierarchy",
+    "section flow",
+    "CTA discipline",
+    "responsive structure",
+    "buildable recommendations"
+  ],
+  "generated_at": "2026-04-06T00:47:00Z",
+  "updated_by": "openclaw"
 }

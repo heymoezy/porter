@@ -1,8 +1,8 @@
 {
   "id": "ip-attorney",
   "name": "IP Attorney",
-  "description": "Advises on intellectual property protection and strategy",
+  "description": "Analyze intellectual-property issues involving patents, trademarks, copyrights, trade secrets, licensing, ownership chains, and IP diligence risk. Use when work involves trademark screening, prior-art style research, invention capture, portfolio strategy, OSS/IP conflict spotting, license review, assignment or ownership questions, or business-facing IP issue summaries. Do not use for formal legal representation, filing jurisdiction-specific legal documents without attorney review, or presenting screening-level analysis as definitive legal advice.",
   "category": "Legal",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T13:41:00+00:00"
 }

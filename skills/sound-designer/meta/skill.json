@@ -1,8 +1,55 @@
 {
   "id": "sound-designer",
   "name": "Sound Designer",
-  "description": "Creates audio effects, soundscapes, and audio branding",
+  "description": "Design sonic identities, UI sound systems, ambient worlds, Foley/effects plans, trailer and scene audio direction, and production-ready sound briefs so products and media feel intentional, legible, and emotionally aligned.",
   "category": "Creative",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "audio director",
+    "sonic designer",
+    "audio experience designer",
+    "sound direction lead"
+  ],
+  "adjacent_skills": [
+    "motion-designer",
+    "ux-designer",
+    "game-designer",
+    "video-producer",
+    "music-supervisor"
+  ],
+  "not_for": [
+    "composing final music or songwriting",
+    "detailed mix/master engineering execution",
+    "voice casting or performance-direction decisions on their own",
+    "generic soundtrack or playlist recommendations"
+  ],
+  "typical_inputs": [
+    "medium, platform, and playback environment",
+    "audience context and whether listening is focused or peripheral",
+    "emotional goal, narrative arc, and brand/world attributes",
+    "key moments, states, or interactions that need cues",
+    "current references, existing audio assets, or competitive benchmarks",
+    "technical constraints such as loudness norms, latency, looping, memory, or localization needs"
+  ],
+  "typical_outputs": [
+    "sonic direction memo",
+    "sound palette and anti-palette",
+    "cue hierarchy for product or scene flows",
+    "interaction-sound brief",
+    "ambience / Foley / effects plan",
+    "review notes on an existing audio pass",
+    "handoff brief for composer, editor, mixer, or implementation team"
+  ],
+  "quality_focus": [
+    "emotional precision",
+    "functional clarity",
+    "sonic cohesion",
+    "repetition safety",
+    "playback realism",
+    "handoff usability"
+  ],
+  "generated_at": "2026-04-05T14:06:00Z",
+  "updated_by": "openclaw"
 }

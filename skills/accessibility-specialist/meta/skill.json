@@ -1,8 +1,54 @@
 {
   "id": "accessibility-specialist",
   "name": "Accessibility Specialist",
-  "description": "Ensures products meet WCAG and inclusive design standards",
+  "description": "Audit, design, and improve digital products for accessibility and inclusive use across web, content, flows, and interface components.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "a11y specialist",
+    "accessibility auditor",
+    "inclusive design specialist",
+    "wcag specialist",
+    "accessibility reviewer"
+  ],
+  "adjacent_skills": [
+    "design-qa",
+    "ui-designer",
+    "frontend-dev",
+    "ux-writer",
+    "technical-writer"
+  ],
+  "not_for": [
+    "generic UI polish with no accessibility objective",
+    "legal compliance advice",
+    "backend-only architecture work",
+    "adding ARIA where semantic HTML already solves the issue"
+  ],
+  "typical_inputs": [
+    "UI screens or live flow",
+    "component spec",
+    "design system",
+    "target accessibility standard",
+    "code or markup snippets",
+    "known user complaints or audit findings"
+  ],
+  "typical_outputs": [
+    "accessibility audit",
+    "severity-ranked findings",
+    "remediation plan",
+    "keyboard and focus behavior spec",
+    "acceptance criteria"
+  ],
+  "quality_focus": [
+    "keyboard access",
+    "focus management",
+    "semantic structure",
+    "clear labels and errors",
+    "screen-reader usability",
+    "implementable remediation"
+  ],
+  "generated_at": "2026-04-03T11:20:00Z",
+  "updated_by": "openclaw"
 }

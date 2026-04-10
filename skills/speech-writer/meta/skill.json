@@ -1,8 +1,55 @@
 {
   "id": "speech-writer",
   "name": "Speech Writer",
-  "description": "Crafts persuasive speeches and presentation scripts",
-  "category": "Content",
+  "description": "Write keynotes, executive remarks, ceremonial speeches, conference openers, talking points, crisis or change-management addresses, and spoken rewrites that sound credible aloud, fit the speaker, and move the room under live-delivery constraints.",
+  "category": "Writing",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "speechwriter",
+    "remarks writer",
+    "executive speechwriter",
+    "talking-points writer"
+  ],
+  "adjacent_skills": [
+    "copywriter",
+    "pr-strategist",
+    "message-strategist",
+    "media-trainer",
+    "executive-communications-lead"
+  ],
+  "not_for": [
+    "generic article or essay ghostwriting",
+    "debate-prep war gaming or opposition research",
+    "teleprompter logistics or stage-production handling",
+    "broad communications strategy beyond the speech itself"
+  ],
+  "typical_inputs": [
+    "speaker identity, role, authority, and known voice traits",
+    "audience composition, mood, and what they most care about",
+    "occasion, objective, and desired takeaway or action",
+    "timing, venue, format, and whether Q&A follows",
+    "mandatory points, sensitivities, and taboo areas",
+    "source material, anecdotes, proof points, and facts that must be preserved"
+  ],
+  "typical_outputs": [
+    "full speech draft",
+    "remarks or keynote outline",
+    "talking-point framework",
+    "rewritten live-language version of an existing draft",
+    "opening and closing options",
+    "delivery notes or trim cuts",
+    "speech revision memo"
+  ],
+  "quality_focus": [
+    "speakability",
+    "voice fit",
+    "audience resonance",
+    "structural clarity",
+    "emotional control",
+    "memorable phrasing"
+  ],
+  "generated_at": "2026-04-05T14:06:00Z",
+  "updated_by": "openclaw"
 }

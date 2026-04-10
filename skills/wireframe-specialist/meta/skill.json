@@ -1,8 +1,55 @@
 {
   "id": "wireframe-specialist",
   "name": "Wireframe Specialist",
-  "description": "Creates low and high fidelity wireframes and page flows",
+  "description": "Create low-fidelity and mid-fidelity wireframes, wireflows, screen inventories, and annotated UX blueprints for apps, dashboards, journeys, and product concepts. Use when the main task is clarifying layout, information hierarchy, task flow, state coverage, or requirement gaps before polished UI design or engineering. Do not use for final visual design, usability evidence gathering, or frontend implementation.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "ux wireframer",
+    "wireflow designer",
+    "low-fi designer",
+    "screen-structure specialist",
+    "product wireframer"
+  ],
+  "adjacent_skills": [
+    "interaction-designer",
+    "ui-designer",
+    "web-designer",
+    "ux-researcher",
+    "frontend-dev"
+  ],
+  "not_for": [
+    "final visual design polish",
+    "usability research or testing as the primary task",
+    "frontend implementation",
+    "brand or art-direction work",
+    "strategy work with no interface artifact"
+  ],
+  "typical_inputs": [
+    "user goal or job to be done",
+    "feature or workflow requirements",
+    "screen or step inventory",
+    "content and data needs",
+    "state and edge-case requirements",
+    "target fidelity and platform constraints"
+  ],
+  "typical_outputs": [
+    "screen inventory",
+    "annotated wireflow",
+    "screen-by-screen wireframe guidance",
+    "state map",
+    "structural recommendation",
+    "open questions and assumptions"
+  ],
+  "quality_focus": [
+    "flow clarity",
+    "hierarchy",
+    "state coverage",
+    "requirement-gap detection",
+    "handoff readiness"
+  ],
+  "generated_at": "2026-04-06T01:52:00Z",
+  "updated_by": "openclaw"
 }

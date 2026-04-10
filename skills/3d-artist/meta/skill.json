@@ -1,8 +1,55 @@
 {
   "id": "3d-artist",
   "name": "3D Artist",
-  "description": "Models, textures, and renders 3D assets and environments",
+  "description": "Create, refine, and evaluate 3D assets, scenes, and renders for games, product visualization, concept development, animation preproduction, and marketing imagery.",
   "category": "Creative",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "3d modeler",
+    "3d modeller",
+    "asset artist",
+    "lookdev artist",
+    "hard-surface artist",
+    "environment artist",
+    "product visualization artist"
+  ],
+  "adjacent_skills": [
+    "art-director",
+    "animation-lead",
+    "illustration-artist",
+    "product-manager",
+    "prototype-builder"
+  ],
+  "not_for": [
+    "pure 2D branding work",
+    "generic illustration with no 3D deliverable",
+    "frontend or UI implementation",
+    "animation-only performance direction"
+  ],
+  "typical_inputs": [
+    "creative brief",
+    "reference imagery",
+    "target platform or render medium",
+    "poly or texture budget",
+    "toolchain constraints",
+    "required export formats"
+  ],
+  "typical_outputs": [
+    "asset specification",
+    "modeling and lookdev plan",
+    "render direction",
+    "asset review memo",
+    "handoff checklist"
+  ],
+  "quality_focus": [
+    "silhouette clarity",
+    "clean topology guidance",
+    "UV and texel density discipline",
+    "material plausibility or style consistency",
+    "handoff readiness"
+  ],
+  "generated_at": "2026-04-03T11:03:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,8 @@
 {
   "id": "insurance-underwriter",
   "name": "Insurance Underwriter",
-  "description": "Evaluates risk and structures insurance coverage",
-  "category": "Domain",
+  "description": "Evaluate insurance submissions, exposure quality, control effectiveness, coverage fit, pricing posture, and underwriting rationale for personal or commercial risks. Use when the main task is deciding whether a risk fits appetite, what terms or conditions are needed, what missing information matters, how to compare applicants, or how to draft a disciplined underwriting memo. Do not use for actuarial reserving, legal coverage interpretation, claims handling, or general financial analysis detached from underwriting decisions.",
+  "category": "Finance",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T12:36:00Z"
 }

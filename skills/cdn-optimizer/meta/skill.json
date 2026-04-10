@@ -1,8 +1,53 @@
 {
   "id": "cdn-optimizer",
   "name": "CDN Optimizer",
-  "description": "Optimizes content delivery and edge caching strategies",
+  "description": "Design and improve content delivery networks, caching rules, edge routing, origin shielding, asset delivery strategy, and CDN performance tuning.",
   "category": "Infrastructure",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "cdn performance engineer",
+    "edge caching specialist",
+    "content delivery optimizer",
+    "edge delivery architect"
+  ],
+  "adjacent_skills": [
+    "load-balancer",
+    "performance-optimizer",
+    "cloud-architect",
+    "site-reliability",
+    "security-auditor"
+  ],
+  "not_for": [
+    "general database or backend performance tuning without a CDN layer",
+    "frontend refactors unrelated to edge delivery or cacheability",
+    "DNS-only work with no caching or content delivery impact",
+    "application business-logic debugging that is not caused by CDN behavior"
+  ],
+  "typical_inputs": [
+    "traffic profile by region and asset type",
+    "current CDN provider and origin topology",
+    "cache headers, surrogate directives, TTLs, and invalidation workflows",
+    "cache hit ratio, latency, and origin load metrics",
+    "personalization, auth, geo, and compliance constraints",
+    "specific stale-content, miss, or regional-performance symptoms"
+  ],
+  "typical_outputs": [
+    "CDN optimization plan",
+    "cache policy matrix",
+    "edge-routing recommendations",
+    "incident diagnosis and remediation plan",
+    "cost-performance tradeoff memo",
+    "rollout and rollback checklist"
+  ],
+  "quality_focus": [
+    "delivery correctness",
+    "latency",
+    "origin offload",
+    "cache efficiency",
+    "operational safety"
+  ],
+  "generated_at": "2026-04-03T12:46:00Z",
+  "updated_by": "openclaw"
 }

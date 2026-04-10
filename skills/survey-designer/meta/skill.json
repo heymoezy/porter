@@ -1,8 +1,54 @@
 {
   "id": "survey-designer",
   "name": "Survey Designer",
-  "description": "Designs effective surveys with unbiased methodology",
+  "description": "Design or repair surveys, screeners, question wording, response scales, routing logic, and instrument structure so the data collected is interpretable, low-bias, and usable for real decisions.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "questionnaire designer",
+    "survey methodologist",
+    "research instrument designer",
+    "survey writer"
+  ],
+  "adjacent_skills": [
+    "market-researcher",
+    "ux-researcher",
+    "data-analyst",
+    "customer-support",
+    "customer-success-manager"
+  ],
+  "not_for": [
+    "panel sourcing, incentives, or fieldwork/vendor operations as the primary task",
+    "post-field statistical modeling with no instrument redesign component",
+    "interview guides, moderator guides, or other qualitative facilitation materials",
+    "organization-wide research strategy without a concrete survey deliverable",
+    "polling methodology or election-survey work as the main problem"
+  ],
+  "typical_inputs": [
+    "decision to be informed and hypotheses to test",
+    "target population, eligibility rules, and respondent context",
+    "delivery environment, device, locale, and sensitivity constraints",
+    "constructs to measure plus any tracker or legacy wording constraints",
+    "analysis plan, segments, and comparison needs",
+    "existing draft or required questions"
+  ],
+  "typical_outputs": [
+    "full questionnaire draft",
+    "revised question set with rationale",
+    "screener and skip-logic map",
+    "question-by-question audit with fixes",
+    "response-scale recommendation memo",
+    "fielding-risk and burden assessment"
+  ],
+  "quality_focus": [
+    "measurement validity",
+    "neutral wording",
+    "respondent burden control",
+    "analysis readiness",
+    "field-ready clarity"
+  ],
+  "generated_at": "2026-04-05T16:14:00Z",
+  "updated_by": "openclaw"
 }

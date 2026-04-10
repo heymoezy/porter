@@ -1,8 +1,52 @@
 {
   "id": "print-designer",
   "name": "Print Designer",
-  "description": "Designs print materials, layouts, and publication assets",
+  "description": "Design, critique, and production-plan print-ready materials such as posters, brochures, editorial layouts, packaging graphics, signage, direct mail, and other physical pieces where bleed, trim, folds, stock, color reproduction, and prepress quality matter.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "prepress designer",
+    "print production designer",
+    "editorial print designer",
+    "prepress reviewer"
+  ],
+  "adjacent_skills": [
+    "brand-designer",
+    "packaging-designer",
+    "typography-specialist",
+    "ui-designer"
+  ],
+  "not_for": [
+    "digital-only graphics with no print deliverable",
+    "inventing printer specs, dielines, or fabrication tolerances",
+    "packaging structure engineering as the primary task",
+    "legal or compliance approval of required print disclosures"
+  ],
+  "typical_inputs": [
+    "piece type and finished dimensions",
+    "printer or fabricator specs",
+    "brand assets and layout goals",
+    "stock, finish, and viewing context",
+    "images, logos, barcodes, or QR assets",
+    "deadline and proofing constraints"
+  ],
+  "typical_outputs": [
+    "prepress review",
+    "print-ready layout guidance",
+    "production spec summary",
+    "fold or panel-system recommendations",
+    "export notes",
+    "printer handoff checklist"
+  ],
+  "quality_focus": [
+    "production readiness",
+    "hierarchy and readability",
+    "color and asset realism",
+    "spec accuracy",
+    "handoff clarity"
+  ],
+  "generated_at": "2026-04-05T04:32:00Z",
+  "updated_by": "openclaw"
 }

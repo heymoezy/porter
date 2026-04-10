@@ -26,6 +26,9 @@ export class GeminiCLIAdapter implements GatewayAdapter {
   readonly name = 'Gemini CLI';
   readonly gatewayType = 'gemini_cli' as const;
 
+  /** Token counts from the last stream() call — captured from Gemini's result event */
+  lastStreamTokens: { inputTokens?: number; outputTokens?: number } | null = null;
+
   constructor(private readonly row: GatewayRow) {}
 
   private get binaryPath(): string {
@@ -198,6 +201,8 @@ export class GeminiCLIAdapter implements GatewayAdapter {
   // ── stream ───────────────────────────────────────────────────────────────────
 
   async *stream(req: BridgeDispatchRequest, signal: AbortSignal): AsyncIterable<string> {
+    this.lastStreamTokens = null;
+
     const userContent = req.messages.filter((m) => m.role === 'user').at(-1)?.content ?? '';
     const prompt = req.systemPrompt ? `${req.systemPrompt}\n\n${userContent}` : userContent;
 
@@ -244,7 +249,16 @@ export class GeminiCLIAdapter implements GatewayAdapter {
           yield event.content as string;
         }
 
-        // Skip init, result, tool_use, tool_result events
+        // Capture actual token counts from result event
+        if (event.type === 'result') {
+          const stats = event.stats as Record<string, unknown> | undefined;
+          if (stats) {
+            this.lastStreamTokens = {
+              inputTokens: stats.input_tokens as number | undefined,
+              outputTokens: stats.output_tokens as number | undefined,
+            };
+          }
+        }
       }
     } finally {
       clearTimeout(timer);
@@ -255,7 +269,12 @@ export class GeminiCLIAdapter implements GatewayAdapter {
   // ── listModels ───────────────────────────────────────────────────────────────
 
   async listModels(): Promise<string[]> {
-    // Static — from Gemini CLI init event discovery
-    return ['gemini-2.5-pro', 'gemini-2.5-flash', 'auto-gemini-3'];
+    return [
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+      'gemini-3-flash-preview',
+      'gemini-3-pro-preview',
+    ];
   }
 }

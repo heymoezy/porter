@@ -20,9 +20,9 @@ import { Play, Pause, Search, Flame, Wrench, Sparkles } from "lucide-react"
 const DEFAULT_PORTRAIT = { skin: "#F5D0A9", hair: "#2C1810", eyes: "#1A1A2E", shirt: "#8B5CF6", hairStyle: "short" as const }
 
 const SPECIALISTS = {
-  1: { name: "Quill", template: "Soul Writer", skin: "#f1c27d", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#c2410c", hairStyle: "parted" as const, templateId: "cre-storyteller" },
-  2: { name: "Sage", template: "Skill Trainer", skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#a16207", hairStyle: "short" as const, templateId: "sup-training" },
-  3: { name: "Anvil", template: "Gear Outfitter", skin: "#c68642", hair: "#292524", eyes: "#1a1a2e", shirt: "#92400e", hairStyle: "mohawk" as const, templateId: "eng-platform" },
+  1: { name: "Quill", template: "Storyteller", skin: "#f1c27d", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#c2410c", hairStyle: "parted" as const, templateId: "cre-storyteller" },
+  2: { name: "Sage", template: "Training Specialist", skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#a16207", hairStyle: "short" as const, templateId: "sup-training" },
+  3: { name: "Anvil", template: "Platform Engineer", skin: "#c68642", hair: "#292524", eyes: "#1a1a2e", shirt: "#92400e", hairStyle: "mohawk" as const, templateId: "eng-platform" },
 }
 
 // ── Bombastic Verbs ──────────────────────────────────────
@@ -219,18 +219,6 @@ function WorkshopPlaceholder() {
   )
 }
 
-// ── Arena — coming soon ───────────────────────────────────
-
-function ArenaSoon() {
-  return (
-    <div className="flex flex-col items-center gap-3 text-center">
-      <span className="text-3xl">⚔️</span>
-      <p className="text-sm font-semibold text-text2">Arena</p>
-      <p className="text-xs text-text3">Coming in Phase 28.</p>
-    </div>
-  )
-}
-
 // ── Page ─────────────────────────────────────────────────
 
 export default function ForgePage() {
@@ -303,11 +291,7 @@ export default function ForgePage() {
               <TabsTrigger value="workshop" className="text-xs gap-1.5">
                 <Wrench className="size-3" /> Workshop
               </TabsTrigger>
-              <TabsTrigger value="arena" className="text-xs gap-1.5 opacity-50" disabled>
-                <span className="text-xs leading-none">⚔️</span> Arena
-              </TabsTrigger>
               <div className="ml-auto flex items-center gap-3 pr-2">
-                <Link to="/battles" className="text-xs text-accent-porter hover:underline">Battle Arena →</Link>
                 <Link to="/evolution" className="text-xs text-accent-porter hover:underline">Skill Evolution →</Link>
               </div>
             </TabsList>
@@ -415,11 +399,11 @@ export default function ForgePage() {
                   </div>
                   <div className="flex items-end gap-4 overflow-x-auto pb-1 scrollbar-thin">
                     {/* Warden — forge queue keeper */}
-                    <div className="shrink-0 flex flex-col items-center grayscale opacity-50">
+                    <Link to="/agents/forge-queue-master" className="shrink-0 flex flex-col items-center grayscale opacity-50 hover:opacity-80 transition-opacity">
                       <PixelPortrait skin="#8d5524" hair="#1a1a2e" eyes="#0f172a" shirt="#dc2626" hairStyle="ponytail" size="sm" />
                       <span className="text-2xs font-bold text-text3 mt-1">Warden</span>
-                      <span className="text-2xs text-text3 leading-none">Queue Keeper</span>
-                    </div>
+                      <span className="text-2xs text-text3 leading-none">Queue Master</span>
+                    </Link>
 
                     {/* Divider — the velvet rope */}
                     <div className="shrink-0 w-px h-10 bg-[var(--forge-ember)]/30" />
@@ -551,10 +535,6 @@ export default function ForgePage() {
               }
             </TabsContent>
 
-            {/* Arena — coming soon */}
-            <TabsContent value="arena" className="flex-1 flex items-center justify-center mt-0">
-              <ArenaSoon />
-            </TabsContent>
           </Tabs>
         </div>
 

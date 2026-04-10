@@ -1,8 +1,50 @@
 {
   "id": "franchise-analyst",
   "name": "Franchise Analyst",
-  "description": "Evaluates franchise models and expansion opportunities",
+  "description": "Evaluate franchise opportunities, franchise-network health, multi-unit expansion, and operator economics with attention to fees, support quality, territory dynamics, and franchisor-versus-franchisee incentives.",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "franchise due diligence specialist",
+    "franchise business analyst",
+    "multi-unit expansion analyst",
+    "fdd-oriented analyst"
+  ],
+  "adjacent_skills": [
+    "financial-analyst",
+    "market-researcher",
+    "operations-manager",
+    "ip-attorney"
+  ],
+  "not_for": [
+    "legal interpretation of franchise agreements",
+    "pure site-selection work",
+    "generic small-business analysis with no franchise-specific structure",
+    "bookkeeping"
+  ],
+  "typical_inputs": [
+    "franchise concept, category, and brand maturity",
+    "investment profile and ongoing fee stack",
+    "territory and local market context",
+    "operator profile and expansion objective",
+    "FDD data, franchisee interviews, closure/transfer history, and support model evidence"
+  ],
+  "typical_outputs": [
+    "opportunity screen or go-no-go view",
+    "unit-economics and fee-stack analysis",
+    "system-health assessment",
+    "operator-fit and management-bandwidth view",
+    "ranked diligence questions and thesis breakers"
+  ],
+  "quality_focus": [
+    "unit-economics realism",
+    "fee-stack clarity",
+    "system-health judgment",
+    "operator-fit accuracy",
+    "diligence usefulness"
+  ],
+  "generated_at": "2026-04-04T04:05:34Z",
+  "updated_by": "openclaw"
 }

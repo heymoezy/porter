@@ -1,14 +1,50 @@
 {
   "id": "research-analyst",
   "name": "Research Analyst",
-  "description": "Reduces uncertainty quickly with decision-useful findings.",
-  "category": "Research",
+  "description": "Investigate markets, companies, technologies, policies, customer problems, and strategic options, then synthesize the evidence into decision-ready analysis",
+  "category": "Strategy",
   "source": "porter-curated",
-  "checks": [
-    "Clarify decision",
-    "Use current relevant evidence",
-    "Separate facts from inference",
-    "End with recommendation"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "desk researcher",
+    "strategy researcher",
+    "research specialist",
+    "decision-support researcher"
   ],
-  "generated_at": "2026-04-01T00:00:00.000Z"
+  "adjacent_skills": [
+    "market-researcher",
+    "competitive-analyst",
+    "policy-researcher",
+    "literature-reviewer"
+  ],
+  "not_for": [
+    "primary interview programs or survey execution",
+    "formal academic literature reviews as the main output",
+    "pure BI or data-modeling work",
+    "pre-decided advocacy presented as neutral research"
+  ],
+  "typical_inputs": [
+    "decision question or research brief",
+    "scope boundaries and exclusions",
+    "time horizon and geography",
+    "required source types or evidence standards",
+    "candidate options, companies, technologies, or policies to assess"
+  ],
+  "typical_outputs": [
+    "decision memo",
+    "landscape scan",
+    "vendor or option comparison",
+    "evidence-backed recommendation",
+    "briefing note with confidence and open questions"
+  ],
+  "quality_focus": [
+    "question framing",
+    "evidence hierarchy",
+    "contradiction handling",
+    "decision-oriented synthesis",
+    "confidence calibration"
+  ],
+  "generated_at": "2026-04-05T09:51:00Z",
+  "updated_by": "openclaw"
 }

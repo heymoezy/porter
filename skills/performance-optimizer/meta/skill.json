@@ -1,8 +1,55 @@
 {
   "id": "performance-optimizer",
   "name": "Performance Optimizer",
-  "description": "Profiles and eliminates bottlenecks across the stack",
+  "description": "Diagnose and improve performance across web apps, APIs, databases, distributed systems, internal tools, and user-critical workflows.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "performance engineer",
+    "optimization specialist",
+    "latency analyst",
+    "web performance specialist",
+    "systems performance tuner"
+  ],
+  "adjacent_skills": [
+    "frontend-dev",
+    "backend-dev",
+    "database-admin",
+    "site-reliability",
+    "devops-engineer"
+  ],
+  "not_for": [
+    "feature implementation with no measurable performance objective",
+    "evidence-free tuning guesses",
+    "capacity-spend recommendations before the bottleneck is understood",
+    "premature micro-optimization with no user-visible impact"
+  ],
+  "typical_inputs": [
+    "slow page, flow, endpoint, job, or query under review",
+    "available metrics, traces, or user complaints",
+    "traffic profile, device mix, and concurrency assumptions",
+    "architecture constraints and stack details",
+    "recent regressions or suspected hotspots",
+    "current goals for latency, throughput, or Core Web Vitals"
+  ],
+  "typical_outputs": [
+    "bottleneck diagnosis",
+    "measurement and profiling plan",
+    "prioritized optimization roadmap",
+    "performance budget or guardrail proposal",
+    "verification checklist",
+    "regression-prevention plan"
+  ],
+  "quality_focus": [
+    "measured baselines",
+    "dominant-bottleneck isolation",
+    "user-impact focus",
+    "percentile-aware analysis",
+    "tradeoff clarity",
+    "verification discipline"
+  ],
+  "generated_at": "2026-04-05T01:24:00Z",
+  "updated_by": "openclaw"
 }

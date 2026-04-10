@@ -1,8 +1,52 @@
 {
   "id": "privacy-specialist",
   "name": "Privacy Specialist",
-  "description": "Manages data privacy, GDPR, and consent frameworks",
-  "category": "Legal",
+  "description": "Assess privacy risk, data handling, consent and notice design, retention, vendor exposure, rights operations, and privacy-by-design controls for products, workflows, and third parties involving personal data.",
+  "category": "Risk",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "privacy analyst",
+    "privacy-by-design specialist",
+    "data privacy specialist",
+    "privacy operations lead"
+  ],
+  "adjacent_skills": [
+    "policy-drafter",
+    "security-auditor",
+    "procurement-specialist",
+    "compliance-officer"
+  ],
+  "not_for": [
+    "formal legal advice or regulatory sign-off",
+    "jurisdiction-specific final conclusions without counsel review",
+    "pure security architecture review as the primary task",
+    "policy drafting with no underlying data-use analysis"
+  ],
+  "typical_inputs": [
+    "feature, workflow, or vendor description",
+    "personal-data categories and purposes",
+    "user journey or notice/consent flow",
+    "sharing, transfer, and vendor context",
+    "retention and deletion behavior",
+    "applicable policy or jurisdiction constraints"
+  ],
+  "typical_outputs": [
+    "privacy risk review",
+    "data minimization memo",
+    "consent or notice critique",
+    "vendor privacy diligence summary",
+    "rights-operations gap analysis",
+    "control recommendation plan"
+  ],
+  "quality_focus": [
+    "data-flow clarity",
+    "minimization and retention discipline",
+    "user-impact realism",
+    "practical controls",
+    "honest legal-boundary handling"
+  ],
+  "generated_at": "2026-04-05T04:32:00Z",
+  "updated_by": "openclaw"
 }

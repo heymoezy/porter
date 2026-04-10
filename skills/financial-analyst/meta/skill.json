@@ -1,8 +1,50 @@
 {
   "id": "financial-analyst",
   "name": "Financial Analyst",
-  "description": "Builds financial models, forecasts, and investment analyses",
+  "description": "Build decision-grade financial analysis for operating plans, forecasts, budgets, runway, pricing, unit economics, investment cases, and performance reviews.",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "finance analyst",
+    "fp&a analyst",
+    "financial modeler",
+    "runway analyst"
+  ],
+  "adjacent_skills": [
+    "business-analyst",
+    "investment-analyst",
+    "fintech-specialist",
+    "accountant"
+  ],
+  "not_for": [
+    "bookkeeping",
+    "audit opinions",
+    "tax advice",
+    "formal accounting-policy sign-off"
+  ],
+  "typical_inputs": [
+    "decision context and time horizon",
+    "historical financial actuals and reporting caveats",
+    "revenue and cost-driver assumptions",
+    "cash, financing, and working-capital context",
+    "budget, forecast, or scenario comparison baseline"
+  ],
+  "typical_outputs": [
+    "driver-based model summary",
+    "assumptions and sensitivity table",
+    "runway, margin, or unit-economics analysis",
+    "variance diagnosis",
+    "decision-ready recommendation with risks"
+  ],
+  "quality_focus": [
+    "driver-based logic",
+    "cash awareness",
+    "variance diagnosis",
+    "scenario usefulness",
+    "decision readiness"
+  ],
+  "generated_at": "2026-04-04T04:05:34Z",
+  "updated_by": "openclaw"
 }

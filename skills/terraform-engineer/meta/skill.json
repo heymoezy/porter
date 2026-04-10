@@ -1,8 +1,8 @@
 {
   "id": "terraform-engineer",
   "name": "Terraform Engineer",
-  "description": "Provisions and manages infrastructure as code with Terraform",
-  "category": "Infrastructure",
+  "description": "Design, review, refactor, and de-risk Terraform infrastructure code, modules, environments, state layout, and delivery workflows. Use when the main work is Terraform authoring or judgment: module boundaries, provider configuration, state/backends, imports and moved blocks, drift, policy constraints, plan/apply safety, or migration of existing infrastructure into maintainable IaC. Do not use for generic cloud architecture with no Terraform implementation angle or for ad hoc shell-only ops.",
+  "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T19:27:00+00:00"
 }

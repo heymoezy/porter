@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { ok } from '../../lib/admin-envelope.js';
-import { queryOne, queryAll } from '../../db/pg-helpers.js';
+import { queryOne, queryAll, execute } from '../../db/pg-helpers.js';
+import { emitAdminEvent } from '../../services/admin/admin-sse.js';
+import crypto from 'crypto';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -120,5 +122,34 @@ export default async function healthRoutes(fastify: FastifyInstance) {
       recentActivity,
       version: ADMIN_VERSION,
     });
+  });
+
+  // POST /api/admin/health/log-external — public endpoint for CLI activity logging (no auth)
+  fastify.post('/log-external', async (request, reply) => {
+    const body = request.body as Record<string, unknown>;
+    const gatewayType = (body.gateway_type as string) || 'unknown';
+    const modelName = (body.model_name as string) || 'unknown';
+    const inputTokens = (body.input_tokens as number) || 0;
+    const outputTokens = (body.output_tokens as number) || 0;
+    const latencyMs = (body.latency_ms as number) || 0;
+    const sourceAgent = (body.source_agent as string) || null;
+    const intent = (body.intent as string) || null;
+    const chatId = (body.chat_id as string) || null;
+    const username = (body.username as string) || null;
+
+    const gw = await queryAll<{ id: string }>(`SELECT id FROM gateways WHERE type = $1 LIMIT 1`, [gatewayType]);
+    const gatewayId = gw[0]?.id || null;
+
+    await execute(
+      `INSERT INTO bridge_dispatch_log
+         (id, gateway_id, gateway_type, model_name, chosen_reason, input_tokens, output_tokens, latency_ms,
+          source_agent, intent, chat_id, username, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, EXTRACT(EPOCH FROM NOW()))`,
+      [crypto.randomUUID(), gatewayId, gatewayType, modelName, 'external_cli',
+       inputTokens, outputTokens, latencyMs, sourceAgent, intent, chatId, username],
+    );
+
+    emitAdminEvent('bridge:dispatch', { gateway_type: gatewayType, model: modelName, intent });
+    return reply.send(ok({ logged: true }));
   });
 }

@@ -1,8 +1,55 @@
 {
   "id": "nlp-specialist",
   "name": "NLP Specialist",
-  "description": "Builds text processing, classification, and generation systems",
+  "description": "Design, audit, and improve NLP systems for classification, extraction, retrieval, summarization, search, semantic matching, multilingual text, prompt pipelines, and production language workflows. Use when the task is about turning messy text into reliable structured decisions or useful generated output, and the answer depends on data shape, evaluation design, and failure-mode control.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "natural language processing specialist",
+    "language systems designer",
+    "text ai engineer",
+    "nlp engineer",
+    "retrieval and extraction specialist"
+  ],
+  "adjacent_skills": [
+    "prompt-engineer",
+    "prompt-architect",
+    "ml-engineer",
+    "model-evaluator",
+    "knowledge-base-author"
+  ],
+  "not_for": [
+    "generic prompting with no text-system design question",
+    "pure ml infrastructure or training work with little language-task reasoning",
+    "content writing or editing as the primary task",
+    "policy or legal review not centered on language-system behavior"
+  ],
+  "typical_inputs": [
+    "sample texts or document set",
+    "task definition and target output",
+    "taxonomy, schema, or label space",
+    "latency, cost, and quality constraints",
+    "current pipeline behavior or failure examples",
+    "privacy, compliance, or review requirements"
+  ],
+  "typical_outputs": [
+    "approach selection memo",
+    "pipeline design",
+    "schema or label rubric",
+    "evaluation plan",
+    "failure-mode audit",
+    "prioritized fix plan"
+  ],
+  "quality_focus": [
+    "task-fit architecture",
+    "realistic evaluation",
+    "structured output reliability",
+    "fallback and abstention behavior",
+    "retrieval and prompt robustness",
+    "production operability"
+  ],
+  "generated_at": "2026-04-04T23:11:00Z",
+  "updated_by": "openclaw"
 }

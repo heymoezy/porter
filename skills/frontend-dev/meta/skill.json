@@ -1,8 +1,50 @@
 {
   "id": "frontend-dev",
   "name": "Frontend Developer",
-  "description": "Builds responsive, accessible web interfaces with modern frameworks",
+  "description": "Build, debug, and refactor browser-facing product behavior inside an existing application, especially when UI state, rendering correctness, forms, async UX, accessibility, responsiveness, or browser quirks dominate the work.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "frontend engineer",
+    "ui developer",
+    "client-side developer",
+    "web interface engineer"
+  ],
+  "adjacent_skills": [
+    "backend-dev",
+    "fullstack-dev",
+    "ux-designer",
+    "accessibility-specialist"
+  ],
+  "not_for": [
+    "backend-led changes where server logic dominates",
+    "pure visual exploration or mockups without implementation",
+    "infrastructure or deployment work",
+    "end-to-end features where frontend and backend are both materially complex"
+  ],
+  "typical_inputs": [
+    "user flow or bug report",
+    "existing UI code path and component boundaries",
+    "data dependencies and async behavior",
+    "design-system or styling constraints",
+    "accessibility, responsive, and browser expectations"
+  ],
+  "typical_outputs": [
+    "implemented UI and state changes",
+    "explicit visible-state handling",
+    "accessibility and responsive behavior notes",
+    "tests or browser verification notes",
+    "risks, follow-ups, or adjacent backend asks"
+  ],
+  "quality_focus": [
+    "user-visible correctness",
+    "accessibility and inclusive interaction",
+    "state clarity and maintainability",
+    "responsive resilience",
+    "browser-tested reliability"
+  ],
+  "generated_at": "2026-04-04T05:08:00Z",
+  "updated_by": "openclaw"
 }

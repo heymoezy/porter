@@ -1,8 +1,52 @@
 {
   "id": "procurement-specialist",
   "name": "Procurement Specialist",
-  "description": "Manages purchasing, contracts, and cost negotiations",
-  "category": "Business",
+  "description": "Plan, structure, and evaluate purchasing decisions, sourcing strategies, vendor selection, RFP/RFQ processes, commercial requirements, supplier risk, and buying governance for goods and services.",
+  "category": "Operations",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "sourcing specialist",
+    "procurement analyst",
+    "vendor selection specialist",
+    "purchasing strategist"
+  ],
+  "adjacent_skills": [
+    "vendor-manager",
+    "financial-analyst",
+    "privacy-specialist",
+    "contract-reviewer"
+  ],
+  "not_for": [
+    "legal contract drafting or clause negotiation as the primary task",
+    "invoice or AP processing",
+    "ongoing supplier relationship management after purchase",
+    "making buying recommendations from vendor marketing alone"
+  ],
+  "typical_inputs": [
+    "business need and desired outcome",
+    "requirements, constraints, and timeline",
+    "budget and expected usage profile",
+    "vendor options or market category",
+    "implementation, integration, and risk considerations",
+    "stakeholders, approvers, and governance needs"
+  ],
+  "typical_outputs": [
+    "sourcing strategy memo",
+    "weighted vendor scorecard",
+    "RFP or RFQ structure",
+    "TCO comparison",
+    "go / no-go / conditional-go recommendation",
+    "pre-signature diligence checklist"
+  ],
+  "quality_focus": [
+    "requirements clarity",
+    "decision traceability",
+    "cost realism",
+    "supplier-risk awareness",
+    "operational practicality"
+  ],
+  "generated_at": "2026-04-05T04:32:00Z",
+  "updated_by": "openclaw"
 }

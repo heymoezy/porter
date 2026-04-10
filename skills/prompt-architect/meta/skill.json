@@ -1,14 +1,52 @@
 {
   "id": "prompt-architect",
   "name": "Prompt Architect",
-  "description": "Repairs weak prompts and sharpens worker briefs before delegation.",
+  "description": "Rewrite vague, bloated, or under-specified prompts into compact high-signal instructions for agents, models, and human collaborators",
   "category": "Orchestration",
-  "source": "porter-core",
-  "checks": [
-    "Preserve intent",
-    "Remove ambiguity",
-    "Add deliverables and validation",
-    "Keep prompt compact"
+  "source": "porter-curated",
+  "catalogTier": "professional",
+  "status": "active",
+  "aliases": [
+    "brief rewriter",
+    "instruction editor",
+    "delegation prompt designer",
+    "prompt repair specialist"
   ],
-  "generated_at": "2026-04-01T00:00:00.000Z"
+  "adjacent_skills": [
+    "prompt-engineer",
+    "quality-reviewer",
+    "research-analyst",
+    "proposal-writer"
+  ],
+  "not_for": [
+    "prompt-system architecture across a product",
+    "evaluation harness design with no prompt rewrite need",
+    "generic copywriting unrelated to instructions",
+    "workflow failures caused by missing tools or source data"
+  ],
+  "typical_inputs": [
+    "source prompt or messy brief",
+    "true task objective",
+    "target executor",
+    "constraints and forbidden moves",
+    "desired deliverable and quality bar",
+    "known gaps or missing inputs"
+  ],
+  "typical_outputs": [
+    "rewritten prompt",
+    "delegation brief",
+    "reusable template",
+    "prompt variants",
+    "assumptions list",
+    "acceptance checklist"
+  ],
+  "quality_focus": [
+    "intent preservation",
+    "ambiguity removal",
+    "instruction hierarchy",
+    "compactness",
+    "immediate executability"
+  ],
+  "generated_at": "2026-04-05T06:40:00Z",
+  "updated_by": "openclaw"
 }

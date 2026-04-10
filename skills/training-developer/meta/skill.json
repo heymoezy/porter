@@ -1,8 +1,8 @@
 {
   "id": "training-developer",
-  "name": "Training Developer",
-  "description": "Creates training materials, workshops, and learning paths",
-  "category": "Support",
+  "name": "training-developer",
+  "description": "Design job-relevant training programs, workshops, onboarding paths, facilitator guides, labs, assessments, and reinforcement plans that build real capability instead of content inventory. Use when work involves curriculum design, enablement, skill-gap closure, onboarding, role-based learning paths, train-the-trainer materials, workshop planning, or converting subject-matter expertise into structured instruction. Do not use for one-off explanatory writing that does not need learning design.",
+  "category": "Education",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T20:29:00+00:00"
 }

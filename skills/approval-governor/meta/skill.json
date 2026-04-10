@@ -1,8 +1,54 @@
 {
   "id": "approval-governor",
   "name": "Approval Governor",
-  "description": "Applies approval gates before roster/structure changes",
+  "description": "Decide whether proposed changes require explicit approval before execution, especially for roster changes, role/permission changes, structural reconfiguration, destructive operations, policy exceptions, or other high-impact governance decisions.",
   "category": "Orchestration",
   "source": "porter-core",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "catalogTier": "governance",
+  "status": "active",
+  "aliases": [
+    "approval gatekeeper",
+    "change approver",
+    "risk approval reviewer",
+    "guardrail decision maker"
+  ],
+  "adjacent_skills": [
+    "delegation-governor",
+    "compliance-officer",
+    "privacy-specialist",
+    "security-auditor",
+    "operations-manager",
+    "project-operator"
+  ],
+  "not_for": [
+    "routine low-risk execution already clearly authorized",
+    "implementation planning after approval is already granted",
+    "legal sign-off as a substitute for counsel",
+    "deep specialist security or privacy review"
+  ],
+  "typical_inputs": [
+    "proposed action",
+    "affected scope and stakeholders",
+    "existing authorization or policy context",
+    "risk and reversibility details",
+    "time sensitivity",
+    "safer alternatives"
+  ],
+  "typical_outputs": [
+    "proceed or approval-required recommendation",
+    "risk classification",
+    "approval request draft",
+    "decision rationale",
+    "escalation note",
+    "scoped alternative plan"
+  ],
+  "quality_focus": [
+    "clear approval boundaries",
+    "proportional governance",
+    "risk visibility",
+    "minimal bureaucracy",
+    "execution safety"
+  ],
+  "generated_at": "2026-04-03T12:20:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,8 @@
 {
   "id": "load-balancer",
   "name": "Load Balancer Specialist",
-  "description": "Configures traffic distribution and high availability",
+  "description": "Design, review, and troubleshoot load balancing strategies for reliability, latency, and traffic control across services. Use when the work involves L4/L7 balancing, health checks, routing policies, session affinity, failover, TLS termination, proxy behavior, traffic steering, connection draining, or debugging uneven traffic and availability issues. Do not use for general network architecture with no traffic-distribution problem, or application-only performance tuning unrelated to routing and balancing.",
   "category": "Infrastructure",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T16:58:00+00:00"
 }

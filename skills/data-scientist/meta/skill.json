@@ -1,8 +1,52 @@
 {
   "id": "data-scientist",
   "name": "Data Scientist",
-  "description": "Extracts insights from data using statistical and ML methods",
+  "description": "Frame ambiguous questions into testable analytical work, choose appropriate statistical or machine-learning methods, and translate results into decision-ready recommendations. Use when Porter needs experiment design, forecasting, segmentation, predictive modeling, model evaluation, causal caution, or evidence-backed guidance on what the data actually supports.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "applied data scientist",
+    "predictive analyst",
+    "experimentation scientist",
+    "forecasting analyst",
+    "ml scientist"
+  ],
+  "adjacent_skills": [
+    "bi-analyst",
+    "analytics-engineer",
+    "ml-engineer",
+    "data-engineer"
+  ],
+  "not_for": [
+    "data ingestion or warehouse design as the primary task",
+    "dashboard polish without substantive analysis",
+    "production ML platform engineering as the main objective",
+    "making causal claims from weak observational evidence"
+  ],
+  "typical_inputs": [
+    "decision to support",
+    "available data and known gaps",
+    "target outcome and time horizon",
+    "constraints and cost of errors",
+    "evaluation metric",
+    "baseline process or heuristic"
+  ],
+  "typical_outputs": [
+    "analysis plan",
+    "experiment design",
+    "forecasting or modeling recommendation",
+    "evaluation summary",
+    "decision memo with caveats"
+  ],
+  "quality_focus": [
+    "decision usefulness",
+    "baseline discipline",
+    "evaluation fit",
+    "uncertainty honesty",
+    "causal restraint"
+  ],
+  "generated_at": "2026-04-03T19:34:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,54 @@
 {
   "id": "devops-engineer",
   "name": "DevOps Engineer",
-  "description": "Automates build, test, and deployment pipelines",
+  "description": "Design, harden, and simplify the path from commit to production across CI/CD, infrastructure automation, deployment strategy, environment management, secrets handling, release controls, and observability. Use when the main problem is delivery safety or operational reliability: flaky pipelines, manual deploys, environment drift, weak rollback plans, poor release visibility, or slow developer feedback loops.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "platform ops engineer",
+    "release engineer",
+    "ci cd engineer",
+    "delivery engineer",
+    "infra automation engineer"
+  ],
+  "adjacent_skills": [
+    "site-reliability",
+    "cloud-architect",
+    "security-auditor",
+    "disaster-recovery",
+    "infrastructure-engineer"
+  ],
+  "not_for": [
+    "pure feature implementation",
+    "live incident command as the primary task",
+    "vague infrastructure diagramming with no delivery workflow impact",
+    "cost optimization work with no release or operability angle"
+  ],
+  "typical_inputs": [
+    "service topology",
+    "current delivery workflow",
+    "pipeline bottlenecks or failure history",
+    "environment and secrets model",
+    "observability setup",
+    "compliance or release constraints"
+  ],
+  "typical_outputs": [
+    "delivery-path map",
+    "CI/CD redesign",
+    "deployment strategy recommendation",
+    "configuration and secrets plan",
+    "release runbook",
+    "operability improvement roadmap"
+  ],
+  "quality_focus": [
+    "safe delivery",
+    "rollback readiness",
+    "observability",
+    "automation leverage",
+    "developer throughput"
+  ],
+  "generated_at": "2026-04-03T21:41:00Z",
+  "updated_by": "openclaw"
 }

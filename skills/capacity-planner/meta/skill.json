@@ -1,8 +1,53 @@
 {
   "id": "capacity-planner",
   "name": "Capacity Planner",
-  "description": "Forecasts and plans infrastructure capacity needs",
+  "description": "Forecast service and infrastructure capacity, model demand versus supply, and recommend headroom, scaling, and resilience plans before systems or teams hit failure.",
   "category": "Infrastructure",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "capacity analyst",
+    "infrastructure capacity planner",
+    "workload planner",
+    "scaling planner"
+  ],
+  "adjacent_skills": [
+    "site-reliability",
+    "performance-optimizer",
+    "cloud-architect",
+    "operations-manager",
+    "cost-optimizer"
+  ],
+  "not_for": [
+    "active incident triage during an outage",
+    "detailed implementation of infrastructure changes",
+    "code-level performance debugging only",
+    "budgeting disconnected from workload behavior"
+  ],
+  "typical_inputs": [
+    "service or operation being planned",
+    "throughput, concurrency, and demand patterns",
+    "SLOs or turnaround commitments",
+    "current utilization, limits, and known bottlenecks",
+    "growth drivers, seasonality, and launch events",
+    "cost envelope, lead times, and operational constraints"
+  ],
+  "typical_outputs": [
+    "baseline capacity assessment",
+    "scenario-based demand forecast",
+    "bottleneck and saturation-risk analysis",
+    "headroom and threshold recommendation",
+    "scaling or staffing plan",
+    "capacity monitoring and revisit plan"
+  ],
+  "quality_focus": [
+    "peak-aware measurement",
+    "bottleneck identification",
+    "scenario planning",
+    "headroom policy",
+    "cost-reliability tradeoffs"
+  ],
+  "generated_at": "2026-04-03T12:38:00Z",
+  "updated_by": "openclaw"
 }

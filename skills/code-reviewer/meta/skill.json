@@ -1,8 +1,52 @@
 {
   "id": "code-reviewer",
   "name": "Code Reviewer",
-  "description": "Provides thorough, constructive code review feedback",
+  "description": "Provide thorough, constructive review feedback on code changes with attention to correctness, maintainability, edge cases, tests, regressions, performance, and security.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "pr reviewer",
+    "pull request reviewer",
+    "merge risk reviewer",
+    "patch reviewer"
+  ],
+  "adjacent_skills": [
+    "code-implementer",
+    "backend-dev",
+    "frontend-dev",
+    "fullstack-dev",
+    "security-auditor",
+    "project-architect"
+  ],
+  "not_for": [
+    "implementing the code as the main task",
+    "architecture planning before concrete changes exist",
+    "purely stylistic cleanup when real risks matter more",
+    "generic approval with no review substance"
+  ],
+  "typical_inputs": [
+    "diff or pull request",
+    "change intent",
+    "requirements or acceptance criteria",
+    "test changes",
+    "risk-sensitive areas of the system"
+  ],
+  "typical_outputs": [
+    "review summary",
+    "severity-ranked findings",
+    "merge blockers",
+    "review questions",
+    "merge recommendation"
+  ],
+  "quality_focus": [
+    "correctness",
+    "regression prevention",
+    "test sufficiency",
+    "maintainability",
+    "high-signal feedback"
+  ],
+  "generated_at": "2026-04-03T12:49:00Z",
+  "updated_by": "openclaw"
 }

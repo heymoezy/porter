@@ -1,8 +1,8 @@
 {
   "id": "typography-specialist",
-  "name": "Typography Specialist",
-  "description": "Selects and pairs typefaces for optimal readability and brand fit",
-  "category": "Creative",
+  "name": "typography-specialist",
+  "description": "Design, critique, and systematize typography for product UI, editorial layouts, brand systems, decks, and marketing assets with strong readability, hierarchy, rhythm, and accessibility. Use when the hard part is choosing type pairings, defining scales, fixing spacing and line-length issues, improving legibility, or creating implementation-ready typography guidance. Do not use for broader visual identity strategy or full screen layout design when typography is only one small part.",
+  "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T21:35:00+00:00"
 }

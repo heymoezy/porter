@@ -1,8 +1,54 @@
 {
   "id": "sustainability-advisor",
   "name": "Sustainability Advisor",
-  "description": "Develops ESG strategies and sustainability frameworks",
-  "category": "Domain",
+  "description": "Turn sustainability work into a practical operating agenda by identifying material impacts, clarifying reporting and boundary choices, prioritizing credible reduction levers, and stress-testing sustainability claims against available evidence.",
+  "category": "Operations",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "sustainability strategist",
+    "decarbonization advisor",
+    "ESG strategy advisor",
+    "climate transition planner"
+  ],
+  "adjacent_skills": [
+    "supply-chain-optimizer",
+    "financial-analyst",
+    "policy-researcher",
+    "regulatory-analyst",
+    "procurement-specialist"
+  ],
+  "not_for": [
+    "legal assurance opinions, attestation conclusions, or certification determinations",
+    "full life-cycle assessment or product-footprint modeling as the primary task",
+    "investor-relations or glossy ESG communications detached from operating reality",
+    "marketing claims that outrun the evidence",
+    "policy lobbying or regulatory interpretation as the main deliverable"
+  ],
+  "typical_inputs": [
+    "organization type, business model, and major value-chain activities",
+    "likely footprint hotspots across operations and supply chain",
+    "current inventory/reporting scope, baseline year, and methodology if any",
+    "reporting pressures, customer requests, and disclosure expectations",
+    "operational constraints such as budget, supplier leverage, and data quality",
+    "stated targets, public claims, and existing initiatives"
+  ],
+  "typical_outputs": [
+    "sustainability strategy memo",
+    "materiality or hotspot prioritization map",
+    "GHG reporting-readiness assessment",
+    "decarbonization action roadmap",
+    "target and claim credibility review",
+    "cross-functional implementation plan"
+  ],
+  "quality_focus": [
+    "materiality focus",
+    "boundary clarity",
+    "credibility under scrutiny",
+    "operational practicality",
+    "ranked action prioritization"
+  ],
+  "generated_at": "2026-04-05T16:14:00Z",
+  "updated_by": "openclaw"
 }

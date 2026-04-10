@@ -1,8 +1,52 @@
 {
   "id": "proposal-writer",
   "name": "Proposal Writer",
-  "description": "Creates persuasive business and project proposals",
+  "description": "Create persuasive proposals for services, projects, partnerships, grants, and internal initiatives",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "bid writer",
+    "business proposal writer",
+    "scope of work drafter",
+    "approval memo writer"
+  ],
+  "adjacent_skills": [
+    "copywriter",
+    "contract-reviewer",
+    "grant-writer",
+    "project-architect"
+  ],
+  "not_for": [
+    "legal contract drafting",
+    "marketing collateral with no approval decision",
+    "pure technical specifications",
+    "hiding major assumptions or exclusions to sound stronger"
+  ],
+  "typical_inputs": [
+    "client or stakeholder brief",
+    "decision criteria and approvers",
+    "scope and deliverables",
+    "timeline and dependencies",
+    "pricing or resource assumptions",
+    "proof points and known risks"
+  ],
+  "typical_outputs": [
+    "proposal draft",
+    "executive summary",
+    "scope and pricing table",
+    "options comparison",
+    "assumptions and exclusions section",
+    "approval-ready close"
+  ],
+  "quality_focus": [
+    "decision-maker clarity",
+    "commercial logic",
+    "credibility",
+    "scannability",
+    "clear call to action"
+  ],
+  "generated_at": "2026-04-05T06:40:00Z",
+  "updated_by": "openclaw"
 }

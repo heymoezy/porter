@@ -1,8 +1,53 @@
 {
   "id": "blog-writer",
   "name": "Blog Writer",
-  "description": "Writes engaging, SEO-friendly blog posts and articles",
+  "description": "Plan and write blog posts that are useful, readable, and strategically aligned to audience, channel, and business goal.",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "article writer",
+    "content blogger",
+    "editorial writer",
+    "seo blog writer"
+  ],
+  "adjacent_skills": [
+    "content-writer",
+    "copywriter",
+    "technical-writer",
+    "case-study-writer",
+    "seo-specialist"
+  ],
+  "not_for": [
+    "ad copy or landing-page copy as the main deliverable",
+    "deep technical documentation",
+    "ghostwritten speeches or scripts",
+    "keyword-stuffed low-value content"
+  ],
+  "typical_inputs": [
+    "target audience and business goal",
+    "topic, angle, and key claims",
+    "source material or product facts",
+    "seo keywords or search intent",
+    "tone, style, and format constraints",
+    "cta and distribution channel"
+  ],
+  "typical_outputs": [
+    "full blog draft",
+    "outline and headline options",
+    "editorial rewrite",
+    "seo refresh plan",
+    "blog content brief",
+    "cta and metadata recommendations"
+  ],
+  "quality_focus": [
+    "reader value",
+    "clear angle",
+    "structure and flow",
+    "accuracy",
+    "channel fit"
+  ],
+  "generated_at": "2026-04-03T13:00:00Z",
+  "updated_by": "openclaw"
 }

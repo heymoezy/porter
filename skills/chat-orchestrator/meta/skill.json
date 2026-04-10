@@ -1,8 +1,52 @@
 {
   "id": "chat-orchestrator",
   "name": "Chat Orchestrator",
-  "description": "Keeps conversations lean, turns chat into orchestration moves",
+  "description": "Turn ambiguous chat requests into crisp execution moves, structured replies, routing decisions, and next-step orchestration.",
   "category": "Orchestration",
   "source": "porter-core",
-  "generated_at": "2026-04-02T04:10:00+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "conversation orchestrator",
+    "chat flow operator",
+    "reply strategist",
+    "conversation triage lead"
+  ],
+  "adjacent_skills": [
+    "delegation-governor",
+    "project-operator",
+    "directive-librarian",
+    "customer-support",
+    "prompt-architect"
+  ],
+  "not_for": [
+    "deep specialist domain execution that another skill should own",
+    "long-form content writing as the primary deliverable",
+    "project-management system design beyond chat orchestration",
+    "stalling execution with unnecessary clarifying questions"
+  ],
+  "typical_inputs": [
+    "user goal and desired output",
+    "conversation history or messy thread context",
+    "constraints on tone, brevity, and timing",
+    "known facts, open questions, and blockers",
+    "available specialists, tools, or handoff options"
+  ],
+  "typical_outputs": [
+    "concise reply strategy",
+    "task sequencing plan",
+    "delegation or routing brief",
+    "conversation summary with decisions and blockers",
+    "single clarifying question",
+    "action-oriented response draft"
+  ],
+  "quality_focus": [
+    "clarity",
+    "momentum",
+    "routing quality",
+    "brevity",
+    "decision usefulness"
+  ],
+  "generated_at": "2026-04-03T12:43:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,52 @@
 {
   "id": "escalation-handler",
   "name": "Escalation Handler",
-  "description": "Manages critical escalations with urgency and care",
-  "category": "Support",
+  "description": "Triage, stabilize, and communicate through high-stakes customer, partner, executive, internal, or operational escalations.",
+  "category": "Operations",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "escalation manager",
+    "incident communications handler",
+    "customer escalation lead",
+    "executive escalation responder"
+  ],
+  "adjacent_skills": [
+    "customer-support",
+    "customer-success-manager",
+    "disaster-recovery",
+    "incident-responder",
+    "communications-manager"
+  ],
+  "not_for": [
+    "routine low-severity support replies",
+    "formal legal admissions or settlement language",
+    "public crisis statements requiring communications approval",
+    "deep technical remediation execution itself"
+  ],
+  "typical_inputs": [
+    "what happened and why it escalated",
+    "severity, stakeholders, and business impact",
+    "prior promises, missed commitments, and emotional temperature",
+    "current status, owners, blockers, and unknowns",
+    "authority, deadlines, and trust risks"
+  ],
+  "typical_outputs": [
+    "escalation summary",
+    "stakeholder communication draft",
+    "owner-action matrix",
+    "update cadence recommendation",
+    "de-escalation and trust-repair plan",
+    "post-escalation prevention notes"
+  ],
+  "quality_focus": [
+    "speed of stabilization",
+    "clarity under pressure",
+    "ownership definition",
+    "trust preservation",
+    "credible follow-through"
+  ],
+  "generated_at": "2026-04-04T00:53:00Z",
+  "updated_by": "openclaw"
 }

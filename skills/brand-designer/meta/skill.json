@@ -1,8 +1,53 @@
 {
   "id": "brand-designer",
   "name": "Brand Designer",
-  "description": "Develops cohesive visual identities and brand guidelines",
+  "description": "Design cohesive brand identity systems, visual directions, and brand guidelines that create recognition and consistency across touchpoints.",
   "category": "Creative",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "brand identity designer",
+    "visual identity designer",
+    "branding designer",
+    "brand system designer"
+  ],
+  "adjacent_skills": [
+    "art-director",
+    "ui-designer",
+    "packaging-designer",
+    "style-guide-writer",
+    "illustration-artist"
+  ],
+  "not_for": [
+    "one-off campaign graphics with no identity-system component",
+    "ui design as the primary task",
+    "illustration commissions detached from brand strategy",
+    "style exploration without usage context"
+  ],
+  "typical_inputs": [
+    "brand mission, positioning, and audience",
+    "existing identity assets and constraints",
+    "required touchpoints and channels",
+    "competitive landscape and category patterns",
+    "deliverable requirements such as logo, palette, type system, and guidelines",
+    "accessibility and rollout constraints"
+  ],
+  "typical_outputs": [
+    "brand identity direction memo",
+    "brand concept options",
+    "visual system recommendation",
+    "brand guideline structure",
+    "identity critique and refresh plan",
+    "touchpoint application guidance"
+  ],
+  "quality_focus": [
+    "strategic alignment",
+    "recognizability",
+    "system coherence",
+    "practical usability",
+    "accessibility"
+  ],
+  "generated_at": "2026-04-03T13:05:00Z",
+  "updated_by": "openclaw"
 }

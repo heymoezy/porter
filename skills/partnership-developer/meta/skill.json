@@ -1,8 +1,55 @@
 {
   "id": "partnership-developer",
   "name": "Partnership Developer",
-  "description": "Identifies and structures strategic partnerships",
-  "category": "Business",
+  "description": "Build, prioritize, and advance partnerships that create distribution, revenue, product leverage, audience access, or strategic positioning.",
+  "category": "Growth",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "partnership strategist",
+    "alliances manager",
+    "channel partnership lead",
+    "ecosystem developer",
+    "business development partner lead"
+  ],
+  "adjacent_skills": [
+    "sales-strategist",
+    "product-marketer",
+    "growth-hacker",
+    "corporate-development-analyst",
+    "integration-strategist"
+  ],
+  "not_for": [
+    "direct outbound sales to end customers with no partner layer",
+    "final legal drafting of partnership agreements",
+    "M&A or investment evaluation",
+    "generic networking advice with no strategic business objective"
+  ],
+  "typical_inputs": [
+    "business objective and target market",
+    "ICP, buying motion, and existing channels",
+    "available partner categories and ecosystem landscape",
+    "product capabilities, integration surface, and service capacity",
+    "partner incentives, objections, and internal constraints",
+    "commercial goals, attribution model, and success metrics"
+  ],
+  "typical_outputs": [
+    "partnership strategy",
+    "partner landscape map",
+    "prioritized target list",
+    "value proposition by partner type",
+    "partner pitch or outreach memo",
+    "pilot and deal-structure options"
+  ],
+  "quality_focus": [
+    "mutual value clarity",
+    "ecosystem fit",
+    "target prioritization realism",
+    "activation sequencing",
+    "commercial practicality",
+    "measurable pilot design"
+  ],
+  "generated_at": "2026-04-05T00:15:00Z",
+  "updated_by": "openclaw"
 }

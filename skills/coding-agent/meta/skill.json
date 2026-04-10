@@ -1,8 +1,52 @@
 {
   "id": "coding-agent",
   "name": "Coding Agent",
-  "description": "Delegated implementation lane for real code execution",
+  "description": "Delegate substantial coding work to an external coding harness or background implementation agent that can explore repositories, edit files, run commands, and iterate on code changes.",
   "category": "Development",
   "source": "runtime",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "delegated coder",
+    "implementation agent",
+    "coding harness",
+    "repo coding agent"
+  ],
+  "adjacent_skills": [
+    "code-implementer",
+    "code-reviewer",
+    "backend-dev",
+    "frontend-dev",
+    "fullstack-dev",
+    "tmux"
+  ],
+  "not_for": [
+    "tiny direct edits that are faster to perform inline",
+    "pure code review with no implementation delegation",
+    "architecture-only work before a coding target is defined",
+    "non-coding research or documentation tasks"
+  ],
+  "typical_inputs": [
+    "repository path or workspace target",
+    "implementation goal or bug report",
+    "acceptance criteria and non-goals",
+    "file, branch, or permission constraints",
+    "validation commands or expected checks"
+  ],
+  "typical_outputs": [
+    "coding delegation brief",
+    "implemented code artifact",
+    "validation summary",
+    "files changed summary",
+    "open risks or blockers"
+  ],
+  "quality_focus": [
+    "delegation clarity",
+    "scope control",
+    "implementation quality",
+    "validation evidence",
+    "reviewability"
+  ],
+  "generated_at": "2026-04-03T12:56:00Z",
+  "updated_by": "openclaw"
 }

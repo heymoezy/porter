@@ -1,8 +1,52 @@
 {
   "id": "email-writer",
   "name": "Email Writer",
-  "description": "Writes professional emails matched to context and tone",
-  "category": "Writing",
+  "description": "Draft, rewrite, and sharpen emails for internal communication, customer communication, executive updates, recruiting, outreach, follow-up, coordination, and sensitive professional conversations.",
+  "category": "Communication",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:10:02+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "email drafter",
+    "business email writer",
+    "outreach email writer",
+    "executive email writer"
+  ],
+  "adjacent_skills": [
+    "copywriter",
+    "customer-success-manager",
+    "customer-support",
+    "escalation-handler",
+    "ghostwriter"
+  ],
+  "not_for": [
+    "binding legal or HR advice",
+    "full campaign or lifecycle email strategy without drafting work",
+    "SMS/chat-first scripting unless intentionally adapted from email",
+    "deceptive outreach or phishing-style messages"
+  ],
+  "typical_inputs": [
+    "sender, recipient, and relationship context",
+    "primary objective of the email",
+    "facts, deadlines, and requested action",
+    "tone constraints and sensitivity level",
+    "likely recipient concerns or objections"
+  ],
+  "typical_outputs": [
+    "sendable email draft",
+    "subject line options",
+    "shorter / warmer / firmer variants",
+    "reply draft for an existing thread",
+    "follow-up version after no response",
+    "tone notes or delivery guidance"
+  ],
+  "quality_focus": [
+    "clarity",
+    "tone fit",
+    "recipient effort reduction",
+    "response likelihood",
+    "risk-aware wording"
+  ],
+  "generated_at": "2026-04-04T00:53:00Z",
+  "updated_by": "openclaw"
 }

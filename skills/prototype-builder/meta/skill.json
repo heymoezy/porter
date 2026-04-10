@@ -1,8 +1,49 @@
 {
   "id": "prototype-builder",
   "name": "Prototype Builder",
-  "description": "Builds interactive prototypes for user testing",
-  "category": "Design",
+  "description": "Design fast, decision-oriented prototypes that test product, workflow, service, or technical assumptions before production investment",
+  "category": "Product",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "rapid prototyper",
+    "proof-of-concept builder",
+    "mvp slicer",
+    "product validation prototyper"
+  ],
+  "adjacent_skills": [
+    "product-manager",
+    "frontend-dev",
+    "fullstack-dev",
+    "quality-reviewer"
+  ],
+  "not_for": [
+    "production hardening",
+    "full-scale architecture design",
+    "visual design critique without a learning goal"
+  ],
+  "typical_inputs": [
+    "idea or hypothesis",
+    "decision to inform",
+    "target audience",
+    "core user journey",
+    "technical or operational constraints"
+  ],
+  "typical_outputs": [
+    "prototype recommendation",
+    "scope slice",
+    "mocking strategy",
+    "build and test plan",
+    "demo or validation script"
+  ],
+  "quality_focus": [
+    "speed to signal",
+    "fidelity-to-question fit",
+    "scope discipline",
+    "assumption visibility",
+    "decision usefulness"
+  ],
+  "generated_at": "2026-04-05T07:44:00Z",
+  "updated_by": "openclaw"
 }

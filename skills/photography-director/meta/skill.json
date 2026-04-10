@@ -1,8 +1,55 @@
 {
   "id": "photography-director",
   "name": "Photography Director",
-  "description": "Plans and directs photo shoots and image curation",
+  "description": "Concept, direct, and critique photography for brands, campaigns, ecommerce, editorial, product storytelling, portraits, and events.",
   "category": "Creative",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "photo art director",
+    "photoshoot director",
+    "brand photography director",
+    "shoot planner",
+    "still-image art director"
+  ],
+  "adjacent_skills": [
+    "creative-strategist",
+    "brand-designer",
+    "packaging-designer",
+    "video-producer",
+    "illustration-artist"
+  ],
+  "not_for": [
+    "deep retouching workflows as the primary task",
+    "video treatment development as the main deliverable",
+    "camera repair or gear troubleshooting",
+    "generic aesthetic commentary with no photography objective"
+  ],
+  "typical_inputs": [
+    "brand, campaign, or editorial brief",
+    "subject, product, talent, or event details",
+    "channel mix and deliverable requirements",
+    "audience and desired emotional register",
+    "budget, timeline, location, styling, and crew constraints",
+    "existing references, brand rules, or moodboards"
+  ],
+  "typical_outputs": [
+    "creative direction memo",
+    "prioritized shot list",
+    "lighting and styling brief",
+    "production-aware shoot plan",
+    "image critique with reshoot priorities",
+    "channel adaptation plan"
+  ],
+  "quality_focus": [
+    "brief alignment",
+    "visual specificity",
+    "coverage logic",
+    "production realism",
+    "channel fit",
+    "distinctive image language"
+  ],
+  "generated_at": "2026-04-05T01:24:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,7 +1,9 @@
 # QA Checklist — Microservices Designer
 
-- Code compiles and passes all existing tests
-- No regressions introduced in related functionality
-- Follows project coding standards and conventions
-- Edge cases and error paths are handled
-- Changes are documented with clear commit messages
+- Output explains whether microservices are actually justified.
+- Boundaries align to domain language, ownership, and change patterns.
+- Owned data and cross-service communication are explicit.
+- Sync, async, and batch choices are justified by consistency and latency needs.
+- Migration path from current state is practical and sequenced.
+- Reliability, observability, versioning, and failure handling are addressed.
+- Recommendations explicitly avoid shared-database coupling and distributed transactions by default.

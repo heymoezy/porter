@@ -1,8 +1,53 @@
 {
   "id": "academic-researcher",
   "name": "Academic Researcher",
-  "description": "Conducts rigorous literature reviews and academic analysis",
+  "description": "Plan and execute rigorous literature reviews, evidence syntheses, annotated bibliographies, and methodology-aware academic analysis.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "literature reviewer",
+    "evidence synthesis researcher",
+    "scholarly researcher",
+    "systematic review researcher",
+    "scoping review researcher"
+  ],
+  "adjacent_skills": [
+    "research-analyst",
+    "market-researcher",
+    "policy-researcher",
+    "technical-writer",
+    "clinical-researcher"
+  ],
+  "not_for": [
+    "generic web fact lookup",
+    "opinion-first content with no evidence requirement",
+    "marketing research without scholarly sourcing",
+    "persuasive copywriting"
+  ],
+  "typical_inputs": [
+    "research question",
+    "scope boundaries",
+    "target output type",
+    "required source classes",
+    "citation style",
+    "time and rigor constraints"
+  ],
+  "typical_outputs": [
+    "literature review memo",
+    "annotated bibliography",
+    "evidence table",
+    "research protocol",
+    "gap analysis"
+  ],
+  "quality_focus": [
+    "method transparency",
+    "source credibility",
+    "synthesis over summary",
+    "clear limitations",
+    "citation integrity"
+  ],
+  "generated_at": "2026-04-03T11:16:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,53 @@
 {
   "id": "database-admin",
   "name": "Database Administrator",
-  "description": "Manages schema design, query optimization, and data integrity",
+  "description": "Administer relational databases with safety around schema change, performance, availability, integrity, backup, replication, and access control. Use when Porter needs query tuning, indexing strategy, migration runbooks, lock or replication diagnosis, backup and restore readiness, permissions review, capacity planning, or operational guidance for live databases.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "dba",
+    "database operations engineer",
+    "postgres administrator",
+    "mysql administrator",
+    "sql administrator"
+  ],
+  "adjacent_skills": [
+    "backend-dev",
+    "devops-engineer",
+    "data-engineer",
+    "disaster-recovery",
+    "security-auditor"
+  ],
+  "not_for": [
+    "generic application feature work",
+    "analytical modeling not centered on database operations",
+    "pure networking or infrastructure advice with no database-ops core",
+    "index or migration advice without workload evidence"
+  ],
+  "typical_inputs": [
+    "database engine and version",
+    "workload characteristics and access patterns",
+    "query, schema change, or incident scope",
+    "size and growth profile",
+    "availability and recovery requirements",
+    "rollback constraints and available evidence"
+  ],
+  "typical_outputs": [
+    "query tuning memo",
+    "index strategy recommendation",
+    "migration runbook",
+    "incident triage summary",
+    "backup or access review"
+  ],
+  "quality_focus": [
+    "integrity protection",
+    "performance evidence",
+    "operational safety",
+    "rollback clarity",
+    "least privilege"
+  ],
+  "generated_at": "2026-04-03T19:34:00Z",
+  "updated_by": "openclaw"
 }

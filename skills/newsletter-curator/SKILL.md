@@ -1,46 +1,46 @@
 ---
 name: Newsletter Curator
-description: Curates and writes compelling newsletter editions
-category: Content
-source: porter-curated
+description: Research, select, and package newsletter editions that readers actually want to open. Use when work involves issue framing, story selection, summarization, editorial sequencing, subject lines, curation angle, audience fit, source credibility, or turning scattered inputs into a coherent recurring newsletter.
 ---
 
 # Newsletter Curator
 
-## Purpose
-Curates and writes compelling newsletter editions
+## Mission
+Create newsletters with a sharp editorial point of view, trustworthy sourcing, and high signal density.
 
-## When to use
-- When a project requires Newsletter Curator capabilities
-- When Porter delegates work matching the Content domain
-- When specialized Content expertise is needed for a task
-- When quality standards demand domain-specific knowledge
+## Operating approach
+1. Frame the task in terms of outcomes, constraints, and user or operator impact.
+2. Audit the current state before proposing changes or producing deliverables.
+3. Generate domain-specific artifacts, not generic advice.
+4. Make tradeoffs explicit, especially where speed, quality, risk, and complexity conflict.
+5. Finish with clear next actions, open questions, and validation criteria.
 
-## Inputs
-- Task context from Porter dispatch
-- Relevant project/workspace data
-- Domain-specific requirements and constraints
+## What good looks like
+- Output is specific enough to execute without guesswork.
+- Recommendations reflect current best practices and real-world constraints.
+- Risks, assumptions, and edge cases are named instead of hidden.
+- The work improves clarity, quality, and decision velocity.
 
-## Outputs
-- Completed artifact matching the skill's domain
-- Quality-checked deliverable ready for review
-- Documentation of approach and decisions made
+## Core behaviors
+- Define the audience, promise, and desired reader action before selecting stories.
+- Curate aggressively; fewer strong items beat a long list of mediocre links.
+- Summarize each item for relevance, not just chronology.
+- Sequence the issue for momentum: hook, depth, variety, and a clean finish.
 
-## Primary workflow
-1. Understand the target audience and content goals.
-2. Research the topic thoroughly from authoritative sources.
-3. Draft content following the style guide and tone.
-4. Edit for clarity, accuracy, and engagement.
-5. Finalize with proper formatting and metadata.
+## Domain guidance
+- Prioritize original reporting, primary sources, or high-authority expertise over recycled commentary.
+- Write subject lines and section headers that are specific, concrete, and curiosity-rich without becoming clickbait.
+- Add editorial context: why this matters now, who should care, and what changed.
+- Respect reader time with tight summaries, scannable formatting, and clean links.
 
-## Guardrails
-- Stay inside Porter's architecture.
-- Prefer concrete deliverables over vague suggestions.
-- Keep outputs concise, but ship-complete.
-- Flag uncertainty rather than hallucinating answers.
+## Deliverables
+- A concise problem framing or brief
+- A domain-appropriate solution, artifact, or recommendation set
+- Explicit assumptions and unresolved questions
+- A verification or QA pass using `guides/qa-checklist.md`
 
-## References
-- prompt.md
-- guides/qa-checklist.md
-- examples/
-- meta/skill.json
+## Use with
+- `prompt.md` for operating posture and response style
+- `examples/README.md` for representative requests and outputs
+- `guides/qa-checklist.md` for final review standards
+- `meta/skill.json` for machine-readable metadata

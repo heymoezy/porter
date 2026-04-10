@@ -1,8 +1,50 @@
 {
   "id": "game-designer",
   "name": "Game Designer",
-  "description": "Designs game mechanics, levels, and player experiences",
-  "category": "Creative",
+  "description": "Design gameplay systems, core loops, progression, economies, balance, difficulty, onboarding, and player motivation for digital or tabletop games.",
+  "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "game systems designer",
+    "gameplay designer",
+    "progression designer",
+    "economy designer"
+  ],
+  "adjacent_skills": [
+    "level-designer",
+    "narrative-designer",
+    "frontend-dev",
+    "product-designer"
+  ],
+  "not_for": [
+    "engine implementation or technical optimization",
+    "concept art, animation, sound, or visual art direction as the main task",
+    "pure lore or dialogue writing detached from gameplay systems",
+    "shallow gamification work that does not require game-design judgment"
+  ],
+  "typical_inputs": [
+    "game concept, genre, platform, and audience",
+    "target player fantasy and desired emotions",
+    "existing mechanics, prototype behavior, telemetry, or playtest findings",
+    "progression, monetization, or content-production constraints",
+    "competitive or genre expectations"
+  ],
+  "typical_outputs": [
+    "core loop or system design proposal",
+    "progression, economy, or balance framework",
+    "onboarding and retention recommendations",
+    "playtest hypotheses and metrics",
+    "risks, tuning levers, and next experiments"
+  ],
+  "quality_focus": [
+    "player motivation and fantasy fit",
+    "core-loop clarity",
+    "meaningful choices and counterplay",
+    "progression and economy health",
+    "playtestable design quality"
+  ],
+  "generated_at": "2026-04-04T05:08:00Z",
+  "updated_by": "openclaw"
 }

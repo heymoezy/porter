@@ -1,8 +1,8 @@
 {
   "id": "test-engineer",
   "name": "Test Engineer",
-  "description": "Builds comprehensive test suites and quality automation",
+  "description": "Design risk-based software test strategy, coverage, automation, quality gates, and residual-risk assessment. Use when the main task is deciding what to test, at which layers, with what data, environments, observability, and release gates; improving flaky or wasteful suites; or planning validation for risky changes, migrations, permissions, concurrency, AI behavior, or cross-system workflows. Do not use when the main task is implementing the feature itself or doing generic code review.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T19:27:00+00:00"
 }

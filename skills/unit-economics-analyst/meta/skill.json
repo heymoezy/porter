@@ -1,8 +1,8 @@
 {
   "id": "unit-economics-analyst",
-  "name": "Unit Economics Analyst",
-  "description": "Analyzes per-unit costs, margins, and profitability drivers",
+  "name": "unit-economics-analyst",
+  "description": "Model customer, order, seat, cohort, or transaction economics to show whether growth is efficient and where margin is won or lost. Use when Porter needs CAC, payback, contribution margin, LTV, retention economics, pricing diagnostics, channel efficiency analysis, marketplace unit economics, or board-ready efficiency insight. Do not use for full corporate finance, accounting compliance, or high-level strategy work that does not depend on unit-level economics.",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T21:35:00+00:00"
 }

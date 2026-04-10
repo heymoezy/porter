@@ -1,8 +1,54 @@
 {
   "id": "design-qa",
   "name": "Design QA",
-  "description": "Verifies implementation matches design specs pixel-for-pixel",
+  "description": "Verify that implemented UI matches design intent across layout, spacing, typography, components, states, responsiveness, and interaction behavior. Use when the task is to compare a real build against Figma, prototypes, screenshots, or design-system standards and report fidelity gaps with clear reproduction, severity, and fix guidance.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "ui qa",
+    "visual qa",
+    "design fidelity reviewer",
+    "pixel qa",
+    "implementation fidelity reviewer"
+  ],
+  "adjacent_skills": [
+    "design-critic",
+    "frontend-dev",
+    "accessibility-specialist",
+    "test-engineer",
+    "design-system-architect"
+  ],
+  "not_for": [
+    "open-ended design critique",
+    "formal accessibility review as the main task",
+    "general functional QA with no design-fidelity angle",
+    "subjective commentary without a reference design"
+  ],
+  "typical_inputs": [
+    "source design artifact",
+    "environment under test",
+    "viewport and browser coverage",
+    "flows or components to inspect",
+    "state coverage expectations",
+    "release-signoff context"
+  ],
+  "typical_outputs": [
+    "fidelity audit table",
+    "issue list with severity",
+    "expected-versus-actual findings",
+    "reproduction notes",
+    "systemic-fix clues",
+    "ship-readiness recommendation"
+  ],
+  "quality_focus": [
+    "reference fidelity",
+    "reproducibility",
+    "state coverage",
+    "prioritized severity",
+    "release usefulness"
+  ],
+  "generated_at": "2026-04-03T20:38:00Z",
+  "updated_by": "openclaw"
 }

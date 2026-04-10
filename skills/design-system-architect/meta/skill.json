@@ -1,8 +1,54 @@
 {
   "id": "design-system-architect",
   "name": "Design System Architect",
-  "description": "Builds and maintains scalable design systems",
+  "description": "Architect, evolve, and govern reusable design systems across design tokens, component APIs, accessibility rules, documentation, and adoption workflows. Use when the core problem is system-level UI consistency: defining primitives, deciding what should become a shared component, aligning Figma and code libraries, planning migrations, setting contribution rules, or reducing repeated interface decisions across teams and products.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "design systems lead",
+    "component-system architect",
+    "ui systems architect",
+    "token architect",
+    "design language architect"
+  ],
+  "adjacent_skills": [
+    "frontend-dev",
+    "design-critic",
+    "accessibility-specialist",
+    "ui-designer",
+    "web-designer"
+  ],
+  "not_for": [
+    "one-off page or feature design",
+    "isolated frontend bug fixing",
+    "brand strategy work without reusable product-system implications",
+    "component implementation tasks where the system contract is already decided"
+  ],
+  "typical_inputs": [
+    "product surface inventory",
+    "existing tokens and component libraries",
+    "consistency pain points",
+    "accessibility and localization requirements",
+    "design-tool and code-stack constraints",
+    "ownership and adoption goals"
+  ],
+  "typical_outputs": [
+    "design-system architecture proposal",
+    "token taxonomy",
+    "component contract model",
+    "governance workflow",
+    "migration roadmap",
+    "adoption metrics"
+  ],
+  "quality_focus": [
+    "boundary clarity",
+    "contract quality",
+    "accessibility readiness",
+    "adoption practicality",
+    "governance durability"
+  ],
+  "generated_at": "2026-04-03T21:41:00Z",
+  "updated_by": "openclaw"
 }

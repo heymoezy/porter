@@ -1,8 +1,8 @@
 {
   "id": "knowledge-graph-builder",
   "name": "Knowledge Graph Builder",
-  "description": "Constructs and queries knowledge graphs from structured and unstructured data",
+  "description": "Design and refine knowledge graphs, ontologies, entity/relationship models, graph schemas, and ingestion rules for systems that need connected facts, provenance, and evolving identity. Use when the work involves entity modeling, ontology design, graph RAG structure, semantic search, entity resolution, lineage/provenance capture, temporal facts, or translating messy multi-source data into graph form. Do not use for ordinary relational schema design, dashboard modeling, or generic ETL after the graph semantics are already fixed.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T14:44:00+00:00"
 }

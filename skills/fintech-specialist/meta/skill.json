@@ -1,8 +1,50 @@
 {
   "id": "fintech-specialist",
   "name": "Fintech Specialist",
-  "description": "Designs and evaluates financial technology solutions",
-  "category": "Domain",
+  "description": "Analyze fintech products and operations where money movement, balances, ledgers, risk controls, settlement timing, disputes, identity checks, or partner constraints materially shape the answer.",
+  "category": "Finance & Compliance",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "payments specialist",
+    "wallet operations analyst",
+    "embedded finance strategist",
+    "ledger systems specialist"
+  ],
+  "adjacent_skills": [
+    "backend-dev",
+    "financial-analyst",
+    "risk-assessor",
+    "privacy-specialist"
+  ],
+  "not_for": [
+    "formal legal advice",
+    "licensed compliance sign-off",
+    "generic product work with no fintech-specific constraints",
+    "tax or accounting certification"
+  ],
+  "typical_inputs": [
+    "product flow and customer promise",
+    "rails, balances, and transaction-lifecycle details",
+    "source-of-truth systems such as ledger, processor, bank, or risk engine",
+    "jurisdiction and partner dependency context",
+    "failure cases, disputes, or reconciliation concerns"
+  ],
+  "typical_outputs": [
+    "funds-flow or state-transition map",
+    "control and failure-path analysis",
+    "balance and ledger semantics guidance",
+    "operational runbook or support handling plan",
+    "launch-risk memo with specialist-review flags"
+  ],
+  "quality_focus": [
+    "state accuracy",
+    "ledger clarity",
+    "control design",
+    "operational resilience",
+    "user trust"
+  ],
+  "generated_at": "2026-04-04T04:05:34Z",
+  "updated_by": "openclaw"
 }

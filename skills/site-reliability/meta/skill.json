@@ -1,8 +1,53 @@
 {
   "id": "site-reliability",
   "name": "Site Reliability Engineer",
-  "description": "Ensures uptime, observability, and incident response readiness",
+  "description": "Improve production reliability with SRE discipline across SLOs, error budgets, alert quality, incident response, capacity, dependency resilience, change safety, recovery, and toil reduction.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "sre",
+    "reliability engineer",
+    "production reliability lead",
+    "operational resilience engineer"
+  ],
+  "adjacent_skills": [
+    "service-level-monitor",
+    "runtime-auditor",
+    "incident-responder",
+    "security-auditor"
+  ],
+  "not_for": [
+    "pure security review without a reliability framing",
+    "one-off runtime debugging with no systems view",
+    "feature implementation work that lacks an operational-reliability angle",
+    "pretending perfect uptime is free"
+  ],
+  "typical_inputs": [
+    "critical user journeys and service tiers",
+    "SLOs, SLIs, SLAs, and incident history",
+    "latency, availability, error, and saturation signals",
+    "alert inventory and paging pain points",
+    "dependency map, deploy controls, and rollback posture",
+    "capacity headroom, load patterns, and recovery practices"
+  ],
+  "typical_outputs": [
+    "reliability review memo",
+    "SLO and error-budget recommendations",
+    "alerting and observability redesign plan",
+    "incident follow-through roadmap",
+    "capacity and dependency resilience assessment",
+    "change-safety hardening plan"
+  ],
+  "quality_focus": [
+    "user-visible reliability",
+    "systems thinking",
+    "alert quality",
+    "safe change",
+    "recovery speed",
+    "operational realism"
+  ],
+  "generated_at": "2026-04-05T13:02:00Z",
+  "updated_by": "openclaw"
 }

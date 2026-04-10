@@ -1,8 +1,51 @@
 {
   "id": "roster-curator",
   "name": "Roster Curator",
-  "description": "Keeps worker roster clean — reuse over sprawl",
+  "description": "Curate Porter's skill roster by deciding when to reuse, merge, split, retire, rename, or create skills so the catalog stays clear, high-signal, and routable.",
   "category": "Orchestration",
   "source": "porter-core",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "catalogTier": "system",
+  "status": "active",
+  "aliases": [
+    "skill roster curator",
+    "worker taxonomy curator",
+    "catalog rationalization lead",
+    "capability portfolio curator"
+  ],
+  "adjacent_skills": [
+    "skill-creator",
+    "runtime-selector",
+    "project-lineage",
+    "taxonomy-architect"
+  ],
+  "not_for": [
+    "rewriting the internals of an individual skill pack",
+    "changing Porter application code or routing code directly",
+    "inventing narrow skills from one-off prompts",
+    "keeping redundant workers for sentiment or prestige"
+  ],
+  "typical_inputs": [
+    "current skill metadata and boundaries",
+    "examples of recurring tasks or routing misses",
+    "evidence of overlap, ambiguity, or stale coverage",
+    "portfolio constraints and naming patterns",
+    "demand frequency and failure cost"
+  ],
+  "typical_outputs": [
+    "reuse-vs-create memo",
+    "merge or split recommendation",
+    "retirement or rename proposal",
+    "catalog gap analysis",
+    "adjacency cleanup plan",
+    "maintainer next-step list"
+  ],
+  "quality_focus": [
+    "boundary clarity",
+    "reuse bias",
+    "taxonomy discipline",
+    "routing quality",
+    "maintenance-cost awareness"
+  ],
+  "generated_at": "2026-04-05T10:55:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,51 @@
 {
   "id": "computer-vision-engineer",
   "name": "Computer Vision Engineer",
-  "description": "Develops image and video analysis solutions",
+  "description": "Design, build, evaluate, and operationalize image and video analysis systems for detection, classification, segmentation, tracking, OCR, and visual understanding tasks.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "cv engineer",
+    "vision engineer",
+    "image analysis engineer",
+    "video analysis engineer"
+  ],
+  "adjacent_skills": [
+    "data-scientist",
+    "ml-engineer",
+    "clinical-researcher",
+    "healthcare-analyst"
+  ],
+  "not_for": [
+    "general ML tasks without visual data",
+    "vague AI feature ideation with no task definition",
+    "frontend media rendering work",
+    "causal claims from predictive CV outputs"
+  ],
+  "typical_inputs": [
+    "vision task type",
+    "data source and annotation quality",
+    "environment and hardware constraints",
+    "evaluation metric and acceptance criteria",
+    "known edge cases and failure modes",
+    "deployment context"
+  ],
+  "typical_outputs": [
+    "CV system design",
+    "dataset and annotation plan",
+    "evaluation strategy",
+    "deployment architecture",
+    "monitoring and retraining plan"
+  ],
+  "quality_focus": [
+    "task clarity",
+    "data discipline",
+    "real-world robustness",
+    "evaluation integrity",
+    "production readiness"
+  ],
+  "generated_at": "2026-04-03T12:54:00Z",
+  "updated_by": "openclaw"
 }

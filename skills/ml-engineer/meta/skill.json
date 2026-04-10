@@ -1,8 +1,53 @@
 {
   "id": "ml-engineer",
   "name": "ML Engineer",
-  "description": "Builds and deploys production machine learning systems",
+  "description": "Design production-grade machine learning systems that turn data into reliable predictions or decisions. Use when work involves ML problem framing, target definition, feature and label strategy, baseline selection, model choice, offline or online evaluation, inference architecture, thresholding, experimentation, or diagnosing why an ML system fails in production.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "ai",
+  "status": "active",
+  "aliases": [
+    "machine learning engineer",
+    "applied ml engineer",
+    "production ml engineer",
+    "predictive systems engineer",
+    "modeling engineer"
+  ],
+  "adjacent_skills": [
+    "data-scientist",
+    "ml-ops",
+    "data-engineer",
+    "model-evaluator",
+    "computer-vision-engineer"
+  ],
+  "not_for": [
+    "paper-style novelty research with no deployment objective",
+    "bi or dashboard analysis with no predictive system",
+    "prompt-only llm work that does not require ml engineering",
+    "ml platform automation where lifecycle operations are the core challenge"
+  ],
+  "typical_inputs": [
+    "business decision and action path",
+    "target definition and label source",
+    "data availability, freshness, and likely leakage paths",
+    "latency, throughput, and cost constraints",
+    "error tradeoffs and business impact",
+    "deployment and monitoring context"
+  ],
+  "typical_outputs": [
+    "ml system design",
+    "baseline and model comparison",
+    "feature and label risk review",
+    "evaluation plan",
+    "inference and rollout recommendation"
+  ],
+  "quality_focus": [
+    "baseline discipline",
+    "label and feature realism",
+    "evaluation fit",
+    "serving practicality",
+    "decision usefulness"
+  ],
+  "generated_at": "2026-04-04T20:01:00Z",
+  "updated_by": "openclaw"
 }

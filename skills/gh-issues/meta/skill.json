@@ -1,8 +1,51 @@
 {
   "id": "gh-issues",
   "name": "GitHub Issues",
-  "description": "Issue intake, triage, and queue shaping",
+  "description": "Operate GitHub issue intake and backlog hygiene with clear triage, prioritization, deduplication, and execution-ready rewriting.",
   "category": "Development",
-  "source": "runtime",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "source": "porter-curated",
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "issue triager",
+    "backlog triage",
+    "github issue operator",
+    "issue intake manager"
+  ],
+  "adjacent_skills": [
+    "github",
+    "bug-triager",
+    "project-manager",
+    "release-manager"
+  ],
+  "not_for": [
+    "implementing the fix itself",
+    "full pull request review or merge workflow",
+    "repository administration outside issue operations",
+    "broad product strategy detached from issue intake"
+  ],
+  "typical_inputs": [
+    "issue title body and comments",
+    "screenshots logs and repro notes",
+    "current labels assignees milestones and related tickets",
+    "impact urgency and user reports",
+    "queue-health or template-design concerns"
+  ],
+  "typical_outputs": [
+    "triage summary with severity and priority rationale",
+    "rewritten implementation-ready issue",
+    "duplicate consolidation recommendation",
+    "clarifying questions",
+    "backlog cleanup proposal",
+    "issue form or labeling improvement plan"
+  ],
+  "quality_focus": [
+    "classification accuracy",
+    "evidence-based prioritization",
+    "execution readiness",
+    "queue hygiene",
+    "clear next actions"
+  ],
+  "generated_at": "2026-04-04T06:13:00Z",
+  "updated_by": "openclaw"
 }

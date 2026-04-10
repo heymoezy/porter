@@ -1,8 +1,53 @@
 {
   "id": "content-writer",
   "name": "Content Writer",
-  "description": "Drafts concise written output matched to brief and audience",
+  "description": "Draft audience-aware written content across marketing, editorial, product, support, and business contexts.",
   "category": "Writing",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "general content writer",
+    "editorial writer",
+    "marketing content drafter",
+    "rewrite specialist"
+  ],
+  "adjacent_skills": [
+    "copywriter",
+    "blog-writer",
+    "email-writer",
+    "technical-writer",
+    "content-auditor"
+  ],
+  "not_for": [
+    "high-stakes conversion copy optimization",
+    "formal legal or regulated-document review",
+    "deep SEO strategy",
+    "social publishing strategy"
+  ],
+  "typical_inputs": [
+    "target audience",
+    "channel and format",
+    "desired outcome",
+    "source material or facts",
+    "tone constraints",
+    "CTA or required sections"
+  ],
+  "typical_outputs": [
+    "complete draft",
+    "clean rewrite",
+    "structured outline",
+    "headline options",
+    "channel-adapted variants",
+    "internal communication draft"
+  ],
+  "quality_focus": [
+    "audience fit",
+    "structure",
+    "clarity",
+    "factual discipline",
+    "publishable usefulness"
+  ],
+  "generated_at": "2026-04-03T13:15:00Z",
+  "updated_by": "openclaw"
 }

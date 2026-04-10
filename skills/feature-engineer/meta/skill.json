@@ -1,8 +1,51 @@
 {
   "id": "feature-engineer",
   "name": "Feature Engineer",
-  "description": "Creates and selects features that maximize model performance",
-  "category": "Data & AI",
+  "description": "Own end-to-end feature delivery inside an existing product: scope behavior, implement cross-layer changes, verify them, and plan rollout.",
+  "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "product engineer",
+    "feature implementer",
+    "end-to-end feature developer",
+    "shippable feature owner"
+  ],
+  "adjacent_skills": [
+    "backend-dev",
+    "frontend-dev",
+    "fullstack-dev",
+    "product-manager",
+    "test-engineer"
+  ],
+  "not_for": [
+    "tiny bug fixes",
+    "isolated ui polish",
+    "architecture-only ideation",
+    "pure research with no delivery ownership"
+  ],
+  "typical_inputs": [
+    "feature request, product goal, or user problem",
+    "current codebase behavior and technical constraints",
+    "acceptance criteria, non-goals, and edge cases",
+    "affected layers such as ui, api, data, analytics, and permissions",
+    "rollout, migration, and monitoring constraints"
+  ],
+  "typical_outputs": [
+    "behavior and scope summary",
+    "implementation plan or completed changes",
+    "verification notes and evidence",
+    "risk and tradeoff summary",
+    "rollout, flag, or follow-up cleanup guidance"
+  ],
+  "quality_focus": [
+    "behavioral clarity",
+    "scope discipline",
+    "cross-layer coherence",
+    "verification depth",
+    "rollout safety"
+  ],
+  "generated_at": "2026-04-04T03:00:00Z",
+  "updated_by": "openclaw"
 }

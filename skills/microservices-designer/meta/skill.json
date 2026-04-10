@@ -1,8 +1,53 @@
 {
   "id": "microservices-designer",
   "name": "Microservices Designer",
-  "description": "Decomposes monoliths into well-bounded, communicating services",
+  "description": "Design service boundaries, bounded contexts, interfaces, data ownership, and migration paths for distributed systems. Use when work involves decomposing monoliths, deciding whether microservices are justified, mapping domain boundaries across teams, choosing synchronous versus asynchronous collaboration patterns, defining API or event contracts, or preventing shared-database and distributed-transaction anti-patterns.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "engineering",
+  "status": "active",
+  "aliases": [
+    "microservice architect",
+    "service decomposition architect",
+    "distributed systems architect",
+    "bounded context designer",
+    "service topology designer"
+  ],
+  "adjacent_skills": [
+    "backend-dev",
+    "database-admin",
+    "site-reliability",
+    "system-architect",
+    "terraform-engineer"
+  ],
+  "not_for": [
+    "routine backend coding with no decomposition question",
+    "prematurely splitting a simple small application",
+    "diagram-only architecture work with no migration path",
+    "treating shared-database services as a clean final state"
+  ],
+  "typical_inputs": [
+    "current system shape",
+    "domain capabilities and language",
+    "team topology",
+    "scaling reliability or compliance pain points",
+    "consistency and latency requirements",
+    "migration constraints"
+  ],
+  "typical_outputs": [
+    "context map",
+    "service boundary proposal",
+    "owned-data model",
+    "API and event interaction guidance",
+    "migration roadmap and risk register"
+  ],
+  "quality_focus": [
+    "boundary clarity",
+    "ownership discipline",
+    "data ownership",
+    "migration realism",
+    "operability"
+  ],
+  "generated_at": "2026-04-04T18:57:00Z",
+  "updated_by": "openclaw"
 }

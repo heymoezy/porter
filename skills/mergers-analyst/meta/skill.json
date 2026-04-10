@@ -1,8 +1,53 @@
 {
   "id": "mergers-analyst",
-  "name": "Mergers & Acquisitions Analyst",
-  "description": "Conducts due diligence and deal structuring analysis",
+  "name": "Mergers Analyst",
+  "description": "Evaluate acquisition targets, merger proposals, and corporate-development opportunities across strategic fit, diligence risk, valuation ranges, deal-structure implications, synergy realism, and integration feasibility. Use when work involves buy-vs-build decisions, deal screening, LOI framing, diligence synthesis, quality-of-earnings concerns, red-flag surfacing, or proceed/renegotiate/walk recommendations.",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "finance",
+  "status": "active",
+  "aliases": [
+    "m&a analyst",
+    "acquisition analyst",
+    "corporate development analyst",
+    "deal diligence analyst",
+    "transaction analyst"
+  ],
+  "adjacent_skills": [
+    "due-diligence-analyst",
+    "financial-analyst",
+    "market-analyst",
+    "pricing-strategist",
+    "risk-assessor"
+  ],
+  "not_for": [
+    "drafting legal transaction documents",
+    "tax advice or specialist structuring",
+    "fairness opinions or licensed investment advice",
+    "generic corporate strategy commentary with no target-specific analysis"
+  ],
+  "typical_inputs": [
+    "buyer objective",
+    "target profile and business model",
+    "deal stage",
+    "financial and operating data",
+    "diligence findings",
+    "constraints on financing timing and integration capacity"
+  ],
+  "typical_outputs": [
+    "deal-screen memo",
+    "red-flag register",
+    "valuation range",
+    "synergy and dis-synergy analysis",
+    "proceed renegotiate gate or walk recommendation"
+  ],
+  "quality_focus": [
+    "strategic fit clarity",
+    "earnings quality",
+    "valuation discipline",
+    "synergy realism",
+    "integration feasibility"
+  ],
+  "generated_at": "2026-04-04T18:57:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,52 @@
 {
   "id": "edtech-designer",
   "name": "EdTech Designer",
-  "description": "Designs educational technology products and learning experiences",
-  "category": "Domain",
+  "description": "Design learning experiences, lesson flows, curriculum sequences, practice loops, assessments, and education-product interventions that improve comprehension, retention, transfer, and learner persistence",
+  "category": "Education",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "instructional designer",
+    "learning experience designer",
+    "education product designer",
+    "curriculum learning designer"
+  ],
+  "adjacent_skills": [
+    "course-creator",
+    "ux-designer",
+    "technical-writer",
+    "training-developer",
+    "tutorial-creator"
+  ],
+  "not_for": [
+    "standalone tutoring or homework help",
+    "LMS administration or course operations",
+    "pure UI styling without instructional decisions",
+    "subject-matter authoring alone"
+  ],
+  "typical_inputs": [
+    "learner profile and prior knowledge",
+    "observable learning outcomes and success criteria",
+    "delivery environment and platform constraints",
+    "time budget, motivation challenges, and accessibility needs",
+    "source content, assessment requirements, and evidence goals"
+  ],
+  "typical_outputs": [
+    "learning-experience blueprint",
+    "lesson or module design",
+    "curriculum sequence",
+    "practice-and-feedback plan",
+    "assessment map",
+    "learning-product flow redesign memo"
+  ],
+  "quality_focus": [
+    "outcome alignment",
+    "cognitive-load management",
+    "practice quality",
+    "assessment fit",
+    "learning transfer"
+  ],
+  "generated_at": "2026-04-03T23:49:00Z",
+  "updated_by": "openclaw"
 }

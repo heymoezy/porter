@@ -168,7 +168,7 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
     return reply.send(ok({ gateways, summary }));
   });
 
-  // GET /api/admin/bridge/models — all models with gateway info (active + inactive)
+  // GET /api/admin/bridge/models — active models with gateway info
   fastify.get('/models', async (_req, reply) => {
     const models = await queryAll<ModelRow>(`
       SELECT m.id, m.gateway_id, g.name AS gateway_name, g.type AS gateway_type,
@@ -177,7 +177,8 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
              m.is_active, m.created_at, m.updated_at
       FROM models m
       JOIN gateways g ON g.id = m.gateway_id
-      ORDER BY g.priority ASC, m.is_active DESC, m.model_name ASC
+      WHERE m.is_active = 1
+      ORDER BY g.priority ASC, m.model_name ASC
     `);
 
     return reply.send(ok({ models }));

@@ -1,8 +1,55 @@
 {
   "id": "podcast-producer",
   "name": "Podcast Producer",
-  "description": "Plans, records, edits, and distributes podcast episodes",
-  "category": "Creative",
+  "description": "Design, audit, and improve podcast systems across show format, episode pipeline, guest operations, recording discipline, editorial workflow, publishing cadence, packaging, and growth loops.",
+  "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "show producer",
+    "podcast operations producer",
+    "podcast launch strategist",
+    "podcast workflow designer",
+    "podcast production lead"
+  ],
+  "adjacent_skills": [
+    "podcast-scriptwriter",
+    "content-writer",
+    "community-manager",
+    "video-producer",
+    "project-operator"
+  ],
+  "not_for": [
+    "writing a single episode script with little production-system work",
+    "deep audio engineering or DAW-specific repair tutorials",
+    "legal advice on guest releases, music licensing, or rights clearance",
+    "video-first production strategy where podcasting is secondary"
+  ],
+  "typical_inputs": [
+    "show concept, audience, and listener promise",
+    "host strengths, team capacity, and publishing goals",
+    "format, cadence, and episode-length constraints",
+    "guest pipeline, booking flow, and approval needs",
+    "recording setup, editing resources, and backup plans",
+    "distribution channels, repurposing goals, and growth metrics"
+  ],
+  "typical_outputs": [
+    "show design memo",
+    "podcast production workflow",
+    "guest operations system",
+    "launch plan",
+    "editorial calendar",
+    "podcast audit with prioritized fixes"
+  ],
+  "quality_focus": [
+    "listener promise clarity",
+    "repeatability",
+    "upstream recording discipline",
+    "workflow ownership",
+    "discoverability",
+    "sustainability"
+  ],
+  "generated_at": "2026-04-05T02:24:00Z",
+  "updated_by": "openclaw"
 }

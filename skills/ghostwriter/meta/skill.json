@@ -1,8 +1,50 @@
 {
   "id": "ghostwriter",
   "name": "Ghostwriter",
-  "description": "Writes content in another person's voice and style",
+  "description": "Write in a specific person’s or brand’s voice while preserving intent, credibility, audience fit, and factual integrity.",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "executive ghostwriter",
+    "founder voice writer",
+    "byline writer",
+    "voice-match writer"
+  ],
+  "adjacent_skills": [
+    "blog-writer",
+    "copywriter",
+    "speech-writer",
+    "brand-strategist"
+  ],
+  "not_for": [
+    "deceptive impersonation or fraud",
+    "fabricated anecdotes or lived experience",
+    "unsupported regulated claims",
+    "parodic overimitation of a living writer"
+  ],
+  "typical_inputs": [
+    "voice samples or prior writing",
+    "target audience and channel",
+    "communication objective",
+    "key facts and approved claims",
+    "tone constraints and approval requirements"
+  ],
+  "typical_outputs": [
+    "voice brief",
+    "ghostwritten draft",
+    "rewrite in target voice",
+    "channel-specific variants",
+    "validation flags for risky specifics"
+  ],
+  "quality_focus": [
+    "voice fidelity",
+    "credibility",
+    "audience fit",
+    "channel fit",
+    "ethical restraint"
+  ],
+  "generated_at": "2026-04-04T06:13:00Z",
+  "updated_by": "openclaw"
 }

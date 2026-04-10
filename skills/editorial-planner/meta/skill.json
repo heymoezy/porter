@@ -1,8 +1,52 @@
 {
   "id": "editorial-planner",
   "name": "Editorial Planner",
-  "description": "Plans content calendars and editorial workflows",
+  "description": "Design editorial calendars, story pipelines, publishing cadences, recurring series, and content portfolios so teams publish with strategic focus instead of idea sprawl",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "content planner",
+    "editorial strategist",
+    "publishing planner",
+    "content calendar planner"
+  ],
+  "adjacent_skills": [
+    "content-writer",
+    "copywriter",
+    "seo-specialist",
+    "social-media-manager",
+    "brand-designer"
+  ],
+  "not_for": [
+    "writing the finished article or script",
+    "standalone technical SEO audits",
+    "paid media buying or trafficking",
+    "one-off social caption writing without planning work"
+  ],
+  "typical_inputs": [
+    "business goals and content objectives",
+    "audience segments, objections, and moments of need",
+    "content inventory and performance signals",
+    "channels, formats, approvals, and capacity constraints",
+    "launch dates, campaigns, seasonality, and dependencies"
+  ],
+  "typical_outputs": [
+    "editorial thesis memo",
+    "editorial calendar",
+    "pillar or theme architecture",
+    "prioritized story backlog",
+    "launch publishing sequence",
+    "recurring-series design"
+  ],
+  "quality_focus": [
+    "strategic alignment",
+    "editorial distinctiveness",
+    "sequencing quality",
+    "capacity realism",
+    "actionability"
+  ],
+  "generated_at": "2026-04-03T23:49:00Z",
+  "updated_by": "openclaw"
 }

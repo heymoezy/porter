@@ -1,8 +1,51 @@
 {
   "id": "risk-assessor",
   "name": "Risk Assessor",
-  "description": "Identifies, quantifies, and mitigates business risks",
+  "description": "Assess strategic, operational, delivery, financial, compliance, vendor, and reputational risks by defining concrete failure modes, judging materiality, evaluating controls, and recommending mitigations, monitoring signals, and escalation thresholds",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "risk analyst",
+    "decision risk reviewer",
+    "operational risk assessor",
+    "pre-mortem facilitator"
+  ],
+  "adjacent_skills": [
+    "security-auditor",
+    "regulatory-analyst",
+    "financial-analyst",
+    "release-manager"
+  ],
+  "not_for": [
+    "penetration testing or hands-on security validation",
+    "formal legal, actuarial, or regulated opinions",
+    "bloated speculative registers with no prioritization",
+    "arbitrary scoring models that hide uncertainty"
+  ],
+  "typical_inputs": [
+    "decision or initiative being assessed",
+    "assumptions, constraints, and risk appetite",
+    "key dependencies, vendors, systems, or teams",
+    "impact dimensions such as revenue, delivery, compliance, safety, and trust",
+    "existing controls, owners, and contingency plans"
+  ],
+  "typical_outputs": [
+    "ranked risk register",
+    "decision risk memo",
+    "pre-mortem summary",
+    "control-gap review",
+    "mitigation and monitoring plan",
+    "escalation-threshold map"
+  ],
+  "quality_focus": [
+    "materiality judgment",
+    "clear risk statements",
+    "control realism",
+    "monitoring and thresholds",
+    "decision support"
+  ],
+  "generated_at": "2026-04-05T09:51:00Z",
+  "updated_by": "openclaw"
 }

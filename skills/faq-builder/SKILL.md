@@ -1,46 +1,107 @@
 ---
-name: FAQ Builder
-description: Creates comprehensive, well-organized FAQ sections
-category: Content
-source: porter-curated
+name: faq-builder
+description: Build or repair FAQ systems from docs, policies, release notes, support tickets, search logs, and stakeholder inputs. Use when the job is to decide which questions belong in an FAQ, cluster overlapping questions, draft direct answers, improve help-center findability, or maintain launch / onboarding / internal-ops FAQs. Do not use for long-form documentation, chatbot conversation design, SEO article production, or policy/legal approval that needs specialist sign-off.
 ---
 
 # FAQ Builder
 
-## Purpose
-Creates comprehensive, well-organized FAQ sections
+Build FAQ content that resolves real questions fast.
 
-## When to use
-- When a project requires FAQ Builder capabilities
-- When Porter delegates work matching the Content domain
-- When specialized Content expertise is needed for a task
-- When quality standards demand domain-specific knowledge
+## Gather inputs first
 
-## Inputs
-- Task context from Porter dispatch
-- Relevant project/workspace data
-- Domain-specific requirements and constraints
+Collect or infer:
+- audience, channel, and moment of use
+- source materials: docs, policies, release notes, transcripts, tickets, search queries
+- top user intents, misconceptions, blockers, and edge cases
+- brand, tone, and compliance constraints
+- answer owners for unresolved policy or product gaps
 
-## Outputs
-- Completed artifact matching the skill's domain
-- Quality-checked deliverable ready for review
-- Documentation of approach and decisions made
+If source quality is weak, say so early.
 
-## Primary workflow
-1. Understand the target audience and content goals.
-2. Research the topic thoroughly from authoritative sources.
-3. Draft content following the style guide and tone.
-4. Edit for clarity, accuracy, and engagement.
-5. Finalize with proper formatting and metadata.
+## Decide whether FAQ is the right format
 
-## Guardrails
-- Stay inside Porter's architecture.
-- Prefer concrete deliverables over vague suggestions.
-- Keep outputs concise, but ship-complete.
-- Flag uncertainty rather than hallucinating answers.
+Use an FAQ when users need quick answers to recurring questions.
 
-## References
-- prompt.md
-- guides/qa-checklist.md
-- examples/
-- meta/skill.json
+Do not force FAQ structure onto work that should be:
+- step-by-step documentation
+- troubleshooting decision trees
+- chatbot flows
+- policy review or legal interpretation
+- marketing pages disguised as support content
+
+Recommend the better format when FAQ is the wrong container.
+
+## Build the question set
+
+### 1. Start from user language
+Use the phrasing users actually search, ask, or complain about. Prefer external wording over internal product jargon.
+
+### 2. Cluster duplicates before drafting
+Merge near-identical questions. Split only when the answer materially changes by persona, plan, region, or workflow.
+
+### 3. Prioritize by friction
+Order questions by likelihood and urgency:
+- blockers to signup, setup, billing, access, or trust
+- high-volume support issues
+- launch-specific confusion
+- important edge cases
+- nice-to-know clarifications
+
+### 4. Keep the set tight
+A smaller, sharper FAQ beats a bloated one. If a question does not meaningfully reduce confusion or support load, cut it.
+
+## Write answers for scan speed
+
+For each answer:
+1. Lead with the direct answer in the first sentence.
+2. Add steps, limits, exceptions, or links only after the core answer is clear.
+3. Use short paragraphs, bullets, and concrete terms.
+4. State conditions explicitly: who qualifies, when it applies, what happens next.
+5. Avoid evasive phrasing, hype, and internal shorthand.
+
+When a definitive answer is unavailable, say what is known, what is unknown, and who must confirm it.
+
+## Surface gaps instead of hiding them
+
+Flag:
+- conflicting source materials
+- undocumented edge cases
+- policy ambiguity
+- stale release information
+- ownership gaps for future maintenance
+
+Do not invent certainty to make the FAQ sound polished.
+
+## Optimize for maintenance
+
+Deliver structure that can survive updates:
+- stable categories
+- reusable answer patterns
+- links to source-of-truth docs when appropriate
+- owner/follow-up notes for unresolved items
+- suggested review triggers after launches, pricing changes, or policy updates
+
+## Strong outputs
+
+Return some combination of:
+- recommended FAQ architecture
+- prioritized question list
+- draft or rewritten FAQ entries
+- duplicate/merge recommendations
+- gaps, contradictions, and approval flags
+- maintenance notes and update triggers
+
+## Boundaries
+
+Prefer adjacent skills when the core request is actually about:
+- `technical-writer` for full procedural docs
+- `customer-support` for live support responses and case handling
+- `ux-writer` for in-product microcopy
+- `knowledge-base-author` for broader help-center systems beyond FAQ format
+
+## Use supporting files
+
+- Use `prompt.md` for operating stance and response shape.
+- Use `examples/README.md` for deliverable patterns.
+- Use `guides/qa-checklist.md` before finalizing.
+- Use `meta/skill.json` for metadata, aliases, and boundaries.

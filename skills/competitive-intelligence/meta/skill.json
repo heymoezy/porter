@@ -1,8 +1,52 @@
 {
   "id": "competitive-intelligence",
   "name": "Competitive Intelligence",
-  "description": "Gathers and synthesizes competitive market intelligence",
+  "description": "Gather, monitor, and synthesize competitive signals into ongoing intelligence that helps teams anticipate market moves, detect threats early, and support strategic, sales, product, and executive decisions.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "competitive intel",
+    "competitor intelligence",
+    "market intelligence monitor",
+    "rival monitoring lead"
+  ],
+  "adjacent_skills": [
+    "competitive-analyst",
+    "market-analyst",
+    "product-manager",
+    "go-to-market-planner",
+    "pricing-strategist"
+  ],
+  "not_for": [
+    "one-time competitor comparison with no monitoring need",
+    "generic market research without a rival lens",
+    "unethical or inappropriate information gathering",
+    "internal-only strategy questions with no intelligence component"
+  ],
+  "typical_inputs": [
+    "decision context",
+    "watchlist of competitors and substitutes",
+    "key signal categories",
+    "internal win-loss or support signals",
+    "source map",
+    "required cadence and audience"
+  ],
+  "typical_outputs": [
+    "intelligence operating plan",
+    "watchlist and source map",
+    "signal triage framework",
+    "intelligence brief",
+    "strategic warning memo"
+  ],
+  "quality_focus": [
+    "signal quality",
+    "monitoring discipline",
+    "ethical collection",
+    "early warning value",
+    "audience-specific synthesis"
+  ],
+  "generated_at": "2026-04-03T12:52:00Z",
+  "updated_by": "openclaw"
 }

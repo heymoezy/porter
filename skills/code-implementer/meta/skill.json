@@ -1,8 +1,52 @@
 {
   "id": "code-implementer",
   "name": "Code Implementer",
-  "description": "Turns requirements into working code changes",
+  "description": "Turn concrete requirements, bug reports, specs, or approved plans into working code changes that fit the existing codebase.",
   "category": "Development",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "implementation engineer",
+    "software implementer",
+    "feature implementer",
+    "bug fix implementer"
+  ],
+  "adjacent_skills": [
+    "api-designer",
+    "code-reviewer",
+    "backend-dev",
+    "frontend-dev",
+    "fullstack-dev",
+    "project-architect"
+  ],
+  "not_for": [
+    "broad architecture redesign before implementation scope is clear",
+    "code review as the primary task",
+    "product strategy or requirement discovery",
+    "large exploratory refactors with no clear implementation target"
+  ],
+  "typical_inputs": [
+    "clear requirement or bug report",
+    "relevant codebase context",
+    "constraints and patterns in the existing system",
+    "expected edge cases",
+    "available tests or verification paths"
+  ],
+  "typical_outputs": [
+    "working code change",
+    "implementation summary",
+    "edge-case notes",
+    "verification steps",
+    "assumption or limitation note"
+  ],
+  "quality_focus": [
+    "correctness",
+    "small focused changes",
+    "edge-case handling",
+    "verification",
+    "reviewability"
+  ],
+  "generated_at": "2026-04-03T12:48:00Z",
+  "updated_by": "openclaw"
 }

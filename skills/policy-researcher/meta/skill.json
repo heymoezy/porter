@@ -1,8 +1,54 @@
 {
   "id": "policy-researcher",
   "name": "Policy Researcher",
-  "description": "Analyzes public policy impacts and regulatory landscapes",
+  "description": "Research public policy, regulation, and government action to explain what is changing, who is affected, what options exist, and what the practical implications are",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "public policy analyst",
+    "regulatory researcher",
+    "government policy analyst",
+    "policy impact researcher",
+    "legislative analyst"
+  ],
+  "adjacent_skills": [
+    "policy-drafter",
+    "government-specialist",
+    "due-diligence-analyst",
+    "legal-researcher"
+  ],
+  "not_for": [
+    "final legal advice",
+    "drafting internal or public policy text as the main deliverable",
+    "pure advocacy copy without analysis",
+    "speculating about policy outcomes without evidence"
+  ],
+  "typical_inputs": [
+    "jurisdiction, agency, and policy topic",
+    "decision context and audience",
+    "relevant bills, rules, guidance, or consultations",
+    "time horizon, trigger dates, and urgency",
+    "known stakeholders or affected groups",
+    "requested output format"
+  ],
+  "typical_outputs": [
+    "policy brief",
+    "regulatory landscape summary",
+    "cross-jurisdiction comparison",
+    "stakeholder map",
+    "implementation-risk memo",
+    "monitoring update"
+  ],
+  "quality_focus": [
+    "source quality",
+    "jurisdiction accuracy",
+    "status discipline",
+    "practical implications",
+    "decision usefulness",
+    "honest uncertainty"
+  ],
+  "generated_at": "2026-04-05T03:28:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,55 @@
 {
   "id": "sports-analytics",
   "name": "Sports Analytics Specialist",
-  "description": "Analyzes athletic performance and sports business data",
-  "category": "Domain",
+  "description": "Analyze players, teams, tactics, game states, matchups, and sports-performance data with sport-aware context so decisions reflect role, opposition, sample size, game state, and competition level rather than shallow box-score narratives.",
+  "category": "Analytics",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "sports analyst",
+    "performance analyst sports",
+    "game analytics specialist",
+    "team analytics advisor"
+  ],
+  "adjacent_skills": [
+    "data-analyst",
+    "forecasting-analyst",
+    "research-analyst",
+    "journalist",
+    "performance-optimizer"
+  ],
+  "not_for": [
+    "gambling picks or betting tout content",
+    "injury diagnosis or medical return-to-play advice",
+    "generic analytics work detached from sport mechanics",
+    "highlight-style commentary without analytical interpretation"
+  ],
+  "typical_inputs": [
+    "sport, league, competition level, and season context",
+    "specific decision or question being answered",
+    "data source, metric definitions, and timeframe",
+    "player roles, tactical system, opponent context, and lineup availability",
+    "known confounders such as injuries, schedule congestion, venue, pace, or possession environment",
+    "intended audience and how technical the final explanation can be"
+  ],
+  "typical_outputs": [
+    "player or team analysis memo",
+    "matchup brief",
+    "comparison table with context notes",
+    "advanced-metric explainer for non-analysts",
+    "tactical-performance diagnosis",
+    "scouting-support summary",
+    "decision recommendation with uncertainty and monitoring points"
+  ],
+  "quality_focus": [
+    "context-aware interpretation",
+    "metric fit",
+    "sample-size discipline",
+    "tactical relevance",
+    "uncertainty honesty",
+    "communication clarity"
+  ],
+  "generated_at": "2026-04-05T14:06:00Z",
+  "updated_by": "openclaw"
 }

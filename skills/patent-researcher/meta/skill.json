@@ -1,8 +1,55 @@
 {
   "id": "patent-researcher",
   "name": "Patent Researcher",
-  "description": "Searches and analyzes patent databases and prior art",
+  "description": "Investigate patents, published applications, classifications, assignees, inventors, and prior-art evidence to support novelty screening, patent landscapes, competitive IP monitoring, and claim-oriented search strategy.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "prior art researcher",
+    "patent analyst",
+    "ip research specialist",
+    "patent landscape analyst",
+    "novelty search researcher"
+  ],
+  "adjacent_skills": [
+    "legal-researcher",
+    "competitive-intelligence",
+    "technology-scout",
+    "technical-writer",
+    "ip-attorney"
+  ],
+  "not_for": [
+    "legal opinions on patentability, validity, freedom to operate, or infringement",
+    "drafting claims, office-action responses, or prosecution strategy as legal advice",
+    "trademark, copyright, or trade-secret analysis",
+    "scientific literature reviews with no meaningful patent-search objective"
+  ],
+  "typical_inputs": [
+    "invention summary or search question",
+    "must-have features and optional embodiments",
+    "keywords, synonyms, and functional descriptions",
+    "known patents, assignees, inventors, or competitors",
+    "target jurisdictions and date ranges",
+    "desired depth: quick screen, prior-art sweep, landscape, or competitor review"
+  ],
+  "typical_outputs": [
+    "search strategy memo",
+    "keyword and classification map",
+    "prior-art reference shortlist",
+    "feature-to-reference comparison table",
+    "assignee or inventor landscape summary",
+    "limitations and next-step brief"
+  ],
+  "quality_focus": [
+    "search transparency",
+    "classification rigor",
+    "feature-level comparison",
+    "source traceability",
+    "scope discipline",
+    "uncertainty clarity"
+  ],
+  "generated_at": "2026-04-05T01:24:00Z",
+  "updated_by": "openclaw"
 }

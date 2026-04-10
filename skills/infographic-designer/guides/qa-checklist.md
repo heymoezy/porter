@@ -1,7 +1,13 @@
 # QA Checklist — Infographic Designer
 
-- Design follows the established design system
-- Accessibility standards (WCAG 2.1 AA) are met
-- Responsive behavior is defined for all breakpoints
-- Interactive states are specified (hover, focus, disabled)
-- Design tokens and specs are developer-ready
+Before returning work, verify that:
+
+- The audience, format, and primary takeaway are explicit.
+- The recommended structure clearly fits the source material.
+- Reading order is obvious without extra explanation.
+- Visual encodings support the claim type and avoid misleading representation.
+- Copy is compressed enough to scan quickly.
+- Important caveats, sources, or uncertainty are not silently dropped.
+- The plan is specific enough for a designer or generator to execute.
+- Decorative choices do not compete with comprehension.
+- The output stays concise, practical, and free of filler.

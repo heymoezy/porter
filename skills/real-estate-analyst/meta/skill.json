@@ -1,8 +1,49 @@
 {
   "id": "real-estate-analyst",
   "name": "Real Estate Analyst",
-  "description": "Analyzes property markets, valuations, and investment returns",
-  "category": "Domain",
+  "description": "Analyze residential, commercial, industrial, hospitality, land, and mixed-use real estate opportunities using market evidence, comparables, underwriting logic, rent or sales assumptions, capital needs, and downside scenarios",
+  "category": "Finance",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "property analyst",
+    "real estate underwriter",
+    "cre analyst",
+    "property investment analyst"
+  ],
+  "adjacent_skills": [
+    "market-analyst",
+    "financial-analyst",
+    "regulatory-analyst",
+    "proposal-writer"
+  ],
+  "not_for": [
+    "legal title opinions",
+    "architectural or site design work",
+    "construction engineering estimates without property-level analysis"
+  ],
+  "typical_inputs": [
+    "property details",
+    "location and submarket",
+    "rent or sales comps",
+    "income, expense, and capex assumptions",
+    "investment or lease objective"
+  ],
+  "typical_outputs": [
+    "property analysis memo",
+    "underwriting summary",
+    "comp and market view",
+    "sensitivity analysis",
+    "investment recommendation"
+  ],
+  "quality_focus": [
+    "comp quality",
+    "underwriting realism",
+    "NOI and debt logic",
+    "sensitivity awareness",
+    "decision usefulness"
+  ],
+  "generated_at": "2026-04-05T07:44:00Z",
+  "updated_by": "openclaw"
 }

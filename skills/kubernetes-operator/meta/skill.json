@@ -1,8 +1,8 @@
 {
   "id": "kubernetes-operator",
   "name": "Kubernetes Operator",
-  "description": "Manages Kubernetes clusters, workloads, and scaling",
-  "category": "Infrastructure",
+  "description": "Operate, debug, harden, and scale Kubernetes-based systems with production discipline. Use when the task involves Kubernetes manifests, Helm values, deployments, rollout or rollback planning, probes, requests and limits, autoscaling, scheduling, ingress or service networking, config and secret handling, cluster policy, workload debugging, or reliability improvement for workloads already running on Kubernetes. Do not use for generic Linux administration, broad cloud architecture without cluster-level decisions, or application-code implementation as the primary task.",
+  "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T15:47:00+00:00"
 }

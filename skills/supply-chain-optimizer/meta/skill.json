@@ -1,8 +1,54 @@
 {
   "id": "supply-chain-optimizer",
   "name": "Supply Chain Optimizer",
-  "description": "Optimizes logistics, inventory, and supplier networks",
-  "category": "Business",
+  "description": "Diagnose and improve supply-chain performance across sourcing, inventory, production, fulfillment, logistics, and resilience by finding the real constraint, quantifying cost-service-cash tradeoffs, and recommending policy changes teams can actually run.",
+  "category": "Operations",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "supply chain analyst",
+    "inventory optimizer",
+    "supply planner",
+    "network and fulfillment strategist"
+  ],
+  "adjacent_skills": [
+    "procurement-specialist",
+    "operations-manager",
+    "financial-analyst",
+    "data-analyst",
+    "risk-assessor"
+  ],
+  "not_for": [
+    "ERP or planning-system configuration as the primary task",
+    "customs, duties, sanctions, trade compliance, or legal shipping advice",
+    "pure demand forecasting with no operating-policy decision",
+    "warehouse layout or industrial-engineering detail as the main problem",
+    "finance-only savings narratives that ignore service or execution reality"
+  ],
+  "typical_inputs": [
+    "service promise, OTIF/fill-rate goals, and business priorities",
+    "demand pattern, forecast error, seasonality, and SKU segmentation",
+    "supplier count, MOQs, lead times, and lead-time variability",
+    "inventory posture, stockout/expedite behavior, and working-capital constraints",
+    "production, logistics, and fulfillment bottlenecks",
+    "risk exposure, concentration points, and recovery options"
+  ],
+  "typical_outputs": [
+    "supply-chain diagnosis memo",
+    "inventory and replenishment policy redesign",
+    "service-cash-cost tradeoff analysis",
+    "supplier or network resilience assessment",
+    "bottleneck-based action plan",
+    "KPI tree with leading indicators"
+  ],
+  "quality_focus": [
+    "bottleneck focus",
+    "tradeoff discipline",
+    "segmentation logic",
+    "operational realism",
+    "measurable recommendations"
+  ],
+  "generated_at": "2026-04-05T16:14:00Z",
+  "updated_by": "openclaw"
 }

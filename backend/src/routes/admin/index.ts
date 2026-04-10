@@ -2,7 +2,6 @@ import { FastifyInstance } from 'fastify';
 import healthRoutes from './health.js';
 import usersRoutes from './users.js';
 import emailRoutes from './email.js';
-import billingRoutes from './billing.js';
 import bridgeRoutes from './bridge.js';
 import agentsRoutes from './agents.js';
 import diagnosticsRoutes from './diagnostics.js';
@@ -17,7 +16,6 @@ import settingsRoutes from './settings.js';
 import chatRoutes from './chat.js';
 import customersRoutes from './customers.js';
 import intelligenceRoutes from './intelligence.js';
-import battlesRoutes from './battles.js';
 import decisionsRoutes from './decisions.js';
 import sessionsAdminRoutes from './sessions-admin.js';
 import costsRoutes from './costs.js';
@@ -25,21 +23,15 @@ import evolutionRoutes from './evolution.js';
 import msgBusRoutes from './msg-bus.js';
 import envToolsRoutes from './env-tools.js';
 import learningsRoutes from './learnings.js';
-import customerScoresRoutes from './customer-scores.js';
 import skillFeedbackRoutes from './skill-feedback.js';
-import calendarRoutes from './calendar.js';
-import forgeRunsRoutes from './forge-runs.js';
 import routingRoutes from './routing.js';
 import jobsRoutes from '../v1/admin/jobs.js';
-import watchersRoutes from '../v1/admin/watchers.js';
-import mailAdminRoutes from '../v1/mail-admin.js';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(healthRoutes, { prefix: '/health' });
   fastify.register(usersRoutes, { prefix: '/users' });
   fastify.register(customersRoutes, { prefix: '/customers' });
   fastify.register(emailRoutes, { prefix: '/email' });
-  fastify.register(billingRoutes, { prefix: '/billing' });
   fastify.register(agentsRoutes, { prefix: '/agents' });
   fastify.register(diagnosticsRoutes, { prefix: '/diagnostics' });
   fastify.register(templatesRoutes, { prefix: '/templates' });
@@ -53,7 +45,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(settingsRoutes, { prefix: '/settings' });
   fastify.register(chatRoutes, { prefix: '/porter' });
   fastify.register(intelligenceRoutes, { prefix: '/intelligence' });
-  fastify.register(battlesRoutes, { prefix: '/battles' });
   fastify.register(decisionsRoutes, { prefix: '/decisions' });
   fastify.register(sessionsAdminRoutes, { prefix: '/sessions' });
   fastify.register(costsRoutes, { prefix: '/costs' });
@@ -61,12 +52,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(msgBusRoutes, { prefix: '/msg-bus' });
   fastify.register(envToolsRoutes, { prefix: '/env-tools' });
   fastify.register(learningsRoutes, { prefix: '/learnings' });
-  fastify.register(customerScoresRoutes, { prefix: '/customer-scores' });
   fastify.register(skillFeedbackRoutes, { prefix: '/skill-feedback' });
-  fastify.register(calendarRoutes, { prefix: '/calendar' });
-  fastify.register(forgeRunsRoutes, { prefix: '/forge-runs' });
   fastify.register(routingRoutes, { prefix: '/routing' });
   fastify.register(jobsRoutes, { prefix: '/jobs' });
-  fastify.register(watchersRoutes, { prefix: '/watchers' });
-  fastify.register(mailAdminRoutes, { prefix: '/mail' });
 }

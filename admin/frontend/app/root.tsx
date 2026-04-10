@@ -18,7 +18,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <title>Porter Dashboard</title>
+        <title>Porter — Your AI Mission Control</title>
+        <meta name="description" content="One command center for all your AI agents." />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://askporter.app" />
+        <meta property="og:title" content="Porter — Your AI Mission Control" />
+        <meta property="og:description" content="One command center for all your AI agents." />
+        <meta property="og:image" content="https://askporter.app/og-preview.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:site_name" content="Porter" />
+
+        {/* Twitter / X */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Porter — Your AI Mission Control" />
+        <meta name="twitter:description" content="One command center for all your AI agents." />
+        <meta name="twitter:image" content="https://askporter.app/og-preview.png" />
+
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="icon" type="image/x-icon" href="/favicon.ico" />
         <Meta />

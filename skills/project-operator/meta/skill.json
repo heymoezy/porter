@@ -1,8 +1,52 @@
 {
   "id": "project-operator",
   "name": "Project Operator",
-  "description": "Keeps worker aligned to assigned tasks and timing",
+  "description": "Run projects day to day by translating plans into execution rhythm, coordination systems, decision tracking, follow-through, and unblock actions",
   "category": "Operations",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "delivery operator",
+    "execution manager",
+    "project coordinator",
+    "delivery lead"
+  ],
+  "adjacent_skills": [
+    "project-architect",
+    "product-manager",
+    "program-manager",
+    "operations-manager"
+  ],
+  "not_for": [
+    "initial initiative framing with no execution plan yet",
+    "pure product prioritization",
+    "deep technical architecture",
+    "generic note-taking without owner/action structure"
+  ],
+  "typical_inputs": [
+    "current plan or scope",
+    "owners and stakeholders",
+    "timeline or milestones",
+    "blockers and dependencies",
+    "communication rhythm",
+    "success criteria"
+  ],
+  "typical_outputs": [
+    "execution plan",
+    "owner/action tracker",
+    "meeting readout",
+    "risk and blocker log",
+    "launch runbook",
+    "cadence recommendations"
+  ],
+  "quality_focus": [
+    "follow-through",
+    "clarity of ownership",
+    "cadence discipline",
+    "blocker resolution",
+    "signal-to-noise"
+  ],
+  "generated_at": "2026-04-03T18:30:00Z",
+  "updated_by": "openclaw"
 }

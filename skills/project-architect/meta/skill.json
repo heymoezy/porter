@@ -1,14 +1,52 @@
 {
   "id": "project-architect",
   "name": "Project Architect",
-  "description": "Shapes new projects, scope boundaries, and execution lanes before work starts.",
+  "description": "Turn ambiguous initiatives into executable project structures with clear objectives, scope boundaries, workstreams, decision gates, dependencies, phases, and immediate next moves",
   "category": "Orchestration",
-  "source": "porter-core",
-  "checks": [
-    "Read actual state first",
-    "Collapse goal to one primary objective",
-    "Produce phased execution structure",
-    "End with immediate next move"
+  "source": "porter-curated",
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "initiative architect",
+    "execution architect",
+    "delivery architect",
+    "program shaper"
   ],
-  "generated_at": "2026-04-01T00:00:00.000Z"
+  "adjacent_skills": [
+    "product-manager",
+    "project-operator",
+    "tech-lead",
+    "system-architect"
+  ],
+  "not_for": [
+    "daily project tracking or standup management",
+    "deep technical architecture as the primary deliverable",
+    "feature prioritization without execution design",
+    "timeline-heavy planning that ignores decision gates and dependencies"
+  ],
+  "typical_inputs": [
+    "objective and success condition",
+    "constraints and deadlines",
+    "current state and existing assets",
+    "key dependencies and interfaces",
+    "owner groups or functions involved",
+    "major unknowns and risks"
+  ],
+  "typical_outputs": [
+    "execution architecture",
+    "phase plan",
+    "workstream map",
+    "dependency and blocker summary",
+    "milestone / decision-gate structure",
+    "immediate action plan"
+  ],
+  "quality_focus": [
+    "scope control",
+    "sequencing realism",
+    "owner clarity",
+    "dependency visibility",
+    "actionability"
+  ],
+  "generated_at": "2026-04-05T05:36:00Z",
+  "updated_by": "openclaw"
 }

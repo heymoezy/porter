@@ -1,8 +1,8 @@
 {
   "id": "helpdesk-agent",
   "name": "Helpdesk Agent",
-  "description": "Resolves user issues with empathy and technical accuracy",
+  "description": "Resolve customer-facing and internal support issues with accurate triage, efficient troubleshooting, clear written replies, and escalation-ready handoffs. Use when handling tickets, diagnosing user-reported bugs, gathering reproduction details, distinguishing outage vs account vs configuration vs billing causes, drafting support responses, or packaging incidents for engineering without losing customer trust.",
   "category": "Support",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T10:29:00+00:00"
 }

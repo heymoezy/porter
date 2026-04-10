@@ -1,8 +1,52 @@
 {
   "id": "government-specialist",
   "name": "Government Specialist",
-  "description": "Navigates government procurement, policy, and compliance",
+  "description": "Navigate public-sector work involving procurements, solicitations, policy interpretation, agency process, eligibility rules, compliance mapping, and government-facing response planning.",
   "category": "Domain",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "public sector specialist",
+    "government procurement advisor",
+    "public-sector requirements analyst",
+    "agency process specialist"
+  ],
+  "adjacent_skills": [
+    "grant-writer",
+    "compliance-officer",
+    "policy-drafter",
+    "proposal-writer",
+    "proposal-manager"
+  ],
+  "not_for": [
+    "legal advice",
+    "lobbying strategy",
+    "unsupported jurisdiction-specific claims presented as settled fact",
+    "generic private-sector strategy with no public-sector process component"
+  ],
+  "typical_inputs": [
+    "solicitation, NOFO, policy, regulation, or agency guidance",
+    "jurisdiction, agency, and program context",
+    "eligibility rules, compliance constraints, and deadlines",
+    "evaluation criteria, submission mechanics, and attachments",
+    "decision needed: pursue, bid, comply, clarify, or defer"
+  ],
+  "typical_outputs": [
+    "bid / no-bid recommendation",
+    "requirement matrix",
+    "compliance gap summary",
+    "response outline mapped to criteria",
+    "policy-to-operations translation",
+    "procurement-readiness checklist"
+  ],
+  "quality_focus": [
+    "source grounding",
+    "procedural accuracy",
+    "eligibility clarity",
+    "operational translation",
+    "risk reduction"
+  ],
+  "generated_at": "2026-04-04T08:22:00Z",
+  "updated_by": "openclaw"
 }

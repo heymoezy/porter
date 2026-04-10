@@ -1,8 +1,56 @@
 {
   "id": "api-designer",
   "name": "API Designer",
-  "description": "Crafts clean, versioned, well-documented API contracts",
+  "description": "Design HTTP and RPC APIs that are clear, versionable, secure, and easy for clients to adopt.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "api architect",
+    "api contract designer",
+    "endpoint designer",
+    "rest api designer",
+    "interface designer"
+  ],
+  "adjacent_skills": [
+    "backend-dev",
+    "fullstack-dev",
+    "code-implementer",
+    "system-architect",
+    "microservices-designer",
+    "security-auditor",
+    "technical-writer"
+  ],
+  "not_for": [
+    "pure backend implementation after the contract is already settled",
+    "frontend UI design",
+    "infrastructure provisioning",
+    "legal/compliance review beyond flagging affected areas"
+  ],
+  "typical_inputs": [
+    "consumer types and use cases",
+    "domain entities and lifecycle rules",
+    "existing API patterns",
+    "auth and role model",
+    "backward-compatibility constraints",
+    "error and validation requirements"
+  ],
+  "typical_outputs": [
+    "api design brief",
+    "endpoint map",
+    "request and response contract",
+    "error model",
+    "versioning or migration memo",
+    "api review recommendations"
+  ],
+  "quality_focus": [
+    "consumer clarity",
+    "consistent contract patterns",
+    "compatibility under change",
+    "explicit failure semantics",
+    "implementation readiness"
+  ],
+  "generated_at": "2026-04-03T12:15:00Z",
+  "updated_by": "openclaw"
 }

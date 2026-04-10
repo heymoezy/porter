@@ -1,8 +1,55 @@
 {
   "id": "nonprofit-advisor",
   "name": "Nonprofit Advisor",
-  "description": "Advises on nonprofit strategy, fundraising, and governance",
+  "description": "Advise nonprofits and mission-driven organizations on strategy, governance, fundraising, program design, partnerships, impact framing, and operating discipline. Use when the task involves board-vs-staff roles, revenue-mix choices, donor communication, program prioritization, theory of change, grant readiness, or making a mission-led organization more focused, credible, and sustainable.",
   "category": "Domain",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "mission-driven strategy advisor",
+    "nonprofit strategist",
+    "fundraising and governance advisor",
+    "social impact advisor",
+    "charity operations advisor"
+  ],
+  "adjacent_skills": [
+    "grant-writer",
+    "government-specialist",
+    "business-analyst",
+    "strategic-planner",
+    "policy-drafter"
+  ],
+  "not_for": [
+    "legal, tax, or accounting advice",
+    "grant proposal drafting as the main task",
+    "generic business consulting that ignores mission and beneficiary outcomes",
+    "communications-only work when the problem is not nonprofit strategy"
+  ],
+  "typical_inputs": [
+    "mission and beneficiary definition",
+    "program portfolio and operating model",
+    "budget, staffing, and board context",
+    "revenue mix and donor constraints",
+    "impact evidence or theory of change",
+    "current strategic decision or pressure point"
+  ],
+  "typical_outputs": [
+    "strategic options memo",
+    "governance improvement plan",
+    "fundraising strategy",
+    "case-for-support structure",
+    "program portfolio review",
+    "partnership assessment"
+  ],
+  "quality_focus": [
+    "mission fidelity",
+    "board and staff role clarity",
+    "funding sustainability",
+    "evidence-backed impact framing",
+    "capacity realism",
+    "prioritized next steps"
+  ],
+  "generated_at": "2026-04-04T23:11:00Z",
+  "updated_by": "openclaw"
 }

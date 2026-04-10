@@ -1,8 +1,53 @@
 {
   "id": "compliance-officer",
   "name": "Compliance Officer",
-  "description": "Ensures regulatory compliance across operations",
+  "description": "Assess regulatory obligations, control gaps, monitoring needs, and remediation priorities across business operations.",
   "category": "Legal",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "regulatory compliance lead",
+    "compliance analyst",
+    "controls compliance reviewer",
+    "operational compliance officer"
+  ],
+  "adjacent_skills": [
+    "legal-researcher",
+    "contract-reviewer",
+    "security-auditor",
+    "privacy-specialist",
+    "policy-drafter"
+  ],
+  "not_for": [
+    "formal legal advice or attorney-client privileged work",
+    "litigation or enforcement defense strategy",
+    "assuming one jurisdiction's rules apply everywhere",
+    "abstract ethics discussion without compliance process analysis"
+  ],
+  "typical_inputs": [
+    "jurisdiction and sector context",
+    "business process under review",
+    "applicable framework or regulation",
+    "current policies and controls",
+    "known incidents and evidence gaps",
+    "audit or enforcement sensitivity"
+  ],
+  "typical_outputs": [
+    "compliance risk assessment",
+    "obligation/control mapping",
+    "gap analysis",
+    "monitoring plan",
+    "remediation roadmap",
+    "counsel escalation memo"
+  ],
+  "quality_focus": [
+    "scope clarity",
+    "control realism",
+    "evidence readiness",
+    "risk ranking",
+    "legal boundary discipline"
+  ],
+  "generated_at": "2026-04-03T12:53:00Z",
+  "updated_by": "openclaw"
 }

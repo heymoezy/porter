@@ -1,8 +1,49 @@
 {
   "id": "release-manager",
   "name": "Release Manager",
-  "description": "Coordinates release trains, changelogs, and deployment schedules",
-  "category": "Engineering",
+  "description": "Plan and coordinate software, content, operations, or multi-team launches with explicit scope, readiness checks, sequencing, communication, rollback paths, go/no-go criteria, and post-release verification.",
+  "category": "Operations",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "professional",
+  "status": "active",
+  "aliases": [
+    "launch manager",
+    "deployment coordinator",
+    "release coordinator",
+    "go-live manager"
+  ],
+  "adjacent_skills": [
+    "project-manager",
+    "incident-responder",
+    "quality-reviewer",
+    "technical-writer"
+  ],
+  "not_for": [
+    "deep implementation debugging",
+    "long-range roadmap prioritization unrelated to a concrete launch",
+    "live incident command once a release is already failing"
+  ],
+  "typical_inputs": [
+    "release scope and audience impact",
+    "date window or deployment constraints",
+    "dependencies and approvals",
+    "rollout, monitoring, and rollback details",
+    "communications or support requirements"
+  ],
+  "typical_outputs": [
+    "release plan",
+    "runbook or go-live checklist",
+    "risk and dependency register",
+    "release notes and communication plan",
+    "post-release verification and follow-up plan"
+  ],
+  "quality_focus": [
+    "scope discipline",
+    "dependency visibility",
+    "operational sequencing",
+    "rollback readiness",
+    "verification discipline"
+  ],
+  "generated_at": "2026-04-05T08:47:00Z",
+  "updated_by": "openclaw"
 }

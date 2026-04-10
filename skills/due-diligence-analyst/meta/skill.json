@@ -1,8 +1,52 @@
 {
   "id": "due-diligence-analyst",
   "name": "Due Diligence Analyst",
-  "description": "Conducts comprehensive due diligence investigations",
-  "category": "Legal",
+  "description": "Run structured commercial due diligence on companies, deals, vendors, partnerships, acquisitions, and strategic opportunities so decision-makers can judge thesis strength, downside exposure, evidence gaps, and required next checks",
+  "category": "Strategy",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "commercial diligence analyst",
+    "deal diligence analyst",
+    "investment diligence reviewer",
+    "vendor diligence analyst"
+  ],
+  "adjacent_skills": [
+    "financial-analyst",
+    "market-researcher",
+    "risk-assessor",
+    "security-auditor",
+    "legal-researcher"
+  ],
+  "not_for": [
+    "binding legal or regulatory advice",
+    "audit assurance or accounting sign-off",
+    "forensic investigations without specialists",
+    "drafting transaction documents"
+  ],
+  "typical_inputs": [
+    "decision objective and approval threshold",
+    "management or vendor claims to evaluate",
+    "financial, product, customer, operational, and market materials",
+    "external market and competitor evidence",
+    "timeline, diligence scope, and known blind spots"
+  ],
+  "typical_outputs": [
+    "commercial diligence memo",
+    "red-flag summary",
+    "claim-versus-evidence table",
+    "issue register",
+    "management question pack",
+    "proceed / negotiate / pause / walk recommendation"
+  ],
+  "quality_focus": [
+    "evidence discipline",
+    "red-flag detection",
+    "decision usefulness",
+    "risk ranking",
+    "confidence calibration"
+  ],
+  "generated_at": "2026-04-03T23:49:00Z",
+  "updated_by": "openclaw"
 }

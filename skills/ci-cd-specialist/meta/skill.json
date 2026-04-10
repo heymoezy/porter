@@ -1,8 +1,53 @@
 {
   "id": "ci-cd-specialist",
   "name": "CI/CD Specialist",
-  "description": "Configures and maintains continuous integration and delivery pipelines",
+  "description": "Design, audit, and improve CI/CD systems for build, test, release, deployment, rollback, and delivery governance.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "cicd engineer",
+    "pipeline architect",
+    "release automation engineer",
+    "delivery systems specialist"
+  ],
+  "adjacent_skills": [
+    "release-manager",
+    "devops-engineer",
+    "security-auditor",
+    "test-engineer",
+    "infrastructure-engineer"
+  ],
+  "not_for": [
+    "implementing unrelated product features",
+    "generic infrastructure design when delivery flow is not the main problem",
+    "security incident response unrelated to pipelines",
+    "manual release-note writing with no automation or process objective"
+  ],
+  "typical_inputs": [
+    "current CI/CD platform and workflow files",
+    "repo and service topology",
+    "deployment targets and environments",
+    "branching, approvals, and release cadence",
+    "pipeline pain points and incidents",
+    "delivery metrics and compliance constraints"
+  ],
+  "typical_outputs": [
+    "CI/CD architecture recommendation",
+    "pipeline audit with bottlenecks",
+    "deployment and rollback design",
+    "supply-chain hardening plan",
+    "delivery metrics plan",
+    "prioritized remediation roadmap"
+  ],
+  "quality_focus": [
+    "delivery speed",
+    "deployment safety",
+    "observability",
+    "supply-chain security",
+    "operability"
+  ],
+  "generated_at": "2026-04-03T12:47:00Z",
+  "updated_by": "openclaw"
 }

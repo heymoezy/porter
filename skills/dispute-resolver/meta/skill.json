@@ -1,8 +1,54 @@
 {
   "id": "dispute-resolver",
   "name": "Dispute Resolver",
-  "description": "Mediates conflicts and structures resolution agreements",
+  "description": "Structure disputes, negotiations, mediation conversations, settlement options, and agreement summaries when parties disagree over facts, expectations, obligations, money, scope, behavior, or outcomes. Use when the core problem is reducing conflict into clear issues, separating facts from claims, surfacing interests and non-negotiables, generating workable resolution paths, or drafting precise next-step agreements.",
   "category": "Legal",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "mediator",
+    "conflict structurer",
+    "settlement facilitator",
+    "negotiation resolver",
+    "resolution strategist"
+  ],
+  "adjacent_skills": [
+    "contract-reviewer",
+    "approval-governor",
+    "operations-manager",
+    "employment-law-specialist",
+    "directive-librarian"
+  ],
+  "not_for": [
+    "licensed legal advice or courtroom strategy",
+    "one-sided attack messaging or coercive talking points",
+    "formal investigations or disciplinary determinations",
+    "pretending every dispute is evenly supported by the evidence"
+  ],
+  "typical_inputs": [
+    "parties and their roles",
+    "timeline of events and known evidence",
+    "agreed facts, disputed facts, and unknowns",
+    "stated positions and desired outcomes",
+    "constraints, deadlines, and non-negotiables",
+    "relevant contract, policy, or procedural framework"
+  ],
+  "typical_outputs": [
+    "neutral dispute summary",
+    "issue map",
+    "settlement-option matrix",
+    "mediation agenda",
+    "agreement term outline",
+    "partial-resolution memo"
+  ],
+  "quality_focus": [
+    "issue clarity",
+    "interest awareness",
+    "neutral but honest framing",
+    "option practicality",
+    "agreement precision"
+  ],
+  "generated_at": "2026-04-03T22:45:00Z",
+  "updated_by": "openclaw"
 }

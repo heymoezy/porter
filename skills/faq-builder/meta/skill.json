@@ -1,8 +1,50 @@
 {
   "id": "faq-builder",
   "name": "FAQ Builder",
-  "description": "Creates comprehensive, well-organized FAQ sections",
+  "description": "Build or repair FAQ systems from docs, policies, release notes, support tickets, search logs, and stakeholder inputs.",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "faq writer",
+    "help center faq editor",
+    "support faq strategist",
+    "knowledge-base faq specialist"
+  ],
+  "adjacent_skills": [
+    "technical-writer",
+    "customer-support",
+    "ux-writer",
+    "knowledge-base-author"
+  ],
+  "not_for": [
+    "long-form product documentation",
+    "chatbot conversation design",
+    "seo article production",
+    "policy or legal approval"
+  ],
+  "typical_inputs": [
+    "docs, policies, release notes, and source-of-truth materials",
+    "support tickets, chats, call notes, or transcripts",
+    "help-center search queries or common user questions",
+    "audience, channel, and publishing context",
+    "known misconceptions, edge cases, and approval constraints"
+  ],
+  "typical_outputs": [
+    "recommended FAQ architecture or categories",
+    "prioritized question set",
+    "draft or rewritten FAQ entries",
+    "duplicates-to-merge and gaps-to-fill notes",
+    "maintenance or approval follow-up list"
+  ],
+  "quality_focus": [
+    "findability",
+    "answer clarity",
+    "factual accuracy",
+    "deduplication quality",
+    "maintenance durability"
+  ],
+  "generated_at": "2026-04-04T03:00:00Z",
+  "updated_by": "openclaw"
 }

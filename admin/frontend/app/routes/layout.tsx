@@ -50,9 +50,7 @@ function usePreloader() {
           queryClient.prefetchQuery({ queryKey: ["admin", "tools", "connections"], queryFn: () => api("/api/admin/tools/connections").catch(() => []) }),
           queryClient.prefetchQuery({ queryKey: ["admin", "customers"], queryFn: () => api("/api/admin/customers").catch(() => []) }),
           queryClient.prefetchQuery({ queryKey: ["admin", "diagnostics"], queryFn: () => api("/api/admin/diagnostics").catch(() => ({ errors: [], stats: {} })) }),
-          // Billing, Email
-          queryClient.prefetchQuery({ queryKey: ["admin", "billing", "subscriptions"], queryFn: () => api("/api/admin/billing/subscriptions").catch(() => []) }),
-          queryClient.prefetchQuery({ queryKey: ["admin", "billing", "stats"], queryFn: () => api("/api/admin/billing/stats").catch(() => {}) }),
+          // Email
           queryClient.prefetchQuery({ queryKey: ["admin", "email", "config"], queryFn: () => api("/api/admin/email/config").catch(() => ({})) }),
           // Recall
           queryClient.prefetchQuery({ queryKey: ["recall", "concepts", "all", "all", ""], queryFn: () => api("/api/v1/memory/concepts?limit=100").catch(() => ({ concepts: [], count: 0 })) }),

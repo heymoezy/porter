@@ -1,8 +1,8 @@
 {
   "id": "customer-support",
   "name": "Customer Support",
-  "description": "Handles inbound queries with empathy and accuracy",
+  "description": "Handle inbound customer questions, troubleshooting, incident communication, policy explanations, and escalation summaries with fast, trustworthy, human support language. Use when Porter needs a support reply, triage response, help-center draft, macro, outage update, refund/policy explanation, or escalation package for an active customer issue. Do not use for post-sale success planning, outbound sales, or deep product-roadmap strategy.",
   "category": "Operations",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:10:02+00:00"
+  "generated_at": "2026-04-03T17:27:00+00:00"
 }

@@ -1,8 +1,53 @@
 {
   "id": "storyboard-artist",
   "name": "Storyboard Artist",
-  "description": "Visualizes narrative sequences through sequential illustrations",
+  "description": "Translate scripts, scenes, ad beats, explainers, and motion concepts into production-useful storyboards, shot maps, and frame-by-frame visual sequences.",
   "category": "Creative",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "storyboarder",
+    "previsualization artist",
+    "shot planner",
+    "visual sequence artist"
+  ],
+  "adjacent_skills": [
+    "art-director",
+    "motion-designer",
+    "animator",
+    "video-producer",
+    "director",
+    "scriptwriter"
+  ],
+  "not_for": [
+    "final polished illustration or key art rendering",
+    "full scriptwriting when story structure is the real problem",
+    "concept art detached from sequence planning",
+    "on-set cinematography decisions without a storyboard problem"
+  ],
+  "typical_inputs": [
+    "script pages, scene synopsis, or beat-by-beat action",
+    "format, runtime target, and aspect ratio",
+    "scene objective, emotional beats, and priority moments",
+    "cast, props, setting, and production constraints",
+    "style references and whether motion or still boards are needed"
+  ],
+  "typical_outputs": [
+    "storyboard panel plan with numbered panels",
+    "shot-by-shot sequence breakdown",
+    "blocking and camera movement notes",
+    "visual continuity / geography notes",
+    "revision memo on what to cut, combine, or redraw",
+    "animatic-ready board descriptions"
+  ],
+  "quality_focus": [
+    "sequence clarity",
+    "spatial coherence",
+    "coverage economy",
+    "production usefulness",
+    "pacing control"
+  ],
+  "generated_at": "2026-04-05T15:10:00Z",
+  "updated_by": "openclaw"
 }

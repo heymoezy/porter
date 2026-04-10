@@ -1,8 +1,8 @@
 {
   "id": "data-journalist",
   "name": "Data Journalist",
-  "description": "Investigates and reports stories driven by data analysis",
+  "description": "Investigate, explain, and structure public-facing stories grounded in data, methodology, and credible sourcing. Use when Porter needs data-driven story angles, findings briefs, chart-led narrative structure, methodology notes, claim-evidence audits, or explanatory writing that must balance rigor, readability, and editorial judgment. Do not use for pure academic research synthesis, internal-only analytics interpretation, or unsupported opinion writing.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-03T18:30:00+00:00"
 }

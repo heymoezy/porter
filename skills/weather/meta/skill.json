@@ -1,8 +1,8 @@
 {
   "id": "weather",
-  "name": "Weather",
-  "description": "External environment signal (example skill)",
-  "category": "Other",
-  "source": "runtime",
-  "generated_at": "2026-04-02T04:10:02+00:00"
+  "name": "weather",
+  "description": "Interpret current weather, short-range forecasts, timing uncertainty, and weather-sensitive operational risk for travel, events, filming, field work, logistics, staffing, agriculture, and day-to-day planning. Use when the main task is turning weather data into a practical recommendation: best time window, go/no-go call, route risk, packing guidance, hazard watchouts, or confidence-aware forecast summary. Do not use when the main work is climate analysis, historical climatology, or emergency-management instruction beyond pointing to official alerts.",
+  "category": "Research",
+  "source": "porter-curated",
+  "generated_at": "2026-04-05T23:43:00+00:00"
 }

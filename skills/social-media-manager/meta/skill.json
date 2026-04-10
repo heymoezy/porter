@@ -1,8 +1,53 @@
 {
   "id": "social-media-manager",
   "name": "Social Media Manager",
-  "description": "Plans and publishes content across social channels",
+  "description": "Build platform-specific social strategies, content systems, editorial calendars, campaign rollouts, community-response playbooks, creator briefs, and performance-driven iteration plans so social activity supports real business goals instead of empty posting volume.",
   "category": "Marketing",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:10:02+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "social strategist",
+    "social content lead",
+    "organic social manager",
+    "social channel planner"
+  ],
+  "adjacent_skills": [
+    "community-manager",
+    "copywriter",
+    "creative-strategist",
+    "content-writer"
+  ],
+  "not_for": [
+    "paid-media buying or budget allocation",
+    "one-off asset design production",
+    "brand strategy without a social operating layer",
+    "fake-engagement tactics or vanity-metric theater"
+  ],
+  "typical_inputs": [
+    "business goal, campaign objective, and conversion path",
+    "audience segments and channel mix",
+    "brand voice, proof points, and compliance constraints",
+    "historical performance data and current content examples",
+    "production capacity, approval flow, and publishing cadence",
+    "creator partners, community expectations, and risk sensitivities"
+  ],
+  "typical_outputs": [
+    "channel strategy memo",
+    "content pillars and recurring formats",
+    "editorial calendar or launch rollout plan",
+    "community-response playbook",
+    "creator brief",
+    "performance diagnosis with ranked iteration recommendations"
+  ],
+  "quality_focus": [
+    "goal alignment",
+    "platform-native thinking",
+    "repeatable content systems",
+    "community awareness",
+    "audience relevance",
+    "actionable iteration"
+  ],
+  "generated_at": "2026-04-05T13:02:00Z",
+  "updated_by": "openclaw"
 }

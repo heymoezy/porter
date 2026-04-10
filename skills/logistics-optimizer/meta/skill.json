@@ -1,8 +1,8 @@
 {
   "id": "logistics-optimizer",
   "name": "Logistics Optimizer",
-  "description": "Optimizes shipping, routing, and warehouse operations",
+  "description": "Design and improve logistics systems across transportation, warehousing, fulfillment, inventory flow, and service-level performance. Use when the work involves routing strategy, distribution-network design, warehouse throughput, last-mile tradeoffs, inventory positioning, carrier choice, OTIF/SLA improvement, returns flow, or cost-to-serve analysis. Do not use for generic operations advice with no physical-goods flow component.",
   "category": "Domain",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T16:58:00+00:00"
 }

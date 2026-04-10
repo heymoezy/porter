@@ -1,8 +1,8 @@
 {
   "id": "legal-researcher",
   "name": "Legal Researcher",
-  "description": "Researches case law, statutes, and legal precedents",
-  "category": "Legal",
+  "description": "Research legal authorities and organize legal analysis into source-aware, jurisdiction-specific briefs. Use when the work involves statutes, regulations, case law themes, issue spotting, jurisdiction comparison, authority mapping, compliance-oriented legal research, memo preparation, or turning a practical business question into a structured legal research plan. Do not use for courtroom advocacy, definitive legal advice, fabricated citations, or claims that primary authority has been verified when it has not.",
+  "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T15:47:00+00:00"
 }

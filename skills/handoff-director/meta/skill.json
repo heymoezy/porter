@@ -1,8 +1,51 @@
 {
   "id": "handoff-director",
   "name": "Handoff Director",
-  "description": "Manages handoffs between workers without dropped context",
+  "description": "Design clean transfers of ownership between people, teams, or agents so the next owner can start immediately with the right context, artifacts, risks, timing, and definition of done.",
   "category": "Orchestration",
-  "source": "porter-core",
-  "generated_at": "2026-04-02T04:10:00+00:00"
+  "source": "porter-curated",
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "transition manager",
+    "work handoff specialist",
+    "context transfer lead",
+    "async handoff coordinator"
+  ],
+  "adjacent_skills": [
+    "project-manager",
+    "operations-manager",
+    "knowledge-manager",
+    "delegation-governor"
+  ],
+  "not_for": [
+    "broad project management with no real handoff",
+    "org design or staffing decisions",
+    "generic status summaries with no transfer of responsibility",
+    "durable documentation system design"
+  ],
+  "typical_inputs": [
+    "current owner, next owner, and transfer timing",
+    "work item, goal, and current state",
+    "artifacts, evidence, tickets, links, or files",
+    "blockers, dependencies, risks, and deadlines",
+    "definition of done and acceptance criteria"
+  ],
+  "typical_outputs": [
+    "handoff brief",
+    "shift-change summary",
+    "ready-for-review package",
+    "dependency transfer plan",
+    "receiver checklist",
+    "escalation-aware status snapshot"
+  ],
+  "quality_focus": [
+    "ownership clarity",
+    "receiver actionability",
+    "low restart cost",
+    "risk visibility",
+    "concise transfer records"
+  ],
+  "generated_at": "2026-04-04T09:25:00Z",
+  "updated_by": "openclaw"
 }

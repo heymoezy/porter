@@ -1,8 +1,20 @@
 {
   "id": "model-trainer",
   "name": "Model Trainer",
-  "description": "Fine-tunes and trains ML models on domain-specific data",
+  "description": "Train, fine-tune, and optimize machine learning or LLM systems for production use. Use when work involves dataset curation, feature or embedding pipelines, supervised training, fine-tuning, reward modeling, hyperparameter search, experiment design, training stability, checkpoint strategy, model packaging, or reproducible training workflows.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "aliases": [
+    "ml-trainer",
+    "fine-tuning-engineer",
+    "training-engineer",
+    "llm-trainer"
+  ],
+  "adjacent_skills": [
+    "model-evaluator",
+    "ml-engineer",
+    "ml-ops",
+    "data-engineer"
+  ],
+  "generated_at": "2026-04-04T21:05:00+00:00"
 }

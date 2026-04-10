@@ -1,8 +1,8 @@
 {
   "id": "tmux",
-  "name": "Tmux",
-  "description": "Multi-session supervision across worker terminals",
-  "category": "Infrastructure",
-  "source": "porter-internal",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "name": "tmux",
+  "description": "Operate, script, debug, and design tmux-based terminal workflows using sessions, windows, panes, layouts, copy mode, pane capture, and safe key injection. Use when work involves durable CLI workspaces, remote-shell resilience, long-running jobs, multi-pane observability, session naming/layout conventions, or controlled interaction with live terminal programs through tmux. Do not use for ordinary one-shell tasks that do not benefit from multiplexing.",
+  "category": "Operations",
+  "source": "porter-curated",
+  "generated_at": "2026-04-05T19:27:00+00:00"
 }

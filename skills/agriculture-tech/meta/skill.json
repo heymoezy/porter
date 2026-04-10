@@ -1,8 +1,53 @@
 {
   "id": "agriculture-tech",
   "name": "Agriculture Tech Specialist",
-  "description": "Applies technology to farming, crop analysis, and agri-logistics",
+  "description": "Plan, assess, and improve technology-enabled agriculture systems spanning precision farming, crop monitoring, irrigation, sensing, decision support, and traceability.",
   "category": "Domain",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "agtech specialist",
+    "precision agriculture specialist",
+    "digital agriculture specialist",
+    "farm technology advisor",
+    "agri-tech strategist"
+  ],
+  "adjacent_skills": [
+    "data-analyst",
+    "bi-analyst",
+    "logistics-optimizer",
+    "sustainability-advisor",
+    "product-manager"
+  ],
+  "not_for": [
+    "pure agronomy with no technology component",
+    "generic logistics advice outside agriculture",
+    "policy-only or subsidy interpretation",
+    "hype-driven AI recommendations without field grounding"
+  ],
+  "typical_inputs": [
+    "crop and geography context",
+    "farm size and operating model",
+    "current tech stack",
+    "data availability",
+    "pain point or workflow problem",
+    "budget and rollout constraints"
+  ],
+  "typical_outputs": [
+    "ag-tech architecture",
+    "implementation roadmap",
+    "monitoring workflow",
+    "vendor/approach comparison",
+    "KPI and adoption plan"
+  ],
+  "quality_focus": [
+    "decision-linked sensing",
+    "field-operational realism",
+    "data quality awareness",
+    "interoperability",
+    "measurable outcomes"
+  ],
+  "generated_at": "2026-04-03T11:55:00Z",
+  "updated_by": "openclaw"
 }

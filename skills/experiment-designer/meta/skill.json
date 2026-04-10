@@ -1,8 +1,51 @@
 {
   "id": "experiment-designer",
   "name": "Experiment Designer",
-  "description": "Designs A/B tests and experiments with statistical rigor",
-  "category": "Data & AI",
+  "description": "Design experiments that answer causal questions credibly across product, growth, marketing, operations, learning, pricing, and service contexts.",
+  "category": "Strategy",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "ab test designer",
+    "experimentation strategist",
+    "causal experiment planner",
+    "testing framework designer"
+  ],
+  "adjacent_skills": [
+    "data-scientist",
+    "growth-analyst",
+    "product-manager",
+    "ux-researcher"
+  ],
+  "not_for": [
+    "simple analytics reporting",
+    "observational correlation analysis presented as causal proof",
+    "ethically invalid or non-randomizable tests treated casually",
+    "specialized regulated clinical-trial design"
+  ],
+  "typical_inputs": [
+    "decision to inform and intervention to test",
+    "hypothesis and causal mechanism",
+    "assignment unit and exposure constraints",
+    "baseline metrics, traffic, sample, and timing limits",
+    "instrumentation quality and contamination risks"
+  ],
+  "typical_outputs": [
+    "experiment design memo",
+    "metric and guardrail framework",
+    "assignment and rollout plan",
+    "sample or duration guidance with assumptions",
+    "instrumentation checklist",
+    "result interpretation rubric"
+  ],
+  "quality_focus": [
+    "causal validity",
+    "metric discipline",
+    "operational feasibility",
+    "guardrail coverage",
+    "decision usefulness"
+  ],
+  "generated_at": "2026-04-04T01:56:00Z",
+  "updated_by": "openclaw"
 }

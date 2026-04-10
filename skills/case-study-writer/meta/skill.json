@@ -1,8 +1,53 @@
 {
   "id": "case-study-writer",
   "name": "Case Study Writer",
-  "description": "Crafts compelling customer success stories",
+  "description": "Write evidence-backed customer stories and case studies that show challenge, solution, implementation, and measurable outcomes in a credible narrative.",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "customer story writer",
+    "customer success writer",
+    "B2B case study writer",
+    "reference story writer"
+  ],
+  "adjacent_skills": [
+    "copywriter",
+    "blog-writer",
+    "press-release-writer",
+    "ghostwriter",
+    "content-writer"
+  ],
+  "not_for": [
+    "fictional or invented customer stories",
+    "press releases or launch announcements",
+    "generic blog content with no customer narrative",
+    "legal approval of marketing claims"
+  ],
+  "typical_inputs": [
+    "target audience and channel",
+    "customer profile and consent constraints",
+    "challenge, stakes, and implementation context",
+    "solution details and differentiators",
+    "measurable outcomes with timeframe and proof sources",
+    "approved quotes, claims, and anonymization rules"
+  ],
+  "typical_outputs": [
+    "full case study draft",
+    "short customer story",
+    "interview-to-story synthesis",
+    "proof-point and quote summary",
+    "sales one-pager narrative",
+    "multi-format adaptation plan"
+  ],
+  "quality_focus": [
+    "credibility",
+    "story structure",
+    "proof density",
+    "audience relevance",
+    "claim discipline"
+  ],
+  "generated_at": "2026-04-03T12:38:00Z",
+  "updated_by": "openclaw"
 }

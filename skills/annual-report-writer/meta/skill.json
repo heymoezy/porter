@@ -1,8 +1,53 @@
 {
   "id": "annual-report-writer",
   "name": "Annual Report Writer",
-  "description": "Produces comprehensive organizational annual reports",
+  "description": "Plan and write annual reports that combine strategy, performance, financial context, governance, impact, and forward-looking narrative into a clear stakeholder document.",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "annual review writer",
+    "corporate report writer",
+    "stakeholder report writer",
+    "year in review writer",
+    "integrated report writer"
+  ],
+  "adjacent_skills": [
+    "financial-analyst",
+    "technical-writer",
+    "documentation-writer",
+    "copywriter",
+    "proposal-writer"
+  ],
+  "not_for": [
+    "audited financial statement preparation",
+    "legal filing advice",
+    "generic blog content",
+    "quarterly update copy unless annual-report style is intended"
+  ],
+  "typical_inputs": [
+    "organization profile",
+    "audience and reporting purpose",
+    "verified metrics",
+    "leadership messaging",
+    "major milestones and setbacks",
+    "required sections or governance content"
+  ],
+  "typical_outputs": [
+    "annual report outline",
+    "executive letter draft",
+    "section copy",
+    "KPI narrative",
+    "editorial review memo"
+  ],
+  "quality_focus": [
+    "credibility",
+    "clear narrative spine",
+    "evidence-backed claims",
+    "stakeholder usefulness",
+    "honest treatment of performance"
+  ],
+  "generated_at": "2026-04-03T12:14:00Z",
+  "updated_by": "openclaw"
 }

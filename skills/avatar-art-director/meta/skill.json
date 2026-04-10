@@ -1,8 +1,53 @@
 {
   "id": "avatar-art-director",
   "name": "Avatar Art Director",
-  "description": "Turns agent role into pixel identity direction",
+  "description": "Define avatar identity direction for agents, characters, brands, and digital personas so profile art feels intentional, recognizable, and system-consistent.",
   "category": "Creative",
   "source": "porter-internal",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "avatar director",
+    "character avatar director",
+    "profile art director",
+    "persona visual director"
+  ],
+  "adjacent_skills": [
+    "art-director",
+    "brand-designer",
+    "illustration-artist",
+    "3d-artist",
+    "icon-designer"
+  ],
+  "not_for": [
+    "generic logo work",
+    "broad brand strategy beyond avatar identity",
+    "final illustration execution without direction work",
+    "ui implementation"
+  ],
+  "typical_inputs": [
+    "persona or role description",
+    "use contexts and display sizes",
+    "desired style constraints",
+    "existing avatar family or brand cues",
+    "concept drafts or references",
+    "signals and clichés to avoid"
+  ],
+  "typical_outputs": [
+    "avatar direction memo",
+    "visual trait map",
+    "style rules for avatar sets",
+    "concept recommendation",
+    "critique and revision brief",
+    "illustrator or generator production brief"
+  ],
+  "quality_focus": [
+    "thumbnail readability",
+    "persona clarity",
+    "family consistency",
+    "distinctive visual identity",
+    "production-ready direction"
+  ],
+  "generated_at": "2026-04-03T12:35:00Z",
+  "updated_by": "openclaw"
 }

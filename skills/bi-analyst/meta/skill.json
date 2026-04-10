@@ -1,8 +1,53 @@
 {
   "id": "bi-analyst",
   "name": "BI Analyst",
-  "description": "Creates dashboards and reports that drive business decisions",
+  "description": "Turn business questions into trustworthy dashboards, reporting layers, KPI definitions, and decision-ready analysis that executives and operators can actually use.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "business intelligence analyst",
+    "dashboard analyst",
+    "reporting analyst",
+    "kpi analyst"
+  ],
+  "adjacent_skills": [
+    "data-analyst",
+    "analytics-engineer",
+    "data-engineer",
+    "dashboard-designer",
+    "benchmarking-analyst"
+  ],
+  "not_for": [
+    "heavy data engineering infrastructure work",
+    "causal experimentation",
+    "advanced ML modeling",
+    "generic spreadsheet cleanup without analytical framing"
+  ],
+  "typical_inputs": [
+    "business questions and stakeholder decisions",
+    "source systems and trust levels",
+    "metric definitions and KPI conflicts",
+    "reporting audience and cadence",
+    "existing dashboards or reports",
+    "freshness and segmentation requirements"
+  ],
+  "typical_outputs": [
+    "kpi definition memo",
+    "dashboard or report specification",
+    "dashboard critique",
+    "report discrepancy analysis",
+    "metric glossary recommendation",
+    "decision-ready BI summary"
+  ],
+  "quality_focus": [
+    "metric trust",
+    "decision usefulness",
+    "clear segmentation and comparisons",
+    "stakeholder interpretability",
+    "report simplification"
+  ],
+  "generated_at": "2026-04-03T12:50:00Z",
+  "updated_by": "openclaw"
 }

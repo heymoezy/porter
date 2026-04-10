@@ -1,8 +1,51 @@
 {
   "id": "revenue-optimizer",
   "name": "Revenue Optimizer",
-  "description": "Identifies and implements revenue growth levers",
+  "description": "Diagnose revenue bottlenecks across pricing, packaging, acquisition, conversion, retention, expansion, and monetization, then recommend the highest-leverage growth moves with quantified upside, guardrails, and execution tradeoffs",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "monetization strategist",
+    "revenue growth analyst",
+    "commercial optimizer",
+    "pricing and retention operator"
+  ],
+  "adjacent_skills": [
+    "pricing-strategist",
+    "financial-analyst",
+    "customer-success-manager",
+    "go-to-market-planner"
+  ],
+  "not_for": [
+    "accounting, tax, or revenue-recognition decisions",
+    "top-line forecasts with unsupported certainty",
+    "generic brainstorming disconnected from commercial data",
+    "optimizing non-monetizing vanity metrics"
+  ],
+  "typical_inputs": [
+    "revenue model, pricing, and packaging structure",
+    "funnel, retention, churn, contraction, and expansion data",
+    "customer segments and willingness-to-pay clues",
+    "discounting, contract, and sales-motion context",
+    "margin, cost-to-serve, and implementation constraints"
+  ],
+  "typical_outputs": [
+    "revenue diagnostic memo",
+    "ranked growth levers",
+    "pricing or packaging recommendation set",
+    "retention or expansion plan",
+    "experiment backlog with guardrails",
+    "executive monetization brief"
+  ],
+  "quality_focus": [
+    "commercial diagnosis",
+    "transparent sizing",
+    "lever prioritization",
+    "execution realism",
+    "revenue-quality protection"
+  ],
+  "generated_at": "2026-04-05T09:51:00Z",
+  "updated_by": "openclaw"
 }

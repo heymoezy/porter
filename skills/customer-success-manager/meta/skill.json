@@ -1,8 +1,54 @@
 {
   "id": "customer-success-manager",
   "name": "Customer Success Manager",
-  "description": "Drives adoption, retention, and customer satisfaction",
+  "description": "Plan and improve onboarding, adoption, customer health, renewal readiness, stakeholder coverage, and value realization for existing accounts.",
   "category": "Support",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "csm",
+    "customer success strategist",
+    "account health manager",
+    "renewal readiness manager"
+  ],
+  "adjacent_skills": [
+    "customer-support",
+    "helpdesk-agent",
+    "operations-manager",
+    "product-manager",
+    "onboarding-specialist"
+  ],
+  "not_for": [
+    "reactive support troubleshooting",
+    "new-logo sales prospecting",
+    "revenue forecasting without customer context",
+    "generic account management without measurable outcomes"
+  ],
+  "typical_inputs": [
+    "customer goals and promised outcomes",
+    "usage and adoption data",
+    "stakeholder map",
+    "support and sentiment signals",
+    "renewal timeline",
+    "internal owners and cadence"
+  ],
+  "typical_outputs": [
+    "success plan",
+    "onboarding plan",
+    "health score model",
+    "renewal-risk brief",
+    "stakeholder map",
+    "qbr outline",
+    "intervention plan"
+  ],
+  "quality_focus": [
+    "outcome orientation",
+    "leading-indicator discipline",
+    "root-cause diagnosis",
+    "actionability",
+    "retention realism"
+  ],
+  "generated_at": "2026-04-03T16:23:00Z",
+  "updated_by": "openclaw"
 }

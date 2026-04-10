@@ -1,8 +1,54 @@
 {
   "id": "disaster-recovery",
-  "name": "Disaster Recovery Specialist",
-  "description": "Designs backup, failover, and recovery strategies",
+  "name": "Disaster Recovery",
+  "description": "Design disaster recovery strategy, backup and restore posture, continuity plans, failover approach, and recovery runbooks for severe outages, data corruption, ransomware-style disruption, or regional/provider failure. Use when the core problem is restoring critical services and data to explicit recovery targets (RTO/RPO), validating recovery readiness, prioritizing continuity investments, or turning resilience gaps into tested recovery plans.",
   "category": "Infrastructure",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "dr planner",
+    "business continuity architect",
+    "recovery strategist",
+    "backup and restore lead",
+    "contingency planning specialist"
+  ],
+  "adjacent_skills": [
+    "site-reliability",
+    "devops-engineer",
+    "database-admin",
+    "security-auditor",
+    "cloud-architect"
+  ],
+  "not_for": [
+    "routine uptime tuning with no major-failure scenario",
+    "basic deployment rollback planning in isolation",
+    "generic risk management writeups with no executable recovery design",
+    "assuming backups, snapshots, or replication automatically prove readiness"
+  ],
+  "typical_inputs": [
+    "critical business workflows and service tiers",
+    "current or desired RTO/RPO targets",
+    "system and dependency map",
+    "backup, retention, and restore evidence",
+    "likely disaster scenarios",
+    "compliance or contractual recovery obligations"
+  ],
+  "typical_outputs": [
+    "RTO/RPO matrix",
+    "recovery strategy memo",
+    "backup and restore readiness assessment",
+    "disaster scenario matrix",
+    "recovery runbook",
+    "remediation roadmap"
+  ],
+  "quality_focus": [
+    "business alignment",
+    "restore realism",
+    "dependency visibility",
+    "runbook executability",
+    "evidence-backed readiness"
+  ],
+  "generated_at": "2026-04-03T22:45:00Z",
+  "updated_by": "openclaw"
 }

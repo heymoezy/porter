@@ -1,8 +1,54 @@
 {
   "id": "backend-dev",
   "name": "Backend Developer",
-  "description": "Designs and implements server-side logic, APIs, and data layers",
+  "description": "Design and implement server-side systems, APIs, jobs, data access, and service behavior that are correct, maintainable, observable, and production-safe.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "backend engineer",
+    "server-side developer",
+    "api implementer",
+    "service engineer"
+  ],
+  "adjacent_skills": [
+    "api-designer",
+    "database-admin",
+    "devops-engineer",
+    "infrastructure-engineer",
+    "code-reviewer",
+    "system-architect"
+  ],
+  "not_for": [
+    "frontend-only work",
+    "pure API contract design without implementation",
+    "infrastructure provisioning with no backend code changes",
+    "DBA-only administration tasks"
+  ],
+  "typical_inputs": [
+    "feature or bug requirements",
+    "existing backend code paths",
+    "data model and invariants",
+    "dependency and integration constraints",
+    "runtime failure modes",
+    "test and observability baseline"
+  ],
+  "typical_outputs": [
+    "implemented backend changes",
+    "root-cause analysis",
+    "service and handler updates",
+    "tests and verification notes",
+    "migration or rollout guidance",
+    "risk and follow-up summary"
+  ],
+  "quality_focus": [
+    "production correctness",
+    "architectural fit",
+    "failure handling",
+    "observability",
+    "maintainable implementation"
+  ],
+  "generated_at": "2026-04-03T12:40:00Z",
+  "updated_by": "openclaw"
 }

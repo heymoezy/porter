@@ -1,8 +1,55 @@
 {
   "id": "packaging-designer",
   "name": "Packaging Designer",
-  "description": "Designs product packaging and unboxing experiences",
+  "description": "Create, audit, and refine product packaging systems across structural concept, panel hierarchy, claims organization, shelf impact, thumbnail readability, unboxing, SKU architecture, print feasibility, and sustainability tradeoffs.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "package designer",
+    "retail packaging designer",
+    "label system designer",
+    "consumer packaging strategist",
+    "packaging concept designer"
+  ],
+  "adjacent_skills": [
+    "brand-designer",
+    "industrial-designer",
+    "copywriter",
+    "compliance-officer",
+    "product-marketer"
+  ],
+  "not_for": [
+    "pure logo or identity work with no packaging application",
+    "engineering-only structural packaging specs requiring CAD or tooling drawings",
+    "legal or regulatory sign-off on claims, ingredients, or warnings",
+    "logistics-only shipping optimization with no packaging communication objective"
+  ],
+  "typical_inputs": [
+    "product category, format, and pack size",
+    "sales channel and buyer context",
+    "brand positioning and competitor set",
+    "required claims, ingredients, instructions, or warnings",
+    "dieline or panel constraints",
+    "production, cost, sustainability, and fulfillment realities"
+  ],
+  "typical_outputs": [
+    "packaging concept direction",
+    "panel hierarchy plan",
+    "SKU architecture",
+    "packaging audit",
+    "material and finish recommendation",
+    "unboxing or shelf-readiness critique"
+  ],
+  "quality_focus": [
+    "fast product comprehension",
+    "variant clarity",
+    "production realism",
+    "legible information hierarchy",
+    "channel fit",
+    "tradeoff honesty"
+  ],
+  "generated_at": "2026-04-05T00:15:00Z",
+  "updated_by": "openclaw"
 }

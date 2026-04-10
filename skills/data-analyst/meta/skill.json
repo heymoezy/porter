@@ -1,8 +1,8 @@
 {
   "id": "data-analyst",
   "name": "Data Analyst",
-  "description": "Interprets structured data to surface insights",
+  "description": "Analyze structured data, define trustworthy metrics, investigate changes, and turn numbers into decision-ready conclusions with explicit assumptions and caveats. Use when Porter needs KPI logic, SQL-oriented analysis plans, funnel or cohort analysis, experiment readouts, anomaly investigation, forecast framing, business diagnostics, or executive-facing analytical summaries. Do not use for data-pipeline implementation, dashboard layout design, or causal claims that cannot be supported by the evidence.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:10:02+00:00"
+  "generated_at": "2026-04-03T17:27:00+00:00"
 }

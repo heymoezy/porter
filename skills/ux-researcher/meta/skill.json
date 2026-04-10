@@ -1,8 +1,8 @@
 {
   "id": "ux-researcher",
-  "name": "UX Researcher",
-  "description": "Conducts user research to inform design decisions",
+  "name": "ux-researcher",
+  "description": "Plan, run, and synthesize UX research focused on whether people can understand, navigate, and complete tasks in a specific interface, workflow, information architecture, or prototype. Use when the main question is task success, usability, comprehension, findability, error recovery, onboarding friction, navigation clarity, or launch readiness of a product experience. Do not use for broad discovery of user needs, jobs, motivations, segmentation, or market understanding outside a concrete experience under test.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T22:39:00+00:00"
 }

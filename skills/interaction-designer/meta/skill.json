@@ -1,8 +1,8 @@
 {
   "id": "interaction-designer",
   "name": "Interaction Designer",
-  "description": "Designs intuitive interaction patterns and user flows",
+  "description": "Design user flows, interaction rules, state models, and recovery behavior for digital products. Use when work involves onboarding, navigation, forms, multi-step tasks, approvals, settings, empty/loading/error states, permission friction, or translating product requirements into implementable interaction behavior. Do not use for styling-only visual design, brand direction, UX copy as a standalone task, or frontend implementation after the interaction model is already settled.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T13:41:00+00:00"
 }

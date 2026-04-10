@@ -1,8 +1,51 @@
 {
   "id": "seo-specialist",
   "name": "SEO Specialist",
-  "description": "Optimises content and structure for search visibility",
+  "description": "Improve organic search performance by aligning pages and site structure to search intent, SERP expectations, on-page clarity, internal linking, and technical discoverability.",
   "category": "Marketing",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:10:02+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "organic search strategist",
+    "search optimization specialist",
+    "technical seo analyst",
+    "organic growth seo lead"
+  ],
+  "adjacent_skills": [
+    "copywriter",
+    "content-writer",
+    "web-designer",
+    "data-analyst"
+  ],
+  "not_for": [
+    "keyword stuffing or manipulative tactics",
+    "promising rankings on a schedule",
+    "black-hat link schemes",
+    "treating metadata as a substitute for strong content"
+  ],
+  "typical_inputs": [
+    "target audience, geography, and search intent",
+    "page URLs, templates, or site structure",
+    "current titles, headings, content, and internal links",
+    "rankings, CTR, or query data when available",
+    "crawl, render, canonical, and indexing constraints"
+  ],
+  "typical_outputs": [
+    "seo audit",
+    "page optimization brief",
+    "content cluster map",
+    "internal-linking plan",
+    "technical seo findings",
+    "prioritized organic roadmap"
+  ],
+  "quality_focus": [
+    "search-intent alignment",
+    "page-type fit",
+    "topical clarity",
+    "technical discoverability",
+    "user-first durability"
+  ],
+  "generated_at": "2026-04-05T11:59:00Z",
+  "updated_by": "openclaw"
 }

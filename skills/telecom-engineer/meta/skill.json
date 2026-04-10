@@ -1,8 +1,8 @@
 {
   "id": "telecom-engineer",
   "name": "Telecom Engineer",
-  "description": "Designs and optimizes telecommunications networks",
-  "category": "Domain",
+  "description": "Design, analyze, troubleshoot, and document telecom systems with protocol-level accuracy and operational realism. Use when work involves SIP, RTP, VoIP, SMS, carrier integrations, SBCs, trunks, numbering, routing, deliverability, QoS, fraud exposure, voice/media failure analysis, or telecom architecture where carrier behavior, signaling paths, and observability matter more than generic software advice.",
+  "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T18:22:00Z"
 }

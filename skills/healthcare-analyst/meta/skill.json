@@ -1,8 +1,51 @@
 {
   "id": "healthcare-analyst",
   "name": "Healthcare Analyst",
-  "description": "Analyzes healthcare data, workflows, and compliance",
+  "description": "Analyze healthcare programs, workflows, metrics, utilization, quality, access, and operating decisions with attention to reimbursement logic, compliance constraints, staff reality, and patient impact.",
   "category": "Domain",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "health operations analyst",
+    "care delivery analyst",
+    "healthcare metrics analyst",
+    "payer-provider workflow analyst"
+  ],
+  "adjacent_skills": [
+    "compliance-officer",
+    "data-analyst",
+    "policy-researcher",
+    "operations-manager"
+  ],
+  "not_for": [
+    "patient-specific diagnosis or treatment advice",
+    "patient triage decisions",
+    "definitive legal or regulatory opinions",
+    "generic business analysis that ignores healthcare context"
+  ],
+  "typical_inputs": [
+    "care setting, population, and workflow",
+    "program, service line, or utilization context",
+    "quality, access, throughput, cost, or reimbursement metrics",
+    "operational and compliance constraints",
+    "decision to support and stakeholders affected"
+  ],
+  "typical_outputs": [
+    "workflow diagnosis",
+    "KPI interpretation memo",
+    "utilization or capacity analysis",
+    "access bottleneck review",
+    "payer-provider process map",
+    "healthcare operational recommendations"
+  ],
+  "quality_focus": [
+    "contextual accuracy",
+    "metric discipline",
+    "operational realism",
+    "patient impact awareness",
+    "safe boundaries"
+  ],
+  "generated_at": "2026-04-04T09:25:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,20 @@
 {
   "id": "model-evaluator",
   "name": "Model Evaluator",
-  "description": "Benchmarks and validates ML model performance and fairness",
+  "description": "Evaluate ML, ranking, recommendation, forecasting, and LLM systems with rigorous offline and online measurement. Use when work involves benchmark design, dataset and holdout strategy, baseline selection, rubric design, error analysis, slice testing, fairness or calibration checks, robustness testing, A/B readouts, human evaluation, or ship/no-ship recommendations for model quality.",
   "category": "Data & AI",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "aliases": [
+    "ml-evaluator",
+    "llm-evaluator",
+    "eval-engineer",
+    "benchmark-designer"
+  ],
+  "adjacent_skills": [
+    "model-trainer",
+    "ml-engineer",
+    "ai-safety-reviewer",
+    "data-analyst"
+  ],
+  "generated_at": "2026-04-04T21:05:00+00:00"
 }

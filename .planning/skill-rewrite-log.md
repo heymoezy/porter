@@ -133,3 +133,38 @@ Notes:
 - Tightened data-journalist around supportable story angles, methodology transparency, claim-evidence-caveat discipline, and chart choices that inform without sensationalizing.
 - Attempted lightweight web research, but the search endpoint returned bot-detection challenges, so the rewrites were completed from direct audit and established best practice.
 - Advanced queue from `data-engineer` to `data-pipeline-architect`.
+
+2026-04-06T00:55:00Z | 203/207 | completed web-designer | next web-search
+2026-04-06T00:55:00Z | 204/207 | completed web-search | next whitepaper-author
+2026-04-06T00:55:00Z | 205/207 | completed whitepaper-author | next wireframe-specialist
+
+## 2026-04-06 00:55 UTC — batch rewrite
+
+Completed:
+- web-designer
+- web-search
+- whitepaper-author
+
+Notes:
+- Rewrote all five pack files for each skill: `SKILL.md`, `prompt.md`, `examples/README.md`, `guides/qa-checklist.md`, `meta/skill.json`.
+- Sharpened web-designer around page promise, narrative section sequencing, density control, proof placement, CTA discipline, and responsive structure instead of surface-only polish.
+- Reframed web-search around primary-source preference, lateral reading, contradiction checking, caveat handling, and decision-useful synthesis rather than link collection.
+- Tightened whitepaper-author around governing thesis, evidence standards, claim-strength control, executive readability, and implication-led conclusions.
+- Attempted lightweight web research to refresh current guidance; partial search results were usable before the search endpoint began returning bot-detection challenges, so the rewrites were completed with direct audit plus established best-practice framing.
+- Advanced queue from `web-designer` to `wireframe-specialist`.
+
+2026-04-06T01:52:00Z | 206/207 | completed wireframe-specialist | next worker-architect
+2026-04-06T01:52:00Z | 207/207 | completed worker-architect | next none
+
+## 2026-04-06 01:52 UTC — batch rewrite
+
+Completed:
+- wireframe-specialist
+- worker-architect
+
+Notes:
+- Rewrote all five pack files for the remaining queue items: `SKILL.md`, `prompt.md`, `examples/README.md`, `guides/qa-checklist.md`, `meta/skill.json`.
+- Sharpened wireframe-specialist around structure-before-polish discipline, wireflow usage, state/branch coverage, and requirement-gap detection before UI design or implementation.
+- Reframed worker-architect around reuse-vs-create rigor, anti-sprawl roster design, explicit refusal boundaries, lean loadouts, and handoff contracts tied to recurring jobs.
+- Used lightweight web research to refresh wireflow framing and worker-boundary guidance, drawing on NN/g wireflow guidance plus Team Topologies cognitive-load principles.
+- Queue completed at `worker-architect`; no remaining skills.

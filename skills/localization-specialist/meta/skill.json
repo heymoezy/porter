@@ -1,8 +1,8 @@
 {
   "id": "localization-specialist",
   "name": "Localization Specialist",
-  "description": "Adapts content for international markets and cultures",
+  "description": "Adapt products, interfaces, content, and workflows for new languages, locales, and cultures. Use when the work involves localization strategy, translation briefs, transcreation, pseudo-localization, terminology control, locale QA, regional formatting, RTL concerns, or launch-readiness work across markets. Do not use for raw translation alone when cultural, UX, and operational adaptation are not needed.",
   "category": "Content",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T16:58:00+00:00"
 }

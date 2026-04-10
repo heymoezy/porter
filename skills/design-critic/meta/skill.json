@@ -1,8 +1,53 @@
 {
   "id": "design-critic",
   "name": "Design Critic",
-  "description": "Reviews visual work for clarity and consistency",
+  "description": "Critique product, brand, marketing, or interface design for hierarchy, clarity, coherence, interaction quality, and overall taste. Use when the main need is sharp, prioritized feedback on a concept, screen, flow, visual system, or creative direction, including choosing between options and explaining what to keep, cut, simplify, or strengthen.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "design reviewer",
+    "visual critic",
+    "ui critic",
+    "ux critic",
+    "creative critic"
+  ],
+  "adjacent_skills": [
+    "design-qa",
+    "art-director",
+    "accessibility-specialist",
+    "ux-writer",
+    "design-system-architect"
+  ],
+  "not_for": [
+    "pixel-fidelity implementation audits",
+    "formal accessibility review as the main task",
+    "engineering bug verification without design judgment",
+    "generic praise or mood-board commentary"
+  ],
+  "typical_inputs": [
+    "design artifact or concept",
+    "intended audience",
+    "job-to-be-done or message",
+    "channel or platform context",
+    "brand or system constraints",
+    "decision the team needs to make"
+  ],
+  "typical_outputs": [
+    "ranked critique memo",
+    "concept comparison",
+    "keep-change-remove review",
+    "directional recommendation",
+    "interaction-quality diagnosis"
+  ],
+  "quality_focus": [
+    "hierarchy",
+    "clarity",
+    "interaction quality",
+    "taste with reasoning",
+    "actionable prioritization"
+  ],
+  "generated_at": "2026-04-03T20:38:00Z",
+  "updated_by": "openclaw"
 }

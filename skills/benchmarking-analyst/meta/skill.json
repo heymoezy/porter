@@ -1,8 +1,54 @@
 {
   "id": "benchmarking-analyst",
   "name": "Benchmarking Analyst",
-  "description": "Compares performance metrics against industry standards",
+  "description": "Compare performance, cost, quality, maturity, or operational metrics against internal history, peers, competitors, or recognized standards to reveal where something is leading, lagging, or mismeasured.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "benchmark analyst",
+    "peer comparison analyst",
+    "kpi benchmarking specialist",
+    "comparative performance analyst"
+  ],
+  "adjacent_skills": [
+    "bi-analyst",
+    "data-analyst",
+    "competitive-analyst",
+    "market-researcher",
+    "financial-analyst",
+    "unit-economics-analyst"
+  ],
+  "not_for": [
+    "raw BI dashboarding without benchmark logic",
+    "causal experiment analysis",
+    "open-ended market research with no comparative metric frame",
+    "financial valuation work outside benchmarking scope"
+  ],
+  "typical_inputs": [
+    "decision context",
+    "metric definitions",
+    "peer-set or standard candidates",
+    "historical baselines",
+    "data quality and normalization constraints",
+    "performance or cost data"
+  ],
+  "typical_outputs": [
+    "benchmarking memo",
+    "normalized comparison table",
+    "gap analysis",
+    "target-range recommendation",
+    "peer-set rationale",
+    "benchmark critique"
+  ],
+  "quality_focus": [
+    "fair comparability",
+    "metric normalization",
+    "honest interpretation",
+    "actionable prioritization",
+    "decision relevance"
+  ],
+  "generated_at": "2026-04-03T12:45:00Z",
+  "updated_by": "openclaw"
 }

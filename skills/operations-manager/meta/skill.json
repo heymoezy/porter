@@ -1,8 +1,55 @@
 {
   "id": "operations-manager",
   "name": "Operations Manager",
-  "description": "Streamlines processes and optimizes operational efficiency",
+  "description": "Design, audit, and improve recurring operating systems across intake, triage, routing, staffing, service levels, escalation, controls, and review cadence.",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "ops manager",
+    "service operations manager",
+    "business operations lead",
+    "workflow operations designer",
+    "operating model architect"
+  ],
+  "adjacent_skills": [
+    "program-manager",
+    "project-manager",
+    "customer-support",
+    "incident-responder",
+    "process-designer"
+  ],
+  "not_for": [
+    "single one-off project planning with no recurring service component",
+    "org design or HR policy advice detached from workflow execution",
+    "pure technical architecture without an operating-process layer",
+    "high-level strategy recommendations with no ownership, thresholds, or cadence"
+  ],
+  "typical_inputs": [
+    "work types, demand patterns, and intake channels",
+    "service goals, SLAs, or quality expectations",
+    "current roles, handoffs, and decision rights",
+    "tooling for intake, routing, QA, and reporting",
+    "failure modes such as backlog, rework, and breach history",
+    "staffing, coverage, and dependency constraints"
+  ],
+  "typical_outputs": [
+    "operating model",
+    "SOP or runbook pack",
+    "queue and escalation design",
+    "service tier / SLA framework",
+    "staffing and coverage logic",
+    "KPI and review cadence"
+  ],
+  "quality_focus": [
+    "clear ownership",
+    "repeatability",
+    "exception handling",
+    "capacity realism",
+    "actionable metrics",
+    "operational resilience"
+  ],
+  "generated_at": "2026-04-05T00:15:00Z",
+  "updated_by": "openclaw"
 }

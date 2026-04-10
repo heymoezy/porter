@@ -1,8 +1,54 @@
 {
   "id": "press-release-writer",
   "name": "Press Release Writer",
-  "description": "Writes newsworthy press releases and media statements",
-  "category": "Content",
+  "description": "Write and refine press releases that are newsworthy, structured, quotable, and ready for media, newsroom, investor, partner, or launch distribution",
+  "category": "Communications",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "pr writer",
+    "news release writer",
+    "media announcement writer",
+    "launch announcement specialist",
+    "corporate communications writer"
+  ],
+  "adjacent_skills": [
+    "copywriter",
+    "speech-writer",
+    "content-writer",
+    "policy-researcher"
+  ],
+  "not_for": [
+    "ad copy or landing page copy with no news angle",
+    "fabricating quotes, claims, or external validation",
+    "writing around a nonexistent announcement",
+    "media outreach execution or legal review"
+  ],
+  "typical_inputs": [
+    "announcement type and objective",
+    "what is actually new",
+    "audience and target outlets",
+    "supporting facts, metrics, and timing",
+    "approved quote owners and constraints",
+    "embargo or publication requirements"
+  ],
+  "typical_outputs": [
+    "press release",
+    "headline and subhead options",
+    "quote options",
+    "short newsroom version",
+    "supporting FAQ or fact sheet",
+    "draft critique with rewrite guidance"
+  ],
+  "quality_focus": [
+    "newsworthiness",
+    "clarity",
+    "credibility",
+    "tight structure",
+    "quote quality",
+    "publishability"
+  ],
+  "generated_at": "2026-04-05T03:28:00Z",
+  "updated_by": "openclaw"
 }

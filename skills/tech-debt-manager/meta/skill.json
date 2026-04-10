@@ -1,8 +1,8 @@
 {
   "id": "tech-debt-manager",
   "name": "Tech Debt Manager",
-  "description": "Identifies, prioritizes, and systematically reduces technical debt",
+  "description": "Identify, classify, prioritize, and reduce technical debt across code, architecture, tooling, tests, dependencies, and delivery workflows. Use when the main task is to turn messy systems or recurring engineering pain into a debt register, ranked remediation plan, modernization roadmap, or business case for engineering health investment. Do not use for one-off bug fixing, generic refactoring with no prioritization question, or architecture design work that is not framed as debt reduction.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T17:19:00+00:00"
 }

@@ -1,8 +1,53 @@
 {
   "id": "bibliographic-researcher",
   "name": "Bibliographic Researcher",
-  "description": "Compiles and annotates comprehensive bibliographies",
+  "description": "Build rigorous, well-scoped bibliographies and annotated source maps for a research question, topic area, or evidence review.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "annotated bibliography researcher",
+    "citation researcher",
+    "source mapper",
+    "literature sourcing specialist"
+  ],
+  "adjacent_skills": [
+    "research-analyst",
+    "literature-reviewer",
+    "legal-researcher",
+    "academic-researcher",
+    "knowledge-manager"
+  ],
+  "not_for": [
+    "full literature synthesis as the main deliverable",
+    "legal, medical, or investment advice",
+    "generic web search without citation discipline",
+    "fabricated or unverifiable references"
+  ],
+  "typical_inputs": [
+    "research question or topic boundary",
+    "time range, geography, and language constraints",
+    "preferred source types and citation style",
+    "seed references or must-include authors",
+    "required depth from starter list to broad scan",
+    "annotation expectations"
+  ],
+  "typical_outputs": [
+    "annotated bibliography",
+    "thematic reading list",
+    "source matrix",
+    "citation cleanup pass",
+    "coverage gap analysis",
+    "organized bibliography for downstream research"
+  ],
+  "quality_focus": [
+    "citation accuracy",
+    "source credibility",
+    "annotation usefulness",
+    "scope discipline",
+    "navigable organization"
+  ],
+  "generated_at": "2026-04-03T12:55:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,8 @@
 {
   "id": "infrastructure-engineer",
   "name": "Infrastructure Engineer",
-  "description": "Provisions and manages servers, networks, and platform services",
-  "category": "Engineering",
+  "description": "Design, review, and improve production infrastructure across compute, storage, networking, runtime boundaries, secrets, access, recovery, and environment topology. Use when the main task is shaping where systems run and how they stay operable: hosting choices, segmentation, capacity posture, dependency mapping, hardening, backup/restore design, migration sequencing, or debugging infrastructure weak points. Do not use for CI/CD workflow design, live incident command, observability program design, or pure IaC implementation after the architecture is already decided.",
+  "category": "Infrastructure",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T12:36:00Z"
 }

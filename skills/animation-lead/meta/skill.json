@@ -1,8 +1,53 @@
 {
   "id": "animation-lead",
   "name": "Animation Lead",
-  "description": "Directs animation projects from storyboard to final render",
+  "description": "Lead animation work from concept through shot planning, animatics, blocking, review, polish, and final delivery.",
   "category": "Creative",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "animation director",
+    "animation supervisor",
+    "motion lead",
+    "shot animation lead",
+    "animation review lead"
+  ],
+  "adjacent_skills": [
+    "3d-artist",
+    "motion-designer",
+    "storyboard-artist",
+    "video-producer",
+    "art-director"
+  ],
+  "not_for": [
+    "static illustration work",
+    "pure 3D asset creation with no motion direction need",
+    "editing-only tasks",
+    "generic project management without animation craft"
+  ],
+  "typical_inputs": [
+    "creative brief",
+    "storyboard or animatic",
+    "runtime and format constraints",
+    "style references",
+    "current animation pass",
+    "delivery requirements"
+  ],
+  "typical_outputs": [
+    "shot review notes",
+    "animation direction memo",
+    "pipeline plan",
+    "beat or shot sheet",
+    "delivery checklist"
+  ],
+  "quality_focus": [
+    "readability",
+    "timing and spacing",
+    "stage-appropriate review",
+    "actionable notes",
+    "sequence continuity"
+  ],
+  "generated_at": "2026-04-03T12:12:00Z",
+  "updated_by": "openclaw"
 }

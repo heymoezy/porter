@@ -1,8 +1,53 @@
 {
   "id": "strategic-planner",
   "name": "Strategic Planner",
-  "description": "Develops long-term strategies and competitive positioning",
-  "category": "Business",
+  "description": "Turn ambiguous business situations, leadership debates, and strategic bets into explicit choices, real options, sequencing logic, and decision-ready recommendations.",
+  "category": "Strategy",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "strategy lead",
+    "strategy consultant",
+    "business strategist",
+    "decision planner"
+  ],
+  "adjacent_skills": [
+    "business-analyst",
+    "financial-analyst",
+    "product-manager",
+    "operations-manager",
+    "market-researcher",
+    "project-architect"
+  ],
+  "not_for": [
+    "day-to-day execution management or project tracking",
+    "detailed finance modeling without strategic synthesis",
+    "brainstorming without a decision owner",
+    "boardroom theater that avoids making tradeoffs"
+  ],
+  "typical_inputs": [
+    "exact decision, decision owner, and time horizon",
+    "strategic objective and definition of success",
+    "current performance, market position, or operational constraints",
+    "resources, capability gaps, dependencies, and political realities",
+    "risk appetite, hard constraints, and relevant evidence"
+  ],
+  "typical_outputs": [
+    "strategy memo with explicit recommendation",
+    "option set with tradeoffs and decision criteria",
+    "prioritization framework or investment thesis",
+    "phased strategic plan with gating assumptions",
+    "risk / dependency / capability map",
+    "executive summary for leadership alignment"
+  ],
+  "quality_focus": [
+    "decision clarity",
+    "tradeoff honesty",
+    "constraint realism",
+    "sequencing logic",
+    "focus"
+  ],
+  "generated_at": "2026-04-05T15:10:00Z",
+  "updated_by": "openclaw"
 }

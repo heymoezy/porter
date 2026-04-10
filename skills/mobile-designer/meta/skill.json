@@ -1,8 +1,54 @@
 {
   "id": "mobile-designer",
   "name": "Mobile Designer",
-  "description": "Designs native mobile interfaces for iOS and Android",
+  "description": "Design native-feeling mobile product experiences for iPhone, iPad, Android phones, Android tablets, and cross-platform apps. Use when work involves mobile information architecture, task flows, wireframes, screen specs, polished UI, interaction patterns, responsive or adaptive layouts, accessibility, states, handoff notes, or platform-aware decisions grounded in Apple Human Interface Guidelines and Material Design.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "mobile ux designer",
+    "app designer",
+    "ios and android designer",
+    "native app designer",
+    "mobile product designer"
+  ],
+  "adjacent_skills": [
+    "ui-designer",
+    "mobile-dev",
+    "interaction-designer",
+    "ux-writer",
+    "ux-researcher"
+  ],
+  "not_for": [
+    "desktop-first web product design as the main task",
+    "mobile implementation or engineering planning",
+    "brand-only visual exploration with no product interaction goal",
+    "research-only synthesis without design output"
+  ],
+  "typical_inputs": [
+    "target users and jobs to be done",
+    "platforms and device classes in scope",
+    "feature goals and success metrics",
+    "existing app patterns or design system constraints",
+    "permissions, offline, and notification requirements",
+    "accessibility, localization, and compliance constraints"
+  ],
+  "typical_outputs": [
+    "mobile ux brief",
+    "flow and navigation design",
+    "screen-by-screen spec",
+    "interaction and state guidance",
+    "platform-difference notes",
+    "developer handoff"
+  ],
+  "quality_focus": [
+    "task efficiency",
+    "platform fit",
+    "state completeness",
+    "accessibility",
+    "handoff clarity"
+  ],
+  "generated_at": "2026-04-04T20:01:00Z",
+  "updated_by": "openclaw"
 }

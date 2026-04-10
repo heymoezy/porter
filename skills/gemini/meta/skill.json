@@ -1,8 +1,50 @@
 {
   "id": "gemini",
   "name": "Gemini",
-  "description": "Deep research and long-context investigation",
+  "description": "Delegate work to Gemini when the task benefits from very large context windows, multimodal input handling, broad source synthesis, or Google-native reasoning strengths.",
   "category": "AI & LLM",
-  "source": "runtime",
-  "generated_at": "2026-04-02T04:10:02+00:00"
+  "source": "porter-curated",
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "gemini operator",
+    "long-context delegate",
+    "multimodal synthesis delegate",
+    "gemini cli specialist"
+  ],
+  "adjacent_skills": [
+    "academic-researcher",
+    "technical-writer",
+    "coding-agent",
+    "model-evaluator"
+  ],
+  "not_for": [
+    "routine local edits or direct repo implementation",
+    "simple questions that do not need delegation",
+    "tool-dependent tasks Gemini cannot actually perform",
+    "unreviewed pass-through of model output as final truth"
+  ],
+  "typical_inputs": [
+    "research question or decision to support",
+    "large source pack or multimodal materials",
+    "desired output schema",
+    "evidence boundaries and exclusions",
+    "verification requirements"
+  ],
+  "typical_outputs": [
+    "Gemini-ready prompt package",
+    "structured synthesis or comparison matrix",
+    "evidence-backed research brief",
+    "confidence notes and caveats",
+    "recommended next actions"
+  ],
+  "quality_focus": [
+    "delegation fit",
+    "context packaging",
+    "evidence discipline",
+    "structured output",
+    "downstream usefulness"
+  ],
+  "generated_at": "2026-04-04T06:13:00Z",
+  "updated_by": "openclaw"
 }

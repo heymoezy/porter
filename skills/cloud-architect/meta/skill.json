@@ -1,8 +1,53 @@
 {
   "id": "cloud-architect",
   "name": "Cloud Architect",
-  "description": "Designs scalable, cost-effective cloud infrastructure",
+  "description": "Design, review, and improve cloud architectures for reliability, security, performance, cost, scalability, resilience, and operability across AWS, Azure, GCP, and hybrid environments.",
   "category": "Engineering",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "cloud solutions architect",
+    "platform architect",
+    "infrastructure architect",
+    "well-architected reviewer"
+  ],
+  "adjacent_skills": [
+    "devops-engineer",
+    "infrastructure-engineer",
+    "database-admin",
+    "site-reliability",
+    "cost-optimizer"
+  ],
+  "not_for": [
+    "small operational console tasks",
+    "application feature implementation without architecture decisions",
+    "narrow CI/CD work where delivery flow is the main problem",
+    "unjustified multi-cloud or multi-region complexity"
+  ],
+  "typical_inputs": [
+    "workload profile and growth expectations",
+    "availability and recovery objectives",
+    "security, residency, and compliance requirements",
+    "current topology and operational pain points",
+    "team capability and ownership model",
+    "cost constraints and deployment model"
+  ],
+  "typical_outputs": [
+    "target-state cloud architecture",
+    "service-selection rationale",
+    "reliability and security review",
+    "cost and resilience optimization plan",
+    "migration roadmap",
+    "architecture tradeoff memo"
+  ],
+  "quality_focus": [
+    "reliability",
+    "security",
+    "operability",
+    "cost discipline",
+    "scalable simplicity"
+  ],
+  "generated_at": "2026-04-03T12:47:00Z",
+  "updated_by": "openclaw"
 }

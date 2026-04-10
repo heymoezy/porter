@@ -1,8 +1,54 @@
 {
   "id": "art-director",
   "name": "Art Director",
-  "description": "Sets visual direction and maintains creative standards",
+  "description": "Set visual direction for brands, campaigns, product surfaces, and asset systems so the work feels coherent, distinctive, and production-ready.",
   "category": "Creative",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "creative director",
+    "visual director",
+    "campaign art director",
+    "design direction lead"
+  ],
+  "adjacent_skills": [
+    "brand-designer",
+    "creative-strategist",
+    "design-critic",
+    "illustration-artist",
+    "photography-director",
+    "motion-designer",
+    "ui-designer"
+  ],
+  "not_for": [
+    "single-asset execution with no direction component",
+    "copywriting",
+    "frontend implementation",
+    "specialist production craft after direction is already locked"
+  ],
+  "typical_inputs": [
+    "creative brief and business goal",
+    "target audience and channels",
+    "brand attributes and existing visual system",
+    "reference sets and competitive landscape",
+    "production constraints and available creative capabilities"
+  ],
+  "typical_outputs": [
+    "creative direction memo",
+    "visual territory recommendation",
+    "art-direction principles",
+    "critique and revision brief",
+    "cross-channel system guidance",
+    "production brief for downstream creatives"
+  ],
+  "quality_focus": [
+    "distinct visual point of view",
+    "coherence across assets",
+    "actionable critique",
+    "brand and audience fit",
+    "production-ready guidance"
+  ],
+  "generated_at": "2026-04-03T12:30:00Z",
+  "updated_by": "openclaw"
 }

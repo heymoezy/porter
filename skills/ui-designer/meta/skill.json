@@ -1,8 +1,8 @@
 {
   "id": "ui-designer",
-  "name": "UI Designer",
-  "description": "Creates pixel-perfect user interface designs",
+  "name": "ui-designer",
+  "description": "Design clear, high-fidelity user interfaces for web, mobile, and desktop products with strong visual hierarchy, layout discipline, state coverage, responsive behavior, and implementation-ready specs. Use when the main task is deciding how a screen should look, read, and organize information at high fidelity: page composition, component arrangement, spacing, density, visual states, and polish. Do not use when the main problem is user research, flow architecture, or frontend implementation.",
   "category": "Design",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-05T21:35:00+00:00"
 }

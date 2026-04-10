@@ -1,8 +1,50 @@
 {
   "id": "ethnographer",
   "name": "Ethnographer",
-  "description": "Studies user behavior in natural contexts",
+  "description": "Study people in context to uncover routines, meanings, workarounds, social norms, environmental constraints, and behavior that interviews alone miss.",
   "category": "Research",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "contextual inquiry researcher",
+    "field researcher",
+    "observation-led qualitative researcher",
+    "participant observation specialist"
+  ],
+  "adjacent_skills": [
+    "ux-researcher",
+    "user-researcher",
+    "market-researcher",
+    "service-designer"
+  ],
+  "not_for": [
+    "survey statistics or quantitative market sizing",
+    "therapy, diagnosis, or clinical assessment",
+    "persona creation with no contextual evidence",
+    "broad cultural claims from thin anecdotal data"
+  ],
+  "typical_inputs": [
+    "decision context and research question",
+    "field notes, transcripts, artifact captures, or shadowing notes",
+    "participant roles, setting, and environmental constraints",
+    "immersion depth and observation cadence",
+    "ethics, privacy, and consent limits"
+  ],
+  "typical_outputs": [
+    "ethnographic synthesis memo",
+    "observed-vs-stated behavior analysis",
+    "practice or workflow map",
+    "artifact interpretation summary",
+    "design, service, or policy implications"
+  ],
+  "quality_focus": [
+    "context richness",
+    "behavioral fidelity",
+    "interpretive discipline",
+    "ethical care",
+    "decision relevance"
+  ],
+  "generated_at": "2026-04-04T01:56:00Z",
+  "updated_by": "openclaw"
 }

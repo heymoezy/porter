@@ -1,8 +1,55 @@
 {
   "id": "onboarding-specialist",
   "name": "Onboarding Specialist",
-  "description": "Designs and delivers smooth user onboarding experiences",
-  "category": "Support",
+  "description": "Design, audit, and improve onboarding flows that move new users from first touch to activation, confidence, and early retention. Use when the task involves signup flow design, first-run setup, empty states, guided setup, onboarding copy, activation milestones, lifecycle nudges, segmentation by persona or use case, or reducing time-to-value without increasing confusion or drop-off.",
+  "category": "Growth",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "core",
+  "status": "active",
+  "aliases": [
+    "activation specialist",
+    "first-run experience designer",
+    "user onboarding strategist",
+    "adoption flow designer",
+    "time-to-value optimizer"
+  ],
+  "adjacent_skills": [
+    "ux-writer",
+    "product-manager",
+    "customer-success-manager",
+    "growth-hacker",
+    "ui-designer"
+  ],
+  "not_for": [
+    "acquisition strategy before product use begins",
+    "late-stage retention or win-back work with no onboarding component",
+    "pure ui implementation work without onboarding strategy",
+    "support troubleshooting when the issue is not rooted in onboarding design"
+  ],
+  "typical_inputs": [
+    "target user segments and jobs-to-be-done",
+    "current onboarding flow or concept",
+    "activation event and success milestones",
+    "drop-off data or user feedback",
+    "setup constraints such as permissions, imports, or integrations",
+    "existing metrics and lifecycle channels"
+  ],
+  "typical_outputs": [
+    "friction audit",
+    "activation-focused onboarding flow",
+    "milestone map",
+    "copy and empty-state guidance",
+    "segmented onboarding strategy",
+    "experiment backlog"
+  ],
+  "quality_focus": [
+    "time-to-value",
+    "friction reduction",
+    "activation alignment",
+    "confidence and trust",
+    "stage-by-stage journey logic",
+    "measurable validation"
+  ],
+  "generated_at": "2026-04-04T23:11:00Z",
+  "updated_by": "openclaw"
 }

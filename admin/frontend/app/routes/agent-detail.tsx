@@ -264,13 +264,6 @@ function AgentDetailContent() {
                 </div>
               )}
 
-              {/* Planned capabilities (registry agents without soul) */}
-              {!isBorn && reg && reg.plannedCapabilities.length > 0 && soul.length === 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {reg.plannedCapabilities.map(cap => <Badge key={cap} variant="outline" className="text-2xs font-normal">{cap}</Badge>)}
-                </div>
-              )}
-
               {/* Tags */}
               {tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
@@ -319,16 +312,43 @@ function AgentDetailContent() {
                   <div className="flex flex-wrap gap-1">{soul.map(s => <Badge key={s} variant="outline" className="text-2xs font-normal">{s}</Badge>)}</div>
                 </div>
               )}
-              {!isBorn && reg && reg.plannedCapabilities.length > 0 && soul.length === 0 && (
+              {!isBorn && reg && reg.plannedCapabilities.length > 0 && (
                 <div className="mb-2">
-                  <p className="text-2xs font-semibold text-text3 mb-1">Planned Capabilities</p>
-                  <div className="flex flex-wrap gap-1">{reg.plannedCapabilities.map(cap => <Badge key={cap} variant="outline" className="text-2xs font-normal">{cap}</Badge>)}</div>
+                  <p className="text-2xs font-semibold text-text3 mb-1">Capabilities</p>
+                  <ul className="space-y-0.5 pl-3">
+                    {reg.plannedCapabilities.map(cap => <li key={cap} className="text-2xs text-text2 list-disc">{cap}</li>)}
+                  </ul>
                 </div>
               )}
               {tags.length > 0 && <div className="flex flex-wrap gap-1 mt-2">{tags.map(tag => <Badge key={tag} variant="outline" className="text-2xs">{tag}</Badge>)}</div>}
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* ── Instances — visible for components (non-instances) ── */}
+      {!isInstance && instances.length > 0 && (
+        <Card className="shrink-0">
+          <div className="flex items-center px-3 py-1.5 border-b border-border bg-muted/50">
+            <Users className="size-3 text-text3 mr-1.5" />
+            <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Instances ({instances.length})</span>
+          </div>
+          <div className="divide-y divide-border/20">
+            {instances.map(inst => {
+              const instBorn = !!(inst as any).soul_hash
+              return (
+                <Link key={inst.id} to={`/agents/${inst.id}`} className="flex items-center gap-3 px-4 py-2 hover:bg-raised/30 transition-colors">
+                  <div className={`size-2 rounded-full shrink-0 ${instBorn ? "bg-success" : "bg-text3/40"}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground">{inst.name}</p>
+                    <p className="text-2xs text-text3">{inst.role}</p>
+                  </div>
+                  <span className="text-2xs text-text3 shrink-0">{instBorn ? "Born" : "Unborn"}</span>
+                </Link>
+              )
+            })}
+          </div>
+        </Card>
       )}
 
       {/* ── Tabs ── */}
@@ -387,33 +407,11 @@ function AgentDetailContent() {
                     spellCheck={false}
                     placeholder={hasApi
                       ? `No ${tab.id} yet. Start typing to define this agent's ${tab.label.toLowerCase()}.`
-                      : `Awaiting forge — ${tab.id} will be generated when this agent is forged.`}
+                      : reg && reg.plannedCapabilities.length > 0 && tab.id === "SOUL.md"
+                        ? `Awaiting forge — capabilities:\n\n${reg.plannedCapabilities.map(c => `• ${c}`).join("\n")}`
+                        : `Awaiting forge — ${tab.id} will be generated when this agent is forged.`}
                   />
                 </Card>
-                {/* Instances — shown in SOUL tab for templates only */}
-                {tab.id === "SOUL.md" && !isInstance && instances.length > 0 && (
-                  <Card className="shrink-0">
-                    <div className="flex items-center px-3 py-1.5 border-b border-border bg-muted/50">
-                      <Users className="size-3 text-text3 mr-1.5" />
-                      <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Instances ({instances.length})</span>
-                    </div>
-                    <div className="divide-y divide-border/20">
-                      {instances.map(inst => {
-                        const instBorn = !!(inst as any).soul_hash
-                        return (
-                          <Link key={inst.id} to={`/agents/${inst.id}`} className="flex items-center gap-3 px-4 py-2 hover:bg-raised/30 transition-colors">
-                            <div className={`size-2 rounded-full shrink-0 ${instBorn ? "bg-success" : "bg-text3/40"}`} />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-foreground">{inst.name}</p>
-                              <p className="text-2xs text-text3">{inst.role}</p>
-                            </div>
-                            <span className="text-2xs text-text3 shrink-0">{instBorn ? "Born" : "Unborn"}</span>
-                          </Link>
-                        )
-                      })}
-                    </div>
-                  </Card>
-                )}
               </div>
             </TabsContent>
           ))}

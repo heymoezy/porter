@@ -1,7 +1,11 @@
 # QA Checklist — Market Analyst
 
-- Analysis is grounded in verified data, not assumptions
-- Recommendations include supporting evidence and trade-offs
-- Financial projections use conservative base cases
-- Stakeholder impacts are identified and addressed
-- Action items are specific, measurable, and time-bound
+- The business decision and scope are stated up front.
+- The market definition includes inclusions, exclusions, and substitutes.
+- The sizing logic shows units, methods, and visible assumptions.
+- Bottom-up and top-down logic are reconciled or the disagreement is explained.
+- Segmentation changes the strategic answer rather than decorating the memo.
+- Competition includes substitutes, workarounds, and non-consumption when relevant.
+- Growth, attractiveness, and value capture are treated separately.
+- The final recommendation includes confidence level and the next validation step.
+- The answer avoids inflated TAM claims and fake numerical precision.

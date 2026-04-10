@@ -1,8 +1,8 @@
 {
   "id": "incident-responder",
   "name": "Incident Responder",
-  "description": "Leads incident response, triage, and post-mortems",
-  "category": "Infrastructure",
+  "description": "Lead technical incident response for outages, degradations, security events, and ambiguous operational failures by driving triage, severity framing, containment, communication, recovery, evidence capture, and post-incident follow-through. Use when systems are failing now, customer impact is unclear, timelines must be reconstructed, responders need coordination, updates must go out, or a postmortem needs concrete root cause and prevention actions.",
+  "category": "Operations",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T11:31:00+00:00"
 }

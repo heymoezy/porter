@@ -1,8 +1,53 @@
 {
   "id": "copywriter",
   "name": "Copywriter",
-  "description": "Produces persuasive copy for marketing and product contexts",
+  "description": "Write persuasive, conversion-aware messaging for product, marketing, sales, lifecycle, and launch contexts.",
   "category": "Writing",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:10:02+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "conversion copywriter",
+    "marketing copywriter",
+    "sales copywriter",
+    "persuasive messaging specialist"
+  ],
+  "adjacent_skills": [
+    "content-writer",
+    "email-writer",
+    "creative-strategist",
+    "brand-designer",
+    "seo-specialist"
+  ],
+  "not_for": [
+    "broad editorial drafting",
+    "full brand identity development",
+    "campaign operations or channel strategy on its own",
+    "legal or compliance review of claims"
+  ],
+  "typical_inputs": [
+    "target audience",
+    "offer or product details",
+    "desired conversion action",
+    "proof points and objections",
+    "channel constraints",
+    "brand voice and forbidden claims"
+  ],
+  "typical_outputs": [
+    "conversion copy draft",
+    "headline and CTA options",
+    "angle variants",
+    "objection-handling copy",
+    "email sequence copy",
+    "messaging hierarchy"
+  ],
+  "quality_focus": [
+    "persuasion clarity",
+    "differentiation",
+    "proof quality",
+    "friction reduction",
+    "testable usefulness"
+  ],
+  "generated_at": "2026-04-03T14:19:00Z",
+  "updated_by": "openclaw"
 }

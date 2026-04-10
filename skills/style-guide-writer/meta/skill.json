@@ -1,8 +1,53 @@
 {
   "id": "style-guide-writer",
   "name": "Style Guide Writer",
-  "description": "Defines editorial standards and writing conventions",
-  "category": "Content",
+  "description": "Build practical writing style guides that turn brand voice, editorial standards, UX copy rules, and terminology decisions into usable instructions, examples, and review logic for real teams.",
+  "category": "Writing",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "editorial style guide writer",
+    "voice and tone writer",
+    "brand writing guide author",
+    "content standards writer"
+  ],
+  "adjacent_skills": [
+    "copywriter",
+    "brand-designer",
+    "ux-writer",
+    "documentation-writer",
+    "localization-specialist",
+    "editorial-planner"
+  ],
+  "not_for": [
+    "one-off copywriting or campaign execution",
+    "high-level brand strategy without language rules",
+    "translation operations",
+    "legal drafting standards as the main task"
+  ],
+  "typical_inputs": [
+    "brand positioning or messaging baseline",
+    "examples of on-brand and off-brand content",
+    "audience segments, channels, and risk-sensitive moments",
+    "required terms, prohibited claims, and compliance constraints",
+    "writer workflow, reviewer workflow, and current inconsistency patterns"
+  ],
+  "typical_outputs": [
+    "full style guide or condensed working guide",
+    "voice and tone framework with flex rules by context",
+    "editorial standards and usage rules",
+    "terminology / naming / capitalization guide",
+    "microcopy standards for UI states and lifecycle moments",
+    "examples library with before/after rewrites"
+  ],
+  "quality_focus": [
+    "enforceability",
+    "adoption ease",
+    "example quality",
+    "cross-channel consistency",
+    "brand specificity"
+  ],
+  "generated_at": "2026-04-05T15:10:00Z",
+  "updated_by": "openclaw"
 }

@@ -1,8 +1,51 @@
 {
   "id": "growth-hacker",
   "name": "Growth Hacker",
-  "description": "Designs and executes rapid growth experiments",
+  "description": "Design high-velocity, measurable growth experiments across acquisition, activation, retention, referral, and monetization.",
   "category": "Business",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "catalogTier": "domain",
+  "status": "active",
+  "aliases": [
+    "growth experimenter",
+    "funnel optimizer",
+    "product growth tester",
+    "retention experiment lead"
+  ],
+  "adjacent_skills": [
+    "go-to-market-planner",
+    "product-manager",
+    "analytics-engineer",
+    "performance-marketer"
+  ],
+  "not_for": [
+    "unmeasured brainstorming",
+    "long-range brand strategy as the main deliverable",
+    "analytics engineering implementation",
+    "manipulative tactics that damage trust for short-term lift"
+  ],
+  "typical_inputs": [
+    "growth goal and funnel bottleneck",
+    "baseline metrics, segments, and recent funnel changes",
+    "activation, retention, conversion, and monetization definitions",
+    "channel mix, lifecycle surfaces, and resource constraints",
+    "instrumentation quality, guardrails, and test-readiness context"
+  ],
+  "typical_outputs": [
+    "bottleneck diagnosis",
+    "prioritized experiment backlog",
+    "activation or retention plan",
+    "growth-loop redesign ideas",
+    "metric and guardrail definitions",
+    "A/B test readout with next steps"
+  ],
+  "quality_focus": [
+    "bottleneck focus",
+    "measurability",
+    "speed to learning",
+    "prioritization quality",
+    "user trust"
+  ],
+  "generated_at": "2026-04-04T08:22:00Z",
+  "updated_by": "openclaw"
 }

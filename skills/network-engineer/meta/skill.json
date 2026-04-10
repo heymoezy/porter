@@ -1,8 +1,8 @@
 {
   "id": "network-engineer",
   "name": "Network Engineer",
-  "description": "Designs and troubleshoots network architectures",
+  "description": "Design, troubleshoot, and harden packet paths, network topology, and connectivity controls. Use when the main task is reasoning about routing, switching, DNS, firewalls, VPNs, ingress, load balancers, segmentation, NAT, TLS termination, latency, packet loss, or resilient network architecture.",
   "category": "Infrastructure",
   "source": "porter-curated",
-  "generated_at": "2026-04-02T04:19:59+00:00"
+  "generated_at": "2026-04-04T22:08:00Z"
 }

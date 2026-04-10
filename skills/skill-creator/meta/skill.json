@@ -1,8 +1,51 @@
 {
   "id": "skill-creator",
   "name": "Skill Creator",
-  "description": "Creates specialist worker skills when roster lacks coverage",
+  "description": "Create, rewrite, audit, split, merge, or modernize Porter skill packs so routing triggers correctly, boundaries stay clean, progressive disclosure stays tight, and downstream agents get practical guidance instead of bloated filler.",
   "category": "Orchestration",
   "source": "porter-internal",
-  "generated_at": "2026-04-02T04:10:01+00:00"
+  "catalogTier": "system",
+  "status": "active",
+  "aliases": [
+    "skill author",
+    "skill pack editor",
+    "agent-skill designer",
+    "skill rewrite specialist"
+  ],
+  "adjacent_skills": [
+    "roster-curator",
+    "prompt-engineer",
+    "runtime-selector",
+    "project-architect"
+  ],
+  "not_for": [
+    "unrelated product-code changes",
+    "high-level roster decisions across many skills without package-editing work",
+    "decorative documentation with no routing or execution value",
+    "bloated skills that repeat obvious domain knowledge"
+  ],
+  "typical_inputs": [
+    "recurring user requests the skill should cover",
+    "adjacent skills and overlap risks",
+    "current pack files and their weaknesses",
+    "expected inputs, outputs, and failure modes",
+    "portfolio constraints such as naming, category, source, and tier"
+  ],
+  "typical_outputs": [
+    "full rewritten skill pack",
+    "trigger and boundary cleanup",
+    "skill audit with prioritized fixes",
+    "metadata modernization",
+    "split or merge recommendation with package implications"
+  ],
+  "quality_focus": [
+    "trigger quality",
+    "boundary clarity",
+    "progressive disclosure",
+    "package coherence",
+    "downstream usefulness",
+    "maintainability"
+  ],
+  "generated_at": "2026-04-05T13:02:00Z",
+  "updated_by": "openclaw"
 }
