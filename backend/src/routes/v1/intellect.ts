@@ -122,6 +122,60 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       episodes = rows;
     }
 
+    // ── Skill recommendations based on recent episode tool patterns ───
+    // Lightweight: look at what tools were used most in recent episodes for
+    // this project, map to skill categories, recommend top 2 skills.
+    interface SkillRec { name: string; description: string }
+    let skillRecs: SkillRec[] = [];
+    try {
+      // Get most-used tools from recent episodes for this project
+      const { rows: recentEpisodes } = await pool.query<{ summary: string }>(
+        `SELECT summary FROM episodes
+         WHERE created_at > EXTRACT(EPOCH FROM NOW()) - 604800
+         ORDER BY created_at DESC LIMIT 10`
+      );
+      // Parse tool counts from episode summaries: "tools: Bash×60, Edit×30"
+      const toolCounts = new Map<string, number>();
+      for (const ep of recentEpisodes) {
+        const m = ep.summary.match(/tools: ([^—]+)/);
+        if (!m) continue;
+        for (const seg of m[1].split(',').map((s: string) => s.trim())) {
+          const mm = seg.match(/^(\S+)×(\d+)/);
+          if (mm) toolCounts.set(mm[1], (toolCounts.get(mm[1]) ?? 0) + parseInt(mm[2], 10));
+        }
+      }
+      // Map dominant tools to skill IDs
+      const TOOL_SKILL_MAP: Record<string, string[]> = {
+        'Bash': ['backend-dev', 'devops-engineer'],
+        'Edit': ['code-reviewer', 'code-implementer'],
+        'Write': ['technical-writer', 'code-implementer'],
+        'WebSearch': ['research-analyst', 'competitive-intelligence'],
+        'WebFetch': ['research-analyst', 'web-designer'],
+        'TaskCreate': ['project-architect', 'product-manager'],
+        'Agent': ['system-architect', 'coding-agent'],
+      };
+      const skillScores = new Map<string, number>();
+      for (const [tool, count] of toolCounts) {
+        const mapped = TOOL_SKILL_MAP[tool];
+        if (!mapped) continue;
+        for (const sid of mapped) {
+          skillScores.set(sid, (skillScores.get(sid) ?? 0) + count);
+        }
+      }
+      const topSkillIds = [...skillScores.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 2)
+        .map(([id]) => id);
+
+      if (topSkillIds.length > 0) {
+        const { rows: skillRows } = await pool.query<{ name: string; description: string }>(
+          `SELECT name, description FROM skills WHERE id = ANY($1::text[])`,
+          [topSkillIds]
+        );
+        skillRecs = skillRows;
+      }
+    } catch { /* non-critical */ }
+
     // Format as markdown for CLI injection
     const sections: string[] = [];
 
@@ -158,6 +212,14 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       sections.push('### Relevant Concepts');
       for (const c of concepts.slice(0, 8)) {
         sections.push(`- ${c.content.substring(0, 200)}${c.content.length > 200 ? '...' : ''}`);
+      }
+    }
+
+    if (skillRecs.length > 0) {
+      sections.push('');
+      sections.push('### Recommended Skills');
+      for (const sr of skillRecs) {
+        sections.push(`- **${sr.name}**: ${sr.description?.substring(0, 150) ?? ''}`);
       }
     }
 
