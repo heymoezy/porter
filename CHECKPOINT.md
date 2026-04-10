@@ -173,11 +173,69 @@ tracks emergent patterns, not assigned identities.
 
 **Phase 3 NEXT — Autonomy:**
 
-**Phase 3 — Autonomy:**
-Memory pruner (daily cleanup), agent evolution (NOT role-based — pattern-based
-per MIPT), pattern mining from promoted corrections, custom workflow
-composition, Intellect self-monitoring (are memories getting used? are
-corrections decreasing over time?).
+## Porter Intellect — Phase 3 SHIPPED (2026-04-10)
+
+**Autonomy layer live. Porter prunes itself, watches itself, mines its own patterns.**
+
+**Phase 2 fixes landed first:**
+- Correction detector tightened: rejects any message with `?` anywhere, rejects
+  first-person discussion ("let's", "I want to", "should we"), max length
+  dropped 600→280 chars, weak modals (`must`/`have to`/`need to`/`always`)
+  only accepted in messages ≤160 chars. Verified: the false-positive ymc.capital
+  question that previously slipped through is now correctly rejected.
+- Validator fuzzy match constrained: noise dirs (admin, build, dist, archive,
+  vendor, node_modules, etc.) excluded. Multiple-match cases marked
+  `reference_ambiguous` instead of guessing wrong. The validator no longer
+  auto-corrects `tasks/checkpoint.md` → wrong `admin/tasks/checkpoint.md`.
+- Validator now propagates corrected paths back into source memory `content`
+  via parameterized REPLACE update on whitelisted tables. Verified end-to-end:
+  moved a file → ref auto-fixed → directive content rewritten in same pass.
+
+**New Phase 3 services:**
+- **memory-pruner.ts**: daily cleanup. Archives unused concepts (use_count=0,
+  age >30d). Dedupes near-duplicate active directives via Jaccard similarity
+  ≥0.85 (newer wins, older becomes superseded). Deletes superseded memories
+  >7d. Compacts JSONB payloads on episodes >30d. Catches /documents/ stale
+  pattern regressions. Cleans dead memory_references.
+- **self-monitor.ts**: 6 health signals computed from existing tables — no
+  state stored. Corrections trend (last 7d vs prev 7d, classified
+  improving/flat/rising), memory hit rate, validator accuracy ratio,
+  workflow health roster (per-workflow last_run + failures), promotion
+  velocity, episode coverage. GET /health returns flat snapshot.
+- **pattern-miner.ts**: greedy Jaccard clustering on active directives within
+  same scope. Theme tokens = words appearing in ≥half of cluster members.
+  Project topic extraction from project-scoped directives. Tool affinity
+  parsed from episode summaries (per-project tool histograms).
+
+**Phase 3 API endpoints:**
+- POST /prune          — run memory pruner manually
+- GET  /health         — Intellect self-monitor snapshot
+- GET  /patterns       — pattern miner output (themes + topics + tool affinity)
+
+**Workflow engine grew to 9 seeded workflows** (Phase 1+2: 6, Phase 3: 3):
+- Prune stale memory daily         (every_24h)
+- Self-monitor Intellect health    (every_6h)
+- Mine memory for patterns         (every_24h)
+
+Scheduler now has an `every_24h` tag (43200 ticks × 2s).
+
+**UI extensions** on Intelligence page Intellect section:
+- Self-Monitor card with 4 stat tiles + 14-day correction sparkline +
+  workflow health roster (colored dots: healthy/idle/failing)
+- Theme clusters card (groups of similar directives, click to drill in)
+- Project topics card (per-project directive counts + top tokens)
+- New event types in stream: pruner_swept, self_monitor_snapshot, patterns_mined
+
+**Verified end-to-end (2026-04-10):**
+1. Fix 1: false-positive ymc.capital long question → `question_or_discussion`
+   (rejected). Real correction "never commit secrets to git" → new candidate.
+2. Fix 2: validator no longer auto-corrects into `admin/`. Stale references
+   correctly marked `broken` for human review.
+3. Fix 3: moved file → ref auto-fixed AND directive content REPLACE'd in one
+   validator pass.
+4. Phase 3 endpoints all return data from real DB state.
+5. 9 workflows seeded; pruner first run reported zero work needed (correct,
+   no candidates aged out yet).
 
 **Phase 4 — Dashboard overhaul (LAST):**
 Replace static dashboard with living intelligence view.

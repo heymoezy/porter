@@ -14,6 +14,7 @@ import {
 import {
   Lightbulb, AlertTriangle, Zap, Target, BookOpen,
   Plus, Search, X, Clock, Archive, Activity, FileCheck, FileX, RefreshCw, Brain,
+  TrendingUp, TrendingDown, Minus, Sparkles, Heart, Trash2,
 } from "lucide-react"
 
 // ── Types ──────────────────────────────────────────────
@@ -76,6 +77,62 @@ interface IntellectEpisode {
   files_changed_json: string[]
   duration_seconds: number
   created_at: number
+}
+
+interface IntellectHealth {
+  generatedAt: number
+  corrections: {
+    daily: Array<{ day: string; count: number }>
+    last7d: number
+    prev7d: number
+    trend: "improving" | "flat" | "rising" | "unknown"
+  }
+  memoryHitRate: {
+    activeDirectives: number
+    activeConcepts: number
+    conceptsRecalledLast7d: number
+    avgConceptUseCount: number
+  }
+  validator: { autoFixed7d: number; stale7d: number; accuracyRatio: number }
+  workflows: Array<{
+    name: string
+    actionType: string
+    enabled: boolean
+    runCount: number
+    lastRunAt: number | null
+    lastRunAgoSeconds: number | null
+    failures7d: number
+    health: "healthy" | "idle" | "failing" | "unknown"
+  }>
+  promotion: {
+    candidates: number
+    promoted7d: number
+    rejected7d: number
+    archived7d: number
+    velocity: number
+  }
+  episodes: { created7d: number; uniqueSessions7d: number; coverageRatio: number }
+}
+
+interface PatternMineResult {
+  generatedAt: number
+  themeClusters: Array<{
+    theme: string[]
+    scope: string
+    scopeId: string | null
+    members: Array<{ id: string; preview: string; priority: number }>
+  }>
+  projectTopics: Array<{
+    project: string
+    directiveCount: number
+    topTokens: Array<{ token: string; count: number }>
+  }>
+  toolAffinity: Array<{
+    project: string
+    episodes: number
+    topTools: Array<{ tool: string; uses: number }>
+  }>
+  totals: { directivesScanned: number; episodesScanned: number; clustersFound: number }
 }
 
 // ── Constants ──────────────────────────────────────────
@@ -174,6 +231,23 @@ export default function IntelligencePage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["intellect"] }),
   })
 
+  const intellectHealth = useQuery({
+    queryKey: ["intellect", "health"],
+    queryFn: () => api<IntellectHealth>("/api/v1/intellect/health"),
+    refetchInterval: 30_000,
+  })
+
+  const intellectPatterns = useQuery({
+    queryKey: ["intellect", "patterns"],
+    queryFn: () => api<PatternMineResult>("/api/v1/intellect/patterns"),
+    refetchInterval: 60_000,
+  })
+
+  const pruneNow = useMutation({
+    mutationFn: () => api("/api/v1/intellect/prune", { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["intellect"] }),
+  })
+
   const createEntry = useMutation({
     mutationFn: (d: { entry_type: string; title: string; body: string }) =>
       api("/api/admin/intelligence", { method: "POST", json: d }),
@@ -201,6 +275,8 @@ export default function IntelligencePage() {
   const ievents = intellectEvents.data?.events ?? []
   const icandidates = intellectCandidates.data?.candidates ?? []
   const iepisodes = intellectEpisodes.data?.episodes ?? []
+  const ihealth = intellectHealth.data
+  const ipatterns = intellectPatterns.data
 
   function describeIntellectEvent(ev: IntellectEvent): string {
     const d = ev.details_json as Record<string, any>
@@ -230,7 +306,13 @@ export default function IntelligencePage() {
       case "directive_created":
         return `New directive: ${String(d.content || "").substring(0, 80)}`
       case "memory_pruned":
-        return `Pruned: ${d.reason || "stale"} (${d.count || 1})`
+        return `Pruned: ${d.action || d.reason || "stale"}${d.count ? ` (${d.count})` : ""}${d.preview ? " — " + d.preview : ""}`
+      case "pruner_swept":
+        return `Pruner swept: ${d.conceptsArchived || 0} concepts, ${d.directivesDeduped || 0} dedupes, ${d.episodesCompacted || 0} episodes compacted`
+      case "self_monitor_snapshot":
+        return `Self-monitor: trend=${d.correctionTrend || "?"}, validator=${(Number(d.validatorAccuracy || 0) * 100).toFixed(0)}%, coverage=${(Number(d.episodeCoverage || 0) * 100).toFixed(0)}%`
+      case "patterns_mined":
+        return `Patterns mined: ${d.clustersFound || 0} clusters from ${d.directivesScanned || 0} directives`
       default:
         return ev.event_type.replace(/_/g, " ")
     }
@@ -250,6 +332,10 @@ export default function IntelligencePage() {
       case "workflow_ran": return Activity
       case "workflow_failed": return AlertTriangle
       case "directive_created": return Zap
+      case "memory_pruned": return Trash2
+      case "pruner_swept": return Trash2
+      case "self_monitor_snapshot": return Heart
+      case "patterns_mined": return Sparkles
       default: return Brain
     }
   }
@@ -268,8 +354,23 @@ export default function IntelligencePage() {
       case "workflow_ran": return "text-accent-porter"
       case "workflow_failed": return "text-danger"
       case "directive_created": return "text-accent-porter"
+      case "memory_pruned": return "text-text3"
+      case "pruner_swept": return "text-chart-2"
+      case "self_monitor_snapshot": return "text-success"
+      case "patterns_mined": return "text-chart-2"
       default: return "text-text3"
     }
+  }
+
+  function trendIcon(trend: string) {
+    if (trend === "improving") return TrendingDown
+    if (trend === "rising") return TrendingUp
+    return Minus
+  }
+  function trendColor(trend: string): string {
+    if (trend === "improving") return "text-success"
+    if (trend === "rising") return "text-warning"
+    return "text-text3"
   }
 
   return (
@@ -381,6 +482,156 @@ export default function IntelligencePage() {
                   </span>
                   <span className="text-text2 flex-1 min-w-0">{ep.summary}</span>
                   <span className="text-2xs text-text3 shrink-0">{fmtRel(ep.created_at)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Self-Monitor (Phase 3) ─────────────────────────── */}
+        {ihealth && (() => {
+          const TrendIcon = trendIcon(ihealth.corrections.trend)
+          const trendCls = trendColor(ihealth.corrections.trend)
+          const maxDaily = Math.max(1, ...ihealth.corrections.daily.map(d => d.count))
+          return (
+            <div className="mb-4 rounded-md border border-success/20 bg-success/[0.04] p-3">
+              <div className="flex items-center gap-2 mb-3">
+                <Heart className="size-3 text-success" />
+                <span className="text-2xs font-semibold uppercase tracking-wide text-success">Self-monitor</span>
+                <span className="text-2xs text-text3">Porter watching Porter</span>
+                <Button
+                  size="sm" variant="outline" className="ml-auto h-6 text-2xs"
+                  onClick={() => pruneNow.mutate()} disabled={pruneNow.isPending}
+                >
+                  <Trash2 className="size-3 mr-1" />
+                  Run pruner
+                </Button>
+              </div>
+
+              {/* Health metric cards */}
+              <div className="grid grid-cols-4 gap-2 mb-3">
+                <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+                  <p className="text-2xs text-text3 flex items-center gap-1">
+                    <TrendIcon className={`size-3 ${trendCls}`} />
+                    Corrections trend
+                  </p>
+                  <p className={`text-base font-bold tabular-nums ${trendCls}`}>
+                    {ihealth.corrections.last7d}
+                    <span className="text-2xs text-text3 ml-1">vs {ihealth.corrections.prev7d}</span>
+                  </p>
+                </div>
+                <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+                  <p className="text-2xs text-text3">Validator accuracy</p>
+                  <p className="text-base font-bold tabular-nums text-foreground">
+                    {(ihealth.validator.accuracyRatio * 100).toFixed(0)}%
+                    <span className="text-2xs text-text3 ml-1">{ihealth.validator.autoFixed7d}/{ihealth.validator.autoFixed7d + ihealth.validator.stale7d}</span>
+                  </p>
+                </div>
+                <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+                  <p className="text-2xs text-text3">Episode coverage</p>
+                  <p className="text-base font-bold tabular-nums text-foreground">
+                    {(ihealth.episodes.coverageRatio * 100).toFixed(0)}%
+                    <span className="text-2xs text-text3 ml-1">{ihealth.episodes.created7d}/{ihealth.episodes.uniqueSessions7d}</span>
+                  </p>
+                </div>
+                <div className="rounded-md bg-surface border border-border/50 px-3 py-2">
+                  <p className="text-2xs text-text3">Promotion velocity</p>
+                  <p className="text-base font-bold tabular-nums text-foreground">
+                    {(ihealth.promotion.velocity * 100).toFixed(0)}%
+                    <span className="text-2xs text-text3 ml-1">+{ihealth.promotion.promoted7d} −{ihealth.promotion.archived7d}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Daily corrections sparkline (14d) */}
+              <div className="mb-3">
+                <p className="text-2xs text-text3 mb-1">Corrections per day (last 14)</p>
+                <div className="flex items-end gap-0.5 h-10">
+                  {ihealth.corrections.daily.map((d, i) => (
+                    <div
+                      key={d.day}
+                      className={`flex-1 rounded-sm ${i >= 7 ? "bg-accent-porter" : "bg-text3/30"}`}
+                      style={{ height: `${Math.max(3, (d.count / maxDaily) * 100)}%` }}
+                      title={`${d.day}: ${d.count}`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Workflow health roster */}
+              <div className="space-y-0.5 max-h-[180px] overflow-y-auto">
+                <div className="flex items-center gap-2 mb-1">
+                  <Activity className="size-3 text-text3" />
+                  <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Workflows</span>
+                </div>
+                {ihealth.workflows.map(w => {
+                  const dot =
+                    w.health === "healthy" ? "bg-success" :
+                    w.health === "failing" ? "bg-danger" :
+                    w.health === "idle" ? "bg-text3/40" : "bg-text3/40"
+                  return (
+                    <div key={w.name} className="flex items-center gap-2 px-2 py-1 text-xs hover:bg-raised/50 rounded">
+                      <span className={`size-2 rounded-full ${dot}`} />
+                      <span className="text-text2 flex-1 truncate">{w.name}</span>
+                      <span className="text-2xs text-text3 tabular-nums">×{w.runCount}</span>
+                      {w.failures7d > 0 && <span className="text-2xs text-danger">{w.failures7d} fail</span>}
+                      <span className="text-2xs text-text3 shrink-0">
+                        {w.lastRunAt ? fmtRel(w.lastRunAt) : "never"}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── Pattern clusters (Phase 3) ─────────────────────── */}
+        {ipatterns && ipatterns.themeClusters.length > 0 && (
+          <div className="mb-4 rounded-md border border-chart-2/20 bg-chart-2/[0.04] p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="size-3 text-chart-2" />
+              <span className="text-2xs font-semibold uppercase tracking-wide text-chart-2">Theme clusters</span>
+              <span className="text-2xs text-text3">{ipatterns.themeClusters.length} found across {ipatterns.totals.directivesScanned} directives</span>
+            </div>
+            <div className="space-y-2 max-h-[200px] overflow-y-auto">
+              {ipatterns.themeClusters.map((c, idx) => (
+                <div key={idx} className="rounded bg-surface border border-border/50 p-2">
+                  <div className="flex items-center gap-1 mb-1">
+                    {c.theme.map(t => (
+                      <span key={t} className="rounded bg-chart-2/15 text-chart-2 text-2xs px-1.5 py-0.5">{t}</span>
+                    ))}
+                    <span className="text-2xs text-text3 ml-auto">
+                      {c.scope}{c.scopeId ? `:${c.scopeId}` : ""} · {c.members.length} members
+                    </span>
+                  </div>
+                  <ul className="space-y-0.5">
+                    {c.members.slice(0, 3).map(m => (
+                      <li key={m.id} className="text-2xs text-text2 truncate">• {m.preview}</li>
+                    ))}
+                    {c.members.length > 3 && (
+                      <li className="text-2xs text-text3">+ {c.members.length - 3} more</li>
+                    )}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Project topics (compact) */}
+        {ipatterns && ipatterns.projectTopics.length > 0 && (
+          <div className="mb-4 rounded-md border border-border/50 bg-surface p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Target className="size-3 text-text3" />
+              <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Project topics</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {ipatterns.projectTopics.map(p => (
+                <div key={p.project} className="rounded bg-raised border border-border/50 px-2 py-1 text-2xs">
+                  <span className="font-semibold text-text2">{p.project}</span>
+                  <span className="text-text3"> · {p.directiveCount} directives · </span>
+                  <span className="text-text2">{p.topTokens.slice(0, 4).map(t => t.token).join(", ")}</span>
                 </div>
               ))}
             </div>

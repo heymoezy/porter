@@ -28,6 +28,9 @@ import { analyzeAndStoreSession, sweepStaleSessions } from './session-analyzer.j
 import { runMemoryValidation } from './memory-validator.js';
 import { runMemoryPromotion } from './memory-promoter.js';
 import { runDispatchScoring } from './dispatch-scorer.js';
+import { runMemoryPruning } from './memory-pruner.js';
+import { runSelfMonitor } from './self-monitor.js';
+import { runPatternMining } from './pattern-miner.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -37,6 +40,9 @@ export type WorkflowActionType =
   | 'memory_validate'
   | 'memory_promote'
   | 'dispatch_score'
+  | 'memory_prune'
+  | 'self_monitor'
+  | 'pattern_mine'
   | 'noop';
 
 export interface WorkflowRow {
@@ -79,6 +85,9 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
   memory_validate: async () => runMemoryValidation(),
   memory_promote: async () => runMemoryPromotion(),
   dispatch_score: async () => runDispatchScoring(),
+  memory_prune: async () => runMemoryPruning(),
+  self_monitor: async () => runSelfMonitor(),
+  pattern_mine: async () => runPatternMining(),
   noop: async () => null,
 };
 
@@ -231,6 +240,24 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_type: 'event',
     trigger_value: 'correction.detected',
     action_type: 'memory_promote',
+  },
+  {
+    name: 'Prune stale memory daily',
+    trigger_type: 'schedule',
+    trigger_value: 'every_24h',
+    action_type: 'memory_prune',
+  },
+  {
+    name: 'Self-monitor Intellect health',
+    trigger_type: 'schedule',
+    trigger_value: 'every_6h',
+    action_type: 'self_monitor',
+  },
+  {
+    name: 'Mine memory for patterns',
+    trigger_type: 'schedule',
+    trigger_value: 'every_24h',
+    action_type: 'pattern_mine',
   },
 ];
 

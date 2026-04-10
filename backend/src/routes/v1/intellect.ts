@@ -16,6 +16,9 @@ import { analyzeAndStoreSession } from '../../services/intellect/session-analyze
 import { runMemoryPromotion } from '../../services/intellect/memory-promoter.js';
 import { runDispatchScoring } from '../../services/intellect/dispatch-scorer.js';
 import { emitEvent } from '../../services/intellect/workflow-engine.js';
+import { runMemoryPruning } from '../../services/intellect/memory-pruner.js';
+import { runSelfMonitor } from '../../services/intellect/self-monitor.js';
+import { runPatternMining } from '../../services/intellect/pattern-miner.js';
 
 interface DirectiveRow {
   id: string;
@@ -380,6 +383,42 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     );
     if (!rowCount) return reply.status(404).send(err('NOT_FOUND', 'candidate not found'));
     return reply.send(ok({ rejected: true, id }));
+  });
+
+  // ── POST /prune — run memory pruner ─────────────────────────────────
+
+  fastify.post('/prune', async (_request, reply) => {
+    try {
+      const result = await runMemoryPruning();
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('PRUNE_FAILED', message));
+    }
+  });
+
+  // ── GET /health — Intellect self-monitor snapshot ──────────────────
+
+  fastify.get('/health', async (_request, reply) => {
+    try {
+      const snapshot = await runSelfMonitor();
+      return reply.send(ok(snapshot));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('SELF_MONITOR_FAILED', message));
+    }
+  });
+
+  // ── GET /patterns — pattern miner output ────────────────────────────
+
+  fastify.get('/patterns', async (_request, reply) => {
+    try {
+      const result = await runPatternMining();
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('PATTERN_MINE_FAILED', message));
+    }
   });
 
   // ── GET /episodes — recent session episodes ─────────────────────────

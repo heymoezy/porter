@@ -22,26 +22,38 @@ import { logIntellectEvent } from './file-watcher.js';
 // ── Correction signal patterns ─────────────────────────────────────────
 
 /**
- * Strong correction markers — presence strongly suggests the user is correcting
- * past or expected behavior. Regexes are anchored on word boundaries and
- * case-insensitive.
+ * Strong correction markers — explicit imperatives that almost always mean
+ * "this is a rule for you to follow". Regexes are word-boundary anchored and
+ * case-insensitive. These alone are sufficient to flag a correction.
  */
 const STRONG_CORRECTION_PATTERNS: RegExp[] = [
   /\b(never|don'?t|do not|stop|avoid|refuse to)\b/i,
-  /\b(always|must|have to|need to)\b/i,
-  /\b(wrong|incorrect|that'?s not|not that|not right)\b/i,
+  /\b(wrong|incorrect|that'?s not|not that|not right|that was wrong)\b/i,
   /\b(instead of|rather than)\b/i,
-  /\b(remember (to|that)|from now on)\b/i,
+  /\b(remember (to|that)|from now on|from here on|going forward)\b/i,
+  /^(please )?(always|use|do|make sure|ensure)\b/i,
 ];
 
 /**
- * Noise patterns — presence strongly suggests this is NOT a correction, even
- * if a strong pattern matched. Questions, requests for clarification, general
- * statements.
+ * Weak modal markers — words like "need to", "have to", "must", "always".
+ * These appear in BOTH directives and discussions/questions, so we only treat
+ * them as a correction signal if they appear in an obviously imperative
+ * sentence structure (no question marks, no first-person discussion verbs).
+ */
+const WEAK_MODAL_PATTERNS: RegExp[] = [
+  /\b(must|have to|need to|always)\b/i,
+];
+
+/**
+ * Noise patterns — presence strongly suggests this is NOT a correction.
+ * A question mark ANYWHERE in the message disqualifies it (questions are not
+ * directives even if they contain modal verbs). First-person discussion verbs
+ * ("I want", "I need", "let's", "shall we", etc.) also disqualify.
  */
 const NOISE_PATTERNS: RegExp[] = [
-  /^(what|why|how|when|where|who|which|can you|could you|would you|will you)\b/i,
-  /\?\s*$/,
+  /\?/, // any question mark anywhere
+  /^(what|why|how|when|where|who|which|can you|could you|would you|will you|should i|do you|are you)\b/i,
+  /\b(let'?s|shall we|i want to|i'?d like|i need to|wonder if|maybe we|perhaps we|should we)\b/i,
 ];
 
 /**
@@ -50,8 +62,11 @@ const NOISE_PATTERNS: RegExp[] = [
  */
 const MIN_CORRECTION_LENGTH = 12;
 
-/** Max length we'll store as a directive — anything longer is probably a rant. */
-const MAX_CORRECTION_LENGTH = 600;
+/**
+ * Max correction length (chars). Anything longer is almost certainly a
+ * discussion or research request, not a rule. Real corrections are terse.
+ */
+const MAX_CORRECTION_LENGTH = 280;
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -76,24 +91,39 @@ export interface CorrectionResult {
 /**
  * Return true if the message looks like a correction.
  * Cheap check — no DB, no LLM. Deterministic.
+ *
+ * Decision order:
+ *   1. Length filters (too short = noise, too long = discussion)
+ *   2. Noise patterns (questions, first-person discussion) → reject
+ *   3. Strong patterns → accept
+ *   4. Weak modals → accept ONLY if no question mark and message is short (<160 chars)
+ *   5. Otherwise → reject
  */
 export function isCorrection(message: string): { match: boolean; reason?: string } {
   const trimmed = (message ?? '').trim();
   if (trimmed.length < MIN_CORRECTION_LENGTH) {
     return { match: false, reason: 'too_short' };
   }
-  if (trimmed.length > MAX_CORRECTION_LENGTH * 2) {
-    // Don't bother analyzing walls of text
+  if (trimmed.length > MAX_CORRECTION_LENGTH) {
     return { match: false, reason: 'too_long' };
   }
   for (const noise of NOISE_PATTERNS) {
     if (noise.test(trimmed)) {
-      return { match: false, reason: 'question_or_noise' };
+      return { match: false, reason: 'question_or_discussion' };
     }
   }
   for (const pattern of STRONG_CORRECTION_PATTERNS) {
     if (pattern.test(trimmed)) {
       return { match: true, reason: pattern.source };
+    }
+  }
+  // Weak modal patterns only count when the message is terse and clearly
+  // imperative (≤ 160 chars, no noise patterns matched above).
+  if (trimmed.length <= 160) {
+    for (const pattern of WEAK_MODAL_PATTERNS) {
+      if (pattern.test(trimmed)) {
+        return { match: true, reason: `weak:${pattern.source}` };
+      }
     }
   }
   return { match: false, reason: 'no_signal' };
