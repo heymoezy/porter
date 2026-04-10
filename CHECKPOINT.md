@@ -3,8 +3,8 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.3.0
-updated: 2026-04-09
+version: v6.4.0
+updated: 2026-04-10
 updated_by: claude-opus-4.6
 
 ## Architecture
@@ -241,6 +241,47 @@ Scheduler now has an `every_24h` tag (43200 ticks × 2s).
 Replace static dashboard with living intelligence view.
 
 **Plan file:** /home/lobster/.claude/plans/rosy-frolicking-hedgehog.md
+
+## v6.4.0 — Operational Porter (2026-04-10)
+
+### Completed Today
+- Phase 3 Intellect shipped (pruner, self-monitor, pattern miner, 3 Phase 2 fixes)
+- Holistic integration pass: Intellect signals surfaced across Dashboard, System,
+  Bridge, Sessions, Routing, Decisions (6 pages total)
+- **Episodes now inject into every session** — fixed bug where 22 real episodes
+  were invisible (scope query mismatch). Both Bridge dispatch (Tier 5 in
+  buildMemoryContext) and session hook (/context endpoint) now include episodes.
+- **Skill recommendations in context** — session hook now includes top 2 skill
+  recommendations matched to recent episode tool patterns (e.g., heavy Bash/Edit
+  usage → recommends Backend Developer + DevOps Engineer skills)
+- 9 seeded workflows (6 Phase 2 + 3 Phase 3), all running autonomously
+
+### Operational Status
+| System | State | Key Metric |
+|--------|-------|-----------|
+| Skills | 207 synced, well-written (~1.8KB avg), injection works via Bridge | Recommendations in session hook: ✅ |
+| Tools | 12 env tools detected. Basic detection only | Needs expansion + auto-update |
+| Forge | 107 templates, 9 personas exist (manually created). Pipeline UI built | Zero agents "forged" from templates |
+| Bridge | All 5 adapters working. 10-step dispatch with 6-tier memory injection | Cross-gateway context: only Claude CLI has hooks |
+| Intellect | Phase 1-3 complete. 22 episodes, 1501 scored dispatches | Self-monitoring: 98% validator accuracy |
+
+### In-Progress Operational Roadmap (research/operational-roadmap.md)
+**Phase A: Skills** — DONE (skills are well-written, synced, recommendations work)
+**Phase B: Tools** — TODO (expand from 12 to comprehensive registry, auto-detect, auto-update)
+**Phase C: Forge Activation** — TODO (birth 10 core agents from templates with skills+tools+email)
+**Phase D: Cross-Gateway** — TODO (OpenClaw/Codex/Gemini/Ollama context injection)
+**Phase E: Autonomous Evolution** — TODO (agent subscriptions, skill evolution, routing auto-gen)
+**Phase F: Marketing** — TODO (landing page, demo, positioning)
+**Phase G: Revenue** — TODO (Stripe integration, tiered metering)
+
+### Key Architecture Facts for Forge
+- 9 existing personas: porter-core, forge-quill/sage/anvil, bridge-vigil/ledger/atlas,
+  projects-curator, skills-curator
+- agent_templates table: 107 rows with system_prompt, soul_text, skills[], tools[]
+- Forging = create persona from template + assign skills from persona_skills + create
+  Stalwart mailbox + register in Bridge routing
+- MIPT insight: don't assign fixed roles. Let agents self-specialize per task via
+  Sequential protocol. Porter chooses protocol, not agent role.
 
 ## Queued Work (from pre-Intellect era — lower priority now)
 1. Lifecycle hook system (Pre/PostDispatch events for automation)
