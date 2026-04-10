@@ -263,14 +263,14 @@ Replace static dashboard with living intelligence view.
 | Tools | 23 tools tracked, 21 detected. Auto-scan every 6h via tool-detector workflow | Tool availability injected into dispatch + session context |
 | Forge | 107 templates. Pipeline OPERATIONAL. 10 agents forged from templates with skills + email | Station 1 fixed: direct DB persona creation + Stalwart mailbox provisioning |
 | Bridge | All 5 adapters working. 10-step dispatch with 6-tier memory injection | Cross-gateway context: only Claude CLI has hooks |
-| Intellect | Phase 1-3 complete. 22 episodes, 1501 scored dispatches | Self-monitoring: 98% validator accuracy |
+| Intellect | Phase 1-3 + evolution complete. 12 autonomous workflows. 4 external subscriptions | Self-monitoring: 98% validator accuracy, 21 tools detected |
 
 ### In-Progress Operational Roadmap (research/operational-roadmap.md)
 **Phase A: Skills** — DONE (207 skills, recommendations work, evolution loop wired)
 **Phase B: Tools** — DONE (23 tools, 21 detected, auto-scan every 6h, injected into context)
 **Phase C: Forge Activation** — DONE (10 agents born: Backend Dev, Frontend Dev, DevOps, Security, QA, Fullstack, Product Manager, Growth Strategist, Competitive Intelligence, Technical Writer. All with @askporter.app email.)
 **Phase D: Cross-Gateway** — DONE (Bridge dispatch already injects full context; only Claude CLI has hooks but all gateways get memory+skills+episodes+tools via Bridge)
-**Phase E: Autonomous Evolution** — PARTIAL (skill evolution loop wired, tool detection scheduled; agent subscriptions + routing auto-gen still TODO)
+**Phase E: Autonomous Evolution** — DONE (skill evolution, tool detection, subscription manager all wired. 12 autonomous workflows. 4 external subscriptions ingesting release/news data into concepts.)
 **Phase F: Marketing** — TODO (landing page, demo, positioning)
 **Phase G: Revenue** — TODO (Stripe integration, tiered metering)
 
