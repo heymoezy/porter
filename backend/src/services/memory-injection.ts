@@ -17,7 +17,8 @@ function estimateTokens(text: string): number {
  *   Tier 2: Directives        (target 300 tokens)  — workspace + project rules
  *   Tier 3: Project notes     (target 400 tokens)  — project state/decisions
  *   Tier 4: Agent notes       (target 400 tokens)  — agent learnings/constraints
- *   Tier 5: Archival FTS      (remaining)           — relevant concepts from memory
+ *   Tier 5: Recent episodes   (target 200 tokens)  — what happened in prior sessions
+ *   Tier 6: Archival FTS      (remaining)           — relevant concepts from memory
  *
  * Token budget prevents context overflow. Tiers use a rolling budget: if a higher-priority
  * tier uses less than its target, the remainder flows to lower-priority tiers.
@@ -210,7 +211,47 @@ export async function buildMemoryContext(opts: {
       }
     }
 
-    // ── Tier 5: Archival FTS Search (Remaining) ───────────────────────────────
+    // ── Tier 5: Recent Episodes (Target: 200) ──────────────────────────────────
+    // Session summaries from Intellect session-analyzer. Most recent first.
+    // Gives the current session context about what was worked on before.
+    if (totalRemaining > 50) {
+      const episodeQuery = projectId
+        ? `SELECT summary, created_at
+           FROM episodes
+           WHERE (scope = 'project' AND scope_id = $1) OR scope = 'workspace'
+           ORDER BY created_at DESC
+           LIMIT 5`
+        : `SELECT summary, created_at
+           FROM episodes
+           ORDER BY created_at DESC
+           LIMIT 5`;
+      const episodeParams = projectId ? [projectId] : [];
+      try {
+        const res = await pool.query<{ summary: string; created_at: number }>(
+          episodeQuery,
+          episodeParams
+        );
+        if (res.rows.length > 0) {
+          const header = '## Recent Sessions\n';
+          let body = '';
+          const tier5Budget = Math.min(200, totalRemaining);
+          for (const row of res.rows) {
+            const when = new Date(row.created_at * 1000).toISOString().split('T')[0];
+            const line = `- **${when}**: ${row.summary}\n`;
+            if (estimateTokens(header + body + line) > tier5Budget) break;
+            body += line;
+          }
+          if (body) {
+            const section = header + body;
+            const tokens = estimateTokens(section);
+            sections.push(section);
+            totalRemaining -= tokens;
+          }
+        }
+      } catch { /* episodes table may not exist on first run */ }
+    }
+
+    // ── Tier 6: Archival FTS Search (Remaining) ───────────────────────────────
     if (searchQuery && totalRemaining > 50) {
       const res = await pool.query<{ content: string; confidence_score: number | null }>(
         `SELECT content, confidence_score

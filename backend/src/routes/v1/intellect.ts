@@ -98,16 +98,26 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       project ? [project] : []
     );
 
-    // Fetch recent episodes for this project
+    // Fetch recent episodes — project-scoped first, then workspace-scoped fallback.
+    // Most episodes are workspace-scoped (session analyzer doesn't always know the project).
     let episodes: EpisodeRow[] = [];
     if (project) {
       const { rows } = await pool.query<EpisodeRow>(
         `SELECT id, scope_id, summary, files_changed_json, created_at
          FROM episodes
-         WHERE scope = 'project' AND scope_id = $1
+         WHERE (scope = 'project' AND scope_id = $1)
+            OR scope = 'workspace'
          ORDER BY created_at DESC
          LIMIT 5`,
         [project]
+      );
+      episodes = rows;
+    } else {
+      const { rows } = await pool.query<EpisodeRow>(
+        `SELECT id, scope_id, summary, files_changed_json, created_at
+         FROM episodes
+         ORDER BY created_at DESC
+         LIMIT 5`
       );
       episodes = rows;
     }
