@@ -224,6 +224,18 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // Available tools (compact list)
+    try {
+      const { rows: toolRows } = await pool.query<{ tool_key: string }>(
+        `SELECT tool_key FROM environment_tools WHERE detected = 1 AND health = 'ok' ORDER BY tool_key`
+      );
+      if (toolRows.length > 0) {
+        sections.push('');
+        sections.push(`### Available Tools (${toolRows.length})`);
+        sections.push(toolRows.map(t => t.tool_key).join(', '));
+      }
+    } catch { /* non-critical */ }
+
     const contextText = sections.join('\n');
 
     return reply.send(ok({

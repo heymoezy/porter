@@ -251,6 +251,25 @@ export async function buildMemoryContext(opts: {
       } catch { /* episodes table may not exist on first run */ }
     }
 
+    // ── Tier 5b: Available Tools (compact — ~50 tokens) ─────────────────────
+    // Inject a compact list of detected tools so the agent knows what's available.
+    if (totalRemaining > 30) {
+      try {
+        const { rows: tools } = await pool.query<{ tool_key: string }>(
+          `SELECT tool_key FROM environment_tools WHERE detected = 1 AND health = 'ok' ORDER BY tool_key`
+        );
+        if (tools.length > 0) {
+          const toolList = tools.map(t => t.tool_key).join(', ');
+          const section = `## Available Tools\n${toolList}\n`;
+          const tokens = estimateTokens(section);
+          if (tokens <= totalRemaining) {
+            sections.push(section);
+            totalRemaining -= tokens;
+          }
+        }
+      } catch { /* environment_tools may not exist */ }
+    }
+
     // ── Tier 6: Archival FTS Search (Remaining) ───────────────────────────────
     if (searchQuery && totalRemaining > 50) {
       const res = await pool.query<{ content: string; confidence_score: number | null }>(
