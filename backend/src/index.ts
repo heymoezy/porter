@@ -45,6 +45,7 @@ import { migrateMailV1 } from './db/migrate-mail-v1.js';
 import { migrateIntellectV1 } from './db/migrate-intellect-v1.js';
 import { startFileWatcher } from './services/intellect/file-watcher.js';
 import { seedBuiltinWorkflows } from './services/intellect/workflow-engine.js';
+import { ensureSubscriptionsTable, seedDefaultSubscriptions } from './services/intellect/subscription-manager.js';
 import { seedTemplates } from './db/seed-templates.js';
 import { detectAndUpsertGateways } from './services/bridge/startup-detector.js';
 import * as scheduler from './services/scheduler.js';
@@ -251,11 +252,13 @@ const start = async () => {
     const projectDirs = ['/home/lobster/projects'];
     startFileWatcher(projectDirs);
 
-    // Seed Intellect built-in workflows (idempotent by name)
+    // Seed Intellect built-in workflows + subscriptions (idempotent)
     try {
       await seedBuiltinWorkflows();
+      await ensureSubscriptionsTable();
+      await seedDefaultSubscriptions();
     } catch (err) {
-      console.error('[intellect] workflow seed failed:', err instanceof Error ? err.message : err);
+      console.error('[intellect] seed failed:', err instanceof Error ? err.message : err);
     }
 
     // SIN-03: Warm routing confidence cache from historical outcome data

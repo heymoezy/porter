@@ -20,6 +20,7 @@ import { runMemoryPruning } from '../../services/intellect/memory-pruner.js';
 import { runSelfMonitor } from '../../services/intellect/self-monitor.js';
 import { runPatternMining } from '../../services/intellect/pattern-miner.js';
 import { runToolDetection } from '../../services/intellect/tool-detector.js';
+import { runSubscriptionCheck } from '../../services/intellect/subscription-manager.js';
 
 interface DirectiveRow {
   id: string;
@@ -515,6 +516,18 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       return reply.status(500).send(err('TOOL_DETECTION_FAILED', message));
+    }
+  });
+
+  // ── POST /check-subscriptions — fetch external sources ─────────────
+
+  fastify.post('/check-subscriptions', async (_request, reply) => {
+    try {
+      const result = await runSubscriptionCheck();
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('SUBSCRIPTION_CHECK_FAILED', message));
     }
   });
 
