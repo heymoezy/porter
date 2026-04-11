@@ -471,15 +471,21 @@ export default function ForgePage() {
 
                   {filteredTemplates.map((t, i) => {
                     const spec = parseSpec(t.appearance_spec as any)
-                    const inPipeline = items.some(it => it.template_id === t.id)
+                    const pipelineItem = items.find(it => it.template_id === t.id)
+                    const isBorn = pipelineItem?.status === "complete"
+                    const isActive = pipelineItem && !isBorn // queued or claimed
                     return (
                       <div key={t.id}
-                        className={`animate-card-deal-in rounded-lg border border-border bg-surface p-2.5 transition-all ${
-                          inPipeline ? "animate-forge-disintegrate pointer-events-none" : "hover:border-text3/30 grayscale opacity-60 hover:grayscale-0 hover:opacity-100"
+                        className={`animate-card-deal-in rounded-lg border p-2.5 transition-all ${
+                          isBorn
+                            ? "border-success/30 bg-surface hover:border-success/50"
+                            : isActive
+                              ? "border-[var(--forge-ember)]/30 bg-surface animate-pulse"
+                              : "border-border bg-surface hover:border-text3/30 grayscale opacity-60 hover:grayscale-0 hover:opacity-100"
                         }`}
                         style={{ animationDelay: `${i * 15}ms` }}
                       >
-                        <Link to={`/agents/${t.id}`} className="block">
+                        <Link to={`/agents/${pipelineItem?.agent_id ?? t.id}`} className="block">
                           <div className="flex items-center gap-2">
                             <PixelPortrait
                               hair={spec.hair || "#2c1b18"} skin={spec.skin || "#f1c27d"}
@@ -488,15 +494,25 @@ export default function ForgePage() {
                               size="xs"
                             />
                             <div className="min-w-0 flex-1">
-                              <p className="text-2xs font-bold text-text truncate">{t.name}</p>
+                              <p className={`text-2xs font-bold truncate ${isBorn ? "text-success" : "text-text"}`}>{t.name}</p>
                               <p className="text-2xs text-text3 line-clamp-2 leading-relaxed">{t.description}</p>
                             </div>
-                            <Badge className="text-2xs bg-muted text-text3 border-0 shrink-0">{t.category}</Badge>
+                            {isBorn ? (
+                              <Badge className="text-2xs border-0 bg-success/10 text-success shrink-0">Born</Badge>
+                            ) : (
+                              <Badge className="text-2xs bg-muted text-text3 border-0 shrink-0">{t.category}</Badge>
+                            )}
                           </div>
                         </Link>
                         <div className="mt-2 flex items-center gap-1.5">
-                          {inPipeline ? (
-                            <Badge className="text-2xs border-0 bg-[var(--forge-ember)]/10 text-[var(--forge-flame)]">Queued</Badge>
+                          {isBorn ? (
+                            <span className="text-2xs text-text3">
+                              Born {new Date((pipelineItem as any)?.updated_at * 1000 || Date.now()).toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Singapore" })}
+                            </span>
+                          ) : isActive ? (
+                            <Badge className="text-2xs border-0 bg-[var(--forge-ember)]/10 text-[var(--forge-flame)]">
+                              {pipelineItem?.status === "claimed" ? "Forging..." : "Queued"}
+                            </Badge>
                           ) : (
                             <Button size="sm" variant="outline" className="h-5 text-2xs px-2 gap-1 border-border text-text3 hover:text-[var(--forge-ember)] hover:border-[var(--forge-ember)]/30"
                               onClick={() => {
