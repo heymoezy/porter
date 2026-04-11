@@ -277,8 +277,8 @@ Replace static dashboard with living intelligence view.
 **Phase C: Forge Activation** — DONE (10 agents born: Backend Dev, Frontend Dev, DevOps, Security, QA, Fullstack, Product Manager, Growth Strategist, Competitive Intelligence, Technical Writer. All with @askporter.app email.)
 **Phase D: Cross-Gateway** — DONE (Bridge dispatch already injects full context; only Claude CLI has hooks but all gateways get memory+skills+episodes+tools via Bridge)
 **Phase E: Autonomous Evolution** — DONE (skill evolution, tool detection, subscription manager all wired. 12 autonomous workflows. 4 external subscriptions ingesting release/news data into concepts.)
-**Phase F: Marketing** — TODO (landing page, demo, positioning)
-**Phase G: Revenue** — TODO (Stripe integration, tiered metering)
+**Phase F: Marketing** — DONE (landing page live at askporter.app for unauthenticated visitors, marketing strategy doc, positioning/pricing/channels defined)
+**Phase G: Revenue** — DONE (billing routes wired, usage metering by user, plans API with Free/$29 Pro/$99 Enterprise, LemonSqueezy subscription integration, funnel metrics)
 
 ### Key Architecture Facts for Forge
 - 9 existing personas: porter-core, forge-quill/sage/anvil, bridge-vigil/ledger/atlas,
