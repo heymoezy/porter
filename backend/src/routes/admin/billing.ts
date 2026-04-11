@@ -82,6 +82,56 @@ export default async function billingRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // GET /api/admin/billing/usage — per-user usage for current period
+  fastify.get('/usage', async () => {
+    try {
+      // Dispatches per user in last 30 days
+      const usage = await queryAll<{
+        username: string;
+        dispatches: number;
+        input_tokens: number;
+        output_tokens: number;
+        gateways: number;
+      }>(
+        `SELECT
+           COALESCE(username, 'anonymous') AS username,
+           COUNT(*)::int AS dispatches,
+           COALESCE(SUM(input_tokens), 0)::int AS input_tokens,
+           COALESCE(SUM(output_tokens), 0)::int AS output_tokens,
+           COUNT(DISTINCT gateway_type)::int AS gateways
+         FROM bridge_dispatch_log
+         WHERE created_at > EXTRACT(epoch FROM now()) - 2592000
+         GROUP BY username
+         ORDER BY dispatches DESC`
+      );
+
+      // Total usage across all users
+      const total = usage.reduce(
+        (acc, u) => ({
+          dispatches: acc.dispatches + u.dispatches,
+          inputTokens: acc.inputTokens + u.input_tokens,
+          outputTokens: acc.outputTokens + u.output_tokens,
+        }),
+        { dispatches: 0, inputTokens: 0, outputTokens: 0 }
+      );
+
+      return ok({ period: '30d', usage, total });
+    } catch {
+      return ok({ period: '30d', usage: [], total: { dispatches: 0, inputTokens: 0, outputTokens: 0 } });
+    }
+  });
+
+  // GET /api/admin/billing/plans — available plans
+  fastify.get('/plans', async () => {
+    return ok({
+      plans: [
+        { id: 'free', name: 'Free', price: 0, dispatches: 100, projects: 3, agents: 5, features: ['Basic memory', 'Single gateway', 'Community support'] },
+        { id: 'pro', name: 'Pro', price: 29, dispatches: -1, projects: -1, agents: -1, features: ['Unlimited dispatches', 'All 5 gateways', 'Team memory', 'Skill evolution', 'Priority support'] },
+        { id: 'enterprise', name: 'Enterprise', price: 99, dispatches: -1, projects: -1, agents: -1, features: ['Everything in Pro', 'SSO/SAML', 'Audit trail', 'Custom agents', 'Dedicated support', 'On-prem option'] },
+      ],
+    });
+  });
+
   // GET /api/admin/billing/stats — summary stats
   fastify.get('/stats', async () => {
     try {

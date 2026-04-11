@@ -25,6 +25,7 @@ import envToolsRoutes from './env-tools.js';
 import learningsRoutes from './learnings.js';
 import skillFeedbackRoutes from './skill-feedback.js';
 import routingRoutes from './routing.js';
+import billingRoutes from './billing.js';
 import jobsRoutes from '../v1/admin/jobs.js';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
@@ -54,5 +55,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(learningsRoutes, { prefix: '/learnings' });
   fastify.register(skillFeedbackRoutes, { prefix: '/skill-feedback' });
   fastify.register(routingRoutes, { prefix: '/routing' });
+  fastify.register(billingRoutes, { prefix: '/billing' });
   fastify.register(jobsRoutes, { prefix: '/jobs' });
 }
