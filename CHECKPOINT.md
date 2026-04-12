@@ -3,7 +3,7 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.6.0
+version: v6.7.0
 updated: 2026-04-12
 updated_by: claude-opus-4.6
 
@@ -11,7 +11,49 @@ updated_by: claude-opus-4.6
 
 Single monorepo (heymoezy/porter). One Fastify process on :3001. API metering business model.
 3 pillars: Bridge (hub), Forge (factory), Recall (shared brain).
-6 gateways: Claude CLI, OpenClaw, Ollama, Codex CLI, Gemini CLI, **Anthropic API (NEW)**.
+6 gateways: Claude CLI, OpenClaw, Ollama, Codex CLI, Gemini CLI, Anthropic API.
+
+## v6.7.0 — Forge + Gateway tabs autonomous
+
+Four agents launched as real heartbeat-driven instances. The Forge and Gateway admin tabs are now owned by autonomous Porter agents instead of static polling.
+
+**4 templates + 4 instances** (per the components doctrine):
+- `tmpl-forge-queuemaster` → `forge-queuemaster` (30s heartbeat) — owns the Forge pipeline
+- `tmpl-bridge-vigil` → `bridge-vigil` (30s heartbeat) — gateway health monitor
+- `tmpl-bridge-atlas` → `bridge-atlas` (hourly) — routing optimizer
+- `tmpl-bridge-ledger` → `bridge-ledger` (hourly) — cost controller
+
+**Personas written by OpenClaw via real Porter Bridge dispatch.** No more "background agent" fiction. Generation script at `backend/scripts/generate-persona-openclaw.ts` is the canonical birth-via-OpenClaw primitive — re-runnable, idempotent, supports `--direct` fallback for the rare case where Porter Bridge memory injection makes GPT-5.4 hallucinate tool use. Each agent's 4 .md files (IDENTITY, SOUL, ROLE_CARD, SYSTEM_PROMPT) total ~7-9KB.
+
+**Job executor at `backend/src/services/job-executor.ts`** — generic heartbeat scanner + dispatcher. Scans `personas WHERE heartbeat_enabled=1` every 5s, computes due time from `agent_templates.heartbeat_interval` or parses `personas.heartbeat_cron` for the two formats Porter uses, inserts `agent_jobs` rows with `source='job-executor'`, then claims them via `SELECT FOR UPDATE SKIP LOCKED` and dispatches through `/api/v1/chat/stream`. Exponential backoff (30s → 90s → 270s) on failure, max 3 attempts, then fails permanently with the error captured.
+
+**Forge service rewired** to attribute every tick to `forge-queuemaster` via SSE event `forge:queuemaster_tick` and an `intelligence_feed` row per tick. Forge tab broken link `/agents/forge-queue-master` → `/agents/forge-queuemaster` fixed in `admin/frontend/app/routes/forge.tsx:418`. Old persona dirs `forge-quill`, `forge-sage`, `forge-anvil` deleted — their station logic is folded into the queuemaster's SOUL.md as Writer/Trainer/Outfitter sub-doctrines.
+
+**Routing rules** scoped per-agent in `routing_rules` (`autonomy-*` IDs) force these dispatches to OpenClaw (anthropic_api will take over once it's healthy).
+
+**Root-cause fixes (no band-aids):**
+- `openclaw.ts` adapter: hardcoded `lobster-2026` token removed. Now reads `~/.openclaw/openclaw.json → gateway.auth.token` as the canonical source of truth (respects `OPENCLAW_STATE_DIR`). Falls back to `OPENCLAW_TOKEN` env. No fallback to a hardcoded value — missing token surfaces explicitly via `health()`.
+- `openclaw.ts` adapter: removed system-role message injection per Moe's rule "no system prompts to external models". The dispatch protocol override is now a user-role preamble.
+- `stream-service.ts` `selectStreamBackend()`: the `backend` parameter was previously cosmetic — it is now translated into `forceGatewayType` on the routing context so explicit gateway choices actually take effect.
+- `scheduler.ts` `claimNextJob()`: no longer claims jobs with `source='job-executor'`. Two systems were racing for the same rows; the existing scheduler's `result.response.slice(2000)` path was throwing on every persona tick.
+- `rpg-engine.ts` `awardXP()`: now resolves persona instance IDs to template IDs before writing to `agent_rpg_stats`. Was throwing FK violations on every dispatch from a persona that wasn't itself a template ID.
+- Two `openclaw-gateway.service` units (user + system) were SIGTERMing each other every ~15s, causing OpenClaw to flap. User unit stopped, system unit (v2026.3.8 at `/etc/systemd/system/`) is the canonical one.
+
+**Verification — all 8 gates passed:**
+1. Health: 5/6 gateways active (anthropic_api still unavailable; openclaw recovered)
+2. Seed: 4 personas + 4 templates present, heartbeat_enabled=1
+3. Files: 16 .md files, 32243 bytes total
+4. Dispatch provenance: 7+ openclaw rows in bridge_dispatch_log for our agents
+5. Heartbeat firing: bridge-vigil within 107s, forge-queuemaster within 39s
+6. Recent jobs: 4/4 completed, zero failures after restart
+7. Intelligence feed: forge-queuemaster entries present
+8. Forge API: returns running=true cleanly
+
+**v6.6.0 — Anthropic API gateway** (the previous version's work) was committed to code but the version was never bumped in package.json. v6.7.0 carries both that work and the autonomy launch.
+
+---
+
+## v6.6.0 — Anthropic API Gateway (6th adapter)
 
 ## v6.6.0 — Anthropic API Gateway (6th adapter)
 
@@ -38,9 +80,15 @@ Unlike CLI adapters, this runs tools IN-PROCESS — no terminal, no approval pro
 - Research agent personas: `agent-res-market`, `agent-leg-regulatory`, `agent-biz-vendor`
 - Enriched templates: `res-market`, `leg-regulatory`, `biz-vendor` have deep system prompts
 
-**Activation:** Set `ANTHROPIC_API_KEY` in env, or add `api_keys.anthropic` to porter_config.json. Gateway auto-detects key and becomes healthy. Research agents route through it automatically via routing rules.
+**Anthropic API activation:** Set `ANTHROPIC_API_KEY` in env, or add `api_keys.anthropic` to porter_config.json. Also supports Claude Code OAuth tokens from `~/.claude/.credentials.json` as fallback (with auto-refresh). Gateway auto-detects and becomes healthy.
 
-**Why this matters:** Research agents can now run autonomously — web search, read sources, save findings to disk — all through Porter Bridge, with full dispatch logging, cost tracking, and memory injection. No human in the loop for tool approval.
+**Claude CLI adapter enhanced (v6.6.0):**
+- `--permission-mode auto` + `--allowedTools WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent` — tools execute without terminal approval
+- Timeout increased to 5 min (was 60s) for research tasks
+- Parser captures assistant text from tool-execution loops (was missing post-tool output)
+- Agent-targeted dispatches bypass delegation doctrine (no more escalate interception)
+
+**Why this matters:** Research agents now run fully autonomously — web search, read sources, save findings to disk — all through Porter Bridge, with full dispatch logging, cost tracking, and memory injection. No human in the loop for tool approval. Dispatching is one curl to `/api/v1/chat/stream` with `agent_id`.
 **Port 5175 is DEAD. Everything on :3001.**
 
 ## v6.3.0 — Complete Data Surface Coverage
@@ -324,3 +372,14 @@ Replace static dashboard with living intelligence view.
 3. Notification folding + priority queue
 4. Agent status shimmer/pulse animations
 5. Replace hardcoded revenue curves with real billing data
+
+## 2026-04-12 — Bridge Ledger Persona Authoring
+
+- Reviewed canonical checkpoint and latest git activity before drafting.
+- Authored production persona content for `bridge-ledger` / `tmpl-bridge-ledger`:
+  `IDENTITY.md`, `SOUL.md`, `ROLE_CARD.md`, `SYSTEM_PROMPT.md`.
+- Ledger doctrine locked to SQL-first daily re-aggregation from
+  `bridge_dispatch_log` into `token_usage_daily`, immutable historical pricing,
+  attribution-gap detection on `input_tokens` / `output_tokens` /
+  `estimated_cost_usd`, and `budget_warning` publication to `intelligence_feed`
+  when a user exceeds 80% of daily cap.
