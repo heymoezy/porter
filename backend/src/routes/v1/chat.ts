@@ -332,7 +332,8 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       : undefined;
 
     // Phase 45: Delegation doctrine — decide strategy before dispatch
-    const doctrine = decideDoctrine(message);
+    // When a specific agent is targeted, bypass doctrine — caller already chose the execution path
+    const doctrine = agentId ? { strategy: 'direct' as const, reason: 'Agent-targeted dispatch', classifierUsed: false } : decideDoctrine(message);
     const dispatchStrategy = doctrine.strategy;
 
     if (doctrine.strategy === 'delegate') {

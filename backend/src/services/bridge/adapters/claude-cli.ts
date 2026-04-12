@@ -20,7 +20,7 @@ import type {
   HealthResult,
 } from '../types.js';
 
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 300_000; // 5 min — research tasks need more time than simple queries
 
 export class ClaudeCLIAdapter implements GatewayAdapter {
   readonly name = 'Claude CLI';
@@ -93,12 +93,16 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     const userContent = req.messages.filter((m) => m.role === 'user').at(-1)?.content ?? '';
     const prompt = req.systemPrompt ? `${req.systemPrompt}\n\n${userContent}` : userContent;
 
+    // Porter Bridge dispatches run non-interactively — enable tool auto-approval
+    // so agents can use web search, file I/O, and bash without a terminal.
     const args = [
       '-p',
       '--output-format', 'stream-json',
       '--verbose',
       '--include-partial-messages',
       '--no-session-persistence',
+      '--permission-mode', 'auto',
+      '--allowedTools', 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent',
     ];
 
     const child = spawn(this.binaryPath, args, {
@@ -157,6 +161,19 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
           }
         }
 
+        // Capture text from assistant messages (appears after tool execution loops)
+        if (event.type === 'assistant' && typeof event.message === 'string') {
+          streamText += event.message;
+        }
+        // Also capture from content_block_stop with accumulated text
+        if (event.type === 'assistant' && Array.isArray(event.content)) {
+          for (const block of event.content as Array<Record<string, unknown>>) {
+            if (block.type === 'text' && typeof block.text === 'string') {
+              streamText += block.text;
+            }
+          }
+        }
+
         // Extract final result (usage + fallback text)
         if (event.type === 'result') {
           resultText = (event.result as string) ?? '';
@@ -207,6 +224,8 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       '--verbose',
       '--include-partial-messages',
       '--no-session-persistence',
+      '--permission-mode', 'auto',
+      '--allowedTools', 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent',
     ];
 
     const child = spawn(this.binaryPath, args, {

@@ -255,26 +255,110 @@ interface MessagesResponse {
 
 type MessageParam = { role: 'user' | 'assistant'; content: string | ContentBlock[] };
 
+// ── OAuth Token Management ────────────────────────────────────────────────────
+
+interface OAuthCredentials {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+}
+
+function readClaudeOAuth(): OAuthCredentials | null {
+  try {
+    const raw = fs.readFileSync(path.join(process.env.HOME || '', '.claude', '.credentials.json'), 'utf-8');
+    const creds = JSON.parse(raw);
+    const oauth = creds.claudeAiOauth;
+    if (oauth?.accessToken && oauth?.refreshToken) {
+      return { accessToken: oauth.accessToken, refreshToken: oauth.refreshToken, expiresAt: oauth.expiresAt ?? 0 };
+    }
+    return null;
+  } catch { return null; }
+}
+
+async function refreshOAuthToken(refreshToken: string): Promise<OAuthCredentials | null> {
+  try {
+    const resp = await fetch('https://console.anthropic.com/v1/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: refreshToken }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json() as { access_token: string; refresh_token: string; expires_in: number };
+    const newCreds: OAuthCredentials = {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token || refreshToken,
+      expiresAt: Date.now() + (data.expires_in * 1000),
+    };
+    // Persist refreshed token back to credentials file
+    try {
+      const credsPath = path.join(process.env.HOME || '', '.claude', '.credentials.json');
+      const existing = JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
+      existing.claudeAiOauth = { ...existing.claudeAiOauth, ...newCreds };
+      fs.writeFileSync(credsPath, JSON.stringify(existing, null, 2), 'utf-8');
+    } catch { /* non-critical — token still works for this session */ }
+    return newCreds;
+  } catch { return null; }
+}
+
 // ── Adapter ───────────────────────────────────────────────────────────────────
 
 export class AnthropicAPIAdapter implements GatewayAdapter {
   readonly name = 'Anthropic API';
   readonly gatewayType = 'anthropic_api' as GatewayType;
+  private cachedOAuth: OAuthCredentials | null = null;
 
   constructor(private readonly row: GatewayRow) {}
 
-  private get apiKey(): string | null {
-    // Priority: gateway metadata → env var → porter_config.json
+  /**
+   * Auth resolution priority:
+   * 1. ANTHROPIC_API_KEY env var (standard API key → x-api-key header)
+   * 2. Gateway metadata api_key (manual config)
+   * 3. porter_config.json api_keys.anthropic
+   * 4. Claude Code OAuth token (~/.claude/.credentials.json → Authorization: Bearer)
+   */
+  private getApiKey(): string | null {
     const metaKey = (this.row.metadata as Record<string, string>)?.api_key;
     if (metaKey) return metaKey;
     if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY;
     try {
-      const raw = fs.readFileSync(
-        path.join(process.env.HOME || '', 'projects', 'Porter', 'porter_config.json'),
-        'utf-8',
-      );
+      const raw = fs.readFileSync(path.join(process.env.HOME || '', 'projects', 'Porter', 'porter_config.json'), 'utf-8');
       return JSON.parse(raw)?.api_keys?.anthropic || null;
     } catch { return null; }
+  }
+
+  private async getAuthHeaders(): Promise<Record<string, string>> {
+    // Try API key first (simplest, most reliable)
+    const apiKey = this.getApiKey();
+    if (apiKey) {
+      return { 'x-api-key': apiKey, 'anthropic-version': API_VERSION };
+    }
+
+    // Fall back to Claude Code OAuth
+    if (!this.cachedOAuth) {
+      this.cachedOAuth = readClaudeOAuth();
+    }
+    if (!this.cachedOAuth) {
+      throw new Error('No auth configured: set ANTHROPIC_API_KEY or ensure Claude Code is authenticated');
+    }
+
+    // Refresh if expired (with 60s buffer)
+    if (this.cachedOAuth.expiresAt < Date.now() + 60_000) {
+      console.log('[anthropic-api] OAuth token expired, refreshing...');
+      const refreshed = await refreshOAuthToken(this.cachedOAuth.refreshToken);
+      if (refreshed) {
+        this.cachedOAuth = refreshed;
+        console.log('[anthropic-api] OAuth token refreshed successfully');
+      } else {
+        // Re-read from disk in case another process refreshed it
+        this.cachedOAuth = readClaudeOAuth();
+        if (!this.cachedOAuth || this.cachedOAuth.expiresAt < Date.now()) {
+          throw new Error('OAuth token expired and refresh failed. Re-authenticate Claude Code.');
+        }
+      }
+    }
+
+    return { 'Authorization': `Bearer ${this.cachedOAuth.accessToken}`, 'anthropic-version': API_VERSION };
   }
 
   private get model(): string {
@@ -284,33 +368,30 @@ export class AnthropicAPIAdapter implements GatewayAdapter {
   // ── detect ────────────────────────────────────────────────────────────────
 
   async detect(): Promise<DetectResult> {
-    return { found: !!this.apiKey, version: 'anthropic-api' };
+    const hasApiKey = !!this.getApiKey();
+    const hasOAuth = !!readClaudeOAuth();
+    return { found: hasApiKey || hasOAuth, version: 'anthropic-api' };
   }
 
   // ── health ────────────────────────────────────────────────────────────────
 
   async health(): Promise<HealthResult> {
-    if (!this.apiKey) {
-      return { healthy: false, error: 'No ANTHROPIC_API_KEY configured. Set in env, gateway metadata, or porter_config.json api_keys.anthropic' };
+    let authHeaders: Record<string, string>;
+    try {
+      authHeaders = await this.getAuthHeaders();
+    } catch (err) {
+      return { healthy: false, error: err instanceof Error ? err.message : String(err) };
     }
+
     const start = Date.now();
     try {
-      // Minimal API call to verify key
       const resp = await fetch(`${API_BASE}/v1/messages`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.apiKey,
-          'anthropic-version': API_VERSION,
-        },
-        body: JSON.stringify({
-          model: this.model,
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'ping' }],
-        }),
-        signal: AbortSignal.timeout(10_000),
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ model: this.model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
+        signal: AbortSignal.timeout(15_000),
       });
-      if (resp.status === 401) return { healthy: false, error: 'Invalid API key', latencyMs: Date.now() - start };
+      if (resp.status === 401) return { healthy: false, error: 'Invalid credentials', latencyMs: Date.now() - start };
       return { healthy: resp.ok, latencyMs: Date.now() - start, version: this.model };
     } catch (err) {
       return { healthy: false, error: err instanceof Error ? err.message : String(err), latencyMs: Date.now() - start };
@@ -320,9 +401,7 @@ export class AnthropicAPIAdapter implements GatewayAdapter {
   // ── dispatch (agentic loop with tool execution) ───────────────────────────
 
   async dispatch(req: BridgeDispatchRequest): Promise<BridgeDispatchResult> {
-    const key = this.apiKey;
-    if (!key) throw new Error('No ANTHROPIC_API_KEY configured');
-
+    const authHeaders = await this.getAuthHeaders();
     const start = Date.now();
     let totalInput = 0;
     let totalOutput = 0;
@@ -363,11 +442,7 @@ export class AnthropicAPIAdapter implements GatewayAdapter {
 
       const resp = await fetch(`${API_BASE}/v1/messages`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': key,
-          'anthropic-version': API_VERSION,
-        },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
       });
