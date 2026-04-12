@@ -485,6 +485,7 @@ async function tick() {
 async function claimNextJob(): Promise<JobRow | undefined> {
   // Use LEFT JOIN on personas to allow system jobs (agent_id='system') to be claimed.
   // For non-system agents, the original constraints apply (not retired, not ephemeral on finished project).
+  // job-executor jobs are owned by services/job-executor.ts and must not be claimed here.
   const result = await pool.query(`
     UPDATE agent_jobs
     SET status = 'running', started_at = EXTRACT(EPOCH FROM NOW()), worker_id = $1,
@@ -494,6 +495,7 @@ async function claimNextJob(): Promise<JobRow | undefined> {
       LEFT JOIN personas p ON p.id = aj.agent_id
       LEFT JOIN projects pr ON pr.id = aj.project_id
       WHERE aj.status = 'pending'
+        AND aj.source != 'job-executor'
         AND aj.scheduled_for <= EXTRACT(EPOCH FROM NOW())
         AND (aj.agent_id = 'system' OR (
           p.status != 'retired'

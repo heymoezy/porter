@@ -455,10 +455,31 @@ export async function recalculateStats(templateId: string): Promise<RpgStats> {
  * awardXP — Add XP for an event. Updates xp, level, stars, rarity.
  * Emits SSE rpg:level_up if the agent levels up.
  * Fire-safe: catches errors and never throws.
+ *
+ * Accepts either a template_id directly OR a persona instance id; if the
+ * argument doesn't match agent_templates, we look up the persona's template
+ * and use that. Persona instances without an associated template are skipped
+ * silently — RPG stats only make sense at the template level.
  */
-export async function awardXP(templateId: string, event: XpEvent): Promise<void> {
+export async function awardXP(idOrPersona: string, event: XpEvent): Promise<void> {
   try {
     const xpGain = XP_AWARDS[event];
+
+    // Resolve persona instance id → template id when needed
+    let templateId = idOrPersona;
+    const tplCheck = await pool.query<{ id: string }>(
+      'SELECT id FROM agent_templates WHERE id = $1',
+      [idOrPersona],
+    );
+    if (tplCheck.rows.length === 0) {
+      const personaRow = await pool.query<{ template_id: string | null }>(
+        'SELECT template_id FROM personas WHERE id = $1',
+        [idOrPersona],
+      );
+      const resolved = personaRow.rows[0]?.template_id;
+      if (!resolved) return; // no template → no RPG stats
+      templateId = resolved;
+    }
 
     // Get or create the agent_rpg_stats row
     const { rows } = await pool.query<{

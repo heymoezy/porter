@@ -49,6 +49,7 @@ import { ensureSubscriptionsTable, seedDefaultSubscriptions } from './services/i
 import { seedTemplates } from './db/seed-templates.js';
 import { detectAndUpsertGateways } from './services/bridge/startup-detector.js';
 import * as scheduler from './services/scheduler.js';
+import * as jobExecutor from './services/job-executor.js';
 // DEPRECATED: IMAP IDLE auto-start removed in Tranche 12. Gmail is a connector, not the primary mail system.
 // import { startImapIdle, stopImapIdle } from './services/email.js';
 import { pool } from './db/client.js';
@@ -163,7 +164,7 @@ fastify.get('/health', async () => {
   return {
     status: 'ok',
     engine: 'fastify',
-    version: '6.5.0',
+    version: '6.7.0',
     mail: {
       provider: config.mail.provider,
       domain: config.mail.defaultDomain,
@@ -268,6 +269,7 @@ const start = async () => {
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
     scheduler.start();
+    jobExecutor.start();
 
     // Start Intellect file watcher on project directories
     const projectDirs = ['/home/lobster/projects'];
@@ -306,7 +308,7 @@ const start = async () => {
   }
 };
 
-process.on('SIGINT', () => { scheduler.stop(); process.exit(0); });
-process.on('SIGTERM', () => { scheduler.stop(); process.exit(0); });
+process.on('SIGINT', () => { scheduler.stop(); jobExecutor.stop(); process.exit(0); });
+process.on('SIGTERM', () => { scheduler.stop(); jobExecutor.stop(); process.exit(0); });
 
 start();
