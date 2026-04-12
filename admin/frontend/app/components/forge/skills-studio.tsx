@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react"
+import { useState, useMemo } from "react"
 import { useNavigate } from "react-router"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
@@ -6,12 +6,17 @@ import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Switch } from "~/components/ui/switch"
 import { Input } from "~/components/ui/input"
-import { Sparkles, Search, ChevronDown, ChevronRight, Bot, Plus, Pencil, Loader2, Package, Download, LayoutGrid, Table2 } from "lucide-react"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/sheet"
+import { Separator } from "~/components/ui/separator"
+import { Progress } from "~/components/ui/progress"
+import {
+  Sparkles, Search, Bot, Plus, Download, Loader2,
+  CircleDot, CircleCheck, Star, AlertTriangle, CircleDashed,
+  ChevronRight, Package, ArrowUpRight, Zap,
+} from "lucide-react"
 import { SkillCreateDialog } from "~/components/forge/skill-create-dialog"
 import { SkillEditSheet } from "~/components/forge/skill-edit-sheet"
 import { SkillImportDialog } from "~/components/forge/skill-import-dialog"
-import { SkillsMarketplace } from "~/components/forge/skills-marketplace"
-import { SkillQualityBadge, type QualityTier } from "~/components/skill-quality-badge"
 import { EvolutionPanel } from "~/components/forge/evolution-panel"
 
 // ── Types ──────────────────────────────────────────────────
@@ -36,20 +41,29 @@ interface SkillsResponse {
   tiers: { scaffold: number; baseline: number; production: number; 'high-performing': number; stale: number }
 }
 
-const sourceColors: Record<string, string> = {
-  "porter-core": "bg-accent-porter/15 text-accent-porter",
-  "porter-internal": "bg-warning/15 text-warning",
-  "porter-curated": "bg-success/15 text-success",
-  "runtime": "bg-blue-500/15 text-blue-400",
-  "detected": "bg-text3/15 text-text3",
+// ── Quality tier config ────────────────────────────────────
+
+type QualityTier = "scaffold" | "baseline" | "production" | "high-performing" | "stale"
+
+const TIER_CONFIG: Record<QualityTier, {
+  label: string
+  icon: typeof CircleDot
+  bg: string
+  text: string
+  dot: string
+}> = {
+  "scaffold":        { label: "Scaffold",       icon: CircleDashed,  bg: "bg-danger/8",          text: "text-danger",       dot: "bg-danger" },
+  "baseline":        { label: "Baseline",       icon: CircleDot,     bg: "bg-warning/8",         text: "text-warning",      dot: "bg-warning" },
+  "production":      { label: "Production",     icon: CircleCheck,   bg: "bg-success/8",         text: "text-success",      dot: "bg-success" },
+  "high-performing": { label: "High Perf",      icon: Star,          bg: "bg-blue-500/8",        text: "text-blue-400",     dot: "bg-blue-400" },
+  "stale":           { label: "Stale",          icon: AlertTriangle, bg: "bg-slate-500/8",       text: "text-slate-400",    dot: "bg-slate-400" },
 }
 
-const tierColors: Record<string, string> = {
-  "scaffold": "bg-danger/15 text-danger",
-  "baseline": "bg-warning/15 text-warning",
-  "production": "bg-success/15 text-success",
-  "high-performing": "bg-blue-500/15 text-blue-400",
-  "stale": "bg-slate-500/15 text-slate-400",
+const SOURCE_COLORS: Record<string, string> = {
+  "porter-core": "text-accent-porter",
+  "porter-internal": "text-warning",
+  "porter-curated": "text-success",
+  "runtime": "text-blue-400",
 }
 
 // ── Component ──────────────────────────────────────────────
@@ -57,16 +71,15 @@ const tierColors: Record<string, string> = {
 export function SkillsStudio() {
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<"skills" | "evolution">("skills")
+  const [activeTab, setActiveTab] = useState<"library" | "evolution">("library")
   const [search, setSearch] = useState("")
   const [activeCat, setActiveCat] = useState("all")
   const [activeTier, setActiveTier] = useState("all")
-  const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
+  const [detailSkill, setDetailSkill] = useState<Skill | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [editSkill, setEditSkill] = useState<Skill | null>(null)
   const [editOpen, setEditOpen] = useState(false)
-  const [viewMode, setViewMode] = useState<"table" | "grid">("table")
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "skills"],
@@ -79,326 +92,342 @@ export function SkillsStudio() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "skills"] }),
   })
 
-  const generateAll = useMutation({
-    mutationFn: () =>
-      api<{ generated: number; total: number }>("/api/admin/skills/builder/generate-all", { method: "POST" }),
+  const runAudit = useMutation({
+    mutationFn: () => api("/api/admin/skills/audit", { method: "GET" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "skills"] }),
   })
 
-  const runAudit = useMutation({
-    mutationFn: () =>
-      api("/api/admin/skills/audit", { method: "GET" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "skills"] }),
-  })
+  // ── Derived data ──────────────────────────────────────────
+
+  const allSkills = data?.skills ?? []
+  const categories = data?.categories ?? {}
+  const tierCounts = data?.tiers ?? { scaffold: 0, baseline: 0, production: 0, "high-performing": 0, stale: 0 }
+  const missingCount = data?.status?.missing ?? 0
+
+  const filtered = useMemo(() => {
+    let result = allSkills
+    if (activeCat !== "all") result = result.filter(s => s.category === activeCat)
+    if (activeTier !== "all") result = result.filter(s => s.qualityTier === activeTier)
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q) ||
+        s.id.toLowerCase().includes(q) ||
+        s.tags?.some(t => t.toLowerCase().includes(q))
+      )
+    }
+    return result
+  }, [allSkills, activeCat, activeTier, search])
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-10">
+      <div className="flex items-center justify-center py-16">
         <div className="size-6 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
       </div>
     )
   }
 
-  const allSkills = data?.skills ?? []
-  const categories = data?.categories ?? {}
-  const sources = data?.sources ?? {}
-  const allTags = data?.allTags ?? {}
-  const statusCounts = data?.status ?? { ready: 0, partial: 0, missing: 0 }
-  const tierCounts = data?.tiers ?? { scaffold: 0, baseline: 0, production: 0, 'high-performing': 0, stale: 0 }
-  const missingCount = statusCounts.missing
-
-  const categoryList = Object.keys(categories).sort()
-
-  let skills = allSkills
-  if (activeCat !== "all") skills = skills.filter(s => s.category === activeCat)
-  if (activeTier !== "all") skills = skills.filter(s => s.qualityTier === activeTier)
-  if (search) {
-    const q = search.toLowerCase()
-    skills = skills.filter(s =>
-      s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) ||
-      s.id.toLowerCase().includes(q) || s.category.toLowerCase().includes(q)
-    )
-  }
-
-  function openEdit(skill: Skill, e: React.MouseEvent) {
-    e.stopPropagation()
-    setEditSkill(skill)
-    setEditOpen(true)
-  }
+  // ── Render ────────────────────────────────────────────────
 
   return (
-    <div className="space-y-2">
-      {/* Tab switcher */}
-      <div className="flex items-center gap-1 mb-2 border-b border-border pb-2">
-        <button
-          onClick={() => setActiveTab("skills")}
-          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-            activeTab === "skills"
-              ? "bg-surface text-text"
-              : "text-text3 hover:text-text"
-          }`}
-        >
-          Skills
-        </button>
-        <button
-          onClick={() => setActiveTab("evolution")}
-          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-            activeTab === "evolution"
-              ? "bg-surface text-text"
-              : "text-text3 hover:text-text"
-          }`}
-        >
-          Evolution
-        </button>
-      </div>
-
-      {activeTab === "evolution" ? (
-        <EvolutionPanel />
-      ) : (
-      <>
-      {/* Stats + actions + search */}
-      <div className="flex items-center gap-2">
-        <Sparkles className="size-3 text-accent-porter" />
-        <span className="text-2xs font-semibold uppercase tracking-wide text-text3">
-          {data?.totalSkills ?? 0} skills · {data?.assignedSkills ?? 0} assigned · {data?.totalAssignments ?? 0} deployments
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          {Object.entries(sources).map(([src, cnt]) => (
-            <Badge key={src} className={`text-2xs border-0 ${sourceColors[src] || "bg-text3/15 text-text3"}`}>
-              {src} ({cnt})
-            </Badge>
-          ))}
-        </div>
-        <Button
-          size="xs"
-          variant="outline"
-          onClick={() => runAudit.mutate()}
-          disabled={runAudit.isPending}
-        >
-          {runAudit.isPending ? (
-            <Loader2 className="size-3 mr-1 animate-spin" />
-          ) : (
-            <Search className="size-3 mr-1" />
-          )}
-          Audit
-        </Button>
-        {missingCount > 0 && (
-          <Button
-            size="xs"
-            variant="outline"
-            onClick={() => generateAll.mutate()}
-            disabled={generateAll.isPending}
+    <div className="space-y-4">
+      {/* ── Tab bar ── */}
+      <div className="flex items-center gap-1 border-b border-border">
+        {(["library", "evolution"] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`relative px-4 py-2 text-xs font-semibold transition-colors ${
+              activeTab === tab ? "text-foreground" : "text-text3 hover:text-text2"
+            }`}
           >
-            {generateAll.isPending ? (
-              <Loader2 className="size-3 mr-1 animate-spin" />
-            ) : (
-              <Package className="size-3 mr-1" />
+            {tab === "library" ? "Skill Library" : "Evolution"}
+            {activeTab === tab && (
+              <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-t-full bg-accent-porter" />
             )}
-            Scaffold ({missingCount})
-          </Button>
-        )}
-        <Button size="xs" variant="outline" onClick={() => setImportOpen(true)}>
-          <Download className="size-3 mr-1" />
-          Import
-        </Button>
-        <Button size="xs" onClick={() => setCreateOpen(true)}>
-          <Plus className="size-3 mr-1" />
-          New
-        </Button>
-        <div className="flex items-center rounded-md border border-border overflow-hidden">
-          <button
-            onClick={() => setViewMode("table")}
-            className={`p-1.5 transition-colors ${viewMode === "table" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2"}`}
-            title="Table view"
-          >
-            <Table2 className="size-3" />
           </button>
-          <button
-            onClick={() => setViewMode("grid")}
-            className={`p-1.5 transition-colors ${viewMode === "grid" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2"}`}
-            title="Grid view"
-          >
-            <LayoutGrid className="size-3" />
-          </button>
-        </div>
-        {viewMode === "table" && (
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 size-3 -translate-y-1/2 text-text3" />
-            <Input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Filter..."
-              className="h-7 w-[150px] bg-raised border-border pl-7 text-xs"
-            />
-          </div>
-        )}
+        ))}
       </div>
 
-      {viewMode === "grid" ? (
-        <SkillsMarketplace
-          skills={allSkills}
-          categories={categories}
-          allTags={allTags}
-          tiers={tierCounts}
-          onSelect={(skill) => navigate(`/skills/${skill.id}/pack`)}
-        />
-      ) : (
+      {activeTab === "evolution" ? <EvolutionPanel /> : (
         <>
-          {/* Filters */}
-          <div className="flex items-center justify-between">
-            {/* Category tabs */}
-            <div className="flex flex-wrap gap-1">
-              <button
-                onClick={() => setActiveCat("all")}
-                className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors ${
-                  activeCat === "all" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
-                }`}
-              >all ({allSkills.length})</button>
-              {Object.entries(categories).sort(([,a],[,b]) => b - a).map(([cat, cnt]) => (
-                <button
-                  key={cat}
-                  onClick={() => setActiveCat(cat)}
-                  className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors ${
-                    activeCat === cat ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
-                  }`}
-                >{cat} ({cnt})</button>
-              ))}
+          {/* ── Header: search + actions ── */}
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-text3" />
+              <Input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search skills, tags, categories..."
+                className="h-9 bg-surface border-border pl-9 text-sm"
+              />
             </div>
+            <span className="text-xs text-text3 tabular-nums">
+              {filtered.length}/{allSkills.length} skills
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => runAudit.mutate()} disabled={runAudit.isPending} className="h-8 text-xs gap-1.5">
+                {runAudit.isPending ? <Loader2 className="size-3 animate-spin" /> : <Zap className="size-3" />}
+                Audit
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="h-8 text-xs gap-1.5">
+                <Download className="size-3" /> Import
+              </Button>
+              <Button size="sm" onClick={() => setCreateOpen(true)} className="h-8 text-xs gap-1.5">
+                <Plus className="size-3" /> New Skill
+              </Button>
+            </div>
+          </div>
 
-            {/* Tier filters */}
-            <div className="flex flex-wrap gap-1">
-              <button
-                onClick={() => setActiveTier("all")}
-                className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors ${
-                  activeTier === "all" ? "bg-accent-porter/15 text-accent-porter" : "text-text3 hover:text-text2 hover:bg-raised"
-                }`}
-              >All Tiers</button>
-              {Object.entries(tierCounts).filter(([,cnt]) => cnt > 0).map(([tier, cnt]) => (
+          {/* ── Tier summary cards ── */}
+          <div className="grid grid-cols-5 gap-2">
+            {(Object.entries(TIER_CONFIG) as [QualityTier, typeof TIER_CONFIG[QualityTier]][]).map(([tier, cfg]) => {
+              const count = tierCounts[tier] ?? 0
+              const Icon = cfg.icon
+              const isActive = activeTier === tier
+              return (
                 <button
                   key={tier}
-                  onClick={() => setActiveTier(tier)}
-                  className={`rounded-md px-2 py-1 text-2xs font-medium transition-colors border border-transparent ${
-                    activeTier === tier ? tierColors[tier] + " border-current" : "text-text3 hover:text-text2 hover:bg-raised"
+                  onClick={() => setActiveTier(activeTier === tier ? "all" : tier)}
+                  className={`rounded-lg border p-3 text-left transition-all ${
+                    isActive
+                      ? `${cfg.bg} border-current ${cfg.text}`
+                      : "border-border bg-surface hover:bg-raised/50"
                   }`}
-                >{tier} ({cnt})</button>
-              ))}
-            </div>
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Icon className={`size-3.5 ${isActive ? cfg.text : "text-text3"}`} />
+                    <span className={`text-2xs font-semibold uppercase tracking-wide ${isActive ? cfg.text : "text-text3"}`}>
+                      {cfg.label}
+                    </span>
+                  </div>
+                  <span className={`text-xl font-bold tabular-nums ${isActive ? cfg.text : "text-foreground"}`}>
+                    {count}
+                  </span>
+                </button>
+              )
+            })}
           </div>
 
-          {/* Skills table */}
-          <div className="rounded-xl border border-border overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border/50 bg-surface text-left">
-                  <th className="w-5 px-2 py-1.5" />
-                  <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Skill</th>
-                  <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Description</th>
-                  <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Source</th>
-                  <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Quality</th>
-                  <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 text-right">Agents</th>
-                  <th className="w-8 px-2 py-1.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {skills.map(skill => {
-                  const isExpanded = expandedSkill === skill.id
-                  const enabledCount = skill.agents.filter(a => a.enabled).length
-                  return (
-                    <Fragment key={skill.id}>
-                      <tr
-                        onClick={() => setExpandedSkill(isExpanded ? null : skill.id)}
-                        className="border-b border-border/20 last:border-0 cursor-pointer hover:bg-surface/60 transition-colors"
-                      >
-                        <td className="px-2 py-1">
-                          {skill.agents.length > 0 ? (
-                            isExpanded ? <ChevronDown className="size-3 text-text3" /> : <ChevronRight className="size-3 text-text3" />
-                          ) : <span className="size-3" />}
-                        </td>
-                        <td className="px-2 py-1 text-xs font-bold whitespace-nowrap">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); navigate(`/skills/${skill.id}/pack`) }}
-                            className="text-text hover:text-accent-porter transition-colors hover:underline"
-                          >
-                            {skill.name}
-                          </button>
-                        </td>
-                        <td className="px-2 py-1 text-2xs text-text3 truncate max-w-[300px]">{skill.description}</td>
-                        <td className="px-2 py-1">
-                          <Badge className={`text-2xs border-0 ${sourceColors[skill.source] || "bg-text3/15 text-text3"}`}>
-                            {skill.source}
-                          </Badge>
-                        </td>
-                        <td className="px-2 py-1">
-                          <SkillQualityBadge tier={skill.qualityTier} />
-                        </td>
-                        <td className="px-2 py-1 text-right">
-                          {skill.agents.length > 0 ? (
-                            <span className="text-xs text-text2">{enabledCount}/{skill.agents.length}</span>
-                          ) : (
-                            <span className="text-2xs text-text3">--</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-1">
-                          <button
-                            onClick={(e) => openEdit(skill, e)}
-                            className="rounded p-1 text-text3 hover:text-text hover:bg-raised transition-colors"
-                            title="Edit skill"
-                          >
-                            <Pencil className="size-3" />
-                          </button>
-                        </td>
-                      </tr>
-                      {isExpanded && skill.agents.length > 0 && (
-                        <tr key={`${skill.id}-agents`}>
-                          <td colSpan={7} className="bg-surface/50 border-b border-border/20">
-                            <div className="px-8 py-1">
-                              {skill.agents.map(a => (
-                                <div key={a.id} className="flex items-center gap-2 py-0.5">
-                                  <Bot className="size-2.5 text-text3" />
-                                  <span className="text-2xs font-medium text-text flex-1">{a.name}</span>
-                                  <span className="text-2xs text-text3 truncate max-w-[200px]">{a.role}</span>
-                                  <Switch
-                                    checked={a.enabled}
-                                    onCheckedChange={() => toggleSkill.mutate({ personaId: a.id, skillName: skill.id })}
-                                    className="scale-[0.65]"
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
+          {/* ── Category filter pills ── */}
+          <div className="flex flex-wrap items-center gap-1">
+            <button
+              onClick={() => setActiveCat("all")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                activeCat === "all"
+                  ? "bg-accent-porter/15 text-accent-porter"
+                  : "bg-raised text-text3 hover:text-text2"
+              }`}
+            >All</button>
+            {Object.entries(categories).sort(([,a],[,b]) => b - a).map(([cat, cnt]) => (
+              <button
+                key={cat}
+                onClick={() => setActiveCat(activeCat === cat ? "all" : cat)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  activeCat === cat
+                    ? "bg-accent-porter/15 text-accent-porter"
+                    : "bg-raised text-text3 hover:text-text2"
+                }`}
+              >
+                {cat} <span className="text-text3/60 ml-0.5">{cnt}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* ── Skill card grid ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filtered.map(skill => {
+              const tierCfg = TIER_CONFIG[skill.qualityTier] ?? TIER_CONFIG.baseline
+              const TierIcon = tierCfg.icon
+              const enabledAgents = skill.agents.filter(a => a.enabled).length
+              return (
+                <button
+                  key={skill.id}
+                  onClick={() => setDetailSkill(skill)}
+                  className="group rounded-xl border border-border bg-surface p-4 text-left transition-all hover:border-accent-porter/30 hover:shadow-lg hover:shadow-accent-porter/5"
+                >
+                  {/* Top row: name + tier */}
+                  <div className="flex items-start gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-bold text-foreground truncate group-hover:text-accent-porter transition-colors">
+                        {skill.name}
+                      </h3>
+                      <span className={`text-2xs ${SOURCE_COLORS[skill.source] ?? "text-text3"}`}>
+                        {skill.source}
+                      </span>
+                    </div>
+                    <div className={`flex items-center gap-1 rounded-md px-2 py-0.5 ${tierCfg.bg}`}>
+                      <TierIcon className={`size-3 ${tierCfg.text}`} />
+                      <span className={`text-2xs font-semibold ${tierCfg.text}`}>{tierCfg.label}</span>
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <p className="text-xs text-text2 line-clamp-2 leading-relaxed mb-3">
+                    {skill.description || "No description"}
+                  </p>
+
+                  {/* Bottom row: category + agents */}
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-2xs border-border text-text3">
+                      {skill.category}
+                    </Badge>
+                    {skill.tags?.slice(0, 2).map(tag => (
+                      <Badge key={tag} variant="outline" className="text-2xs border-border/50 text-text3/70">
+                        {tag}
+                      </Badge>
+                    ))}
+                    <div className="ml-auto flex items-center gap-1 text-2xs text-text3">
+                      {enabledAgents > 0 && (
+                        <>
+                          <Bot className="size-3" />
+                          <span className="tabular-nums">{enabledAgents}</span>
+                        </>
                       )}
-                    </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+
+                  {/* Quality score bar */}
+                  <div className="mt-3">
+                    <Progress value={skill.qualityScore} className="h-1" />
+                  </div>
+                </button>
+              )
+            })}
           </div>
 
-          {skills.length === 0 && (
-            <div className="py-6 text-center text-xs text-text3">{search ? "No skills match" : "No skills"}</div>
+          {filtered.length === 0 && (
+            <div className="rounded-xl border border-border bg-surface py-16 text-center">
+              <Sparkles className="size-8 mx-auto text-text3/40 mb-3" />
+              <p className="text-sm text-text3">{search ? "No skills match your search" : "No skills found"}</p>
+            </div>
           )}
         </>
       )}
-      </>
-      )}
+
+      {/* ── Detail drawer ── */}
+      <Sheet open={!!detailSkill} onOpenChange={open => { if (!open) setDetailSkill(null) }}>
+        <SheetContent className="w-[420px] sm:max-w-[420px] overflow-y-auto">
+          {detailSkill && <SkillDetail
+            skill={detailSkill}
+            onEdit={() => { setEditSkill(detailSkill); setEditOpen(true); setDetailSkill(null) }}
+            onNavigate={(id) => { setDetailSkill(null); navigate(`/skills/${id}/pack`) }}
+            onToggleAgent={(personaId, skillId) => toggleSkill.mutate({ personaId, skillName: skillId })}
+          />}
+        </SheetContent>
+      </Sheet>
 
       {/* Dialogs */}
-      <SkillCreateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        categories={categoryList}
-      />
-      <SkillEditSheet
-        skill={editSkill}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        categories={categoryList}
-      />
-      <SkillImportDialog
-        open={importOpen}
-        onOpenChange={setImportOpen}
-      />
+      <SkillCreateDialog open={createOpen} onOpenChange={setCreateOpen} categories={Object.keys(categories).sort()} />
+      <SkillEditSheet skill={editSkill} open={editOpen} onOpenChange={setEditOpen} categories={Object.keys(categories).sort()} />
+      <SkillImportDialog open={importOpen} onOpenChange={setImportOpen} />
+    </div>
+  )
+}
+
+// ── Detail panel (inside sheet) ─────────────────────────────
+
+function SkillDetail({ skill, onEdit, onNavigate, onToggleAgent }: {
+  skill: Skill
+  onEdit: () => void
+  onNavigate: (id: string) => void
+  onToggleAgent: (personaId: string, skillId: string) => void
+}) {
+  const tierCfg = TIER_CONFIG[skill.qualityTier] ?? TIER_CONFIG.baseline
+  const TierIcon = tierCfg.icon
+  const enabledAgents = skill.agents.filter(a => a.enabled).length
+
+  return (
+    <div className="space-y-5 pt-2">
+      <SheetHeader className="space-y-1">
+        <div className="flex items-center gap-2">
+          <div className={`flex items-center gap-1.5 rounded-md px-2 py-1 ${tierCfg.bg}`}>
+            <TierIcon className={`size-3.5 ${tierCfg.text}`} />
+            <span className={`text-xs font-semibold ${tierCfg.text}`}>{tierCfg.label}</span>
+          </div>
+          <span className={`text-xs ${SOURCE_COLORS[skill.source] ?? "text-text3"}`}>
+            {skill.source}
+          </span>
+        </div>
+        <SheetTitle className="text-lg">{skill.name}</SheetTitle>
+      </SheetHeader>
+
+      <p className="text-sm text-text2 leading-relaxed">{skill.description || "No description"}</p>
+
+      {/* Quality score */}
+      <div className="rounded-lg border border-border bg-raised/30 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-text3">Quality Score</span>
+          <span className={`text-sm font-bold ${tierCfg.text} tabular-nums`}>{skill.qualityScore}/100</span>
+        </div>
+        <Progress value={skill.qualityScore} className="h-2" />
+      </div>
+
+      {/* Tags */}
+      {skill.tags && skill.tags.length > 0 && (
+        <div className="space-y-1.5">
+          <span className="text-xs font-semibold text-text3">Tags</span>
+          <div className="flex flex-wrap gap-1.5">
+            {skill.tags.map(tag => (
+              <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Metadata */}
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="rounded-md bg-surface border border-border/50 p-2">
+          <span className="text-text3">Category</span>
+          <p className="font-semibold text-foreground">{skill.category}</p>
+        </div>
+        <div className="rounded-md bg-surface border border-border/50 p-2">
+          <span className="text-text3">Agents</span>
+          <p className="font-semibold text-foreground">{enabledAgents}/{skill.agents.length}</p>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Agent assignment */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Bot className="size-3.5 text-text3" />
+          <span className="text-xs font-semibold text-text3">Agent Assignment</span>
+        </div>
+        {skill.agents.length === 0 ? (
+          <p className="text-xs text-text3 py-2">No agents available for this skill</p>
+        ) : (
+          <div className="space-y-1">
+            {skill.agents.map(agent => (
+              <div key={agent.id} className="flex items-center gap-3 rounded-lg border border-border/50 bg-surface px-3 py-2">
+                <Bot className="size-3.5 text-text3 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-semibold text-foreground">{agent.name}</span>
+                  <p className="text-2xs text-text3 truncate">{agent.role}</p>
+                </div>
+                <Switch
+                  checked={agent.enabled}
+                  onCheckedChange={() => onToggleAgent(agent.id, skill.id)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Separator />
+
+      {/* Actions */}
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" className="flex-1 gap-1.5" onClick={onEdit}>
+          Edit Skill
+        </Button>
+        <Button variant="outline" size="sm" className="flex-1 gap-1.5" onClick={() => onNavigate(skill.id)}>
+          View Pack <ArrowUpRight className="size-3" />
+        </Button>
+      </div>
     </div>
   )
 }
