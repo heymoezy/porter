@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Link } from "react-router"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
@@ -249,20 +249,31 @@ export default function ForgePage() {
   const active = items.filter(i => i.status === "claimed")
   const complete = items.filter(i => i.status === "complete")
 
-  // Birth animation — only trigger when a NEW item completes (not on page load)
-  const [prevCompleteCount, setPrevCompleteCount] = useState(complete.length)
+  // Birth animation — only trigger when a genuinely NEW item completes
+  // during THIS browser session. The dataReady ref gates animation until
+  // after the initial data load, so pre-existing complete items never animate.
+  const seenCompleteIds = useRef<Set<string>>(new Set())
+  const dataReady = useRef(false)
   useEffect(() => {
-    if (complete.length > prevCompleteCount) {
-      const latest = complete[complete.length - 1]
-      setBirthItem(latest)
-      const t = setTimeout(() => setBirthItem(null), 4000)
-      setPrevCompleteCount(complete.length)
-      return () => clearTimeout(t)
+    if (!data) return // query still loading
+    const currentIds = new Set(complete.map(c => c.id))
+    if (!dataReady.current) {
+      // First time data arrives — snapshot all existing complete IDs
+      seenCompleteIds.current = currentIds
+      dataReady.current = true
+      return
     }
-    if (complete.length !== prevCompleteCount) {
-      setPrevCompleteCount(complete.length)
+    // After initial load, check for new completions
+    for (const item of complete) {
+      if (!seenCompleteIds.current.has(item.id)) {
+        seenCompleteIds.current = currentIds
+        setBirthItem(item)
+        const t = setTimeout(() => setBirthItem(null), 4000)
+        return () => clearTimeout(t)
+      }
     }
-  }, [complete.length, prevCompleteCount])
+    seenCompleteIds.current = currentIds
+  }, [data, complete])
 
   const allTemplates = (tmplData?.templates ?? [])
     .sort((a, b) => {

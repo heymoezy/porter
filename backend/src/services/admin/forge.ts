@@ -357,8 +357,8 @@ async function runWriter(item: PipelineItem): Promise<void> {
         `, [agentId, skillId, skillId]);
       }
 
-      // Write persona .md files to disk
-      const personaDir = path.join(process.env.HOME ?? '/home/lobster', 'documents/porter/personas', agentId);
+      // Write persona .md files to disk (use config.personasDir — same path the admin reads from)
+      const personaDir = path.join(config.personasDir, agentId);
       try {
         fs.mkdirSync(personaDir, { recursive: true });
         if (tmplRow.soul_text) fs.writeFileSync(path.join(personaDir, 'SOUL.md'), tmplRow.soul_text);

@@ -1,3 +1,119 @@
+## v6.1.0 (2026-04-12)
+
+- fix(bridge): enable autonomous tool execution for Porter agent dispatches
+- fix(forge): 3 bugs — birth animation loop, empty .md files, broken nav
+- fix(skills): proper redesign — compact cards, file info, timestamps, pack explorer link
+- feat(bridge): Anthropic API gateway — 6th adapter with server-side tool execution
+- feat(skills): complete UX redesign — card grid, detail drawer, tier icons
+- docs(checkpoint): all 7 operational phases complete (A-G)
+- feat(billing): wire billing routes + add usage metering + plans API
+- fix(forge): born agents stay visible in catalogue with green border + date
+- feat(agents): enrich research templates with substantive prompts + skills
+- feat: marketing landing page at askporter.app
+- chore: bump to v6.5.0 — Intellect Phases 1-3, Forge, tools, skills, subscriptions
+- docs(checkpoint): Phase E complete — full autonomous evolution loop
+- feat(intellect): agent subscription manager — external knowledge ingestion
+- docs(checkpoint): v6.4.0 update — tools + skills + evolution complete
+- feat(intellect): autonomous skill evolution from dispatch telemetry
+- feat(intellect): inject available tools into dispatch + session context
+- feat(intellect): tool detector service + expanded registry (23 tools)
+- fix(skills): correct skills directory path case (porter → Porter)
+- docs(checkpoint): Forge operational — 10 agents born with email
+- feat(forge): Station 1 now creates agents directly (no HTTP API call)
+- docs(checkpoint): v6.4.0 — operational Porter roadmap + status update
+- feat(intellect): skill recommendations in context + episodes in memory injection
+- fix(intellect): wire episodes into memory injection + context endpoint
+- feat(admin): holistic Intellect integration across 6 admin pages
+- feat(intellect): Phase 3 — Autonomy (pruner + self-monitor + pattern miner) plus Phase 2 fixes
+- feat(intellect): Phase 2 — Learning layer (corrections → directives, episodes, dispatch scoring)
+- docs(checkpoint): Phase 1 Porter Intellect complete, Phase 2 roadmap
+- fix(intellect): validate button — handle unique constraint on fuzzy-match auto-fix
+- feat(sidebar): add Intellect to Ops nav
+- feat(intelligence): add Porter Intellect section to Intelligence page
+- fix(intellect): dedupe memory_references with UNIQUE constraint + ON CONFLICT
+- feat(intellect): Phase 1.4 — Intellect API with context endpoint + event stream
+- feat(intellect): Phase 1.3 — memory validator with reference tracking
+- feat(intellect): Phase 1.2 — real-time file watcher with chokidar
+- feat(intellect): Phase 1.1 — schema migrations + stale data fix
+- feat(email): Porter logo avatar, reply box starts at 2 rows
+- fix(email): add min-h-0 to flex chain so messages scroll, reply stays visible
+- fix(email): reply box truly fixed at bottom, noreply sorted last
+- fix(email): subject inline with messages, reply box fixed at bottom
+- feat(email): slide-in animation, per-message reply, smaller reply box
+- feat(email): add refresh button next to search in folder tabs
+- fix(email): visual distinction for sent emails, smaller subject header
+- refactor(email): Gmail-style layout overhaul
+- fix(email): restore ChevronDown import used in compose From picker
+- refactor(email): mailboxes in left nav, folder tabs on top
+- fix(mail-ops): count 'sent' status as successful delivery in success rate
+- fix(mail): hard-delete mailboxes from Stalwart + DB, proper confirmation dialog
+- fix(mail-admin): fix DNS health check to detect DKIM/DMARC from TXT content
+- fix(mail-ops): correct API path prefix from /api/admin/mail to /api/v1/mail-admin
+- feat(mail): wire email UI to Stalwart JMAP — fully functional webmail
+- docs: update checkpoint for v6.3.0 — complete data surface coverage
+- feat(admin): expose remaining 5 hidden surfaces, nothing left hidden (v6.3.0)
+- docs: update checkpoint for v6.2.0 platform intelligence surface
+- feat(dashboard): replace seed data with real dispatches + projects
+- refactor(admin): merge evolution into skills page, cross-link billing → costs
+- feat(admin): contextual navigation links between bridge, system, forge pages
+- feat(admin): cross-link all pages — agents, gateways, skills, sessions
+- feat(dashboard): add real cost metrics to hero bar, prefetch costs data
+- fix(health): update hardcoded version to 6.2.0
+- feat(admin): expose 8 hidden data surfaces as new admin pages (v6.2.0)
+- fix(files): collect all drag entries synchronously before async read
+- fix(files): folder drop uses recursive handler, fix scroll on long file lists
+- feat(files): support folder drag-and-drop upload with recursive directory reading
+- fix(mail): mailbox picker + search in thread list header, remove top bar
+- fix(mail): move useState before early return to fix hooks crash
+- fix(mail): mailbox picker to top bar with search, fix mailbox switch bug
+- fix(mail): improve email UX — mailbox picker on top, search, trash delete, sent redirect
+- feat(mail): implement real SMTP sending via Stalwart
+- feat(mail): deploy Stalwart mail server, fix auth to Basic, provision all mailboxes
+- fix(mail): Gmail-style left sidebar navigation for email page
+- feat(mail): add mailbox CRUD management to Mail Ops page
+- fix(mail): compact email folders to horizontal tabs, reclaim sidebar space
+
+
+## v6.5.0 (2026-04-12)
+
+**Porter Intellect + Forge + Operational Brain**
+
+- Intellect Phase 1: file watcher, memory validator, reference tracking, Intellect API
+- Intellect Phase 2: correction detector, session analyzer, memory promoter, dispatch scorer, workflow engine (6 workflows)
+- Intellect Phase 3: memory pruner, self-monitor (6 health signals), pattern miner, skill evolver, tool detector, subscription manager
+- 12 autonomous workflows running on schedule (memory, dispatch, tools, skills, subscriptions, self-monitor)
+- Forge pipeline operational: Station 1 writes persona .md files + provisions email, Station 2 assigns skills, Station 3 sets tools/appearance
+- 10 agents forged: Backend Dev, Frontend Dev, DevOps, Security, QA, Fullstack, Product Manager, Growth Strategist, Competitive Intelligence, Technical Writer
+- 11 agent email addresses at @askporter.app via Stalwart
+- 23 tools tracked, 21 detected, auto-scan every 6h
+- 207 skills with quality evolution from dispatch telemetry
+- 4 external subscriptions (Node.js, Ollama releases, Anthropic news, OpenAI changelog)
+- Episodes + skills + tools injected into every CLI session context
+- Holistic admin integration: Intellect signals on Dashboard, System, Bridge, Sessions, Routing, Decisions
+- Landing page at askporter.app for unauthenticated visitors
+- Billing routes wired with usage metering + pricing tiers (Free/Pro/Enterprise)
+- Research agent templates enriched with substantive system prompts + web search skills
+- Skills UX redesigned: compact cards, file info, timestamps, pack explorer link
+- Forge catalogue: born agents visible with green border + birth date
+
+## v6.3.0 (2026-04-09)
+
+**Complete Data Surface Coverage**
+
+- 13 new admin pages (costs, battles, decisions, sessions, msg-bus, env-tools, learnings, calendar, forge-runs, routing, customer-scores, skill-feedback)
+- All pages cross-linked (agents, gateways, skills, users)
+- Dashboard shows real dispatch feed + real projects (seed data removed)
+- Evolution merged into Skills (3 tabs: Studio, Proposals, History)
+
+## v6.2.0 (2026-04-07)
+
+**Admin Consolidation + Email**
+
+- Email/JMAP wiring: Stalwart JMAP client, folder/thread/message endpoints, send via JMAP
+- DKIM + SPF + DMARC configured for askporter.app
+- Attachment upload/download via Stalwart blob API
+- 12 mailboxes operational
+
 ## v6.1.0 (2026-04-04)
 
 ### Porter Mail Platform — 14 Tranches
