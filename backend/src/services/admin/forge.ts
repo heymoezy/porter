@@ -34,6 +34,12 @@ interface ForgeState {
     error: number;
     dead_letter: number;
   };
+  /**
+   * Template IDs that have at least one living persona instance. Drives the
+   * "Born" pills in the catalog — a template is "born" when an instance of
+   * it exists, regardless of whether it passed through forge_pipeline.
+   */
+  bornTemplateIds: string[];
 }
 
 interface PipelineItem {
@@ -681,7 +687,25 @@ async function getState(): Promise<ForgeState> {
     FROM forge_pipeline
   `);
 
-  const stats = row ?? { queued: 0, claimed: 0, complete: 0, error: 0, dead_letter: 0 };
+  const pipelineStats = row ?? { queued: 0, claimed: 0, complete: 0, error: 0, dead_letter: 0 };
+
+  // "Born" is the count of distinct agent templates that have at least one
+  // living persona instance. This is the authoritative count — it reflects
+  // reality whether the persona went through forge_pipeline or was seeded
+  // directly (e.g. the autonomy queuemaster, chicken-and-egg exception).
+  const bornRows = await queryAll<{ template_id: string }>(`
+    SELECT DISTINCT p.template_id
+    FROM personas p
+    WHERE p.template_id IS NOT NULL
+      AND p.template_id != ''
+      AND p.status IN ('active', 'idle', 'running')
+  `);
+  const bornTemplateIds = bornRows.map(r => r.template_id);
+
+  const stats = {
+    ...pipelineStats,
+    complete: bornTemplateIds.length,
+  };
 
   return {
     running: settings.running,
@@ -690,6 +714,7 @@ async function getState(): Promise<ForgeState> {
     dailyTokenBudget: settings.dailyTokenBudget,
     qualityThreshold: settings.qualityThreshold,
     stats,
+    bornTemplateIds,
   };
 }
 

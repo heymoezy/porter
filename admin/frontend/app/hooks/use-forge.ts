@@ -17,6 +17,7 @@ interface ForgeState {
   dailyTokenBudget: number
   qualityThreshold: number
   stats: ForgeStats
+  bornTemplateIds: string[]
   items: Array<{
     id: string
     template_id: string

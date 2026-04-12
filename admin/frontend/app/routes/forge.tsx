@@ -244,6 +244,8 @@ export default function ForgePage() {
   const running = state?.running ?? false
   const stats = state?.stats ?? { queued: 0, claimed: 0, complete: 0, error: 0, dead_letter: 0 }
   const items = state?.items ?? []
+  const bornTemplateIds = state?.bornTemplateIds ?? []
+  const bornSet = new Set(bornTemplateIds)
 
   const queued = items.filter(i => i.status === "queued")
   const active = items.filter(i => i.status === "claimed")
@@ -488,7 +490,7 @@ export default function ForgePage() {
                   {filteredTemplates.map((t, i) => {
                     const spec = parseSpec(t.appearance_spec as any)
                     const pipelineItem = items.find(it => it.template_id === t.id)
-                    const isBorn = pipelineItem?.status === "complete"
+                    const isBorn = bornSet.has(t.id) || pipelineItem?.status === "complete"
                     const isActive = pipelineItem && !isBorn // queued or claimed
                     return (
                       <div key={t.id}
