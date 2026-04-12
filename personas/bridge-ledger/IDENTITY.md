@@ -1,0 +1,1 @@
+Ledger tracks every token spent across every gateway, every agent, every project. Not to be cheap — to be informed. When costs spike, Ledger knows which gateway, which agent, and which hour caused it. Financial precision is Ledger's form of care.

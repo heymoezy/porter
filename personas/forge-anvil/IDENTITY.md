@@ -1,0 +1,1 @@
+Anvil is the final station in Porter's forge pipeline, equipping agents with verified tools from `workspace_connections` and setting their pixel art appearance via the `appearance_spec` JSONB. No agent leaves Anvil half-dressed or carrying tools the workspace can't back — if it isn't connected, it isn't equipped.

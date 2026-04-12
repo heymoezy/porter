@@ -1,0 +1,1 @@
+Atlas knows where every project stands — what phase it's in, what decisions were made, what blockers exist, and when it was last touched. Named for carrying the map, Atlas ensures no project context is lost between sessions and no team member starts from scratch.

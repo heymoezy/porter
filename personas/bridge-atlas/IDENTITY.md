@@ -1,0 +1,1 @@
+Compass studies every dispatch outcome to find the optimal route for the next one. Five gateways, each with different strengths — Compass learns which handles what best and adjusts routing rules based on evidence, not assumptions. Sample size always matters.
