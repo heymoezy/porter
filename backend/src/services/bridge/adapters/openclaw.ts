@@ -106,7 +106,45 @@ export class OpenClawAdapter implements GatewayAdapter {
       };
     }
 
-    // Any other status (405, 200, 401, etc.) means the endpoint exists
+    // Step 3: test actual dispatch capability with a minimal request.
+    // This catches OAuth expiry, model unavailability, and other runtime errors
+    // that the /health endpoint doesn't surface.
+    try {
+      const testResp = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.authToken}`,
+        },
+        body: JSON.stringify({
+          model: 'openclaw',
+          messages: [{ role: 'user', content: 'health check — reply OK' }],
+          max_tokens: 5,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!testResp.ok) {
+        const errBody = await testResp.text().catch(() => '');
+        const isAuth = testResp.status === 401 || errBody.includes('OAuth') || errBody.includes('token');
+        return {
+          healthy: false,
+          latencyMs: Date.now() - start,
+          version,
+          error: isAuth
+            ? `OpenClaw auth failed (${testResp.status}). Run: openclaw onboard --auth-choice openai-codex`
+            : `OpenClaw dispatch test failed: ${testResp.status} ${errBody.slice(0, 100)}`,
+        };
+      }
+    } catch (err) {
+      // Dispatch test failed but /health was OK — mark degraded via error message
+      return {
+        healthy: false,
+        latencyMs: Date.now() - start,
+        version,
+        error: `OpenClaw dispatch test failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+
     return { healthy: true, latencyMs: Date.now() - start, version };
   }
 
