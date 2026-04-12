@@ -8,6 +8,9 @@
  * ~/.openclaw/openclaw.json — a 404 response signals it is disabled.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import which from 'which';
 import type {
   GatewayAdapter,
@@ -29,13 +32,34 @@ export class OpenClawAdapter implements GatewayAdapter {
     return this.row.url ?? 'http://127.0.0.1:18789';
   }
 
+  /**
+   * Resolve the bearer token by checking, in order:
+   *   1. gateway row metadata.token (DB-configured)
+   *   2. OPENCLAW_TOKEN / OPENCLAW_GATEWAY_TOKEN env vars
+   *   3. ~/.openclaw/openclaw.json → gateway.auth.token (canonical source of truth)
+   *
+   * Never falls back to a hardcoded value — a missing token is an explicit error
+   * surfaced by health() and dispatch().
+   */
   private get authToken(): string {
-    return (
-      (this.row.metadata as Record<string, string>).token ??
-      process.env.OPENCLAW_TOKEN ??
-      process.env.OPENCLAW_GATEWAY_TOKEN ??
-      'lobster-2026'
-    );
+    const fromMetadata = (this.row.metadata as Record<string, string> | undefined)?.token;
+    if (fromMetadata) return fromMetadata;
+
+    const fromEnv = process.env.OPENCLAW_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN;
+    if (fromEnv) return fromEnv;
+
+    const stateDir = process.env.OPENCLAW_STATE_DIR ?? path.join(os.homedir(), '.openclaw');
+    const configPath = path.join(stateDir, 'openclaw.json');
+    try {
+      const raw = fs.readFileSync(configPath, 'utf8');
+      const cfg = JSON.parse(raw) as { gateway?: { auth?: { token?: string } } };
+      const fromFile = cfg.gateway?.auth?.token;
+      if (fromFile) return fromFile;
+    } catch {
+      // fall through to empty — health() will surface the config gap
+    }
+
+    return '';
   }
 
   // ── detect() ──────────────────────────────────────────────────────────────
@@ -153,12 +177,14 @@ export class OpenClawAdapter implements GatewayAdapter {
   async dispatch(req: BridgeDispatchRequest): Promise<BridgeDispatchResult> {
     const start = Date.now();
 
+    // OpenClaw proxies to GPT-5.4 via openai-codex. Per Porter policy we never
+    // send system-role messages to external models — the dispatch protocol
+    // override is prepended as a user-role preamble instead.
+    const preamble =
+      '[porter-bridge-dispatch] Skip session startup. Do not read checkpoints, git logs, or project state. Answer directly and concisely.';
     const messages: Array<{ role: string; content: string }> = [];
-    // Bridge dispatch: override session protocol to prevent context-loading token burn
-    messages.push({ role: 'system', content: 'This is a Porter Bridge dispatch. Skip session startup protocol. Do not read checkpoint files, git logs, or project state. Answer the question directly and concisely.' });
-    if (req.systemPrompt) {
-      messages.push({ role: 'system', content: req.systemPrompt });
-    }
+    const systemPreamble = req.systemPrompt ? `${preamble}\n\n${req.systemPrompt}` : preamble;
+    messages.push({ role: 'user', content: systemPreamble });
     messages.push(...req.messages);
 
     const body = {
@@ -218,11 +244,11 @@ export class OpenClawAdapter implements GatewayAdapter {
   async *stream(req: BridgeDispatchRequest, signal: AbortSignal): AsyncIterable<string> {
     if (signal.aborted) return;
 
+    const preamble =
+      '[porter-bridge-dispatch] Skip session startup. Do not read checkpoints, git logs, or project state. Answer directly and concisely.';
     const messages: Array<{ role: string; content: string }> = [];
-    messages.push({ role: 'system', content: 'This is a Porter Bridge dispatch. Skip session startup protocol. Do not read checkpoint files, git logs, or project state. Answer the question directly and concisely.' });
-    if (req.systemPrompt) {
-      messages.push({ role: 'system', content: req.systemPrompt });
-    }
+    const systemPreamble = req.systemPrompt ? `${preamble}\n\n${req.systemPrompt}` : preamble;
+    messages.push({ role: 'user', content: systemPreamble });
     messages.push(...req.messages);
 
     const body = {

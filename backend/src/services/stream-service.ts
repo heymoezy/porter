@@ -52,8 +52,17 @@ export async function selectStreamBackend(
   return {
     name: backend === 'ollama' ? 'ollama' : backend === 'openclaw' ? 'openclaw' : 'auto',
     async *stream(prompt: string, signal: AbortSignal, systemPrompt?: string): AsyncIterable<string> {
+      // Honor an explicit backend override by translating it into a
+      // forceGatewayType on the routing context. Without this, `backend`
+      // was only a cosmetic label and routing ignored the caller's choice.
+      const forceGatewayType =
+        backend === 'openclaw' ? 'openclaw' :
+        backend === 'ollama' ? 'ollama' :
+        undefined;
+
       const ctx: RoutingContext = {
         message: message, // Use initial message for routing
+        ...(forceGatewayType ? { forceGatewayType } : {}),
         ...ctxOverride,
       };
 
