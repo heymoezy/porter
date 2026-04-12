@@ -414,11 +414,11 @@ export default function ForgePage() {
                     <span className="text-2xs text-text3">{queued.length} waiting</span>
                   </div>
                   <div className="flex items-end gap-4 overflow-x-auto pb-1 scrollbar-thin">
-                    {/* Warden — forge queue keeper */}
-                    <Link to="/agents/forge-queue-master" className="shrink-0 flex flex-col items-center grayscale opacity-50 hover:opacity-80 transition-opacity">
+                    {/* Forge Queuemaster — owns the pipeline */}
+                    <Link to="/agents/forge-queuemaster" className="shrink-0 flex flex-col items-center hover:opacity-80 transition-opacity">
                       <PixelPortrait skin="#8d5524" hair="#1a1a2e" eyes="#0f172a" shirt="#dc2626" hairStyle="ponytail" size="sm" />
-                      <span className="text-2xs font-bold text-text3 mt-1">Warden</span>
-                      <span className="text-2xs text-text3 leading-none">Queue Master</span>
+                      <span className="text-2xs font-bold text-text mt-1">Queuemaster</span>
+                      <span className="text-2xs text-text3 leading-none">Owns Forge</span>
                     </Link>
 
                     {/* Divider — the velvet rope */}

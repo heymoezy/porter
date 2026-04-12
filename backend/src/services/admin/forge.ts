@@ -582,17 +582,19 @@ async function tick(): Promise<void> {
 
     await recoverStaleLeases();
 
+    let workedItem: { id: string; station: number } | null = null;
     for (const station of [1, 2, 3]) {
       const item = await claimNext(station);
       if (!item) continue;
 
+      workedItem = { id: item.id, station };
       switch (station) {
         case 1: await runWriter(item); break;
         case 2: await runTrainer(item); break;
         case 3: await runOutfitter(item); break;
       }
 
-      return;
+      break;
     }
 
     const state = await getState();
@@ -601,6 +603,41 @@ async function tick(): Promise<void> {
       data: state.stats,
       timestamp: Date.now(),
     });
+
+    // Queuemaster tick — attribution + intelligence feed entry. The queuemaster
+    // is the autonomous owner of the Forge surface. Every tick gets logged as
+    // its activity so the agent has a real, queryable execution history.
+    emitForgeEvent({
+      type: 'forge:queuemaster_tick',
+      data: {
+        agent_id: 'forge-queuemaster',
+        wave: settings.currentWave,
+        worked_item: workedItem,
+        stats: state.stats,
+      },
+      timestamp: Date.now(),
+    });
+
+    try {
+      await execute(
+        `INSERT INTO intelligence_feed (id, source_agent, entry_type, title, body, metadata)
+         VALUES ($1, 'forge-queuemaster', 'tick', $2, $3, $4)`,
+        [
+          `forge-tick-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          workedItem
+            ? `Wave ${settings.currentWave} — station ${workedItem.station} ran on ${workedItem.id}`
+            : `Wave ${settings.currentWave} — pipeline idle`,
+          `queued=${state.stats.queued} claimed=${state.stats.claimed} complete=${state.stats.complete} error=${state.stats.error} dead_letter=${state.stats.dead_letter}`,
+          JSON.stringify({
+            wave: settings.currentWave,
+            worked: workedItem,
+            stats: state.stats,
+          }),
+        ],
+      );
+    } catch (logErr) {
+      console.warn('[forge] intelligence_feed write failed:', logErr);
+    }
   } finally {
     tickInProgress = false;
   }
