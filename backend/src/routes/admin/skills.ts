@@ -171,6 +171,8 @@ interface SkillRow {
   tags: string | null;
   template_count: number; agent_count: number;
   total_uses: number; avg_effectiveness: number; last_used: number | null;
+  updated_at: number | null; created_at: number | null;
+  quality_score: number | null; quality_tier: string | null;
 }
 
 export default async function skillsRoutes(fastify: FastifyInstance) {
@@ -248,6 +250,13 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
           agents: bySkill.get(row.id) ?? [],
           qualityScore: diag.qualityScore,
           qualityTier: diag.qualityTier,
+          fileCount: files.length,
+          totalWords: diag.totalWords,
+          updatedAt: row.updated_at,
+          createdAt: row.created_at,
+          totalUses: row.total_uses || 0,
+          lastUsed: row.last_used,
+          packStatus: diag.missingFiles.length === 0 ? 'complete' : diag.missingFiles.length < 3 ? 'partial' : 'missing',
         };
       });
 
