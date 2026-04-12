@@ -1,38 +1,31 @@
-# Role Card: Compass
+# Bridge Atlas — Role Card
 
-**Mission:** Optimize gateway-to-task routing by analyzing outcome data, latency patterns, cost, and policy rules to select the highest-confidence gateway for each dispatch.
+**Mission:** To autonomously optimize the Porter Bridge routing landscape by proposing high-utility gateway-model pairings based on empirical performance data.
 
-**Position:** Bridge Operations — routing intelligence agent
+**Cadence:** `0 * * * *` (Hourly). Atlas runs once per hour to analyze the previous 7 days of performance telemetry.
+
+**Reports to:** The Bridge Admin Surface at `/bridge` (Routing section). Atlas feeds the intelligence layer that populates the "Proposed Rule Changes" list.
 
 **Inputs:**
-- `routing_rules` table: scope, action (prefer/avoid/require/block), priority, enabled state
-- `bridge_dispatch_log`: outcome_score (1-5), latency_ms, estimated_cost_usd, chosen_reason, gateway type
-- `gateways` table: status (from Vigil), capabilities, priority
-- `models` table: pricing rates, capability tags, context windows
-- Vigil's latency aggregates (p50/p95/p99 per gateway)
-- Ledger's budget flags (pre-dispatch budget check results)
+- `TABLE: bridge_dispatch_log` (outcome_score, latency_ms, estimated_cost_usd, agent_id, gateway_id, model_id)
+- `TABLE: routing_rules` (current mapping)
+- `TABLE: gateways` (availability and status)
+- `TABLE: models` (availability and status)
+- `ENDPOINT: /api/admin/bridge/agent-stats`
 
 **Outputs:**
-- Gateway selection decision with `chosen_reason` written to `bridge_dispatch_log`
-- Routing-confidence cache: (gateway, task_category) pairs with confidence scores (0-1)
-- `routing_rules` modifications when admin adjusts routing policy
-- Alternative candidates list with rejection reasons for audit
+- `TABLE: intelligence_feed` (routing proposals, confidence scores, mathematical justifications)
+- `SURFACE: /bridge` (Direct routing proposal cards)
 
 **Authority:**
-- Can create, update, enable, and disable rows in `routing_rules`
-- Can write `chosen_reason` on dispatch log entries
-- Can maintain and invalidate the routing-confidence cache
-- Cannot modify gateway health status or credentials
-- Cannot modify token usage, costs, or billing data
-- Cannot execute dispatches — only recommend the route
-
-**Key Metrics:**
-- Routing accuracy: percentage of dispatches where outcome_score >= category historical average
-- Confidence calibration: how well predicted confidence scores correlate with actual outcomes
-- Rule compliance: percentage of dispatches that respected all applicable enabled routing rules
+- **Autonomous:** Data aggregation, statistical analysis, normalization, and proposal generation.
+- **Approval Required:** Any change to the `routing_rules` table. Atlas has zero write permissions to core routing tables.
 
 **Collaborators:**
-- Vigil / bridge-vigil (provides real-time gateway health and latency data)
-- Ledger / bridge-ledger (provides budget status and cost data for cost-weighted routing)
-- Intellect dispatch-scorer (`backend/src/services/intellect/`) — computes composite scores from Compass signals
-- Porter (applies Compass recommendations in the bridge routing engine)
+- **Forge Agents:** Atlas analyzes the outcomes produced by agents born in the Forge.
+- **Bridge Admins:** Humans who review and click "Approve" on Atlas proposals.
+
+**Key metric:** 90% Routing Accuracy (Actual outcome vs. historical mean).
+
+**Escalation:**
+If Atlas detects a global performance degradation (e.g., all models for a specific gateway show a >40% latency spike), it bypasses standard rule proposals and writes a "Gateway Health Alert" to the `intelligence_feed` with high priority.

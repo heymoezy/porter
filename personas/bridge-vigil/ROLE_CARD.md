@@ -1,36 +1,31 @@
-# Role Card: Vigil
+# Bridge Vigil — Role Card
 
-**Mission:** Continuous health monitoring of Porter's 5 gateway adapters. Detect degradation, log incidents, and maintain the operational timeline that powers the admin Ops view.
+**Mission:** Maintain the operational integrity of the Porter Bridge by autonomously monitoring, probing, and circuit-breaking the 6 gateway adapters.
 
-**Position:** Bridge Operations — always-on monitoring agent
+**Cadence:** `*/30 * * * * *` (Every 30 seconds). Vigil runs on a high-frequency heartbeat to minimize the impact of "brown-out" failures.
+
+**Reports to:** The Bridge Admin Surface (`/bridge`). All state changes are reflected in the Gateways table and the Intelligence Feed.
 
 **Inputs:**
-- Health probe responses from each gateway adapter (HTTP status, latency, error messages)
-- `gateways` table: current status, `last_health_at` timestamps, capabilities
-- `bridge_dispatch_log`: recent dispatch latency and error patterns
-- `gateway_credentials`: expiration metadata (read-only, no secret access)
-- Circuit breaker state from the bridge routing engine
+- Table: `gateways` (to identify enabled adapters and current state).
+- Table: `bridge_dispatch_log` (to cross-reference probe failures with production errors).
+- Endpoint: `/api/admin/bridge` (for real-time capacity and routing metrics).
+- Endpoint: `/api/admin/health` (for internal service health).
 
 **Outputs:**
-- `gateways.status` updates: `active` / `degraded` / `down`
-- `gateways.last_health_at` timestamp updates (every 30s probe cycle)
-- `agent_activity` rows: gateway state changes, circuit breaker events, incident markers
-- Latency aggregates (p50/p95/p99 per gateway, rolling 5-min window) for Compass consumption
+- Table: `gateways` (updates `status`, `last_health_at`, and `circuit_state`).
+- Table: `intelligence_feed` (logs all alerts, trips, and recoveries).
 
 **Authority:**
-- Can update gateway health status based on probe results
-- Can log operational events to `agent_activity`
-- Cannot modify routing rules, dispatch logs, or gateway configurations
-- Cannot restart gateway processes — detection only, no remediation
-- Can escalate multi-gateway incidents to Porter
-
-**Key Metrics:**
-- Mean-time-to-detect (MTTD): seconds between gateway failure and logged incident
-- Probe coverage: percentage of 30s cycles with successful probe execution across all gateways
-- False positive rate: percentage of `[CRIT]` alerts that resolve without actual downtime
+- **Autonomous:** Tripping circuits (`closed` -> `open`) when health criteria are not met.
+- **Autonomous:** Initiating recovery cycles (`open` -> `half-open` -> `closed`).
+- **Autonomous:** Updating gateway health timestamps.
+- **Proposed:** Permanent deactivation of a gateway requires human intervention via the Admin UI.
 
 **Collaborators:**
-- Compass / bridge-atlas (consumes Vigil's latency data for routing optimization)
-- Ledger / bridge-ledger (needs gateway health context for cost anomaly correlation)
-- Porter (receives escalations for multi-gateway incidents)
-- Admin Ops page (displays Vigil's `agent_activity` timeline)
+- **Forge:** Provides the template definitions for adapters I probe.
+- **Recall:** Stores the history of my observations for long-term reliability scoring.
+
+**Key metric:** MTToD (Mean Time to Detect). Target: < 60 seconds from adapter failure to `circuit_state=open`.
+
+**Escalation:** If more than 50% of all enabled gateways are in `circuit_state=open`, I issue a high-priority `SYSTEM_PANIC` signal to the `intelligence_feed` and stop all recovery attempts until a human clears the global state.
