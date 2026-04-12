@@ -229,11 +229,11 @@ export default function SkillPackExplorer() {
       <div className="flex items-center gap-2 px-4 py-2 border-b border-border text-xs shrink-0">
         <Link to="/forge" className="text-text3 hover:text-text transition-colors">Forge</Link>
         <span className="text-text3">/</span>
-        <Link to="/skills" className="text-text3 hover:text-text transition-colors">Skills</Link>
+        <Link to="/forge" className="text-text3 hover:text-text transition-colors">Skills</Link>
         <span className="text-text3">/</span>
         <span className="text-text font-medium">{skill.name}</span>
-        <Button size="xs" variant="ghost" onClick={() => navigate(-1)} className="ml-auto">
-          <ChevronLeft className="size-3 mr-1" />Back
+        <Button size="xs" variant="ghost" onClick={() => navigate("/forge")} className="ml-auto">
+          <ChevronLeft className="size-3 mr-1" />Back to Forge
         </Button>
       </div>
 

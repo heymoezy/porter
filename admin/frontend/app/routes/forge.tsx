@@ -249,15 +249,20 @@ export default function ForgePage() {
   const active = items.filter(i => i.status === "claimed")
   const complete = items.filter(i => i.status === "complete")
 
-  // Birth animation — trigger on new complete items
+  // Birth animation — only trigger when a NEW item completes (not on page load)
+  const [prevCompleteCount, setPrevCompleteCount] = useState(complete.length)
   useEffect(() => {
-    if (complete.length > 0) {
+    if (complete.length > prevCompleteCount) {
       const latest = complete[complete.length - 1]
       setBirthItem(latest)
       const t = setTimeout(() => setBirthItem(null), 4000)
+      setPrevCompleteCount(complete.length)
       return () => clearTimeout(t)
     }
-  }, [complete.length])
+    if (complete.length !== prevCompleteCount) {
+      setPrevCompleteCount(complete.length)
+    }
+  }, [complete.length, prevCompleteCount])
 
   const allTemplates = (tmplData?.templates ?? [])
     .sort((a, b) => {

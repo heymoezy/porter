@@ -16,6 +16,8 @@ import { pool } from '../../db/client.js';
 import { config } from '../../config.js';
 import { writeSkillsManifest } from '../skills-manifest.js';
 import crypto from 'crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // ── Types ────────────────────────────────────────────────
 
@@ -353,6 +355,18 @@ async function runWriter(item: PipelineItem): Promise<void> {
           VALUES ($1, $2, $3, 1, EXTRACT(EPOCH FROM NOW()))
           ON CONFLICT DO NOTHING
         `, [agentId, skillId, skillId]);
+      }
+
+      // Write persona .md files to disk
+      const personaDir = path.join(process.env.HOME ?? '/home/lobster', 'documents/porter/personas', agentId);
+      try {
+        fs.mkdirSync(personaDir, { recursive: true });
+        if (tmplRow.soul_text) fs.writeFileSync(path.join(personaDir, 'SOUL.md'), tmplRow.soul_text);
+        if (tmplRow.role_card_text) fs.writeFileSync(path.join(personaDir, 'ROLE_CARD.md'), tmplRow.role_card_text);
+        if (tmplRow.identity_text) fs.writeFileSync(path.join(personaDir, 'IDENTITY.md'), tmplRow.identity_text);
+        if (tmplRow.system_prompt) fs.writeFileSync(path.join(personaDir, 'SYSTEM_PROMPT.md'), tmplRow.system_prompt);
+      } catch (fsErr) {
+        console.warn(`[forge:writer] .md file write failed for ${agentId}:`, fsErr instanceof Error ? fsErr.message : fsErr);
       }
 
       // Birth record in agent_notes
