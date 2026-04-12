@@ -17,6 +17,9 @@ export { CodexCLIAdapter } from './codex-cli.js';
 export { ClaudeCLIAdapter } from './claude-cli.js';
 export { GeminiCLIAdapter } from './gemini-cli.js';
 
+// Direct API adapters (with server-side tool execution)
+export { AnthropicAPIAdapter } from './anthropic-api.js';
+
 // Stream normalizer
 export { StreamNormalizer } from '../stream-normalizer.js';
 
@@ -28,6 +31,7 @@ import { OpenClawAdapter } from './openclaw.js';
 import { CodexCLIAdapter } from './codex-cli.js';
 import { ClaudeCLIAdapter } from './claude-cli.js';
 import { GeminiCLIAdapter } from './gemini-cli.js';
+import { AnthropicAPIAdapter } from './anthropic-api.js';
 
 /** Maps gateway type string to its adapter constructor. Used for dynamic instantiation from DB rows. */
 export const ADAPTER_MAP: Record<string, new (row: GatewayRow) => GatewayAdapter> = {
@@ -36,6 +40,7 @@ export const ADAPTER_MAP: Record<string, new (row: GatewayRow) => GatewayAdapter
   codex_cli: CodexCLIAdapter,
   claude_cli: ClaudeCLIAdapter,
   gemini_cli: GeminiCLIAdapter,
+  anthropic_api: AnthropicAPIAdapter,
 };
 
 /**

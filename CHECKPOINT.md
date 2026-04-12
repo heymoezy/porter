@@ -3,15 +3,44 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.5.0
-updated: 2026-04-10
-updated_by: codex-gpt-5.4
+version: v6.6.0
+updated: 2026-04-12
+updated_by: claude-opus-4.6
 
 ## Architecture
 
 Single monorepo (heymoezy/porter). One Fastify process on :3001. API metering business model.
 3 pillars: Bridge (hub), Forge (factory), Recall (shared brain).
-5 gateways: Claude CLI, OpenClaw, Ollama, Codex CLI, Gemini CLI.
+6 gateways: Claude CLI, OpenClaw, Ollama, Codex CLI, Gemini CLI, **Anthropic API (NEW)**.
+
+## v6.6.0 — Anthropic API Gateway (6th adapter)
+
+**New adapter:** `anthropic_api` — direct HTTP adapter for Anthropic Messages API with server-side tool execution.
+
+Unlike CLI adapters, this runs tools IN-PROCESS — no terminal, no approval prompts, no subprocess overhead. The adapter executes an agentic loop: model responds with tool_use → execute server-side → send result → repeat until done.
+
+**Server-side tools (5):**
+- `web_search` — Brave Search API (key in porter_config.json)
+- `web_fetch` — HTTP GET with HTML→text extraction (50KB cap)
+- `read_file` — local filesystem (100KB cap)
+- `write_file` — sandboxed to /home/lobster/projects/ and /tmp/
+- `bash` — shell execution (30s timeout, destructive commands blocked)
+
+**Key files:**
+- `backend/src/services/bridge/adapters/anthropic-api.ts` — full adapter
+- `backend/src/services/bridge/adapters/index.ts` — registered in ADAPTER_MAP
+- `backend/src/services/bridge/types.ts` — `anthropic_api` added to GatewayType union
+- `backend/src/services/bridge/capability-registry.ts` — capability record added
+
+**Database:**
+- Gateway row: `anthropic-api-gw` in gateways table
+- Routing rules: 4 agent-scoped force_model rules routing research agents to anthropic_api
+- Research agent personas: `agent-res-market`, `agent-leg-regulatory`, `agent-biz-vendor`
+- Enriched templates: `res-market`, `leg-regulatory`, `biz-vendor` have deep system prompts
+
+**Activation:** Set `ANTHROPIC_API_KEY` in env, or add `api_keys.anthropic` to porter_config.json. Gateway auto-detects key and becomes healthy. Research agents route through it automatically via routing rules.
+
+**Why this matters:** Research agents can now run autonomously — web search, read sources, save findings to disk — all through Porter Bridge, with full dispatch logging, cost tracking, and memory injection. No human in the loop for tool approval.
 **Port 5175 is DEAD. Everything on :3001.**
 
 ## v6.3.0 — Complete Data Surface Coverage
