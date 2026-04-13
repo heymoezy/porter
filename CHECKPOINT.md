@@ -3,8 +3,8 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.7.0
-updated: 2026-04-12
+version: v6.8.0
+updated: 2026-04-13
 updated_by: claude-opus-4.6
 
 ## Architecture
@@ -12,6 +12,60 @@ updated_by: claude-opus-4.6
 Single monorepo (heymoezy/porter). One Fastify process on :3001. API metering business model.
 3 pillars: Bridge (hub), Forge (factory), Recall (shared brain).
 6 gateways: Claude CLI, OpenClaw, Ollama, Codex CLI, Gemini CLI, Anthropic API.
+
+## v6.8.0 — Born = components, not instances (DB-enforced)
+
+Fixes the lingering conceptual mess from v6.7.0: the Forge "Born" counter was reading from persona existence instead of template content, letting five impossible states sit in the DB (Quill on thin Storyteller, Anvil on thin Platform Engineer, Sage on thin Training Specialist, Skills Curator on empty KB Manager, Atlas on 0-byte Projects Curator).
+
+**New rule, now impossible to break:**
+
+A template is BORN when all four text fields meet the threshold:
+- `system_prompt  ≥ 500` bytes
+- `soul_text      ≥ 200` bytes
+- `role_card_text ≥ 200` bytes
+- `identity_text  ≥  50` bytes
+
+Instances (personas) are snapshots of a born component. An instance cannot exist on a non-born template — the PostgreSQL trigger `personas_template_born_check` (migration `migrate-born-check-v1.ts`) rejects any INSERT or UPDATE of `personas.template_id` that points at a thin template. Error message points the operator at `backend/scripts/birth-templates.ts` so the fix path is obvious.
+
+**5 orphans birthed via OpenClaw** (direct dispatch, bypasses Porter Bridge memory injection to avoid GPT-5.4 hallucinating tool calls):
+- `cre-storyteller` (Quill's template) — 6.5KB content
+- `eng-platform` (Anvil's template) — 7.3KB
+- `sup-training` (Sage's template) — 6.8KB
+- `sup-knowledge-base` (Skills Curator's template) — 7.4KB
+- `projects-curator-tpl` (Atlas's template) — 6.7KB
+
+Now `Quill/Sage/Anvil/Skills Curator/Atlas` are legitimate snapshots of born components.
+
+**Born counter now reads truth.** `/api/admin/forge` returns `stats.complete: 15` and `bornTemplateIds` lists the 15 templates that actually have substantive content (10 pre-existing + 5 newly-birthed). The remaining 93 templates in the catalog are skeletons — visible in the Forge tab, but marked not-yet-born, and the DB trigger prevents anyone from creating instances on them until they get their own Writer dispatch.
+
+**Semantic overlap audit at `research/template-overlap-audit.md`** — 22 clusters flagged for Moe's review. Zero deletions. Each cluster has my opinion (KEEP / NEEDS_MOE / MERGE) and the reason it was flagged (shared final word in name, or Jaccard similarity on description tokens ≥40%). The 3 non-conforming system-agent IDs (analytics-collector, crm-sweeper, system-maintenance) are called out separately — they're real agents in seed-templates.ts, recommendation KEEP.
+
+**Key files added:**
+- `backend/scripts/birth-templates.ts` — canonical "birth a template via OpenClaw" primitive. Targets template IDs by name, looks up the existing instance character name (if any) to keep the soul on the template, writes directly into `agent_templates` (not persona .md files).
+- `backend/scripts/audit-template-overlaps.ts` — overlap detector. Same-category-same-last-word clustering plus Jaccard on descriptions. Re-runnable, deterministic.
+- `backend/src/db/migrate-born-check-v1.ts` — trigger migration. Idempotent. Guards against existing orphans before creating the trigger (warns in logs rather than failing).
+- `research/template-overlap-audit.md` — the audit report output.
+
+**Verification gates — all passed:**
+1. SQL born count = 15 ✓
+2. `/api/admin/forge` `stats.complete` = 15 ✓
+3. `bornTemplateIds` contains the 5 previously-orphan templates ✓
+4. `INSERT INTO personas ... template_id='cnt-writer'` → trigger rejects with explicit error ✓
+5. Existing orphan personas now validate (UPDATE no-op succeeds) ✓
+6. `research/template-overlap-audit.md` exists (22 clusters, 330 lines) ✓
+7. `curl /health` returns `v6.8.0` ✓
+8. Migration ran at startup: `[migrate-born-check-v1] complete` in logs ✓
+
+**What is NOT in this ship (explicit scope boundary):**
+- Birthing the remaining 93 thin templates — not needed right now; they're not blocking. On-demand via `birth-templates.ts <id>`.
+- Deleting any templates from the overlap audit — report is input to a conversation, not a fait accompli.
+- Rewiring the Forge runWriter() station to generate content via OpenClaw instead of copying existing text — that's a separate architecture fix.
+- Renaming the 3 non-conforming-ID system templates — would break internal code references.
+
+**Memory update:** new entry `feedback_born_components.md` carries the four-threshold rule and the trigger enforcement fact so no future session (mine or another model's) can regress.
+
+---
+
 
 ## v6.7.0 — Forge + Gateway tabs autonomous
 
