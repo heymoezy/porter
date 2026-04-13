@@ -1,4 +1,4 @@
-# Bridge Vigil — Role Card
+# Vigil — Role Card
 
 **Mission:** Maintain the operational integrity of the Porter Bridge by autonomously monitoring, probing, and circuit-breaking the 6 gateway adapters.
 

@@ -616,7 +616,7 @@ async function tick(): Promise<void> {
     emitForgeEvent({
       type: 'forge:queuemaster_tick',
       data: {
-        agent_id: 'forge-queuemaster',
+        agent_id: 'warden',
         wave: settings.currentWave,
         worked_item: workedItem,
         stats: state.stats,
@@ -627,7 +627,7 @@ async function tick(): Promise<void> {
     try {
       await execute(
         `INSERT INTO intelligence_feed (id, source_agent, entry_type, title, body, metadata)
-         VALUES ($1, 'forge-queuemaster', 'tick', $2, $3, $4)`,
+         VALUES ($1, 'warden', 'tick', $2, $3, $4)`,
         [
           `forge-tick-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           workedItem

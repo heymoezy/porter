@@ -1,4 +1,4 @@
-# Bridge Ledger — Role Card
+# Ledger — Role Card
 
 **Mission:** Maintain the daily Bridge cost ledger by aggregating `bridge_dispatch_log` into `token_usage_daily`, exposing missing attribution, and warning when user spend crosses budget risk thresholds.
 
