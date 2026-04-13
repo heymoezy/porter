@@ -689,18 +689,23 @@ async function getState(): Promise<ForgeState> {
 
   const pipelineStats = row ?? { queued: 0, claimed: 0, complete: 0, error: 0, dead_letter: 0 };
 
-  // "Born" is the count of distinct agent templates that have at least one
-  // living persona instance. This is the authoritative count — it reflects
-  // reality whether the persona went through forge_pipeline or was seeded
-  // directly (e.g. the autonomy queuemaster, chicken-and-egg exception).
-  const bornRows = await queryAll<{ template_id: string }>(`
-    SELECT DISTINCT p.template_id
-    FROM personas p
-    WHERE p.template_id IS NOT NULL
-      AND p.template_id != ''
-      AND p.status IN ('active', 'idle', 'running')
+  // "Born" means the TEMPLATE itself has substantive content — all four
+  // persona text fields are populated above threshold. Instances are
+  // snapshots of a born component; they can never be the thing that makes
+  // a component born. See feedback_born_components memory.
+  //   system_prompt  ≥ 500 bytes  — Writer station output
+  //   soul_text      ≥ 200 bytes  — personality seed
+  //   role_card_text ≥ 200 bytes  — structured metadata
+  //   identity_text  ≥  50 bytes  — short role card
+  const bornRows = await queryAll<{ id: string }>(`
+    SELECT id FROM agent_templates
+    WHERE octet_length(system_prompt)  >= 500
+      AND octet_length(soul_text)      >= 200
+      AND octet_length(role_card_text) >= 200
+      AND octet_length(identity_text)  >=  50
+    ORDER BY id
   `);
-  const bornTemplateIds = bornRows.map(r => r.template_id);
+  const bornTemplateIds = bornRows.map(r => r.id);
 
   const stats = {
     ...pipelineStats,
