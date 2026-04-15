@@ -3,15 +3,34 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.8.0
-updated: 2026-04-13
+version: v6.8.1
+updated: 2026-04-15
 updated_by: claude-opus-4.6
 
 ## Architecture
 
 Single monorepo (heymoezy/porter). One Fastify process on :3001. API metering business model.
 3 pillars: Bridge (hub), Forge (factory), Recall (shared brain).
-6 gateways: Claude CLI, OpenClaw, Ollama, Codex CLI, Gemini CLI, Anthropic API.
+5 gateways: Claude CLI, OpenClaw, Ollama, Codex CLI, Gemini CLI.
+
+## v6.8.1 — Anthropic API gateway removed
+
+Moe flagged that Porter does not connect directly to the Anthropic API — the `anthropic_api` adapter was added speculatively and never had a live use case. Cleaned it out end-to-end.
+
+- Deleted `backend/src/services/bridge/adapters/anthropic-api.ts` (531 lines)
+- Dropped `'anthropic_api'` from `GatewayType` union in `types.ts`
+- Removed entry from `ADAPTER_MAP` and barrel exports in `adapters/index.ts`
+- Removed `anthropic_api` capability record from `capability-registry.ts`
+- DB: `DELETE FROM gateways WHERE type='anthropic_api'` (1 row: `anthropic-api-gw`)
+- `seed-autonomy-agents.ts`: all 4 autonomy agents (Queuemaster, Vigil, Atlas, Ledger) now `preferredBackend: 'openclaw'`; narrowed type union
+- `generate-persona-openclaw.ts` + `birth-templates.ts`: prompt context updated (6 adapters → 5); tooling notes rewritten to route through openclaw for server-side tool execution
+- Persona files: `personas/vigil/SYSTEM_PROMPT.md` and `personas/warden/ROLE_CARD.md` cleaned of `anthropic_api` references
+
+**Verified:** tsc clean, `npm run build` clean, health returns `v6.8.1`, DB lists 5 gateway types (claude_cli/codex_cli/gemini_cli/ollama/openclaw), 0 personas/dispatches/routing_rules referenced `anthropic_api` before the delete.
+
+**Known orthogonal issue:** `gateways.status` for `openclaw` row says `unavailable` even though the HTTP probe at :18789 returns up via `/api/v1/health` backends check. Not caused by this cleanup — pre-existing. Worth investigating next.
+
+Commit: `893499c`
 
 ## v6.8.0 — Born = components, not instances (DB-enforced)
 
