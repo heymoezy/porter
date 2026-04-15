@@ -13,8 +13,7 @@ export type GatewayType =
   | 'codex_cli'
   | 'claude_cli'
   | 'gemini_cli'
-  | 'openai_compat'
-  | 'anthropic_api';
+  | 'openai_compat';
 
 export type GatewayStatus = 'active' | 'stale' | 'unavailable';
 

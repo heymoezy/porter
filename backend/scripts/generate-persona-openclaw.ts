@@ -118,7 +118,7 @@ const AGENTS: AgentBrief[] = [
     successMetric:
       'Mean time to detect a dead gateway should be under 60 seconds. Mean time to recover (circuit goes from open to half-open to closed after probes recover) should be under 3 minutes.',
     toolingNotes:
-      'Vigil is dispatched through the anthropic_api adapter so it has server-side tools (bash, read_file, write_file). Its SYSTEM_PROMPT must instruct it to use the bash tool for each probe and to write structured observations back to intelligence_feed via SQL. Never just describe what it would do — actually do it on every tick.',
+      'Vigil is dispatched through the openclaw adapter so it has server-side tools (bash, read_file, write_file). Its SYSTEM_PROMPT must instruct it to use the bash tool for each probe and to write structured observations back to intelligence_feed via SQL. Never just describe what it would do — actually do it on every tick.',
   },
   {
     instanceId: 'bridge-atlas',
@@ -147,7 +147,7 @@ const AGENTS: AgentBrief[] = [
     successMetric:
       'Routing accuracy: percentage of dispatches whose outcome_score is within 10% of the historical average for that (agent, gateway, model) triple. Target: 90%.',
     toolingNotes:
-      'Atlas is dispatched through the anthropic_api adapter with server-side SQL and read_file tools. Its SYSTEM_PROMPT must instruct it to compute the weighted score explicitly, show its math in intelligence_feed entries, and never directly mutate routing_rules without human approval.',
+      'Atlas is dispatched through the openclaw adapter with server-side SQL and read_file tools. Its SYSTEM_PROMPT must instruct it to compute the weighted score explicitly, show its math in intelligence_feed entries, and never directly mutate routing_rules without human approval.',
   },
   {
     instanceId: 'bridge-ledger',
@@ -180,7 +180,7 @@ const AGENTS: AgentBrief[] = [
     successMetric:
       'Attribution coverage: percentage of dispatches in bridge_dispatch_log with complete cost data (tokens, cost, user, agent, project). Target: 100%. Below 95% means Ledger is not doing its job.',
     toolingNotes:
-      'Ledger is dispatched through the anthropic_api adapter with SQL and bash tools. Its SYSTEM_PROMPT must instruct it to use SQL for aggregation (not bash), show totals and deltas in accounting language ("$0.0034" not "0.0034", "14,200 tokens" not "14.2k"), and never retroactively adjust historical costs when pricing changes.',
+      'Ledger is dispatched through the openclaw adapter with SQL and bash tools. Its SYSTEM_PROMPT must instruct it to use SQL for aggregation (not bash), show totals and deltas in accounting language ("$0.0034" not "0.0034", "14,200 tokens" not "14.2k"), and never retroactively adjust historical costs when pricing changes.',
   },
 ];
 
@@ -219,9 +219,9 @@ ${agent.toolingNotes}
 
 # Porter stack context (for grounding)
 
-Porter is a single Fastify monorepo at backend/ (:3001) with an admin surface at admin/ served from the same process. PostgreSQL is the sole database. Bridge routes AI requests through 6 gateway adapters (claude_cli, openclaw, ollama, codex_cli, gemini_cli, anthropic_api). Forge births agents through a 3-station pipeline (Writer → Trainer → Outfitter). Recall is the shared memory system backed by directives/concepts/episodes/signals tables. Personas are instances born from agent_templates.
+Porter is a single Fastify monorepo at backend/ (:3001) with an admin surface at admin/ served from the same process. PostgreSQL is the sole database. Bridge routes AI requests through 5 gateway adapters (claude_cli, openclaw, ollama, codex_cli, gemini_cli). Forge births agents through a 3-station pipeline (Writer → Trainer → Outfitter). Recall is the shared memory system backed by directives/concepts/episodes/signals tables. Personas are instances born from agent_templates.
 
-Routing the agent's own dispatches: this agent is expected to be dispatched on a heartbeat through the Bridge pipeline and to use server-side tools (bash, read_file, write_file, SQL) provided by the anthropic_api adapter (or openclaw for reasoning-heavy work).
+Routing the agent's own dispatches: this agent is expected to be dispatched on a heartbeat through the Bridge pipeline and to use server-side tools (bash, read_file, write_file, SQL) provided by the openclaw adapter.
 
 # Files to write
 

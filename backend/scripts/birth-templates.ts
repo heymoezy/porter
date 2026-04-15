@@ -142,7 +142,7 @@ ${characterHint}
 
 # Porter stack context
 
-Porter is a single Fastify monorepo at backend/ (:3001) with an admin surface served from the same process. PostgreSQL is the sole database. Bridge routes AI requests through 6 gateway adapters (claude_cli, openclaw, ollama, codex_cli, gemini_cli, anthropic_api). Forge births templates through a Writer → Trainer → Outfitter pipeline. Recall is the shared memory system backed by directives, concepts, episodes, and signals tables. Instances are rows in the personas table; templates are rows in agent_templates.
+Porter is a single Fastify monorepo at backend/ (:3001) with an admin surface served from the same process. PostgreSQL is the sole database. Bridge routes AI requests through 5 gateway adapters (claude_cli, openclaw, ollama, codex_cli, gemini_cli). Forge births templates through a Writer → Trainer → Outfitter pipeline. Recall is the shared memory system backed by directives, concepts, episodes, and signals tables. Instances are rows in the personas table; templates are rows in agent_templates.
 
 # Output format
 

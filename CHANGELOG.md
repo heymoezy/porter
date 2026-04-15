@@ -1,3 +1,30 @@
+## v6.1.0 (2026-04-15)
+
+- chore(release): v6.8.0 — Born model correction + DB trigger enforcement
+- feat(forge): template-overlap audit — 22 clusters surfaced for review
+- feat(db): born-check trigger on personas — impossible state is now impossible
+- feat(forge): birth-templates.ts — canonical template-birth primitive
+- fix(forge): Born reads from template content, not persona existence
+- fix(autonomy): template=role, instance=character — undo v6.7.0 conflation
+- fix(forge): Born counter reflects real personas, not pipeline throughput
+- chore(release): v6.7.0 — autonomy launch + bridge openclaw fixes
+- feat(autonomy): generic heartbeat job executor + scheduler isolation
+- feat(forge): queuemaster ownership of Forge tab
+- feat(forge): seed 4 autonomy templates + instances into postgres
+- feat(agents): birth 4 autonomy agents via real OpenClaw dispatch
+- fix(bridge): openclaw token from canonical config + honor backend override
+- feat(agents): enriched persona files from background agent (3-4KB souls)
+- fix(bridge): OpenClaw health probe now tests actual dispatch capability
+- feat(agents): substantive .md files for 8 operational agents + cleanup
+
+
+## v6.8.1 (2026-04-15)
+
+- chore(bridge): remove anthropic_api gateway adapter — Porter doesn't connect directly to Anthropic API
+- refactor(bridge): adapter count 6 → 5 (claude_cli, openclaw, ollama, codex_cli, gemini_cli)
+- chore(db): delete anthropic-api-gw row; drop anthropic_api from GatewayType union and capability-registry
+- chore(seed): autonomy agents now prefer openclaw; persona prompts updated
+
 ## v6.1.0 (2026-04-12)
 
 - fix(bridge): enable autonomous tool execution for Porter agent dispatches

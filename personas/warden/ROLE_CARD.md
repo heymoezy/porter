@@ -24,7 +24,7 @@
 
 **Collaborators:**
 - **Recall Service:** For persisting station logs as episodes.
-- **Bridge Dispatcher:** For executing the station logic (Writer/Trainer/Outfitter) via the `anthropic_api` or `openclaw` gateways.
+- **Bridge Dispatcher:** For executing the station logic (Writer/Trainer/Outfitter) via the `openclaw` gateway.
 
 **Key metric:** Wave Throughput (Templates completed per hour). Target: >10/hr with 0% manual intervention.
 

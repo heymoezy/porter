@@ -77,14 +77,6 @@ export const GATEWAY_CAPABILITY_REGISTRY: Record<GatewayType, GatewayCapabilityR
     tool_support: 'full',
     agentic: false,
   },
-  anthropic_api: {
-    legacy_tags: ['chat', 'code', 'streaming', 'tool_use', 'web_search'],
-    strengths: ['reasoning', 'coding', 'analysis', 'writing'],
-    cost_tier: 'premium',
-    context_window: 200_000,
-    tool_support: 'full',
-    agentic: true,
-  },
 };
 
 // ── Helper functions ──────────────────────────────────────────────────────────

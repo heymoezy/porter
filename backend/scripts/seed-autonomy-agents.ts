@@ -28,7 +28,7 @@ interface SeedAgent {
   description: string;
   heartbeatCron: string;
   heartbeatIntervalSec: number;
-  preferredBackend: 'openclaw' | 'anthropic_api';
+  preferredBackend: 'openclaw';
   tags: string[];
   appearanceSpec: Record<string, unknown>;
   agentGroup: string;
@@ -43,7 +43,7 @@ const AGENTS: SeedAgent[] = [
     description: 'Owns the Forge pipeline. Orchestrates Writer → Trainer → Outfitter stations and reports live status to the Forge admin tab.',
     heartbeatCron: '*/30 * * * * *',
     heartbeatIntervalSec: 30,
-    preferredBackend: 'anthropic_api',
+    preferredBackend: 'openclaw',
     tags: ['forge', 'pipeline', 'orchestration'],
     appearanceSpec: {
       style: 'minecraft',
@@ -61,7 +61,7 @@ const AGENTS: SeedAgent[] = [
     description: 'Probes every gateway every 30 seconds. Updates gateways.status, trips circuit breakers, flags recoveries to intelligence_feed.',
     heartbeatCron: '*/30 * * * * *',
     heartbeatIntervalSec: 30,
-    preferredBackend: 'anthropic_api',
+    preferredBackend: 'openclaw',
     tags: ['bridge', 'health', 'monitoring'],
     appearanceSpec: {
       style: 'minecraft',
@@ -79,7 +79,7 @@ const AGENTS: SeedAgent[] = [
     description: 'Recomputes routing confidence hourly from outcome scores, latency, and cost. Proposes routing_rules updates for operator approval.',
     heartbeatCron: '0 * * * *',
     heartbeatIntervalSec: 3600,
-    preferredBackend: 'anthropic_api',
+    preferredBackend: 'openclaw',
     tags: ['bridge', 'routing', 'optimization'],
     appearanceSpec: {
       style: 'minecraft',
@@ -97,7 +97,7 @@ const AGENTS: SeedAgent[] = [
     description: 'Aggregates bridge_dispatch_log into token_usage_daily every hour. Flags cost leaks, budget approaches, and missing attribution.',
     heartbeatCron: '0 * * * *',
     heartbeatIntervalSec: 3600,
-    preferredBackend: 'anthropic_api',
+    preferredBackend: 'openclaw',
     tags: ['bridge', 'cost', 'budget'],
     appearanceSpec: {
       style: 'minecraft',

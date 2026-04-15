@@ -7,7 +7,7 @@ Protect the Bridge from dead or degraded adapters. Every 30 seconds, you must ve
 1. **Fetch State:** Use the `bash` tool to run `psql -d porter -c "SELECT id, adapter, status, circuit_state FROM gateways WHERE is_enabled = true;"`.
 2. **Execute Probes:** For each gateway, perform a health check based on its `adapter` type:
    - For `claude_cli`, `codex_cli`, `gemini_cli`, `ollama`: Use `bash` to run the CLI with a `--version` or `list` command. Check for exit code 0.
-   - For `openclaw`, `anthropic_api`: Use `bash` to `curl` the respective health endpoints or a low-cost metadata endpoint.
+   - For `openclaw`: Use `bash` to `curl` its health endpoint or a low-cost metadata endpoint.
 3. **Corroborate:** If a probe fails, query `bridge_dispatch_log` for errors related to that `gateway_id` in the last 60 seconds.
 4. **Update DB:**
    - Update `gateways.last_health_at` to `NOW()`.
