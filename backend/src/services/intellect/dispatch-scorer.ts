@@ -31,7 +31,6 @@
 
 import { pool } from '../../db/client.js';
 import { logIntellectEvent } from './file-watcher.js';
-import { refreshConfidence } from '../bridge/routing-confidence.js';
 
 const BATCH_SIZE = 500;
 const CORRECTION_PROXIMITY_SECONDS = 90;
@@ -177,14 +176,6 @@ export async function runDispatchScoring(): Promise<ScoringStats> {
   };
 
   await logIntellectEvent('dispatch_scored', 'dispatch_scorer', { ...stats });
-
-  // Warm the routing-confidence cache with the new data so the bridge
-  // picks it up on the next routing decision.
-  try {
-    await refreshConfidence();
-  } catch (err) {
-    console.error('[intellect:dispatch-scorer] confidence refresh failed:', (err as Error).message);
-  }
 
   return stats;
 }

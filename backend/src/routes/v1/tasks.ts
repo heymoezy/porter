@@ -22,12 +22,6 @@ import {
   TASK_CAPABLE_TYPES,
   getTaskQueue,
 } from '../../services/bridge/task-executor.js';
-import {
-  executeHttpTask,
-  HTTP_TASK_CAPABLE_TYPES,
-  type HttpGatewayConfig,
-} from '../../services/bridge/http-task-executor.js';
-import { createAdapter } from '../../services/bridge/adapters/index.js';
 import type { GatewayType } from '../../services/bridge/types.js';
 import { normalizeCapabilities } from '../../services/bridge/capability-registry.js';
 import type { GatewayCapabilityRecord } from '../../services/bridge/capability-registry.js';
@@ -40,8 +34,6 @@ const runningTasks = new Map<string, AbortController>();
 
 const BINARY_DEFAULTS: Record<string, string> = {
   claude_cli: 'claude',
-  gemini_cli: 'gemini',
-  codex_cli: 'codex',
 };
 
 // ── Capability filter helpers ─────────────────────────────────────────────────
@@ -67,47 +59,6 @@ interface GatewayDbRow {
   created_at: number | null;
   updated_at: number | null;
   last_health_at: number | null;
-}
-
-// ── HTTP config builder ───────────────────────────────────────────────────────
-
-const HTTP_DEFAULT_URLS: Record<string, string> = {
-  openclaw: 'http://127.0.0.1:18789',
-  ollama: 'http://127.0.0.1:11434',
-};
-
-const HTTP_DEFAULT_TOKENS: Record<string, string | undefined> = {
-  openclaw: process.env.OPENCLAW_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN ?? 'lobster-2026',
-  ollama: undefined, // no auth
-};
-
-const HTTP_DEFAULT_MODELS: Record<string, string> = {
-  openclaw: 'openai-codex/gpt-5.4',
-  ollama: 'qwen2.5-coder:1.5b',
-};
-
-/**
- * Build an HttpGatewayConfig from a DB row for openclaw/ollama gateways.
- */
-function buildHttpConfig(
-  type: string,
-  row: GatewayDbRow,
-  meta: Record<string, unknown>,
-  modelName: string,
-): HttpGatewayConfig {
-  const baseUrl = row.url ?? HTTP_DEFAULT_URLS[type] ?? `http://127.0.0.1`;
-  const token = (meta.token as string | undefined)
-    ?? HTTP_DEFAULT_TOKENS[type];
-  const model = (meta.default_model as string | undefined)
-    ?? HTTP_DEFAULT_MODELS[type]
-    ?? modelName;
-
-  return {
-    type: type as 'openclaw' | 'ollama',
-    baseUrl,
-    token,
-    model,
-  };
 }
 
 // ── Background execution ──────────────────────────────────────────────────────
@@ -240,8 +191,6 @@ async function runTaskInBackground(
   cwd: string,
   timeoutMs: number | undefined,
   ac: AbortController,
-  httpConfig?: HttpGatewayConfig,
-  toolSupport?: string,
   tools?: string[],
 ): Promise<void> {
   const startEpoch = Date.now();
@@ -262,11 +211,7 @@ async function runTaskInBackground(
 
   try {
     await getTaskQueue(gatewayType).add(async () => {
-      // ── Choose executor based on gateway type ──────────────────────────
-      const effectiveToolSupport = (toolSupport as 'full' | 'limited' | 'none' | undefined) ?? 'full';
-      const eventSource = HTTP_TASK_CAPABLE_TYPES.has(gatewayType) && httpConfig
-        ? executeHttpTask(httpConfig, prompt, cwd, ac.signal, effectiveToolSupport)
-        : executeTask(binaryPath, gatewayType, prompt, cwd, ac.signal, timeoutMs, tools);
+      const eventSource = executeTask(binaryPath, gatewayType, prompt, cwd, ac.signal, timeoutMs, tools);
 
       const result = await processTaskEvents(taskId, gatewayType, startEpoch, ac, eventSource);
       finalBroadcast = result.finalBroadcast;
@@ -360,8 +305,6 @@ export default async function tasksV1Routes(
       let selectedGatewayType: GatewayType;
       let binaryPath: string;
       let modelName: string;
-      let httpConfig: HttpGatewayConfig | undefined;
-      let toolSupport: string | undefined;
 
       if (gateway) {
         // Explicit gateway requested — validate it's task-capable
@@ -398,15 +341,6 @@ export default async function tasksV1Routes(
         selectedGatewayType = raw.type as GatewayType;
         binaryPath = (meta.binary_path as string | undefined) ?? BINARY_DEFAULTS[raw.type] ?? raw.type;
         modelName = (meta.default_model as string | undefined) ?? raw.name;
-
-        // GWC-03: Extract tool_support from explicit gateway capabilities
-        const rawCaps = normalizeCapabilities(raw.capabilities);
-        toolSupport = rawCaps?.tool_support ?? 'full';
-
-        // Build HTTP config for HTTP-type gateways
-        if (HTTP_TASK_CAPABLE_TYPES.has(selectedGatewayType)) {
-          httpConfig = buildHttpConfig(selectedGatewayType, raw, meta, modelName);
-        }
       } else {
         // Auto-select: pick highest-priority active task-capable gateway
         const { rows } = await pool.query<GatewayDbRow>(
@@ -422,7 +356,7 @@ export default async function tasksV1Routes(
 
         if (taskCapable.length === 0) {
           return reply.code(503).send(
-            err('NO_TASK_CAPABLE_GATEWAY', 'No active task-capable gateways available (need claude_cli, gemini_cli, codex_cli, openclaw, or ollama)'),
+            err('NO_TASK_CAPABLE_GATEWAY', 'No active task-capable gateway available (need claude_cli)'),
           );
         }
 
@@ -454,15 +388,6 @@ export default async function tasksV1Routes(
         selectedGatewayType = chosen.type as GatewayType;
         binaryPath = (meta.binary_path as string | undefined) ?? BINARY_DEFAULTS[chosen.type] ?? chosen.type;
         modelName = (meta.default_model as string | undefined) ?? chosen.name;
-
-        // GWC-03: Extract tool_support from chosen gateway capabilities
-        const chosenCaps = normalizeCapabilities(chosen.capabilities);
-        toolSupport = chosenCaps?.tool_support ?? 'full';
-
-        // Build HTTP config for HTTP-type gateways
-        if (HTTP_TASK_CAPABLE_TYPES.has(selectedGatewayType)) {
-          httpConfig = buildHttpConfig(selectedGatewayType, chosen, meta, modelName);
-        }
       }
 
       // ── Create task row ──────────────────────────────────────────────────
@@ -490,8 +415,6 @@ export default async function tasksV1Routes(
         cwd,
         timeoutMs,
         ac,
-        httpConfig,
-        toolSupport,
         tools,
       );
 

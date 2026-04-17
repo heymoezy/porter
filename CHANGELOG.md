@@ -18,6 +18,15 @@
 - feat(agents): substantive .md files for 8 operational agents + cleanup
 
 
+## v6.9.0 (2026-04-17)
+
+- refactor(bridge): Claude CLI only — delete 4 dead adapters, routing-confidence, http-task-executor (~4,000 LOC removed)
+- refactor(bridge): simplify routing-engine — no fallback chains, no routing rules eval, no heuristic scoring
+- refactor(bridge): simplify startup-detector, usage-collector, model-catalog, task-executor, agent-delegation, dispatch-queues
+- refactor(bridge): simplify stream-service — backend param ignored, always Claude CLI
+- chore(db): delete non-Claude gateway rows (ollama, openclaw, codex_cli, gemini_cli)
+- chore(test): delete routing-rule-consistency + usage-collector tests (dead code)
+
 ## v6.8.1 (2026-04-15)
 
 - chore(bridge): remove anthropic_api gateway adapter — Porter doesn't connect directly to Anthropic API

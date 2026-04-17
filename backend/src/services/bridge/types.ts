@@ -7,13 +7,7 @@
 
 // ── Type aliases matching DB column values ────────────────────────────────────
 
-export type GatewayType =
-  | 'ollama'
-  | 'openclaw'
-  | 'codex_cli'
-  | 'claude_cli'
-  | 'gemini_cli'
-  | 'openai_compat';
+export type GatewayType = 'claude_cli';
 
 export type GatewayStatus = 'active' | 'stale' | 'unavailable';
 

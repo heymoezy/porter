@@ -1,11 +1,9 @@
 /**
- * Routing Engine — DB-driven AI gateway selection and dispatch logging
+ * Routing Engine — Claude CLI single-gateway dispatch and logging
  *
- * Replaces hardcoded shouldRouteCheap() / getBackends() / selectModel() with
- * live DB-backed gateway selection, operator rule evaluation, concurrency-
- * queued dispatch, transparent logging, and session routing context.
- *
- * Phase 20: Smart Routing Engine (RT-01 through RT-05)
+ * Simplified from multi-gateway routing to single Claude CLI gateway.
+ * Retains DB-backed gateway lookup, dispatch logging, session tracking,
+ * and concurrency-queued dispatch.
  */
 
 import { pool } from '../../db/client.js';
@@ -16,14 +14,12 @@ import { buildContextStats } from '../context-stats-collector.js';
 import { getBreaker } from './circuit-breaker-registry.js';
 import { withRetry } from './retry.js';
 import { emitSSE } from '../scheduler.js';
-import { parseRateLimitHeaders, record429, hasCapacity } from './rate-limit-tracker.js';
+import { parseRateLimitHeaders, record429 } from './rate-limit-tracker.js';
 import { v4 as uuidv4 } from 'uuid';
 import { awardXP } from '../rpg-engine.js';
 import { compressToolOutput, estimateTokens, COMPRESS_MODEL } from '../context-compressor.js';
 import { getLegacyTags, normalizeCapabilities } from './capability-registry.js';
-import { getGatewayConfidenceSync } from './routing-confidence.js';
 
-// Alias for use in compression stats metadata (avoids runtime import cycle confusion)
 const COMPRESS_MODEL_NAME = COMPRESS_MODEL;
 import { upsertSession } from '../session-registry.js';
 import type {
@@ -31,7 +27,6 @@ import type {
   GatewayAdapter,
   RoutingContext,
   RoutingDecision,
-  RoutingRuleRow,
   BridgeDispatchRequest,
   BridgeDispatchResult,
   AgentMessageLogContext,
@@ -64,28 +59,12 @@ interface GatewayDbRow {
   last_health_at: number | null;
 }
 
-interface RoutingRuleDbRow {
-  id: string;
-  scope: string;
-  scope_id: string | null;
-  action: string;
-  action_value: string | null;
-  enabled: number;
-  priority: number;
-  description: string | null;
-  created_by: string | null;
-  created_at: number | null;
-  updated_at: number | null;
-}
-
 // ── RoutingEngine class ───────────────────────────────────────────────────────
 
 export class RoutingEngine {
   /**
    * Query all active+enabled gateway candidates ordered by priority.
-   * Includes 'stale' gateways (degraded but functional) — only 'unavailable' is excluded.
-   * Used by both select() and selectWithFallback().
-   * GW-06: Fallback chain iterates all candidates returned here.
+   * With Claude CLI as sole gateway, returns at most 1 candidate.
    */
   async selectAllCandidates(): Promise<GatewayCandidate[]> {
     const { rows: dbRows } = await pool.query<GatewayDbRow>(
@@ -107,175 +86,42 @@ export class RoutingEngine {
   }
 
   /**
-   * Select the best available gateway for the given routing context.
-   *
-   * RT-01: Queries gateways table for active+enabled candidates.
-   * RT-02: Evaluates routing_rules before falling back to heuristic.
+   * Select the Claude CLI gateway for the given routing context.
+   * If forceModelName is set, overrides the default_model on the gateway row.
    */
   async select(ctx: RoutingContext): Promise<RoutingDecision> {
-    // 1. Query active, enabled gateways ordered by priority
     const candidates = await this.selectAllCandidates();
 
     if (candidates.length === 0) {
       throw new Error('No active gateways available');
     }
 
-    // MOD-03: Filter by model capabilities when requested
-    const filteredCandidates = ctx.requiredCapabilities?.length
-      ? await this.filterByCapabilities(candidates, ctx.requiredCapabilities)
-      : candidates;
+    let chosen = candidates[0];
 
-    if (ctx.forceGatewayType) {
-      const forced = filteredCandidates.find(c => c.row.type === ctx.forceGatewayType)
-        ?? candidates.find(c => c.row.type === ctx.forceGatewayType);
-
-      if (!forced) {
-        throw new Error(`Forced gateway ${ctx.forceGatewayType} is not available`);
-      }
-
-      const chosen = ctx.forceModelName
-        ? {
-            row: {
-              ...forced.row,
-              metadata: { ...forced.row.metadata, default_model: ctx.forceModelName },
-            },
-            adapter: forced.adapter,
-          }
-        : forced;
-
-      const chosenId = chosen.row.id;
-      const alternatives = candidates
-        .filter(c => c.row.id !== chosenId)
-        .map(c => ({
-          gatewayType: c.row.type,
-          modelName: resolveModelName(c.row),
-          reasonSkipped: `forced to ${ctx.forceGatewayType}`,
-        }));
-
-      return {
-        gatewayRow: chosen.row,
+    // Apply model override if requested
+    if (ctx.forceModelName) {
+      chosen = {
+        row: {
+          ...chosen.row,
+          metadata: { ...chosen.row.metadata, default_model: ctx.forceModelName },
+        },
         adapter: chosen.adapter,
-        modelName: resolveModelName(chosen.row),
-        reason: `Forced target gateway: ${ctx.forceGatewayType}`,
-        alternatives,
-        matchedRuleId: null,
       };
     }
-
-    // 3. Evaluate routing rules — returns first matching rule or null
-    const matchedRule = await this.evaluateRules(ctx, filteredCandidates);
-
-    let chosen: GatewayCandidate;
-    let reason: string;
-    let matchedRuleId: string | null = null;
-
-    if (matchedRule) {
-      matchedRuleId = matchedRule.id;
-
-      if (matchedRule.action === 'force_model' && matchedRule.actionValue) {
-        // force_model: find gateway matching actionValue (gatewayType or "type:model" format)
-        // Use indexOf instead of split(':',2) to preserve model names that contain colons (e.g. llama3.1:8b)
-        const [forceType, forceModel] = splitOnFirstColon(matchedRule.actionValue);
-
-        const forced = filteredCandidates.find(c => c.row.type === forceType);
-        if (forced) {
-          chosen = forced;
-          reason = `Rule: ${matchedRule.description ?? matchedRule.action} (${matchedRule.id})`;
-          if (forceModel) {
-            // Override modelName via shallow row copy
-            chosen = {
-              row: { ...forced.row, metadata: { ...forced.row.metadata, default_model: forceModel } },
-              adapter: forced.adapter,
-            };
-          }
-        } else {
-          // Forced gateway not available — fall through to heuristic
-          chosen = this.selectByHeuristic(ctx.message, filteredCandidates);
-          reason = `Heuristic fallback (forced gateway ${forceType} unavailable)`;
-          matchedRuleId = null;
-        }
-      } else if (matchedRule.action === 'block_gateway' && matchedRule.actionValue) {
-        // block_gateway: remove matching gateway type from candidates
-        const afterBlock = filteredCandidates.filter(c => c.row.type !== matchedRule.actionValue);
-        if (afterBlock.length === 0) throw new Error('No active gateways after block_gateway rule');
-        chosen = this.selectByHeuristic(ctx.message, afterBlock);
-        reason = `Heuristic (blocked ${matchedRule.actionValue}) — Rule: ${matchedRule.id}`;
-      } else if (matchedRule.action === 'prefer_local') {
-        // prefer_local: re-sort to put local/CLI gateways first
-        const LOCAL_TYPES = new Set(['ollama', 'codex_cli', 'claude_cli', 'gemini_cli']);
-        const sorted = [
-          ...filteredCandidates.filter(c => LOCAL_TYPES.has(c.row.type)),
-          ...filteredCandidates.filter(c => !LOCAL_TYPES.has(c.row.type)),
-        ];
-        chosen = sorted[0];
-        reason = `Rule: prefer_local (${matchedRule.id})`;
-      } else {
-        // cap_cost_usd or unrecognised action — use heuristic
-        chosen = this.selectByHeuristic(ctx.message, filteredCandidates);
-        reason = `Heuristic (rule ${matchedRule.id} action=${matchedRule.action})`;
-      }
-    } else {
-      // No rules — pure heuristic
-      chosen = this.selectByHeuristic(ctx.message, filteredCandidates);
-      reason = `Heuristic: ${isComplexMessage(ctx.message) ? 'complex' : 'simple'} message`;
-    }
-
-    // 4. Build alternatives list (all candidates, not just filtered — shows full picture)
-    const chosenId = chosen.row.id;
-    const alternatives = candidates
-      .filter(c => c.row.id !== chosenId)
-      .map(c => ({
-        gatewayType: c.row.type,
-        modelName: resolveModelName(c.row),
-        reasonSkipped: `lower priority or not selected (priority=${c.row.priority})`,
-      }));
 
     return {
       gatewayRow: chosen.row,
       adapter: chosen.adapter,
       modelName: resolveModelName(chosen.row),
-      reason,
-      alternatives,
-      matchedRuleId,
+      reason: `Claude CLI (single gateway)`,
+      alternatives: [],
+      matchedRuleId: null,
     };
-  }
-
-  /**
-   * Evaluate routing_rules table. Returns first matching rule (lowest priority number).
-   * RT-02: DB-driven rule evaluation.
-   */
-  async evaluateRules(
-    ctx: RoutingContext,
-    _candidates: GatewayCandidate[],
-  ): Promise<RoutingRuleRow | null> {
-    const { rows } = await pool.query<RoutingRuleDbRow>(
-      `SELECT id, scope, scope_id, action, action_value, enabled, priority,
-              description, created_by, created_at, updated_at
-       FROM routing_rules
-       WHERE enabled = 1
-       ORDER BY priority ASC`,
-    );
-
-    for (const raw of rows) {
-      const rule = mapRuleRow(raw);
-      const matches =
-        (rule.scope === 'global') ||
-        (rule.scope === 'agent' && rule.scopeId === ctx.agentId && ctx.agentId != null) ||
-        (rule.scope === 'project' && rule.scopeId === ctx.projectId && ctx.projectId != null) ||
-        (rule.scope === 'gateway' && _candidates.some(c => c.row.type === rule.scopeId));
-
-      if (matches) return rule;
-    }
-
-    return null;
   }
 
   /**
    * Log a completed dispatch to bridge_dispatch_log.
    * Fire-and-forget — never blocks the caller.
-   * RT-03: Transparent dispatch logging.
-   *
-   * @param agentMsgCtx — optional agent-message correlation fields (Bridge v1)
    */
   async logDispatch(
     decision: RoutingDecision,
@@ -286,10 +132,8 @@ export class RoutingEngine {
   ): Promise<string> {
     const id = uuidv4();
 
-    // Fire-and-forget — pattern from existing logDecision() in ai-router.ts
     (async () => {
       try {
-        // MOD-05: Calculate estimated USD cost from model pricing metadata
         const costUsd = await calculateCostUsd(
           result.inputTokens ?? null,
           result.outputTokens ?? null,
@@ -299,7 +143,6 @@ export class RoutingEngine {
           pool,
         );
 
-        // MOD-04: Resolve model_version_id — most recent version for this gateway+model
         let modelVersionId: string | null = null;
         try {
           const { rows: vrows } = await pool.query<{ id: string }>(
@@ -313,7 +156,7 @@ export class RoutingEngine {
           );
           modelVersionId = vrows[0]?.id ?? null;
         } catch {
-          // non-fatal — version lookup failure must not block dispatch logging
+          // non-fatal
         }
 
         await pool.query(
@@ -366,13 +209,12 @@ export class RoutingEngine {
           ],
         );
 
-        // RPG: award XP for this dispatch (fire-and-forget, never blocks)
-        // logDispatch is only reached on success — errors throw before reaching here
+        // RPG: award XP for this dispatch
         if (ctx.agentId) {
           awardXP(ctx.agentId, 'dispatch').catch(() => {});
         }
 
-        // Phase 34: Increment times_selected counter on persona_skills for each selected skill
+        // Increment times_selected counter on persona_skills
         if (ctx.skillsUsed?.selected?.length && ctx.agentId) {
           try {
             const skillIds = ctx.skillsUsed.selected.map(s => s.skillId);
@@ -384,10 +226,10 @@ export class RoutingEngine {
                  AND COALESCE(skill_id, skill_name) = ANY($2)`,
               [ctx.agentId, skillIds]
             );
-          } catch { /* non-fatal — counter update must never block dispatch */ }
+          } catch { /* non-fatal */ }
         }
 
-        // SES-01: Track per-session token usage + ACX-05: write context_stats
+        // Session token tracking + context_stats
         let sessionContextPct = 0;
         let sessionCompressionEvents = 0;
         let sessionTokensReclaimed = 0;
@@ -395,7 +237,6 @@ export class RoutingEngine {
         try {
           const totalTokens = (result.inputTokens ?? 0) + (result.outputTokens ?? 0);
           if (totalTokens > 0 && (ctx.chatId || ctx.agentId)) {
-            // Resolve context_window from models table for this gateway+model
             let tokenBudget = 0;
             try {
               const { rows: mrows } = await pool.query<{ context_window: number }>(
@@ -415,7 +256,6 @@ export class RoutingEngine {
             );
             sessionContextPct = sessionResult.contextPct;
 
-            // Fetch compression events and turn number from session_registry
             try {
               const { rows: srows } = await pool.query<{
                 compression_events: number | null;
@@ -431,11 +271,11 @@ export class RoutingEngine {
                 sessionTokensReclaimed = srows[0].tokens_reclaimed ?? 0;
                 sessionTurnNumber = srows[0].context_msgs;
               }
-            } catch { /* non-fatal — context_stats still written with zeros */ }
+            } catch { /* non-fatal */ }
           }
-        } catch { /* non-critical — never block dispatch */ }
+        } catch { /* non-critical */ }
 
-        // ACX-05: Write context_stats to dispatch log row (UPDATE after INSERT)
+        // Write context_stats to dispatch log row
         try {
           const contextStats = buildContextStats({
             skillsUsed: ctx.skillsUsed ?? null,
@@ -459,12 +299,11 @@ export class RoutingEngine {
             `UPDATE bridge_dispatch_log SET context_stats = $1 WHERE id = $2`,
             [JSON.stringify(contextStats), id],
           );
-        } catch { /* non-critical — never block dispatch */ }
+        } catch { /* non-critical */ }
 
-        // INT-01: Memory V3 signal — agent learns model preferences
+        // Memory V3 signal — agent learns model preferences
         if (ctx.agentId) {
           try {
-            // Deduplication: skip if same agent+gateway_type+model note exists in last hour
             const existing = await pool.query(
               `SELECT 1 FROM agent_notes
                WHERE agent_id = $1
@@ -487,13 +326,13 @@ export class RoutingEngine {
                 ]
               );
             }
-          } catch { /* non-critical — never block dispatch */ }
+          } catch { /* non-critical */ }
         }
       } catch {
         // Non-critical — never block dispatch
       }
 
-      // Parse rate limit headers from HTTP adapters (fire-and-forget)
+      // Parse rate limit headers from HTTP adapters
       if (result.responseHeaders) {
         try {
           parseRateLimitHeaders(result.responseHeaders, decision.gatewayRow.id);
@@ -514,7 +353,6 @@ export class RoutingEngine {
   /**
    * Record a per-turn session routing entry in session_routing_context.
    * Fire-and-forget — never blocks the caller.
-   * RT-05: Session routing context.
    */
   async recordSessionTurn(
     ctx: RoutingContext,
@@ -547,7 +385,6 @@ export class RoutingEngine {
 
   /**
    * Dispatch through per-gateway concurrency queue.
-   * RT-04: p-queue concurrency control.
    */
   async dispatchWithQueue(
     decision: RoutingDecision,
@@ -559,136 +396,41 @@ export class RoutingEngine {
   }
 
   /**
-   * Dispatch with N-gateway fallback chain.
-   * Iterates priority-ordered candidates. For each:
-   *   - Skip if circuit breaker is open
-   *   - Try dispatch wrapped in withRetry() + breaker.fire() + dispatch queue
-   *   - On failure, record error and try next candidate
-   * GW-06: Fallback chain — N gateways in priority order.
+   * Dispatch to Claude CLI with circuit breaker and retry.
+   * Single gateway — no fallback iteration.
    */
   async selectWithFallback(
     ctx: RoutingContext,
     req: BridgeDispatchRequest,
   ): Promise<{ decision: RoutingDecision; result: BridgeDispatchResult }> {
-    const candidates = await this.selectAllCandidates();
-    if (candidates.length === 0) {
-      throw new Error('No active gateways available');
-    }
+    const decision = await this.select(ctx);
+    const breaker = getBreaker(decision.gatewayRow.id, decision.gatewayRow.type);
 
-    // Evaluate rules — apply them to fallback order just as select() does
-    const matchedRule = await this.evaluateRules(ctx, candidates);
+    try {
+      const result = await withRetry(() =>
+        getQueue(decision.gatewayRow.type).add(() =>
+          breaker.fire(async () => decision.adapter.dispatch(req))
+        ) as Promise<BridgeDispatchResult>,
+      );
 
-    // INT-03: Check concepts table for learned gateway preference for this agent
-    let conceptPreferredType: string | null = null;
-    if (ctx.agentId) {
-      try {
-        const { rows: conceptRows } = await pool.query<{ content: string; scope_id: string }>(
-          `SELECT content, scope_id FROM concepts
-           WHERE source_type = 'intelligence_loop'
-             AND status = 'active'
-             AND memory_kind = 'concept'
-             AND (scope_id = $1 OR scope_id IS NULL)
-             AND (content LIKE '%model_strength%' OR content LIKE '%routed to%')
-           ORDER BY created_at DESC
-           LIMIT 5`,
-          [ctx.agentId],
-        );
-        // Extract preferred gateway_type from concept content
-        // Content format: "Agent {id} routed to {gateway_type}/{model} N times..."
-        for (const row of conceptRows) {
-          const match = row.content.match(/routed to (\w+)\//);
-          if (match) {
-            conceptPreferredType = match[1];
-            break;
-          }
-        }
-      } catch { /* non-critical — concept lookup never blocks routing */ }
-    }
+      return { decision, result };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
 
-    // Sort candidates: prefer gateways with capacity headroom (soft preference)
-    // Gateways at 90%+ utilization are pushed to the end, not blocked.
-    // INT-03: Learned concept preference wins over capacity + priority
-    const capacitySorted = [...candidates].sort((a, b) => {
-      const aConceptPreferred = conceptPreferredType && a.row.type === conceptPreferredType ? 0 : 1;
-      const bConceptPreferred = conceptPreferredType && b.row.type === conceptPreferredType ? 0 : 1;
-      if (aConceptPreferred !== bConceptPreferred) return aConceptPreferred - bConceptPreferred;
-      const aHas = hasCapacity(a.row.id) ? 0 : 1;
-      const bHas = hasCapacity(b.row.id) ? 0 : 1;
-      if (aHas !== bHas) return aHas - bHas;
-      return a.row.priority - b.row.priority; // preserve priority within same capacity tier
-    });
-
-    // Apply matched routing rule to fallback iteration order
-    const sorted = applyRuleToFallbackOrder(matchedRule, capacitySorted);
-
-    const errors: string[] = [];
-
-    for (const candidate of sorted) {
-      const breaker = getBreaker(candidate.row.id, candidate.row.type);
-
-      // Skip gateways with open circuit breakers
-      if (breaker.opened) {
-        errors.push(`${candidate.row.type}(${candidate.row.id.slice(0, 8)}): circuit open`);
-        continue;
+      // Record 429 events for rate limit tracking
+      if (/429|rate.?limit|too.?many/i.test(msg)) {
+        record429(decision.gatewayRow.id);
       }
 
-      try {
-        const result = await withRetry(() =>
-          getQueue(candidate.row.type).add(() =>
-            breaker.fire(async () => candidate.adapter.dispatch(req))
-          ) as Promise<BridgeDispatchResult>,
-        );
-
-        // Build the routing decision for the gateway that succeeded
-        const chosenId = candidate.row.id;
-        const alternatives = candidates
-          .filter(c => c.row.id !== chosenId)
-          .map(c => ({
-            gatewayType: c.row.type,
-            modelName: resolveModelName(c.row),
-            reasonSkipped: errors.find(e => e.startsWith(c.row.type))
-              ?? `lower priority (priority=${c.row.priority})`,
-          }));
-
-        const baseReason = errors.length > 0
-          ? `Fallback: ${errors.length} gateway(s) failed before ${candidate.row.type}`
-          : `Primary: ${candidate.row.type} (priority=${candidate.row.priority})`;
-
-        // INT-03: Annotate reason when concept preference was applied and matched
-        const finalReason = (conceptPreferredType && candidate.row.type === conceptPreferredType)
-          ? `${baseReason} [learned: preferred ${conceptPreferredType} for agent ${ctx.agentId?.slice(0, 8)}]`
-          : baseReason;
-
-        const decision: RoutingDecision = {
-          gatewayRow: candidate.row,
-          adapter: candidate.adapter,
-          modelName: resolveModelName(candidate.row),
-          reason: finalReason,
-          alternatives,
-          matchedRuleId: matchedRule?.id ?? null,
-        };
-
-        return { decision, result };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        errors.push(`${candidate.row.type}(${candidate.row.id.slice(0, 8)}): ${msg}`);
-
-        // Record 429 events for rate limit tracking
-        if (/429|rate.?limit|too.?many/i.test(msg)) {
-          record429(candidate.row.id);
-        }
-      }
+      throw new Error(`Gateway ${decision.gatewayRow.type} failed: ${msg}`);
     }
-
-    throw new Error(`All ${candidates.length} gateways failed: ${errors.join('; ')}`);
   }
 
   /**
    * Dispatch a streaming request through per-gateway concurrency queue.
    * Wraps the adapter stream to capture observability data (latency, tokens).
-   * RT-04: p-queue concurrency control for streams.
    */
-  async dispatchStream(
+  private async dispatchStream(
     decision: RoutingDecision,
     ctx: RoutingContext,
     req: BridgeDispatchRequest,
@@ -698,10 +440,8 @@ export class RoutingEngine {
     let firstTokenAt: number | null = null;
     let fullResponse = '';
 
-    // Create a local reference to logDispatch to avoid 'this' issues in generator
     const self = this;
 
-    // Use a generator to wrap the adapter's stream and capture metrics
     const wrappedStream = (async function* () {
       try {
         const stream = decision.adapter.stream(req, signal);
@@ -713,12 +453,11 @@ export class RoutingEngine {
           yield token;
         }
 
-        // Stream finished — use actual token counts from adapter if available, otherwise estimate
         const adapterTokens = (decision.adapter as any).lastStreamTokens as { inputTokens?: number; outputTokens?: number } | null;
         const rawOutputTokens = adapterTokens?.outputTokens ?? estimateTokens(fullResponse);
         const inputTokens = adapterTokens?.inputTokens ?? estimateTokens(JSON.stringify(req.messages));
 
-        // Phase 38-02: Tool output compression — compress verbose responses before logging
+        // Tool output compression
         let compressionStats: { tool_outputs_compressed: number; tokens_saved: number; compression_model: string } | null = null;
         let loggedResponse = fullResponse;
         try {
@@ -732,7 +471,7 @@ export class RoutingEngine {
             };
           }
         } catch {
-          // Non-fatal — compression failure must not block dispatch
+          // Non-fatal
         }
 
         const result: BridgeDispatchResult = {
@@ -744,12 +483,10 @@ export class RoutingEngine {
           inputTokens,
         };
 
-        // Phase 34: capture dispatch ID and yield as metadata token for chat.ts to thread into SSE done event
         const dispatchId = self.logDispatch(decision, ctx, result, undefined, compressionStats).catch(() => null as string | null);
         const resolvedId = await dispatchId;
         if (resolvedId) yield `__DISPATCH_META__${JSON.stringify({ dispatch_id: resolvedId })}`;
       } catch (err) {
-        // Errors in the stream are re-thrown to the caller
         throw err;
       }
     })();
@@ -758,187 +495,37 @@ export class RoutingEngine {
   }
 
   /**
-   * Dispatch with N-gateway fallback chain for streaming.
-   * Similar to selectWithFallback() but returns an AsyncIterable.
-   * GW-06: Fallback chain for streams.
+   * Dispatch streaming to Claude CLI with circuit breaker.
+   * Single gateway — no fallback iteration.
    */
   async selectStreamWithFallback(
     ctx: RoutingContext,
     req: BridgeDispatchRequest,
     signal: AbortSignal,
   ): Promise<{ decision: RoutingDecision; stream: AsyncIterable<string> }> {
-    const candidates = await this.selectAllCandidates();
-    if (candidates.length === 0) {
-      throw new Error('No active gateways available');
+    const decision = await this.select(ctx);
+    const breaker = getBreaker(decision.gatewayRow.id, decision.gatewayRow.type);
+
+    if (breaker.opened) {
+      throw new Error(`Gateway ${decision.gatewayRow.type}: circuit open`);
     }
 
-    // Evaluate rules — must be applied to streaming fallback order the same way as select()
-    const matchedRule = await this.evaluateRules(ctx, candidates);
+    try {
+      const stream = await this.dispatchStream(decision, ctx, req, signal);
 
-    // Sort candidates: prefer gateways with capacity headroom
-    const capacitySorted = [...candidates].sort((a, b) => {
-      const aHas = hasCapacity(a.row.id) ? 0 : 1;
-      const bHas = hasCapacity(b.row.id) ? 0 : 1;
-      if (aHas !== bHas) return aHas - bHas;
-      return a.row.priority - b.row.priority;
-    });
+      // Record session turn (fire-and-forget)
+      this.recordSessionTurn(ctx, decision, uuidv4()).catch(() => {});
 
-    // Apply matched routing rule to fallback iteration order (fixes force_model/block_gateway/prefer_local)
-    const sorted = applyRuleToFallbackOrder(matchedRule, capacitySorted);
+      return { decision, stream };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
 
-    const errors: string[] = [];
-
-    for (const candidate of sorted) {
-      const breaker = getBreaker(candidate.row.id, candidate.row.type);
-
-      if (breaker.opened) {
-        errors.push(`${candidate.row.type}: circuit open`);
-        continue;
+      if (/429|rate.?limit|too.?many/i.test(msg)) {
+        record429(decision.gatewayRow.id);
       }
 
-      try {
-        // Build the routing decision for the chosen candidate
-        const chosenId = candidate.row.id;
-        const alternatives = candidates
-          .filter(c => c.row.id !== chosenId)
-          .map(c => ({
-            gatewayType: c.row.type,
-            modelName: resolveModelName(c.row),
-            reasonSkipped: errors.find(e => e.startsWith(c.row.type))
-              ?? `lower priority (priority=${c.row.priority})`,
-          }));
-
-        const decision: RoutingDecision = {
-          gatewayRow: candidate.row,
-          adapter: candidate.adapter,
-          modelName: resolveModelName(candidate.row),
-          reason: errors.length > 0
-            ? `Fallback: ${errors.length} failure(s) before ${candidate.row.type}`
-            : `Primary: ${candidate.row.type}`,
-          alternatives,
-          matchedRuleId: matchedRule?.id ?? null,
-        };
-
-        // Initiate the stream — if this throws, we fallback to next candidate
-        const stream = await this.dispatchStream(decision, ctx, req, signal);
-
-        // Record session turn (fire-and-forget)
-        // Note: dispatchStream logs the dispatch result when the stream ends,
-        // so we don't have a logId yet. We'll pass null or a placeholder.
-        this.recordSessionTurn(ctx, decision, uuidv4()).catch(() => {});
-
-        return { decision, stream };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        errors.push(`${candidate.row.type}: ${msg}`);
-
-        // Record 429 events for rate limit tracking
-        if (/429|rate.?limit|too.?many/i.test(msg)) {
-          record429(candidate.row.id);
-        }
-      }
+      throw new Error(`Streaming failed on ${decision.gatewayRow.type}: ${msg}`);
     }
-
-    throw new Error(`Streaming failed on all gateways: ${errors.join('; ')}`);
-  }
-
-  /**
-   * Filter candidates by model capabilities when requiredCapabilities is set.
-   * MOD-03: Route by model strengths, not just cost tier.
-   * Gracefully degrades — returns full candidate list if no models match.
-   */
-  private async filterByCapabilities(
-    candidates: GatewayCandidate[],
-    requiredCapabilities: string[],
-  ): Promise<GatewayCandidate[]> {
-    if (requiredCapabilities.length === 0) return candidates;
-
-    const gatewayIds = candidates.map(c => c.row.id);
-    if (gatewayIds.length === 0) return candidates;
-
-    const placeholders = gatewayIds.map((_, i) => `$${i + 1}`).join(',');
-    const { rows } = await pool.query<{ gateway_id: string; capabilities: unknown }>(
-      `SELECT gateway_id, capabilities
-       FROM models
-       WHERE gateway_id IN (${placeholders})
-         AND is_active = 1`,
-      gatewayIds,
-    );
-
-    // Build set of gateway IDs that have at least one model with all required capabilities
-    const capableGatewayIds = new Set<string>();
-    for (const row of rows) {
-      const caps: string[] = Array.isArray(row.capabilities)
-        ? (row.capabilities as string[])
-        : (typeof row.capabilities === 'string' ? JSON.parse(row.capabilities as string) : []);
-      const hasAll = requiredCapabilities.every(rc => caps.includes(rc));
-      if (hasAll) capableGatewayIds.add(row.gateway_id);
-    }
-
-    const filtered = candidates.filter(c => capableGatewayIds.has(c.row.id));
-
-    // Graceful degradation — return all candidates if none match capabilities
-    return filtered.length > 0 ? filtered : candidates;
-  }
-
-  /**
-   * Select a gateway candidate by message complexity heuristic.
-   * Complex messages prefer HTTP/remote gateways; simple messages prefer local.
-   */
-  /**
-   * SIN-03: Select best candidate using priority + optional confidence nudge.
-   *
-   * Base score = 10 - priority (lower priority number = higher base score).
-   * Confidence bonus = (avgScore - 3.0) * confidence * 0.2
-   *   - avgScore 5.0, confidence 1.0 → +0.4 bonus
-   *   - avgScore 1.0, confidence 1.0 → -0.4 penalty
-   *   - No data (confidence 0) → no change
-   *
-   * This is a GENTLE nudge — priority still dominates.
-   * Complex messages get an additional bonus for gateways with 'reasoning' or 'strong' capability.
-   */
-  private selectByHeuristic(message: string, candidates: GatewayCandidate[]): GatewayCandidate {
-    const complex = isComplexMessage(message);
-    const LOCAL_TYPES = new Set(['ollama', 'codex_cli', 'claude_cli', 'gemini_cli']);
-
-    // Compute composite score for each candidate
-    const scored = candidates.map(c => {
-      // Base score: lower priority number = higher base score (max priority ~10)
-      let score = 10 - c.row.priority;
-
-      // SIN-03: Apply confidence nudge from historical outcome data
-      const confidence = getGatewayConfidenceSync(c.row.type);
-      if (confidence && confidence.confidence > 0) {
-        score += (confidence.avgScore - 3.0) * confidence.confidence * 0.2;
-      }
-
-      // Complexity preference: boost capable gateways for complex messages
-      if (complex) {
-        const tags = Array.isArray(c.row.capabilities) ? c.row.capabilities as string[] : [];
-        if (tags.some(t => t === 'reasoning' || t === 'strong')) {
-          score += 0.5;
-        }
-        // Penalise local gateways for complex messages (less capable)
-        if (LOCAL_TYPES.has(c.row.type)) {
-          score -= 1.0;
-        }
-      } else {
-        // Boost local gateways for simple messages (faster + cheaper)
-        if (LOCAL_TYPES.has(c.row.type)) {
-          score += 1.0;
-        }
-      }
-
-      return { candidate: c, score };
-    });
-
-    // Sort by composite score DESC, fall back to priority ASC for ties
-    scored.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      return a.candidate.row.priority - b.candidate.row.priority;
-    });
-
-    return scored[0].candidate;
   }
 }
 
@@ -947,24 +534,6 @@ export class RoutingEngine {
 export const routingEngine = new RoutingEngine();
 
 // ── Private helpers ───────────────────────────────────────────────────────────
-
-/**
- * Split a "type:model" string on the first colon only.
- * Preserves model names that themselves contain colons (e.g. "ollama:llama3.1:8b").
- */
-function splitOnFirstColon(s: string): [string, string | null] {
-  const idx = s.indexOf(':');
-  if (idx === -1) return [s, null];
-  return [s.slice(0, idx), s.slice(idx + 1)];
-}
-
-function isComplexMessage(message: string): boolean {
-  return (
-    message.length > 160 ||
-    message.split(/\s+/).length > 28 ||
-    /```|`|https?:\/\/|debug|implement|refactor|test|tool|analyze|architecture/i.test(message)
-  );
-}
 
 function resolveModelName(row: GatewayRow): string {
   const meta = row.metadata as Record<string, unknown> | undefined;
@@ -992,80 +561,5 @@ function mapGatewayRow(raw: GatewayDbRow): GatewayRow {
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
     lastHealthAt: raw.last_health_at,
-  };
-}
-
-/**
- * Apply a matched routing rule to a fallback candidate list.
- * Exported for unit testing.
- *
- * Used by both selectWithFallback() and selectStreamWithFallback() so that
- * force_model / block_gateway / prefer_local are honored consistently with select().
- *
- * Unlike select() which picks exactly one gateway, fallback methods iterate the list,
- * so rules are expressed as ordering/filtering rather than single-gateway selection:
- *   - force_model: move forced gateway type to front (it is tried first, others remain as fallbacks)
- *   - block_gateway: remove the blocked gateway type entirely
- *   - prefer_local: reorder so local gateway types lead the list
- *   - cap_cost_usd / unknown: no ordering change
- */
-export function applyRuleToFallbackOrder(
-  rule: RoutingRuleRow | null,
-  candidates: GatewayCandidate[],
-): GatewayCandidate[] {
-  if (!rule) return candidates;
-
-  if (rule.action === 'force_model' && rule.actionValue) {
-    const [forceType] = rule.actionValue.includes(':')
-      ? rule.actionValue.split(':', 2)
-      : [rule.actionValue];
-
-    // Move the forced gateway type to the front; keep the rest in order as fallbacks
-    const forced = candidates.filter(c => c.row.type === forceType);
-    const rest = candidates.filter(c => c.row.type !== forceType);
-
-    if (forced.length > 0) {
-      // Use indexOf-based split to preserve model names with colons (e.g. llama3.1:8b)
-      const [, forceModel] = splitOnFirstColon(rule.actionValue);
-      const mappedForced = forceModel
-        ? forced.map(c => ({
-            row: { ...c.row, metadata: { ...c.row.metadata, default_model: forceModel } },
-            adapter: c.adapter,
-          }))
-        : forced;
-      return [...mappedForced, ...rest];
-    }
-    return candidates; // forced type not available — keep original order
-  }
-
-  if (rule.action === 'block_gateway' && rule.actionValue) {
-    const after = candidates.filter(c => c.row.type !== rule.actionValue);
-    return after.length > 0 ? after : candidates; // graceful: never produce empty list
-  }
-
-  if (rule.action === 'prefer_local') {
-    const LOCAL_TYPES = new Set(['ollama', 'codex_cli', 'claude_cli', 'gemini_cli']);
-    return [
-      ...candidates.filter(c => LOCAL_TYPES.has(c.row.type)),
-      ...candidates.filter(c => !LOCAL_TYPES.has(c.row.type)),
-    ];
-  }
-
-  return candidates; // cap_cost_usd and unknown actions — no ordering change
-}
-
-function mapRuleRow(raw: RoutingRuleDbRow): RoutingRuleRow {
-  return {
-    id: raw.id,
-    scope: raw.scope as RoutingRuleRow['scope'],
-    scopeId: raw.scope_id,
-    action: raw.action as RoutingRuleRow['action'],
-    actionValue: raw.action_value,
-    enabled: raw.enabled,
-    priority: raw.priority,
-    description: raw.description,
-    createdBy: raw.created_by,
-    createdAt: raw.created_at,
-    updatedAt: raw.updated_at,
   };
 }

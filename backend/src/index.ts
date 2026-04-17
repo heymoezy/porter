@@ -58,7 +58,7 @@ import adminAuthPlugin from './plugins/admin-auth.js';
 import adminRoutes from './routes/admin/index.js';
 import { addSSEClient } from './services/admin/admin-sse.js';
 import { probeAllGateways } from './services/admin/gateway-versions.js';
-import { initConfidenceCache } from './services/bridge/routing-confidence.js';
+
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -165,7 +165,7 @@ fastify.get('/health', async () => {
   return {
     status: 'ok',
     engine: 'fastify',
-    version: '6.8.1',
+    version: '6.9.0',
     mail: {
       provider: config.mail.provider,
       domain: config.mail.defaultDomain,
@@ -285,9 +285,6 @@ const start = async () => {
     } catch (err) {
       console.error('[intellect] seed failed:', err instanceof Error ? err.message : err);
     }
-
-    // SIN-03: Warm routing confidence cache from historical outcome data
-    await initConfidenceCache();
 
     // Auto-detect AI gateways and bootstrap from env vars
     await detectAndUpsertGateways(pool);

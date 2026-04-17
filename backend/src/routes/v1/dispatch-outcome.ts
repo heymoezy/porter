@@ -10,7 +10,6 @@
 
 import type { FastifyInstance } from 'fastify';
 import { pool } from '../../db/client.js';
-import { refreshConfidence } from '../../services/bridge/routing-confidence.js';
 
 export async function dispatchOutcomeRoutes(app: FastifyInstance) {
   // SIN-03: Score a dispatch outcome
@@ -48,9 +47,6 @@ export async function dispatchOutcomeRoutes(app: FastifyInstance) {
        WHERE id = $3`,
       [score, note ?? null, id],
     );
-
-    // Trigger async confidence refresh — fire-and-forget, never blocks response
-    refreshConfidence().catch(() => {});
 
     return reply.send({ ok: true, dispatch_id: id, score, note: note ?? null });
   });

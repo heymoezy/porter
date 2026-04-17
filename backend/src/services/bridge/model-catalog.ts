@@ -1,5 +1,5 @@
 /**
- * Model Catalog Service — Phase 19
+ * Model Catalog Service — Claude CLI only
  *
  * Auto-populates the models table from gateway adapter discovery.
  * Tracks version history in model_versions when capabilities change.
@@ -17,8 +17,6 @@ import { createAdapter } from './adapters/index.js';
 import type { GatewayAdapter, GatewayRow, GatewayType, GatewayAuthMethod, GatewaySource } from './types.js';
 
 // ── Static metadata map ───────────────────────────────────────────────────────
-// Keyed by canonical model name. lookupMetadata() does prefix matching so
-// versioned variants (e.g. claude-sonnet-4-7) still get enriched metadata.
 
 interface ModelMetadata {
   capabilities: string[];
@@ -50,54 +48,9 @@ const MODEL_METADATA: Record<string, ModelMetadata> = {
     pricingOutputPerM: 1.25,
     benchmarkScores: {},
   },
-  'openai-codex/gpt-5.4': {
-    capabilities: ['coding', 'analysis'],
-    contextWindow: 128000,
-    pricingInputPerM: null,
-    pricingOutputPerM: null,
-    benchmarkScores: {},
-  },
-  'gpt-5.4': {
-    capabilities: ['coding', 'analysis'],
-    contextWindow: 128000,
-    pricingInputPerM: null,
-    pricingOutputPerM: null,
-    benchmarkScores: {},
-  },
-  'gemini-2.5-pro': {
-    capabilities: ['coding', 'writing', 'analysis', 'vision'],
-    contextWindow: 1000000,
-    pricingInputPerM: 1.25,
-    pricingOutputPerM: 10.0,
-    benchmarkScores: {},
-  },
-  'gemini-2.5-flash': {
-    capabilities: ['coding', 'writing', 'analysis'],
-    contextWindow: 1000000,
-    pricingInputPerM: 0.075,
-    pricingOutputPerM: 0.30,
-    benchmarkScores: {},
-  },
-  'gemma4:e4b': {
-    capabilities: ['chat', 'coding', 'reasoning'],
-    contextWindow: 32768,
-    pricingInputPerM: 0.0,
-    pricingOutputPerM: 0.0,
-    benchmarkScores: {},
-  },
 };
 
-// Default metadata for unknown Ollama-style local models (free, small context)
-const OLLAMA_DEFAULT_METADATA: ModelMetadata = {
-  capabilities: ['chat'],
-  contextWindow: 32768,
-  pricingInputPerM: 0.0,
-  pricingOutputPerM: 0.0,
-  benchmarkScores: {},
-};
-
-// Bare default for completely unknown models
-const BARE_DEFAULT_METADATA: ModelMetadata = {
+const DEFAULT_METADATA: ModelMetadata = {
   capabilities: ['chat'],
   contextWindow: null as unknown as number,
   pricingInputPerM: null,
@@ -107,24 +60,18 @@ const BARE_DEFAULT_METADATA: ModelMetadata = {
 
 /**
  * Resolve metadata for a model name.
- * Priority: exact match → prefix match → Ollama-style (contains ':') default → bare default
+ * Priority: exact match → prefix match → default
  */
 function lookupMetadata(modelName: string): ModelMetadata {
-  // 1. Exact match
   if (MODEL_METADATA[modelName]) return MODEL_METADATA[modelName];
 
-  // 2. Prefix match — known key is a prefix of the incoming modelName
   for (const [key, meta] of Object.entries(MODEL_METADATA)) {
     if (modelName.startsWith(key) || key.startsWith(modelName)) {
       return meta;
     }
   }
 
-  // 3. Ollama-style (e.g. "llama3:8b", "mistral:latest") — free local model
-  if (modelName.includes(':')) return OLLAMA_DEFAULT_METADATA;
-
-  // 4. Bare default
-  return BARE_DEFAULT_METADATA;
+  return DEFAULT_METADATA;
 }
 
 // ── DB row shape from raw SQL ─────────────────────────────────────────────────
@@ -208,14 +155,12 @@ export async function refreshModelsForGateway(
     const meta = lookupMetadata(modelName);
     const now = Date.now() / 1000;
 
-    // Check if model already exists
     const existing = await pool.query<ModelDbRow>(
       `SELECT id, capabilities, context_window FROM models WHERE gateway_id = $1 AND model_name = $2`,
       [gatewayId, modelName],
     );
 
     if (existing.rowCount === 0) {
-      // First discovery — INSERT model row + initial version snapshot
       const modelId = crypto.randomUUID();
       const capJson = JSON.stringify(meta.capabilities);
       await pool.query(
@@ -230,19 +175,12 @@ export async function refreshModelsForGateway(
            is_active = 1,
            updated_at = EXCLUDED.updated_at`,
         [
-          modelId,
-          gatewayId,
-          modelName,
-          capJson,
-          meta.contextWindow ?? null,
-          meta.pricingInputPerM,
-          meta.pricingOutputPerM,
-          JSON.stringify(meta.benchmarkScores),
-          now,
+          modelId, gatewayId, modelName, capJson,
+          meta.contextWindow ?? null, meta.pricingInputPerM, meta.pricingOutputPerM,
+          JSON.stringify(meta.benchmarkScores), now,
         ],
       );
 
-      // Fetch actual model id (ON CONFLICT may have returned an existing row)
       const inserted = await pool.query<{ id: string }>(
         `SELECT id FROM models WHERE gateway_id = $1 AND model_name = $2`,
         [gatewayId, modelName],
@@ -253,8 +191,7 @@ export async function refreshModelsForGateway(
         `INSERT INTO model_versions (id, model_id, version_label, snapshot, detected_at)
          VALUES ($1, $2, 'initial', $3::jsonb, $4)`,
         [
-          crypto.randomUUID(),
-          actualModelId,
+          crypto.randomUUID(), actualModelId,
           JSON.stringify({
             modelName,
             capabilities: meta.capabilities,
@@ -276,14 +213,11 @@ export async function refreshModelsForGateway(
       const ctxChanged = existingCtx !== (meta.contextWindow ?? null);
 
       if (capsChanged || ctxChanged) {
-        // Capability or context window changed — record new version
         await pool.query(
           `INSERT INTO model_versions (id, model_id, version_label, snapshot, detected_at)
            VALUES ($1, $2, $3, $4::jsonb, $5)`,
           [
-            crypto.randomUUID(),
-            row.id,
-            new Date().toISOString(),
+            crypto.randomUUID(), row.id, new Date().toISOString(),
             JSON.stringify({
               modelName,
               capabilities: meta.capabilities,
@@ -297,25 +231,17 @@ export async function refreshModelsForGateway(
 
         await pool.query(
           `UPDATE models SET
-             capabilities = $1::jsonb,
-             context_window = $2,
-             pricing_input_per_m = $3,
-             pricing_output_per_m = $4,
-             is_active = 1,
-             updated_at = $5
+             capabilities = $1::jsonb, context_window = $2,
+             pricing_input_per_m = $3, pricing_output_per_m = $4,
+             is_active = 1, updated_at = $5
            WHERE id = $6`,
           [
-            JSON.stringify(meta.capabilities),
-            meta.contextWindow ?? null,
-            meta.pricingInputPerM,
-            meta.pricingOutputPerM,
-            now,
-            row.id,
+            JSON.stringify(meta.capabilities), meta.contextWindow ?? null,
+            meta.pricingInputPerM, meta.pricingOutputPerM, now, row.id,
           ],
         );
         updatedCount++;
       } else {
-        // Unchanged — just bump updated_at and ensure active
         await pool.query(
           `UPDATE models SET is_active = 1, updated_at = $1 WHERE id = $2`,
           [now, row.id],
@@ -325,7 +251,6 @@ export async function refreshModelsForGateway(
   }
 
   // Mark models not in listModels() response as inactive
-  // Only do this for 'active' gateways — stale gateways may have incomplete model lists
   if (gatewayStatus === 'active' && seenModelNames.size > 0) {
     const seenArray = Array.from(seenModelNames);
     const placeholders = seenArray.map((_, i) => `$${i + 3}`).join(', ');
@@ -342,11 +267,7 @@ export async function refreshModelsForGateway(
 // ── refreshAllGateways ────────────────────────────────────────────────────────
 
 /**
- * Refresh the models catalog for all enabled gateways.
- *
- * Iterates active + stale gateways, creates adapters, and calls
- * refreshModelsForGateway() for each. One failing gateway does not block others.
- *
+ * Refresh the models catalog for all enabled gateways (Claude CLI only).
  * MOD-04
  */
 export async function refreshAllGateways(pool: pg.Pool): Promise<void> {

@@ -9,10 +9,8 @@
  *   1. Generate a unique messageId
  *   2. Log to msg_bus_events for observability
  *   3. Persist to agent_messages for inbox/audit
- *   4. Route through the same RoutingEngine that powers the HTTP endpoint
+ *   4. Route through the RoutingEngine (always selects Claude CLI)
  *   5. Return a typed DelegationResult with full correlation fields
- *
- * Phase 43: Inter-Agent Messaging (IAM-01)
  */
 
 import crypto from 'node:crypto';
@@ -22,7 +20,7 @@ import { classifyRisk, createApprovalRequest } from '../control-plane/approval-g
 import { routingEngine } from './routing-engine.js';
 import type { AgentMessageLogContext, RoutingContext } from './types.js';
 
-/** PCP-02: Maximum delegation depth (stricter than bridge HTTP limit) */
+/** PCP-02: Maximum delegation depth */
 const MAX_DELEGATION_DEPTH = 3;
 
 // ── Request / Result interfaces ───────────────────────────────────────────────
@@ -37,8 +35,6 @@ export interface DelegationRequest {
   sourceAgent?: string;
   /** Logical name of the target agent (e.g. a persona name). */
   targetAgent?: string;
-  /** Optional gateway type hint, optionally with model: "ollama" or "ollama:qwen2.5-coder:1.5b". */
-  targetGateway?: string;
   /** Structured context to pass as system prompt to the target model. */
   context?: Record<string, unknown>;
   /** Optional dispatch constraints. */
@@ -51,7 +47,7 @@ export interface DelegationRequest {
 
 /** Result of a successful in-process agent delegation. */
 export interface DelegationResult {
-  /** messageId generated for this delegation (same as the AgentMessage envelope). */
+  /** messageId generated for this delegation. */
   messageId: string;
   /** Correlation chain ID linking this to the originating DAG rootId. */
   correlationId: string;
@@ -59,7 +55,7 @@ export interface DelegationResult {
   response: string;
   /** Model name that produced the response. */
   model: string;
-  /** Gateway type that handled the dispatch. */
+  /** Gateway type that handled the dispatch (always 'claude_cli'). */
   gatewayType: string;
   /** End-to-end latency in ms (routing + dispatch). */
   latencyMs: number;
@@ -69,22 +65,6 @@ export interface DelegationResult {
   dispatchLogId: string;
   /** msg_bus_events row ID, or null if logging failed (non-fatal). */
   msgBusEventId: string | null;
-}
-
-// ── Internal helper ───────────────────────────────────────────────────────────
-
-/**
- * Split "gatewayType:modelName" into parts.
- * Handles model names that themselves contain colons (e.g. "ollama:qwen2.5-coder:1.5b").
- */
-function splitTargetGateway(value?: string): { forceGatewayType?: string; forceModelName?: string } {
-  if (!value) return {};
-  const idx = value.indexOf(':');
-  if (idx === -1) return { forceGatewayType: value };
-  return {
-    forceGatewayType: value.slice(0, idx),
-    forceModelName: value.slice(idx + 1) || undefined,
-  };
 }
 
 // ── delegateToAgent ───────────────────────────────────────────────────────────
@@ -106,13 +86,12 @@ export async function delegateToAgent(opts: DelegationRequest): Promise<Delegati
 
   // PCP-02: Enforce delegation depth limit
   if (hopCount >= MAX_DELEGATION_DEPTH) {
-    // Log violation to msg_bus_events
     try {
       await logMsgBusEvent({
         correlationId: opts.correlationId,
         sourceAgent: source,
         targetAgent: opts.targetAgent,
-        targetGateway: opts.targetGateway,
+        targetGateway: 'claude_cli',
         intent: 'depth_violation',
         payload: {
           reason: 'DELEGATION_DEPTH_EXCEEDED',
@@ -130,7 +109,6 @@ export async function delegateToAgent(opts: DelegationRequest): Promise<Delegati
   // PCP-03: Approval gate for high-risk actions
   const riskAssessment = classifyRisk(opts.task);
   if (riskAssessment.level === 'high') {
-    // Create approval request and pause execution
     const approval = await createApprovalRequest({
       task: opts.task,
       correlationId: opts.correlationId,
@@ -140,7 +118,6 @@ export async function delegateToAgent(opts: DelegationRequest): Promise<Delegati
       delegationRequest: opts,
     });
 
-    // Do NOT execute — throw a typed error the caller can handle
     const error = new Error(
       `Action requires approval (id=${approval.id}): ${riskAssessment.reasons.join(', ')}`,
     );
@@ -156,9 +133,8 @@ export async function delegateToAgent(opts: DelegationRequest): Promise<Delegati
     msgBusEventId = await logMsgBusEvent({
       correlationId: opts.correlationId,
       sourceAgent: source,
-      sourceGateway: undefined,
       targetAgent: opts.targetAgent,
-      targetGateway: opts.targetGateway,
+      targetGateway: 'claude_cli',
       intent: 'request',
       payload: {
         task: opts.task,
@@ -179,7 +155,7 @@ export async function delegateToAgent(opts: DelegationRequest): Promise<Delegati
     [
       messageId,
       source,
-      opts.targetAgent ?? opts.targetGateway ?? 'unknown',
+      opts.targetAgent ?? 'claude_cli',
       opts.task,
       chainId,
       hopCount,
@@ -187,14 +163,11 @@ export async function delegateToAgent(opts: DelegationRequest): Promise<Delegati
   );
   const agentMessageId = created.rows[0]?.id ?? null;
 
-  // ── Step 3: Build routing context ────────────────────────────────────────
-  const { forceGatewayType, forceModelName } = splitTargetGateway(opts.targetGateway);
-
+  // ── Step 3: Build routing context (always Claude CLI) ────────────────────
   const ctx: RoutingContext = {
     message: opts.task,
     username: 'porter-delegation',
-    forceGatewayType,
-    forceModelName,
+    forceGatewayType: 'claude_cli',
   };
 
   // ── Step 4: Build dispatch request ───────────────────────────────────────
@@ -211,7 +184,6 @@ export async function delegateToAgent(opts: DelegationRequest): Promise<Delegati
     decision = await routingEngine.select(ctx);
     result = await routingEngine.dispatchWithQueue(decision, dispatchReq);
   } catch (e) {
-    // Update agent_messages to failed
     if (agentMessageId != null) {
       await pool.query(
         `UPDATE agent_messages
@@ -220,7 +192,6 @@ export async function delegateToAgent(opts: DelegationRequest): Promise<Delegati
         [agentMessageId, e instanceof Error ? e.message : String(e)],
       );
     }
-    // Update msg_bus_events to failed
     if (msgBusEventId) {
       updateMsgBusEvent(msgBusEventId, { status: 'failed' }).catch(() => {});
     }
@@ -233,7 +204,7 @@ export async function delegateToAgent(opts: DelegationRequest): Promise<Delegati
     sourceAgent: source,
     sourceGateway: undefined,
     targetAgent: opts.targetAgent,
-    targetGateway: opts.targetGateway,
+    targetGateway: 'claude_cli',
     intent: 'request',
     replyTo: undefined,
   };

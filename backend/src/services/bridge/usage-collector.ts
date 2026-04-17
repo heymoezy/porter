@@ -1,45 +1,31 @@
 /**
- * Usage Collector — reads actual usage from provider APIs and local CLI storage
+ * Usage Collector — Claude CLI only
  *
- * Populates gateway_rate_limits with real usage data from:
- *   1. Claude — minimal Haiku API call, reads rate-limit headers (provider-level, highest trust)
- *   2. Codex CLI — SQLite state_5.sqlite threads table
- *   3. Gemini CLI — dispatch_log counts (no local usage files)
- *   4. OpenClaw — sessions.json token sums (5hour + weekly windows)
+ * Populates gateway_rate_limits with real usage data from Anthropic's API.
+ * Makes a minimal Haiku probe call and reads the rate-limit utilization headers
+ * to get 5-hour and 7-day usage percentages directly from the provider.
  *
  * Called every 30 seconds by the scheduler alongside health probes.
- * Claude API call is rate-limited to once per 5 minutes (uses ~1 Haiku token = negligible cost).
+ * Claude API call is rate-limited to once per 5 minutes (~1 Haiku token = negligible cost).
  */
 
 import { pool } from '../../db/client.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
-import Database from 'better-sqlite3';
 import { emitSSE } from '../scheduler.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const HOME = process.env.HOME || '/home/lobster';
 const CLAUDE_CREDENTIALS_PATH = path.join(HOME, '.claude', '.credentials.json');
-const CODEX_SQLITE_PATH = path.join(HOME, '.codex', 'state_5.sqlite');
-const CODEX_SESSIONS_DIR = path.join(HOME, '.codex', 'sessions');
-const OPENCLAW_SESSIONS_PATH = path.join(HOME, '.openclaw', 'agents', 'main', 'sessions', 'sessions.json');
-const GEMINI_OAUTH_PATH = path.join(HOME, '.gemini', 'oauth_creds.json');
 
 const CLAUDE_MESSAGES_API_URL = 'https://api.anthropic.com/v1/messages';
 const CLAUDE_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
 const CLAUDE_CLIENT_ID = '22422756-60c9-4084-8eb7-27705fd5cf9a';
-const GEMINI_QUOTA_URL = 'https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota';
 
 const CLAUDE_API_MIN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // refresh 5 min before expiry
-
-const FIVE_HOURS_SEC = 5 * 3600;
-const ONE_HOUR_SEC = 3600;
-const SEVEN_DAYS_SEC = 7 * 24 * 3600;
-const ONE_DAY_SEC = 24 * 3600;
 
 // ── Claude API cache ─────────────────────────────────────────────────────────
 
@@ -59,63 +45,54 @@ const claudeApiCache: ClaudeApiCache = {
   lastResult: null,
 };
 
-// ── Gateway Activity Sniffer — detects session transitions per gateway ────────
+// ── Activity Sniffer — detects session transitions ──────────────────────────
 
-interface GatewaySnifferState {
+interface SnifferState {
   activeSessions: number;
   totalTokens: number;
   wasActive: boolean;
 }
 
-const snifferState = new Map<string, GatewaySnifferState>();
+let sniffer: SnifferState | null = null;
 
-function sniffActivity(
-  gatewayType: string,
-  gatewayName: string,
-  sessions: number,
-  tokens: number,
-) {
-  const prev = snifferState.get(gatewayType);
+function sniffActivity(sessions: number, tokens: number): void {
+  const prev = sniffer;
   const nowActive = sessions > 0;
   const wasActive = prev?.wasActive ?? false;
 
-  // Detect transitions
   if (!wasActive && nowActive) {
-    // idle → active
     const tokStr = tokens > 0 ? ` · ${fmtTokens(tokens)} tokens` : '';
     emitSSE('bridge:activity', {
-      gateway: gatewayName,
-      type: gatewayType,
+      gateway: 'Claude CLI',
+      type: 'claude_cli',
       event: 'session_start',
-      text: `${gatewayName} active — ${sessions} session${sessions > 1 ? 's' : ''}${tokStr}`,
+      text: `Claude CLI active — ${sessions} session${sessions > 1 ? 's' : ''}${tokStr}`,
     }).catch(() => {});
-    console.log('[sniffer] %s: idle → active (%d sessions)', gatewayName, sessions);
+    console.log('[sniffer] Claude CLI: idle → active (%d sessions)', sessions);
   } else if (wasActive && !nowActive) {
-    // active → idle
     const tokStr = prev?.totalTokens ? ` · ${fmtTokens(prev.totalTokens)} tokens used` : '';
     emitSSE('bridge:activity', {
-      gateway: gatewayName,
-      type: gatewayType,
+      gateway: 'Claude CLI',
+      type: 'claude_cli',
       event: 'session_end',
-      text: `${gatewayName} idle${tokStr}`,
+      text: `Claude CLI idle${tokStr}`,
     }).catch(() => {});
-    console.log('[sniffer] %s: active → idle', gatewayName);
+    console.log('[sniffer] Claude CLI: active → idle');
   } else if (nowActive && prev) {
-    // still active — check for significant token growth (>5k since last check)
     const tokenDelta = tokens - prev.totalTokens;
     if (tokenDelta > 5000) {
       emitSSE('bridge:activity', {
-        gateway: gatewayName,
-        type: gatewayType,
+        gateway: 'Claude CLI',
+        type: 'claude_cli',
         event: 'token_growth',
-        text: `${gatewayName} working — ${fmtTokens(tokens)} tokens (+${fmtTokens(tokenDelta)})`,
+        text: `Claude CLI working — ${fmtTokens(tokens)} tokens (+${fmtTokens(tokenDelta)})`,
         sessions,
         tokens,
       }).catch(() => {});
     }
   }
 
-  snifferState.set(gatewayType, { activeSessions: sessions, totalTokens: tokens, wasActive: nowActive });
+  sniffer = { activeSessions: sessions, totalTokens: tokens, wasActive: nowActive };
 }
 
 function fmtTokens(n: number): string {
@@ -126,30 +103,18 @@ function fmtTokens(n: number): string {
 
 // ── Gateway ID cache ────────────────────────────────────────────────────────
 
-let gatewayIds: { claude: string; codex: string; gemini: string; openclaw?: string; ollama?: string } | null = null;
+let claudeGatewayId: string | null = null;
 
-async function getGatewayIds(): Promise<typeof gatewayIds> {
-  if (gatewayIds) return gatewayIds;
+async function getClaudeGatewayId(): Promise<string | null> {
+  if (claudeGatewayId) return claudeGatewayId;
 
-  const { rows } = await pool.query<{ id: string; type: string }>(
-    `SELECT id, type FROM gateways WHERE type IN ('claude_cli', 'codex_cli', 'gemini_cli', 'openclaw', 'ollama')`,
+  const { rows } = await pool.query<{ id: string }>(
+    `SELECT id FROM gateways WHERE type = 'claude_cli' LIMIT 1`,
   );
 
-  const map: Record<string, string> = {};
-  for (const r of rows) map[r.type] = r.id;
-
-  if (!map.claude_cli || !map.codex_cli || !map.gemini_cli) {
-    return null; // Some gateways not registered yet
-  }
-
-  gatewayIds = {
-    claude: map.claude_cli,
-    codex: map.codex_cli,
-    gemini: map.gemini_cli,
-    openclaw: map.openclaw,
-    ollama: map.ollama,
-  };
-  return gatewayIds;
+  if (rows.length === 0) return null;
+  claudeGatewayId = rows[0].id;
+  return claudeGatewayId;
 }
 
 // ── Main entry point ────────────────────────────────────────────────────────
@@ -160,17 +125,10 @@ type CollectLocalUsageOptions = {
 
 export async function collectLocalUsage(options: CollectLocalUsageOptions = {}): Promise<void> {
   try {
-    const ids = await getGatewayIds();
-    if (!ids) return; // Gateways not configured yet
+    const gatewayId = await getClaudeGatewayId();
+    if (!gatewayId) return; // Gateway not configured yet
 
-    const tasks = [
-      collectClaudeUsage(ids.claude, options),
-      collectCodexUsage(ids.codex),
-      collectGeminiUsage(ids.gemini),
-    ];
-    if (ids.openclaw) tasks.push(collectOpenClawUsage(ids.openclaw));
-    if (ids.ollama) tasks.push(collectOllamaUsage(ids.ollama));
-    await Promise.allSettled(tasks);
+    await collectClaudeUsage(gatewayId, options);
 
     // Emit SSE so admin UI refreshes capacity in real-time
     emitSSE('bridge:usage', { ts: Date.now() }).catch(() => {});
@@ -305,7 +263,6 @@ async function collectClaudeUsage(
     });
 
     // Parse rate-limit headers regardless of response status
-    // (headers are returned even on 4xx/5xx)
     const fiveHourUtil = parseFloat(resp.headers.get('anthropic-ratelimit-unified-5h-utilization') || '');
     const sevenDayUtil = parseFloat(resp.headers.get('anthropic-ratelimit-unified-7d-utilization') || '');
     const fiveHourReset = parseInt(resp.headers.get('anthropic-ratelimit-unified-5h-reset') || '', 10);
@@ -332,7 +289,7 @@ async function collectClaudeUsage(
 
     // Sniff for utilization changes (active if >0%)
     const activeSessions = result.fiveHourUtilization > 0 ? 1 : 0;
-    sniffActivity('claude_cli', 'Claude CLI', activeSessions, Math.round(result.fiveHourUtilization * 100));
+    sniffActivity(activeSessions, Math.round(result.fiveHourUtilization * 100));
 
     console.log('[usage-collector] Claude usage: 5h=%s%% 7d=%s%% status=%s',
       (result.fiveHourUtilization * 100).toFixed(1),
@@ -356,7 +313,7 @@ async function upsertClaudeFromCache(
 ): Promise<void> {
   await Promise.allSettled([
     // 5-hour session window
-    upsertUsageProvider(
+    upsertUsage(
       gatewayId,
       'requests',
       '5hour',
@@ -366,7 +323,7 @@ async function upsertClaudeFromCache(
       nowSec,
     ),
     // 7-day weekly window
-    upsertUsageProvider(
+    upsertUsage(
       gatewayId,
       'requests',
       'weekly',
@@ -378,10 +335,9 @@ async function upsertClaudeFromCache(
   ]);
 }
 
-/**
- * Upsert with source='provider' — highest trust, always overwrites.
- */
-async function upsertUsageProvider(
+// ── DB upsert helper ────────────────────────────────────────────────────────
+
+async function upsertUsage(
   gatewayId: string,
   limitType: string,
   period: string,
@@ -402,518 +358,4 @@ async function upsertUsageProvider(
        updated_at = EXCLUDED.updated_at`,
     [uuidv4(), gatewayId, limitType, period, limitValue, currentValue, resetAt, now],
   );
-}
-
-// ── Codex CLI ───────────────────────────────────────────────────────────────
-
-async function collectCodexUsage(gatewayId: string): Promise<void> {
-  const nowSec = Date.now() / 1000;
-  const fiveHourCutoff = nowSec - FIVE_HOURS_SEC;
-  const weekCutoff = nowSec - SEVEN_DAYS_SEC;
-
-  try {
-    const usageTasks: Promise<unknown>[] = [];
-
-    // Prefer Codex's own token_count rate-limit events for session/weekly %
-    // so Bridge shows the same percentage semantics as Claude.
-    const rateLimits = getLatestCodexRateLimits();
-    if (rateLimits) {
-      usageTasks.push(
-        upsertUsageProvider(
-          gatewayId,
-          'requests',
-          '5hour',
-          rateLimits.primary.usedPercent,
-          100,
-          rateLimits.primary.resetAt,
-          nowSec,
-        ),
-        upsertUsageProvider(
-          gatewayId,
-          'requests',
-          'weekly',
-          rateLimits.secondary.usedPercent,
-          100,
-          rateLimits.secondary.resetAt,
-          nowSec,
-        ),
-      );
-    }
-
-    if (fs.existsSync(CODEX_SQLITE_PATH)) {
-      // Open read-only to avoid WAL lock conflicts with running Codex
-      const db = new Database(CODEX_SQLITE_PATH, { readonly: true, fileMustExist: true });
-
-      try {
-        // 5-hour window
-        const fiveHourRow = db.prepare(
-          `SELECT COUNT(*) as cnt, COALESCE(SUM(tokens_used), 0) as tokens, MIN(updated_at) as oldest
-           FROM threads WHERE updated_at >= ?`,
-        ).get(fiveHourCutoff) as { cnt: number; tokens: number; oldest: number | null };
-
-        // Weekly window
-        const weekRow = db.prepare(
-          `SELECT COUNT(*) as cnt, COALESCE(SUM(tokens_used), 0) as tokens, MIN(updated_at) as oldest
-           FROM threads WHERE updated_at >= ?`,
-        ).get(weekCutoff) as { cnt: number; tokens: number; oldest: number | null };
-
-        const fiveHourResetAt = rateLimits?.primary.resetAt ?? (
-          fiveHourRow.oldest !== null ? fiveHourRow.oldest + FIVE_HOURS_SEC : null
-        );
-        const weeklyResetAt = rateLimits?.secondary.resetAt ?? getNextSaturdayMidnightUtc(nowSec);
-
-        // Keep token totals as collected tracking data. Requests are provider
-        // percentages when available, otherwise fall back to raw counts.
-        if (!rateLimits) {
-          usageTasks.push(
-            upsertUsageFallback(gatewayId, 'requests', '5hour', fiveHourRow.cnt, null, fiveHourResetAt, nowSec),
-            upsertUsageFallback(gatewayId, 'requests', 'weekly', weekRow.cnt, null, weeklyResetAt, nowSec),
-          );
-        }
-        usageTasks.push(
-          upsertUsage(gatewayId, 'tokens', '5hour', fiveHourRow.tokens, null, fiveHourResetAt, nowSec),
-          upsertUsage(gatewayId, 'tokens', 'weekly', weekRow.tokens, null, weeklyResetAt, nowSec),
-        );
-      } finally {
-        db.close();
-      }
-    } else if (!rateLimits) {
-      return;
-    }
-
-    await Promise.allSettled(usageTasks);
-  } catch (err) {
-    console.error('[usage-collector] codex sqlite error:', err instanceof Error ? err.message : err);
-  }
-}
-
-type CodexRateWindow = {
-  usedPercent: number;
-  resetAt: number | null;
-};
-
-type CodexRateLimits = {
-  timestamp: string;
-  primary: CodexRateWindow;
-  secondary: CodexRateWindow;
-};
-
-type CodexTokenCountEvent = {
-  timestamp?: string;
-  type?: string;
-  payload?: {
-    type?: string;
-    rate_limits?: {
-      primary?: { used_percent?: number; resets_at?: number };
-      secondary?: { used_percent?: number; resets_at?: number };
-    };
-  };
-};
-
-export function extractCodexRateLimitsFromJsonl(text: string): CodexRateLimits | null {
-  const lines = text.split('\n');
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    const line = lines[i]?.trim();
-    if (!line || !line.includes('"type":"token_count"') || !line.includes('used_percent')) continue;
-
-    try {
-      const evt = JSON.parse(line) as CodexTokenCountEvent;
-      const payload = evt.payload;
-      const primary = payload?.rate_limits?.primary;
-      const secondary = payload?.rate_limits?.secondary;
-      if (!payload || payload.type !== 'token_count' || primary?.used_percent == null || secondary?.used_percent == null) {
-        continue;
-      }
-      return {
-        timestamp: typeof evt.timestamp === 'string' ? evt.timestamp : new Date(0).toISOString(),
-        primary: {
-          usedPercent: primary.used_percent,
-          resetAt: typeof primary.resets_at === 'number' ? primary.resets_at : null,
-        },
-        secondary: {
-          usedPercent: secondary.used_percent,
-          resetAt: typeof secondary.resets_at === 'number' ? secondary.resets_at : null,
-        },
-      };
-    } catch {
-      // ignore malformed session lines and continue scanning older entries
-    }
-  }
-  return null;
-}
-
-function getLatestCodexRateLimits(): CodexRateLimits | null {
-  if (!fs.existsSync(CODEX_SESSIONS_DIR)) return null;
-
-  let latest: CodexRateLimits | null = null;
-  const stack = [CODEX_SESSIONS_DIR];
-  while (stack.length > 0) {
-    const dir = stack.pop()!;
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(fullPath);
-      } else if (entry.isFile() && fullPath.endsWith('.jsonl')) {
-        try {
-          const raw = fs.readFileSync(fullPath, 'utf-8');
-          const parsed = extractCodexRateLimitsFromJsonl(raw);
-          if (parsed && (!latest || parsed.timestamp > latest.timestamp)) {
-            latest = parsed;
-          }
-        } catch {
-          // ignore unreadable session files
-        }
-      }
-    }
-  }
-
-  return latest;
-}
-
-// ── Ollama (local, unlimited) ─────────────────────────────────────────────
-
-async function collectOllamaUsage(gatewayId: string): Promise<void> {
-  const nowSec = Date.now() / 1000;
-  // Local model — no provider limits. Store 0/0 so UI shows "0% · No limit".
-  await Promise.allSettled([
-    upsertUsageProvider(gatewayId, 'requests', '5hour', 0, null, null, nowSec),
-    upsertUsageProvider(gatewayId, 'requests', 'weekly', 0, null, null, nowSec),
-  ]);
-}
-
-// ── Gemini CLI ──────────────────────────────────────────────────────────────
-
-async function collectGeminiUsage(gatewayId: string): Promise<void> {
-  const nowSec = Date.now() / 1000;
-  const hourCutoff = nowSec - ONE_HOUR_SEC;
-  const dayCutoff = nowSec - 86400;
-
-  try {
-    // Hourly requests from Porter dispatch log
-    const { rows: hourRows } = await pool.query<{ cnt: string }>(`
-      SELECT COUNT(*)::text AS cnt
-      FROM bridge_dispatch_log
-      WHERE gateway_id = $1 AND created_at >= $2
-    `, [gatewayId, hourCutoff]);
-
-    const hourCount = parseInt(hourRows[0]?.cnt || '0', 10);
-    const hourLimit = 50;
-    const hourResetAt = Math.floor(nowSec / 3600) * 3600 + 3600;
-    await upsertUsage(gatewayId, 'requests', 'hourly', hourCount, hourLimit, hourResetAt, nowSec);
-
-    // Daily requests from Porter dispatch log
-    const { rows: dayRows } = await pool.query<{ cnt: string }>(`
-      SELECT COUNT(*)::text AS cnt
-      FROM bridge_dispatch_log
-      WHERE gateway_id = $1 AND created_at >= $2
-    `, [gatewayId, dayCutoff]);
-
-    const dayCount = parseInt(dayRows[0]?.cnt || '0', 10);
-    const dayLimit = 500;
-    const dayResetAt = Math.floor(nowSec / 86400) * 86400 + 86400;
-    await upsertUsage(gatewayId, 'requests', 'daily', dayCount, dayLimit, dayResetAt, nowSec);
-
-    // Per-model daily token usage from dispatch log
-    const { rows: modelRows } = await pool.query<{ model_name: string; req_count: string; total_in: string; total_out: string }>(`
-      SELECT model_name, COUNT(*)::text AS req_count,
-             COALESCE(SUM(input_tokens), 0)::text AS total_in,
-             COALESCE(SUM(output_tokens), 0)::text AS total_out
-      FROM bridge_dispatch_log
-      WHERE gateway_id = $1 AND created_at >= $2 AND model_name IS NOT NULL
-      GROUP BY model_name
-    `, [gatewayId, dayCutoff]);
-
-    for (const m of modelRows) {
-      const tokens = parseInt(m.total_in, 10) + parseInt(m.total_out, 10);
-      await upsertUsage(gatewayId, 'tokens', 'daily', tokens, null, dayResetAt, nowSec, m.model_name);
-      await upsertUsage(gatewayId, 'requests', 'daily', parseInt(m.req_count, 10), null, dayResetAt, nowSec, m.model_name);
-    }
-
-    console.log('[usage-collector] Gemini: hourly=%d/%d daily=%d/%d models=%d',
-      hourCount, hourLimit, dayCount, dayLimit, modelRows.length);
-  } catch (err) {
-    console.error('[usage-collector] gemini quota error:', err instanceof Error ? err.message : err);
-  }
-}
-
-// ── OpenClaw (GPT-5.4) ──────────────────────────────────────────────────────
-
-interface OpenClawStatusSession {
-  totalTokens: number | null;
-  contextTokens: number | null;
-  percentUsed: number | null;
-  age: number;  // ms since last update
-  updatedAt?: number;
-  model: string;
-  totalTokensFresh?: boolean;
-  remainingTokens?: number | null;
-  systemSent?: boolean;
-  flags?: string[];
-}
-
-interface OpenClawProviderUsageWindow {
-  usedPercent: number;
-  resetAt: number | null;
-}
-
-interface OpenClawProviderUsage {
-  providerLabel: string;
-  fiveHour: OpenClawProviderUsageWindow;
-  weekly: OpenClawProviderUsageWindow;
-}
-
-function parseOpenClawDurationToResetAt(text: string, nowSec: number): number | null {
-  const days = /(\d+)d/.exec(text)?.[1];
-  const hours = /(\d+)h/.exec(text)?.[1];
-  const minutes = /(\d+)m/.exec(text)?.[1];
-  const seconds = /(\d+)s/.exec(text)?.[1];
-  const totalSec =
-    (days ? parseInt(days, 10) * 86400 : 0) +
-    (hours ? parseInt(hours, 10) * 3600 : 0) +
-    (minutes ? parseInt(minutes, 10) * 60 : 0) +
-    (seconds ? parseInt(seconds, 10) : 0);
-  return totalSec > 0 ? nowSec + totalSec : null;
-}
-
-export function extractOpenClawProviderUsage(text: string, nowSec: number): OpenClawProviderUsage | null {
-  const providerMatch = text.match(/Usage:\s*[\s\S]*?^\s{2}([^\n]+)\n\s{4}5h:\s*(\d+)% left · resets ([^\n]+)\n\s{4}Week:\s*(\d+)% left · resets ([^\n]+)/m);
-  if (!providerMatch) return null;
-
-  const providerLabel = providerMatch[1].trim();
-  const fiveHourLeft = parseInt(providerMatch[2], 10);
-  const fiveHourResetText = providerMatch[3].trim();
-  const weeklyLeft = parseInt(providerMatch[4], 10);
-  const weeklyResetText = providerMatch[5].trim();
-
-  if ([fiveHourLeft, weeklyLeft].some(n => Number.isNaN(n))) return null;
-
-  return {
-    providerLabel,
-    fiveHour: {
-      usedPercent: Math.max(0, Math.min(100, 100 - fiveHourLeft)),
-      resetAt: parseOpenClawDurationToResetAt(fiveHourResetText, nowSec),
-    },
-    weekly: {
-      usedPercent: Math.max(0, Math.min(100, 100 - weeklyLeft)),
-      resetAt: parseOpenClawDurationToResetAt(weeklyResetText, nowSec),
-    },
-  };
-}
-
-async function collectOpenClawUsage(gatewayId: string): Promise<void> {
-  const nowSec = Date.now() / 1000;
-
-  try {
-    const usageText = execSync('openclaw status --usage 2>/dev/null', { encoding: 'utf-8', timeout: 10000 });
-    const providerUsage = extractOpenClawProviderUsage(usageText, nowSec);
-
-    // Use `openclaw status --json` for live session/context tracking data.
-    const raw = execSync('openclaw status --json 2>/dev/null', { encoding: 'utf-8', timeout: 10000 });
-    const data = JSON.parse(raw);
-    const recent: OpenClawStatusSession[] = data?.sessions?.recent ?? [];
-
-    if (recent.length === 0 && !providerUsage) return;
-
-    const fiveHourMs = FIVE_HOURS_SEC * 1000;
-    const weekMs = SEVEN_DAYS_SEC * 1000;
-
-    let fiveHourTokens = 0;
-    let fiveHourSessions = 0;
-    let weeklyTokens = 0;
-    let weeklySessions = 0;
-    let totalContextWindow = 0;
-    let totalUsedInContext = 0;
-    let latestUsableSession: OpenClawStatusSession | null = null;
-
-    for (const s of recent) {
-      const ageMs = s.age ?? Infinity;
-      const totalTokens = typeof s.totalTokens === 'number' && Number.isFinite(s.totalTokens) ? s.totalTokens : null;
-      const contextTokens = typeof s.contextTokens === 'number' && Number.isFinite(s.contextTokens) ? s.contextTokens : null;
-      const hasUsableSessionUsage = totalTokens !== null && contextTokens !== null && contextTokens > 0;
-
-      if (hasUsableSessionUsage && (!latestUsableSession || (s.updatedAt ?? 0) > (latestUsableSession.updatedAt ?? 0))) {
-        latestUsableSession = s;
-      }
-      if (ageMs < weekMs) {
-        weeklySessions += 1;
-        weeklyTokens += totalTokens ?? 0;
-      }
-      if (ageMs < fiveHourMs) {
-        fiveHourSessions += 1;
-        fiveHourTokens += totalTokens ?? 0;
-        if (hasUsableSessionUsage) {
-          totalContextWindow += contextTokens;
-          totalUsedInContext += totalTokens;
-        }
-      }
-    }
-
-    // Context window utilization across usable recent sessions only.
-    const contextPct = totalContextWindow > 0 ? totalUsedInContext / totalContextWindow : null;
-
-    const fiveHourResetAt = providerUsage?.fiveHour.resetAt ?? (nowSec + FIVE_HOURS_SEC);
-    const weeklyResetAt = providerUsage?.weekly.resetAt ?? getNextSaturdayMidnightUtc(nowSec);
-
-    const usageTasks: Promise<unknown>[] = [
-      upsertUsageFallback(gatewayId, 'tokens', '5hour', fiveHourTokens, null, fiveHourResetAt, nowSec),
-      providerUsage
-        ? upsertUsageProvider(gatewayId, 'requests', '5hour', providerUsage.fiveHour.usedPercent, 100, providerUsage.fiveHour.resetAt, nowSec)
-        : upsertUsageFallback(gatewayId, 'requests', '5hour', fiveHourSessions, null, fiveHourResetAt, nowSec),
-      upsertUsageFallback(gatewayId, 'tokens', 'weekly', weeklyTokens, null, weeklyResetAt, nowSec),
-      providerUsage
-        ? upsertUsageProvider(gatewayId, 'requests', 'weekly', providerUsage.weekly.usedPercent, 100, providerUsage.weekly.resetAt, nowSec)
-        : upsertUsageFallback(gatewayId, 'requests', 'weekly', weeklySessions, null, weeklyResetAt, nowSec),
-    ];
-
-    if (latestUsableSession) {
-      const latestTotalTokens = latestUsableSession.totalTokens as number;
-      const latestContextTokens = latestUsableSession.contextTokens as number;
-      const latestPercentUsed = typeof latestUsableSession.percentUsed === 'number' && Number.isFinite(latestUsableSession.percentUsed)
-        ? latestUsableSession.percentUsed
-        : Math.round((latestTotalTokens / latestContextTokens) * 100);
-
-      usageTasks.push(
-        upsertUsage(
-          gatewayId,
-          'requests',
-          'session',
-          latestPercentUsed,
-          100,
-          null,
-          nowSec,
-        ),
-        upsertUsage(
-          gatewayId,
-          'tokens',
-          'session',
-          latestTotalTokens,
-          latestContextTokens,
-          null,
-          nowSec,
-        ),
-      );
-    }
-
-    await Promise.allSettled(usageTasks);
-
-    // Sniff for activity transitions
-    sniffActivity('openclaw', 'OpenClaw', fiveHourSessions, fiveHourTokens);
-
-    console.log('[usage-collector] OpenClaw (live): %d sessions / %dk tokens (5h), %d sessions / %dk tokens (week), ctx %s%%, provider %s 5h=%s%% week=%s%%',
-      fiveHourSessions, Math.round(fiveHourTokens / 1000),
-      weeklySessions, Math.round(weeklyTokens / 1000),
-      contextPct != null ? Math.round(contextPct * 100) : 'n/a',
-      providerUsage?.providerLabel ?? 'n/a',
-      providerUsage?.fiveHour.usedPercent ?? 'n/a',
-      providerUsage?.weekly.usedPercent ?? 'n/a');
-  } catch (err) {
-    // Fallback to sessions.json if openclaw command fails
-    try {
-      if (!fs.existsSync(OPENCLAW_SESSIONS_PATH)) return;
-      const raw = fs.readFileSync(OPENCLAW_SESSIONS_PATH, 'utf-8');
-      const sessions: Record<string, { updatedAt?: number; totalTokens?: number }> = JSON.parse(raw);
-      const nowMs = Date.now();
-      let fiveHourTokens = 0, weeklyTokens = 0, fiveH = 0, weekR = 0;
-      for (const s of Object.values(sessions)) {
-        const age = nowMs - (s.updatedAt ?? 0);
-        if (age < SEVEN_DAYS_SEC * 1000) { weeklyTokens += s.totalTokens ?? 0; weekR++; }
-        if (age < FIVE_HOURS_SEC * 1000) { fiveHourTokens += s.totalTokens ?? 0; fiveH++; }
-      }
-      await Promise.allSettled([
-        upsertUsage(gatewayId, 'tokens', '5hour', fiveHourTokens, null, nowSec + FIVE_HOURS_SEC, nowSec),
-        upsertUsage(gatewayId, 'requests', '5hour', fiveH, null, nowSec + FIVE_HOURS_SEC, nowSec),
-        upsertUsage(gatewayId, 'tokens', 'weekly', weeklyTokens, null, getNextSaturdayMidnightUtc(nowSec), nowSec),
-        upsertUsage(gatewayId, 'requests', 'weekly', weekR, null, getNextSaturdayMidnightUtc(nowSec), nowSec),
-      ]);
-    } catch { /* both methods failed, skip silently */ }
-  }
-}
-
-// ── DB upsert helper ────────────────────────────────────────────────────────
-
-async function upsertUsage(
-  gatewayId: string,
-  limitType: string,
-  period: string,
-  currentValue: number,
-  limitValue: number | null,
-  resetAt: number | null,
-  now: number,
-  modelName: string | null = null,
-): Promise<void> {
-  await pool.query(
-    `INSERT INTO gateway_rate_limits
-       (id, gateway_id, model_name, limit_type, period, limit_value, current_value, reset_at, source, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'collected', $9)
-     ON CONFLICT (gateway_id, COALESCE(model_name, ''), limit_type, period) DO UPDATE SET
-       current_value = EXCLUDED.current_value,
-       reset_at = COALESCE(EXCLUDED.reset_at, gateway_rate_limits.reset_at),
-       limit_value = COALESCE(EXCLUDED.limit_value, gateway_rate_limits.limit_value),
-       source = CASE
-         WHEN gateway_rate_limits.source IN ('provider', 'configured') THEN gateway_rate_limits.source
-         ELSE EXCLUDED.source
-       END,
-       updated_at = EXCLUDED.updated_at`,
-    [uuidv4(), gatewayId, modelName, limitType, period, limitValue, currentValue, resetAt, now],
-  );
-}
-
-async function upsertUsageFallback(
-  gatewayId: string,
-  limitType: string,
-  period: string,
-  currentValue: number,
-  limitValue: number | null,
-  resetAt: number | null,
-  now: number,
-): Promise<void> {
-  await pool.query(
-    `INSERT INTO gateway_rate_limits
-       (id, gateway_id, model_name, limit_type, period, limit_value, current_value, reset_at, source, updated_at)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, 'collected', $8)
-     ON CONFLICT (gateway_id, COALESCE(model_name, ''), limit_type, period) DO UPDATE SET
-       current_value = CASE
-         WHEN gateway_rate_limits.source IN ('provider', 'configured') THEN gateway_rate_limits.current_value
-         ELSE EXCLUDED.current_value
-       END,
-       reset_at = CASE
-         WHEN gateway_rate_limits.source IN ('provider', 'configured') THEN gateway_rate_limits.reset_at
-         ELSE COALESCE(EXCLUDED.reset_at, gateway_rate_limits.reset_at)
-       END,
-       limit_value = COALESCE(EXCLUDED.limit_value, gateway_rate_limits.limit_value),
-       source = CASE
-         WHEN gateway_rate_limits.source IN ('provider', 'configured') THEN gateway_rate_limits.source
-         ELSE EXCLUDED.source
-       END,
-       updated_at = EXCLUDED.updated_at`,
-    [uuidv4(), gatewayId, limitType, period, limitValue, currentValue, resetAt, now],
-  );
-}
-
-// ── Time helpers ────────────────────────────────────────────────────────────
-
-function getNextSaturdayMidnightUtc(nowSec: number): number {
-  const d = new Date(nowSec * 1000);
-  const dayOfWeek = d.getUTCDay(); // 0=Sun, 6=Sat
-  const daysUntilSat = dayOfWeek === 6 ? 7 : (6 - dayOfWeek);
-  const nextSat = new Date(Date.UTC(
-    d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + daysUntilSat,
-    0, 0, 0, 0,
-  ));
-  return nextSat.getTime() / 1000;
-}
-
-function getNextMidnightUtc(nowSec: number): number {
-  const d = new Date(nowSec * 1000);
-  const tomorrow = new Date(Date.UTC(
-    d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1,
-    0, 0, 0, 0,
-  ));
-  return tomorrow.getTime() / 1000;
 }

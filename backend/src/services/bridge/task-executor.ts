@@ -1,8 +1,8 @@
 /**
- * Bridge Task Executor (Phase 39)
+ * Bridge Task Executor
  *
- * Core subprocess orchestrator for CLI-based task dispatch.
- * Spawns claude/gemini/codex CLIs as subprocesses, parses JSONL output,
+ * Core subprocess orchestrator for Claude CLI task dispatch.
+ * Spawns claude CLI as a subprocess, parses JSONL output,
  * and yields TaskEvent objects via an async generator.
  *
  * Features:
@@ -21,7 +21,7 @@ import type { GatewayType, TaskEvent } from './types.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-export const TASK_CAPABLE_TYPES = new Set<GatewayType>(['claude_cli', 'gemini_cli', 'codex_cli', 'openclaw', 'ollama']);
+export const TASK_CAPABLE_TYPES = new Set<GatewayType>(['claude_cli'] as const);
 
 const DEFAULT_TIMEOUT_MS = 300_000;   // 5 minutes
 const MAX_TIMEOUT_MS = 600_000;       // 10 minutes
@@ -67,7 +67,7 @@ export function validateCwd(cwd: string): void {
   const allowed = CWD_ALLOWLIST.some((prefix) => cwd.startsWith(prefix));
   if (!allowed) {
     throw new Error(
-      `Invalid cwd: "${cwd}" is not under an allowed path. Allowed: ${CWD_ALLOWLIST.join(', ')}`
+      `Invalid cwd: "${cwd}" is not under an allowed path. Allowed: ${CWD_ALLOWLIST.join(', ')}`,
     );
   }
 
@@ -85,79 +85,41 @@ export interface BuildTaskArgsResult {
 }
 
 /**
- * Build CLI arguments for the given gateway type and prompt.
- * Each gateway has a distinct invocation pattern:
- * - claude_cli: prompt via stdin, stream-json output, --bare to suppress extraneous output
- * - gemini_cli: prompt as -p positional arg, stream-json output, --yolo for full autonomy
- * - codex_cli: prompt positional, dangerously-bypass-approvals, -C for cwd
+ * Build CLI arguments for Claude CLI.
+ * Prompt is fed via stdin, output is stream-json, --bare suppresses extraneous output.
  */
 export function buildTaskArgs(
-  gatewayType: GatewayType,
+  _gatewayType: GatewayType,
   prompt: string,
   cwd: string,
   tools?: string[],
 ): BuildTaskArgsResult {
-  switch (gatewayType) {
-    case 'claude_cli': {
-      const baseArgs = [
-        '-p',
-        '--dangerously-skip-permissions',
-        '--output-format', 'stream-json',
-        '--verbose',
-        '--no-session-persistence',
-      ];
-      // GWC-03: Pass tool allowlist if specified
-      if (tools?.length) {
-        baseArgs.push('--allowedTools', tools.join(','));
-      }
-      return {
-        args: baseArgs,
-        stdinPrompt: prompt,
-        spawnCwd: cwd,
-      };
-    }
-
-    case 'gemini_cli':
-      // Note: Gemini CLI (--yolo) does not support per-tool filtering
-      return {
-        args: [
-          '-p', prompt,
-          '--yolo',
-        ],
-        stdinPrompt: null,
-        spawnCwd: cwd,
-      };
-
-    case 'codex_cli':
-      // Note: Codex CLI (--dangerously-bypass-approvals-and-sandbox) does not support per-tool filtering
-      return {
-        args: [
-          'exec',
-          '--dangerously-bypass-approvals-and-sandbox',
-          '--json',
-          '-C', cwd,
-          prompt,
-        ],
-        stdinPrompt: null,
-        spawnCwd: cwd,
-      };
-
-    default:
-      throw new Error(
-        `Gateway type "${gatewayType}" does not support task dispatch. ` +
-        `Supported: ${[...TASK_CAPABLE_TYPES].join(', ')}`
-      );
+  const baseArgs = [
+    '-p',
+    '--dangerously-skip-permissions',
+    '--output-format', 'stream-json',
+    '--verbose',
+    '--no-session-persistence',
+  ];
+  // GWC-03: Pass tool allowlist if specified
+  if (tools?.length) {
+    baseArgs.push('--allowedTools', tools.join(','));
   }
+  return {
+    args: baseArgs,
+    stdinPrompt: prompt,
+    spawnCwd: cwd,
+  };
 }
 
 // ── Core async generator ──────────────────────────────────────────────────────
 
 /**
- * Execute a task via CLI subprocess and yield TaskEvent objects.
+ * Execute a task via Claude CLI subprocess and yield TaskEvent objects.
  *
  * Lifecycle:
  * 1. validateCwd — security gate before any subprocess is spawned
- * 2. buildTaskArgs — gateway-specific CLI flags
+ * 2. buildTaskArgs — Claude CLI flags
  * 3. spawn subprocess with PORTER_BRIDGE_DISPATCH=1 env marker
  * 4. AbortSignal → SIGTERM → 5s → SIGKILL
  * 5. Hard timeout → SIGTERM → 5s → SIGKILL
@@ -181,7 +143,7 @@ export async function* executeTask(
   // Clamp timeout
   const clampedTimeout = Math.min(
     Math.max(timeoutMs ?? DEFAULT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS),
-    MAX_TIMEOUT_MS
+    MAX_TIMEOUT_MS,
   );
 
   const startTime = Date.now();
@@ -192,7 +154,7 @@ export async function* executeTask(
     env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
   });
 
-  // Drain stderr into buffer (prevents deadlock; used for Codex bwrap filtering)
+  // Drain stderr into buffer (prevents deadlock)
   const stderrChunks: Buffer[] = [];
   child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
 
@@ -215,7 +177,7 @@ export async function* executeTask(
     }, 5_000);
   }, clampedTimeout);
 
-  // Feed prompt via stdin (claude_cli only)
+  // Feed prompt via stdin
   if (stdinPrompt !== null) {
     child.stdin.write(stdinPrompt, 'utf8');
     child.stdin.end();
@@ -242,159 +204,65 @@ export async function* executeTask(
       try {
         event = JSON.parse(line) as Record<string, unknown>;
       } catch {
-        // Non-JSON line — for Codex/Gemini this IS the output (plain text)
-        // Filter out known noise lines
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        if (trimmed.startsWith('warning:')) continue;
-        if (trimmed.startsWith('OpenAI Codex')) continue;
-        if (trimmed === '--------') continue;
-        if (trimmed.startsWith('workdir:') || trimmed.startsWith('model:') || trimmed.startsWith('provider:')) continue;
-        if (trimmed.startsWith('approval:') || trimmed.startsWith('sandbox:') || trimmed.startsWith('reasoning')) continue;
-        if (trimmed.startsWith('session id:') || trimmed.startsWith('mcp startup:')) continue;
-        if (trimmed === 'user' || trimmed === 'codex' || trimmed === 'exec') continue;
-        if (trimmed.startsWith('tokens used')) continue;
-
-        // Capture as output text
-        if (!outputTruncated) {
-          const text = trimmed + '\n';
-          outputBytes += Buffer.byteLength(text, 'utf8');
-          if (outputBytes > MAX_OUTPUT_BYTES) {
-            outputTruncated = true;
-            yield { type: 'progress' as const, text: '\n[output truncated at 1MB]' };
-          } else {
-            yield { type: 'progress' as const, text };
-          }
-        }
+        // Non-JSON line — skip noise
         continue;
       }
 
       if (!event) continue;
 
-      // ── Claude CLI parsing ──────────────────────────────────────────────────
-      if (gatewayType === 'claude_cli') {
-        // New schema: type: assistant with content accumulator
-        if (event.type === 'assistant' && event.message) {
-          const msg = event.message as Record<string, unknown>;
-          const content = msg.content as Array<Record<string, unknown>> | undefined;
-          if (Array.isArray(content)) {
-            for (const block of content) {
-              if (block.type === 'text') {
-                const fullText = (block.text as string) ?? '';
-                claudeAccumulator = fullText;
-                if (claudeAccumulator.length > claudeLastYieldedLength) {
-                  const delta = claudeAccumulator.slice(claudeLastYieldedLength);
-                  claudeLastYieldedLength = claudeAccumulator.length;
+      // ── Claude CLI parsing ──────────────────────────────────────────────
+      // New schema: type: assistant with content accumulator
+      if (event.type === 'assistant' && event.message) {
+        const msg = event.message as Record<string, unknown>;
+        const content = msg.content as Array<Record<string, unknown>> | undefined;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block.type === 'text') {
+              const fullText = (block.text as string) ?? '';
+              claudeAccumulator = fullText;
+              if (claudeAccumulator.length > claudeLastYieldedLength) {
+                const delta = claudeAccumulator.slice(claudeLastYieldedLength);
+                claudeLastYieldedLength = claudeAccumulator.length;
 
-                  if (!outputTruncated) {
-                    outputBytes += Buffer.byteLength(delta, 'utf8');
-                    if (outputBytes > MAX_OUTPUT_BYTES) {
-                      outputTruncated = true;
-                      yield { type: 'progress', text: '\n[output truncated at 1MB]' };
-                    } else {
-                      yield { type: 'progress', text: delta };
-                    }
+                if (!outputTruncated) {
+                  outputBytes += Buffer.byteLength(delta, 'utf8');
+                  if (outputBytes > MAX_OUTPUT_BYTES) {
+                    outputTruncated = true;
+                    yield { type: 'progress', text: '\n[output truncated at 1MB]' };
+                  } else {
+                    yield { type: 'progress', text: delta };
                   }
                 }
               }
-              // Tool use block
-              if (block.type === 'tool_use') {
-                yield {
-                  type: 'tool_use',
-                  tool: block.name as string | undefined,
-                  input: block.input,
-                };
-              }
             }
-          }
-        }
-
-        // Legacy schema: stream_event content_block_delta
-        if (
-          event.type === 'stream_event' &&
-          (event.event as Record<string, unknown>)?.type === 'content_block_delta'
-        ) {
-          const delta = (event.event as Record<string, unknown>).delta as
-            | Record<string, unknown>
-            | undefined;
-          const text = delta?.text as string | undefined;
-          if (text && !outputTruncated) {
-            outputBytes += Buffer.byteLength(text, 'utf8');
-            if (outputBytes > MAX_OUTPUT_BYTES) {
-              outputTruncated = true;
-              yield { type: 'progress', text: '\n[output truncated at 1MB]' };
-            } else {
-              yield { type: 'progress', text };
+            // Tool use block
+            if (block.type === 'tool_use') {
+              yield {
+                type: 'tool_use',
+                tool: block.name as string | undefined,
+                input: block.input,
+              };
             }
           }
         }
       }
 
-      // ── Gemini CLI parsing ──────────────────────────────────────────────────
-      if (gatewayType === 'gemini_cli') {
-        if (event.type === 'message' && event.role === 'assistant') {
-          const content = event.content as string | undefined;
-          if (content && !outputTruncated) {
-            outputBytes += Buffer.byteLength(content, 'utf8');
-            if (outputBytes > MAX_OUTPUT_BYTES) {
-              outputTruncated = true;
-              yield { type: 'progress', text: '\n[output truncated at 1MB]' };
-            } else {
-              yield { type: 'progress', text: content };
-            }
-          }
-        }
-      }
-
-      // ── Codex CLI parsing (--json JSONL format) ─────────────────────────────
-      if (gatewayType === 'codex_cli' && event.type === 'item.completed') {
-        const item = event.item as Record<string, unknown> | undefined;
-        if (!item) continue;
-
-        // Agent message: {"item":{"type":"agent_message","text":"..."}}
-        if (item.type === 'agent_message' && item.text) {
-          const text = (item.text as string) + '\n';
-          if (!outputTruncated) {
-            outputBytes += Buffer.byteLength(text, 'utf8');
-            if (outputBytes > MAX_OUTPUT_BYTES) {
-              outputTruncated = true;
-              yield { type: 'progress', text: '\n[output truncated at 1MB]' };
-            } else {
-              yield { type: 'progress', text };
-            }
-          }
-        }
-
-        // Command execution: {"item":{"type":"command_execution","aggregated_output":"...","exit_code":0}}
-        if (item.type === 'command_execution' && item.aggregated_output) {
-          const text = (item.aggregated_output as string);
-          if (!outputTruncated) {
-            outputBytes += Buffer.byteLength(text, 'utf8');
-            if (outputBytes > MAX_OUTPUT_BYTES) {
-              outputTruncated = true;
-              yield { type: 'progress', text: '\n[output truncated at 1MB]' };
-            } else {
-              yield { type: 'progress', text };
-            }
-          }
-        }
-
-        // Legacy: message with content[].output_text
-        if (item.type === 'message') {
-          const content = item.content as Array<Record<string, unknown>> | undefined;
-          if (Array.isArray(content)) {
-            for (const c of content) {
-              if (c.type === 'output_text' && c.text && !outputTruncated) {
-                const text = c.text as string;
-                outputBytes += Buffer.byteLength(text, 'utf8');
-                if (outputBytes > MAX_OUTPUT_BYTES) {
-                  outputTruncated = true;
-                  yield { type: 'progress', text: '\n[output truncated at 1MB]' };
-                } else {
-                  yield { type: 'progress', text };
-                }
-              }
-            }
+      // Legacy schema: stream_event content_block_delta
+      if (
+        event.type === 'stream_event' &&
+        (event.event as Record<string, unknown>)?.type === 'content_block_delta'
+      ) {
+        const delta = (event.event as Record<string, unknown>).delta as
+          | Record<string, unknown>
+          | undefined;
+        const text = delta?.text as string | undefined;
+        if (text && !outputTruncated) {
+          outputBytes += Buffer.byteLength(text, 'utf8');
+          if (outputBytes > MAX_OUTPUT_BYTES) {
+            outputTruncated = true;
+            yield { type: 'progress', text: '\n[output truncated at 1MB]' };
+          } else {
+            yield { type: 'progress', text };
           }
         }
       }
