@@ -51,9 +51,21 @@ Moe's call: the multi-gateway Bridge was complexity without value. 5 adapters �
 - Deleted routing-rules and workspace-config CRUD handlers from all 3 admin bridge route files (470 LOC)
 - Frontend rebuilt, bridge page renders clean with single Claude CLI gateway card
 
-**Total across v6.9.0:** ~5,300 lines removed. Bridge is fully simplified.
+**Post-ship fixes:**
+- Fixed `/api/admin/bridge/confidence` returning `{}` instead of `[]` — caused bridge page crash (`{}.reduce is not a function` caught by ErrorBoundary as "Content failed to load")
+- Added `claude-opus-4-7` and `claude-haiku-4-5` to model catalog + DB (5 models total)
+- Replaced 3-agent tab navigation (Vigil/Compass/Ledger) with simple Status/Models/Costs tabs — single gateway doesn't need agent personas
+- Removed unused PixelPortrait and useNavigate imports from bridge.tsx
 
-Commits: `cb13a7d` (backend), `98171ed` (admin cleanup)
+**Total across v6.9.0:** ~5,500 lines removed. Bridge is fully simplified.
+
+**Current state of bridge page:**
+- 3 tabs: Status / Models / Costs
+- 1 gateway: Claude CLI (active)
+- 5 models: claude-opus-4-7, claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5, claude-haiku-3-5
+- All dispatch logging, cost analytics, health probes still operational
+
+Commits: `cb13a7d` (backend), `98171ed` (admin cleanup), `ad40f77` (confidence fix), `c8d942f` (models + UI)
 
 ## v6.8.1 — Anthropic API gateway removed
 
