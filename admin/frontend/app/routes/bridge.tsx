@@ -575,9 +575,9 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
       {models.length > 0 && (
         <div className="border-t border-border/30">
           {models.map((model, i) => (
-            <button key={model.id} onClick={() => toggleModel.mutate(model.id)}
-              className={`flex items-center gap-2.5 px-4 py-1.5 w-full text-left ${i < models.length - 1 ? "border-b border-border/15" : ""} bg-background/30 hover:bg-raised/30 transition-colors`}>
-              <span className={`size-2 rounded-full shrink-0 ${model.is_active ? "bg-text3/40" : "bg-text3/15"}`} title={model.is_active ? "Registered" : "Inactive"} />
+            <div key={model.id}
+              className={`flex items-center gap-2.5 px-4 py-1.5 w-full text-left ${i < models.length - 1 ? "border-b border-border/15" : ""} bg-background/30`}>
+              <span className={`size-2 rounded-full shrink-0 ${model.is_active ? "bg-success/60" : "bg-text3/15"}`} title={model.is_active ? "Active" : "Inactive"} />
               <p className={`text-2xs font-mono flex-1 min-w-0 truncate ${model.is_active ? "text-text" : "text-text3"}`}>{model.model_name}</p>
               <div className="flex gap-0.5 shrink-0">
                 {(model.capabilities ?? []).map(cap => (
@@ -591,7 +591,7 @@ function GatewayCard({ gw, models, versionInfo, capacity, metrics, onOpenEditor,
                 ))}
               </div>
               <span className="text-2xs text-text3 tabular-nums shrink-0">{fmtCtx(model.context_window)}</span>
-            </button>
+            </div>
           ))}
         </div>
       )}
