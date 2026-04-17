@@ -45,11 +45,15 @@ Moe's call: the multi-gateway Bridge was complexity without value. 5 adapters �
 - All dispatch logging (bridge_dispatch_log) — still records every dispatch
 - All callers (ai-router.ts, task-decomposition, chat routes) — unchanged API surface
 
-**Still TODO (follow-up session):**
-- Phase 4: Admin API cleanup (remove routing rules CRUD, simplify gateway endpoints)
-- Phase 5: Frontend cleanup (remove routing-rules.tsx, workspace-gateway-overrides.tsx, simplify bridge.tsx)
+**Phase 4+5 completed (same session):**
+- Deleted `routing-rules.tsx` (524 LOC) and `workspace-gateway-overrides.tsx` (225 LOC) from frontend
+- Removed their imports from bridge.tsx
+- Deleted routing-rules and workspace-config CRUD handlers from all 3 admin bridge route files (470 LOC)
+- Frontend rebuilt, bridge page renders clean with single Claude CLI gateway card
 
-Commit: `cb13a7d`
+**Total across v6.9.0:** ~5,300 lines removed. Bridge is fully simplified.
+
+Commits: `cb13a7d` (backend), `98171ed` (admin cleanup)
 
 ## v6.8.1 — Anthropic API gateway removed
 
