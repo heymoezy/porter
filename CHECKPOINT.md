@@ -3,15 +3,53 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.8.1
-updated: 2026-04-15
+version: v6.9.0
+updated: 2026-04-17
 updated_by: claude-opus-4.6
 
 ## Architecture
 
 Single monorepo (heymoezy/porter). One Fastify process on :3001. API metering business model.
 3 pillars: Bridge (hub), Forge (factory), Recall (shared brain).
-5 gateways: Claude CLI, OpenClaw, Ollama, Codex CLI, Gemini CLI.
+1 gateway: Claude CLI. Scripts (birth-templates) still call OpenClaw directly via HTTP when needed.
+
+## v6.9.0 — Bridge simplified to Claude CLI only
+
+Moe's call: the multi-gateway Bridge was complexity without value. 5 adapters → 1.
+
+**What was removed (~4,100 lines):**
+- 4 adapter files: openclaw.ts, ollama.ts, codex-cli.ts, gemini-cli.ts
+- http-task-executor.ts (HTTP-based dispatch, only used by deleted adapters)
+- routing-confidence.ts (confidence scoring across gateways — moot with 1 gateway)
+- routing-rule-consistency.test.ts + usage-collector.test.ts
+- 4 DB gateway rows (only `claude_cli` remains)
+
+**What was simplified:**
+- routing-engine.ts (1,071 → 565): no fallback chains, no routing rules evaluation, no heuristic scoring. `select()` returns Claude. `selectWithFallback()` dispatches once.
+- startup-detector.ts (333 → 152): only detects Claude binary
+- usage-collector.ts (919 → 361): only Claude OAuth + rate-limit sniffing
+- model-catalog.ts (440 → 361): Claude models only
+- task-executor.ts (421 → 289): CLI subprocess only
+- agent-delegation.ts (287 → 258): always delegates to Claude
+- stream-service.ts (76 → 50): backend param ignored
+- dispatch-queues.ts (54 → 33): single queue
+- capability-registry.ts: Claude entry only
+- types.ts: `GatewayType = 'claude_cli'`
+
+**What still works unchanged:**
+- rate-limit-tracker.ts (516) — already per-gateway-id, works with 1
+- circuit-breaker-registry.ts (103) — same
+- health-probe.ts (184) — adapter-agnostic, probes Claude
+- retry.ts (80) — error classification is gateway-agnostic
+- stream-normalizer.ts (46) — unchanged
+- All dispatch logging (bridge_dispatch_log) — still records every dispatch
+- All callers (ai-router.ts, task-decomposition, chat routes) — unchanged API surface
+
+**Still TODO (follow-up session):**
+- Phase 4: Admin API cleanup (remove routing rules CRUD, simplify gateway endpoints)
+- Phase 5: Frontend cleanup (remove routing-rules.tsx, workspace-gateway-overrides.tsx, simplify bridge.tsx)
+
+Commit: `cb13a7d`
 
 ## v6.8.1 — Anthropic API gateway removed
 
