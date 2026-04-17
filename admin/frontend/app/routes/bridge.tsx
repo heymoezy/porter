@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react"
-import { useNavigate, Link } from "react-router"
+import { Link } from "react-router"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
-import { PixelPortrait } from "~/components/pixel-portrait"
+
 import { LLMTerminal } from "~/components/llm-terminal"
 import { ModelCatalog } from "~/components/bridge/model-catalog"
 import { DispatchLog } from "~/components/bridge/dispatch-log"
@@ -330,10 +330,10 @@ function fmtNow() {
 
 // ── Bridge Agent Team ────────────────────────────────
 
-const BRIDGE_TEAM = [
-  { templateId: "bridge-operator", tab: "operator", name: "Vigil", specialist: "Bridge Operator", role: "Health & Sessions", skin: "#c68642", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#059669", hairStyle: "short" as const },
-  { templateId: "route-optimizer", tab: "routing", name: "Compass", specialist: "Route Optimizer", role: "Models · Dispatch · Rules", skin: "#8d5524", hair: "#292524", eyes: "#1a1a2e", shirt: "#2563eb", hairStyle: "mohawk" as const },
-  { templateId: "cost-controller", tab: "controller", name: "Ledger", specialist: "Cost Controller", role: "Tokens · Limits · Costs", skin: "#e0ac69", hair: "#2C1810", eyes: "#1a1a2e", shirt: "#d97706", hairStyle: "short" as const },
+const BRIDGE_TABS = [
+  { tab: "status", label: "Status" },
+  { tab: "models", label: "Models" },
+  { tab: "costs", label: "Costs" },
 ]
 
 // ── Operator Event Log ────────────────────────────────
@@ -1270,8 +1270,7 @@ function JobQueuePanel() {
 // ── Page ────────────────────────────────────────────────
 
 export default function BridgePage() {
-  const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState("operator")
+  const [activeTab, setActiveTab] = useState("status")
   const [, setLogTick] = useState(0)
   const tickLog = () => setLogTick(t => t + 1)
 
@@ -1376,39 +1375,30 @@ export default function BridgePage() {
         </div>
       </div>
 
-      {/* ── Agent Navigation ── */}
+      {/* ── Tab Navigation ── */}
       <div className="shrink-0 flex items-stretch border-b border-border">
-        {BRIDGE_TEAM.map(agent => {
-          const isActive = agent.tab === activeTab
+        {BRIDGE_TABS.map(t => {
+          const isActive = t.tab === activeTab
           return (
             <button
-              key={agent.tab}
-              onClick={() => {
-                if (isActive) navigate(`/agents/${agent.templateId}`)
-                else { setActiveTab(agent.tab); setEditingGw(null) }
-              }}
-              className={`flex-1 flex items-center justify-center gap-2.5 py-3 px-3 transition-colors duration-200 relative ${
-                isActive ? "bg-accent-porter/5" : "hover:bg-raised/30"
+              key={t.tab}
+              onClick={() => { setActiveTab(t.tab); setEditingGw(null) }}
+              className={`px-5 py-2.5 text-xs font-medium transition-colors relative ${
+                isActive ? "text-foreground" : "text-text3 hover:text-text2"
               }`}
             >
-              {isActive && <div className="absolute bottom-0 left-[10%] right-[10%] h-[3px] rounded-t-full bg-accent-porter" />}
-              <div className="grayscale opacity-50">
-                <PixelPortrait size="sm" skin={agent.skin} hair={agent.hair} eyes={agent.eyes} shirt={agent.shirt} hairStyle={agent.hairStyle} />
-              </div>
-              <div className="text-left min-w-0">
-                <p className={`text-xs font-bold leading-tight ${isActive ? "text-foreground" : "text-text3"}`}>{agent.name}</p>
-                <p className="text-2xs text-text3 leading-tight">{agent.specialist}</p>
-              </div>
+              {isActive && <div className="absolute bottom-0 left-2 right-2 h-[2px] rounded-t-full bg-accent-porter" />}
+              {t.label}
             </button>
           )
         })}
       </div>
 
       {/* ── Content ── */}
-      <div className={`flex-1 min-h-0 px-5 py-4 ${activeTab === "operator" ? "flex flex-col" : "overflow-y-auto"}`}>
-        {activeTab === "operator" && renderOperatorTab()}
-        {activeTab === "routing" && <div className="space-y-6"><ModelCatalog /><DispatchLog /><div className="flex justify-end"><Link to="/sessions" className="text-xs text-accent-porter hover:underline">View Sessions →</Link></div></div>}
-        {activeTab === "controller" && <div className="space-y-6"><CostAnalytics /><div className="flex justify-end"><Link to="/costs" className="text-xs text-accent-porter hover:underline">Full Cost Analytics →</Link></div><UserKeyManager /></div>}
+      <div className={`flex-1 min-h-0 px-5 py-4 ${activeTab === "status" ? "flex flex-col" : "overflow-y-auto"}`}>
+        {activeTab === "status" && renderOperatorTab()}
+        {activeTab === "models" && <div className="space-y-6"><ModelCatalog /><DispatchLog /><div className="flex justify-end"><Link to="/sessions" className="text-xs text-accent-porter hover:underline">View Sessions →</Link></div></div>}
+        {activeTab === "costs" && <div className="space-y-6"><CostAnalytics /><div className="flex justify-end"><Link to="/costs" className="text-xs text-accent-porter hover:underline">Full Cost Analytics →</Link></div><UserKeyManager /></div>}
       </div>
     </div>
   )

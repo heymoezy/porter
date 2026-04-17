@@ -27,8 +27,15 @@ interface ModelMetadata {
 }
 
 const MODEL_METADATA: Record<string, ModelMetadata> = {
+  'claude-opus-4-7': {
+    capabilities: ['coding', 'writing', 'analysis', 'reasoning'],
+    contextWindow: 200000,
+    pricingInputPerM: 15.0,
+    pricingOutputPerM: 75.0,
+    benchmarkScores: {},
+  },
   'claude-opus-4-6': {
-    capabilities: ['coding', 'writing', 'analysis'],
+    capabilities: ['coding', 'writing', 'analysis', 'reasoning'],
     contextWindow: 200000,
     pricingInputPerM: 15.0,
     pricingOutputPerM: 75.0,
@@ -39,6 +46,13 @@ const MODEL_METADATA: Record<string, ModelMetadata> = {
     contextWindow: 200000,
     pricingInputPerM: 3.0,
     pricingOutputPerM: 15.0,
+    benchmarkScores: {},
+  },
+  'claude-haiku-4-5': {
+    capabilities: ['coding', 'writing'],
+    contextWindow: 200000,
+    pricingInputPerM: 0.25,
+    pricingOutputPerM: 1.25,
     benchmarkScores: {},
   },
   'claude-haiku-3-5': {
