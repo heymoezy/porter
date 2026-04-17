@@ -9,9 +9,7 @@ import { LLMTerminal } from "~/components/llm-terminal"
 import { ModelCatalog } from "~/components/bridge/model-catalog"
 import { DispatchLog } from "~/components/bridge/dispatch-log"
 import { CostAnalytics } from "~/components/bridge/cost-analytics"
-import { RoutingRules } from "~/components/bridge/routing-rules"
 import { UserKeyManager } from "~/components/bridge/user-key-manager"
-import { WorkspaceGatewayOverrides } from "~/components/bridge/workspace-gateway-overrides"
 import {
   Clock, Server, XCircle,
   Pause, Play, Settings, RefreshCw, Save, FileText,
@@ -1409,8 +1407,8 @@ export default function BridgePage() {
       {/* ── Content ── */}
       <div className={`flex-1 min-h-0 px-5 py-4 ${activeTab === "operator" ? "flex flex-col" : "overflow-y-auto"}`}>
         {activeTab === "operator" && renderOperatorTab()}
-        {activeTab === "routing" && <div className="space-y-6"><ModelCatalog /><DispatchLog /><div className="flex justify-end"><Link to="/sessions" className="text-xs text-accent-porter hover:underline">View Sessions →</Link></div><RoutingRules /></div>}
-        {activeTab === "controller" && <div className="space-y-6"><CostAnalytics /><div className="flex justify-end"><Link to="/costs" className="text-xs text-accent-porter hover:underline">Full Cost Analytics →</Link></div><UserKeyManager /><WorkspaceGatewayOverrides /></div>}
+        {activeTab === "routing" && <div className="space-y-6"><ModelCatalog /><DispatchLog /><div className="flex justify-end"><Link to="/sessions" className="text-xs text-accent-porter hover:underline">View Sessions →</Link></div></div>}
+        {activeTab === "controller" && <div className="space-y-6"><CostAnalytics /><div className="flex justify-end"><Link to="/costs" className="text-xs text-accent-porter hover:underline">Full Cost Analytics →</Link></div><UserKeyManager /></div>}
       </div>
     </div>
   )

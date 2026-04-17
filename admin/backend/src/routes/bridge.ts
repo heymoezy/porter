@@ -16,17 +16,6 @@ type UserApiKeyRow = {
   rotated_at: number | null;
 };
 
-type WorkspaceOverrideRow = {
-  id: string;
-  gateway_id: string;
-  gateway_type: string;
-  gateway_name: string;
-  enabled: number;
-  reason: string | null;
-  updated_by: string | null;
-  updated_at: number | null;
-};
-
 type GatewayRow = {
   id: string;
   type: string;
@@ -576,102 +565,6 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
     return reply.send(err('INVALID_ACTION', 'action must be one of: list, add, update, remove, validate'));
   });
 
-  // POST /api/admin/bridge/routing-rules — Routing rule management (CFG-02)
-  fastify.post('/routing-rules', async (request, reply) => {
-    const body = request.body as Record<string, unknown>;
-    const { action, ...data } = body as { action: string; [k: string]: unknown };
-
-    const VALID_SCOPES = new Set(['global', 'agent', 'project', 'gateway']);
-    const VALID_RULE_ACTIONS = new Set(['force_model', 'block_gateway', 'cap_cost_usd', 'prefer_local']);
-
-    // ── list ──────────────────────────────────────────────────────────────
-    if (action === 'list') {
-      const rows = await queryAll<{
-        id: string; scope: string; scope_id: string | null; action: string;
-        action_value: string | null; enabled: number; priority: number;
-        description: string | null; created_by: string | null;
-        created_at: number; updated_at: number;
-      }>(`
-        SELECT id, scope, scope_id, action, action_value, enabled, priority,
-               description, created_by, created_at, updated_at
-        FROM routing_rules
-        ORDER BY priority ASC, created_at ASC
-      `);
-      return reply.send(ok({ rules: rows }));
-    }
-
-    // ── create ────────────────────────────────────────────────────────────
-    if (action === 'create') {
-      const scope = data.scope as string | undefined;
-      const action_type = data.action_type as string | undefined;
-      if (!scope || !VALID_SCOPES.has(scope)) {
-        return reply.send(err('INVALID_SCOPE', `scope must be one of: ${[...VALID_SCOPES].join(', ')}`));
-      }
-      if (!action_type || !VALID_RULE_ACTIONS.has(action_type)) {
-        return reply.send(err('INVALID_ACTION_TYPE', `action_type must be one of: ${[...VALID_RULE_ACTIONS].join(', ')}`));
-      }
-      const { randomUUID } = await import('node:crypto');
-      const id = randomUUID();
-      await execute(
-        `INSERT INTO routing_rules (id, scope, scope_id, action, action_value, enabled, priority, description, created_by, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,EXTRACT(EPOCH FROM NOW()),EXTRACT(EPOCH FROM NOW()))`,
-        [
-          id,
-          scope,
-          (data.scope_id as string | null) ?? null,
-          action_type,
-          (data.action_value as string | null) ?? null,
-          (data.enabled as number) ?? 1,
-          (data.priority as number) ?? 50,
-          (data.description as string | null) ?? null,
-          null, // created_by — admin backend doesn't expose session user easily; use null
-        ]
-      );
-      return reply.send(ok({ created: true, id }));
-    }
-
-    // ── update ────────────────────────────────────────────────────────────
-    if (action === 'update') {
-      const id = data.id as string | undefined;
-      if (!id) return reply.send(err('MISSING_ID', 'id is required'));
-      if (data.scope !== undefined && !VALID_SCOPES.has(data.scope as string)) {
-        return reply.send(err('INVALID_SCOPE', `scope must be one of: ${[...VALID_SCOPES].join(', ')}`));
-      }
-      if (data.action_type !== undefined && !VALID_RULE_ACTIONS.has(data.action_type as string)) {
-        return reply.send(err('INVALID_ACTION_TYPE', `action_type must be one of: ${[...VALID_RULE_ACTIONS].join(', ')}`));
-      }
-      const allowed: Record<string, string> = {
-        scope: 'scope', scope_id: 'scope_id', action_type: 'action',
-        action_value: 'action_value', enabled: 'enabled',
-        priority: 'priority', description: 'description',
-      };
-      const setClauses: string[] = [];
-      const params: unknown[] = [];
-      for (const [key, col] of Object.entries(allowed)) {
-        if (data[key] !== undefined) {
-          params.push(data[key]);
-          setClauses.push(`${col} = $${params.length}`);
-        }
-      }
-      if (setClauses.length > 0) {
-        setClauses.push(`updated_at = EXTRACT(EPOCH FROM NOW())`);
-        params.push(id);
-        await execute(`UPDATE routing_rules SET ${setClauses.join(', ')} WHERE id = $${params.length}`, params);
-      }
-      return reply.send(ok({ updated: true, id }));
-    }
-
-    // ── delete ────────────────────────────────────────────────────────────
-    if (action === 'delete') {
-      const id = data.id as string | undefined;
-      if (!id) return reply.send(err('MISSING_ID', 'id is required'));
-      await execute('DELETE FROM routing_rules WHERE id = $1', [id]);
-      return reply.send(ok({ deleted: true, id }));
-    }
-
-    return reply.send(err('INVALID_ACTION', 'action must be one of: list, create, update, delete'));
-  });
-
   // GET /api/admin/bridge/user-keys — all users' masked API keys (CFG-03)
   fastify.get('/user-keys', async (_req, reply) => {
     const keys = await queryAll<UserApiKeyRow>(`
@@ -709,53 +602,6 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
     }
 
     return reply.send(err('INVALID_ACTION', 'action must be one of: delete, rotate'));
-  });
-
-  // POST /api/admin/bridge/workspace-config — workspace gateway override management (CFG-04)
-  fastify.post('/workspace-config', async (request, reply) => {
-    const body = request.body as Record<string, unknown>;
-    const { action, ...data } = body as { action: string; [k: string]: unknown };
-
-    // ── list ──────────────────────────────────────────────────────────────
-    if (action === 'list') {
-      const overrides = await queryAll<WorkspaceOverrideRow>(`
-        SELECT wgo.id, wgo.gateway_id, wgo.enabled, wgo.reason, wgo.updated_by, wgo.updated_at,
-               g.type AS gateway_type, g.name AS gateway_name
-        FROM workspace_gateway_overrides wgo
-        JOIN gateways g ON g.id = wgo.gateway_id
-        ORDER BY g.priority ASC
-      `);
-      return reply.send(ok({ overrides }));
-    }
-
-    // ── set ───────────────────────────────────────────────────────────────
-    if (action === 'set') {
-      const gateway_id = data.gateway_id as string | undefined;
-      if (!gateway_id) return reply.send(err('MISSING_FIELD', 'gateway_id is required'));
-      const enabled = data.enabled !== undefined ? (data.enabled ? 1 : 0) : 1;
-      const { randomUUID } = await import('node:crypto');
-      const id = randomUUID();
-      await queryAll<Record<string, unknown>>(`
-        INSERT INTO workspace_gateway_overrides (id, gateway_id, enabled, reason, updated_by, updated_at)
-        VALUES ($1, $2, $3, $4, $5, EXTRACT(EPOCH FROM NOW()))
-        ON CONFLICT (gateway_id) DO UPDATE SET
-          enabled    = EXCLUDED.enabled,
-          reason     = EXCLUDED.reason,
-          updated_by = EXCLUDED.updated_by,
-          updated_at = EXTRACT(EPOCH FROM NOW())
-      `, [id, gateway_id, enabled, (data.reason as string | null) ?? null, 'platform_admin']);
-      return reply.send(ok({ set: true, gateway_id, enabled: !!enabled }));
-    }
-
-    // ── remove ────────────────────────────────────────────────────────────
-    if (action === 'remove') {
-      const gateway_id = data.gateway_id as string | undefined;
-      if (!gateway_id) return reply.send(err('MISSING_FIELD', 'gateway_id is required'));
-      await execute('DELETE FROM workspace_gateway_overrides WHERE gateway_id = $1', [gateway_id]);
-      return reply.send(ok({ removed: true, gateway_id }));
-    }
-
-    return reply.send(err('INVALID_ACTION', 'action must be one of: list, set, remove'));
   });
 
   // POST /api/admin/bridge/gateways/save-token — save token to metadata.token + masked_display
