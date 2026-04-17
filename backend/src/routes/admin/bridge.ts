@@ -1206,6 +1206,6 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
   // GET /api/admin/bridge/confidence — per-gateway outcome confidence scores
   // (routing-confidence removed — single gateway, confidence scoring is moot)
   fastify.get('/confidence', async (_req, reply) => {
-    return reply.send(ok({ confidence: {} }));
+    return reply.send(ok({ confidence: [] }));
   });
 }
