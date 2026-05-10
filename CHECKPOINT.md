@@ -3,9 +3,52 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.9.0
-updated: 2026-04-17
-updated_by: claude-opus-4.6
+version: v6.11.0
+updated: 2026-05-10
+updated_by: claude-opus-4.7
+
+## v6.11.0 — Bridge revival: tabs + summary + live ticker (2026-05-10)
+
+After v6.9.0 stripped the Bridge page to a 77-LOC health bar, three large
+components (cost-analytics, model-catalog, dispatch-log) were sitting unused
+and the dispatch log was 99% polluted by tool-use observability hooks. This
+two-phase fix restores Bridge as a useful surface.
+
+**v6.10.0 — Data Truth (commit `ec9c632`)**
+- New table `cli_activity_log` for tool-call observability (intent, tool_name,
+  bytes-based fields). Tool calls no longer write to `bridge_dispatch_log`.
+- `/api/admin/health/log-external` rewritten to write `cli_activity_log`,
+  emits `cli:activity` SSE event.
+- `~/.claude/hooks/porter-activity-log.js` updated: reports current model
+  (Opus 4.7 via `CLAUDE_MODEL` env or default), uses bytes-based payload.
+- Migration `bridge_v8` purged 3,965 legacy `external_cli` rows from
+  `bridge_dispatch_log`.
+- Claude CLI adapter advertises Opus 4.7 + Haiku 4.5; `model-catalog.ts`
+  Haiku 4.5 pricing corrected to $1/$5 per M tokens.
+- All 5 models now active in DB with pricing: Opus 4.7 ($15/$75),
+  Opus 4.6 ($15/$75), Sonnet 4.6 ($3/$15), Haiku 4.5 ($1/$5),
+  Haiku 3.5 ($0.25/$1.25).
+
+**v6.11.0 — Page Pass + Live Motion (commit `29a0f3b`)**
+- Bridge page rebuilt with 5 tabs: Status / Dispatches / Costs / Models /
+  CLI Activity. Reuses the previously-orphaned components.
+- Status tab: gateway pill + 5 metric cards (dispatches 24h/7d, cost 7d,
+  avg latency, CLI calls 24h) + LiveDispatchTicker.
+- New `cli-activity.tsx` — 24h tool histogram + paginated activity table.
+- New `live-dispatch-ticker.tsx` — SSE-driven event feed; pulses on
+  `bridge:dispatch`, shows last 12 events (mixed dispatch + CLI).
+- New endpoints: `GET /api/admin/bridge/summary` and
+  `GET /api/admin/bridge/cli-activity`.
+- `cli:activity` events now broadcast on Brain SSE (`/api/events`) so the
+  ticker uses one stream for both event types.
+
+**Known follow-ups (not blocking):**
+- Real Claude CLI dispatches are logged with `model_name = "Claude CLI"`
+  (gateway name) instead of an Anthropic SKU like `claude-opus-4-7`,
+  so cost lookups return null. Routing engine needs to translate the
+  adapter's effective model into the catalog name on log insert.
+- The 3 zero-byte garbage files in `backend/` (`\001\342\322\002@…`)
+  are pre-existing and untracked; safe to ignore but should be cleaned.
 
 ## Architecture
 
