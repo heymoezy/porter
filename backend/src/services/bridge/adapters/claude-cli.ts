@@ -297,7 +297,14 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
   // ── listModels ───────────────────────────────────────────────────────────────
 
   async listModels(): Promise<string[]> {
-    // Static — no programmatic endpoint available in claude CLI
-    return ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-3-5'];
+    // Static — no programmatic endpoint available in claude CLI.
+    // Anthropic public model lineup as of 2026-05.
+    return [
+      'claude-opus-4-7',
+      'claude-sonnet-4-6',
+      'claude-haiku-4-5',
+      'claude-opus-4-6',
+      'claude-haiku-3-5',
+    ];
   }
 }

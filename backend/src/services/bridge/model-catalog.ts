@@ -51,8 +51,8 @@ const MODEL_METADATA: Record<string, ModelMetadata> = {
   'claude-haiku-4-5': {
     capabilities: ['coding', 'writing'],
     contextWindow: 200000,
-    pricingInputPerM: 0.25,
-    pricingOutputPerM: 1.25,
+    pricingInputPerM: 1.0,
+    pricingOutputPerM: 5.0,
     benchmarkScores: {},
   },
   'claude-haiku-3-5': {

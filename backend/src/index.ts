@@ -24,6 +24,7 @@ import { migrateBridgeV4 } from './db/migrate-bridge-v4.js';
 import { migrateBridgeV5 } from './db/migrate-bridge-v5.js';
 import { migrateBridgeV6 } from './db/migrate-bridge-v6.js';
 import { migrateBridgeV7 } from './db/migrate-bridge-v7.js';
+import { migrateBridgeV8 } from './db/migrate-bridge-v8.js';
 import { migrateRateLimits } from './db/migrate-rate-limits.js';
 import { migrateRpgV1 } from './db/migrate-rpg-v1.js';
 import { migrateSotV1 } from './db/migrate-sot-v1.js';
@@ -165,7 +166,7 @@ fastify.get('/health', async () => {
   return {
     status: 'ok',
     engine: 'fastify',
-    version: '6.9.0',
+    version: '6.10.0',
     mail: {
       provider: config.mail.provider,
       domain: config.mail.defaultDomain,
@@ -247,6 +248,7 @@ const start = async () => {
     await migrateBridgeV5(pool);
     await migrateBridgeV6(pool);
     await migrateBridgeV7(pool);
+    await migrateBridgeV8(pool);
     await migrateRateLimits(pool);
     await migrateRpgV1(pool);
     await migrateSotV1(pool);

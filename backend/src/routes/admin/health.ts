@@ -124,32 +124,35 @@ export default async function healthRoutes(fastify: FastifyInstance) {
     });
   });
 
-  // POST /api/admin/health/log-external — public endpoint for CLI activity logging (no auth)
+  // POST /api/admin/health/log-external — public endpoint for CLI tool-use observability.
+  //
+  // CLI tool calls (Bash/Edit/Write/etc) are NOT model dispatches. They live in
+  // cli_activity_log so they don't pollute Bridge metrics. The `intent` field
+  // carries `tool:<Name>` from the PostToolUse hook.
   fastify.post('/log-external', async (request, reply) => {
     const body = request.body as Record<string, unknown>;
     const gatewayType = (body.gateway_type as string) || 'unknown';
-    const modelName = (body.model_name as string) || 'unknown';
-    const inputTokens = (body.input_tokens as number) || 0;
-    const outputTokens = (body.output_tokens as number) || 0;
-    const latencyMs = (body.latency_ms as number) || 0;
-    const sourceAgent = (body.source_agent as string) || null;
+    const modelName = (body.model_name as string) || null;
     const intent = (body.intent as string) || null;
+    const toolName = intent?.startsWith('tool:') ? intent.slice(5) : null;
+    const sourceAgent = (body.source_agent as string) || null;
     const chatId = (body.chat_id as string) || null;
     const username = (body.username as string) || null;
-
-    const gw = await queryAll<{ id: string }>(`SELECT id FROM gateways WHERE type = $1 LIMIT 1`, [gatewayType]);
-    const gatewayId = gw[0]?.id || null;
+    const inputBytes = typeof body.input_bytes === 'number' ? body.input_bytes
+      : typeof body.input_tokens === 'number' ? body.input_tokens * 4 : null;
+    const outputBytes = typeof body.output_bytes === 'number' ? body.output_bytes
+      : typeof body.output_tokens === 'number' ? body.output_tokens * 4 : null;
 
     await execute(
-      `INSERT INTO bridge_dispatch_log
-         (id, gateway_id, gateway_type, model_name, chosen_reason, input_tokens, output_tokens, latency_ms,
-          source_agent, intent, chat_id, username, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, EXTRACT(EPOCH FROM NOW()))`,
-      [crypto.randomUUID(), gatewayId, gatewayType, modelName, 'external_cli',
-       inputTokens, outputTokens, latencyMs, sourceAgent, intent, chatId, username],
+      `INSERT INTO cli_activity_log
+         (id, gateway_type, model_name, tool_name, intent, chat_id, username, source_agent,
+          input_bytes, output_bytes, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, EXTRACT(EPOCH FROM NOW()))`,
+      [crypto.randomUUID(), gatewayType, modelName, toolName, intent, chatId, username, sourceAgent,
+       inputBytes, outputBytes],
     );
 
-    emitAdminEvent('bridge:dispatch', { gateway_type: gatewayType, model: modelName, intent });
+    emitAdminEvent('cli:activity', { gateway_type: gatewayType, tool: toolName, intent });
     return reply.send(ok({ logged: true }));
   });
 }
