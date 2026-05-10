@@ -156,6 +156,63 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
     return reply.send(ok({ gateways, summary }));
   });
 
+  // GET /api/admin/bridge/summary — top-line metrics for Bridge status page
+  fastify.get('/summary', async (_req, reply) => {
+    const [d24, d7, l24, models, cli24] = await Promise.all([
+      queryAll<{ c: string }>(`SELECT count(*)::int AS c FROM bridge_dispatch_log WHERE created_at > extract(epoch from now()) - 86400`),
+      queryAll<{ c: string; cost: string | null }>(`SELECT count(*)::int AS c, COALESCE(sum(estimated_cost_usd), 0)::float8 AS cost FROM bridge_dispatch_log WHERE created_at > extract(epoch from now()) - 86400*7`),
+      queryAll<{ avg_lat: string | null }>(`SELECT round(avg(NULLIF(latency_ms,0)))::int AS avg_lat FROM bridge_dispatch_log WHERE created_at > extract(epoch from now()) - 86400`),
+      queryAll<{ c: string }>(`SELECT count(*)::int AS c FROM models WHERE is_active = 1`),
+      queryAll<{ c: string }>(`SELECT count(*)::int AS c FROM cli_activity_log WHERE created_at > extract(epoch from now()) - 86400`),
+    ]);
+
+    return reply.send(ok({
+      dispatches_24h: Number(d24[0]?.c ?? 0),
+      dispatches_7d: Number(d7[0]?.c ?? 0),
+      total_cost_usd_7d: Number(d7[0]?.cost ?? 0),
+      avg_latency_ms_24h: l24[0]?.avg_lat ? Number(l24[0].avg_lat) : null,
+      active_models: Number(models[0]?.c ?? 0),
+      cli_activity_24h: Number(cli24[0]?.c ?? 0),
+    }));
+  });
+
+  // GET /api/admin/bridge/cli-activity — recent CLI tool calls (separate from dispatches)
+  fastify.get('/cli-activity', async (request, reply) => {
+    const q = request.query as Record<string, string | undefined>;
+    const limit = Math.min(Number(q.limit ?? 50), 200);
+    const page = Math.max(Number(q.page ?? 1), 1);
+    const offset = (page - 1) * limit;
+
+    const [rows, totalRow, byTool] = await Promise.all([
+      queryAll(`
+        SELECT id, gateway_type, model_name, tool_name, intent, chat_id, username, source_agent,
+               input_bytes, output_bytes, created_at
+        FROM cli_activity_log
+        ORDER BY created_at DESC
+        LIMIT $1 OFFSET $2
+      `, [limit, offset]),
+      queryAll<{ c: string }>(`SELECT count(*)::int AS c FROM cli_activity_log`),
+      queryAll(`
+        SELECT tool_name, count(*)::int AS dispatch_count,
+               sum(COALESCE(input_bytes,0))::bigint AS total_input_bytes,
+               sum(COALESCE(output_bytes,0))::bigint AS total_output_bytes
+        FROM cli_activity_log
+        WHERE created_at > extract(epoch from now()) - 86400
+          AND tool_name IS NOT NULL
+        GROUP BY tool_name
+        ORDER BY dispatch_count DESC
+        LIMIT 20
+      `),
+    ]);
+
+    const total = Number(totalRow[0]?.c ?? 0);
+    return reply.send(ok({
+      entries: rows,
+      by_tool_24h: byTool,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    }));
+  });
+
   // GET /api/admin/bridge/models — active models with gateway info
   fastify.get('/models', async (_req, reply) => {
     const models = await queryAll<ModelRow>(`

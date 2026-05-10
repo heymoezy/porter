@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { ok } from '../../lib/admin-envelope.js';
 import { queryOne, queryAll, execute } from '../../db/pg-helpers.js';
 import { emitAdminEvent } from '../../services/admin/admin-sse.js';
+import { broadcast as broadcastBrainSSE } from '../../services/sse-hub.js';
 import crypto from 'crypto';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
@@ -152,7 +153,9 @@ export default async function healthRoutes(fastify: FastifyInstance) {
        inputBytes, outputBytes],
     );
 
-    emitAdminEvent('cli:activity', { gateway_type: gatewayType, tool: toolName, intent });
+    const cliPayload = { gateway_type: gatewayType, tool: toolName, intent };
+    emitAdminEvent('cli:activity', cliPayload);
+    broadcastBrainSSE('cli:activity', cliPayload);
     return reply.send(ok({ logged: true }));
   });
 }
