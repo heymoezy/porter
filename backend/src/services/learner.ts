@@ -27,6 +27,7 @@ import robotsParser from 'robots-parser';
 import { config } from '../config.js';
 import { pool } from '../db/client.js';
 import { getGitHubClient } from './github.js';
+import { scrubPII } from './intellect/pii-scrub.js';
 
 // ── Exported Types ─────────────────────────────────────────────────────────────
 
@@ -189,20 +190,8 @@ function sourceConfidence(url: string): { score: number; tier: 'low' | 'medium' 
 }
 
 // ── PII Scrubbing ─────────────────────────────────────────────────────────────
-
-const PII_PATTERNS: RegExp[] = [
-  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,  // emails
-  /\B@[A-Za-z0-9_]{2,}\b/g,                                    // @handles (min 2 chars)
-  /\b\+?[\d][\d\s\-().]{7,}\d\b/g,                             // phone numbers
-];
-
-function scrubPII(text: string): string {
-  let clean = text;
-  for (const pattern of PII_PATTERNS) {
-    clean = clean.replace(new RegExp(pattern.source, pattern.flags), '[REDACTED]');
-  }
-  return clean;
-}
+// scrubPII + PII_PATTERNS extracted to ./intellect/pii-scrub.ts (Phase 48.2 TRC-05).
+// Both learner and transcript-capture share the same redaction set.
 
 // ── Politeness delay ──────────────────────────────────────────────────────────
 
