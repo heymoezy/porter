@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.1-05-PLAN.md
-last_updated: "2026-05-11T10:13:00.483Z"
+stopped_at: Completed 48.1-01-PLAN.md
+last_updated: "2026-05-11T10:55:02.071Z"
 progress:
   total_phases: 18
   completed_phases: 16
   total_plans: 50
-  completed_plans: 47
+  completed_plans: 48
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 ## Current Position
 
-Phase: 48.1 (silo-foundation) — EXECUTING (Wave 0 complete; Waves 1+ pending)
-Plan: 1 of 5 complete (plan 05 shipped Wave 0; plans 01-04 pending)
+Phase: 48.1 (silo-foundation) — EXECUTING (Waves 0+1 complete; Waves 2-3 pending)
+Plan: 2 of 5 complete (plans 01 + 05 shipped; plans 02-04 pending)
 
 ## Performance Metrics
 
@@ -105,6 +105,11 @@ Plan: 1 of 5 complete (plan 05 shipped Wave 0; plans 01-04 pending)
 - [Phase 48.1-05]: Smoke script self-degrades — SC-1/SC-6 (schema) run on bare DB via psql; SC-2..SC-5 gated behind `curl -sf /health`, exit 0 with warn line when Fastify offline
 - [Phase 48.1-05]: SC-6 row-existence guard required to prevent vacuous pass — UPDATE/DELETE on missing target returns 0 rows (no error) which would falsely satisfy trigger test
 - [Phase 48.1-05]: SC-4b verifies DRM-03 null-return path: callers omitting cwd param must see zero silo sections (backward compat)
+- [Phase 48.1-01]: Trigger guard OLD.source_type IS DISTINCT FROM 'moe-direct' returns early before any check — non-moe-direct UPDATE/DELETE bypass the function entirely so memory-pruner dedup keeps working
+- [Phase 48.1-01]: Bypass via current_setting('porter.allow_moe_direct_mutation', true) with SET LOCAL — per-tx setting auto-clears on COMMIT/ROLLBACK, forcing explicit opt-in per mutation
+- [Phase 48.1-01]: silos.enabled is BOOLEAN (not INTEGER) per CONTEXT schema lock; schema.ts imports boolean + timestamp from drizzle-orm/pg-core
+- [Phase 48.1-01]: Migration registered after migrateBornCheckV1 in runMigrations() to preserve causal order with prior wave
+- [Phase 48.1]: Phase 48.1-01 trigger guard returns early on OLD.source_type != 'moe-direct' so memory-pruner dedup keeps working
 
 ### Pending Todos
 
@@ -117,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-11T10:13:00.483Z
-Stopped at: Completed 48.1-05-PLAN.md
+Last session: 2026-05-11T10:53:42.131Z
+Stopped at: Completed 48.1-01-PLAN.md
 Resume file: None

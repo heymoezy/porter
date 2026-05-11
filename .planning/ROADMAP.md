@@ -390,7 +390,7 @@ Plans:
   4. A fresh CLI session opened in `/home/lobster/projects/Funds` (non-code project) shows no silo directives — silo detection returns null
   5. `/silo software` typed in a CLI session forces silo tagging for that session and is persisted for the session lifetime
   6. Hand-curated seed directives (`source_type='moe-direct'`) cannot be deleted or modified by automated processes — only by direct DB write or admin API
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 - [ ] 48.1-01-PLAN.md — Schema: silos table + software seed + session_silo_overrides + directive_immutable_moe_direct trigger
