@@ -34,6 +34,7 @@ import { runPatternMining } from './pattern-miner.js';
 import { runToolDetection } from './tool-detector.js';
 import { runSkillEvolution } from './skill-evolver.js';
 import { runSubscriptionCheck } from './subscription-manager.js';
+import { runTranscriptRetention } from './transcript-retention.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ export type WorkflowActionType =
   | 'tool_detect'
   | 'skill_evolve'
   | 'subscription_check'
+  | 'transcript_retain'
   | 'noop';
 
 export interface WorkflowRow {
@@ -97,6 +99,7 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
   tool_detect: async () => runToolDetection(),
   skill_evolve: async () => runSkillEvolution(),
   subscription_check: async () => runSubscriptionCheck(),
+  transcript_retain: async () => runTranscriptRetention(pool),
   noop: async () => null,
 };
 
@@ -285,6 +288,12 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_type: 'schedule',
     trigger_value: 'every_6h',
     action_type: 'subscription_check',
+  },
+  {
+    name: 'Prune transcripts older than 30 days',
+    trigger_type: 'schedule',
+    trigger_value: 'every_24h',
+    action_type: 'transcript_retain',
   },
 ];
 
