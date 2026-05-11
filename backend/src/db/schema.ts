@@ -1,4 +1,4 @@
-import { pgTable, text, integer, doublePrecision, serial, jsonb, uniqueIndex, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, boolean, doublePrecision, serial, jsonb, timestamp, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { customType } from 'drizzle-orm/pg-core';
 
@@ -1403,3 +1403,27 @@ export const mailLearningEvents = pgTable('mail_learning_events', {
   payloadJson: jsonb('payload_json').default(sql`'{}'::jsonb`),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
+
+// ─── Phase 48.1: Silo Foundation ────────────────────────────────────────────
+export const silos = pgTable('silos', {
+  id: text('id').primaryKey(),
+  displayName: text('display_name').notNull(),
+  description: text('description'),
+  promptPath: text('prompt_path'),
+  cadenceSeconds: integer('cadence_seconds').notNull().default(604800),
+  defaultModel: text('default_model').notNull().default('claude-sonnet-4-6'),
+  detectRules: jsonb('detect_rules').notNull().default({}),
+  enabled: boolean('enabled').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const sessionSiloOverrides = pgTable('session_silo_overrides', {
+  sessionId: text('session_id').primaryKey(),
+  siloId: text('silo_id'),
+  setAt: timestamp('set_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  setAtIdx: index('session_silo_overrides_set_at_idx').on(table.setAt),
+}));
+
+export type SiloRow = typeof silos.$inferSelect;
+export type SessionSiloOverrideRow = typeof sessionSiloOverrides.$inferSelect;

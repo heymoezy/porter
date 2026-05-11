@@ -45,6 +45,7 @@ import { migratePsbV1 } from './db/migrate-psb-v1.js';
 import { migrateMailV1 } from './db/migrate-mail-v1.js';
 import { migrateIntellectV1 } from './db/migrate-intellect-v1.js';
 import { migrateBornCheckV1 } from './db/migrate-born-check-v1.js';
+import { migrateSilosV1 } from './db/migrate-silos-v1.js';
 import { startFileWatcher } from './services/intellect/file-watcher.js';
 import { seedBuiltinWorkflows } from './services/intellect/workflow-engine.js';
 import { ensureSubscriptionsTable, seedDefaultSubscriptions } from './services/intellect/subscription-manager.js';
@@ -269,6 +270,7 @@ const start = async () => {
     await migrateMailV1(pool);
     await migrateIntellectV1(pool);
     await migrateBornCheckV1(pool);
+    await migrateSilosV1(pool);
     await seedTemplates();
     await fastify.listen({ port: config.port, host: config.host });
     console.log(`Fastify server running at http://${config.host}:${config.port}`);
