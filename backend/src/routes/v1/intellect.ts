@@ -22,6 +22,7 @@ import { runPatternMining } from '../../services/intellect/pattern-miner.js';
 import { runToolDetection } from '../../services/intellect/tool-detector.js';
 import { runSubscriptionCheck } from '../../services/intellect/subscription-manager.js';
 import { detectSilos } from '../../services/intellect/silo-detector.js';
+import { insertTurn } from '../../services/intellect/transcript-capture.js';
 
 interface DirectiveRow {
   id: string;
@@ -486,6 +487,51 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       current_silo: siloName,
       source: 'override',
     });
+  });
+
+  // ── POST /transcript/turn — Phase 48.2 transcript capture ──────────
+  // TRC-04 (silo tag), TRC-05 (PII scrub), TRC-07 (/silo none kill switch).
+  // 127.0.0.1-only; relies on server bind for protection (no auth middleware
+  // in this file's route group — same posture as /silo-command).
+  // Called fire-and-forget from porter-user-prompt.js (user role) and
+  // porter-stop.js (assistant role) hooks. The handler delegates to
+  // insertTurn() which encapsulates the full capture pipeline.
+  fastify.post('/transcript/turn', async (req, reply) => {
+    const body = (req.body || {}) as {
+      session_id?: string;
+      cwd?: string | null;
+      role?: string;
+      content?: string;
+      captured_at?: string | null;
+    };
+
+    const sessionId = (body.session_id || '').trim();
+    const role = (body.role || '').trim();
+    const content = body.content ?? '';
+
+    if (!sessionId) {
+      return reply.code(400).send({ ok: false, message: 'session_id required' });
+    }
+    if (role !== 'user' && role !== 'assistant') {
+      return reply.code(400).send({ ok: false, message: "role must be 'user' or 'assistant'" });
+    }
+
+    try {
+      const result = await insertTurn(
+        {
+          session_id: sessionId,
+          cwd: body.cwd ?? null,
+          role: role as 'user' | 'assistant',
+          content,
+          captured_at: body.captured_at ?? null,
+        },
+        pool,
+      );
+      return reply.send(result);
+    } catch (e: unknown) {
+      req.log.error({ err: e }, '[transcript/turn] insertTurn failed');
+      return reply.code(500).send({ ok: false, message: 'capture failed' });
+    }
   });
 
   // ── POST /session-end — session finished, create episode ────────────
