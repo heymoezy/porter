@@ -74,10 +74,10 @@
 - [x] **TRC-01**: `session_transcript_turns` table exists with `id, session_id, turn_index, role, silo_id, cwd, content, captured_at` columns; UNIQUE(session_id, turn_index) for idempotency; composite indexes on (silo_id, captured_at DESC) and (captured_at) to serve 48.3 read pattern and retention DELETE
 - [ ] **TRC-02**: `UserPromptSubmit` hook extension writes one user-role row per non-/silo prompt to POST /api/v1/intellect/transcript/turn; fire-and-forget; never blocks the prompt pipeline
 - [ ] **TRC-03**: NEW `Stop` hook reads `transcript_path` JSONL from a per-session byte-offset bookmark, filters to assistant-only rows (skip attachment/queue-operation/isSidechain), and POSTs each to /api/v1/intellect/transcript/turn
-- [ ] **TRC-04**: Silo tagged at INSERT time by calling `detectSilos({cwd, sessionId})` from silo-detector.ts; nullable when no silo detected (Porter cwd → 'software', non-code cwd → NULL)
-- [ ] **TRC-05**: PII filter (`scrubPII` shared helper at `backend/src/services/intellect/pii-scrub.ts`, refactored from learner.ts) applied at INSERT — email/@-handle/phone replaced with `[REDACTED]` before persistence
+- [x] **TRC-04**: Silo tagged at INSERT time by calling `detectSilos({cwd, sessionId})` from silo-detector.ts; nullable when no silo detected (Porter cwd → 'software', non-code cwd → NULL)
+- [x] **TRC-05**: PII filter (`scrubPII` shared helper at `backend/src/services/intellect/pii-scrub.ts`, refactored from learner.ts) applied at INSERT — email/@-handle/phone replaced with `[REDACTED]` before persistence
 - [x] **TRC-06**: 30-day hard-delete retention as a daily-scheduled workflow row (`workflows.action_type='transcript_retain'`, trigger_value='every_24h') invoked by `runScheduledWorkflows('every_24h')`; manual `POST /api/v1/intellect/transcript/retention-run` available for ops
-- [ ] **TRC-07**: Privacy kill switches — per-session `/silo none` override row (silo_id IS NULL) suppresses capture; global config flag `intellect.transcriptCaptureEnabled` (default true, env `INTELLECT_TRANSCRIPT_CAPTURE_ENABLED`) as admin-side belt-and-braces
+- [x] **TRC-07**: Privacy kill switches — per-session `/silo none` override row (silo_id IS NULL) suppresses capture; global config flag `intellect.transcriptCaptureEnabled` (default true, env `INTELLECT_TRANSCRIPT_CAPTURE_ENABLED`) as admin-side belt-and-braces
 - [ ] **TRC-08**: Idempotency — Stop-hook re-fire on the same JSONL produces zero duplicates via UNIQUE(session_id, turn_index) + INSERT ... ON CONFLICT DO NOTHING; server-assigned turn_index from MAX+1 inside the same transaction
 
 ## v7.0 Requirements (Deferred)

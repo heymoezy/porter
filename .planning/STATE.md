@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.2-01-PLAN.md (session_transcript_turns schema + retention workflow)
-last_updated: "2026-05-11T17:51:52Z"
+stopped_at: Completed 48.2-02-PLAN.md (capture endpoint + shared PII scrub + insertTurn orchestrator)
+last_updated: "2026-05-11T19:04:46.884Z"
 progress:
   total_phases: 18
   completed_phases: 17
   total_plans: 50
-  completed_plans: 52
+  completed_plans: 51
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 48.2 (transcript-capture) — EXECUTING
-Plan: 2 of 5 (Plans 01 + 05 DONE — capture endpoint next)
+Plan: 3 of 5 (Plans 01 + 02 + 05 DONE — hooks next via Plan 03)
 
 ## Performance Metrics
 
@@ -33,6 +33,12 @@ Plan: 2 of 5 (Plans 01 + 05 DONE — capture endpoint next)
 - Total plans completed: 92 (v1.0: 51, v2.0: 2, v3.0: 19, v4.0: 17, v5.0: 3 additional)
 - Phases completed: 38 across all milestones
 - Average plan duration: ~6 min
+
+**v6.0 Recent plans:**
+
+| Phase-Plan | Duration | Tasks | Files |
+|------------|----------|-------|-------|
+| 48.2-02    | 40 min   | 3     | 4     |
 
 ## Accumulated Context
 
@@ -133,6 +139,13 @@ Plan: 2 of 5 (Plans 01 + 05 DONE — capture endpoint next)
 - [Phase 48.2-01]: Drizzle siloCapturedIdx defaults ASC at ORM layer; raw SQL migration installs DESC at DB layer — DB-level DESC is what serves 48.3's query planner, Drizzle binding is for $inferSelect type-safety only
 - [Phase 48.2-01]: transcript_retain handler captures pool from workflow-engine module scope (already imported from ../../db/client.js), matching every other action handler in the file
 - [Phase 48.2-01]: New v1 migration pattern established — runs after migrateSilosV1, mirrors migrate-silos-v1.ts exactly (BEGIN, schema_migrations guard, DDL IF NOT EXISTS, conditional seeds, INSERT migration row, COMMIT, ROLLBACK + release in finally)
+- [Phase 48.2-02]: scrubPII + PII_PATTERNS extracted to backend/src/services/intellect/pii-scrub.ts — single source of truth across learner and transcript-capture; verbatim from learner.ts lines 193-205 with inline provenance comment so future readers do not "modernize" without re-checking source
+- [Phase 48.2-02]: Kill switch fires BEFORE detectSilos AND before any INSERT — capture endpoint queries session_silo_overrides directly to disambiguate "explicit /silo none" (silo_id IS NULL) from "no silo detected" (no row); detectSilos returns [] for both, only direct query distinguishes
+- [Phase 48.2-02]: Server-assigned turn_index inside BEGIN/COMMIT via SELECT COALESCE(MAX(turn_index), -1) + 1 — hooks never count; UNIQUE constraint catches dup races; ON CONFLICT DO NOTHING handles duplicate atomically
+- [Phase 48.2-02]: Single retry on ON CONFLICT race inside same tx (recompute MAX+1, retry once); if still conflict return {ok:true, inserted:false, reason:'concurrent_race'} and warn-log — accepted drop-on-race tradeoff: duplicates worse than drops for the Dream Worker
+- [Phase 48.2-02]: 32KB content cap applied AFTER scrubPII so truncation can never reveal cleartext that was redacted; truncation suffix '... [truncated: N chars]' is a signal the Dream Worker can act on (re-fetch JSONL if needed in 48.3)
+- [Phase 48.2-02]: POST /api/v1/intellect/transcript/turn auth posture mirrors /silo-command: 127.0.0.1-only via server bind, no auth middleware on this route group, inline comment documents the parallel
+- [Phase 48.2-02]: learner.ts imports only scrubPII (not PII_PATTERNS) — keeps tsc --strict clean under unused-import detection; PII_PATTERNS remains exported from pii-scrub.ts for future consumers
 
 ### Pending Todos
 
@@ -145,6 +158,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-11T17:51:52Z
-Stopped at: Completed 48.2-01-PLAN.md (session_transcript_turns schema + retention workflow). Plans 01 + 05 done; capture endpoint (02) next.
+Last session: 2026-05-11T19:04:46.880Z
+Stopped at: Completed 48.2-02-PLAN.md (capture endpoint + shared PII scrub + insertTurn orchestrator)
 Resume file: None

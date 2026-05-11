@@ -118,3 +118,18 @@
   - tests/fixtures/stop-hook-input.json
 - **Files NOT touching:** any backend/, admin/, hooks/ — purely tests/ harness. Zero overlap with Plan-01 or other active sessions.
 - **Status:** DONE 2026-05-11T17:55Z — both tasks committed (95a82dd fixtures, 7ae2ea2 harness). Smoke runs cleanly against current DB with deterministic clean failure on TRC-01 (table missing — expected pre-Plan-01-ship behaviour per plan `<done>` clause). Self-cleaning verified (no smoke-48.2-* rows leaked). SUMMARY at .planning/phases/48.2-transcript-capture/48.2-05-SUMMARY.md. STATE + ROADMAP updated. Hand-off: Plan-01 ships migration → restart Porter → TRC-01 flips green; Plans 02/03/04 turn the remaining TRCs green as their behaviour lands.
+
+### GSD Phase 48.2 Executor Plan-01 — DONE 2026-05-11T17:52Z
+- Plan 48.2-01 complete. session_transcript_turns live with 3 indexes + CHECK + UNIQUE constraint. Retention workflow seeded ('Prune transcripts older than 30 days', every_24h, transcript_retain). runTranscriptRetention(pool) verified end-to-end. Porter restarted PID 355504, /health 200, tsc clean. TRC-01 + TRC-06 satisfied. Commits: b1646cf (Task 1), c53002f (Task 2), 675683e (Task 3), f9f58af (SUMMARY+STATE+ROADMAP+REQUIREMENTS).
+
+---
+
+## GSD Phase 48.2 Executor Plan-02 (Opus 4.7 1M) — 2026-05-11T18:20Z
+- **Workstream:** Execute 48.2-02-PLAN.md — extract scrubPII to shared pii-scrub.ts, create transcript-capture.ts orchestrator, add POST /api/v1/intellect/transcript/turn endpoint. TRC-04 (silo tag), TRC-05 (PII), TRC-07 (kill switch).
+- **Files claimed:**
+  - backend/src/services/intellect/pii-scrub.ts (NEW)
+  - backend/src/services/learner.ts (REMOVE local PII_PATTERNS+scrubPII, import shared)
+  - backend/src/services/intellect/transcript-capture.ts (NEW)
+  - backend/src/routes/v1/intellect.ts (ADD POST /transcript/turn)
+- **Files NOT touching:** any hooks, settings.json, file-watcher, schema, retention.
+- **Status:** DONE 2026-05-11T19:05Z — all 3 tasks committed (a610c1e refactor pii-scrub, c41aca0 feat capture-orchestrator, c7ba79c feat route). Porter restarted, /health 200 v6.12.0, tsc clean. Manual sanity all green: TRC-04 (silo=software for Porter cwd), TRC-05 (email+phone → [REDACTED] in DB), TRC-07 (/silo none → skipped:'silo_none', 0 rows). Smoke harness `bash tests/smoke-48.2.sh` → `all checks green (TRC-01..TRC-08)` (TRC-02/03/08 graceful-skip pending hooks in Plan 03). SUMMARY at .planning/phases/48.2-transcript-capture/48.2-02-SUMMARY.md. STATE+ROADMAP+REQUIREMENTS updated. Hand-off: Plan 03 wires hooks (porter-stop.js + UserPromptSubmit extension); endpoint live and verified end-to-end as drop-in HTTP client target.

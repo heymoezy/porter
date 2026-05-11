@@ -106,7 +106,7 @@
 
   Plans:
   - [x] 48.2-01-PLAN.md — Schema: session_transcript_turns + 3 indexes + retention workflow seed + workflow-engine handler (TRC-01, TRC-06) — DONE 2026-05-11
-  - [ ] 48.2-02-PLAN.md — Shared pii-scrub.ts + transcript-capture.ts insertTurn + POST /transcript/turn endpoint (TRC-04, TRC-05, TRC-07)
+  - [x] 48.2-02-PLAN.md — Shared pii-scrub.ts + transcript-capture.ts insertTurn + POST /transcript/turn endpoint (TRC-04, TRC-05, TRC-07) — DONE 2026-05-11
   - [ ] 48.2-03-PLAN.md — UserPromptSubmit hook extension + NEW Stop hook (porter-stop.js) + settings.json registration (TRC-02, TRC-03, TRC-08)
   - [ ] 48.2-04-PLAN.md — Global config flag + retention-run endpoint + SessionEnd belt-and-braces + version v6.13.0 + ship + human-verify (TRC-06, TRC-07)
   - [x] 48.2-05-PLAN.md — Wave 0 smoke harness (tests/smoke-48.2.sh + fixtures covering TRC-01..TRC-08) — DONE 2026-05-11
