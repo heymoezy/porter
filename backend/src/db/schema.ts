@@ -1427,3 +1427,21 @@ export const sessionSiloOverrides = pgTable('session_silo_overrides', {
 
 export type SiloRow = typeof silos.$inferSelect;
 export type SessionSiloOverrideRow = typeof sessionSiloOverrides.$inferSelect;
+
+// Phase 48.2: Transcript Capture
+export const sessionTranscriptTurns = pgTable('session_transcript_turns', {
+  id: serial('id').primaryKey(),
+  sessionId: text('session_id').notNull(),
+  turnIndex: integer('turn_index').notNull(),
+  role: text('role').notNull(),
+  siloId: text('silo_id'),
+  cwd: text('cwd'),
+  content: text('content').notNull(),
+  capturedAt: timestamp('captured_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  uniqSessionTurn: uniqueIndex('transcript_turns_session_turn_uniq').on(table.sessionId, table.turnIndex),
+  siloCapturedIdx: index('transcript_turns_silo_captured_idx').on(table.siloId, table.capturedAt),
+  capturedIdx: index('transcript_turns_captured_idx').on(table.capturedAt),
+}));
+
+export type SessionTranscriptTurnRow = typeof sessionTranscriptTurns.$inferSelect;

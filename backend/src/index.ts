@@ -46,6 +46,7 @@ import { migrateMailV1 } from './db/migrate-mail-v1.js';
 import { migrateIntellectV1 } from './db/migrate-intellect-v1.js';
 import { migrateBornCheckV1 } from './db/migrate-born-check-v1.js';
 import { migrateSilosV1 } from './db/migrate-silos-v1.js';
+import { migrateTranscriptsV1 } from './db/migrate-transcripts-v1.js';
 import { startFileWatcher } from './services/intellect/file-watcher.js';
 import { loadSiloCache } from './services/intellect/silo-detector.js';
 import { seedBuiltinWorkflows } from './services/intellect/workflow-engine.js';
@@ -272,6 +273,7 @@ const start = async () => {
     await migrateIntellectV1(pool);
     await migrateBornCheckV1(pool);
     await migrateSilosV1(pool);
+    await migrateTranscriptsV1(pool);
     // Phase 48.1: warm the silo-detector cache after silos migration.
     // Lazy-load fallback exists in the detector so cold-start works; this is
     // just a perf optimization. Never crash boot if it fails.
