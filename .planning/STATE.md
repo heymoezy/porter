@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 48.2 (transcript-capture) — EXECUTING
-Plan: 1 of 5 (Plan 05 Wave-0 smoke harness shipped in parallel — DONE)
+Plan: 2 of 5 (Plans 01 + 05 DONE — capture endpoint next)
 
 ## Performance Metrics
 
@@ -127,6 +127,12 @@ Plan: 1 of 5 (Plan 05 Wave-0 smoke harness shipped in parallel — DONE)
 - [Phase 48.2-05]: Poll-with-timeout (20 × 0.5s = 10s ceiling) for async hook → backend INSERT round-trip — eliminates fixed-sleep flakiness in TRC-02/03/08
 - [Phase 48.2-05]: TRC-07 (kill switch) inserts NULL-silo override row BEFORE posting and asserts NO row written — verifies capture-side privacy gate end-to-end, not just /silo-command endpoint
 - [Phase 48.2-05]: trap cleanup EXIT — sweeps `session_id LIKE 'smoke-48.2-%'` from both session_transcript_turns + session_silo_overrides + bookmark sidecars under /tmp/porter-transcript-bookmark/ on any exit path
+- [Phase 48.2-01]: silo_id stays nullable TEXT with NO FK to silos.id — orphan-tolerant against future silo rename/disable; mirrors session_silo_overrides precedent from 48.1
+- [Phase 48.2-01]: cwd captured as nullable TEXT per RESEARCH Open Question #5 — tiny cost, future-proofs 48.3 per-project sub-filtering
+- [Phase 48.2-01]: Retention workflow row seeded in TWO places (migration AND BUILTIN_WORKFLOWS in workflow-engine.ts) — both idempotent by name, defense in depth against DB rebuild OR codebase regression
+- [Phase 48.2-01]: Drizzle siloCapturedIdx defaults ASC at ORM layer; raw SQL migration installs DESC at DB layer — DB-level DESC is what serves 48.3's query planner, Drizzle binding is for $inferSelect type-safety only
+- [Phase 48.2-01]: transcript_retain handler captures pool from workflow-engine module scope (already imported from ../../db/client.js), matching every other action handler in the file
+- [Phase 48.2-01]: New v1 migration pattern established — runs after migrateSilosV1, mirrors migrate-silos-v1.ts exactly (BEGIN, schema_migrations guard, DDL IF NOT EXISTS, conditional seeds, INSERT migration row, COMMIT, ROLLBACK + release in finally)
 
 ### Pending Todos
 
@@ -139,6 +145,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-11T17:41:33.910Z
-Stopped at: Completed 48.2-05-PLAN.md (Wave-0 smoke harness)
+Last session: 2026-05-11T17:51:52Z
+Stopped at: Completed 48.2-01-PLAN.md (session_transcript_turns schema + retention workflow). Plans 01 + 05 done; capture endpoint (02) next.
 Resume file: None
