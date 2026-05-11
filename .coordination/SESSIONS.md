@@ -26,5 +26,46 @@
   - **Phase 1.3+:** YMC fan-out (separate ledger)
 - Files I am NOT touching (Porter Dev's scope — no overlap):
   - `backend/src/index.ts`, `backend/src/routes/admin/health.ts`, `backend/src/services/bridge/adapters/claude-cli.ts`, `backend/src/services/bridge/model-catalog.ts`, `admin/frontend/app/routes/bridge.tsx`, `admin/frontend/app/components/bridge/*.tsx`
-- Status: **Phase 1.0 done** (Porter side). Pending Moe completing Meta App Dashboard steps + pasting 3 secrets back. Then Phase 1.1 (media + audio + Whisper).
-- Phase 1.0 verification: `https://askporter.app/api/v1/webhooks/whatsapp` handshake returns 200 with challenge echo on correct token, 403 on wrong token. Verified via Caddy public URL — what Meta will hit.
+- Status: **PIVOTED — Meta path abandoned per Moe.** WA will use openclaw's built-in Baileys channel (no Facebook required). Porter Bridge is no longer in the WA message path; only used by Tom (openclaw agent) when he needs LLM dispatch.
+- Porter `.env` rolled back — WA env vars removed (clean). The Porter `webhooks-whatsapp.ts` route file is left in place (Porter Dev's territory; not for YMC use).
+- Next Phase 1 work happens in openclaw config + YMC, not in Porter.
+
+---
+
+## Porter-Ops-Watchdog — 2026-05-11T03:10Z
+
+- **Workstream:** Fix inotify watch leak that caused VPS CPU spike on 2026-05-11.
+- **Files claimed:**
+  - `backend/src/services/intellect/file-watcher.ts` — reduce chokidar depth, expand ignored patterns
+  - `~/.config/systemd/user/porter-fastify.service` — add MemoryMax + CPUQuota resource limits
+- **Files NOT touching:**
+  - `backend/src/index.ts` (Porter Dev claim)
+  - `backend/src/routes/admin/health.ts` (Porter Dev claim)
+  - `backend/src/services/bridge/adapters/claude-cli.ts` (Porter Dev claim)
+  - `backend/src/services/whatsapp.ts`, `backend/src/routes/v1/webhooks-whatsapp.ts` (Whatsapp claim)
+  - Admin frontend (no overlap)
+- **Status:** active — editing watcher config and unit file.
+
+### Porter-Ops-Watchdog — status update 2026-05-11T05:30Z — DONE
+- file-watcher.ts: `depth: 10 → 3`, expanded ignored patterns. Porter inotify watches: 124,442 → 6,685.
+- porter-fastify.service: MemoryMax=2G, MemoryHigh=1500M, CPUQuota=180%, LimitNOFILE=8192.
+- Porter restarted (PID 86688), health 200, version 6.11.0. Memory peak 422 MiB / 2 GiB.
+- Type-check clean (`npx tsc --noEmit`). No frontend changes — no rebuild needed.
+
+---
+
+## GSD Phase 48.1 Executor (Opus 4.7) — 2026-05-11T00:00+08:00
+- Workstream: Execute Phase 48.1 silo-foundation — 5 plans across 4 waves
+- Files claimed:
+  - backend/src/db/migrate-silos-v1.ts (NEW)
+  - backend/src/db/schema.ts
+  - backend/src/index.ts (migration registration only — Porter Dev session shipped & idle)
+  - backend/src/services/intellect/silo-detector.ts (NEW)
+  - backend/src/routes/v1/intellect.ts
+  - /home/lobster/.claude/hooks/porter-user-prompt.js
+  - /home/lobster/.claude/hooks/porter-session-start.js
+  - tests/smoke-48.1.sh (NEW)
+- Status: active
+
+### Plan 48.1-01 — DONE 2026-05-11T10:43Z
+- Shipped migrate-silos-v1.ts (silos + session_silo_overrides + directive_immutable_moe_direct trigger). DRM-01 + DRM-05 complete. silos.software seeded, 5 moe-direct rows protected, non-moe-direct UPDATEs survive (memory-pruner unaffected). Bypass via SET LOCAL porter.allow_moe_direct_mutation='true' verified. Porter restarted PID 182118+, /health 200, tsc clean. Commits: 068bea9 (Task 1), 8547903 (Task 2), eb12f58 (SUMMARY).
