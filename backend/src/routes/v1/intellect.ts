@@ -416,6 +416,78 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // ── POST /silo-command — Phase 48.1 /silo CLI slash-command handler ──
+  // 127.0.0.1-only; relies on server bind for protection (no auth middleware
+  // in this file's route group). Called by ~/.claude/hooks/porter-user-prompt.js
+  // when a user types `/silo`, `/silo <name>`, or `/silo none` in any Claude
+  // CLI session. UPSERTs into session_silo_overrides; the silo-detector reads
+  // that row in the next /context call.
+  fastify.post('/silo-command', async (req, reply) => {
+    const body = (req.body || {}) as { session_id?: string; command?: string };
+    const sessionId = (body.session_id || '').trim();
+    const command   = (body.command   || '').trim();
+
+    if (!sessionId) return reply.code(400).send({ ok: false, message: 'session_id required' });
+    if (!command.startsWith('/silo')) return reply.code(400).send({ ok: false, message: "command must start with /silo" });
+
+    // Parse: "/silo", "/silo software", "/silo none"
+    const arg = command.slice('/silo'.length).trim().toLowerCase();
+
+    // Case A — status query (no argument)
+    if (arg === '') {
+      const overrideRes = await pool.query(
+        `SELECT silo_id, set_at FROM session_silo_overrides
+         WHERE session_id = $1 AND set_at > NOW() - INTERVAL '24 hours'`,
+        [sessionId],
+      );
+      if (overrideRes.rowCount && overrideRes.rowCount > 0) {
+        const row = overrideRes.rows[0] as { silo_id: string | null };
+        if (row.silo_id === null) {
+          return reply.send({ ok: true, message: 'Silo override: none (explicitly cleared)', current_silo: null, source: 'override' });
+        }
+        return reply.send({ ok: true, message: 'Silo override: ' + row.silo_id, current_silo: row.silo_id, source: 'override' });
+      }
+      return reply.send({ ok: true, message: 'No override set; silo detected from cwd', current_silo: null, source: 'detected' });
+    }
+
+    // Case B — explicit clear
+    if (arg === 'none') {
+      await pool.query(
+        `INSERT INTO session_silo_overrides (session_id, silo_id, set_at)
+         VALUES ($1, NULL, NOW())
+         ON CONFLICT (session_id) DO UPDATE SET silo_id = NULL, set_at = NOW()`,
+        [sessionId],
+      );
+      return reply.send({ ok: true, message: '/silo none — override cleared for this session', current_silo: null, source: 'override' });
+    }
+
+    // Case C — set a silo by name. Validate against silos.id
+    const siloName = arg;
+    const validRes = await pool.query(
+      `SELECT id, display_name FROM silos WHERE id = $1 AND enabled = TRUE LIMIT 1`,
+      [siloName],
+    );
+    if (!validRes.rowCount) {
+      const availRes = await pool.query(`SELECT id FROM silos WHERE enabled = TRUE ORDER BY id`);
+      const avail = (availRes.rows as Array<{id: string}>).map((r) => r.id).join(', ') || '(none enabled)';
+      return reply.code(400).send({ ok: false, message: "Unknown silo '" + siloName + "'. Available: " + avail });
+    }
+
+    await pool.query(
+      `INSERT INTO session_silo_overrides (session_id, silo_id, set_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (session_id) DO UPDATE SET silo_id = $2, set_at = NOW()`,
+      [sessionId, siloName],
+    );
+
+    return reply.send({
+      ok: true,
+      message: '/silo ' + siloName + ' — override applied for this session',
+      current_silo: siloName,
+      source: 'override',
+    });
+  });
+
   // ── POST /session-end — session finished, create episode ────────────
 
   fastify.post('/session-end', async (request, reply) => {
