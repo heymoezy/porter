@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.1-01-PLAN.md
-last_updated: "2026-05-11T10:55:02.071Z"
+stopped_at: Completed 48.1-02-PLAN.md
+last_updated: "2026-05-11T12:01:40.607Z"
 progress:
   total_phases: 18
   completed_phases: 16
   total_plans: 50
-  completed_plans: 48
+  completed_plans: 49
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 ## Current Position
 
-Phase: 48.1 (silo-foundation) — EXECUTING (Waves 0+1 complete; Waves 2-3 pending)
-Plan: 2 of 5 complete (plans 01 + 05 shipped; plans 02-04 pending)
+Phase: 48.1 (silo-foundation) — EXECUTING (Waves 0+1+2 complete; Wave 3 pending)
+Plan: 3 of 5 complete (plans 01 + 02 + 05 shipped; plans 03-04 pending)
 
 ## Performance Metrics
 
@@ -110,6 +110,13 @@ Plan: 2 of 5 complete (plans 01 + 05 shipped; plans 02-04 pending)
 - [Phase 48.1-01]: silos.enabled is BOOLEAN (not INTEGER) per CONTEXT schema lock; schema.ts imports boolean + timestamp from drizzle-orm/pg-core
 - [Phase 48.1-01]: Migration registered after migrateBornCheckV1 in runMigrations() to preserve causal order with prior wave
 - [Phase 48.1]: Phase 48.1-01 trigger guard returns early on OLD.source_type != 'moe-direct' so memory-pruner dedup keeps working
+- [Phase 48.1-02]: silo-detector cache is module-level + lazy-loaded with explicit startup warmup; .catch() on warmup so DB hiccups never crash Fastify boot
+- [Phase 48.1-02]: Detection algorithm priority is override (24h TTL in SQL predicate) → project-type prefix match → cwd_markers fs.existsSync → []; multi-silo aggregated via Map dedup
+- [Phase 48.1-02]: silo_id IS NULL in session_silo_overrides means "explicit none" and returns []; absence of row falls through to detection — Plan 03 uses this for /silo none
+- [Phase 48.1-02]: Silo section sits BETWEEN System Directives and Project Directives in /context markdown — silos amplify workspace rules, project rules customize on top
+- [Phase 48.1-02]: /context detection failures are warn-logged and skipped (fail-open); never break /context because of silo errors
+- [Phase 48.1-02]: cwd missing AND no session override → return [] — guarantees DRM-03 backward-compat for pre-upgrade callers
+- [Phase 48.1-02]: Smoke SC-2 directive-body check must parse data.context from JSON before grep -qF; raw-JSON grep breaks on directives starting with literal quote (silo-sw-compact-means-padding)
 
 ### Pending Todos
 
@@ -122,6 +129,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-11T10:53:42.131Z
-Stopped at: Completed 48.1-01-PLAN.md
+Last session: 2026-05-11T12:01:40.602Z
+Stopped at: Completed 48.1-02-PLAN.md
 Resume file: None

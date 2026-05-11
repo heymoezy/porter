@@ -69,3 +69,6 @@
 
 ### Plan 48.1-01 — DONE 2026-05-11T10:43Z
 - Shipped migrate-silos-v1.ts (silos + session_silo_overrides + directive_immutable_moe_direct trigger). DRM-01 + DRM-05 complete. silos.software seeded, 5 moe-direct rows protected, non-moe-direct UPDATEs survive (memory-pruner unaffected). Bypass via SET LOCAL porter.allow_moe_direct_mutation='true' verified. Porter restarted PID 182118+, /health 200, tsc clean. Commits: 068bea9 (Task 1), 8547903 (Task 2), eb12f58 (SUMMARY).
+
+### Plan 48.1-02 — DONE 2026-05-11T12:05Z
+- Shipped silo-detector.ts (132 LOC) + /context injection between System and Project Directives + startup cache warmup. DRM-02 + DRM-03 complete. Porter restarted PID 211416, /health 200, log `[silo-detector] cache loaded — 1 enabled silo(s)`. Smoke SC-1, SC-2, SC-4, SC-4b, SC-6 green; SC-5a fails on /silo-command (Plan 03 implements). Commits: a334027 (Task 1), b996ceb (Task 2), aedf252 (Task 3 deviation: smoke JSON parse fix).
