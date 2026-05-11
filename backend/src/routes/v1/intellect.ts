@@ -24,6 +24,7 @@ import { runToolDetection } from '../../services/intellect/tool-detector.js';
 import { runSubscriptionCheck } from '../../services/intellect/subscription-manager.js';
 import { detectSilos } from '../../services/intellect/silo-detector.js';
 import { insertTurn } from '../../services/intellect/transcript-capture.js';
+import { runTranscriptRetention } from '../../services/intellect/transcript-retention.js';
 
 interface DirectiveRow {
   id: string;
@@ -546,6 +547,22 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     } catch (e: unknown) {
       req.log.error({ err: e }, '[transcript/turn] insertTurn failed');
       return reply.code(500).send({ ok: false, message: 'capture failed' });
+    }
+  });
+
+  // ── POST /transcript/retention-run — Phase 48.2 TRC-06 manual trigger ──
+  // Used by the smoke harness + admin "run now" surfaces to validate retention
+  // end-to-end without waiting 24h for the scheduled workflow tick. The
+  // production retention runs daily via the workflow engine
+  // (workflows.action_type='transcript_retain', trigger='every_24h').
+  // 127.0.0.1-only; same auth posture as /transcript/turn (relies on server bind).
+  fastify.post('/transcript/retention-run', async (req, reply) => {
+    try {
+      const result = await runTranscriptRetention(pool);
+      return reply.send({ ok: true, deleted: result.deleted });
+    } catch (e: unknown) {
+      req.log.error({ err: e }, '[transcript/retention-run] failed');
+      return reply.code(500).send({ ok: false, message: 'retention failed' });
     }
   });
 
