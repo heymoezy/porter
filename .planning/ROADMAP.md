@@ -96,6 +96,10 @@
 - [x] **Phase 45: Porter Control Plane** - Porter enforces delegation doctrine, depth limits, and approval gates for high-risk actions (completed 2026-04-03)
 - [x] **Phase 46: Project Monitoring** - Per-project watchers (web search, RSS, email, custom) run autonomously and surface findings in activity feed (completed 2026-04-03)
 - [x] **Phase 47: Project Substrate** - Every project has a canonical /_system/ directory, structured intake, intelligence ingress, and Atlas agent (completed 2026-04-03)
+- [ ] **Phase 48.1: Silo Foundation** — `silos` registry table + software seed row, silo detection at session start (cwd + cheap heuristics), `/api/v1/intellect/context` injects scope='silo' directives in a labeled section, `/silo` CLI command for explicit tagging. Spec: `research/porter-dreams-pipeline.md`.
+- [ ] **Phase 48.2: Transcript Capture** — `session_transcript_turns` table (silo-tagged at insert), `Stop` hook + `UserPromptSubmit` extension write turns, PII filter, 30-day retention job.
+- [ ] **Phase 48.3: Software Dream Worker** — `dream-worker.ts` with refine-don't-append doctrine (merge/supersede/delete output kinds before new_directive), Bridge dispatch, software prompt template, weekly workflow, writes to `memory_proposals`.
+- [ ] **Phase 48.4: Review Surface** — Admin UI Dreams tab with silo filter, transactional accept/reject handlers, auto-expiry, event-stream wiring.
 
 ## Phase Details
 
@@ -374,6 +378,26 @@ Plans:
 - [ ] 47-01-PLAN.md — Project substrate provisioning service + migration (PSB-01, PSB-02)
 - [ ] 47-02-PLAN.md — Intelligence ingress pipeline for file uploads (PSB-03)
 - [ ] 47-03-PLAN.md — Atlas structural health agent (PSB-04)
+
+### Phase 48.1: Silo Foundation
+**Goal**: Porter's memory layer becomes silo-aware. A new `silos` registry table holds per-domain configuration (display name, prompt template path, default model, cadence, detection rules). The 4 pre-seeded software-silo directives auto-inject into any Claude CLI session whose cwd or first prompts match the software-silo detector. A `/silo <name>` CLI command lets Moe override the detection explicitly. Cross-silo bleed is impossible by construction (separate scope/scope_id rows, separate injection section in the prompt).
+**Depends on**: Phase 47 (project substrate provides project_type used by silo detector)
+**Requirements**: DRM-01, DRM-02, DRM-03, DRM-04, DRM-05
+**Success Criteria** (what must be TRUE):
+  1. `silos` table exists with `id, display_name, description, prompt_path, cadence_seconds, default_model, detect_rules JSONB, enabled, created_at` columns and an inserted `software` row matching the spec
+  2. `/api/v1/intellect/context?project=X` returns silo-scoped directives in a labeled `## Silo: Software — Operating Rules` section when the active silo is `software`; returns no silo section when silo is null
+  3. A fresh CLI session opened in `/home/lobster/projects/Porter` shows the 4 (now 5) seeded software-silo directives injected via the session-start hook output
+  4. A fresh CLI session opened in `/home/lobster/projects/Funds` (non-code project) shows no silo directives — silo detection returns null
+  5. `/silo software` typed in a CLI session forces silo tagging for that session and is persisted for the session lifetime
+  6. Hand-curated seed directives (`source_type='moe-direct'`) cannot be deleted or modified by automated processes — only by direct DB write or admin API
+**Plans:** 5 plans
+
+Plans:
+- [ ] 48.1-01-PLAN.md — Schema: silos table + software seed + session_silo_overrides + directive_immutable_moe_direct trigger
+- [ ] 48.1-02-PLAN.md — Detection service + /api/v1/intellect/context silo injection
+- [ ] 48.1-03-PLAN.md — POST /silo-command endpoint + UserPromptSubmit hook /silo interception
+- [ ] 48.1-04-PLAN.md — Session-start hook stdin parse + version bump v6.12.0 + ship + human verify
+- [ ] 48.1-05-PLAN.md — Wave 0 smoke harness (tests/smoke-48.1.sh covering SC-1..SC-6)
 
 ## Progress
 

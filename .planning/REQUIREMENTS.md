@@ -61,6 +61,14 @@
 - [x] **PCP-02**: Subagent depth limits (max 2 hops) with tool restrictions on child dispatches
 - [x] **PCP-03**: Approval gates for high-risk actions (code mutation, external API calls, file deletion)
 
+### Dream Silos (Phase 48 series)
+
+- [ ] **DRM-01**: A `silos` registry table holds per-domain configuration (id, display_name, prompt_path, cadence_seconds, default_model, detect_rules JSONB, enabled). Software silo is seeded with detect_rules covering project_types and file globs
+- [ ] **DRM-02**: `/api/v1/intellect/context` returns silo-scoped directives (`scope='silo'` rows) in a labeled `## Silo: <name> — Operating Rules` section, separate from global/project/agent directives, never blended
+- [ ] **DRM-03**: Session-start hook detects the active silo from cwd + cheap content heuristics (file globs, code keywords); returns null when ambiguous so no silo directives inject in mixed/unknown contexts
+- [ ] **DRM-04**: A `/silo <name>` CLI command persists explicit silo tagging for the active session, overriding heuristic detection; clears with `/silo none`
+- [ ] **DRM-05**: Seed directives (`source_type='moe-direct'`) are protected — no automated process can delete or modify them; flagged via the existing source_type column
+
 ## v7.0 Requirements (Deferred)
 
 ### Self-Improvement
@@ -120,10 +128,15 @@
 | PSB-02 | Phase 47 | Complete |
 | PSB-03 | Phase 47 | Complete |
 | PSB-04 | Phase 47 | Complete |
+| DRM-01 | Phase 48.1 | Pending |
+| DRM-02 | Phase 48.1 | Pending |
+| DRM-03 | Phase 48.1 | Pending |
+| DRM-04 | Phase 48.1 | Pending |
+| DRM-05 | Phase 48.1 | Pending |
 
 **Coverage:**
-- v6.0 requirements: 30 total
-- Mapped to phases: 30
+- v6.0 requirements: 35 total
+- Mapped to phases: 35
 - Unmapped: 0
 
 ---
