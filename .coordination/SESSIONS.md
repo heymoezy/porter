@@ -73,5 +73,20 @@
 ### Plan 48.1-02 — DONE 2026-05-11T12:05Z
 - Shipped silo-detector.ts (132 LOC) + /context injection between System and Project Directives + startup cache warmup. DRM-02 + DRM-03 complete. Porter restarted PID 211416, /health 200, log `[silo-detector] cache loaded — 1 enabled silo(s)`. Smoke SC-1, SC-2, SC-4, SC-4b, SC-6 green; SC-5a fails on /silo-command (Plan 03 implements). Commits: a334027 (Task 1), b996ceb (Task 2), aedf252 (Task 3 deviation: smoke JSON parse fix).
 
+### Plan 48.1-04 — CHECKPOINT-PENDING 2026-05-11T13:42Z
+- Workstream: Wire session-start hook (stdin payload → session_id + cwd → /context), version bump v6.11.0 → v6.12.0, ship, smoke, live-CLI checkpoint.
+- Files modified (in-repo, committed):
+  - backend/src/index.ts (line 171: version 6.11.0 → 6.12.0)
+  - backend/src/routes/v1/health.ts (line 71: porter_version 6.9.0 → 6.12.0)
+  - backend/package.json (version 6.11.0 → 6.12.0)
+  - CHANGELOG.md (new v6.12.0 entry covering DRM-01..DRM-05)
+- Files modified (outside repo, NOT committed — global Claude Code hook, reproduced verbatim in SUMMARY for re-deployment):
+  - /home/lobster/.claude/hooks/porter-session-start.js
+- Commits: ff4566b (Task 2 version bump). Task 1 hook lives outside repo. Task 3 is verification-only.
+- Ship: Porter restarted via systemctl stop+start (PID 252036+), /health 200, version v6.12.0 confirmed.
+- Smoke: `bash tests/smoke-48.1.sh` → all checks green (SC-1..SC-6).
+- Hook stdin smoke: cwd=Porter → 1 silo section; cwd=Funds → 0 silo sections.
+- Status: BLOCKED on Task 4 checkpoint:human-verify — Moe must run a live CLI session and confirm silo header appears.
+
 ### Plan 48.1-03 — DONE 2026-05-11T12:52Z
 - Shipped POST /api/v1/intellect/silo-command (UPSERT session_silo_overrides with /silo, /silo none, /silo <name>) + extended porter-user-prompt.js hook (Node 22 fetch + AbortController 3s timeout) emitting `{decision:"block", reason, hookSpecificOutput:{additionalContext}}`. DRM-04 complete. Block-format empirically verified — Risk 2 retired. Manual SC-5 round-trip green (set → /context returns software silo from Funds cwd → /silo none → /context no silo). Full smoke harness: **all checks green (SC-1..SC-6)** — first plan to flip SC-5 green. Porter restarted PID 231782+, /health 200, tsc clean. Auth posture: no middleware in intellect.ts; inline 127.0.0.1-only comment added (WARNING 5). Commit: d3c69a2 (Task 1). Hook NOT committed (global Claude Code hook, outside Porter repo) — reproduced verbatim in SUMMARY for re-deployment.
