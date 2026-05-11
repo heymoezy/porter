@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 47-03-PLAN.md
-last_updated: "2026-04-03T19:15:42.155Z"
+stopped_at: Completed 48.1-05-PLAN.md
+last_updated: "2026-05-11T10:13:00.483Z"
 progress:
-  total_phases: 17
+  total_phases: 18
   completed_phases: 16
-  total_plans: 45
-  completed_plans: 46
+  total_plans: 50
+  completed_plans: 47
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
-**Current focus:** Phase 47 — Project Substrate
+**Current focus:** Phase 48.1 — silo-foundation
 
 ## Current Position
 
-Phase: 47 (Project Substrate) — COMPLETE
-Plan: 3 of 3 (all complete)
+Phase: 48.1 (silo-foundation) — EXECUTING (Wave 0 complete; Waves 1+ pending)
+Plan: 1 of 5 complete (plan 05 shipped Wave 0; plans 01-04 pending)
 
 ## Performance Metrics
 
@@ -101,6 +101,10 @@ Plan: 3 of 3 (all complete)
 - [Phase 47]: Project root resolved from porter_config.json projects mount with fallback to dataDir/projects
 - [Phase 47]: Missing canonical directories auto-repaired; missing _system files only flagged (content files are sacred)
 - [Phase 47]: Atlas runs every 30 min (900 ticks) -- structural drift is slow-changing, first run at tick 900 to avoid startup load
+- [Phase 48.1-05]: Wave 0 smoke harness shipped BEFORE implementation plans so each downstream task has a single-shot <verify> command (`bash tests/smoke-48.1.sh`)
+- [Phase 48.1-05]: Smoke script self-degrades — SC-1/SC-6 (schema) run on bare DB via psql; SC-2..SC-5 gated behind `curl -sf /health`, exit 0 with warn line when Fastify offline
+- [Phase 48.1-05]: SC-6 row-existence guard required to prevent vacuous pass — UPDATE/DELETE on missing target returns 0 rows (no error) which would falsely satisfy trigger test
+- [Phase 48.1-05]: SC-4b verifies DRM-03 null-return path: callers omitting cwd param must see zero silo sections (backward compat)
 
 ### Pending Todos
 
@@ -113,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T19:11:04.726Z
-Stopped at: Completed 47-03-PLAN.md
+Last session: 2026-05-11T10:13:00.483Z
+Stopped at: Completed 48.1-05-PLAN.md
 Resume file: None
