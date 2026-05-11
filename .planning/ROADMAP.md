@@ -96,7 +96,7 @@
 - [x] **Phase 45: Porter Control Plane** - Porter enforces delegation doctrine, depth limits, and approval gates for high-risk actions (completed 2026-04-03)
 - [x] **Phase 46: Project Monitoring** - Per-project watchers (web search, RSS, email, custom) run autonomously and surface findings in activity feed (completed 2026-04-03)
 - [x] **Phase 47: Project Substrate** - Every project has a canonical /_system/ directory, structured intake, intelligence ingress, and Atlas agent (completed 2026-04-03)
-- [ ] **Phase 48.1: Silo Foundation** — `silos` registry table + software seed row, silo detection at session start (cwd + cheap heuristics), `/api/v1/intellect/context` injects scope='silo' directives in a labeled section, `/silo` CLI command for explicit tagging. Spec: `research/porter-dreams-pipeline.md`.
+- [x] **Phase 48.1: Silo Foundation** — `silos` registry table + software seed row, silo detection at session start (cwd + cheap heuristics), `/api/v1/intellect/context` injects scope='silo' directives in a labeled section, `/silo` CLI command for explicit tagging. Spec: `research/porter-dreams-pipeline.md`. (completed 2026-05-11)
 - [ ] **Phase 48.2: Transcript Capture** — `session_transcript_turns` table (silo-tagged at insert), `Stop` hook + `UserPromptSubmit` extension write turns, PII filter, 30-day retention job.
 - [ ] **Phase 48.3: Software Dream Worker** — `dream-worker.ts` with refine-don't-append doctrine (merge/supersede/delete output kinds before new_directive), Bridge dispatch, software prompt template, weekly workflow, writes to `memory_proposals`.
 - [ ] **Phase 48.4: Review Surface** — Admin UI Dreams tab with silo filter, transactional accept/reject handlers, auto-expiry, event-stream wiring.
@@ -390,7 +390,7 @@ Plans:
   4. A fresh CLI session opened in `/home/lobster/projects/Funds` (non-code project) shows no silo directives — silo detection returns null
   5. `/silo software` typed in a CLI session forces silo tagging for that session and is persisted for the session lifetime
   6. Hand-curated seed directives (`source_type='moe-direct'`) cannot be deleted or modified by automated processes — only by direct DB write or admin API
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 - [ ] 48.1-01-PLAN.md — Schema: silos table + software seed + session_silo_overrides + directive_immutable_moe_direct trigger

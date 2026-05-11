@@ -128,11 +128,11 @@
 | PSB-02 | Phase 47 | Complete |
 | PSB-03 | Phase 47 | Complete |
 | PSB-04 | Phase 47 | Complete |
-| DRM-01 | Phase 48.1 | Smoke covered (48.1-05); implementation pending (48.1-01) |
-| DRM-02 | Phase 48.1 | Smoke covered (48.1-05); implementation pending (48.1-02) |
-| DRM-03 | Phase 48.1 | Smoke covered (48.1-05); implementation pending (48.1-03) |
-| DRM-04 | Phase 48.1 | Smoke covered (48.1-05); implementation pending (48.1-03) |
-| DRM-05 | Phase 48.1 | Smoke covered (48.1-05); implementation pending (48.1-01) |
+| DRM-01 | Phase 48.1 | Complete (48.1-01) |
+| DRM-02 | Phase 48.1 | Complete (48.1-02 wired, 48.1-04 live-CLI verified) |
+| DRM-03 | Phase 48.1 | Complete (48.1-02 detector, 48.1-04 session-start hook wired + verified) |
+| DRM-04 | Phase 48.1 | Complete (48.1-03) |
+| DRM-05 | Phase 48.1 | Complete (48.1-01) |
 
 **Coverage:**
 - v6.0 requirements: 35 total
