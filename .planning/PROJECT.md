@@ -84,7 +84,9 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 
 ## Context
 
-Porter has been in development since Feb 18, 2026. Current version is v6.0.0. Single monorepo, single Fastify process on :3001.
+Porter has been in development since Feb 18, 2026. Current version is v6.12.0. Single monorepo, single Fastify process on :3001.
+
+**Phase 48.1 silo-foundation (2026-05-11):** Dream Silos series substrate landed. `silos` table seeded with the software development silo, deterministic cwd-based detection injects a labeled `## Silo: Software Development — Operating Rules` section into `/api/v1/intellect/context` for code-project sessions, `/silo software | none | <id>` slash command persists per-session overrides via UserPromptSubmit hook, and the SessionStart hook now forwards `session_id` + `cwd` so the silo header reaches fresh Claude CLI sessions. Moe-direct directives are sealed at the DB layer (`directive_immutable_moe_direct` trigger) with a `SET LOCAL` bypass for memory-pruner. First piece of the silo-scoped reinforcement-learning system Moe specified in feedback_dream_silos.
 
 **Backend** (`backend/src/`): TypeScript, Fastify 5, Drizzle ORM, PostgreSQL. Brain + Admin merged. All routes on :3001.
 
@@ -124,4 +126,4 @@ Porter has been in development since Feb 18, 2026. Current version is v6.0.0. Si
 | Orchestration is THE feature | Not a chat router — task decomposition + agent coordination | — v6.0 scope |
 
 ---
-*Last updated: 2026-04-02 after v6.0 The Orchestration Platform milestone scoped*
+*Last updated: 2026-05-11 after Phase 48.1 silo-foundation shipped (v6.12.0)*
