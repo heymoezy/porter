@@ -98,6 +98,19 @@
 - [x] **Phase 47: Project Substrate** - Every project has a canonical /_system/ directory, structured intake, intelligence ingress, and Atlas agent (completed 2026-04-03)
 - [x] **Phase 48.1: Silo Foundation** — `silos` registry table + software seed row, silo detection at session start (cwd + cheap heuristics), `/api/v1/intellect/context` injects scope='silo' directives in a labeled section, `/silo` CLI command for explicit tagging. Spec: `research/porter-dreams-pipeline.md`. (completed 2026-05-11)
 - [ ] **Phase 48.2: Transcript Capture** — `session_transcript_turns` table (silo-tagged at insert), `Stop` hook + `UserPromptSubmit` extension write turns, PII filter, 30-day retention job.
+
+  **Goal**: Real Claude CLI sessions persist silo-tagged turn rows to `session_transcript_turns` via a new `Stop` hook (assistant turns from `transcript_path` JSONL) and an extended `UserPromptSubmit` hook (user turns). PII is scrubbed at INSERT, content is capped at 32KB, silo is tagged via `detectSilos`, and 30-day retention runs daily via the existing workflow engine. `/silo none` is the per-session privacy kill switch; `intellect.transcriptCaptureEnabled` is the global config flag. Output feeds Plan 48.3 (Software Dream Worker) via `SELECT * FROM session_transcript_turns WHERE silo_id='software' AND captured_at >= NOW() - INTERVAL '7 days'`.
+  **Depends on**: Phase 48.1 (silo registry + session_silo_overrides + silo-detector)
+  **Requirements**: TRC-01, TRC-02, TRC-03, TRC-04, TRC-05, TRC-06, TRC-07, TRC-08
+  **Plans:** 5 plans
+
+  Plans:
+  - [ ] 48.2-01-PLAN.md — Schema: session_transcript_turns + 3 indexes + retention workflow seed + workflow-engine handler (TRC-01, TRC-06)
+  - [ ] 48.2-02-PLAN.md — Shared pii-scrub.ts + transcript-capture.ts insertTurn + POST /transcript/turn endpoint (TRC-04, TRC-05, TRC-07)
+  - [ ] 48.2-03-PLAN.md — UserPromptSubmit hook extension + NEW Stop hook (porter-stop.js) + settings.json registration (TRC-02, TRC-03, TRC-08)
+  - [ ] 48.2-04-PLAN.md — Global config flag + retention-run endpoint + SessionEnd belt-and-braces + version v6.13.0 + ship + human-verify (TRC-06, TRC-07)
+  - [ ] 48.2-05-PLAN.md — Wave 0 smoke harness (tests/smoke-48.2.sh + fixtures covering TRC-01..TRC-08)
+
 - [ ] **Phase 48.3: Software Dream Worker** — `dream-worker.ts` with refine-don't-append doctrine (merge/supersede/delete output kinds before new_directive), Bridge dispatch, software prompt template, weekly workflow, writes to `memory_proposals`.
 - [ ] **Phase 48.4: Review Surface** — Admin UI Dreams tab with silo filter, transactional accept/reject handlers, auto-expiry, event-stream wiring.
 
