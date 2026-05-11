@@ -133,3 +133,17 @@
   - backend/src/routes/v1/intellect.ts (ADD POST /transcript/turn)
 - **Files NOT touching:** any hooks, settings.json, file-watcher, schema, retention.
 - **Status:** DONE 2026-05-11T19:05Z — all 3 tasks committed (a610c1e refactor pii-scrub, c41aca0 feat capture-orchestrator, c7ba79c feat route). Porter restarted, /health 200 v6.12.0, tsc clean. Manual sanity all green: TRC-04 (silo=software for Porter cwd), TRC-05 (email+phone → [REDACTED] in DB), TRC-07 (/silo none → skipped:'silo_none', 0 rows). Smoke harness `bash tests/smoke-48.2.sh` → `all checks green (TRC-01..TRC-08)` (TRC-02/03/08 graceful-skip pending hooks in Plan 03). SUMMARY at .planning/phases/48.2-transcript-capture/48.2-02-SUMMARY.md. STATE+ROADMAP+REQUIREMENTS updated. Hand-off: Plan 03 wires hooks (porter-stop.js + UserPromptSubmit extension); endpoint live and verified end-to-end as drop-in HTTP client target.
+
+---
+
+## GSD Phase 48.2 Plan 03 Executor (Opus 4.7) — 2026-05-11T19:10:00Z
+- Workstream: Execute 48.2-03 — porter-user-prompt.js extension + NEW porter-stop.js + settings.json Stop registration (TRC-02 + TRC-03 + TRC-08)
+- Files claimed (all OUTSIDE Porter repo — deliberately uncommitted):
+  - /home/lobster/.claude/hooks/porter-user-prompt.js (extend; preserve /silo + /correction)
+  - /home/lobster/.claude/hooks/porter-stop.js (NEW)
+  - /home/lobster/.claude/settings.json (register Stop hook)
+- In-repo files touched (committed):
+  - .planning/phases/48.2-transcript-capture/48.2-03-SUMMARY.md (NEW)
+  - .planning/STATE.md, ROADMAP.md, REQUIREMENTS.md (state advance)
+- Not touching: backend/*, admin/*, anything Porter-Ops-Watchdog still has unstaged.
+- Status: active

@@ -36,7 +36,7 @@ export interface InsertTurnResult {
   inserted: boolean;
   silo: string | null;
   turn_index: number;
-  skipped?: 'silo_none' | 'disabled' | 'empty';
+  skipped?: 'silo_none' | 'disabled' | 'empty' | 'duplicate';
   reason?: 'concurrent_race';
 }
 
@@ -84,6 +84,36 @@ export async function insertTurn(args: InsertTurnArgs, pool: pg.Pool): Promise<I
 
   // 3. PII scrub (TRC-05) + 4. cap
   const clean = capContent(scrubPII(rawContent));
+
+  // 4b. TRC-08 content-based idempotency: when the Stop hook re-parses the same
+  // JSONL (e.g. /tmp bookmark wiped on reboot, or smoke harness clearing the
+  // bookmark to assert TRC-08), the (session_id, turn_index) UNIQUE on its own
+  // is NOT enough — the second pass would simply MAX+1 to a fresh index. Guard
+  // by pre-checking for an existing row with the same (session_id, role,
+  // captured_at, content). captured_at comes from the JSONL `timestamp` field
+  // so it is deterministic per turn. If the hook omitted captured_at (user-prompt
+  // path), the ISO timestamp varies and this check is a no-op (correctly — user
+  // submits at distinct moments).
+  if (args.captured_at) {
+    const dupRes = await pool.query<{ turn_index: number }>(
+      `SELECT turn_index FROM session_transcript_turns
+        WHERE session_id = $1
+          AND role        = $2
+          AND captured_at = $3::timestamptz
+          AND content     = $4
+        LIMIT 1`,
+      [sessionId, role, args.captured_at, clean],
+    );
+    if (dupRes.rowCount && dupRes.rowCount > 0) {
+      return {
+        ok: true,
+        inserted: false,
+        silo: siloId,
+        turn_index: dupRes.rows[0].turn_index,
+        skipped: 'duplicate',
+      };
+    }
+  }
 
   // 5. Server-assigned turn_index + 6. INSERT ON CONFLICT DO NOTHING + 7. single retry on race.
   // We use one transaction so MAX-read and INSERT see a consistent state.
