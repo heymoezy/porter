@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"Test user message — should NOT be captured by Stop hook"},"sessionId":"smoke-48.2-fixture","cwd":"/home/lobster/projects/Porter","timestamp":"2026-05-11T10:00:00.000Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Test assistant reply — SHOULD be captured."}]},"sessionId":"smoke-48.2-fixture","cwd":"/home/lobster/projects/Porter","timestamp":"2026-05-11T10:00:01.000Z"}
+{"type":"attachment","attachment":{"type":"hook_success","content":"## Porter Context — SHOULD NOT be captured (hook-injected)"}}
+{"type":"queue-operation","data":{"op":"flush"}}

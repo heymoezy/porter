@@ -1,0 +1,6 @@
+{
+  "session_id": "smoke-48.2-stop-fixture",
+  "transcript_path": "/tmp/porter-smoke-48.2-transcript.jsonl",
+  "cwd": "/home/lobster/projects/Porter",
+  "hook_event_name": "Stop"
+}
