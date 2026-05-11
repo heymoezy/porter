@@ -91,3 +91,30 @@
 
 ### Plan 48.1-03 — DONE 2026-05-11T12:52Z
 - Shipped POST /api/v1/intellect/silo-command (UPSERT session_silo_overrides with /silo, /silo none, /silo <name>) + extended porter-user-prompt.js hook (Node 22 fetch + AbortController 3s timeout) emitting `{decision:"block", reason, hookSpecificOutput:{additionalContext}}`. DRM-04 complete. Block-format empirically verified — Risk 2 retired. Manual SC-5 round-trip green (set → /context returns software silo from Funds cwd → /silo none → /context no silo). Full smoke harness: **all checks green (SC-1..SC-6)** — first plan to flip SC-5 green. Porter restarted PID 231782+, /health 200, tsc clean. Auth posture: no middleware in intellect.ts; inline 127.0.0.1-only comment added (WARNING 5). Commit: d3c69a2 (Task 1). Hook NOT committed (global Claude Code hook, outside Porter repo) — reproduced verbatim in SUMMARY for re-deployment.
+
+---
+
+## GSD Phase 48.2 Executor Plan-01 (Opus 4.7) — 2026-05-11T17:05Z
+- **Workstream:** Execute 48.2-01-PLAN.md — session_transcript_turns schema + retention workflow seed + transcript_retain action handler.
+- **Files claimed:**
+  - backend/src/db/migrate-transcripts-v1.ts (NEW)
+  - backend/src/db/schema.ts (append-only at EOF)
+  - backend/src/index.ts (import + invocation after migrateSilosV1)
+  - backend/src/services/intellect/transcript-retention.ts (NEW)
+  - backend/src/services/intellect/workflow-engine.ts (add transcript_retain action)
+- **Files NOT touching:**
+  - backend/src/services/intellect/file-watcher.ts (Watchdog scope)
+  - hooks (Plan 03 scope)
+  - routes/v1/intellect.ts (Plan 02 scope)
+- **Status:** active
+
+---
+
+## GSD Phase 48.2 Executor Plan-05 (Opus 4.7 1M) — 2026-05-11T17:10+08:00
+- **Workstream:** Execute 48.2-05-PLAN.md — Wave-0 smoke harness for transcript capture (TRC-01..TRC-08). Wave 1 — runs alongside Plan-01; pure tests/ work, no backend code.
+- **Files claimed (all NEW):**
+  - tests/smoke-48.2.sh
+  - tests/fixtures/synthetic-transcript.jsonl
+  - tests/fixtures/stop-hook-input.json
+- **Files NOT touching:** any backend/, admin/, hooks/ — purely tests/ harness. Zero overlap with Plan-01 or other active sessions.
+- **Status:** DONE 2026-05-11T17:55Z — both tasks committed (95a82dd fixtures, 7ae2ea2 harness). Smoke runs cleanly against current DB with deterministic clean failure on TRC-01 (table missing — expected pre-Plan-01-ship behaviour per plan `<done>` clause). Self-cleaning verified (no smoke-48.2-* rows leaked). SUMMARY at .planning/phases/48.2-transcript-capture/48.2-05-SUMMARY.md. STATE + ROADMAP updated. Hand-off: Plan-01 ships migration → restart Porter → TRC-01 flips green; Plans 02/03/04 turn the remaining TRCs green as their behaviour lands.

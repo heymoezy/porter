@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.1-04-PLAN.md — phase 48.1 silo-foundation complete; ready for phase verification.
-last_updated: "2026-05-11T14:52:58.331Z"
+stopped_at: Completed 48.2-01-PLAN.md (session_transcript_turns schema + retention workflow)
+last_updated: "2026-05-11T17:51:52Z"
 progress:
   total_phases: 18
   completed_phases: 17
   total_plans: 50
-  completed_plans: 51
+  completed_plans: 52
 ---
 
 # Project State
@@ -19,13 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
-**Current focus:** Phase 48.1 — silo-foundation
+**Current focus:** Phase 48.2 — transcript-capture
 
 ## Current Position
 
-Phase: 48.1 (silo-foundation) — COMPLETE (all 5 plans shipped, all 4 waves landed, Moe approved live-CLI checkpoint 2026-05-11)
-Plan: 5 of 5 complete (plans 01 + 02 + 03 + 04 + 05 shipped)
-Next step: `/gsd:verify-work 48.1` then orchestrator-level push (per "push after every phase" rule). Next phase = 48.2 Transcript Capture.
+Phase: 48.2 (transcript-capture) — EXECUTING
+Plan: 1 of 5 (Plan 05 Wave-0 smoke harness shipped in parallel — DONE)
 
 ## Performance Metrics
 
@@ -122,6 +121,12 @@ Next step: `/gsd:verify-work 48.1` then orchestrator-level push (per "push after
 - [Phase 48.1-silo-foundation]: [Phase 48.1-03]: Hook fail-closed on backend failure — /silo always blocks, even on HTTP timeout, so the literal command never leaks to the model
 - [Phase 48.1-silo-foundation]: [Phase 48.1-03]: porter-user-prompt.js hook is NOT in the Porter repo (global Claude Code hook); deliberately uncommitted, reproduced verbatim in SUMMARY for re-deployment
 - [Phase 48.1-silo-foundation]: [Phase 48.1-03]: Block-format empirically verified — Claude Code UserPromptSubmit honors {decision:block, reason, hookSpecificOutput:{additionalContext}} envelope (Risk 2 retired)
+- [Phase 48.2-05]: Wave-0 smoke harness shipped alongside Plan-01 in Wave 1 (disjoint files: tests/ only) — every downstream task has a single-shot `bash tests/smoke-48.2.sh` <verify> command from this point
+- [Phase 48.2-05]: Hook absence is graceful-skip not failure — TRC-02/TRC-03/TRC-08 auto-skip when /home/lobster/.claude/hooks/porter-stop.js or porter-user-prompt.js missing, so smoke runs cleanly in Wave 1 before Plan 03 ships hooks
+- [Phase 48.2-05]: Backend reachability is a soft gate — TRC-01 (schema-only via psql) always runs; TRC-02..TRC-08 skip with warn-exit-0 when Fastify offline. Schema validation never requires the API to be up.
+- [Phase 48.2-05]: Poll-with-timeout (20 × 0.5s = 10s ceiling) for async hook → backend INSERT round-trip — eliminates fixed-sleep flakiness in TRC-02/03/08
+- [Phase 48.2-05]: TRC-07 (kill switch) inserts NULL-silo override row BEFORE posting and asserts NO row written — verifies capture-side privacy gate end-to-end, not just /silo-command endpoint
+- [Phase 48.2-05]: trap cleanup EXIT — sweeps `session_id LIKE 'smoke-48.2-%'` from both session_transcript_turns + session_silo_overrides + bookmark sidecars under /tmp/porter-transcript-bookmark/ on any exit path
 
 ### Pending Todos
 
@@ -134,6 +139,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-11T13:50:00Z
-Stopped at: Completed 48.1-04-PLAN.md — phase 48.1 silo-foundation complete; ready for phase verification.
+Last session: 2026-05-11T17:41:33.910Z
+Stopped at: Completed 48.2-05-PLAN.md (Wave-0 smoke harness)
 Resume file: None

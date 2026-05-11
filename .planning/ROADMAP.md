@@ -109,7 +109,7 @@
   - [ ] 48.2-02-PLAN.md — Shared pii-scrub.ts + transcript-capture.ts insertTurn + POST /transcript/turn endpoint (TRC-04, TRC-05, TRC-07)
   - [ ] 48.2-03-PLAN.md — UserPromptSubmit hook extension + NEW Stop hook (porter-stop.js) + settings.json registration (TRC-02, TRC-03, TRC-08)
   - [ ] 48.2-04-PLAN.md — Global config flag + retention-run endpoint + SessionEnd belt-and-braces + version v6.13.0 + ship + human-verify (TRC-06, TRC-07)
-  - [ ] 48.2-05-PLAN.md — Wave 0 smoke harness (tests/smoke-48.2.sh + fixtures covering TRC-01..TRC-08)
+  - [x] 48.2-05-PLAN.md — Wave 0 smoke harness (tests/smoke-48.2.sh + fixtures covering TRC-01..TRC-08) — DONE 2026-05-11
 
 - [ ] **Phase 48.3: Software Dream Worker** — `dream-worker.ts` with refine-don't-append doctrine (merge/supersede/delete output kinds before new_directive), Bridge dispatch, software prompt template, weekly workflow, writes to `memory_proposals`.
 - [ ] **Phase 48.4: Review Surface** — Admin UI Dreams tab with silo filter, transactional accept/reject handlers, auto-expiry, event-stream wiring.
