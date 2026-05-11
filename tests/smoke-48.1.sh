@@ -66,13 +66,20 @@ fi
 
 # --- SC-2: context endpoint injects silo section for code project -----------
 echo "SC-2: /context injects Silo: Software Development for code cwd"
-CTX_PORTER=$(curl -sf "$API/api/v1/intellect/context?project=Porter&cwd=/home/lobster/projects/Porter") \
+CTX_PORTER_JSON=$(curl -sf "$API/api/v1/intellect/context?project=Porter&cwd=/home/lobster/projects/Porter") \
   || fail "SC-2: GET /context failed"
+# Extract the unescaped `data.context` markdown string. Earlier versions of this
+# smoke script grepped the raw JSON, but directive contents containing literal
+# `"` get JSON-escaped to `\"`, breaking grep -qF matches. We test the rendered
+# markdown the CLI actually consumes, not its on-wire encoding.
+CTX_PORTER=$(printf '%s' "$CTX_PORTER_JSON" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d?.data?.context ?? '');") \
+  || fail "SC-2: could not parse /context JSON envelope"
+
 SILO_COUNT=$(echo "$CTX_PORTER" | grep -c "## Silo: Software Development" || true)
 [[ "$SILO_COUNT" -eq 1 ]] || fail "SC-2: expected 1 silo section, got $SILO_COUNT"
 ok "SC-2: silo section present in Porter cwd"
 
-# All 5 seed directive contents must appear
+# All 5 seed directive contents must appear in the rendered context
 for SLUG in "silo-sw-parallelize-aggressively" "silo-sw-design-system" "silo-sw-components-only" "silo-sw-compact-means-padding" "silo-sw-porter-backbone"; do
   CONTENT=$(psql -d porter -tAc "SELECT content FROM directives WHERE id='$SLUG'")
   SNIPPET=$(echo "$CONTENT" | head -c 40)
