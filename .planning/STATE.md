@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.1-02-PLAN.md
-last_updated: "2026-05-11T12:01:40.607Z"
+stopped_at: Completed 48.1-03-PLAN.md
+last_updated: "2026-05-11T12:57:36.271Z"
 progress:
   total_phases: 18
   completed_phases: 16
   total_plans: 50
-  completed_plans: 49
+  completed_plans: 50
 ---
 
 # Project State
@@ -117,6 +117,10 @@ Plan: 3 of 5 complete (plans 01 + 02 + 05 shipped; plans 03-04 pending)
 - [Phase 48.1-02]: /context detection failures are warn-logged and skipped (fail-open); never break /context because of silo errors
 - [Phase 48.1-02]: cwd missing AND no session override → return [] — guarantees DRM-03 backward-compat for pre-upgrade callers
 - [Phase 48.1-02]: Smoke SC-2 directive-body check must parse data.context from JSON before grep -qF; raw-JSON grep breaks on directives starting with literal quote (silo-sw-compact-means-padding)
+- [Phase 48.1-silo-foundation]: [Phase 48.1-03]: /silo-command endpoint mounted under /api/v1/intellect/ prefix — co-locates with /context (the consumer), keeps all silo logic in one route group
+- [Phase 48.1-silo-foundation]: [Phase 48.1-03]: Hook fail-closed on backend failure — /silo always blocks, even on HTTP timeout, so the literal command never leaks to the model
+- [Phase 48.1-silo-foundation]: [Phase 48.1-03]: porter-user-prompt.js hook is NOT in the Porter repo (global Claude Code hook); deliberately uncommitted, reproduced verbatim in SUMMARY for re-deployment
+- [Phase 48.1-silo-foundation]: [Phase 48.1-03]: Block-format empirically verified — Claude Code UserPromptSubmit honors {decision:block, reason, hookSpecificOutput:{additionalContext}} envelope (Risk 2 retired)
 
 ### Pending Todos
 
@@ -129,6 +133,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-11T12:01:40.602Z
-Stopped at: Completed 48.1-02-PLAN.md
+Last session: 2026-05-11T12:57:36.267Z
+Stopped at: Completed 48.1-03-PLAN.md
 Resume file: None

@@ -66,7 +66,7 @@
 - [x] **DRM-01**: A `silos` registry table holds per-domain configuration (id, display_name, prompt_path, cadence_seconds, default_model, detect_rules JSONB, enabled). Software silo is seeded with detect_rules covering project_types and file globs
 - [x] **DRM-02**: `/api/v1/intellect/context` returns silo-scoped directives (`scope='silo'` rows) in a labeled `## Silo: <name> — Operating Rules` section, separate from global/project/agent directives, never blended
 - [x] **DRM-03**: Session-start hook detects the active silo from cwd + cheap content heuristics (file globs, code keywords); returns null when ambiguous so no silo directives inject in mixed/unknown contexts
-- [ ] **DRM-04**: A `/silo <name>` CLI command persists explicit silo tagging for the active session, overriding heuristic detection; clears with `/silo none`
+- [x] **DRM-04**: A `/silo <name>` CLI command persists explicit silo tagging for the active session, overriding heuristic detection; clears with `/silo none`
 - [x] **DRM-05**: Seed directives (`source_type='moe-direct'`) are protected — no automated process can delete or modify them; flagged via the existing source_type column
 
 ## v7.0 Requirements (Deferred)
