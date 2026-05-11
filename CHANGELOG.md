@@ -1,3 +1,52 @@
+## v6.1.0 (2026-05-11)
+
+- docs(48.1-03): complete /silo slash-command + backend endpoint plan
+- feat(48.1-03): add POST /silo-command endpoint for CLI slash command
+- docs(48.1-02): complete silo detection + /context injection plan
+- fix(48.1-02): parse data.context from /context JSON before grepping directive bodies
+- feat(48.1-02): wire silo-detector into /context + startup cache warmup
+- feat(48.1-02): add silo-detector service with deterministic detection
+- chore(48.1-01): mark plan 01 done in coordination ledger
+- docs(48.1-01): complete silo-foundation schema plan
+- fix(48.1-05): accept both 't' and 'true' for enabled bool in SC-1
+- docs(48.1-05): complete smoke-harness plan
+- feat(48.1-01): register migrateSilosV1 in startup and add Drizzle schema entries
+- feat(48.1-01): add migrate-silos-v1 with silos table, session_silo_overrides, and moe-direct immutability trigger
+- test(48.1-05): add Phase 48.1 smoke harness for SC-1..SC-6
+- plan(48.1): silo foundation — verified plans for Dream Silos series
+- docs(48.1): add validation strategy
+- docs(48.1): research phase silo foundation
+- docs(48.1): generate context from dreams pipeline spec
+- docs(checkpoint): v6.11.0 — bridge revival summary
+- feat(bridge): v6.11.0 — restore tabs, summary metrics, live ticker
+- fix(bridge): v6.10.0 — separate CLI tool observability from real dispatches
+- refactor(bridge): strip page to health bar + dispatch log (1,405 → 77 LOC)
+- fix(bridge): model rows are display-only, not toggle buttons
+- docs(checkpoint): v6.9.0 final — bridge simplification complete
+- fix(bridge): add Opus 4.7 + Haiku 4.5, remove agent tabs from bridge page
+- fix(bridge): confidence endpoint returns [] not {} — fixes bridge page crash
+- docs(checkpoint): v6.9.0 complete — all 5 phases done
+- refactor(bridge): remove routing-rules + workspace-overrides (Phase 4+5)
+- docs(checkpoint): v6.9.0 — Bridge simplified to Claude CLI only
+
+
+## v6.12.0 — 2026-05-11 — Phase 48.1 Silo Foundation
+
+**Added**
+- `silos` registry table with software seed row (DRM-01)
+- `session_silo_overrides` table for per-CLI-session silo override (DRM-04)
+- `directive_immutable_moe_direct` Postgres trigger protecting moe-direct directives (DRM-05)
+- `silo-detector` service: deterministic silo detection from cwd + project type + cwd_markers (DRM-03)
+- `/api/v1/intellect/context` now injects `## Silo: <name> — Operating Rules` section between system and project directives (DRM-02)
+- `POST /api/v1/intellect/silo-command` endpoint for `/silo software` / `/silo none` / `/silo` (status)
+- UserPromptSubmit hook intercepts `/silo` slash commands and emits `decision:block` JSON
+- SessionStart hook reads stdin payload and forwards `session_id` + `cwd` to /context
+
+**Internal**
+- In-process silos cache warmed at startup, reloadable via `reloadSiloCache()`
+- Bypass for moe-direct mutation: `SET LOCAL porter.allow_moe_direct_mutation = 'true'` per-tx
+- `/health` and `/api/v1/health` now both report `v6.12.0` (porter_version field on v1/health bumped from stale `6.9.0`)
+
 ## v6.1.0 (2026-04-15)
 
 - chore(release): v6.8.0 — Born model correction + DB trigger enforcement
