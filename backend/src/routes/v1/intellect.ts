@@ -21,6 +21,7 @@ import { runSelfMonitor } from '../../services/intellect/self-monitor.js';
 import { runPatternMining } from '../../services/intellect/pattern-miner.js';
 import { runToolDetection } from '../../services/intellect/tool-detector.js';
 import { runSubscriptionCheck } from '../../services/intellect/subscription-manager.js';
+import { detectSilos } from '../../services/intellect/silo-detector.js';
 
 interface DirectiveRow {
   id: string;
@@ -60,7 +61,13 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
   // ── GET /context — scoped memory for CLI session injection ────────────
 
   fastify.get('/context', async (request, reply) => {
-    const { project, scope } = request.query as { project?: string; scope?: string };
+    const { project, scope, cwd, session_id } = request.query as {
+      project?: string;
+      scope?: string;
+      cwd?: string;
+      session_id?: string;
+    };
+    void scope; // currently unused but reserved for future scope filtering
 
     // Fetch system directives (always apply)
     const { rows: systemDirectives } = await pool.query<DirectiveRow>(
@@ -191,6 +198,52 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
         sections.push(`- ${d.content}`);
       }
       sections.push('');
+    }
+
+    // ─── Phase 48.1: Silo Foundation — silo-scoped directives ───────────────
+    // Detect silos from cwd + session override, then inject a labeled section
+    // per matching silo BETWEEN System Directives and Project Directives so
+    // silo rules can amplify workspace rules but project rules can still
+    // customize. Fail-open: never break /context because of silo detection.
+    try {
+      const silos = await detectSilos(
+        { cwd, projectName: project, sessionId: session_id },
+        pool,
+      );
+      if (silos.length > 0) {
+        const siloIds = silos.map((s) => s.id);
+        const siloDirectivesRes = await pool.query<{
+          id: string;
+          content: string;
+          priority: number;
+          scope_id: string;
+        }>(
+          `SELECT id, content, priority, scope_id FROM directives
+           WHERE status = 'active' AND scope = 'silo' AND scope_id = ANY($1::text[])
+           ORDER BY priority DESC LIMIT 20`,
+          [siloIds],
+        );
+        // Group directives by scope_id so each silo gets its own section
+        const bySilo = new Map<string, string[]>();
+        for (const row of siloDirectivesRes.rows) {
+          const bucket = bySilo.get(row.scope_id) ?? [];
+          bucket.push(`- ${row.content}`);
+          bySilo.set(row.scope_id, bucket);
+        }
+        for (const silo of silos) {
+          const lines = bySilo.get(silo.id);
+          if (!lines || lines.length === 0) continue;
+          sections.push(
+            `## Silo: ${silo.displayName} — Operating Rules\n${lines.join('\n')}`,
+          );
+          sections.push('');
+        }
+      }
+    } catch (err) {
+      request.log.warn(
+        { err },
+        '[intellect] silo detection/injection failed — continuing without silo section',
+      );
     }
 
     if (projectDirectives.length > 0) {
