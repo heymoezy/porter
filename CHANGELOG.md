@@ -1,5 +1,56 @@
 ## v6.1.0 (2026-05-11)
 
+- feat(48.2-04): add POST /transcript/retention-run manual trigger (TRC-06)
+- feat(48.2-04): add intellect.transcriptCaptureEnabled global kill switch (TRC-07)
+- docs(48.2-03): complete hook-wiring plan (UserPromptSubmit ext + NEW Stop hook + TRC-08 dedup)
+- fix(48.2-03): add content+timestamp dedup to insertTurn for TRC-08 idempotency
+- docs(48.2-02): complete capture endpoint + shared PII scrub plan
+- feat(48.2-02): add POST /api/v1/intellect/transcript/turn endpoint
+- feat(48.2-02): add insertTurn capture orchestrator (TRC-04/05/07)
+- refactor(48.2-02): extract scrubPII to shared intellect/pii-scrub.ts
+- docs(48.2-01): complete session_transcript_turns schema plan
+- docs(48.2-05): complete Wave-0 smoke harness plan
+- feat(48.2-01): add transcript-retention service + transcript_retain workflow action
+- test(48.2-05): add tests/smoke-48.2.sh covering TRC-01..TRC-08
+- feat(48.2-01): register migrateTranscriptsV1 + add Drizzle sessionTranscriptTurns binding
+- test(48.2-05): add smoke fixtures for transcript capture
+- feat(48.2-01): add migrate-transcripts-v1 (session_transcript_turns + retention workflow seed)
+- docs(48.2): research phase transcript capture
+- plan(48.2): revise per plan-checker — VALIDATION + retry-on-race + bookmark-per-turn + smoke poll + detach
+- plan(48.2): transcript capture — 5 plans for Dream Silos series
+- docs(checkpoint): v6.12.0 — Phase 48.1 silo-foundation complete
+- docs(phase-48.1): complete silo-foundation execution + VERIFICATION + PROJECT.md evolved
+- docs(48.1-04): complete session-start hook plan after live-CLI approval
+- chore(48.1-04): update coordination ledger — checkpoint-pending
+
+
+## v6.13.0 — 2026-05-11 — Phase 48.2 Transcript Capture
+
+**Added**
+- `session_transcript_turns` table with silo-tagged turn capture, PII-scrubbed content, 30-day retention (TRC-01, TRC-06)
+- `POST /api/v1/intellect/transcript/turn` capture endpoint with silo tagging via `detectSilos` and PII scrub via shared pii-scrub helper (TRC-04, TRC-05)
+- `POST /api/v1/intellect/transcript/retention-run` manual retention trigger (TRC-06 end-to-end smoke target; production schedule remains daily via the workflow engine)
+- Shared `backend/src/services/intellect/pii-scrub.ts` (refactored from `learner.ts` — single source of truth for PII redaction)
+- `backend/src/services/intellect/transcript-capture.ts` `insertTurn` orchestrator with server-assigned `turn_index`, `ON CONFLICT DO NOTHING` idempotency, and content+timestamp dedup pre-check (TRC-08)
+- `backend/src/services/intellect/transcript-retention.ts` `runTranscriptRetention` helper
+- `transcript_retain` workflow action handler registered in `workflow-engine.ts` (daily via `every_24h` schedule)
+- UserPromptSubmit hook (`~/.claude/hooks/porter-user-prompt.js`) now writes user turns to `/transcript/turn` fire-and-forget (TRC-02)
+- NEW Stop hook (`~/.claude/hooks/porter-stop.js`) parses `transcript_path` JSONL via byte-offset bookmark + writes assistant turns (TRC-03)
+- SessionEnd hook now spawns `porter-stop.js` detached + unref'd as a final belt-and-braces tail-parse (Risk 3 / Anthropic Issue #8564 mitigation)
+- `intellect.transcriptCaptureEnabled` config flag (default `true`; env `INTELLECT_TRANSCRIPT_CAPTURE_ENABLED`) as global kill switch (TRC-07)
+- `/silo none` per-session override remains the primary privacy kill switch (TRC-07)
+
+**Internal**
+- Indexes: `UNIQUE(session_id, turn_index)`, `(silo_id, captured_at DESC)`, `(captured_at)` — serves Plan 48.3 read pattern + retention DELETE
+- 32KB content cap with `... [truncated: N chars]` suffix
+- Stop hook re-fires are idempotent via UNIQUE constraint + ON CONFLICT DO NOTHING + content+timestamp dedup pre-check (TRC-08)
+- Stop hook waits 250ms before reading `transcript_path` to avoid the Anthropic Issue #8564 flush race
+- Per-turn bookmark advance (not end-of-file write) so partial-batch failure retries only the failed lines on the next Stop fire
+- Hooks remain outside the Porter repo at `/home/lobster/.claude/hooks/` (deliberately uncommitted; reproduced verbatim in each plan SUMMARY for re-deployment)
+- `/health` and `/api/v1/health` now both report `v6.13.0`
+
+## v6.1.0 (2026-05-11)
+
 - docs(48.1-03): complete /silo slash-command + backend endpoint plan
 - feat(48.1-03): add POST /silo-command endpoint for CLI slash command
 - docs(48.1-02): complete silo detection + /context injection plan
