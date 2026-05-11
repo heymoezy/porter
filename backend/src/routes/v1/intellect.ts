@@ -9,6 +9,7 @@
 
 import { FastifyInstance } from 'fastify';
 import { pool } from '../../db/client.js';
+import { config } from '../../config.js';
 import { ok, err } from '../../lib/envelope.js';
 import { runMemoryValidation } from '../../services/intellect/memory-validator.js';
 import { processCorrection } from '../../services/intellect/correction-detector.js';
@@ -508,6 +509,20 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     const sessionId = (body.session_id || '').trim();
     const role = (body.role || '').trim();
     const content = body.content ?? '';
+
+    // Phase 48.2 TRC-07: global kill switch (belt-and-braces on top of per-session
+    // /silo none override). Default true; flip via env INTELLECT_TRANSCRIPT_CAPTURE_ENABLED=false.
+    // Gate runs BEFORE any other validation so a globally disabled instance
+    // returns the same neutral shape regardless of input.
+    if (!config.intellect.transcriptCaptureEnabled) {
+      return reply.send({
+        ok: true,
+        inserted: false,
+        silo: null,
+        turn_index: -1,
+        skipped: 'disabled',
+      });
+    }
 
     if (!sessionId) {
       return reply.code(400).send({ ok: false, message: 'session_id required' });

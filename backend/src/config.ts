@@ -63,6 +63,17 @@ export const config = {
 
   // Self-reference URL for admin system health probe
   get fastifyUrl() { return `http://${this.host}:${this.port}`; },
+
+  // Phase 48.2 — transcript capture global kill switch (TRC-07 belt-and-braces).
+  // Default true: capture is on. Per-session override via `/silo none` remains
+  // the primary privacy kill switch; this flag is the admin-side global gate.
+  // Set INTELLECT_TRANSCRIPT_CAPTURE_ENABLED=false (or 0/no) to disable.
+  intellect: {
+    transcriptCaptureEnabled: (() => {
+      const raw = (process.env.INTELLECT_TRANSCRIPT_CAPTURE_ENABLED || 'true').toLowerCase().trim();
+      return raw !== 'false' && raw !== '0' && raw !== 'no';
+    })(),
+  },
 };
 
 /** Loopback addresses — used to identify the local machine in node config. */
