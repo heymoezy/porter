@@ -13,9 +13,11 @@ psql -d porter -c "DELETE FROM session_silo_overrides WHERE session_id LIKE 'smo
 
 # --- SC-1: silos table + software seed row -----------------------------------
 echo "SC-1: silos table + software seed"
-SOFTWARE_ROW=$(psql -d porter -tAc "SELECT id || '|' || display_name || '|' || enabled FROM silos WHERE id='software'") \
+SOFTWARE_ROW=$(psql -d porter -tAc "SELECT id || '|' || display_name || '|' || enabled::text FROM silos WHERE id='software'") \
   || fail "SC-1: silos table missing or query failed"
-[[ "$SOFTWARE_ROW" == software\|*\|t ]] || fail "SC-1: software seed row malformed: '$SOFTWARE_ROW'"
+# Postgres casts boolean to 'true'/'false' via ::text. Accept either short ('t') or long ('true').
+[[ "$SOFTWARE_ROW" == software\|*\|t || "$SOFTWARE_ROW" == software\|*\|true ]] \
+  || fail "SC-1: software seed row malformed: '$SOFTWARE_ROW'"
 ok "SC-1: silos.software exists, enabled=true ($SOFTWARE_ROW)"
 
 # Column shape check — must have prompt_path, cadence_seconds, detect_rules, default_model
