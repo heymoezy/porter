@@ -3,9 +3,66 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.11.0
-updated: 2026-05-10
-updated_by: claude-opus-4.7
+version: v6.12.0
+updated: 2026-05-11
+updated_by: claude-opus-4.7 (Porter Dreams 3)
+
+## v6.12.0 — Phase 48.1 silo-foundation (2026-05-11)
+
+First phase of the Dream Silos series. Silos are silo-scoped reinforcement-learning
+buckets — directives that only apply when the session matches the silo's detect
+rules. The "software development" silo seeds the system: when Claude CLI runs
+in a code-project cwd, the loaded context now includes a labeled
+`## Silo: Software Development — Operating Rules` section with the 5
+canonical silo directives (compact=padding, components-only, parallel agents/codex,
+porter-backbone, design-system).
+
+**5 plans shipped across 4 waves (all green, SC-1..SC-6 pass):**
+
+- **48.1-01 (schema):** `silos` registry table with software seed row,
+  `session_silo_overrides` table, `directive_immutable_moe_direct` trigger
+  protecting `source_type='moe-direct'` rows from UPDATE/DELETE
+  (`SET LOCAL porter.allow_moe_direct_mutation='true'` bypass for memory-pruner).
+- **48.1-02 (detector):** `backend/src/services/intellect/silo-detector.ts` —
+  deterministic detection (override → project_type → cwd_markers → null),
+  wired into `/api/v1/intellect/context` between System and Project Directives.
+  Startup cache warmup on Porter boot.
+- **48.1-03 (slash command):** `POST /api/v1/intellect/silo-command` endpoint +
+  global `~/.claude/hooks/porter-user-prompt.js` extension intercepts
+  `/silo software | none | <bare>`, persists override to `session_silo_overrides`,
+  short-circuits the prompt with an echoed confirmation.
+- **48.1-04 (session-start hook):** `~/.claude/hooks/porter-session-start.js`
+  now reads stdin SessionStart event, extracts `session_id` + `cwd`,
+  forwards to /context. Fresh CLI sessions in code cwds receive the silo
+  header. Live-verified by Moe.
+- **48.1-05 (smoke harness):** `tests/smoke-48.1.sh` — 6 success criteria,
+  bash + psql + curl + jq, no node test framework.
+
+**Requirements closed:** DRM-01, DRM-02, DRM-03, DRM-04, DRM-05 (all 5).
+
+**Files of note (in-repo):**
+- `backend/src/db/migrate-silos-v1.ts` — idempotent migration
+- `backend/src/db/schema.ts` — Drizzle entries for silos + session_silo_overrides
+- `backend/src/services/intellect/silo-detector.ts`
+- `backend/src/routes/v1/intellect.ts` — /silo-command endpoint + section injection
+- `backend/src/index.ts` — migrateSilosV1 registration + cache warmup
+- `tests/smoke-48.1.sh`
+
+**Files of note (outside repo, global Claude hooks):**
+- `~/.claude/hooks/porter-user-prompt.js` — /silo interception
+- `~/.claude/hooks/porter-session-start.js` — stdin payload forwarding
+
+**Commits:** `068bea9 8547903 a334027 b996ceb d3c69a2 ff4566b 10fa0f0` and
+metadata commits. Pushed as `172ed29`.
+
+**Known follow-ups:**
+- Phase 48.2+ (silo expansion): additional silos beyond software (admin/dataroom,
+  legal, finance), per the dream_silos memory. Phase 48.1 is intentionally
+  software-only — admin/data-room is a separate silo for later per Moe's
+  feedback_dream_silos rule.
+- Bridge model-name normalization (carry-over from v6.10.0 known issues).
+
+---
 
 ## v6.11.0 — Bridge revival: tabs + summary + live ticker (2026-05-10)
 

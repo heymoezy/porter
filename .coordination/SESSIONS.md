@@ -65,7 +65,7 @@
   - /home/lobster/.claude/hooks/porter-user-prompt.js
   - /home/lobster/.claude/hooks/porter-session-start.js
   - tests/smoke-48.1.sh (NEW)
-- Status: active
+- Status: **DONE** — Phase 48.1 verified passed (6/6), v6.12.0 pushed as 172ed29 (2026-05-11). Session renamed to "Porter Dreams 3".
 
 ### Plan 48.1-01 — DONE 2026-05-11T10:43Z
 - Shipped migrate-silos-v1.ts (silos + session_silo_overrides + directive_immutable_moe_direct trigger). DRM-01 + DRM-05 complete. silos.software seeded, 5 moe-direct rows protected, non-moe-direct UPDATEs survive (memory-pruner unaffected). Bypass via SET LOCAL porter.allow_moe_direct_mutation='true' verified. Porter restarted PID 182118+, /health 200, tsc clean. Commits: 068bea9 (Task 1), 8547903 (Task 2), eb12f58 (SUMMARY).
