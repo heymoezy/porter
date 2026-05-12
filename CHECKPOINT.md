@@ -3,9 +3,36 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.14.0
+version: v6.15.0
 updated: 2026-05-12
-updated_by: claude-opus-4.7-1m (Porter Tom-Unblock)
+updated_by: claude-opus-4.7-1m (Porter Tom-Unblock — Tom 2 session)
+
+## v6.15.0 — `raw: true` Bridge passthrough (Tom-unblock complete, 2026-05-12)
+
+Closes the third leak found in v6.14.0 verification. `POST /api/v1/chat/stream` now accepts `raw: true` in the body. When set, the endpoint skips identity prefix, Memory V3 injection, runtime skill selection, and delegation doctrine — pure passthrough. Existing Porter Admin chat (which always supplies agent_id/project_id) is unchanged.
+
+**A/B verification (same prompt, claude_cli backend):**
+- Without raw → 5.7s, "A Porter worker dispatched by you (Moe)…" (Memory V3 leaked workspace directives)
+- With raw  → 6.5s, "I'm Claude, an AI coding assistant made by Anthropic" (clean)
+
+**Companion shim ship** (separate commit, YMC repo):
+- `ymc.capital/backend/src/routes/tom-llm.ts` — 1-line change to send `raw: true` in every Bridge fetch.
+
+**Task E (YMC openclaw flip) is now safe.** Three commands Moe runs:
+1. Edit `~/.openclaw/openclaw.json` → `agents.tom.model.primary` from `openai-codex/gpt-5.4` to `porter/claude-via-porter`.
+2. `systemctl --user restart openclaw-gateway && sleep 3`
+3. `time openclaw agent --agent tom --message "who are you" --json | jq '.result.payloads[0].text, .result.meta.durationMs'` — expect Tom's voice + < 5000ms.
+
+If green: re-add `120363408357856572@g.us,+6596609260,+6594777112` to `OPENCLAW_TOM_ALLOWLIST`, set `OPENCLAW_TOM_DEFAULT_TARGET=120363408357856572@g.us`, then `UPDATE templates SET enabled = TRUE, channels = ARRAY['email','whatsapp'] WHERE slug LIKE 'admin_%'`.
+
+**Files (this commit):**
+- `backend/src/routes/v1/chat.ts` (raw flag)
+- `backend/package.json`, `backend/src/index.ts`, `backend/src/routes/v1/health.ts` (v6.14.0 → v6.15.0)
+- `CHANGELOG.md`, `CHECKPOINT.md`
+
+**Files NOT touching** (active 48.2 session): `backend/src/services/intellect/file-watcher.ts`, `.planning/phases/48.2-transcript-capture/`.
+
+---
 
 ## v6.14.0 — Bridge claude_cli context isolation (Tom-unblock, 2026-05-12)
 

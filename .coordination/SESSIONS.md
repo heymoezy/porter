@@ -185,3 +185,9 @@
   - backend/src/services/bridge/adapters/claude-cli.ts (cwd sandbox in spawn options)
 - Not touching: backend/src/services/intellect/* (active 48.2 session owns file-watcher.ts), admin/*, schema, tests/.
 - Status: active
+
+### Porter Tom-Unblock — DONE 2026-05-12T01:30Z
+- Pushed commit 30b7729 — v6.14.0. /health 200 with new version.
+- Tasks A + B + D shipped per handover. Latency unblocked: Bridge claude_cli 138s → 6.2s.
+- KNOWN ISSUE: third leak found — workspace-scoped Memory V3 directives still inject at /api/v1/chat/stream endpoint level. Awaiting Moe call on whether to add `raw: true` flag here (Porter) + 1-line shim update on YMC side, or treat as separate work.
+- Status: done (Porter side); Task E (YMC openclaw flip) deferred until raw-flag decision.

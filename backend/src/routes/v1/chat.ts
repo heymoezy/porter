@@ -202,6 +202,10 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       chat_id?: string;
       project_id?: string;  // COLLAB-03: project context for identity injection
       backend?: 'ollama' | 'openclaw' | 'auto';
+      raw?: boolean;  // v6.15.0: when true, skip identity prefix + Memory V3 + skill
+                      // selection + delegation doctrine. Pure passthrough for
+                      // cross-app consumers (e.g. YMC Tom). The caller owns the
+                      // system prompt; Porter Bridge does not layer its own.
     } | null;
 
     const message = body?.message?.trim();
@@ -213,6 +217,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     const chatId = body?.chat_id;
     const projectId = body?.project_id;
     const backend = body?.backend;
+    const raw = body?.raw === true;
 
     // COLLAB-03: If a project context is provided, verify project access (chat role minimum)
     if (projectId) {
@@ -296,44 +301,52 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       }
     }
 
-    // Memory V3: inject tiered memory context before streaming
-    // Phase 38: use returnMeta to capture directive_selection stats for dispatch logging
-    const memoryResult = await buildMemoryContext({
-      agentId: agentId,
-      projectId: projectId,
-      searchQuery: message,
-      taskText: message,
-      skillTags: selectedSkillTags,
-      returnMeta: true,
-    });
-    const memoryContext = memoryResult.text;
-    const directiveSelectionStats = memoryResult.directive_selection;
-
-    // Injection order: [identity prefix] → [memory context] → [user message]
-    // Only the original user message is persisted to chat history (not augmented content)
+    // Memory V3: inject tiered memory context before streaming.
+    // v6.15.0: when raw=true (cross-app consumer like YMC Tom), skip injection
+    // entirely — the caller owns the prompt, Porter Bridge does not layer Porter's
+    // workspace directives on top.
     let augmentedMessage = message;
-    if (memoryContext) {
-      augmentedMessage = memoryContext + '\n\n---\n\n' + augmentedMessage;
-    }
-    if (identityPrefix) {
-      augmentedMessage = identityPrefix + augmentedMessage;
+    let directiveStats: { total: number; injected: number; skipped: number; scoring_mode: 'task_aware' | 'all' } | undefined;
+
+    if (!raw) {
+      // Phase 38: use returnMeta to capture directive_selection stats for dispatch logging
+      const memoryResult = await buildMemoryContext({
+        agentId: agentId,
+        projectId: projectId,
+        searchQuery: message,
+        taskText: message,
+        skillTags: selectedSkillTags,
+        returnMeta: true,
+      });
+      const memoryContext = memoryResult.text;
+      const directiveSelectionStats = memoryResult.directive_selection;
+
+      // Injection order: [identity prefix] → [memory context] → [user message]
+      // Only the original user message is persisted to chat history (not augmented content)
+      if (memoryContext) {
+        augmentedMessage = memoryContext + '\n\n---\n\n' + augmentedMessage;
+      }
+      if (identityPrefix) {
+        augmentedMessage = identityPrefix + augmentedMessage;
+      }
+
+      directiveStats = directiveSelectionStats
+        ? {
+            total: directiveSelectionStats.total,
+            injected: directiveSelectionStats.injected,
+            skipped: directiveSelectionStats.skipped,
+            scoring_mode: (selectedSkillTags.length > 0 || message.length > 0
+              ? 'task_aware'
+              : 'all') as 'task_aware' | 'all',
+          }
+        : undefined;
     }
 
-    // Build directive stats for dispatch log context_stats
-    const directiveStats = directiveSelectionStats
-      ? {
-          total: directiveSelectionStats.total,
-          injected: directiveSelectionStats.injected,
-          skipped: directiveSelectionStats.skipped,
-          scoring_mode: (selectedSkillTags.length > 0 || message.length > 0
-            ? 'task_aware'
-            : 'all') as 'task_aware' | 'all',
-        }
-      : undefined;
-
-    // Phase 45: Delegation doctrine — decide strategy before dispatch
-    // When a specific agent is targeted, bypass doctrine — caller already chose the execution path
-    const doctrine = agentId ? { strategy: 'direct' as const, reason: 'Agent-targeted dispatch', classifierUsed: false } : decideDoctrine(message);
+    // Phase 45: Delegation doctrine — decide strategy before dispatch.
+    // When raw=true OR a specific agent is targeted, bypass doctrine — caller already chose the execution path.
+    const doctrine = (raw || agentId)
+      ? { strategy: 'direct' as const, reason: raw ? 'Raw passthrough' : 'Agent-targeted dispatch', classifierUsed: false }
+      : decideDoctrine(message);
     const dispatchStrategy = doctrine.strategy;
 
     if (doctrine.strategy === 'delegate') {

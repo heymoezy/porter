@@ -1,3 +1,18 @@
+## v6.15.0 — 2026-05-12 — `raw: true` passthrough on /api/v1/chat/stream
+
+**Added**
+- `raw: true` flag on `POST /api/v1/chat/stream` body. When set: skip identity prefix, Memory V3 injection (`buildMemoryContext`), runtime skill selection, and delegation doctrine. Caller owns the prompt end-to-end. Force `strategy: 'direct'`. Built for cross-app consumers (YMC Tom) that route their own LLM through Porter Bridge and don't want Porter's workspace directives layered on top.
+- Companion YMC shim change in `ymc.capital/backend/src/routes/tom-llm.ts` (separate commit/repo) flips `raw: true` on every Bridge call.
+
+**Verified**
+- A/B same prompt to `claude_cli`:
+  - **Without raw:** 5.7s, "A Porter worker dispatched by you (Moe)…" (Memory V3 leaking).
+  - **With raw:** 6.5s, "I'm Claude, an AI coding assistant made by Anthropic." (clean).
+
+**Files**
+- `backend/src/routes/v1/chat.ts` — request body type + skip blocks gated on `raw`.
+- v6.15.0 version bump (backend/package.json, src/index.ts, src/routes/v1/health.ts).
+
 ## v6.14.0 — 2026-05-12 — Bridge claude_cli context isolation (Tom unblock)
 
 **Fixed**
