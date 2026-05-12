@@ -153,3 +153,35 @@
 - Backend deviation (TRC-08 dedup) committed in-repo as `30bb6e8`.
 - Hook files + settings.json deliberately uncommitted (outside Porter repo); full contents in 48.2-03-SUMMARY.md for re-deployment.
 - Status: done.
+
+---
+
+## GSD Phase 48.2 Plan 04 Executor (Opus 4.7 1M) — 2026-05-11T20:16Z
+- **Workstream:** Execute 48.2-04 — global config flag + retention-run endpoint + SessionEnd belt-and-braces + v6.13.0 ship + live-CLI human-verify checkpoint (TRC-06 + TRC-07 + ship).
+- **Files claimed (in-repo, committed):**
+  - backend/src/config.ts (add intellect.transcriptCaptureEnabled)
+  - backend/src/routes/v1/intellect.ts (add /transcript/retention-run + gate /transcript/turn)
+  - backend/src/index.ts (version bump 6.12.0 -> 6.13.0)
+  - backend/src/routes/v1/health.ts (porter_version 6.13.0)
+  - backend/package.json (version 6.13.0)
+  - CHANGELOG.md (v6.13.0 entry)
+- **Files claimed (OUTSIDE repo, uncommitted):**
+  - /home/lobster/.claude/hooks/porter-session-end.js (extend with detached porter-stop.js spawn)
+- **Files NOT touching:** any other backend/services, admin/, schema, tests/.
+- **Status:** active
+
+### GSD Phase 48.2 Plan 04 Executor — CHECKPOINT-PENDING 2026-05-11T20:58Z
+- All 4 code tasks complete. Backend shipped v6.13.0. `/health` 200. `bash tests/smoke-48.2.sh` → all 8 TRCs green (TRC-01..TRC-08). Manual retention round-trip verified via the new `/transcript/retention-run` endpoint (insert 31-day-old row → curl POST → `{"ok":true,"deleted":1}` → row gone).
+- In-repo commits: 4146992 (config flag), f651b03 (retention-run endpoint), ff08ef6 (v6.13.0 bump + CHANGELOG).
+- Out-of-repo (uncommitted, reproduced in 48.2-04-SUMMARY): /home/lobster/.claude/hooks/porter-session-end.js extended with detached porter-stop.js spawn for Risk 3 belt-and-braces.
+- AWAITING: live-CLI human-verify checkpoint per plan Task 5. Moe runs 6 manual verification steps in a fresh Claude CLI session; on "approved" the plan-metadata commit (SUMMARY + STATE + ROADMAP + REQUIREMENTS advance) lands and Phase 48.2 closes.
+- Status: checkpoint-pending
+
+## Porter Tom-Unblock (Opus 4.7 1M) — 2026-05-12T00:00Z
+- Workstream: Trim CLAUDE.md global+Porter; isolate claude_cli backend cwd so subprocess doesn't auto-load Porter operating context. Unblocks YMC Tom (claude-via-Porter latency 60-160s → expected <5s).
+- Files claimed:
+  - /home/lobster/CLAUDE.md (out of repo, trim 196→≤80 lines)
+  - /home/lobster/projects/Porter/CLAUDE.md (in-repo, trim 110→≤60 lines)
+  - backend/src/services/bridge/adapters/claude-cli.ts (cwd sandbox in spawn options)
+- Not touching: backend/src/services/intellect/* (active 48.2 session owns file-watcher.ts), admin/*, schema, tests/.
+- Status: active

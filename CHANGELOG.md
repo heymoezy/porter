@@ -1,3 +1,17 @@
+## v6.14.0 — 2026-05-12 — Bridge claude_cli context isolation (Tom unblock)
+
+**Fixed**
+- `claude_cli` Bridge adapter now spawns `claude` with `cwd=/tmp/porter-bridge-sandbox` and `--setting-sources project` so the subprocess does NOT inherit Porter's operating context (CLAUDE.md auto-discovery, `~/.claude/` hooks, auto-memory). Cross-app consumers — notably YMC Tom — go from 60–160s/turn (Porter voice bleeding into Tom's persona) back to ~5s/turn (generic Claude, OAuth preserved).
+- Smoke: `claude -p` from sandbox cwd with `--setting-sources project` → "I'm Claude, an AI coding assistant made by Anthropic" in 5.5s. Previously: 12s with "Loaded Porter. Last work: 48.2-02…".
+
+**Changed**
+- `/home/lobster/CLAUDE.md` trimmed 196 → 56 lines (2.4KB). Porter-specific bloat moved out; only cross-project essentials remain (session-start, project layout, Bridge URL, coordination rules, hard rules).
+- `Porter/CLAUDE.md` trimmed 110 → 57 lines (2.5KB). Repositioned Porter as background services platform (Bridge / Intelligence / Memory). Product-UI flavor removed.
+
+**Files**
+- `backend/src/services/bridge/adapters/claude-cli.ts` — SANDBOX_CWD const + `cwd` in both `dispatch()` and `stream()` spawns + `--setting-sources project` arg
+- `/home/lobster/CLAUDE.md`, `/home/lobster/projects/Porter/CLAUDE.md` — trimmed
+
 ## v6.1.0 (2026-05-11)
 
 - feat(48.2-04): add POST /transcript/retention-run manual trigger (TRC-06)

@@ -5,11 +5,16 @@
  * Spawns: claude -p --output-format stream-json --verbose --include-partial-messages --no-session-persistence
  * Prompt is written to stdin (not positional arg).
  * Parses JSONL stream_event/content_block_delta for streaming tokens.
- * Timeout: 60s.
+ * Timeout: 5 min.
+ *
+ * ISOLATION: spawned with cwd = SANDBOX_CWD (a dir under /tmp with no
+ * CLAUDE.md ancestors) so claude does NOT auto-load Porter's operating
+ * context for cross-app consumers (e.g. YMC Tom).
  */
 
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { mkdirSync } from 'node:fs';
 import which from 'which';
 import type {
   GatewayAdapter,
@@ -21,6 +26,16 @@ import type {
 } from '../types.js';
 
 const TIMEOUT_MS = 300_000; // 5 min — research tasks need more time than simple queries
+
+// Sandbox cwd for claude subprocess. /tmp has no CLAUDE.md ancestors, so claude
+// won't pull in /home/lobster/CLAUDE.md or ~/projects/Porter/CLAUDE.md when
+// traversing up from cwd. Created once at module load.
+const SANDBOX_CWD = '/tmp/porter-bridge-sandbox';
+try {
+  mkdirSync(SANDBOX_CWD, { recursive: true });
+} catch {
+  // best-effort; spawn will surface a clearer error if cwd is unusable
+}
 
 export class ClaudeCLIAdapter implements GatewayAdapter {
   readonly name = 'Claude CLI';
@@ -103,10 +118,18 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       '--no-session-persistence',
       '--permission-mode', 'auto',
       '--allowedTools', 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent',
+      // Isolation: skip user-level settings (hooks like porter-session-start
+      // that inject Porter Memory/directives). Combined with cwd=SANDBOX_CWD
+      // (no CLAUDE.md ancestors), this keeps cross-app consumers (e.g. YMC
+      // Tom) from inheriting Porter's operating context. Auto-memory under
+      // ~/.claude/projects/* is loaded by these hooks, not the binary, so it
+      // is dropped too. OAuth (keychain) still works — only --bare disables that.
+      '--setting-sources', 'project',
     ];
 
     const child = spawn(this.binaryPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: SANDBOX_CWD,
       env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
     });
 
@@ -226,10 +249,18 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       '--no-session-persistence',
       '--permission-mode', 'auto',
       '--allowedTools', 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent',
+      // Isolation: skip user-level settings (hooks like porter-session-start
+      // that inject Porter Memory/directives). Combined with cwd=SANDBOX_CWD
+      // (no CLAUDE.md ancestors), this keeps cross-app consumers (e.g. YMC
+      // Tom) from inheriting Porter's operating context. Auto-memory under
+      // ~/.claude/projects/* is loaded by these hooks, not the binary, so it
+      // is dropped too. OAuth (keychain) still works — only --bare disables that.
+      '--setting-sources', 'project',
     ];
 
     const child = spawn(this.binaryPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: SANDBOX_CWD,
       env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
     });
 

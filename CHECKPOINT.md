@@ -3,9 +3,57 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.12.0
-updated: 2026-05-11
-updated_by: claude-opus-4.7 (Porter Dreams 3)
+version: v6.14.0
+updated: 2026-05-12
+updated_by: claude-opus-4.7-1m (Porter Tom-Unblock)
+
+## v6.14.0 — Bridge claude_cli context isolation (Tom-unblock, 2026-05-12)
+
+Per HANDOVER-2026-05-12-tom-unblock.md. Two of three diagnosed leaks fixed; a third surfaced during verification.
+
+**Fixed (Tasks A + B + D from handover):**
+
+- **`/home/lobster/CLAUDE.md`** trimmed 196 → 56 lines (2.4KB). Porter-specific bloat moved out; only cross-project essentials remain.
+- **`Porter/CLAUDE.md`** trimmed 110 → 57 lines (2.5KB). Repositioned as background services platform (Bridge / Intelligence / Memory). Product-UI flavor gone.
+- **`backend/src/services/bridge/adapters/claude-cli.ts`** — `dispatch()` and `stream()` now spawn `claude` with:
+  - `cwd: '/tmp/porter-bridge-sandbox'` (created at module load; no CLAUDE.md ancestors)
+  - `--setting-sources project` (skips `~/.claude/settings.json` → no Porter hooks fire, no auto-memory load)
+  - OAuth (keychain) still works — only `--bare` disables that.
+
+**Smoke results:**
+
+| Test | Before | After |
+|------|--------|-------|
+| `claude -p` from sandbox cwd, no flags | 12.6s, "I'm Claude … on the Porter monorepo" + session-end hook fired | n/a (cwd alone insufficient) |
+| `claude -p` + `--setting-sources project` | n/a | **5.6s, "I'm Claude, an AI coding assistant made by Anthropic"** |
+| Bridge `/api/v1/chat/stream` `backend: claude_cli` | 138s timeout | **6.2s** (latency fixed) |
+
+**KNOWN ISSUE — third leak found during verification:**
+
+Bridge `/api/v1/chat/stream` response still mentions "Porter", "Moe", "heymoezy/porter monorepo" because `chat.ts:301 buildMemoryContext()` injects **workspace-scoped directives** from Postgres even when `agentId`/`projectId`/`chatId` are all null. This is a Porter Brain-level injection, independent of the subprocess CLAUDE.md auto-load the handover diagnosed.
+
+Tom's voice will still fight Porter directives unless one of:
+- A `raw: true` flag is added to `/api/v1/chat/stream` that skips identity prefix + Memory V3 injection + skill selection + delegation doctrine when caller is an external app (Tom shim sets it).
+- `chat.ts` is changed to skip workspace directives when no agent/project/chat context is supplied.
+
+**Recommendation:** add the `raw` flag. Cleaner contract for cross-app consumers. ~15 line change in `backend/src/routes/v1/chat.ts` + 1 line in YMC `tom-llm.ts` (which is the second-session/repo, so a separate commit there).
+
+**Files touched (this commit):**
+
+- `CLAUDE.md`, `backend/src/services/bridge/adapters/claude-cli.ts`
+- `backend/package.json`, `backend/src/index.ts`, `backend/src/routes/v1/health.ts` (version 6.13.0 → 6.14.0)
+- `CHANGELOG.md`, `CHECKPOINT.md`
+- `/home/lobster/CLAUDE.md` (out-of-repo)
+- `HANDOVER-2026-05-12-tom-unblock.md` (Moe's handover doc, committed for history)
+
+**NOT touched** (active 48.2 session checkpoint-pending):
+
+- `backend/src/services/intellect/file-watcher.ts` (Porter Ops Watchdog uncommitted)
+- `.planning/phases/48.2-transcript-capture/48.2-04-SUMMARY.md`
+
+**Task E (Tom flip on YMC side) — pending Moe.** Don't lift the Clement/Yai allowlist freeze yet; the third leak will still produce Porter voice in Tom's replies even though latency is fixed.
+
+---
 
 ## v6.12.0 — Phase 48.1 silo-foundation (2026-05-11)
 
