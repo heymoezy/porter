@@ -7,6 +7,33 @@ version: v6.15.0
 updated: 2026-05-12
 updated_by: claude-opus-4.7-1m (Porter Tom-Unblock — Tom 2 session)
 
+## Tom unblock — END-TO-END GREEN (2026-05-12)
+
+`openclaw agent --agent tom --message "who are you"` → **"Tom from YMC Capital 👋" in 6.1s.**
+Pre-fix baseline was 60–160s timeouts. All 4 leaks closed, allowlist restored, admin templates re-enabled.
+
+**Layers fixed (Porter + YMC):**
+
+1. **Subprocess CLAUDE.md auto-discovery** (Porter v6.14.0). `claude_cli` adapter spawns from `/tmp/porter-bridge-sandbox` so claude can't traverse up to `/home/lobster/CLAUDE.md` or `Porter/CLAUDE.md`.
+2. **User-level hooks + auto-memory** (Porter v6.14.0). `--setting-sources project` flag skips `~/.claude/settings.json` so `porter-session-start.js`, `porter-user-prompt.js`, etc. don't fire inside the subprocess. OAuth keychain still works.
+3. **Bridge endpoint Memory V3 injection** (Porter v6.15.0). New `raw: true` body flag on `/api/v1/chat/stream` skips identity prefix, `buildMemoryContext`, skill selection, and delegation doctrine. YMC `tom-llm.ts` flips it on every fetch.
+4. **Anthropic SSE event format** (YMC `61fef203`). Shim now emits `message_start` → `content_block_*` → `message_delta` → `message_stop` events when `body.stream === true`. Previously the shim returned a regular JSON envelope, so openclaw retried 4× with "request ended without sending any chunks" before giving up.
+
+**YMC restoration (.env + DB, gitignored / not in commit):**
+
+- `OPENCLAW_TOM_ALLOWLIST` += `120363408357856572@g.us,+6596609260,+6594777112`
+- `OPENCLAW_TOM_DEFAULT_TARGET` = `120363408357856572@g.us` (admin group)
+- `UPDATE templates SET enabled=TRUE, channels=ARRAY['email','whatsapp'] WHERE slug LIKE 'admin_%'` → 5 rows (handover said 6; only 5 exist in DB).
+
+**Commits:**
+
+- Porter `30b7729` (v6.14.0) — sandbox cwd + `--setting-sources project`
+- Porter `54d76ea` (v6.15.0) — `raw: true` Bridge passthrough
+- YMC `049a08f1` — flip `raw: true` in shim
+- YMC `61fef203` — Anthropic SSE streaming in shim
+
+---
+
 ## v6.15.0 — `raw: true` Bridge passthrough (Tom-unblock complete, 2026-05-12)
 
 Closes the third leak found in v6.14.0 verification. `POST /api/v1/chat/stream` now accepts `raw: true` in the body. When set, the endpoint skips identity prefix, Memory V3 injection, runtime skill selection, and delegation doctrine — pure passthrough. Existing Porter Admin chat (which always supplies agent_id/project_id) is unchanged.

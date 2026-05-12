@@ -191,3 +191,15 @@
 - Tasks A + B + D shipped per handover. Latency unblocked: Bridge claude_cli 138s → 6.2s.
 - KNOWN ISSUE: third leak found — workspace-scoped Memory V3 directives still inject at /api/v1/chat/stream endpoint level. Awaiting Moe call on whether to add `raw: true` flag here (Porter) + 1-line shim update on YMC side, or treat as separate work.
 - Status: done (Porter side); Task E (YMC openclaw flip) deferred until raw-flag decision.
+
+### Porter Tom-Unblock raw-flag — DONE 2026-05-12T02:05Z
+- v6.15.0 pushed 54d76ea. YMC tom-llm shim pushed 049a08f1.
+- All 3 leaks closed: (1) CLAUDE.md auto-discovery (cwd sandbox) (2) ~/.claude/ hooks + auto-memory (--setting-sources project) (3) Memory V3 endpoint-level injection (raw:true).
+- Task E (openclaw model flip + allowlist + admin templates) ready for Moe.
+- Status: done.
+
+### Porter Tom-Unblock — FULL END-TO-END GREEN 2026-05-12T02:55Z
+- openclaw → tom → porter/claude-via-porter → shim → Porter Bridge (raw:true) → claude_cli → "Tom from YMC Capital 👋" in 6.1s.
+- All 4 leaks closed (CLAUDE.md ancestry, hooks/auto-memory, Memory V3 endpoint, SSE event format).
+- YMC .env restored; admin_* templates re-enabled (5 rows, handover said 6).
+- Task complete.
