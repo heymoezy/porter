@@ -52,7 +52,7 @@ export type WorkflowActionType =
   | 'skill_evolve'
   | 'subscription_check'
   | 'transcript_retain'
-  | 'dream_run'                 // Phase 48.3 — placeholder, real wiring in 48.3-04
+  | 'dream_run'                 // Phase 48.3 — wired in 48.3-04 (runDreamWorker)
   | 'dream_runs_stuck_sweep'    // Phase 48.3 — fully wired here
   | 'noop';
 

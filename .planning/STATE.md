@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.3-03-PLAN.md (prompt template + dream-sampler + dream-parser with DB-as-ground-truth doctrine validator)
-last_updated: "2026-05-13T07:46:52.753Z"
+stopped_at: Completed 48.3-04-PLAN.md (dream-worker pipeline + workflow-engine wiring + smoke fixes)
+last_updated: "2026-05-13T09:23:29.122Z"
 progress:
   total_phases: 18
   completed_phases: 17
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 48.3 (software-dream-worker) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 
 ## Performance Metrics
 
@@ -44,6 +44,7 @@ Plan: 4 of 5
 | 48.3-01    | 18 min   | 2     | 4     |
 | Phase 48.3-software-dream-worker P02 | 32min | 5 tasks | 5 files |
 | Phase 48.3-software-dream-worker P03 | 37 min | 3 tasks | 3 files |
+| Phase 48.3-software-dream-worker P04 | 63 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -176,6 +177,16 @@ Plan: 4 of 5
 - [Phase 48.3-software-dream-worker]: [Phase 48.3-03]: SEED_BASELINE=4 (matches the 4 hand-curated software-silo seeds from 48.1-01). Doctrine engages only when activeCountBefore > 4. Below baseline the rule set is too sparse to demand refinement.
 - [Phase 48.3-software-dream-worker]: [Phase 48.3-03]: assignSortOrder uses cross-area offset of +1000 to prevent collision between conceptual_areas. Within area: 100+n delete, 200+n supersede, 300+n merge, 900+n new_directive. Lexicographic area ordering means design-system refinements (offset 0) sort before ship-discipline additions (offset 1000+).
 - [Phase 48.3-software-dream-worker]: [Phase 48.3-03]: Smoke harness directive-seed type mismatch (NOW() vs double precision on directives.created_at, tests/smoke-48.3.sh lines 129/131/132) logged to deferred-items.md — out of scope for Plan 03, fix at start of Plan 04 with EXTRACT(EPOCH FROM NOW()).
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: Raw passthrough by OMISSION — dispatchDream's RoutingContext omits agentId/projectId/skillsUsed/directiveStats/dispatchStrategy; Memory V3/skills/doctrine wiring skipped because services only engage when their context fields are set. Module header locks contract.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: Explicit routingEngine.logDispatch call after selectWithFallback — selectWithFallback does NOT call logDispatch internally (only dispatchStream does). Worker captures dispatchLogId for dream_runs.dispatch_id; without this the column is always null.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: All-or-nothing transactional INSERT via pool.connect/BEGIN/COMMIT/ROLLBACK — pool.query auto-commits per statement so multi-row atomicity requires a single client. Failure mid-loop ROLLBACKs already-inserted proposals.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: dream_runs row INSERT happens OUTSIDE proposals tx (status='running' written at top of runDreamWorker). Crash leaves sweepable orphan for dream_runs_stuck_sweep (every_30m) — audit-trail row persists even on failure paths.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: ESM __dirname shim via fileURLToPath(import.meta.url) + path.dirname. Repo-root resolution prefers PORTER_REPO_ROOT env var, fallback path.resolve(__dirname,'../../../..') reaches Porter repo from backend/dist/services/intellect/.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: Mock-injection at dispatch boundary via DREAM_WORKER_MOCK_RESPONSE_PATH env var. Production never sets it. Returns modelUsed='mock', dispatchLogId=undefined so downstream identifies mocked runs by dream_runs.model_used + dream_runs.dispatch_id=null.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: Pre-flight sealed-seed check BEFORE DB trigger fires — diagnostic error_message ('Doctrine violation: targeted sealed seed X') rather than postgres constraint-violation traceback. DB trigger remains as defense-in-depth.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: Skip-recent guard fires only for triggeredBy='schedule' (manual triggers ALWAYS run). every_week scheduler + manual /dream-run button compose cleanly — manual won't double-fire after scheduled run, manual won't false-skip on debug re-runs.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: Empty corpus is SUCCESS not failure — quiet week (zero captured turns in 7 days) finalizes dream_runs.status='completed' with proposals_extracted=0, model_used='n/a (empty corpus)', dispatch skipped.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: Smoke harness DRW-04..DRW-12 still skip after Plan 04 because POST /api/v1/intellect/dream-run is Plan 05's deliverable. SKIP_WORKER gate widened with 404-probe so harness exits 0 with schema-only green; full path auto-turns-on when Plan 05 mounts endpoint. Pipeline correctness verified inline via /tmp/dream-worker-{mock,failure}-smoke.mjs.
 
 ### Pending Todos
 
@@ -188,6 +199,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-13T07:42:42.605Z
-Stopped at: Completed 48.3-03-PLAN.md (prompt template + dream-sampler + dream-parser with DB-as-ground-truth doctrine validator)
+Last session: 2026-05-13T09:19:11.368Z
+Stopped at: Completed 48.3-04-PLAN.md (dream-worker pipeline + workflow-engine wiring + smoke fixes)
 Resume file: None

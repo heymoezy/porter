@@ -254,6 +254,29 @@
 - Not touching: anything outside the 3 files above.
 - Status: active
 
+## Porter Dream-Worker Pipeline (Opus 4.7 1M) — 2026-05-13T08:11Z
+- Workstream: Phase 48.3-04 execute — full dream worker pipeline (sample → render → dispatch → parse → validate → preFlight → assignSortOrder → transactional INSERT) + workflow-engine handler swap + smoke harness deferred-item fix.
+- Files claimed:
+  - backend/src/services/intellect/dream-worker.ts (NEW)
+  - backend/src/services/intellect/workflow-engine.ts (swap NOT_IMPLEMENTED placeholder for real handler)
+  - tests/smoke-48.3.sh (fix directive-seed NOW() type mismatch per deferred-items.md + widen SKIP_WORKER 404-probe)
+- Not touching: anything outside the 3 files above.
+- Status: done
+
+### Porter Dream-Worker Pipeline — DONE 2026-05-13T09:14Z
+- Commits: baf09dd (Task 0 smoke fixes), c18b88c (Task 1 dream-worker.ts), 4cad516 (Task 2 workflow-engine wiring), 4285229 (Task 3 smoke gate widening).
+- Live: backend/src/services/intellect/dream-worker.ts (497 lines) — runDreamWorker entry, dispatchDream (raw passthrough by omission + explicit logDispatch + mock-injection), insertProposalsTransactionally (BEGIN/INSERT N/COMMIT|ROLLBACK), preFlightValidateTargets (target-id-exists + sealed-seed), checkConcurrency, checkSkipRecent.
+- workflow-engine.ts placeholder REMOVED; dream_run handler now calls runDreamWorker({siloId: config.silo_id ?? 'software', triggeredBy:'schedule'}).
+- 3-layer doctrine enforcement wired end-to-end: prompt (L1) + validateRefinementDoctrine with DB ground truth (L2) + assignSortOrder cross-area offset (L3).
+- 5 guards: concurrency, skip-recent (schedule-only, 6.5d), empty-corpus (success), sealed-seed (pre-flight), target-id-exists (pre-flight).
+- 5 audit-event kinds: dream_run_started, dream_run_completed, dream_run_failed, dream_run_skipped, dream_seed_flagged (never turn content).
+- ESM __dirname shim via fileURLToPath(import.meta.url); PORTER_REPO_ROOT env override.
+- Inline pipeline verification (since smoke harness DRW-04..DRW-12 still gated on Plan 05 endpoint): /tmp/dream-worker-mock-smoke.mjs (happy-path, 3 proposals, correct sort_order, audit events) and /tmp/dream-worker-failure-smoke.mjs (DRW-06 doctrine violation, DRW-10 malformed JSON, concurrency guard — all assertions passed).
+- Smoke harness fixes: directive-seed NOW() → EXTRACT(EPOCH FROM NOW()) (deferred-items.md resolved); intellect_events column-name correction (source/kind/payload → source_type/event_type/details_json); SKIP_WORKER gate widened with 404-probe so harness exits 0 with schema checks green until Plan 05 mounts endpoint.
+- tsc clean. Build clean. systemctl --user is-active porter-fastify → active. /health 200 at v6.15.0.
+- Requirements complete: DRW-04, DRW-05, DRW-10, DRW-11 (DRW-06 + DRW-07 were already marked complete by Plan 03).
+- Duration: 63 min.
+
 ### Porter Dream-Worker Prompt+Sampler+Parser — DONE 2026-05-13T07:47Z
 - Commits: 1fb6f09 (Task 1 prompt template), 2e4b178 (Task 2 dream-sampler.ts), 0a7d556 (Task 3 dream-parser.ts), 5654708 (docs).
 - Live: backend/src/services/intellect/dream-prompts/software.md (matches silos.prompt_path), dream-sampler.ts (deterministic stratified 5-pass), dream-parser.ts (Zod schemas + parseDreamResponse + validateRefinementDoctrine + assignSortOrder).
