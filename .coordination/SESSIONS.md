@@ -313,3 +313,26 @@
   - .planning/ROADMAP.md (expand Phase 48.4 entry)
 - Files NOT touching: any backend/src/**, admin/**, tests/**. Plans 48.4-01..05 executors own those.
 - Status: **DONE** 2026-05-13 — 5 plans validated (frontmatter + structure), VALIDATION drafted, REQUIREMENTS + ROADMAP updated. Next: executors run plans wave-by-wave.
+
+## GSD Phase 48.4 Executor Plan-01 (Opus 4.7 1M) — 2026-05-13T15:45Z
+- Workstream: Execute 48.4-01-PLAN.md (Wave 0 smoke harness + Playwright scaffold + fixture SQL).
+- Files claimed (disjoint from Plan 02..05 source-code surfaces):
+  - tests/smoke-48.4.sh (NEW, executable)
+  - tests/dreams.spec.js (NEW, Playwright scaffold; tests skipped until plans 03/04/05)
+  - tests/fixtures/dreams-mock-proposals.sql (NEW, seed fixture)
+  - .planning/phases/48.4-review-surface/48.4-01-SUMMARY.md
+  - .planning/STATE.md, .planning/ROADMAP.md, .planning/REQUIREMENTS.md
+- Files NOT touching: backend/**, admin/**.
+- Status: active
+
+## GSD Phase 48.4 Executor Plan-02 (Opus 4.7 1M) — 2026-05-13T15:45Z
+- Workstream: Execute 48.4-02-PLAN.md — admin review surface (dreams.ts 5 endpoints, transactional accept/reject, auto-expire workflow, SSE wiring).
+- Files claimed:
+  - backend/src/routes/admin/dreams.ts (NEW)
+  - backend/src/routes/admin/index.ts (add dreamsRoutes registration)
+  - backend/src/services/intellect/workflow-engine.ts (memory_proposals_expire handler + BUILTIN entry)
+  - backend/src/services/intellect/dream-worker.ts (3× broadcast wiring)
+  - .planning/phases/48.4-review-surface/48.4-02-SUMMARY.md (NEW)
+  - .planning/STATE.md, .planning/ROADMAP.md, .planning/REQUIREMENTS.md
+- Status: active
+- **DONE** 2026-05-13T16:23Z — 3 commits shipped (04d37c3 fixture SQL, 8309968 smoke harness, 1d08ef6 Playwright scaffold). Wave 1 graceful-skip verified: bash tests/smoke-48.4.sh exits 0 with RVS-00 schema gate green + RVS-13/RVS-14 green + RVS-01..RVS-12 graceful [skip] pending Plan 02 admin/dreams.ts + auth wire-up. SSE topic contract + auto-expiry workflow contract DEFINED for Plan 02 to honor. Smoke covers all 4 proposal_kind accept paths + SILO_MISMATCH 422 + SEALED_SEED 422 + idempotent re-accept/reject 409 + 404 missing + 410 TARGET_GONE. RVS-13/RVS-14 marked complete in REQUIREMENTS.md.

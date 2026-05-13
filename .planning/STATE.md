@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.3-05-PLAN.md (manual dream-run endpoint + v6.16.0 ship + live raw-passthrough proven)
-last_updated: "2026-05-13T12:54:19.833Z"
+stopped_at: Completed 48.4-01-PLAN.md (Wave 0 smoke + Playwright scaffold + fixture SQL)
+last_updated: "2026-05-13T16:22:28.422Z"
 progress:
   total_phases: 18
   completed_phases: 17
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
-**Current focus:** Phase 48.3 — software-dream-worker
+**Current focus:** Phase 48.4 — review-surface
 
 ## Current Position
 
-Phase: 48.3 (software-dream-worker) — COMPLETE (all 5 plans shipped)
-Plan: 5 of 5
+Phase: 48.4 (review-surface) — EXECUTING
+Plan: 2 of 5
 
 ## Performance Metrics
 
@@ -46,6 +46,7 @@ Plan: 5 of 5
 | Phase 48.3-software-dream-worker P03 | 37 min | 3 tasks | 3 files |
 | Phase 48.3-software-dream-worker P04 | 63 min | 3 tasks | 5 files |
 | Phase 48.3-software-dream-worker P05 | 132 min | 3 tasks | 9 files |
+| Phase 48.4 P01 | 23 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -193,6 +194,12 @@ Plan: 5 of 5
 - [Phase 48.3-software-dream-worker]: [Phase 48.3-05]: Bridge circuit-breaker action was a no-op (broken since opossum 9 adoption). Fixed by replacing noop with runThunk = async (fn) => fn(); also bumped timeout 30s → 180s. Dormant Bridge-wide because chat goes through dispatchStream which bypasses breaker.fire — dream-worker is the first real consumer of non-streaming dispatch.
 - [Phase 48.3-software-dream-worker]: [Phase 48.3-05]: Live unmocked Sonnet 4.6 dispatch verified raw passthrough by omission — bridge_dispatch_log row's agent_id/chat_id/project_id/skills_used/dispatch_strategy all NULL (Memory V3/skills/doctrine only fire when those fields are set). 72.7s real dispatch, 6362 output tokens, Layer 2 doctrine fired on real model output.
 - [Phase 48.3-software-dream-worker]: [Phase 48.3-05]: bridge_dispatch_log.system_prompt does NOT exist on live schema — the plan's textual raw-passthrough check substituted with structural NULL-set proof on context-tracking columns (logically equivalent, stronger evidence).
+- [Phase 48.4]: [Phase 48.4-01]: Wave 0 smoke + Playwright scaffold + fixture SQL shipped BEFORE Plan 02 implementation so every downstream task has single-shot bash tests/smoke-48.4.sh <verify> command. Same precedent as 48.1-05 + 48.2-05 + 48.3-01.
+- [Phase 48.4]: [Phase 48.4-01]: Three-gate soft-skip pattern: (1) backend reachable via curl /health, (2) backend/src/routes/admin/dreams.ts exists on disk, (3) admin login succeeds. Each gate failure -> graceful [skip] of dependent RVS-* checks, harness still exits 0.
+- [Phase 48.4]: [Phase 48.4-01]: SSE event-topic contract DEFINED by Wave 0 smoke (proposals:created on dream-worker INSERT, proposals:resolved on accept/reject/expire, dreams:run-completed on UPDATE-status); Plan 02 must HONOR via post-commit broadcast() calls in admin/dreams.ts + dream-worker.ts + workflow-engine.ts memory_proposals_expire handler.
+- [Phase 48.4]: [Phase 48.4-01]: Auto-expiry workflow contract DEFINED: BUILTIN_WORKFLOWS seed trigger_value='every_24h' + action_type='memory_proposals_expire'; handler UPDATE memory_proposals SET status='expired' WHERE pending AND expires_at < EXTRACT(EPOCH FROM NOW()); audit event + broadcast post-UPDATE. Smoke asserts workflow row presence unconditionally and falls back to direct SQL if /api/admin/workflows/run-by-action endpoint absent.
+- [Phase 48.4]: [Phase 48.4-01]: SILO_MISMATCH probe references the REAL silo-sw-design-system directive intentionally - smoke asserts accept-handler returns 422 AND real directive content remains unmutated (defense in depth against accidental cross-silo accept leak).
+- [Phase 48.4]: [Phase 48.4-01]: Playwright scaffold uses CommonJS require() not ESM import - matches tests/skill-evolution.spec.js precedent and tests/package.json (no type:module). loginAdmin helper uses #uname/#pw/.login-btn selectors with username moe (matches setup-auth.js + skill-evolution.spec.js).
 
 ### Pending Todos
 
@@ -205,6 +212,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-13T12:07:00.489Z
-Stopped at: Completed 48.3-05-PLAN.md (manual dream-run endpoint + v6.16.0 ship + live raw-passthrough proven)
+Last session: 2026-05-13T16:18:18.361Z
+Stopped at: Completed 48.4-01-PLAN.md (Wave 0 smoke + Playwright scaffold + fixture SQL)
 Resume file: None
