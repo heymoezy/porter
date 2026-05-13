@@ -119,8 +119,8 @@
   **Plans:** 5 plans
 
   Plans:
-  - [ ] 48.3-01-PLAN.md — Wave 0 smoke harness (tests/smoke-48.3.sh + 3 fixtures covering DRW-01..DRW-13 with mock-injection contract)
-  - [ ] 48.3-02-PLAN.md — Schema: dream_runs + memory_proposals + 5 indexes + 4 CHECK constraints + 2 BUILTIN workflows + every_week scheduler tag (DRW-01, DRW-02, DRW-08, DRW-12)
+  - [x] 48.3-01-PLAN.md — Wave 0 smoke harness (tests/smoke-48.3.sh + 3 fixtures covering DRW-01..DRW-13 with mock-injection contract)
+  - [x] 48.3-02-PLAN.md — Schema: dream_runs + memory_proposals + 5 indexes + 4 CHECK constraints + 2 BUILTIN workflows + every_week scheduler tag (DRW-01, DRW-02, DRW-08, DRW-12)
   - [ ] 48.3-03-PLAN.md — Prompt template at silos.prompt_path + dream-sampler.ts (stratified deterministic) + dream-parser.ts (Zod + parseDreamResponse + validateRefinementDoctrine + assignSortOrder) (DRW-03, DRW-06, DRW-07)
   - [ ] 48.3-04-PLAN.md — dream-worker.ts entry + dispatchDream (direct routingEngine, raw by omission) + transactional insert + 5 guards (concurrency, skip-recent, empty-corpus, sealed-seed, target-id-exists) + workflow-engine wiring (DRW-04, DRW-05, DRW-06, DRW-07, DRW-10, DRW-11)
   - [ ] 48.3-05-PLAN.md — Admin endpoints (POST /dream-run + GET /dream-runs/:id, admin-capped, 127.0.0.1) + version v6.16.0 + ship + live unmocked human-verify proving raw-passthrough on real Sonnet dispatch (DRW-04, DRW-05, DRW-09, DRW-12, DRW-13)

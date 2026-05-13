@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.3-01-PLAN.md (Wave 0 smoke harness tests/smoke-48.3.sh + 3 response fixtures; mock-injection contract DREAM_WORKER_MOCK_RESPONSE_PATH defined for Plan 04; baseline exits 1 on DRW-01 as expected)
-last_updated: "2026-05-13T06:07:26.024Z"
+stopped_at: Completed 48.3-02-PLAN.md (dream_runs + memory_proposals schema + 5 indexes + 2 workflow seeds + every_week scheduler bucket)
+last_updated: "2026-05-13T06:38:58.593Z"
 progress:
   total_phases: 18
   completed_phases: 17
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 48.3 (software-dream-worker) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 
 ## Performance Metrics
 
@@ -42,6 +42,7 @@ Plan: 2 of 5
 | Phase 48.2-transcript-capture P03 | 28 min | 3 tasks | 4 files |
 | Phase 48.2 P04 | 42 min | 5 tasks | 6 files |
 | 48.3-01    | 18 min   | 2     | 4     |
+| Phase 48.3-software-dream-worker P02 | 32min | 5 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -161,6 +162,12 @@ Plan: 2 of 5
 - [Phase 48.3-01]: Three response fixtures, three distinct assertion paths — dream-response-software.json (happy: DRW-04/07/11/12), dream-response-malformed.json (DRW-10 parse-failure), dream-response-doctrine-violation.json (DRW-06 validateRefinementDoctrine reject). Single-purpose fixtures mean smoke failures point to the exact path that broke.
 - [Phase 48.3-01]: Throwaway silo_id='software-smoke-48.3' isolation pattern — INSERTed at run start with real software.md prompt_path (so DRW-03 still validates production file), 6 directives pre-seeded (4 mp-smoke-seed-* moe-direct + 2 mp-smoke-target-* dream_worker) to fire active_count > 4 doctrine boundary, all DELETEd by trap cleanup EXIT.
 - [Phase 48.3-01]: Wave-0 baseline behavior is intentional non-zero exit at DRW-01 ('memory_proposals table missing'); will turn green as Plans 02-05 land tables / prompt / worker / endpoints. Same failing-baseline-by-design precedent as 48.1-05 + 48.2-05.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-02]: dream_runs.dispatch_id stays nullable TEXT with no FK to bridge_dispatch_log — orphan-tolerant, matches 48.2 silo_id precedent
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-02]: target_directive_ids declared TEXT[] (not jsonb) per RESEARCH lock — array semantics > json for set membership at query time
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-02]: dream_run handler is PLACEHOLDER THROW (not noop) — pre-04 every_week ticks fail loudly in intellect_events instead of silent loss
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-02]: dream_runs_stuck_sweep handler fully working in 02 — safe before worker exists (no rows to sweep yet) so day 1 of 04 has the safety net
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-02]: BUILTIN_WORKFLOWS seeds are belt-and-braces with migrate-dreams-v1.ts seeds — both idempotent by name, defense against DB rebuild OR codebase regression
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-02]: INTELLECT_WEEKLY_INTERVAL = 302400 ticks × 2s = 7d exact; first fire 7 days after restart by design — Plan 04 owns skip-recent guard for manual triggers
 
 ### Pending Todos
 
@@ -173,6 +180,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-13T06:02:47Z
-Stopped at: Completed 48.3-01-PLAN.md (Wave 0 smoke harness tests/smoke-48.3.sh + 3 response fixtures; mock-injection contract DREAM_WORKER_MOCK_RESPONSE_PATH defined for Plan 04; baseline exits 1 on DRW-01 as expected)
+Last session: 2026-05-13T06:36:13.978Z
+Stopped at: Completed 48.3-02-PLAN.md (dream_runs + memory_proposals schema + 5 indexes + 2 workflow seeds + every_week scheduler bucket)
 Resume file: None

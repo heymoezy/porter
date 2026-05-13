@@ -236,4 +236,11 @@
   - backend/src/services/intellect/workflow-engine.ts (extend WorkflowActionType + 2 handlers + 2 BUILTIN seeds)
   - backend/src/services/scheduler.ts (every_week tick bucket, INTELLECT_WEEKLY_INTERVAL=302400)
 - Not touching: anything outside the 5 files above.
-- Status: active
+- Status: done
+
+### Porter Dream-Worker Schema — DONE 2026-05-13T06:40Z
+- Commits: 05f9f78 (Task 1 migration file), a6b52c5 (Task 2 register + schema), 73e9855 (Task 3 workflow-engine), 411ca8f (Task 4 scheduler).
+- Live: dream_runs + memory_proposals tables in production PG with 4 CHECK constraints + 5 user indexes; 2 workflow rows seeded; every_week scheduler tag wired (302400 ticks = 7d).
+- Smoke harness DRW-01 / DRW-02 / DRW-08 sub-criteria all green; DRW-03 fails on missing prompt file (Plan 03's deliverable, expected).
+- /health 200 at v6.15.0 after stop/kill/start cycle (plain `restart` didn't propagate SIGTERM through npx wrapper).
+- Stuck-sweep handler verified by direct SQL: inserted row started 1900s ago, ran sweep, row flipped to failed.
