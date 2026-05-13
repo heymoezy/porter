@@ -36,6 +36,7 @@ import { runSkillEvolution } from './skill-evolver.js';
 import { runSubscriptionCheck } from './subscription-manager.js';
 import { runTranscriptRetention } from './transcript-retention.js';
 import { runDreamWorker } from './dream-worker.js';
+import { broadcast } from '../sse-hub.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ export type WorkflowActionType =
   | 'transcript_retain'
   | 'dream_run'                 // Phase 48.3 — wired in 48.3-04 (runDreamWorker)
   | 'dream_runs_stuck_sweep'    // Phase 48.3 — fully wired here
+  | 'memory_proposals_expire'   // Phase 48.4 — auto-expire pending proposals past expires_at
   | 'noop';
 
 export interface WorkflowRow {
@@ -124,6 +126,30 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
       console.log(`[dream_runs_stuck_sweep] flipped ${swept} stuck run(s) to failed`);
     }
     return { swept };
+  },
+  memory_proposals_expire: async () => {
+    // Phase 48.4 — flip pending proposals past their expires_at to status='expired'.
+    // Uses memory_proposals_expiry_idx partial index (status='pending', expires_at).
+    // logIntellectEvent + broadcast post-mutation so connected admin clients clear
+    // stale rows without a refresh. Empty sweeps are silent (no event, no broadcast).
+    const result = await pool.query<{ id: string; silo_id: string }>(
+      `UPDATE memory_proposals
+         SET status='expired'
+       WHERE status='pending'
+         AND expires_at IS NOT NULL
+         AND expires_at < EXTRACT(EPOCH FROM NOW())
+       RETURNING id, silo_id`,
+    );
+    const expired = result.rowCount ?? 0;
+    if (expired > 0) {
+      await logIntellectEvent('proposals_expired', 'memory_proposals_expire', {
+        count: expired,
+        ids: result.rows.map(r => r.id).slice(0, 20),
+      });
+      broadcast('proposals:resolved', { event: 'expired', count: expired });
+      console.log(`[memory_proposals_expire] flipped ${expired} stale proposal(s) to expired`);
+    }
+    return { expired };
   },
   noop: async () => null,
 };
@@ -332,6 +358,13 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_type: 'schedule',
     trigger_value: 'every_30m',
     action_type: 'dream_runs_stuck_sweep',
+    action_config: {},
+  },
+  {
+    name: 'Expire stale memory proposals',
+    trigger_type: 'schedule',
+    trigger_value: 'every_24h',
+    action_type: 'memory_proposals_expire',
     action_config: {},
   },
 ];
