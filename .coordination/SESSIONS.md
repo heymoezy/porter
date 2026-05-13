@@ -293,6 +293,9 @@
   - backend/src/routes/v1/health.ts (version bump)
   - backend/package.json (version bump)
   - CHANGELOG.md (v6.16.0 entry)
+  - backend/src/services/intellect/dream-worker.ts (Rule 1/3 deviation fixes — mock contract, null-guard, dispatch_id capture)
+  - backend/src/services/bridge/circuit-breaker-registry.ts (Rule 1 deviation — broken noop action)
+  - tests/smoke-48.3.sh (Rule 3 deviation — body-field mock + seed turns)
   - .planning/phases/48.3-software-dream-worker/48.3-05-SUMMARY.md
   - .planning/STATE.md, .planning/ROADMAP.md, .planning/REQUIREMENTS.md
-- Status: active
+- Status: **DONE** 2026-05-13T12:15Z — 5 commits shipped (05021c1, 5dcf985, c2508de, 79afbb0, cdf0738). v6.16.0 live. Smoke 48.1+48.2+48.3 all green. Live unmocked Sonnet 4.6 dispatch verified raw passthrough by omission (dream_run dr_fef03aab → bridge_dispatch_log 12a98900 has agent_id/chat_id/skills_used all NULL; Layer 2 doctrine fired on real model output). Phase 48.3 COMPLETE.
