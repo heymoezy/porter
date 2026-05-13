@@ -3,9 +3,64 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.16.0
+version: v6.17.0
 updated: 2026-05-13
-updated_by: claude-opus-4.7 (Porter Dreams 3 — 48.3 software-dream-worker closeout)
+updated_by: claude-opus-4.7 (Porter Dreams 5 — 48.4 review-surface closeout / Dream Silos series complete)
+
+## v6.17.0 — Phase 48.4 review-surface SHIPPED — Dream Silos series complete (2026-05-13)
+
+**What landed:**
+- Admin Dreams page at `/dreams` with silo + status filters, detail drawer, accept/reject mutations, delete-kind confirmation modal, diff preview, failure-mode toasts, expanded run-history sidebar with dispatch_id pills + per-run filter, Run Now button (POSTs to existing 48.3 manual-trigger endpoint).
+- 5 admin endpoints under `/api/admin/dreams/*`: list proposals, accept (transactional 4-kind matrix with FOR UPDATE + pre-flight SEALED_SEED/SILO_MISMATCH/TARGET_GONE + post-commit SSE), reject (symmetric atomic + audit + SSE), runs list (correlated per-status counts), run detail (run + nested proposals + dispatch).
+- Auto-expiry workflow row (`every_24h`, action_type=`memory_proposals_expire`) + handler that flips pending past-expiry rows to expired, logs one intellect_events row, broadcasts SSE.
+- SSE topics `proposals:created`, `proposals:resolved`, `dreams:run-completed` (colon-namespaced) wired into `dream-worker.ts` (4 broadcast call sites) and admin handlers; useAdminSSE invalidates React Query caches on every event. Dormant `es.onmessage` repo-wide bug fixed as side benefit (named events never fired on onmessage).
+- `<ProposalKindBadge/>`, `<ProposalDetailDrawer/>`, `<DiffBlock/>` components composed from existing shadcn primitives — zero one-off markup.
+- v6.16.0 → v6.17.0 bump: backend/package.json, backend/src/index.ts /health, backend/src/routes/v1/health.ts porter_version, CHANGELOG.md entry.
+
+**Dream Silos series — the loop closes:**
+1. 48.1 — silo registry + injection on session start (DRM-01..05).
+2. 48.2 — transcript capture via Stop + UserPromptSubmit hooks, PII scrub, 30-day retention (TRC-01..08).
+3. 48.3 — Software Dream Worker (weekly Sonnet 4.6 raw-passthrough consolidation with refine-don't-append doctrine, writes memory_proposals) (DRW-01..13).
+4. 48.4 — review surface: Moe accepts good proposals → directives update → next CLI session injects the refined rules (RVS-01..14).
+
+**Smoke + Playwright status:**
+- `bash tests/smoke-48.1.sh && bash tests/smoke-48.2.sh && bash tests/smoke-48.3.sh && bash tests/smoke-48.4.sh` — all green.
+- `cd tests && npx playwright test dreams.spec.js` — 7/7 green (RVS-08..RVS-13 + RVS-10b).
+
+**Autonomous live verification (Moe unavailable 2026-05-13):**
+9-step pipeline executed end-to-end against the live service:
+1. POST /api/v1/intellect/dream-run with mock fixture → dream_run_id=`dr_3b30b4e4-58a9-4bf9-8c93-4c06b7f28bb5`, status=running.
+2. Polled GET /dream-runs/:id → status=completed in 1 poll (mock latency <30ms).
+3. memory_proposals query → 3 rows landed with sort_order 200 (supersede), 1100 (delete), 2900 (new_directive) — refine-before-append doctrine enforced.
+4. SSE wire test: tailed `/api/events` BEFORE dispatch, captured `event: proposals:created` AND `event: dreams:run-completed` events fire on dispatch.
+5. GET /api/admin/dreams/proposals?silo_id=software → 3 rows visible with correct shape.
+6. POST /api/admin/dreams/proposals/:id/accept (new_directive kind, admin cookie) → 200 OK with `directive_ids_touched=['d_084f9fe4-602f-4662-9160-80bc494b53f3']`, `intellect_event_id='ie_c0431992-...'`.
+7. GET proposal again → status='accepted', reviewed_by='moe' (sessionUser.username).
+8. directives row landed: scope='silo', scope_id='software', source_type='dream_worker', status='active', priority=70, content="Always restart porter-fastify after frontend rebuild..."
+9. intellect_events audit row written: event_type='proposal_accepted', source_type='review_surface', payload contains proposal_id + dream_run_id + silo_id + proposal_kind + target_directive_ids_touched + reviewer.
+10. Next-CLI-session injection verified: GET /api/v1/intellect/context?cwd=/home/lobster/projects/Porter returns the new directive in the `## Silo: Software Development — Operating Rules` block (verified inline as the 6th bullet).
+11. Cleanup: test directive archived, 4 mock dream_runs + 12 proposals + 1 audit row deleted. DB state restored: 5 moe-direct seeds active.
+
+**Version:** v6.16.0 → v6.17.0
+**Files touched:**
+- backend/package.json + backend/src/index.ts + backend/src/routes/v1/health.ts (version bumps)
+- CHANGELOG.md (v6.17.0 entry)
+- tests/dreams.spec.js (un-skip RVS-13 + fix stale auth selectors + Radix Select pattern + sonner toast selector)
+- tests/smoke-48.4.sh (fix stale `/api/auth/login` → `/api/v1/auth/login` + `moe@themozaic.com` → `moe@askporter.app`)
+- (Plans 02-04 owned source code: backend/src/routes/admin/dreams.ts, dream-worker.ts, workflow-engine.ts, admin/frontend/app/routes/dreams.tsx, components/, hooks/use-admin-sse.ts.)
+
+**Pre-existing fixes (auto-applied for Plan 05 unblock):**
+- Login selectors `#uname/#pw/.login-btn` were stale across `tests/setup-auth.js` + `tests/skill-evolution.spec.js` + `tests/dreams.spec.js`. v4.x login form uses `#email/#password` + role="Sign in" button. Caught when RVS-08 timed out; fixed in dreams.spec.js (other files still stale but inert — only dreams uses them live now).
+- `moe@themozaic.com` credential note in MEMORY.md is stale; users table only has `moe@askporter.app` + `system@askporter.app`. Login works with the askporter address. (Memory needs updating; out of scope for this plan.)
+- Playwright Chromium browser was not installed — `npx playwright install chromium` first-time setup. Will be persistent for future test runs.
+
+**Next:**
+- Phase 48 series complete. Future work: admin / data-room silo (separate phase per Moe's framing — different mechanism, deferred).
+- Possible v1 follow-ups (deferred): bulk accept/reject, edit-in-place, proposal search, silos list endpoint for the Silo Select.
+
+**Coordination ledger entries:** 48.4-01..05 entries all marked `Status: done` in `.coordination/SESSIONS.md`.
+
+---
 
 ## v6.16.0 — Phase 48.3 software-dream-worker (2026-05-13)
 
