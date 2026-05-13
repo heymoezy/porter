@@ -42,6 +42,7 @@ import { pool } from '../../db/client.js';
 import { routingEngine } from '../bridge/routing-engine.js';
 import type { BridgeDispatchRequest, RoutingContext } from '../bridge/types.js';
 import { logIntellectEvent } from './file-watcher.js';
+import { broadcast } from '../sse-hub.js';
 import { sampleSoftwareTurns, type SampledTurn } from './dream-sampler.js';
 import {
   parseDreamResponse,
@@ -415,6 +416,14 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
         durationMs: Date.now() - startedAtMs,
         emptyCorpus: true,
       });
+      // Phase 48.4 SSE wiring: even empty-corpus success fires the completion
+      // event so the UI clears the "running" pill on a legitimate quiet week.
+      broadcast('dreams:run-completed', {
+        dream_run_id: dreamRunId,
+        silo_id: args.siloId,
+        status: 'completed',
+        proposals_extracted: 0,
+      });
       return { dreamRunId, proposalsExtracted: 0, status: 'completed' };
     }
 
@@ -468,6 +477,18 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
     // ── 13. Insert proposals (or skip in dry-run mode) ────
     if (!args.dryRun) {
       await insertProposalsTransactionally(dreamRunId, args.siloId, parsed);
+      // Phase 48.4 SSE wiring: notify connected admin clients that new proposals
+      // exist. Post-commit only — runs AFTER the COMMIT inside
+      // insertProposalsTransactionally has returned (Pitfall 1). Quiet weeks
+      // (empty proposals) skip the broadcast; the dreams:run-completed event
+      // below still fires so the UI clears any "running" pill.
+      if (parsed.proposals.length > 0) {
+        broadcast('proposals:created', {
+          dream_run_id: dreamRunId,
+          silo_id: args.siloId,
+          count: parsed.proposals.length,
+        });
+      }
     }
 
     // ── 14. Finalize dream_runs ────────────────────────────
@@ -498,6 +519,14 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
       durationMs: Date.now() - startedAtMs,
       dryRun: !!args.dryRun,
     });
+    // Phase 48.4 SSE wiring: notify connected admin clients that the run
+    // completed. Post-UPDATE only.
+    broadcast('dreams:run-completed', {
+      dream_run_id: dreamRunId,
+      silo_id: args.siloId,
+      status: 'completed',
+      proposals_extracted: parsed.proposals.length,
+    });
     return {
       dreamRunId,
       proposalsExtracted: parsed.proposals.length,
@@ -522,6 +551,20 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
       dreamRunId,
       error: truncated,
     });
+    // Phase 48.4 SSE wiring: broadcast on failure too — UI shows error toast
+    // and clears the "running" pill. proposals_extracted=0 because the
+    // transactional insert was rolled back (or never reached). Wrapped in its
+    // own try/catch so a broadcast failure can never mask the original error.
+    try {
+      broadcast('dreams:run-completed', {
+        dream_run_id: dreamRunId,
+        silo_id: args.siloId,
+        status: 'failed',
+        proposals_extracted: 0,
+      });
+    } catch (broadcastErr) {
+      console.error('[dream-worker] failed to broadcast dreams:run-completed (failure path):', broadcastErr);
+    }
     // Re-throw so HTTP caller (manual trigger) sees it; scheduled path is
     // already wrapped by workflow-engine's try/catch which writes workflow_failed.
     throw err;
