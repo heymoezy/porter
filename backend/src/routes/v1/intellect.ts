@@ -25,6 +25,8 @@ import { runSubscriptionCheck } from '../../services/intellect/subscription-mana
 import { detectSilos } from '../../services/intellect/silo-detector.js';
 import { insertTurn } from '../../services/intellect/transcript-capture.js';
 import { runTranscriptRetention } from '../../services/intellect/transcript-retention.js';
+import { runDreamWorker } from '../../services/intellect/dream-worker.js';
+import { randomUUID } from 'node:crypto';
 
 interface DirectiveRow {
   id: string;
@@ -564,6 +566,88 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       req.log.error({ err: e }, '[transcript/retention-run] failed');
       return reply.code(500).send({ ok: false, message: 'retention failed' });
     }
+  });
+
+  // ── Phase 48.3 — POST /dream-run manual trigger ──────────────────────
+  // 127.0.0.1-only; relies on server bind for protection (no auth middleware
+  // in this file's route group — same posture as /silo-command, /transcript/turn,
+  // and /transcript/retention-run). The endpoint validates silo + bounds, mints
+  // a dream_run_id, fires runDreamWorker via setImmediate (fire-and-forget), and
+  // returns 202 with a poll URL. Caller polls GET /dream-runs/:id for status.
+  fastify.post('/dream-run', async (req, reply) => {
+    const body = (req.body ?? {}) as {
+      silo_id?: string;
+      model_override?: string;
+      sample_size_override?: number;
+      triggered_by?: string;
+      dry_run?: boolean;
+    };
+    const siloId = body.silo_id ?? 'software';
+
+    // Validate silo exists + enabled
+    const siloRow = (await pool.query(
+      `SELECT id FROM silos WHERE id=$1 AND enabled=true`,
+      [siloId],
+    )).rows[0];
+    if (!siloRow) {
+      return reply.code(404).send({ ok: false, code: 'SILO_NOT_FOUND', message: `Silo ${siloId} not found or disabled` });
+    }
+
+    // Outer absolute bounds on sample_size_override (Opus ceiling = 2.5MB)
+    if (body.sample_size_override != null) {
+      if (typeof body.sample_size_override !== 'number' || body.sample_size_override < 1000 || body.sample_size_override > 2_500_000) {
+        return reply.code(400).send({ ok: false, code: 'INVALID_SAMPLE_SIZE', message: 'sample_size_override must be a number between 1000 and 2500000 bytes' });
+      }
+      // Model-aware clamp: Sonnet has a smaller effective context — refuse Opus-sized budgets routed to Sonnet
+      if (body.model_override && /sonnet/i.test(body.model_override) && body.sample_size_override > 800_000) {
+        return reply.code(400).send({
+          ok: false,
+          code: 'INVALID_SAMPLE_SIZE_FOR_MODEL',
+          message: 'sample_size_override too large for sonnet (max 800000 bytes)',
+          max: 800_000,
+        });
+      }
+    }
+
+    // Mint run id now so we can return it immediately
+    const dreamRunId = 'dr_' + randomUUID();
+    const triggered_by = (body.triggered_by ?? 'manual-trigger');
+
+    // Fire-and-forget — worker runs in background; caller polls GET /dream-runs/:id
+    setImmediate(() => {
+      runDreamWorker({
+        siloId,
+        triggeredBy: 'manual',
+        triggeredByUser: triggered_by,
+        modelOverride: body.model_override,
+        sampleSizeOverride: body.sample_size_override,
+        dryRun: !!body.dry_run,
+        dreamRunIdOverride: dreamRunId,
+      }).catch(workerErr => {
+        // Worker logs its own intellect_event + flips dream_runs.status='failed'.
+        // We just log here so the failure isn't silent in journald.
+        console.error('[dream-run] worker failed:', workerErr instanceof Error ? workerErr.message : workerErr);
+      });
+    });
+
+    return reply.code(202).send({
+      ok: true,
+      dream_run_id: dreamRunId,
+      status: 'running',
+      poll_url: `/api/v1/intellect/dream-runs/${dreamRunId}`,
+    });
+  });
+
+  // ── Phase 48.3 — GET /dream-runs/:id poll status ─────────────────────
+  // 127.0.0.1-only; relies on server bind for protection (no auth middleware
+  // in this file's route group — same posture as the POST sibling above).
+  fastify.get('/dream-runs/:id', async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const row = (await pool.query(`SELECT * FROM dream_runs WHERE id=$1`, [id])).rows[0];
+    if (!row) {
+      return reply.code(404).send({ ok: false, code: 'NOT_FOUND', message: 'Dream run not found' });
+    }
+    return reply.send({ ok: true, dream_run: row });
   });
 
   // ── POST /session-end — session finished, create episode ────────────
