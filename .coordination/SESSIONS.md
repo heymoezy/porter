@@ -244,3 +244,12 @@
 - Smoke harness DRW-01 / DRW-02 / DRW-08 sub-criteria all green; DRW-03 fails on missing prompt file (Plan 03's deliverable, expected).
 - /health 200 at v6.15.0 after stop/kill/start cycle (plain `restart` didn't propagate SIGTERM through npx wrapper).
 - Stuck-sweep handler verified by direct SQL: inserted row started 1900s ago, ran sweep, row flipped to failed.
+
+## Porter Dream-Worker Prompt+Sampler+Parser (Opus 4.7 1M) — 2026-05-13T07:01Z
+- Workstream: Phase 48.3-03 execute — prompt template + deterministic stratified sampler + JSON parser/doctrine validator/sort-order assigner.
+- Files claimed:
+  - backend/src/services/intellect/dream-prompts/software.md (NEW)
+  - backend/src/services/intellect/dream-sampler.ts (NEW)
+  - backend/src/services/intellect/dream-parser.ts (NEW)
+- Not touching: anything outside the 3 files above.
+- Status: active

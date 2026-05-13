@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.3-02-PLAN.md (dream_runs + memory_proposals schema + 5 indexes + 2 workflow seeds + every_week scheduler bucket)
-last_updated: "2026-05-13T06:38:58.593Z"
+stopped_at: Completed 48.3-03-PLAN.md (prompt template + dream-sampler + dream-parser with DB-as-ground-truth doctrine validator)
+last_updated: "2026-05-13T07:46:52.753Z"
 progress:
   total_phases: 18
   completed_phases: 17
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 48.3 (software-dream-worker) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 
 ## Performance Metrics
 
@@ -43,6 +43,7 @@ Plan: 3 of 5
 | Phase 48.2 P04 | 42 min | 5 tasks | 6 files |
 | 48.3-01    | 18 min   | 2     | 4     |
 | Phase 48.3-software-dream-worker P02 | 32min | 5 tasks | 5 files |
+| Phase 48.3-software-dream-worker P03 | 37 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -168,6 +169,13 @@ Plan: 3 of 5
 - [Phase 48.3-software-dream-worker]: [Phase 48.3-02]: dream_runs_stuck_sweep handler fully working in 02 — safe before worker exists (no rows to sweep yet) so day 1 of 04 has the safety net
 - [Phase 48.3-software-dream-worker]: [Phase 48.3-02]: BUILTIN_WORKFLOWS seeds are belt-and-braces with migrate-dreams-v1.ts seeds — both idempotent by name, defense against DB rebuild OR codebase regression
 - [Phase 48.3-software-dream-worker]: [Phase 48.3-02]: INTELLECT_WEEKLY_INTERVAL = 302400 ticks × 2s = 7d exact; first fire 7 days after restart by design — Plan 04 owns skip-recent guard for manual triggers
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-03]: Prompt file path is backend/src/services/intellect/dream-prompts/software.md — matches silos.prompt_path seeded by 48.1-01 (verified live). Plan 04 worker resolves via path.resolve(process.cwd(), siloRow.prompt_path).
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-03]: validateRefinementDoctrine consumes activeCountBefore as CALLER-SUPPLIED parameter (DB-queried), NOT parsed.active_directive_count_before (model self-report). Trust DB > trust model.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-03]: Sampler stays model-agnostic — outer cap MAX_BUDGET_OPUS_BYTES=2.5MB. Per-model clamping (Sonnet 800KB) is the POST /dream-run endpoint's job (Plan 05).
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-03]: Empty parsed.proposals.length === 0 is SUCCESS (legitimate quiet week); validateRefinementDoctrine returns early without throwing; worker marks dream_run completed with proposals_extracted=0.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-03]: SEED_BASELINE=4 (matches the 4 hand-curated software-silo seeds from 48.1-01). Doctrine engages only when activeCountBefore > 4. Below baseline the rule set is too sparse to demand refinement.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-03]: assignSortOrder uses cross-area offset of +1000 to prevent collision between conceptual_areas. Within area: 100+n delete, 200+n supersede, 300+n merge, 900+n new_directive. Lexicographic area ordering means design-system refinements (offset 0) sort before ship-discipline additions (offset 1000+).
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-03]: Smoke harness directive-seed type mismatch (NOW() vs double precision on directives.created_at, tests/smoke-48.3.sh lines 129/131/132) logged to deferred-items.md — out of scope for Plan 03, fix at start of Plan 04 with EXTRACT(EPOCH FROM NOW()).
 
 ### Pending Todos
 
@@ -180,6 +188,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-13T06:36:13.978Z
-Stopped at: Completed 48.3-02-PLAN.md (dream_runs + memory_proposals schema + 5 indexes + 2 workflow seeds + every_week scheduler bucket)
+Last session: 2026-05-13T07:42:42.605Z
+Stopped at: Completed 48.3-03-PLAN.md (prompt template + dream-sampler + dream-parser with DB-as-ground-truth doctrine validator)
 Resume file: None
