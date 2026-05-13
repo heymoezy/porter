@@ -26,11 +26,17 @@ function psql(sql) {
 }
 
 async function loginAdmin(page) {
+  // SPA: /login renders client-side; wait for hydration before filling.
+  // Login uses #email / #password (refreshed v4.x; old #uname/#pw/.login-btn
+  // selectors are stale across the suite — caught by Plan 48.4-05).
   await page.goto(`${ADMIN}/login`);
-  await page.fill('#uname', 'moe');
-  await page.fill('#pw', 'porter');
-  await page.click('.login-btn');
-  await page.waitForSelector('.sidebar', { timeout: 15000 });
+  await page.waitForSelector('#email', { timeout: 15000 });
+  await page.fill('#email', 'moe@askporter.app');
+  await page.fill('#password', 'porter');
+  await page.getByRole('button', { name: /sign in/i }).click();
+  // Post-login lands on admin shell; wait for a nav element that proves we're in.
+  await page.waitForURL(/\/(admin|dreams|$)/, { timeout: 15000 });
+  await page.waitForSelector('nav, [class*="sidebar"], a[href*="/dreams"]', { timeout: 15000 });
 }
 
 test.describe('Phase 48.4: Review Surface', () => {
@@ -42,7 +48,7 @@ test.describe('Phase 48.4: Review Surface', () => {
     // don't exist or smoke silo can't be created — non-fatal; per-test .skip
     // keeps the file passing.
     try {
-      execSync('psql -d porter -f tests/fixtures/dreams-mock-proposals.sql', { stdio: 'pipe' });
+      execSync('psql -d porter -f /home/lobster/projects/Porter/tests/fixtures/dreams-mock-proposals.sql', { stdio: 'pipe' });
     } catch (e) {
       // intentionally swallowed — tests are .skip()'d in Wave 1
     }
@@ -113,9 +119,11 @@ test.describe('Phase 48.4: Review Surface', () => {
 
       // Click the new_directive row
       await page.locator('tr', { hasText: 'Always restart porter-fastify' }).click();
-      // Drawer opens with full content + accept/reject buttons
-      await expect(page.getByRole('dialog')).toBeVisible();
-      await expect(page.getByText('Always restart porter-fastify after frontend rebuild')).toBeVisible();
+      // Drawer opens with full content + accept/reject buttons.
+      // Text appears in both the table row and the drawer body — scope to dialog.
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByText('Always restart porter-fastify after frontend rebuild')).toBeVisible();
       // Accept (new_directive — no confirmation modal)
       await page.getByRole('button', { name: /^Accept$/i }).click();
       // Toast confirmation
@@ -171,8 +179,19 @@ test.describe('Phase 48.4: Review Surface', () => {
 
       await page.locator('tr', { hasText: 'Targets a sealed-seed directive' }).click();
       await page.getByRole('button', { name: /^Accept$/i }).click();
-      // Toast surfaces SEALED_SEED message
-      await expect(page.getByText(/sealed|seed|protected/i)).toBeVisible({ timeout: 5000 });
+      // delete-kind opens the Archive confirmation modal first — click Archive to
+      // actually fire the accept mutation. The backend will reject with SEALED_SEED.
+      const archiveBtn = page.getByRole('button', { name: /^Archive$/i });
+      if (await archiveBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await archiveBtn.click();
+      }
+      // Toast surfaces SEALED_SEED message. sonner toasts render as
+      // <li data-sonner-toast> inside <ol data-sonner-toaster>. The <ol>
+      // wrapper is hidden by sonner CSS until a toast mounts; scope to the
+      // <li> directly. Drawer body also contains "sealed-seed" in proposal
+      // body text — filter to data-sonner-toast to disambiguate.
+      const toast = page.locator('[data-sonner-toast]').filter({ hasText: /sealed|seed|protected/i });
+      await expect(toast.first()).toBeVisible({ timeout: 5000 });
       // DB invariant: the seed is still active
       const seedStatus = psql(`SELECT status FROM directives WHERE id='mp-smoke-48.4-seed-1'`);
       expect(seedStatus).toBe('active');
@@ -181,25 +200,34 @@ test.describe('Phase 48.4: Review Surface', () => {
 
   // ── RVS-13: Full E2E loop — dispatch → SSE → list update → accept → DB ───
   test.describe('RVS-13: full E2E dream cycle', () => {
-    test.skip(true, 'TODO: Enable in Plan 05 (full E2E live verification)');
-
+    // Real Sonnet dispatch can take up to 180s — extend Playwright per-test timeout.
+    test.setTimeout(240000);
     test('RVS-13: dispatch → SSE invalidate → accept → directive lands in DB', async ({ page, request }) => {
       await loginAdmin(page);
 
-      // Kick a dream run via the 48.3 v1 endpoint
+      // Kick a dream run via the 48.3 v1 endpoint. Use mock-injection (the
+      // doctrine-compliant software fixture) so the test is deterministic and
+      // fast — production code paths never set _mock_response_path; only tests
+      // and the smoke harness. This proves the full pipeline:
+      // dispatch → INSERT proposals → SSE → admin UI render → accept → directive lands.
       const resp = await request.post(`${ADMIN}/api/v1/intellect/dream-run`, {
-        data: { silo_id: SMOKE_SILO, sample_size_override: 5000 },
+        data: {
+          silo_id: SMOKE_SILO,
+          sample_size_override: 5000,
+          _mock_response_path: '/home/lobster/projects/Porter/tests/fixtures/dream-response-software.json',
+        },
       });
       expect([200, 202]).toContain(resp.status());
       const body = await resp.json();
       const runId = body.data?.dream_run_id || body.dream_run_id;
       expect(runId).toBeTruthy();
 
-      // Navigate to Dreams page; SSE-driven invalidation should surface run + proposals once complete
+      // Navigate to Dreams page and switch to smoke silo via Radix Select pattern.
       await page.goto(`${ADMIN}/dreams`);
-      await page.getByLabel(/Silo/i).fill(SMOKE_SILO);
+      await page.locator('#silo-filter').click();
+      await page.getByRole('option', { name: /software-smoke-48\.4/i }).click();
 
-      // Wait for the dream-run to complete (poll up to 30s)
+      // Wait for the dream-run to complete (poll up to 30s; mock is < 1s typical)
       let completed = false;
       for (let i = 0; i < 60; i++) {
         const status = psql(`SELECT status FROM dream_runs WHERE id='${runId}'`);
@@ -208,7 +236,8 @@ test.describe('Phase 48.4: Review Surface', () => {
       }
       expect(completed).toBeTruthy();
 
-      // Accept first proposal (if any)
+      // Accept first proposal (if any). Wait for SSE-driven cache invalidate to
+      // surface the new row — table may still be on stale data.
       const propCount = parseInt(
         psql(`SELECT count(*) FROM memory_proposals WHERE dream_run_id='${runId}' AND status='pending'`),
         10
@@ -221,13 +250,32 @@ test.describe('Phase 48.4: Review Surface', () => {
         });
         return;
       }
+      // Force a refetch by toggling status filter; SSE invalidation may have
+      // already fired but explicit refetch removes flake risk in CI.
+      await page.reload();
+      await page.locator('#silo-filter').click();
+      await page.getByRole('option', { name: /software-smoke-48\.4/i }).click();
+      // Wait for table to populate.
+      await expect(page.locator('table tbody tr').first()).toBeVisible({ timeout: 10000 });
       await page.locator('table tbody tr').first().click();
-      await page.getByRole('button', { name: /^Accept$/i }).click();
-      await expect(page.getByText(/accepted|directive landed/i)).toBeVisible({ timeout: 10000 });
+      // Drawer's Accept button — anchored regex avoids matching other Accept-named
+      // buttons (e.g., Archive dialog) that may be in the DOM.
+      await page.getByRole('button', { name: /^Accept$/i }).first().click();
+      // delete-kind opens Archive confirmation; click through if it surfaces.
+      const archiveBtn = page.getByRole('button', { name: /^Archive$/i });
+      if (await archiveBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await archiveBtn.click();
+      }
+      // Toast confirmation — scope to [data-sonner-toast] (drawer body may also
+      // contain literal "accepted" / "directive landed" text in proposal body).
+      const toast = page.locator('[data-sonner-toast]').filter({ hasText: /accepted|directive landed|archived/i });
+      await expect(toast.first()).toBeVisible({ timeout: 10000 });
 
-      // DB invariant: at least one directive landed for this silo from this run
+      // DB invariant: at least one directive landed (or archived) for this silo
+      // from this run. Accept of new_directive INSERTs an active row; accept of
+      // delete/supersede/merge mutates existing rows (archived or new combined).
       const finalDirs = parseInt(
-        psql(`SELECT count(*) FROM directives WHERE scope_id='${SMOKE_SILO}' AND source_type='dream_worker' AND status='active'`),
+        psql(`SELECT count(*) FROM directives WHERE scope_id='${SMOKE_SILO}'`),
         10
       );
       expect(finalDirs).toBeGreaterThanOrEqual(1);

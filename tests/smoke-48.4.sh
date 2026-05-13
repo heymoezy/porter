@@ -51,14 +51,15 @@ if ! test -f backend/src/routes/admin/dreams.ts; then
 fi
 
 # --- Admin auth: smoke needs a platform_admin cookie to hit /api/admin/dreams/* ---
-# Use the existing test login helper. Default credentials: moe@themozaic.com / porter
+# Login is at /api/v1/auth/login; credentials are moe@askporter.app / porter.
+# (themozaic.com was a stale memory note — verified empty in users table 2026-05-13.)
 COOKIE_JAR=$(mktemp)
 trap 'rm -f "$COOKIE_JAR"; cleanup' EXIT
 if [[ -z "$SKIP_ADMIN_DREAMS" ]]; then
-  LOGIN_RESP=$(curl -sf -c "$COOKIE_JAR" -X POST "$API/api/auth/login" \
+  LOGIN_RESP=$(curl -sf -c "$COOKIE_JAR" -X POST "$API/api/v1/auth/login" \
     -H "Content-Type: application/json" \
-    -d '{"email":"moe@themozaic.com","password":"porter"}' 2>/dev/null || true)
-  if [[ -z "$LOGIN_RESP" ]] || ! grep -q "ok" <<<"$LOGIN_RESP"; then
+    -d '{"email":"moe@askporter.app","password":"porter"}' 2>/dev/null || true)
+  if [[ -z "$LOGIN_RESP" ]] || ! grep -q '"ok":true' <<<"$LOGIN_RESP"; then
     skip "admin login failed — cannot test RVS-01..RVS-05 endpoints (login envelope changed?)"
     SKIP_ADMIN_DREAMS=1
   else
