@@ -3,6 +3,30 @@
 - docs(checkpoint): Tom unblock end-to-end green — "Tom from YMC Capital 👋" in 6.1s
 
 
+## v6.16.0 — 2026-05-13 — Phase 48.3 Software Dream Worker
+
+### Added
+- **Software Dream Worker** (`backend/src/services/intellect/dream-worker.ts`) — weekly consolidation pass over silo-tagged transcript turns. Reads the last 7 days of `silo_id='software'` turns, samples deterministically with stratified 40/30/20/10 budget allocation, dispatches a refinement synthesis prompt via Bridge with raw passthrough (no Memory V3 / identity / skills / doctrine injection), parses the structured JSON response, enforces the refine-don't-append doctrine in three layers (prompt + worker validation + DB sort_order), and inserts `memory_proposals` rows transactionally.
+- **Refinement Doctrine** — three principles locked: refine don't append (merge/supersede/delete encouraged, new_directive last resort); authority to delete with judgment (contradictions, staleness, supersession, redundancy); reinforcement is asymmetric (fresh contradiction outranks five old confirmations). Hand-curated seeds (source_type='moe-direct') are immutable to the worker.
+- **Two new tables** — `dream_runs` (parent, one row per worker invocation with lifecycle status and stats) and `memory_proposals` (child rows: proposal_kind ∈ {merge,supersede,delete,new_directive}, target_directive_ids text[], status ∈ {pending,accepted,rejected,expired}, sort_order, expires_at). Indexes serve Phase 48.4's read contract.
+- **Software-silo dream prompt template** at `backend/src/services/intellect/dream-prompts/software.md` — exact path silos.prompt_path was seeded with in 48.1. Read-from-disk-per-run (no caching) so Moe can edit without redeploy.
+- **Weekly scheduler tag** `every_week` (302400 ticks @ 2s = 7 days) firing `runScheduledWorkflows('every_week')`. Seeded workflow row: 'Software dream — weekly consolidation' (action_type=dream_run, action_config={silo_id:'software'}).
+- **Stuck-run sweep workflow** (every 30 min) flips `dream_runs.status='running' AND started_at < NOW()-1800s` to `status='failed'` — protects against worker crashes leaving phantom rows.
+- **Endpoints**: `POST /api/v1/intellect/dream-run` (127.0.0.1-only via server bind, same posture as /silo-command and /transcript/turn — returns 202 with run_id + poll URL) and `GET /api/v1/intellect/dream-runs/:id` (127.0.0.1-only, returns dream_run row). Model-aware sample_size clamp: Sonnet runs reject sample_size_override > 800KB.
+- **Smoke harness** `tests/smoke-48.3.sh` covering DRW-01..DRW-13 with mock-injection contract via `DREAM_WORKER_MOCK_RESPONSE_PATH` env var; three response fixtures under `tests/fixtures/`.
+
+### Changed
+- `WorkflowActionType` union extended with `dream_run` + `dream_runs_stuck_sweep`.
+- `scheduler.ts` adds the every_week tick bucket immediately after every_24h.
+- `workflow-engine.ts` registers two new BUILTIN_WORKFLOWS rows + two new action handlers.
+
+### Privacy & audit
+- Worker reads only `WHERE silo_id='software'` rows — `/silo none` (silo_id NULL) is invisible by construction.
+- Audit log writes 5 intellect_event kinds: `dream_run_started`, `dream_run_completed`, `dream_run_failed`, `dream_run_skipped`, `dream_seed_flagged`. NEVER logs turn content — only counts, IDs, status.
+- Three-layer refinement enforcement guarantees noise-growth attempts are visible (failed runs) rather than silent.
+- dream_runs.dispatch_id is populated for every real (non-mocked) run via explicit routingEngine.logDispatch call — enables auditing system_prompt content to verify raw-passthrough (Memory V3 not leaked).
+
+
 ## v6.15.0 — 2026-05-12 — `raw: true` passthrough on /api/v1/chat/stream
 
 **Added**
