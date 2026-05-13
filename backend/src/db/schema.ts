@@ -1445,3 +1445,51 @@ export const sessionTranscriptTurns = pgTable('session_transcript_turns', {
 }));
 
 export type SessionTranscriptTurnRow = typeof sessionTranscriptTurns.$inferSelect;
+
+// Phase 48.3: Software Dream Worker
+export const dreamRuns = pgTable('dream_runs', {
+  id: text('id').primaryKey(),
+  siloId: text('silo_id').notNull(),
+  status: text('status').notNull().default('running'),
+  modelUsed: text('model_used').notNull(),
+  triggeredBy: text('triggered_by').notNull(),
+  triggeredByUser: text('triggered_by_user'),
+  actionConfig: jsonb('action_config').notNull().default(sql`'{}'::jsonb`),
+  promptTokenEstimate: integer('prompt_token_estimate'),
+  responseTokenEstimate: integer('response_token_estimate'),
+  turnsSampled: integer('turns_sampled'),
+  sessionsSampled: integer('sessions_sampled'),
+  proposalsExtracted: integer('proposals_extracted').default(0),
+  durationMs: integer('duration_ms'),
+  errorMessage: text('error_message'),
+  dispatchId: text('dispatch_id'),
+  startedAt: doublePrecision('started_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  completedAt: doublePrecision('completed_at'),
+}, (table) => ({
+  siloStarted: index('dream_runs_silo_started_idx').on(table.siloId, table.startedAt),
+  statusIdx: index('dream_runs_status_idx').on(table.status),
+}));
+
+export const memoryProposals = pgTable('memory_proposals', {
+  id: text('id').primaryKey(),
+  dreamRunId: text('dream_run_id').notNull(),
+  siloId: text('silo_id').notNull(),
+  proposalKind: text('proposal_kind').notNull(),
+  targetDirectiveIds: text('target_directive_ids').array().notNull().default(sql`'{}'::text[]`),
+  proposedContent: text('proposed_content').notNull(),
+  proposedMetadata: jsonb('proposed_metadata').notNull().default(sql`'{}'::jsonb`),
+  sourceEvidence: jsonb('source_evidence').notNull().default(sql`'{}'::jsonb`),
+  sortOrder: integer('sort_order').notNull().default(0),
+  status: text('status').notNull().default('pending'),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  expiresAt: doublePrecision('expires_at'),
+  reviewedAt: doublePrecision('reviewed_at'),
+  reviewedBy: text('reviewed_by'),
+}, (table) => ({
+  siloStatusCreated: index('memory_proposals_silo_status_created_idx').on(table.siloId, table.status, table.createdAt),
+  runSort: index('memory_proposals_run_sort_idx').on(table.dreamRunId, table.sortOrder),
+  expiryPartial: index('memory_proposals_expiry_idx').on(table.status, table.expiresAt),
+}));
+
+export type DreamRunRow = typeof dreamRuns.$inferSelect;
+export type MemoryProposalRow = typeof memoryProposals.$inferSelect;
