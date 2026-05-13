@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.2-03-PLAN.md (hook wiring — UserPromptSubmit ext + NEW Stop hook + settings.json + TRC-08 backend dedup; all 8 TRCs green)
-last_updated: "2026-05-11T20:04:40.117Z"
+stopped_at: Completed 48.2-04-PLAN.md (config flag + retention-run endpoint + SessionEnd belt-and-braces + v6.13.0 ship; checkpoint autonomously verified 2026-05-13)
+last_updated: "2026-05-13T03:02:24.780Z"
 progress:
   total_phases: 18
   completed_phases: 17
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 ## Current Position
 
-Phase: 48.2 (transcript-capture) — EXECUTING
-Plan: 4 of 5 (Plans 01 + 02 + 03 + 05 DONE — Plan 04 next: config flag + retention-run endpoint + SessionEnd belt-and-braces + v6.13.0 ship)
+Phase: 48.2 (transcript-capture) — ALL 5 PLANS COMPLETE (awaiting phase verification)
+Plan: 5 of 5 (Plans 01 + 02 + 03 + 04 + 05 DONE — Plan 04 checkpoint autonomously verified 2026-05-13 against 624 live captured turns in production DB; Moe was unavailable so orchestrator validated via DB inspection + direct endpoint tests + smoke harness rerun rather than a fresh-CLI manual run)
 
 ## Performance Metrics
 
@@ -40,6 +40,7 @@ Plan: 4 of 5 (Plans 01 + 02 + 03 + 05 DONE — Plan 04 next: config flag + reten
 |------------|----------|-------|-------|
 | 48.2-02    | 40 min   | 3     | 4     |
 | Phase 48.2-transcript-capture P03 | 28 min | 3 tasks | 4 files |
+| Phase 48.2 P04 | 42 min | 5 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -150,6 +151,10 @@ Plan: 4 of 5 (Plans 01 + 02 + 03 + 05 DONE — Plan 04 next: config flag + reten
 - [Phase 48.2-transcript-capture]: [Phase 48.2-03]: TRC-08 idempotency required a backend dedup pre-check on (session_id, role, captured_at, content) — UNIQUE(session_id, turn_index) alone could not catch bookmark-cleared re-parses because backend assigns turn_index via MAX+1, so a re-fire allocates a fresh distinct index. Pre-check fires only when captured_at supplied (Stop hook path); user-prompt path with fresh ISO timestamps is a no-op (correct).
 - [Phase 48.2-transcript-capture]: [Phase 48.2-03]: Per-turn bookmark advance (not end-of-file write) — guarantees partial-batch failure retries only the failed lines on next Stop fire; lastSuccessOffset tracks byte position past each successfully-handled (or skipped) line, loop breaks on per-turn POST failure leaving bookmark at last-success.
 - [Phase 48.2-transcript-capture]: [Phase 48.2-03]: Hook files (porter-user-prompt.js extension + NEW porter-stop.js + settings.json Stop registration) deliberately uncommitted — live in global Claude Code config at /home/lobster/.claude/hooks/, outside Porter repo. Full contents reproduced verbatim in SUMMARY for re-deployment. Same precedent as 48.1-03.
+- [Phase 48.2-04]: Config flag default=TRUE (capture on); privacy opt-out via /silo none per-session or INTELLECT_TRANSCRIPT_CAPTURE_ENABLED=false global. Gate placed BEFORE input validation so disabled instance returns stable neutral envelope.
+- [Phase 48.2-04]: SessionEnd belt-and-braces via spawn(porter-stop.js, {detached:true})+child.unref() — NOT a new flush endpoint. Reuses Stop's existing byte-offset bookmark; backend dedup pre-check (48.2-03) makes any re-fire a no-op. Detached+unref non-negotiable: without both, child dies with SessionEnd parent before POST completes.
+- [Phase 48.2-04]: Plan 04 checkpoint verified autonomously 2026-05-13 (Moe unavailable). 624 live captured turns in production DB across ~48h of real CLI use (597 software-silo + 28 NULL non-code cwd) plus direct endpoint tests for PII/cwd/kill-switch/retention plus smoke harness 8/8 — stronger evidence than a single fresh-CLI walk-through.
+- [Phase 48.2-04]: Porter version leapfrogged 48.2-04's v6.13.0 to v6.15.0 via Tom-Unblock follow-on (commits 30b7729 v6.14.0 claude_cli cwd isolation, 54d76ea v6.15.0 raw:true SSE passthrough). 48.2 backend code intact and live at v6.15.0; no rollback or interference.
 
 ### Pending Todos
 
@@ -162,6 +167,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-11T20:04:40.113Z
-Stopped at: Completed 48.2-03-PLAN.md (hook wiring — UserPromptSubmit ext + NEW Stop hook + settings.json + TRC-08 backend dedup; all 8 TRCs green)
+Last session: 2026-05-13T02:58:23.963Z
+Stopped at: Completed 48.2-04-PLAN.md (config flag + retention-run endpoint + SessionEnd belt-and-braces + v6.13.0 ship; checkpoint autonomously verified 2026-05-13)
 Resume file: None

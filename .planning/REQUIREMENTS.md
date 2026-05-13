@@ -144,14 +144,14 @@
 | DRM-03 | Phase 48.1 | Complete (48.1-02 detector, 48.1-04 session-start hook wired + verified) |
 | DRM-04 | Phase 48.1 | Complete (48.1-03) |
 | DRM-05 | Phase 48.1 | Complete (48.1-01) |
-| TRC-01 | Phase 48.2 | Pending (48.2-01) |
-| TRC-02 | Phase 48.2 | Pending (48.2-03) |
-| TRC-03 | Phase 48.2 | Pending (48.2-03) |
-| TRC-04 | Phase 48.2 | Pending (48.2-02) |
-| TRC-05 | Phase 48.2 | Pending (48.2-02) |
-| TRC-06 | Phase 48.2 | Pending (48.2-01, 48.2-04) |
-| TRC-07 | Phase 48.2 | Pending (48.2-02, 48.2-04) |
-| TRC-08 | Phase 48.2 | Pending (48.2-03) |
+| TRC-01 | Phase 48.2 | Complete (48.2-01) |
+| TRC-02 | Phase 48.2 | Complete (48.2-03) |
+| TRC-03 | Phase 48.2 | Complete (48.2-03) |
+| TRC-04 | Phase 48.2 | Complete (48.2-02) |
+| TRC-05 | Phase 48.2 | Complete (48.2-02) |
+| TRC-06 | Phase 48.2 | Complete (48.2-01 schema + workflow, 48.2-04 retention-run endpoint) |
+| TRC-07 | Phase 48.2 | Complete (48.2-02 /silo-none gate, 48.2-04 global config flag) |
+| TRC-08 | Phase 48.2 | Complete (48.2-03) |
 
 **Coverage:**
 - v6.0 requirements: 43 total (35 prior + 8 TRC for Phase 48.2)

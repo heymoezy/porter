@@ -1,3 +1,8 @@
+## v6.1.0 (2026-05-13)
+
+- docs(checkpoint): Tom unblock end-to-end green — "Tom from YMC Capital 👋" in 6.1s
+
+
 ## v6.15.0 — 2026-05-12 — `raw: true` passthrough on /api/v1/chat/stream
 
 **Added**
