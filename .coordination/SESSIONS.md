@@ -1,5 +1,19 @@
 # Porter — Active Sessions
 
+## GSD Phase 48.4 Executor Plan-04 (Opus 4.7) — 2026-05-13T18:45Z
+- Workstream: Execute 48.4-04-PLAN.md — proposal detail drawer + accept/reject + delete-confirm + failure toasts + expanded run-history sidebar + sonner toast lib install. Pure admin/frontend work — NO backend code, NO Porter restart (Plan 05 owns).
+- Files claimed:
+  - admin/frontend/package.json (sonner dep)
+  - admin/frontend/app/root.tsx (Toaster mount)
+  - admin/frontend/app/components/ProposalDetailDrawer.tsx (NEW)
+  - admin/frontend/app/components/DiffBlock.tsx (NEW)
+  - admin/frontend/app/routes/dreams.tsx (drawer integration + run-history + toast listener)
+  - tests/dreams.spec.js (un-skip RVS-10/10b/11/12)
+  - .planning/phases/48.4-review-surface/48.4-04-SUMMARY.md (NEW, on completion)
+  - .planning/STATE.md / ROADMAP.md / REQUIREMENTS.md (state updates)
+- Files NOT touching: backend/**, any other admin/frontend/app/routes/*, hooks/use-admin-sse.ts (Plan 03 owns), other component files.
+- Status: **DONE** 2026-05-13T19:30Z — all 5 tasks committed (3dc0071 Task 0 sonner, e27be1b Task 1 DiffBlock, ed41ff1 Task 2 Drawer, 6e71c11 Task 3 dreams.tsx integration, 33288cb Task 4 un-skip RVS-10/10b/11/12). Build green, typecheck clean (1 pre-existing skills-studio error from Plan 03 baseline). Plan 05 ships restart + version bump + RVS-13.
+
 ## GSD Phase 48.3 Executor Plan-01 (Opus 4.7) — 2026-05-13T05:44Z
 - Workstream: Execute 48.3-01-PLAN.md — Wave 0 smoke harness + 3 response fixtures for Phase 48.3 (Software Dream Worker). Pure tests/ + fixtures work — NO backend code.
 - Files claimed:

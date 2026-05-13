@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.4-03-PLAN.md (Dreams admin list page + sidebar nav + SSE addEventListener refactor — fixes dormant repo-wide bug; build artifacts on disk; live verification deferred to Plan 05 restart)
-last_updated: "2026-05-13T18:23:23.360Z"
+stopped_at: "Completed 48.4-04-PLAN.md (Dreams admin detail drawer + accept/reject mutations + delete-kind confirmation + 6 failure-code toasts via sonner + expanded run-history sidebar + window dreams:run-completed listener; RVS-10/10b/11/12 un-skipped; only RVS-13 + Plan 05 ship remain)"
+last_updated: "2026-05-13T19:38:07.233Z"
 progress:
   total_phases: 18
   completed_phases: 17
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 48.4 (review-surface) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 
 ## Performance Metrics
 
@@ -49,6 +49,7 @@ Plan: 3 of 5
 | Phase 48.4 P01 | 23 min | 3 tasks | 3 files |
 | Phase 48.4-review-surface P02 | 79min | 4 tasks | 4 files |
 | Phase 48.4 P03 | 45min | 3 tasks | 6 files |
+| Phase 48.4-review-surface P04 | 42min | 5 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -214,6 +215,12 @@ Plan: 3 of 5
 - [Phase 48.4-review-surface]: [Phase 48.4-03]: Silo Select hardcodes software + software-smoke-48.4 for v1 — no /api/admin/silos endpoint exists yet. Future enhancement: useQuery against that endpoint when it ships.
 - [Phase 48.4-review-surface]: [Phase 48.4-03]: Raw <table> + animate-pulse skeletons matching approvals.tsx precedent (no shadcn Table/Skeleton primitives in this repo). Card + Badge + Button + Select shadcn primitives all exist and used as planned.
 - [Phase 48.4-review-surface]: [Phase 48.4-03]: selectedProposalId state stored on row click + exposed as data-testid='selected-proposal-marker' invisible div for Plan 04 drawer to consume. No drawer rendered yet.
+- [Phase 48.4-review-surface]: [Phase 48.4-04]: sonner toast lib installed + Toaster mounted in root.tsx inside QueryClientProvider — single dep, ships own types, never fall back to alert() (feedback_porter_alive.md + Playwright assertion compatibility)
+- [Phase 48.4-review-surface]: [Phase 48.4-04]: ProposalDetailDrawer uses Sheet (right slide-over) + Dialog (delete-kind confirmation). DiffBlock is set-difference rendering (NOT LCS) — acceptable v1 for wholesale rewrites per RESEARCH § Don't Hand-Roll. Defer LCS until proposal previews show fine-grained edits.
+- [Phase 48.4-review-surface]: [Phase 48.4-04]: Failure-code → toast mapping via two helper fns (toastAcceptError/toastRejectError); 6 codes covered (NOT_FOUND, INVALID_STATE, TARGET_GONE, SEALED_SEED, SILO_MISMATCH, ACCEPT_FAILED). Error-path toasts also invalidate proposals query so stale rows clear.
+- [Phase 48.4-review-surface]: [Phase 48.4-04]: GET /api/admin/intelligence/directives/:id endpoint does NOT exist (verified by grep). Target fetch in drawer try/catches and returns null; DiffBlock renders only when fetch succeeds — graceful degradation. Add endpoint when fine-grained diff preview becomes a felt need.
+- [Phase 48.4-review-surface]: [Phase 48.4-04]: runFilter state on dreams.tsx — clicking 'view' on a run row narrows the proposals table to that dream_run_id via queryKey + dream_run_id URL param. 'Clear run filter' button in card header resets it. Active row gets bg-surface/60 visual cue.
+- [Phase 48.4-review-surface]: [Phase 48.4-04]: Per-route window 'dreams:run-completed' listener (NOT global) — toasts fire only while reviewer is on /dreams page. Cleanup on unmount. Plan 03 already dispatches the CustomEvent from useAdminSSE.
 
 ### Pending Todos
 
@@ -226,6 +233,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-13T18:23:23.356Z
-Stopped at: Completed 48.4-03-PLAN.md (Dreams admin list page + sidebar nav + SSE addEventListener refactor — fixes dormant repo-wide bug; build artifacts on disk; live verification deferred to Plan 05 restart)
+Last session: 2026-05-13T19:38:07.228Z
+Stopped at: Completed 48.4-04-PLAN.md (Dreams admin detail drawer + accept/reject mutations + delete-kind confirmation + 6 failure-code toasts via sonner + expanded run-history sidebar + window dreams:run-completed listener; RVS-10/10b/11/12 un-skipped; only RVS-13 + Plan 05 ship remain)
 Resume file: None
