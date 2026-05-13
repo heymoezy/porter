@@ -88,6 +88,8 @@ Porter has been in development since Feb 18, 2026. Current version is v6.12.0. S
 
 **Phase 48.1 silo-foundation (2026-05-11):** Dream Silos series substrate landed. `silos` table seeded with the software development silo, deterministic cwd-based detection injects a labeled `## Silo: Software Development — Operating Rules` section into `/api/v1/intellect/context` for code-project sessions, `/silo software | none | <id>` slash command persists per-session overrides via UserPromptSubmit hook, and the SessionStart hook now forwards `session_id` + `cwd` so the silo header reaches fresh Claude CLI sessions. Moe-direct directives are sealed at the DB layer (`directive_immutable_moe_direct` trigger) with a `SET LOCAL` bypass for memory-pruner. First piece of the silo-scoped reinforcement-learning system Moe specified in feedback_dream_silos.
 
+**Phase 48.2 transcript-capture (2026-05-13):** Raw substrate for the dream worker (48.3). `session_transcript_turns` table with composite index `(silo_id, captured_at DESC)` for the 48.3 read pattern, single-writer endpoint `POST /api/v1/intellect/transcript/turn` orchestrating silo lookup → /silo none kill switch → shared PII scrub → server-assigned `turn_index` with single retry on race + content+timestamp dedup. Two hooks deployed: extended `porter-user-prompt.js` (third branch captures user turns, skips `/silo` commands) and NEW `porter-stop.js` (tails transcript JSONL from per-session byte-offset bookmark, advances only past successfully-POSTed lines). 30-day hard-delete retention runs daily via the workflow engine + manual `/transcript/retention-run` endpoint. Global kill switch `intellect.transcriptCaptureEnabled` layered on top of per-session `/silo none`. 633 live captures already in DB by phase verification time — pipeline is live and working autonomously across all active CLI sessions.
+
 **Backend** (`backend/src/`): TypeScript, Fastify 5, Drizzle ORM, PostgreSQL. Brain + Admin merged. All routes on :3001.
 
 **Admin** (`admin/frontend/`): React Router 7 + shadcn/ui + Tailwind 4. Served as static files by Brain.
@@ -126,4 +128,4 @@ Porter has been in development since Feb 18, 2026. Current version is v6.12.0. S
 | Orchestration is THE feature | Not a chat router — task decomposition + agent coordination | — v6.0 scope |
 
 ---
-*Last updated: 2026-05-11 after Phase 48.1 silo-foundation shipped (v6.12.0)*
+*Last updated: 2026-05-13 after Phase 48.2 transcript-capture shipped (v6.15.0)*

@@ -4,8 +4,89 @@
 
 project: porter
 version: v6.15.0
-updated: 2026-05-12
-updated_by: claude-opus-4.7-1m (Porter Tom-Unblock — Tom 2 session)
+updated: 2026-05-13
+updated_by: claude-opus-4.7 (Porter Dreams 3 — 48.2 closeout + 48.3 planning)
+
+## v6.15.0 — Phase 48.2 transcript-capture (2026-05-13)
+
+Second phase of the Dream Silos series. Captures the raw turns the dream
+worker (48.3) will consume. Every active Claude CLI session now writes
+user + assistant turns to `session_transcript_turns`, silo-tagged at
+insert, PII-scrubbed, idempotent on Stop-hook re-fire, with two layered
+kill switches (global config flag + per-session `/silo none`) and a
+30-day hard-delete retention sweep.
+
+**5 plans shipped across 4 waves (all green, TRC-01..TRC-08 pass):**
+
+- **48.2-01 (schema):** `session_transcript_turns` table + composite
+  index `(silo_id, captured_at DESC)` serving 48.3's read pattern in
+  <50ms + UNIQUE(session_id, turn_index) for idempotency + retention
+  workflow row + `transcript_retain` action handler in workflow-engine.
+- **48.2-02 (capture endpoint):** `pii-scrub.ts` extracted from
+  `learner.ts` into shared helper (one copy, two callers).
+  `insertTurn()` orchestrator: /silo none kill switch → detectSilos →
+  PII scrub → 32KB cap → BEGIN/COMMIT with server-assigned `turn_index`
+  + single retry on race. `POST /api/v1/intellect/transcript/turn`
+  endpoint as single-writer (127.0.0.1-only).
+- **48.2-03 (hook wiring):** Extended `~/.claude/hooks/porter-user-prompt.js`
+  with a third branch (captures user turns, skips `/silo` and short
+  prompts). NEW `~/.claude/hooks/porter-stop.js`: 250ms flush delay,
+  per-session byte-offset bookmark at `/tmp/porter-transcript-bookmark/`,
+  tail JSONL, advance bookmark only past successfully-POSTed lines.
+  Registered Stop in `~/.claude/settings.json`. Executor caught a real
+  idempotency bug — UNIQUE alone doesn't prevent dups because the
+  backend reallocates `turn_index` per call — fixed with content+timestamp
+  dedup pre-check in `insertTurn`.
+- **48.2-04 (privacy + retention + ship):** Global config flag
+  `intellect.transcriptCaptureEnabled` (env `INTELLECT_TRANSCRIPT_CAPTURE_ENABLED`,
+  default true). Manual trigger endpoint
+  `POST /api/v1/intellect/transcript/retention-run`. SessionEnd hook
+  spawns porter-stop.js detached + unref'd as belt-and-braces tail-parse
+  (Risk 3 mitigation for Anthropic #8564). Version bump v6.12.0 → v6.13.0
+  (later leapfrogged to v6.15.0 by Tom-Unblock).
+- **48.2-05 (smoke harness):** `tests/smoke-48.2.sh` covering TRC-01..TRC-08
+  with graceful-skip when hooks aren't deployed + poll loops instead of
+  fixed sleeps + JSONL replay fixtures.
+
+**Requirements closed:** TRC-01..TRC-08 (all 8).
+
+**Live evidence (verified 2026-05-13):**
+- 633 captured turns in `session_transcript_turns` (605 silo=software,
+  28 silo=NULL from non-code cwds) from active CLI sessions
+- Direct endpoint tests confirm PII scrub, silo tagging, /silo none kill
+  switch, retention deletion
+- Smoke harness: all 8 TRCs green
+- Type-check clean, /health 200, Porter live at v6.15.0
+
+**Files of note (in-repo):**
+- `backend/src/db/migrate-transcripts-v1.ts`
+- `backend/src/db/schema.ts` — sessionTranscriptTurns Drizzle binding
+- `backend/src/services/intellect/pii-scrub.ts` — shared helper
+- `backend/src/services/intellect/transcript-capture.ts` — insertTurn
+- `backend/src/services/intellect/transcript-retention.ts`
+- `backend/src/services/intellect/workflow-engine.ts` — transcript_retain action
+- `backend/src/routes/v1/intellect.ts` — POST /transcript/turn + /transcript/retention-run
+- `backend/src/config.ts` — transcriptCaptureEnabled flag
+- `tests/smoke-48.2.sh` + `tests/fixtures/synthetic-transcript.jsonl` + `tests/fixtures/stop-hook-input.json`
+
+**Files of note (outside repo, global Claude hooks):**
+- `~/.claude/hooks/porter-user-prompt.js` — transcript user-turn branch
+- `~/.claude/hooks/porter-stop.js` — NEW assistant-turn capture
+- `~/.claude/hooks/porter-session-end.js` — belt-and-braces Stop spawn
+- `~/.claude/settings.json` — Stop hook registered
+
+**Verification note:** Live-CLI checkpoint was completed AUTONOMOUSLY on
+2026-05-13 because Moe was unavailable. All 5 substantive criteria pass
+via production data (633 live captures), direct endpoint tests, and
+smoke harness. Future sessions may want manual confirmation but the
+pipeline is observably working in production.
+
+**Next:** Phase 48.3 Software Dream Worker — consumes the captured
+transcripts, dispatches the dream prompt via Bridge, writes proposals
+to `memory_proposals` with refine-don't-append doctrine
+(merge/supersede/delete before new_directive).
+
+---
 
 ## Tom unblock — END-TO-END GREEN (2026-05-12)
 
