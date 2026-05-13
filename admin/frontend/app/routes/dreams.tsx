@@ -1,6 +1,7 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Moon, RefreshCw, Play } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "~/components/ui/button"
 import { Badge } from "~/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card"
@@ -13,6 +14,7 @@ import {
 } from "~/components/ui/select"
 import { api } from "~/lib/api"
 import { ProposalKindBadge } from "~/components/ProposalKindBadge"
+import { ProposalDetailDrawer } from "~/components/ProposalDetailDrawer"
 
 // ──────────────────────────────────────────────────────────────────────────
 // Types — mirror raw pg snake_case shape from /api/admin/dreams/* (Plan 02).
@@ -97,19 +99,51 @@ export default function DreamsPage() {
   // Silo Select is hardcoded for v1; future enhancement loads from /api/admin/silos.
   const [silo, setSilo] = useState<string>("software")
   const [status, setStatus] = useState<string>("pending")
-  // selectedProposalId is read by Plan 04's detail drawer; Plan 03 stores state only.
-  const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null)
+  // runFilter narrows the proposals table to a single dream_run_id when set
+  // (via the "view" button in the Recent runs card). null = no filter.
+  const [runFilter, setRunFilter] = useState<string | null>(null)
+  // selectedProposalId opens ProposalDetailDrawer when non-null.
+  const [selectedProposalId, setSelectedProposalId] = useState<string | null>(
+    null,
+  )
 
   const proposalsQ = useQuery<ProposalsResponse>({
-    queryKey: ["admin", "dreams", "proposals", silo, status],
+    queryKey: ["admin", "dreams", "proposals", silo, status, runFilter],
     queryFn: async () => {
       const params = new URLSearchParams()
       if (silo) params.set("silo_id", silo)
       if (status && status !== "all") params.set("status", status)
+      if (runFilter) params.set("dream_run_id", runFilter)
       params.set("limit", "200")
       return api<ProposalsResponse>(`/api/admin/dreams/proposals?${params}`)
     },
   })
+
+  // ── Listen for SSE-driven dream-run-completed event (dispatched by useAdminSSE).
+  // Show a toast so the reviewer notices a completed run even when not looking
+  // at the runs sidebar. Cleanup on unmount.
+  useEffect(() => {
+    function onRunCompleted(e: Event) {
+      const detail = (e as CustomEvent).detail as
+        | {
+            status?: string
+            proposals_extracted?: number
+            silo_id?: string
+          }
+        | undefined
+      if (!detail) return
+      if (detail.status === "completed") {
+        toast.success(
+          `Dream run completed: ${detail.proposals_extracted ?? 0} proposals (${detail.silo_id ?? "—"})`,
+        )
+      } else if (detail.status === "failed") {
+        toast.error(`Dream run failed (${detail.silo_id ?? "—"})`)
+      }
+    }
+    window.addEventListener("dreams:run-completed", onRunCompleted)
+    return () =>
+      window.removeEventListener("dreams:run-completed", onRunCompleted)
+  }, [])
 
   const runsQ = useQuery<RunsResponse>({
     queryKey: ["admin", "dreams", "runs", silo],
@@ -339,68 +373,106 @@ export default function DreamsPage() {
         </div>
       )}
 
-      {/* ─── Recent runs footer (Plan 04 fleshes the full sidebar) ──────── */}
+      {/* ─── Recent runs (full sidebar) ──────────────────────────────────── */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Recent runs</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center justify-between">
+            <span>Recent runs</span>
+            {runFilter && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setRunFilter(null)}
+              >
+                Clear run filter
+              </Button>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 pb-3">
           {runsQ.isLoading ? (
             <div className="h-12 w-full animate-pulse rounded bg-raised" />
           ) : runs.length === 0 ? (
             <p className="text-2xs text-text3">
-              No runs yet for this silo.
+              No runs yet for this silo. Click <strong>Run Now</strong> to
+              dispatch one.
             </p>
           ) : (
-            runs.slice(0, 5).map((r) => (
-              <div
-                key={r.id}
-                className="flex items-center justify-between text-xs py-1"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Badge
-                    variant="outline"
-                    className={`text-2xs ${
-                      r.status === "completed"
-                        ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20"
-                        : r.status === "failed"
-                        ? "bg-red-500/15 text-red-400 border-red-500/20"
-                        : "bg-yellow-500/15 text-yellow-400 border-yellow-500/20"
-                    }`}
-                  >
-                    {r.status}
-                  </Badge>
-                  <span className="font-mono text-2xs text-text2 truncate">
-                    {r.id}
-                  </span>
-                  <span className="text-2xs text-text3 truncate">
-                    {r.model_used ?? "—"}
-                  </span>
+            runs.slice(0, 20).map((r) => {
+              const isFiltered = runFilter === r.id
+              const dispatchId = (r as unknown as { dispatch_id?: string | null })
+                .dispatch_id
+              return (
+                <div
+                  key={r.id}
+                  className={`flex items-center justify-between text-xs py-1 px-2 rounded transition-colors ${
+                    isFiltered ? "bg-surface/60" : "hover:bg-surface/30"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                    <Badge
+                      variant="outline"
+                      className={`text-2xs ${
+                        r.status === "completed"
+                          ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20"
+                          : r.status === "failed"
+                          ? "bg-red-500/15 text-red-400 border-red-500/20"
+                          : "bg-yellow-500/15 text-yellow-400 border-yellow-500/20"
+                      }`}
+                    >
+                      {r.status}
+                    </Badge>
+                    <span className="font-mono text-2xs text-text2 truncate">
+                      {r.id}
+                    </span>
+                    <span className="text-2xs text-text3 truncate">
+                      {r.model_used ?? "—"}
+                    </span>
+                    <span className="text-2xs text-text3">·</span>
+                    <span className="text-2xs">
+                      {r.proposals_count} proposals
+                    </span>
+                    <span className="text-2xs text-text3">·</span>
+                    <span className="text-2xs">
+                      {r.duration_ms
+                        ? Math.round(r.duration_ms / 1000) + "s"
+                        : "—"}
+                    </span>
+                    {dispatchId && (
+                      <>
+                        <span className="text-2xs text-text3">·</span>
+                        <span
+                          className="font-mono text-[10px] text-text3"
+                          title={`dispatch_id=${dispatchId}`}
+                        >
+                          {String(dispatchId).slice(0, 12)}…
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-2xs text-text3 shrink-0">
+                    <span className="tabular-nums">{fmtRel(r.started_at)}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setRunFilter(r.id)}
+                    >
+                      view
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 text-2xs text-text3 shrink-0">
-                  <span>{r.proposals_count} proposals</span>
-                  <span>
-                    {r.duration_ms
-                      ? Math.round(r.duration_ms / 1000) + "s"
-                      : "—"}
-                  </span>
-                  <span className="tabular-nums">{fmtRel(r.started_at)}</span>
-                </div>
-              </div>
-            ))
+              )
+            })
           )}
         </CardContent>
       </Card>
 
-      {/* selectedProposalId is consumed by the Plan 04 drawer; Plan 03 just persists
-          state. Render an invisible marker so Plan 04 Playwright tests can assert. */}
-      {selectedProposalId && (
-        <div
-          data-testid="selected-proposal-marker"
-          data-proposal-id={selectedProposalId}
-          style={{ display: "none" }}
-        />
-      )}
+      {/* ─── Proposal detail drawer ──────────────────────────────────────── */}
+      <ProposalDetailDrawer
+        proposalId={selectedProposalId}
+        proposals={proposals}
+        onClose={() => setSelectedProposalId(null)}
+      />
     </div>
   )
 }
