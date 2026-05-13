@@ -336,3 +336,23 @@
   - .planning/STATE.md, .planning/ROADMAP.md, .planning/REQUIREMENTS.md
 - Status: active
 - **DONE** 2026-05-13T16:23Z — 3 commits shipped (04d37c3 fixture SQL, 8309968 smoke harness, 1d08ef6 Playwright scaffold). Wave 1 graceful-skip verified: bash tests/smoke-48.4.sh exits 0 with RVS-00 schema gate green + RVS-13/RVS-14 green + RVS-01..RVS-12 graceful [skip] pending Plan 02 admin/dreams.ts + auth wire-up. SSE topic contract + auto-expiry workflow contract DEFINED for Plan 02 to honor. Smoke covers all 4 proposal_kind accept paths + SILO_MISMATCH 422 + SEALED_SEED 422 + idempotent re-accept/reject 409 + 404 missing + 410 TARGET_GONE. RVS-13/RVS-14 marked complete in REQUIREMENTS.md.
+
+## GSD Phase 48.4 Executor Plan-03 (Opus 4.7 1M) — 2026-05-13T17:27Z
+- Workstream: Execute 48.4-03-PLAN.md — Dreams admin list page + sidebar nav + SSE refactor (fixes dormant repo-wide es.onmessage bug) + ProposalKindBadge. RVS-08 + RVS-09.
+- Files claimed (frontend only, disjoint from Plan 04/05 scope):
+  - admin/frontend/app/routes/dreams.tsx (NEW)
+  - admin/frontend/app/components/ProposalKindBadge.tsx (NEW)
+  - admin/frontend/app/routes.ts (add /dreams route)
+  - admin/frontend/app/components/layout/sidebar.tsx (add Dreams nav entry)
+  - admin/frontend/app/hooks/use-admin-sse.ts (refactor onmessage → addEventListener; add 3 dreams topics)
+  - tests/dreams.spec.js (un-skip RVS-08 + RVS-09)
+- Files NOT touching: any backend/**, other admin/frontend pages.
+- Status: **DONE** 2026-05-13T18:12Z — 3 commits (32cb49c Task 1 wiring + SSE refactor, f081280 Task 2 dreams page, 5c0b230 Task 3 un-skip tests). `cd admin/frontend && npx react-router build` exits 0; build artifacts on disk. tsc clean for all 6 Plan 03 files (1 pre-existing skills-studio error unchanged). Dormant SSE bug fixed as side benefit: 20 addEventListener calls, 0 es.onmessage handlers — all bridge:*/agent:*/dreams:* topics will fire after next restart (Plan 05). RVS-08 + RVS-09 marked complete in REQUIREMENTS. STATE plan: 3 of 5. Live /dreams URL deferred to Plan 05 restart per executor-prompt constraint.
+
+### Porter GSD Phase 48.4 Plan-02 — DONE 2026-05-13T17:05Z
+- Commits: 78b21c3 (Task 1 dreams.ts 469 lines), c972f1e (Task 2 registration), 121bca1 (Task 3 memory_proposals_expire), 2c5d297 (Task 4 dream-worker SSE wiring), 0bd590b (final metadata).
+- Live verification at v6.16.0: 5 endpoints under /api/admin/dreams/* curl-tested; new_directive happy path + 4 error codes (404/409/410/422 SEALED_SEED + 422 SILO_MISMATCH); reject with reason payload; memory_proposals_expire SQL verified live.
+- Auto-fix: Drizzle $inferSelect camelCase types vs raw pg snake_case bug — replaced schema.ts imports with inline interfaces (caught on first tsc pass, fixed before commit). Logged in Plan 02 SUMMARY decisions.
+- Deferred: tests/smoke-48.4.sh login URL bug logged to deferred-items.md — Plan 01's deliverable to fix.
+- RVS-01..RVS-07 marked complete in REQUIREMENTS.md. STATE plan: 2 of 5.
+- Duration: 79 min.

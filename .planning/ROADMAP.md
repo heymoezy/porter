@@ -134,7 +134,7 @@
   Plans:
   - [ ] 48.4-01-PLAN.md — Wave 0 smoke harness (tests/smoke-48.4.sh + Playwright scaffold + fixture SQL covering RVS-01..RVS-14)
   - [ ] 48.4-02-PLAN.md — Backend admin/dreams.ts (5 endpoints + transactional accept matrix) + workflow-engine memory_proposals_expire handler + dream-worker SSE broadcasts (RVS-01..RVS-07)
-  - [ ] 48.4-03-PLAN.md — Frontend /dreams route + sidebar Moon nav entry + ProposalKindBadge + useAdminSSE invalidation + list view with filters + Run Now (RVS-08, RVS-09)
+  - [x] 48.4-03-PLAN.md — Frontend /dreams route + sidebar Moon nav entry + ProposalKindBadge + useAdminSSE invalidation + list view with filters + Run Now (RVS-08, RVS-09)
   - [ ] 48.4-04-PLAN.md — ProposalDetailDrawer + DiffBlock + accept/reject mutations + delete-kind confirmation modal + failure-mode toasts + expanded run-history sidebar (RVS-10, RVS-11, RVS-12)
   - [ ] 48.4-05-PLAN.md — Version v6.16.0 → v6.17.0 + ship + RVS-13 full E2E Playwright + full smoke green + live human-verify (dispatch → SSE → accept → directive injected in next CLI session)
 
@@ -464,3 +464,4 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 45. Porter Control Plane | 2/2 | Complete    | 2026-04-03 | - |
 | 46. Project Monitoring | 3/3 | Complete    | 2026-04-03 | - |
 | 47. Project Substrate | 3/3 | Complete    | 2026-04-03 | - |
+| 48.4. Review Surface | v6.0 | 3/5 | In Progress | - |

@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.4-02-PLAN.md (admin/dreams.ts + transactional accept/reject + memory_proposals_expire workflow + dream-worker SSE wiring; all 5 endpoints verified live at v6.16.0)
-last_updated: "2026-05-13T17:10:23.714Z"
+stopped_at: Completed 48.4-03-PLAN.md (Dreams admin list page + sidebar nav + SSE addEventListener refactor — fixes dormant repo-wide bug; build artifacts on disk; live verification deferred to Plan 05 restart)
+last_updated: "2026-05-13T18:23:23.360Z"
 progress:
   total_phases: 18
   completed_phases: 17
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 48.4 (review-surface) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Plan: 2 of 5
 | Phase 48.3-software-dream-worker P05 | 132 min | 3 tasks | 9 files |
 | Phase 48.4 P01 | 23 min | 3 tasks | 3 files |
 | Phase 48.4-review-surface P02 | 79min | 4 tasks | 4 files |
+| Phase 48.4 P03 | 45min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -208,6 +209,11 @@ Plan: 2 of 5
 - [Phase 48.4-review-surface]: [Phase 48.4-02]: Empty-corpus dream run still broadcasts dreams:run-completed (proposals_extracted=0) so UI clears the running pill on quiet weeks. Only proposals:created is gated on parsed.proposals.length>0. 4 broadcast sites total in dream-worker (1 proposals:created + 3 dreams:run-completed for success/empty/failure).
 - [Phase 48.4-review-surface]: [Phase 48.4-02]: Pre-flight order in accept handler: NOT_FOUND → INVALID_STATE → TARGET_GONE (rowCount != length) → SILO_MISMATCH (scope/scope_id check) → SEALED_SEED (source_type=moe-direct for delete/supersede/merge). All ROLLBACK before returning. DB trigger directive_immutable_moe_direct remains as defense-in-depth.
 - [Phase 48.4-review-surface]: [Phase 48.4-02]: Cleanup of sealed-seed test fixtures requires BEGIN; SET LOCAL porter.allow_moe_direct_mutation='true'; DELETE; COMMIT; — the immutability trigger blocks ordinary DELETEs even from psql.
+- [Phase 48.4-review-surface]: [Phase 48.4-03]: SSE refactor from es.onmessage to es.addEventListener fixes dormant repo-wide bug — backend writes named SSE events (event: <topic>), which never fired on .onmessage. All existing bridge:*/agent:*/profile:updated listeners now actually fire after next Porter restart.
+- [Phase 48.4-review-surface]: [Phase 48.4-03]: Each named SSE topic gets its own explicit es.addEventListener call (20 total) — not a single helper — because the gate required grep -c >= 4 verifying the refactor was real. parsed() helper wraps JSON.parse + error swallow once.
+- [Phase 48.4-review-surface]: [Phase 48.4-03]: Silo Select hardcodes software + software-smoke-48.4 for v1 — no /api/admin/silos endpoint exists yet. Future enhancement: useQuery against that endpoint when it ships.
+- [Phase 48.4-review-surface]: [Phase 48.4-03]: Raw <table> + animate-pulse skeletons matching approvals.tsx precedent (no shadcn Table/Skeleton primitives in this repo). Card + Badge + Button + Select shadcn primitives all exist and used as planned.
+- [Phase 48.4-review-surface]: [Phase 48.4-03]: selectedProposalId state stored on row click + exposed as data-testid='selected-proposal-marker' invisible div for Plan 04 drawer to consume. No drawer rendered yet.
 
 ### Pending Todos
 
@@ -220,6 +226,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-13T17:08:53.702Z
-Stopped at: Completed 48.4-02-PLAN.md (admin/dreams.ts + transactional accept/reject + memory_proposals_expire workflow + dream-worker SSE wiring; all 5 endpoints verified live at v6.16.0)
+Last session: 2026-05-13T18:23:23.356Z
+Stopped at: Completed 48.4-03-PLAN.md (Dreams admin list page + sidebar nav + SSE addEventListener refactor — fixes dormant repo-wide bug; build artifacts on disk; live verification deferred to Plan 05 restart)
 Resume file: None
