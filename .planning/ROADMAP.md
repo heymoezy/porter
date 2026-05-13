@@ -124,7 +124,7 @@
   - [x] 48.3-03-PLAN.md — Prompt template at silos.prompt_path + dream-sampler.ts (stratified deterministic) + dream-parser.ts (Zod + parseDreamResponse + validateRefinementDoctrine + assignSortOrder) (DRW-03, DRW-06, DRW-07)
   - [x] 48.3-04-PLAN.md — dream-worker.ts entry + dispatchDream (direct routingEngine, raw by omission) + transactional insert + 5 guards (concurrency, skip-recent, empty-corpus, sealed-seed, target-id-exists) + workflow-engine wiring (DRW-04, DRW-05, DRW-06, DRW-07, DRW-10, DRW-11)
   - [ ] 48.3-05-PLAN.md — Admin endpoints (POST /dream-run + GET /dream-runs/:id, admin-capped, 127.0.0.1) + version v6.16.0 + ship + live unmocked human-verify proving raw-passthrough on real Sonnet dispatch (DRW-04, DRW-05, DRW-09, DRW-12, DRW-13)
-- [ ] **Phase 48.4: Review Surface** — Admin UI Dreams tab with silo filter, transactional accept/reject handlers, auto-expiry, event-stream wiring.
+- [x] **Phase 48.4: Review Surface** — Admin UI Dreams tab with silo filter, transactional accept/reject handlers, auto-expiry, event-stream wiring. (completed 2026-05-13)
 
   **Goal**: Close the silo-scoped dream loop with a human review surface. Admin UI at `/dreams` lists silo-tagged `memory_proposals` with filter + detail drawer; accept handler is a single PostgreSQL transaction implementing the 4-kind matrix (new_directive INSERT, supersede UPDATE, merge INSERT+archive×N, delete soft-archive) with FOR UPDATE row locks + pre-flight SEALED_SEED/SILO_MISMATCH/TARGET_GONE checks + atomic intellect_events audit row + post-commit SSE broadcast. Auto-expiry workflow (every_24h) flips stale pending proposals to expired. SSE topics `proposals:created`, `proposals:resolved`, `dreams:run-completed` wire real-time admin UI updates via React Query invalidation — no polling. Once 48.4 ships, the full cycle closes: capture → dispatch → propose → review → directive update → next session's silo loads the refinement.
   **Depends on**: Phase 48.3 (memory_proposals + dream_runs schema + dream-worker emitting proposals)
@@ -464,4 +464,4 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 45. Porter Control Plane | 2/2 | Complete    | 2026-04-03 | - |
 | 46. Project Monitoring | 3/3 | Complete    | 2026-04-03 | - |
 | 47. Project Substrate | 3/3 | Complete    | 2026-04-03 | - |
-| 48.4. Review Surface | 4/5 | In Progress|  | - |
+| 48.4. Review Surface | 5/5 | Complete   | 2026-05-13 | - |

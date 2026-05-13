@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: "Completed 48.4-04-PLAN.md (Dreams admin detail drawer + accept/reject mutations + delete-kind confirmation + 6 failure-code toasts via sonner + expanded run-history sidebar + window dreams:run-completed listener; RVS-10/10b/11/12 un-skipped; only RVS-13 + Plan 05 ship remain)"
-last_updated: "2026-05-13T19:38:07.233Z"
+stopped_at: "Completed 48.4-05-PLAN.md (v6.17.0 shipped; Dream Silos series complete: full smoke 4-phase green + Playwright 7/7 green + autonomous live verify 9-step pipeline confirmed end-to-end with next-CLI directive injection)"
+last_updated: "2026-05-13T22:09:51.628Z"
 progress:
   total_phases: 18
   completed_phases: 17
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 ## Current Position
 
-Phase: 48.4 (review-surface) — EXECUTING
-Plan: 4 of 5
+Phase: 48.4 (review-surface) — COMPLETE
+Plan: 5 of 5
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Plan: 4 of 5
 | Phase 48.4-review-surface P02 | 79min | 4 tasks | 4 files |
 | Phase 48.4 P03 | 45min | 3 tasks | 6 files |
 | Phase 48.4-review-surface P04 | 42min | 5 tasks | 6 files |
+| Phase 48.4-review-surface P05 | 128min | 4 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -221,6 +222,11 @@ Plan: 4 of 5
 - [Phase 48.4-review-surface]: [Phase 48.4-04]: GET /api/admin/intelligence/directives/:id endpoint does NOT exist (verified by grep). Target fetch in drawer try/catches and returns null; DiffBlock renders only when fetch succeeds — graceful degradation. Add endpoint when fine-grained diff preview becomes a felt need.
 - [Phase 48.4-review-surface]: [Phase 48.4-04]: runFilter state on dreams.tsx — clicking 'view' on a run row narrows the proposals table to that dream_run_id via queryKey + dream_run_id URL param. 'Clear run filter' button in card header resets it. Active row gets bg-surface/60 visual cue.
 - [Phase 48.4-review-surface]: [Phase 48.4-04]: Per-route window 'dreams:run-completed' listener (NOT global) — toasts fire only while reviewer is on /dreams page. Cleanup on unmount. Plan 03 already dispatches the CustomEvent from useAdminSSE.
+- [Phase 48.4-review-surface]: [Phase 48.4-05]: systemd --user restart porter-fastify can race and leave the old PID running; /health continues reporting the previous version. Canonical ship sequence is systemctl stop → sleep 3 → pkill -9 -f "porter/backend|porter-fastify|tsx src/index.ts" → sleep 3 → systemctl start → sleep 10 → verify /health.
+- [Phase 48.4-review-surface]: [Phase 48.4-05]: Sonner toast Playwright selector is [data-sonner-toast] (the visible <li>) not [data-sonner-toaster] (the CSS-hidden <ol> wrapper). Filtering on the <ol> fails strict-mode visibility assertions.
+- [Phase 48.4-review-surface]: [Phase 48.4-05]: SSE broadcast fanout channel is /api/events (single channel, see backend/src/routes/events.ts) — not /api/admin/events. proposals:created + proposals:resolved + dreams:run-completed events all fanout through this single endpoint.
+- [Phase 48.4-review-surface]: [Phase 48.4-05]: Admin login credentials are moe@askporter.app / porter (NOT moe@themozaic.com — that's a stale MEMORY.md note; users table verified). Login endpoint is /api/v1/auth/login (NOT /api/auth/login).
+- [Phase 48.4-review-surface]: [Phase 48.4-05]: Mock-injection for autonomous live verify: POST /api/v1/intellect/dream-run body field _mock_response_path with a doctrine-compliant fixture (dream-response-software.json) gives <30ms deterministic pipeline traversal. Production never sets this field. RVS-13 Playwright + autonomous verify both use it.
 
 ### Pending Todos
 
@@ -233,6 +239,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-13T19:38:07.228Z
-Stopped at: Completed 48.4-04-PLAN.md (Dreams admin detail drawer + accept/reject mutations + delete-kind confirmation + 6 failure-code toasts via sonner + expanded run-history sidebar + window dreams:run-completed listener; RVS-10/10b/11/12 un-skipped; only RVS-13 + Plan 05 ship remain)
+Last session: 2026-05-13T22:07:09.566Z
+Stopped at: Completed 48.4-05-PLAN.md (v6.17.0 shipped; Dream Silos series complete: full smoke 4-phase green + Playwright 7/7 green + autonomous live verify 9-step pipeline confirmed end-to-end with next-CLI directive injection)
 Resume file: None
