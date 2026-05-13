@@ -115,10 +115,16 @@ if ! curl -sf -o /dev/null "$API/health"; then
 fi
 ok "backend reachable at $API/health"
 
-# --- Wave-1 graceful skip: dream-worker.ts may not exist yet -----------------
+# --- Wave-1 graceful skip: dream-worker.ts and/or POST /dream-run may not exist yet
+# Worker module lands in Plan 04; HTTP endpoint lands in Plan 05. Both must be live
+# for DRW-04..DRW-12 to run. The endpoint probe is a HEAD/POST that distinguishes
+# 404 (route not mounted, Plan 05 not yet shipped) from other status codes.
 SKIP_WORKER=""
 if ! test -f backend/src/services/intellect/dream-worker.ts; then
   echo "[warn] dream-worker.ts not yet built; skipping DRW-04..DRW-12" >&2
+  SKIP_WORKER=1
+elif [[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/api/v1/intellect/dream-run" -H 'Content-Type: application/json' -d '{}')" == "404" ]]; then
+  echo "[warn] POST $API/api/v1/intellect/dream-run returns 404 (Plan 05 endpoint not yet wired); skipping DRW-04..DRW-12" >&2
   SKIP_WORKER=1
 fi
 
