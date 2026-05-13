@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.3-04-PLAN.md (dream-worker pipeline + workflow-engine wiring + smoke fixes)
-last_updated: "2026-05-13T09:23:29.122Z"
+stopped_at: Completed 48.3-05-PLAN.md (manual dream-run endpoint + v6.16.0 ship + live raw-passthrough proven)
+last_updated: "2026-05-13T12:11:27.718Z"
 progress:
   total_phases: 18
   completed_phases: 17
@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 ## Current Position
 
-Phase: 48.3 (software-dream-worker) — EXECUTING
+Phase: 48.3 (software-dream-worker) — COMPLETE (all 5 plans shipped)
 Plan: 5 of 5
 
 ## Performance Metrics
@@ -45,6 +45,7 @@ Plan: 5 of 5
 | Phase 48.3-software-dream-worker P02 | 32min | 5 tasks | 5 files |
 | Phase 48.3-software-dream-worker P03 | 37 min | 3 tasks | 3 files |
 | Phase 48.3-software-dream-worker P04 | 63 min | 3 tasks | 5 files |
+| Phase 48.3-software-dream-worker P05 | 132 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -187,6 +188,11 @@ Plan: 5 of 5
 - [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: Skip-recent guard fires only for triggeredBy='schedule' (manual triggers ALWAYS run). every_week scheduler + manual /dream-run button compose cleanly — manual won't double-fire after scheduled run, manual won't false-skip on debug re-runs.
 - [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: Empty corpus is SUCCESS not failure — quiet week (zero captured turns in 7 days) finalizes dream_runs.status='completed' with proposals_extracted=0, model_used='n/a (empty corpus)', dispatch skipped.
 - [Phase 48.3-software-dream-worker]: [Phase 48.3-04]: Smoke harness DRW-04..DRW-12 still skip after Plan 04 because POST /api/v1/intellect/dream-run is Plan 05's deliverable. SKIP_WORKER gate widened with 404-probe so harness exits 0 with schema-only green; full path auto-turns-on when Plan 05 mounts endpoint. Pipeline correctness verified inline via /tmp/dream-worker-{mock,failure}-smoke.mjs.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-05]: Two endpoints (POST /dream-run + GET /dream-runs/:id) match /silo-command + /transcript/turn 127.0.0.1-only posture exactly; NO auth middleware. Server-level bind IS the protection.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-05]: Mock injection moved from env var to body field (_mock_response_path) because env vars don't propagate across HTTP. Production never sets it; tests/smoke-48.3.sh is the only consumer.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-05]: Bridge circuit-breaker action was a no-op (broken since opossum 9 adoption). Fixed by replacing noop with runThunk = async (fn) => fn(); also bumped timeout 30s → 180s. Dormant Bridge-wide because chat goes through dispatchStream which bypasses breaker.fire — dream-worker is the first real consumer of non-streaming dispatch.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-05]: Live unmocked Sonnet 4.6 dispatch verified raw passthrough by omission — bridge_dispatch_log row's agent_id/chat_id/project_id/skills_used/dispatch_strategy all NULL (Memory V3/skills/doctrine only fire when those fields are set). 72.7s real dispatch, 6362 output tokens, Layer 2 doctrine fired on real model output.
+- [Phase 48.3-software-dream-worker]: [Phase 48.3-05]: bridge_dispatch_log.system_prompt does NOT exist on live schema — the plan's textual raw-passthrough check substituted with structural NULL-set proof on context-tracking columns (logically equivalent, stronger evidence).
 
 ### Pending Todos
 
@@ -199,6 +205,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-13T09:19:11.368Z
-Stopped at: Completed 48.3-04-PLAN.md (dream-worker pipeline + workflow-engine wiring + smoke fixes)
+Last session: 2026-05-13T12:07:00.489Z
+Stopped at: Completed 48.3-05-PLAN.md (manual dream-run endpoint + v6.16.0 ship + live raw-passthrough proven)
 Resume file: None
