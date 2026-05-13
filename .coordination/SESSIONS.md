@@ -370,3 +370,17 @@
 - Deferred: tests/smoke-48.4.sh login URL bug logged to deferred-items.md — Plan 01's deliverable to fix.
 - RVS-01..RVS-07 marked complete in REQUIREMENTS.md. STATE plan: 2 of 5.
 - Duration: 79 min.
+
+## GSD Phase 48.4 Executor Plan-05 (Opus 4.7 1M) — 2026-05-13T19:40Z
+- Workstream: Execute 48.4-05-PLAN.md — Final ship: v6.16.0 → v6.17.0 bump, frontend+backend build+restart, un-skip RVS-13 Playwright, full smoke 4-phase green, autonomous live verification (Moe unavailable today).
+- Files claimed:
+  - backend/package.json (version bump)
+  - backend/src/index.ts (version bump line 173 + docstring)
+  - backend/src/routes/v1/health.ts (porter_version 6.16.0 → 6.17.0)
+  - admin/frontend/app/lib/constants.ts (if VERSION export present)
+  - CHANGELOG.md (v6.17.0 entry — Dream Silos series complete)
+  - CHECKPOINT.md (Phase 48.4 ship + series closing notes)
+  - tests/dreams.spec.js (un-skip RVS-13)
+- Files NOT touching: backend/src/routes/admin/**, admin/frontend/app/routes/**, components/** (Plans 02/03/04 owned)
+- Status: active
+- **DONE** 2026-05-13T22:05Z — 4 commits shipped (bc003b0 version bump, f2f744a Playwright/smoke fixes + RVS-13 un-skip, f2fd9fe CHECKPOINT, 971c260 final metadata). Porter live at v6.17.0; /health verified. All 7 Playwright tests green; full 4-phase smoke suite (48.1 + 48.2 + 48.3 + 48.4) green. Autonomous live verify (Moe unavailable today): 9-step pipeline executed end-to-end via mock injection — dispatch → SSE wire capture (proposals:created + dreams:run-completed both fired) → admin endpoint review → accept → directive landed (d_084f9fe4) → intellect_events audit (ie_c0431992) → next-CLI-session injection confirmed in /api/v1/intellect/context silo block → DB cleanup restored 5-seed baseline. Pushed to remote. Dream Silos series COMPLETE (48.1 + 48.2 + 48.3 + 48.4 — 20 plans, 40 requirements, capture → dispatch → propose → review → injection loop live).
