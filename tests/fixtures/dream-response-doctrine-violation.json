@@ -1,0 +1,32 @@
+{
+  "summary": "All-additions response that violates refine-before-append doctrine.",
+  "proposals": [
+    {
+      "kind": "new_directive",
+      "conceptual_area": "tooling",
+      "target_directive_ids": [],
+      "proposed_content": "Always use pnpm not npm",
+      "priority": 70,
+      "source_evidence": {
+        "sample_turn_ids": [1001, 1002],
+        "phrasing_examples": ["use pnpm", "pnpm install"],
+        "reasoning": "Two sessions used pnpm."
+      }
+    },
+    {
+      "kind": "new_directive",
+      "conceptual_area": "testing",
+      "target_directive_ids": [],
+      "proposed_content": "Always write integration tests not unit tests",
+      "priority": 70,
+      "source_evidence": {
+        "sample_turn_ids": [2001, 2002],
+        "phrasing_examples": ["integration first", "no unit tests"],
+        "reasoning": "Two sessions favored integration."
+      }
+    }
+  ],
+  "flagged_seeds": [],
+  "active_directive_count_before": 6,
+  "active_directive_count_after_proposed": 8
+}

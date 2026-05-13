@@ -1,0 +1,13 @@
+{
+  "summary": "Malformed fixture for parse failure exercise.",
+  "proposals": [
+    {
+      "kind": "new_directive",
+      "conceptual_area": "test",
+      "target_directive_ids": [],
+      "proposed_content": "Trailing comma below this object — parser must fail",
+      "priority": 70,
+      "source_evidence": {"sample_turn_ids":[1,2],"phrasing_examples":["x"],"reasoning":"y"},
+    },
+  ]
+}

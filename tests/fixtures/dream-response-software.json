@@ -1,0 +1,44 @@
+{
+  "summary": "Corpus shows reinforced design-system discipline across 24 sessions; one redundant rule subsumed by another; one new pattern emerged around compact spacing.",
+  "proposals": [
+    {
+      "kind": "delete",
+      "conceptual_area": "design-system",
+      "target_directive_ids": ["mp-smoke-target-stale"],
+      "proposed_content": "Stale rule never reinforced in 6 weeks; superseded by silo-sw-design-system. Archive.",
+      "priority": 70,
+      "source_evidence": {
+        "sample_turn_ids": [101, 102],
+        "phrasing_examples": ["use the design system not custom CSS", "always tokens not freehand"],
+        "reasoning": "Corpus has 12 reinforcing prompts for silo-sw-design-system and zero reinforcement for the older rule."
+      }
+    },
+    {
+      "kind": "supersede",
+      "conceptual_area": "component-discipline",
+      "target_directive_ids": ["mp-smoke-target-supersede"],
+      "proposed_content": "Always use components. Every UI element is a reusable component instance. If a needed component does not exist, create it in the library first.",
+      "priority": 70,
+      "source_evidence": {
+        "sample_turn_ids": [201, 202, 203],
+        "phrasing_examples": ["create the component first", "no inline JSX divs", "library before consumer"],
+        "reasoning": "Three sessions reinforce the create-first-then-consume pattern; previous wording was ambiguous."
+      }
+    },
+    {
+      "kind": "new_directive",
+      "conceptual_area": "ship-discipline",
+      "target_directive_ids": [],
+      "proposed_content": "Always restart porter-fastify after frontend rebuild. Backend serves statics; rebuild without restart = blank screen.",
+      "priority": 70,
+      "source_evidence": {
+        "sample_turn_ids": [301, 302],
+        "phrasing_examples": ["always restart after build", "never just rebuild"],
+        "reasoning": "Two sessions ran into the served-stale-bundle trap; pattern is consistent."
+      }
+    }
+  ],
+  "flagged_seeds": [],
+  "active_directive_count_before": 6,
+  "active_directive_count_after_proposed": 5
+}
