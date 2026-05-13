@@ -20,6 +20,7 @@ import decisionsRoutes from './decisions.js';
 import sessionsAdminRoutes from './sessions-admin.js';
 import costsRoutes from './costs.js';
 import evolutionRoutes from './evolution.js';
+import dreamsRoutes from './dreams.js';
 import msgBusRoutes from './msg-bus.js';
 import envToolsRoutes from './env-tools.js';
 import learningsRoutes from './learnings.js';
@@ -50,6 +51,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(sessionsAdminRoutes, { prefix: '/sessions' });
   fastify.register(costsRoutes, { prefix: '/costs' });
   fastify.register(evolutionRoutes, { prefix: '/evolution' });
+  fastify.register(dreamsRoutes, { prefix: '/dreams' });
   fastify.register(msgBusRoutes, { prefix: '/msg-bus' });
   fastify.register(envToolsRoutes, { prefix: '/env-tools' });
   fastify.register(learningsRoutes, { prefix: '/learnings' });
