@@ -39,12 +39,24 @@ export function getBreaker(
     return _breakers.get(gatewayId)!;
   }
 
-  // noop function — the breaker wraps external calls, not a specific function.
-  // Callers call breaker.fire(fn) with the actual async work.
-  const noop = async () => {};
+  // Generic action: the breaker wraps an arbitrary thunk per call.
+  // Callers do `breaker.fire(asyncFn)` and `asyncFn` runs through the circuit.
+  // Opossum invokes `this.action.apply(ctx, args)` so the wrapped action MUST
+  // call its first argument (the caller's fn) — a no-op action would ignore it
+  // and resolve to undefined, breaking every non-streaming dispatch. This was
+  // dormant until Phase 48.3 Plan 05's dream-worker became the first consumer
+  // of selectWithFallback that actually awaits the dispatch result (chat goes
+  // through dispatchStream which bypasses breaker.fire entirely).
+  const runThunk = async <T>(fn: () => Promise<T>): Promise<T> => fn();
 
-  const breaker = new CircuitBreaker(noop, {
-    timeout: 30_000,
+  const breaker = new CircuitBreaker(runThunk, {
+    // 180s mirrors dream-worker's BRIDGE_TIMEOUT_MS and the claude_cli adapter's
+    // own inner timeout. Streaming chats bypass this breaker entirely (see
+    // dispatchStream), so this only governs non-streaming selectWithFallback
+    // dispatches (dream-worker, ai-router from scheduler). The prior 30s was
+    // a holdover from the pre-Sonnet era — Sonnet refinement runs commonly
+    // take 60-120s with a full software-silo corpus.
+    timeout: 180_000,
     errorThresholdPercentage: 50,
     resetTimeout: 60_000,
     volumeThreshold: 3,

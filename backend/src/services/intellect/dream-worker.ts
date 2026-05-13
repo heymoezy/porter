@@ -347,6 +347,12 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
     triggeredByUser: args.triggeredByUser,
   });
 
+  // Hoisted so the catch block can stamp dream_runs.dispatch_id even when
+  // post-dispatch validation throws (e.g. doctrine violation). Without this the
+  // dispatch_id is lost on failure paths and the audit trail can't join to
+  // bridge_dispatch_log for raw-passthrough verification.
+  let capturedDispatchLogId: string | undefined;
+
   try {
     // ── 1. Load silo row ───────────────────────────────────
     const { rows: siloRows } = await pool.query<{
@@ -429,6 +435,9 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
       modelName,
       args.mockResponsePath,
     );
+    // Capture for the failure path so dream_runs.dispatch_id is populated even
+    // if post-dispatch validation (doctrine/parse/preflight) throws.
+    capturedDispatchLogId = dispatchLogId;
 
     // ── 8. Parse + Zod ─────────────────────────────────────
     const parsed = parseDreamResponse(response);
@@ -501,9 +510,10 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
       await pool.query(
         `UPDATE dream_runs SET status='failed',
                               completed_at=EXTRACT(EPOCH FROM NOW()),
-                              error_message=$1
-         WHERE id=$2`,
-        [truncated, dreamRunId],
+                              error_message=$1,
+                              dispatch_id=COALESCE(dispatch_id, $2)
+         WHERE id=$3`,
+        [truncated, capturedDispatchLogId ?? null, dreamRunId],
       );
     } catch {
       /* non-fatal — keep the original error for the caller */
