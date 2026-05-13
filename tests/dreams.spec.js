@@ -104,12 +104,12 @@ test.describe('Phase 48.4: Review Surface', () => {
 
   // ── RVS-10: Detail drawer + accept mutation ───────────────────────────────
   test.describe('RVS-10: proposal detail drawer + accept flow', () => {
-    test.skip(true, 'TODO: Enable in Plan 04 (drawer + accept/reject mutations)');
-
     test('RVS-10: clicking row opens drawer with full content + Accept lands directive', async ({ page }) => {
       await loginAdmin(page);
       await page.goto(`${ADMIN}/dreams`);
-      await page.getByLabel(/Silo/i).fill(SMOKE_SILO);
+      // Switch silo via Radix Select (not .fill — that targets text inputs)
+      await page.locator('#silo-filter').click();
+      await page.getByRole('option', { name: /software-smoke-48\.4/i }).click();
 
       // Click the new_directive row
       await page.locator('tr', { hasText: 'Always restart porter-fastify' }).click();
@@ -131,30 +131,28 @@ test.describe('Phase 48.4: Review Surface', () => {
 
   // ── RVS-10b: delete kind requires confirmation modal ──────────────────────
   test.describe('RVS-10b: delete kind confirmation modal', () => {
-    test.skip(true, 'TODO: Enable in Plan 04 (delete-kind confirmation modal)');
-
     test('RVS-10b: accept of delete-kind opens confirmation modal before archiving', async ({ page }) => {
       await loginAdmin(page);
       await page.goto(`${ADMIN}/dreams`);
-      await page.getByLabel(/Silo/i).fill(SMOKE_SILO);
+      await page.locator('#silo-filter').click();
+      await page.getByRole('option', { name: /software-smoke-48\.4/i }).click();
 
       await page.locator('tr', { hasText: 'Stale: no reinforcement signal' }).click();
       await page.getByRole('button', { name: /^Accept$/i }).click();
       // Confirmation modal opens (delete kind only)
       await expect(page.getByText(/Archive this directive/i)).toBeVisible();
-      await page.getByRole('button', { name: /Archive/i }).click();
-      await expect(page.getByText(/archived|deleted/i)).toBeVisible({ timeout: 5000 });
+      await page.getByRole('button', { name: /^Archive$/i }).click();
+      await expect(page.getByText(/accepted|directive landed/i)).toBeVisible({ timeout: 5000 });
     });
   });
 
   // ── RVS-11: Run-history sidebar lists recent runs ─────────────────────────
   test.describe('RVS-11: dream-runs sidebar tab', () => {
-    test.skip(true, 'TODO: Enable in Plan 04 (run-history sidebar)');
-
     test('RVS-11: recent runs section lists seeded run with status/model/counts', async ({ page }) => {
       await loginAdmin(page);
       await page.goto(`${ADMIN}/dreams`);
-      await page.getByLabel(/Silo/i).fill(SMOKE_SILO);
+      await page.locator('#silo-filter').click();
+      await page.getByRole('option', { name: /software-smoke-48\.4/i }).click();
 
       // Recent runs block visible
       await expect(page.getByText(/Recent runs|Dream runs/i)).toBeVisible();
@@ -165,12 +163,11 @@ test.describe('Phase 48.4: Review Surface', () => {
 
   // ── RVS-12: Failure-mode toasts ───────────────────────────────────────────
   test.describe('RVS-12: failure-mode toasts', () => {
-    test.skip(true, 'TODO: Enable in Plan 04 (failure-mode toast surfacing)');
-
     test('RVS-12: SEALED_SEED accept attempt surfaces error toast and leaves seed active', async ({ page }) => {
       await loginAdmin(page);
       await page.goto(`${ADMIN}/dreams`);
-      await page.getByLabel(/Silo/i).fill(SMOKE_SILO);
+      await page.locator('#silo-filter').click();
+      await page.getByRole('option', { name: /software-smoke-48\.4/i }).click();
 
       await page.locator('tr', { hasText: 'Targets a sealed-seed directive' }).click();
       await page.getByRole('button', { name: /^Accept$/i }).click();
