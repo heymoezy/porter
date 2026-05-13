@@ -3,6 +3,36 @@
 - docs(checkpoint): Tom unblock end-to-end green — "Tom from YMC Capital 👋" in 6.1s
 
 
+## v6.17.0 — Phase 48.4 Review Surface (Dream Silos series complete) (2026-05-13)
+
+### Added
+- **Admin Dreams page** (`/dreams` route in admin/frontend) — list of `memory_proposals` with silo + status filters, click-to-detail drawer, Accept/Reject mutations with toast feedback, delete-kind confirmation modal, simple line-diff preview for supersede/merge previews, expanded recent-runs sidebar with status badges + dispatch_id pills + per-run filter, Run Now button to dispatch a manual dream-run from the UI.
+- **Admin API endpoints** under `/api/admin/dreams/*` (admin-cap guarded, mirroring `/api/admin/evolution/*` shape): `GET /proposals` (list with filters + pagination + counts_by_status), `POST /proposals/:id/accept` (transactional 4-kind matrix: new_directive INSERT, supersede UPDATE, merge INSERT+archive×N, delete soft-archive — all with FOR UPDATE row locks, pre-flight SEALED_SEED + SILO_MISMATCH + TARGET_GONE checks, atomic intellect_events audit row, post-commit SSE broadcast), `POST /proposals/:id/reject` (single-statement UPDATE + audit + broadcast), `GET /runs` (list with correlated per-status counts), `GET /runs/:id` (run + nested proposals + dispatch detail).
+- **Auto-expiry workflow** — new BUILTIN entry `Expire stale memory proposals` (every_24h, action_type=`memory_proposals_expire`) flips `pending` proposals past `expires_at` to `expired`, writes one `intellect_events` audit row, broadcasts SSE `proposals:resolved` with `{event:'expired', count}`.
+- **SSE event topics**: `proposals:created` (fired by dream-worker post-INSERT-COMMIT when new proposals land), `proposals:resolved` (fired by accept/reject/expire handlers), `dreams:run-completed` (fired by dream-worker post-status-UPDATE on both completed + failed paths). All broadcasts are POST-COMMIT (Pitfall 1 enforced). Frontend `useAdminSSE` invalidates React Query caches on every event for true real-time UI updates with no polling.
+- **`<ProposalKindBadge/>` + `<ProposalDetailDrawer/>` + `<DiffBlock/>`** components in admin/frontend/app/components/, composed from existing shadcn primitives (Sheet, Dialog, Input, Button, Badge, Table, Card, Select, Skeleton). Zero one-off markup; single new npm dep (sonner) for toast surface.
+- **Smoke harness** `tests/smoke-48.4.sh` covering RVS-01..RVS-14 with smoke-silo isolation (`silo_id='software-smoke-48.4'`), idempotent cleanup, graceful skips. **Playwright spec** `tests/dreams.spec.js` covering RVS-08..RVS-13 with the auth-setup fixture pattern. **Seed fixture** `tests/fixtures/dreams-mock-proposals.sql` covers all 4 proposal_kind paths + SILO_MISMATCH + SEALED_SEED + expiry probes.
+
+### Changed
+- `dream-worker.ts` gets 4 new `broadcast()` call sites at post-commit/post-update insertion points (`proposals:created` after the proposal-INSERT transaction commits, `dreams:run-completed` after the final UPDATE of dream_runs.status on success / empty-corpus / failure paths).
+- `workflow-engine.ts` extends `actionHandlers` with `memory_proposals_expire` + adds the matching `BUILTIN_WORKFLOWS` entry. The handler uses the partial index `memory_proposals_expiry_idx` provisioned by 48.3-02 — sweep is index-only.
+- `admin/frontend/app/hooks/use-admin-sse.ts` refactored from `es.onmessage` to explicit `es.addEventListener(topic, ...)` per named topic (fixes dormant repo-wide SSE bug — backend writes named events which never fired on `onmessage`). 20 addEventListener calls now wired for bridge:*/agent:*/dreams:* topics; React Query cache invalidations on every event.
+- Sidebar nav adds **Dreams** under Ops (lucide Moon icon, between Intellect and Bridge).
+
+### Privacy & audit
+- Every accept and reject writes an `intellect_events` row (`event_type='proposal_accepted'` or `'proposal_rejected'`, `source_type='review_surface'`). Audit payload contains only proposal_id, dream_run_id, silo_id, proposal_kind, target_directive_ids_touched, reviewer — NEVER turn content, NEVER proposed_content body, NEVER source_evidence content.
+- Every auto-expiry sweep writes a single `proposals_expired` event with `{count, ids}` (capped at 20 ids).
+- Seed immutability enforced at two layers: pre-flight check in the accept handler (clearer 422 SEALED_SEED error) + `directive_immutable_moe_direct` PostgreSQL trigger as defense-in-depth.
+- Silo-mismatch enforced as a pre-flight 422 — `software` silo proposals cannot mutate other silos' directives.
+
+### Dream Silos series — complete (Phase 48.1 + 48.2 + 48.3 + 48.4)
+With this ship, the full closed loop is live:
+1. **48.1** seeded silo registry + silo-aware injection (CLI sessions in code projects get 4 software-silo directives injected at session start).
+2. **48.2** wired transcript capture (Stop + UserPromptSubmit hooks persist silo-tagged turns to `session_transcript_turns`; PII-scrubbed; 30-day retention).
+3. **48.3** shipped the Software Dream Worker (weekly model-driven consolidation reads silo-tagged transcripts, dispatches Sonnet 4.6 with raw passthrough, enforces refine-don't-append doctrine, writes structured `memory_proposals`).
+4. **48.4** (this release) closes the loop with the human review surface: Moe can see proposals, accept the good ones, reject the bad ones, and watch directives update in real-time. Next CLI session injects the refined rules.
+
+
 ## v6.16.0 — 2026-05-13 — Phase 48.3 Software Dream Worker
 
 ### Added
