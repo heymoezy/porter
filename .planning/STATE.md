@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.4-01-PLAN.md (Wave 0 smoke + Playwright scaffold + fixture SQL)
-last_updated: "2026-05-13T16:22:28.422Z"
+stopped_at: Completed 48.4-02-PLAN.md (admin/dreams.ts + transactional accept/reject + memory_proposals_expire workflow + dream-worker SSE wiring; all 5 endpoints verified live at v6.16.0)
+last_updated: "2026-05-13T17:10:23.714Z"
 progress:
   total_phases: 18
   completed_phases: 17
@@ -47,6 +47,7 @@ Plan: 2 of 5
 | Phase 48.3-software-dream-worker P04 | 63 min | 3 tasks | 5 files |
 | Phase 48.3-software-dream-worker P05 | 132 min | 3 tasks | 9 files |
 | Phase 48.4 P01 | 23 min | 3 tasks | 3 files |
+| Phase 48.4-review-surface P02 | 79min | 4 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -200,6 +201,13 @@ Plan: 2 of 5
 - [Phase 48.4]: [Phase 48.4-01]: Auto-expiry workflow contract DEFINED: BUILTIN_WORKFLOWS seed trigger_value='every_24h' + action_type='memory_proposals_expire'; handler UPDATE memory_proposals SET status='expired' WHERE pending AND expires_at < EXTRACT(EPOCH FROM NOW()); audit event + broadcast post-UPDATE. Smoke asserts workflow row presence unconditionally and falls back to direct SQL if /api/admin/workflows/run-by-action endpoint absent.
 - [Phase 48.4]: [Phase 48.4-01]: SILO_MISMATCH probe references the REAL silo-sw-design-system directive intentionally - smoke asserts accept-handler returns 422 AND real directive content remains unmutated (defense in depth against accidental cross-silo accept leak).
 - [Phase 48.4]: [Phase 48.4-01]: Playwright scaffold uses CommonJS require() not ESM import - matches tests/skill-evolution.spec.js precedent and tests/package.json (no type:module). loginAdmin helper uses #uname/#pw/.login-btn selectors with username moe (matches setup-auth.js + skill-evolution.spec.js).
+- [Phase 48.4-review-surface]: [Phase 48.4-02]: req.sessionUser?.username is the canonical reviewer pull (typed FastifyRequest property declared in plugins/auth.ts:11, populated by plugins/admin-auth.ts:37). admin/intelligence.ts:145 precedent. Never use req.session.username — that property does not exist on FastifyRequest.
+- [Phase 48.4-review-surface]: [Phase 48.4-02]: Drizzle $inferSelect types (MemoryProposalRow/DreamRunRow) are camelCase and ONLY apply through the ORM query builder. Raw pool.query returns snake_case column names. Mixing the two compiles silently but breaks at runtime — caught on first tsc pass; inline snake_case row types are correct for raw pg routes.
+- [Phase 48.4-review-surface]: [Phase 48.4-02]: Reject handler is symmetric-atomic with accept (single BEGIN/COMMIT/ROLLBACK on pool.connect() client). Keeps proposal-flip + intellect_events audit INSERT atomic; if the audit write fails, the flip rolls back.
+- [Phase 48.4-review-surface]: [Phase 48.4-02]: All admin/dreams SSE broadcasts are post-COMMIT (outside the try-with-resources around pool.connect). Reject handler stores siloId/dreamRunId in outer-scope vars to broadcast AFTER the finally release. Pitfall 1 enforcement.
+- [Phase 48.4-review-surface]: [Phase 48.4-02]: Empty-corpus dream run still broadcasts dreams:run-completed (proposals_extracted=0) so UI clears the running pill on quiet weeks. Only proposals:created is gated on parsed.proposals.length>0. 4 broadcast sites total in dream-worker (1 proposals:created + 3 dreams:run-completed for success/empty/failure).
+- [Phase 48.4-review-surface]: [Phase 48.4-02]: Pre-flight order in accept handler: NOT_FOUND → INVALID_STATE → TARGET_GONE (rowCount != length) → SILO_MISMATCH (scope/scope_id check) → SEALED_SEED (source_type=moe-direct for delete/supersede/merge). All ROLLBACK before returning. DB trigger directive_immutable_moe_direct remains as defense-in-depth.
+- [Phase 48.4-review-surface]: [Phase 48.4-02]: Cleanup of sealed-seed test fixtures requires BEGIN; SET LOCAL porter.allow_moe_direct_mutation='true'; DELETE; COMMIT; — the immutability trigger blocks ordinary DELETEs even from psql.
 
 ### Pending Todos
 
@@ -212,6 +220,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-13T16:18:18.361Z
-Stopped at: Completed 48.4-01-PLAN.md (Wave 0 smoke + Playwright scaffold + fixture SQL)
+Last session: 2026-05-13T17:08:53.702Z
+Stopped at: Completed 48.4-02-PLAN.md (admin/dreams.ts + transactional accept/reject + memory_proposals_expire workflow + dream-worker SSE wiring; all 5 endpoints verified live at v6.16.0)
 Resume file: None
