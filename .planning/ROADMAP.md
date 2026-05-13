@@ -126,6 +126,18 @@
   - [ ] 48.3-05-PLAN.md — Admin endpoints (POST /dream-run + GET /dream-runs/:id, admin-capped, 127.0.0.1) + version v6.16.0 + ship + live unmocked human-verify proving raw-passthrough on real Sonnet dispatch (DRW-04, DRW-05, DRW-09, DRW-12, DRW-13)
 - [ ] **Phase 48.4: Review Surface** — Admin UI Dreams tab with silo filter, transactional accept/reject handlers, auto-expiry, event-stream wiring.
 
+  **Goal**: Close the silo-scoped dream loop with a human review surface. Admin UI at `/dreams` lists silo-tagged `memory_proposals` with filter + detail drawer; accept handler is a single PostgreSQL transaction implementing the 4-kind matrix (new_directive INSERT, supersede UPDATE, merge INSERT+archive×N, delete soft-archive) with FOR UPDATE row locks + pre-flight SEALED_SEED/SILO_MISMATCH/TARGET_GONE checks + atomic intellect_events audit row + post-commit SSE broadcast. Auto-expiry workflow (every_24h) flips stale pending proposals to expired. SSE topics `proposals:created`, `proposals:resolved`, `dreams:run-completed` wire real-time admin UI updates via React Query invalidation — no polling. Once 48.4 ships, the full cycle closes: capture → dispatch → propose → review → directive update → next session's silo loads the refinement.
+  **Depends on**: Phase 48.3 (memory_proposals + dream_runs schema + dream-worker emitting proposals)
+  **Requirements**: RVS-01, RVS-02, RVS-03, RVS-04, RVS-05, RVS-06, RVS-07, RVS-08, RVS-09, RVS-10, RVS-11, RVS-12, RVS-13, RVS-14
+  **Plans:** 5 plans
+
+  Plans:
+  - [ ] 48.4-01-PLAN.md — Wave 0 smoke harness (tests/smoke-48.4.sh + Playwright scaffold + fixture SQL covering RVS-01..RVS-14)
+  - [ ] 48.4-02-PLAN.md — Backend admin/dreams.ts (5 endpoints + transactional accept matrix) + workflow-engine memory_proposals_expire handler + dream-worker SSE broadcasts (RVS-01..RVS-07)
+  - [ ] 48.4-03-PLAN.md — Frontend /dreams route + sidebar Moon nav entry + ProposalKindBadge + useAdminSSE invalidation + list view with filters + Run Now (RVS-08, RVS-09)
+  - [ ] 48.4-04-PLAN.md — ProposalDetailDrawer + DiffBlock + accept/reject mutations + delete-kind confirmation modal + failure-mode toasts + expanded run-history sidebar (RVS-10, RVS-11, RVS-12)
+  - [ ] 48.4-05-PLAN.md — Version v6.16.0 → v6.17.0 + ship + RVS-13 full E2E Playwright + full smoke green + live human-verify (dispatch → SSE → accept → directive injected in next CLI session)
+
 ## Phase Details
 
 ### Phase 31: Source of Truth Cleanup

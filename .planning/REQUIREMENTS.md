@@ -96,6 +96,23 @@
 - [x] **DRW-12**: Phase 48.4 read contract — `memory_proposals` indexes (silo_id, status, created_at DESC) and (dream_run_id, sort_order ASC) serve 48.4's list-pending-by-silo + group-by-run queries; partial index (status, expires_at) WHERE status='pending' serves the daily expiry sweep; sort_order guarantees refinement-before-append display ordering in 48.4
 - [x] **DRW-13**: Smoke harness `tests/smoke-48.3.sh` covers DRW-01..DRW-12 with mock-injection via `DREAM_WORKER_MOCK_RESPONSE_PATH` + 3 hand-crafted fixtures (doctrine-compliant, malformed JSON, doctrine-violation); idempotent + self-cleaning via throwaway `silo_id='software-smoke-48.3'`; graceful skip for pre-implementation waves; poll-with-timeout for async worker
 
+### Review Surface (Phase 48.4)
+
+- [ ] **RVS-01**: `GET /api/admin/dreams/proposals` lists memory_proposals rows with filters (silo_id, status, dream_run_id), pagination (limit≤200, offset), ordered by created_at DESC + sort_order ASC; response envelope `ok({proposals, count, total, counts_by_status})`; admin-cap guarded; uses memory_proposals_silo_status_created_idx (DRW-12 read contract)
+- [ ] **RVS-02**: `POST /api/admin/dreams/proposals/:id/accept` is a single PostgreSQL transaction (BEGIN/COMMIT/ROLLBACK) that re-reads proposal + targets FOR UPDATE, executes the kind-specific directive mutation per the Accept Handler Matrix (new_directive INSERT, supersede UPDATE, merge INSERT+archive×N, delete UPDATE status='archived'), flips status='accepted' + reviewed_at + reviewed_by, writes intellect_events row, broadcasts proposals:resolved SSE event post-commit; admin-cap guarded; pre-flight SILO_MISMATCH (422) + SEALED_SEED (422 for delete/supersede/merge on source_type='moe-direct') + TARGET_GONE (410) + INVALID_STATE (409 re-accept); 500 ACCEPT_FAILED on unexpected errors
+- [ ] **RVS-03**: `POST /api/admin/dreams/proposals/:id/reject` single-statement UPDATE flips status='rejected' + reviewed_at + reviewed_by, writes intellect_events event_type='proposal_rejected' with optional reason, broadcasts proposals:resolved SSE event; admin-cap guarded; idempotent (re-reject 409 INVALID_STATE)
+- [ ] **RVS-04**: `GET /api/admin/dreams/runs` lists dream_runs rows with optional silo_id + status filter, default sort started_at DESC, joined with correlated per-status counts (proposals_count + pending_count + accepted_count + rejected_count + expired_count); pagination ≤ 100 default 20; admin-cap guarded; uses dream_runs_silo_started_idx
+- [ ] **RVS-05**: `GET /api/admin/dreams/runs/:id` returns the full run row + the proposals it generated (ordered by sort_order ASC) + the bridge_dispatch_log row (LEFT JOIN on dispatch_id, returns null when absent); admin-cap guarded; uses memory_proposals_run_sort_idx
+- [ ] **RVS-06**: Auto-expiry workflow row + handler — new BUILTIN_WORKFLOWS entry `Expire stale memory proposals` (trigger_value='every_24h', action_type='memory_proposals_expire', action_config={}) + new actionHandlers map entry that flips pending rows with expires_at < EXTRACT(EPOCH FROM NOW()) to 'expired', writes one intellect_events row (event_type='proposals_expired') with swept count + capped ids, broadcasts proposals:resolved SSE event with `{event:'expired', count}` payload; uses partial index memory_proposals_expiry_idx (status, expires_at) WHERE status='pending'
+- [ ] **RVS-07**: SSE event broadcasts: (a) `proposals:created` fired by runDreamWorker post-INSERT-COMMIT (one event per run, payload `{dream_run_id, silo_id, count}`, gated on parsed.proposals.length > 0); (b) `proposals:resolved` fired by accept/reject/expire handlers (single-row `{proposal_id, status, silo_id, dream_run_id}`; bulk `{event:'expired', count}`); (c) `dreams:run-completed` fired by dream-worker post-UPDATE-status on both success AND failure paths (payload `{dream_run_id, silo_id, status, proposals_extracted}`). All broadcasts are POST-COMMIT (never inside the open transaction)
+- [ ] **RVS-08**: Frontend route `/dreams` registered in admin/frontend/app/routes.ts; sidebar nav entry 'Dreams' added to Ops group between Intellect and Bridge (lucide Moon icon); guarded by the AdminShell platform-admin auth layer
+- [ ] **RVS-09**: Dreams list view (admin/frontend/app/routes/dreams.tsx) with header (Moon icon + title + counts strip + Refresh + Run Now), silo filter Select (default 'software'), status filter Select (default 'pending'), proposals table (Kind / Target / Content truncated / Source / Created relative / Status / Action ▸), React Query keyed `['admin','dreams','proposals',silo,status]`, SSE invalidates that key on every event, empty/loading/error states use shadcn primitives
+- [ ] **RVS-10**: Proposal detail drawer (admin/frontend/app/components/ProposalDetailDrawer.tsx) triggered by row click, shows full proposed_content + proposed_metadata + target preview (DiffBlock for supersede when target fetch succeeds) + full source_evidence JSON + optional reject reason input + Accept/Reject buttons; Accept of `delete` kind requires shadcn Dialog confirmation modal ('Archive this directive?'); mutations invalidate list query on success
+- [ ] **RVS-11**: Dream-runs sidebar block on /dreams shows chronological list of last 20 runs with status badge + run id (monospace) + model + proposals_count + duration + dispatch_id pill (12-char prefix, optional link to /bridge/dispatches/:id if route exists); clicking 'view' on a run sets a runFilter that narrows the proposals table to dream_run_id=run.id; React Query keyed `['admin','dreams','runs',silo]`; SSE invalidates on dreams:run-completed
+- [ ] **RVS-12**: Failure modes surfaced via toast (sonner OR shadcn useToast — Plan 04 verifies which is wired): 404 NOT_FOUND → 'Proposal not found' + invalidate; 409 INVALID_STATE → 'Proposal status changed — list refreshed' + invalidate; 410 TARGET_GONE → 'Target directive no longer exists' + invalidate; 422 SEALED_SEED → 'Seed directives are protected'; 422 SILO_MISMATCH → 'Proposal targets wrong silo'; 500 ACCEPT_FAILED → 'Accept failed — please retry'; SSE disconnect is non-fatal (EventSource auto-reconnects per existing useAdminSSE pattern); manual Refresh button always available as fallback
+- [ ] **RVS-13**: Playwright spec at `tests/dreams.spec.js` covers RVS-08..RVS-12 with `auth.setup` fixture + per-test `beforeEach` SQL seed of dreams-mock-proposals.sql + `afterEach` cleanup; RVS-13 itself is the full E2E loop: API-dispatch dream-run via POST /api/v1/intellect/dream-run → poll dream_runs.status until terminal → assert SSE-driven proposal appearance in UI → click row → assert detail drawer → click Accept → assert toast + DB write of new directive with source_type='dream_worker' → assert intellect_events row event_type='proposal_accepted'
+- [ ] **RVS-14**: Smoke harness `tests/smoke-48.4.sh` covers RVS-01..RVS-12 with seeded mock proposals (via `tests/fixtures/dreams-mock-proposals.sql`), curl exercises of every endpoint, accept→directive-landed verification for ALL 4 proposal_kind variants, reject + idempotent re-reject, expiry sweep verification, SSE broadcast verification (background curl -N + grep for event name), SILO_MISMATCH + SEALED_SEED + TARGET_GONE pre-flight assertions; idempotent + self-cleaning via throwaway `silo_id='software-smoke-48.4'`; graceful skip for pre-implementation waves
+
 ## v7.0 Requirements (Deferred)
 
 ### Self-Improvement
@@ -181,12 +198,26 @@
 | DRW-11 | Phase 48.3 | Pending (48.3-04) |
 | DRW-12 | Phase 48.3 | Pending (48.3-02 + 48.3-04) |
 | DRW-13 | Phase 48.3 | Pending (48.3-01) |
+| RVS-01 | Phase 48.4 | Pending (48.4-02) |
+| RVS-02 | Phase 48.4 | Pending (48.4-02) |
+| RVS-03 | Phase 48.4 | Pending (48.4-02) |
+| RVS-04 | Phase 48.4 | Pending (48.4-02) |
+| RVS-05 | Phase 48.4 | Pending (48.4-02) |
+| RVS-06 | Phase 48.4 | Pending (48.4-02) |
+| RVS-07 | Phase 48.4 | Pending (48.4-02 + 48.4-05 live-verify) |
+| RVS-08 | Phase 48.4 | Pending (48.4-03) |
+| RVS-09 | Phase 48.4 | Pending (48.4-03) |
+| RVS-10 | Phase 48.4 | Pending (48.4-04) |
+| RVS-11 | Phase 48.4 | Pending (48.4-04) |
+| RVS-12 | Phase 48.4 | Pending (48.4-04) |
+| RVS-13 | Phase 48.4 | Pending (48.4-01 scaffold + 48.4-05 live E2E) |
+| RVS-14 | Phase 48.4 | Pending (48.4-01) |
 
 **Coverage:**
-- v6.0 requirements: 56 total (35 prior + 8 TRC for Phase 48.2 + 13 DRW for Phase 48.3)
-- Mapped to phases: 56
+- v6.0 requirements: 70 total (35 prior + 8 TRC for Phase 48.2 + 13 DRW for Phase 48.3 + 14 RVS for Phase 48.4)
+- Mapped to phases: 70
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-02 — traceability populated by roadmapper*
+*Last updated: 2026-05-13 — RVS-01..RVS-14 added for Phase 48.4 Review Surface*
