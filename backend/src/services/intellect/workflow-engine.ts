@@ -51,6 +51,8 @@ export type WorkflowActionType =
   | 'skill_evolve'
   | 'subscription_check'
   | 'transcript_retain'
+  | 'dream_run'                 // Phase 48.3 — placeholder, real wiring in 48.3-04
+  | 'dream_runs_stuck_sweep'    // Phase 48.3 — fully wired here
   | 'noop';
 
 export interface WorkflowRow {
@@ -100,6 +102,26 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
   skill_evolve: async () => runSkillEvolution(),
   subscription_check: async () => runSubscriptionCheck(),
   transcript_retain: async () => runTranscriptRetention(pool),
+  dream_run: async (_ctx, _config) => {
+    // Placeholder — real wiring lands in Plan 48.3-04 when dream-worker.ts ships.
+    // Throwing (not silently noop'ing) makes any pre-04 every_week tick visible in intellect_events.
+    throw new Error('NOT_IMPLEMENTED: dream_run handler awaits Plan 48.3-04 (dream-worker.ts)');
+  },
+  dream_runs_stuck_sweep: async () => {
+    const result = await pool.query(
+      `UPDATE dream_runs
+         SET status='failed',
+             error_message='Worker process lost (stuck in running >30min)',
+             completed_at=EXTRACT(EPOCH FROM NOW())
+       WHERE status='running'
+         AND started_at < EXTRACT(EPOCH FROM NOW()) - 1800`,
+    );
+    const swept = result.rowCount ?? 0;
+    if (swept > 0) {
+      console.log(`[dream_runs_stuck_sweep] flipped ${swept} stuck run(s) to failed`);
+    }
+    return { swept };
+  },
   noop: async () => null,
 };
 
@@ -294,6 +316,20 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_type: 'schedule',
     trigger_value: 'every_24h',
     action_type: 'transcript_retain',
+  },
+  {
+    name: 'Software dream — weekly consolidation',
+    trigger_type: 'schedule',
+    trigger_value: 'every_week',
+    action_type: 'dream_run',
+    action_config: { silo_id: 'software' },
+  },
+  {
+    name: 'Sweep stuck dream runs (>30 min)',
+    trigger_type: 'schedule',
+    trigger_value: 'every_30m',
+    action_type: 'dream_runs_stuck_sweep',
+    action_config: {},
   },
 ];
 
