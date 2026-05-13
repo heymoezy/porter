@@ -36,6 +36,7 @@ const NEWSLETTER_DIGEST_INTERVAL = 10800; // 10800 ticks x 2s = 6h — run newsl
 const MEMORY_VALIDATION_INTERVAL = 900;  // 900 ticks x 2s = 30 min — validate memory references
 const DISPATCH_SCORING_INTERVAL = 10800; // 10800 ticks x 2s = 6h — auto-score recent dispatches
 const INTELLECT_DAILY_INTERVAL = 43200;  // 43200 ticks x 2s = 24h — daily intellect maintenance (prune, mine)
+const INTELLECT_WEEKLY_INTERVAL = 302400; // 302400 ticks x 2s = 7d — weekly intellect maintenance (dream workers)
 const CONTEXT_PRESSURE_THRESHOLD = 0.8;
 const CONTEXT_ROTATION_THRESHOLD = 0.95;
 const WORKER_ID = crypto.randomUUID();
@@ -413,6 +414,12 @@ async function tick() {
     if (tickCount > 0 && tickCount % INTELLECT_DAILY_INTERVAL === 0) {
       runScheduledWorkflows('every_24h').catch(err =>
         console.error('[scheduler:intellect] every_24h workflows error', err));
+    }
+
+    // Intellect weekly maintenance — every 7 days (dream workers)
+    if (tickCount > 0 && tickCount % INTELLECT_WEEKLY_INTERVAL === 0) {
+      runScheduledWorkflows('every_week').catch(err =>
+        console.error('[scheduler:intellect] every_week workflows error', err));
     }
 
     // ── Agent jobs — require agentScheduling flag ──────────────────────────
