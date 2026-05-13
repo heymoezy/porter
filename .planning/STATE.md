@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
 status: unknown
-stopped_at: Completed 48.2-04-PLAN.md (config flag + retention-run endpoint + SessionEnd belt-and-braces + v6.13.0 ship; checkpoint autonomously verified 2026-05-13)
-last_updated: "2026-05-13T03:40:15.304Z"
+stopped_at: Completed 48.3-01-PLAN.md (Wave 0 smoke harness tests/smoke-48.3.sh + 3 response fixtures; mock-injection contract DREAM_WORKER_MOCK_RESPONSE_PATH defined for Plan 04; baseline exits 1 on DRW-01 as expected)
+last_updated: "2026-05-13T06:07:26.024Z"
 progress:
   total_phases: 18
   completed_phases: 17
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
-**Current focus:** Phase 48.2 — transcript-capture
+**Current focus:** Phase 48.3 — software-dream-worker
 
 ## Current Position
 
-Phase: 48.2 (transcript-capture) — ALL 5 PLANS COMPLETE (awaiting phase verification)
-Plan: 5 of 5 (Plans 01 + 02 + 03 + 04 + 05 DONE — Plan 04 checkpoint autonomously verified 2026-05-13 against 624 live captured turns in production DB; Moe was unavailable so orchestrator validated via DB inspection + direct endpoint tests + smoke harness rerun rather than a fresh-CLI manual run)
+Phase: 48.3 (software-dream-worker) — EXECUTING
+Plan: 2 of 5
 
 ## Performance Metrics
 
@@ -41,6 +41,7 @@ Plan: 5 of 5 (Plans 01 + 02 + 03 + 04 + 05 DONE — Plan 04 checkpoint autonomou
 | 48.2-02    | 40 min   | 3     | 4     |
 | Phase 48.2-transcript-capture P03 | 28 min | 3 tasks | 4 files |
 | Phase 48.2 P04 | 42 min | 5 tasks | 6 files |
+| 48.3-01    | 18 min   | 2     | 4     |
 
 ## Accumulated Context
 
@@ -155,6 +156,11 @@ Plan: 5 of 5 (Plans 01 + 02 + 03 + 04 + 05 DONE — Plan 04 checkpoint autonomou
 - [Phase 48.2-04]: SessionEnd belt-and-braces via spawn(porter-stop.js, {detached:true})+child.unref() — NOT a new flush endpoint. Reuses Stop's existing byte-offset bookmark; backend dedup pre-check (48.2-03) makes any re-fire a no-op. Detached+unref non-negotiable: without both, child dies with SessionEnd parent before POST completes.
 - [Phase 48.2-04]: Plan 04 checkpoint verified autonomously 2026-05-13 (Moe unavailable). 624 live captured turns in production DB across ~48h of real CLI use (597 software-silo + 28 NULL non-code cwd) plus direct endpoint tests for PII/cwd/kill-switch/retention plus smoke harness 8/8 — stronger evidence than a single fresh-CLI walk-through.
 - [Phase 48.2-04]: Porter version leapfrogged 48.2-04's v6.13.0 to v6.15.0 via Tom-Unblock follow-on (commits 30b7729 v6.14.0 claude_cli cwd isolation, 54d76ea v6.15.0 raw:true SSE passthrough). 48.2 backend code intact and live at v6.15.0; no rollback or interference.
+- [Phase 48.3-01]: Wave 0 smoke harness shipped BEFORE implementation plans so every downstream task (Plans 02-05) has a single-shot `bash tests/smoke-48.3.sh` <verify> command. Same precedent as 48.1-05 + 48.2-05.
+- [Phase 48.3-01]: Mock-injection contract DEFINED here for Plan 04 to honor — env var `DREAM_WORKER_MOCK_RESPONSE_PATH`. When set, `dispatchDream()` reads the file and returns its contents instead of calling `routingEngine`. Production code paths must NEVER set or read this variable. Smoke harness is the only consumer.
+- [Phase 48.3-01]: Three response fixtures, three distinct assertion paths — dream-response-software.json (happy: DRW-04/07/11/12), dream-response-malformed.json (DRW-10 parse-failure), dream-response-doctrine-violation.json (DRW-06 validateRefinementDoctrine reject). Single-purpose fixtures mean smoke failures point to the exact path that broke.
+- [Phase 48.3-01]: Throwaway silo_id='software-smoke-48.3' isolation pattern — INSERTed at run start with real software.md prompt_path (so DRW-03 still validates production file), 6 directives pre-seeded (4 mp-smoke-seed-* moe-direct + 2 mp-smoke-target-* dream_worker) to fire active_count > 4 doctrine boundary, all DELETEd by trap cleanup EXIT.
+- [Phase 48.3-01]: Wave-0 baseline behavior is intentional non-zero exit at DRW-01 ('memory_proposals table missing'); will turn green as Plans 02-05 land tables / prompt / worker / endpoints. Same failing-baseline-by-design precedent as 48.1-05 + 48.2-05.
 
 ### Pending Todos
 
@@ -167,6 +173,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-13T02:58:23.963Z
-Stopped at: Completed 48.2-04-PLAN.md (config flag + retention-run endpoint + SessionEnd belt-and-braces + v6.13.0 ship; checkpoint autonomously verified 2026-05-13)
+Last session: 2026-05-13T06:02:47Z
+Stopped at: Completed 48.3-01-PLAN.md (Wave 0 smoke harness tests/smoke-48.3.sh + 3 response fixtures; mock-injection contract DREAM_WORKER_MOCK_RESPONSE_PATH defined for Plan 04; baseline exits 1 on DRW-01 as expected)
 Resume file: None

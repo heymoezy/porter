@@ -1,5 +1,19 @@
 # Porter — Active Sessions
 
+## GSD Phase 48.3 Executor Plan-01 (Opus 4.7) — 2026-05-13T05:44Z
+- Workstream: Execute 48.3-01-PLAN.md — Wave 0 smoke harness + 3 response fixtures for Phase 48.3 (Software Dream Worker). Pure tests/ + fixtures work — NO backend code.
+- Files claimed:
+  - tests/smoke-48.3.sh (NEW, executable)
+  - tests/fixtures/dream-response-software.json (NEW)
+  - tests/fixtures/dream-response-malformed.json (NEW)
+  - tests/fixtures/dream-response-doctrine-violation.json (NEW)
+  - .planning/phases/48.3-software-dream-worker/48.3-01-SUMMARY.md (NEW, on completion)
+  - .planning/STATE.md (plan counter + decisions)
+  - .planning/ROADMAP.md (plan progress)
+  - .planning/REQUIREMENTS.md (DRW-13 mark complete)
+- Files NOT touching: any backend/src/**, admin/**, schema. Plan 02-05 own those.
+- Status: **DONE** 2026-05-13T06:02Z — both tasks committed (2cf0a61 fixtures + 2f350d3 smoke harness). Baseline `bash tests/smoke-48.3.sh` exits 1 on DRW-01 ('memory_proposals table missing') as predicted. Plans 02-05 will flip remaining DRWs green incrementally.
+
 ## Porter Dev (Opus 4.7) — 2026-05-10T07:30:00+08:00
 - Workstream: Bridge revival — fix dispatch-log pollution, restore tabs, live motion
 - Files in scope:
@@ -210,3 +224,16 @@
 - All 4 leaks closed (CLAUDE.md ancestry, hooks/auto-memory, Memory V3 endpoint, SSE event format).
 - YMC .env restored; admin_* templates re-enabled (5 rows, handover said 6).
 - Task complete.
+
+---
+
+## Porter Dream-Worker Schema (Opus 4.7 1M) — 2026-05-13T06:00Z
+- Workstream: Phase 48.3-02 execute — schema + scheduling foundation for software dream worker.
+- Files claimed:
+  - backend/src/db/migrate-dreams-v1.ts (NEW)
+  - backend/src/db/schema.ts (append dreamRuns + memoryProposals pgTables)
+  - backend/src/index.ts (register migrateDreamsV1 after migrateTranscriptsV1)
+  - backend/src/services/intellect/workflow-engine.ts (extend WorkflowActionType + 2 handlers + 2 BUILTIN seeds)
+  - backend/src/services/scheduler.ts (every_week tick bucket, INTELLECT_WEEKLY_INTERVAL=302400)
+- Not touching: anything outside the 5 files above.
+- Status: active
