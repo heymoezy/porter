@@ -35,6 +35,7 @@ import { runToolDetection } from './tool-detector.js';
 import { runSkillEvolution } from './skill-evolver.js';
 import { runSubscriptionCheck } from './subscription-manager.js';
 import { runTranscriptRetention } from './transcript-retention.js';
+import { runDreamWorker } from './dream-worker.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -102,10 +103,12 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
   skill_evolve: async () => runSkillEvolution(),
   subscription_check: async () => runSubscriptionCheck(),
   transcript_retain: async () => runTranscriptRetention(pool),
-  dream_run: async (_ctx, _config) => {
-    // Placeholder — real wiring lands in Plan 48.3-04 when dream-worker.ts ships.
-    // Throwing (not silently noop'ing) makes any pre-04 every_week tick visible in intellect_events.
-    throw new Error('NOT_IMPLEMENTED: dream_run handler awaits Plan 48.3-04 (dream-worker.ts)');
+  dream_run: async (_ctx, config) => {
+    // Wired in Plan 48.3-04: scheduled every_week trigger invokes runDreamWorker for
+    // the configured silo. Errors re-thrown by the worker bubble up here and get
+    // caught by runWorkflow's outer try/catch (which logs workflow_failed).
+    const siloId = (config?.silo_id as string) ?? 'software';
+    return runDreamWorker({ siloId, triggeredBy: 'schedule' });
   },
   dream_runs_stuck_sweep: async () => {
     const result = await pool.query(
