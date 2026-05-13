@@ -3,9 +3,98 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.15.0
+version: v6.16.0
 updated: 2026-05-13
-updated_by: claude-opus-4.7 (Porter Dreams 3 — 48.2 closeout + 48.3 planning)
+updated_by: claude-opus-4.7 (Porter Dreams 3 — 48.3 software-dream-worker closeout)
+
+## v6.16.0 — Phase 48.3 software-dream-worker (2026-05-13)
+
+Third phase of the Dream Silos series — the consciousness layer.
+Consumes the silo-tagged transcripts from 48.2, dispatches them through
+a strong model via Porter Bridge with raw-passthrough-by-omission,
+parses the structured response, enforces refine-before-append doctrine
+in three layers, and writes proposals to `memory_proposals` for review
+(in 48.4).
+
+**5 plans shipped across 4 waves (all 13 DRW requirements pass):**
+
+- **48.3-01 (smoke):** `tests/smoke-48.3.sh` + 3 fixtures
+  (doctrine-compliant / malformed-JSON / doctrine-violation). Defines
+  the `DREAM_WORKER_MOCK_RESPONSE_PATH` env-var contract.
+- **48.3-02 (schema):** `dream_runs` (17 cols) + `memory_proposals`
+  (14 cols) + 5 indexes including `(silo_id, status, created_at DESC)`
+  for 48.4's read pattern. Added `every_week = 302400 ticks` to
+  scheduler.ts. Seeded 2 workflow rows (weekly_dream_run_software +
+  dream_runs_stuck_sweep every 30 min).
+- **48.3-03 (prompt + sampler + parser):** Canonical software dream
+  prompt template at `silos.prompt_path` (seeded by 48.1).
+  `dream-sampler.ts` (deterministic stratified 40/30/20/10 by recency
+  + imperative-phrasing force-include + byte cap, max 200KB default /
+  2.5MB outer ceiling). `dream-parser.ts` (Zod schema +
+  `validateRefinementDoctrine` using DB count as ground truth +
+  `assignSortOrder` ensuring delete<supersede<merge<new_directive).
+- **48.3-04 (worker):** `dream-worker.ts` (497 LOC) wires it all
+  together. `dispatchDream` calls `routingEngine.selectWithFallback`
+  + explicit `logDispatch` (captures dispatch_id for audit). 5
+  pre-flight guards: concurrency, skip-recent (only schedule-triggered),
+  empty-corpus (success not failure), sealed-seed (no
+  delete/supersede on moe-direct directives), hallucinated-target
+  (target_directive_id must exist). All-or-nothing INSERT for
+  memory_proposals. Mock injection honored via env var. Workflow
+  handler swapped from NOT_IMPLEMENTED to real impl.
+- **48.3-05 (endpoints + ship):** `POST /api/v1/intellect/dream-run`
+  (202 + setImmediate kick, 127.0.0.1-only no auth) + GET
+  /dream-runs/:id. Sonnet sample-size clamp (≤800KB). Version bump
+  v6.15.0 → v6.16.0.
+
+**Live verification (autonomous, 2026-05-13):**
+Real Sonnet 4.6 dispatch — `dr_fef03aab-f610-465c-bab0-b650345b7c4e`
+ran for 72.7s, returned 6362 output tokens of real model JSON.
+- Layer 2 doctrine validator FIRED on real model output:
+  `"Doctrine violation: new_directive proposed without prior refinement
+  (active dir count: 5, refinement proposals: 0)"` — refine-before-append
+  guardrail works on production data, not just fixtures.
+- Raw-by-omission proven structurally:
+  `bridge_dispatch_log` row has `agent_id=NULL, project_id=NULL,
+  chat_id=NULL, skills_used=NULL, dispatch_strategy=NULL`
+  — Memory V3 / skill selector / delegation doctrine never engaged.
+
+**4 dormant production bugs surfaced + fixed during live-verify:**
+1. **Bridge circuit breaker `action` was a no-op repo-wide since
+   opossum 9 adoption** — dormant because chat goes through
+   dispatchStream which bypasses `breaker.fire`; dream-worker was
+   the first non-streaming consumer to await the result. Fixed with
+   `runThunk = async (fn) => fn()` + timeout 30s → 180s.
+2. dispatchDream crashed backend on undefined Bridge result —
+   defensive null-guard added.
+3. Smoke mock-injection was unreachable over HTTP — added
+   `_mock_response_path` body field on /dream-run endpoint.
+4. Worker failure path lost dispatch_id — hoisted to outer scope +
+   COALESCE in catch UPDATE.
+
+**Requirements closed:** DRW-01..DRW-13 (all 13).
+
+**Files of note (in-repo):**
+- `backend/src/db/migrate-dreams-v1.ts`
+- `backend/src/services/intellect/dream-worker.ts`
+- `backend/src/services/intellect/dream-sampler.ts`
+- `backend/src/services/intellect/dream-parser.ts`
+- `backend/src/services/intellect/dream-prompts/software.md`
+- `backend/src/services/intellect/workflow-engine.ts` (real handler)
+- `backend/src/services/scheduler.ts` (every_week tag)
+- `backend/src/routes/v1/intellect.ts` (/dream-run + /dream-runs/:id)
+- `backend/src/services/bridge/circuit-breaker-registry.ts` (bug fix)
+- `tests/smoke-48.3.sh` + 3 fixtures
+
+**Verification note:** Live-CLI checkpoint completed AUTONOMOUSLY by
+the Plan 05 executor (Moe was unavailable). Substantive verification
+via real Sonnet dispatch + DB inspection. Documented in plan summary.
+
+**Next:** Phase 48.4 Review Surface — Admin UI Dreams tab with silo
+filter, transactional accept/reject handlers, auto-expiry, event-stream
+wiring. Consumes `memory_proposals` rows written by 48.3.
+
+---
 
 ## v6.15.0 — Phase 48.2 transcript-capture (2026-05-13)
 
