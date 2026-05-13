@@ -70,6 +70,14 @@ export interface RunDreamArgs {
   sampleSizeOverride?: number;
   dryRun?: boolean;
   dreamRunIdOverride?: string;
+  /**
+   * SMOKE-TEST-ONLY: per-invocation mock response path. Mirrors the
+   * DREAM_WORKER_MOCK_RESPONSE_PATH env var but reachable via HTTP body
+   * (env vars don't propagate across HTTP). When set, dispatchDream reads
+   * this file and returns its contents instead of invoking Bridge.
+   * Production code paths never set this; only tests/smoke-48.3.sh does.
+   */
+  mockResponsePath?: string;
 }
 
 export interface RunDreamResult {
@@ -83,9 +91,12 @@ export interface RunDreamResult {
 async function dispatchDream(
   promptBody: string,
   modelName: string,
+  mockResponsePathArg?: string,
 ): Promise<{ response: string; latencyMs: number; modelUsed: string; dispatchLogId?: string }> {
-  // Mock-injection contract (smoke-test only — env var never set in prod)
-  const mockPath = process.env.DREAM_WORKER_MOCK_RESPONSE_PATH;
+  // Mock-injection contract (smoke-test only — env var OR arg never set in prod).
+  // Arg takes precedence so the smoke harness can reach this over HTTP (env vars
+  // don't propagate from curl to the backend process).
+  const mockPath = mockResponsePathArg ?? process.env.DREAM_WORKER_MOCK_RESPONSE_PATH;
   if (mockPath && mockPath.length > 0) {
     const response = await fs.promises.readFile(mockPath, 'utf8');
     return { response, latencyMs: 0, modelUsed: 'mock', dispatchLogId: undefined };
@@ -115,6 +126,16 @@ async function dispatchDream(
   const timer = setTimeout(() => controller.abort(), BRIDGE_TIMEOUT_MS);
   try {
     const { decision, result } = await routingEngine.selectWithFallback(ctx, req);
+
+    // Defensive: if the adapter returned an incomplete BridgeDispatchResult (some
+    // legacy adapters return undefined on partial failure), DO NOT call logDispatch
+    // — its IIFE accesses result.responseHeaders / result.latencyMs outside the
+    // inner try/catch and an undefined result crashes the worker process on the
+    // unhandledRejection path. Caller sees status='failed' with a diagnostic error
+    // rather than the backend systemd-restarting.
+    if (!result || typeof result !== 'object') {
+      throw new Error(`Bridge dispatch returned no result for gateway ${decision.gatewayRow?.type ?? 'unknown'}`);
+    }
 
     // CRITICAL: selectWithFallback does NOT call logDispatch (only dispatchStream does).
     // We must explicitly call logDispatch to populate bridge_dispatch_log and capture
@@ -406,6 +427,7 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
     const { response, latencyMs, modelUsed, dispatchLogId } = await dispatchDream(
       promptBody,
       modelName,
+      args.mockResponsePath,
     );
 
     // ── 8. Parse + Zod ─────────────────────────────────────

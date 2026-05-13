@@ -138,13 +138,23 @@ psql -d porter -c "INSERT INTO directives (id, scope, scope_id, content, priorit
 psql -d porter -c "INSERT INTO directives (id, scope, scope_id, content, priority, source_type, status, created_at, updated_at) VALUES ('mp-smoke-target-supersede', 'silo', '$SMOKE_SILO', 'ambiguous rule to supersede', 70, 'dream_worker', 'active', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW())) ON CONFLICT (id) DO NOTHING" >/dev/null
 ok "smoke silo + 6 directives seeded (4 moe-direct + 2 dream_worker)"
 
+# Seed minimal transcript turns tagged with the smoke silo so the sampler returns
+# a non-empty corpus (worker short-circuits to completed/0-proposals when corpus
+# is empty regardless of mock-injection). Cleanup wipes session_id LIKE 'smoke-48.3-%'.
+psql -d porter -c "INSERT INTO session_transcript_turns (session_id, turn_index, role, silo_id, cwd, content, captured_at) VALUES ('${SMOKE_SESSION_PREFIX}-s1', 0, 'user', '$SMOKE_SILO', '/home/lobster/projects/Porter', 'use the design system not custom CSS', NOW() - INTERVAL '1 day') ON CONFLICT DO NOTHING" >/dev/null
+psql -d porter -c "INSERT INTO session_transcript_turns (session_id, turn_index, role, silo_id, cwd, content, captured_at) VALUES ('${SMOKE_SESSION_PREFIX}-s1', 1, 'assistant', '$SMOKE_SILO', '/home/lobster/projects/Porter', 'Refactored to use design system tokens.', NOW() - INTERVAL '1 day') ON CONFLICT DO NOTHING" >/dev/null
+psql -d porter -c "INSERT INTO session_transcript_turns (session_id, turn_index, role, silo_id, cwd, content, captured_at) VALUES ('${SMOKE_SESSION_PREFIX}-s2', 0, 'user', '$SMOKE_SILO', '/home/lobster/projects/Porter', 'always restart porter-fastify after frontend rebuild', NOW() - INTERVAL '2 days') ON CONFLICT DO NOTHING" >/dev/null
+ok "smoke silo + 3 transcript turns seeded for sampler"
+
 if [[ -z "$SKIP_WORKER" ]]; then
   # --- DRW-04 + DRW-07 + DRW-11: end-to-end run with doctrine-compliant mock
+  # Mock-injection passed via body (_mock_response_path) because env vars don't
+  # propagate from curl to the backend process; the endpoint forwards to
+  # runDreamWorker → dispatchDream which prefers arg over env.
   echo "DRW-04 + DRW-07 + DRW-11: end-to-end worker run (mocked Bridge)"
-  RUN_RESP=$(DREAM_WORKER_MOCK_RESPONSE_PATH="$(pwd)/$FIX_OK" \
-    curl -sf -X POST "$API/api/v1/intellect/dream-run" \
+  RUN_RESP=$(curl -sf -X POST "$API/api/v1/intellect/dream-run" \
     -H "Content-Type: application/json" \
-    -d "{\"silo_id\":\"$SMOKE_SILO\",\"sample_size_override\":50000}")
+    -d "{\"silo_id\":\"$SMOKE_SILO\",\"sample_size_override\":50000,\"_mock_response_path\":\"$(pwd)/$FIX_OK\"}")
   echo "$RUN_RESP" | grep -q '"dream_run_id"' || fail "DRW-04: POST /dream-run did not return dream_run_id (resp: $RUN_RESP)"
   RUN_ID=$(echo "$RUN_RESP" | jq -r '.data.dream_run_id // .dream_run_id')
   [[ -n "$RUN_ID" && "$RUN_ID" != "null" ]] || fail "DRW-04: dream_run_id parsing failed"
@@ -195,10 +205,9 @@ if [[ -z "$SKIP_WORKER" ]]; then
 
   # --- DRW-06: doctrine-violation fixture rejects run ---
   echo "DRW-06: doctrine-violation rejects run"
-  VIO_RESP=$(DREAM_WORKER_MOCK_RESPONSE_PATH="$(pwd)/$FIX_DOC" \
-    curl -sf -X POST "$API/api/v1/intellect/dream-run" \
+  VIO_RESP=$(curl -sf -X POST "$API/api/v1/intellect/dream-run" \
     -H "Content-Type: application/json" \
-    -d "{\"silo_id\":\"$SMOKE_SILO\",\"sample_size_override\":50000}")
+    -d "{\"silo_id\":\"$SMOKE_SILO\",\"sample_size_override\":50000,\"_mock_response_path\":\"$(pwd)/$FIX_DOC\"}")
   VIO_ID=$(echo "$VIO_RESP" | jq -r '.data.dream_run_id // .dream_run_id')
   [[ -n "$VIO_ID" && "$VIO_ID" != "null" ]] || fail "DRW-06: doctrine-violation run_id parse failed"
   for i in $(seq 1 40); do
@@ -215,10 +224,9 @@ if [[ -z "$SKIP_WORKER" ]]; then
 
   # --- DRW-10: malformed JSON fixture rejects run with no orphans ---
   echo "DRW-10: malformed-JSON failure with no orphans"
-  BAD_RESP=$(DREAM_WORKER_MOCK_RESPONSE_PATH="$(pwd)/$FIX_BAD" \
-    curl -sf -X POST "$API/api/v1/intellect/dream-run" \
+  BAD_RESP=$(curl -sf -X POST "$API/api/v1/intellect/dream-run" \
     -H "Content-Type: application/json" \
-    -d "{\"silo_id\":\"$SMOKE_SILO\",\"sample_size_override\":50000}")
+    -d "{\"silo_id\":\"$SMOKE_SILO\",\"sample_size_override\":50000,\"_mock_response_path\":\"$(pwd)/$FIX_BAD\"}")
   BAD_ID=$(echo "$BAD_RESP" | jq -r '.data.dream_run_id // .dream_run_id')
   for i in $(seq 1 40); do
     STATUS=$(psql -d porter -tAc "SELECT status FROM dream_runs WHERE id='$BAD_ID'")

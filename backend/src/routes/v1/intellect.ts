@@ -581,6 +581,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       sample_size_override?: number;
       triggered_by?: string;
       dry_run?: boolean;
+      _mock_response_path?: string;  // SMOKE-TEST-ONLY: per-call mock injection (env vars can't cross HTTP)
     };
     const siloId = body.silo_id ?? 'software';
 
@@ -623,6 +624,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
         sampleSizeOverride: body.sample_size_override,
         dryRun: !!body.dry_run,
         dreamRunIdOverride: dreamRunId,
+        mockResponsePath: body._mock_response_path,
       }).catch(workerErr => {
         // Worker logs its own intellect_event + flips dream_runs.status='failed'.
         // We just log here so the failure isn't silent in journald.
