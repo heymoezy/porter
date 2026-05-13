@@ -21,7 +21,7 @@ cleanup() {
   psql -d porter -c "DELETE FROM directives WHERE scope='silo' AND scope_id='$SMOKE_SILO'" >/dev/null 2>&1 || true
   psql -d porter -c "DELETE FROM silos WHERE id='$SMOKE_SILO'" >/dev/null 2>&1 || true
   psql -d porter -c "DELETE FROM session_transcript_turns WHERE session_id LIKE 'smoke-48.3-%'" >/dev/null 2>&1 || true
-  psql -d porter -c "DELETE FROM intellect_events WHERE source='dream_worker' AND payload->>'siloId'='$SMOKE_SILO'" >/dev/null 2>&1 || true
+  psql -d porter -c "DELETE FROM intellect_events WHERE source_type='dream_worker' AND details_json->>'siloId'='$SMOKE_SILO'" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -126,10 +126,10 @@ fi
 psql -d porter -c "INSERT INTO silos (id, display_name, prompt_path, cadence_seconds, default_model, detect_rules, enabled) SELECT '$SMOKE_SILO', 'Smoke 48.3', prompt_path, 604800, default_model, '{}'::jsonb, true FROM silos WHERE id='software' ON CONFLICT (id) DO NOTHING" >/dev/null
 # Pre-seed 6 directives for the smoke silo (4 'moe-direct' seeds + 2 dream-added) — boundary > 4 so doctrine engages
 for i in 1 2 3 4; do
-  psql -d porter -c "INSERT INTO directives (id, scope, scope_id, content, priority, source_type, status, created_at, updated_at) VALUES ('mp-smoke-seed-$i', 'silo', '$SMOKE_SILO', 'smoke seed $i', 95, 'moe-direct', 'active', NOW(), NOW()) ON CONFLICT (id) DO NOTHING" >/dev/null
+  psql -d porter -c "INSERT INTO directives (id, scope, scope_id, content, priority, source_type, status, created_at, updated_at) VALUES ('mp-smoke-seed-$i', 'silo', '$SMOKE_SILO', 'smoke seed $i', 95, 'moe-direct', 'active', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW())) ON CONFLICT (id) DO NOTHING" >/dev/null
 done
-psql -d porter -c "INSERT INTO directives (id, scope, scope_id, content, priority, source_type, status, created_at, updated_at) VALUES ('mp-smoke-target-stale', 'silo', '$SMOKE_SILO', 'stale rule to delete', 70, 'dream_worker', 'active', NOW(), NOW()) ON CONFLICT (id) DO NOTHING" >/dev/null
-psql -d porter -c "INSERT INTO directives (id, scope, scope_id, content, priority, source_type, status, created_at, updated_at) VALUES ('mp-smoke-target-supersede', 'silo', '$SMOKE_SILO', 'ambiguous rule to supersede', 70, 'dream_worker', 'active', NOW(), NOW()) ON CONFLICT (id) DO NOTHING" >/dev/null
+psql -d porter -c "INSERT INTO directives (id, scope, scope_id, content, priority, source_type, status, created_at, updated_at) VALUES ('mp-smoke-target-stale', 'silo', '$SMOKE_SILO', 'stale rule to delete', 70, 'dream_worker', 'active', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW())) ON CONFLICT (id) DO NOTHING" >/dev/null
+psql -d porter -c "INSERT INTO directives (id, scope, scope_id, content, priority, source_type, status, created_at, updated_at) VALUES ('mp-smoke-target-supersede', 'silo', '$SMOKE_SILO', 'ambiguous rule to supersede', 70, 'dream_worker', 'active', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW())) ON CONFLICT (id) DO NOTHING" >/dev/null
 ok "smoke silo + 6 directives seeded (4 moe-direct + 2 dream_worker)"
 
 if [[ -z "$SKIP_WORKER" ]]; then
@@ -164,8 +164,8 @@ if [[ -z "$SKIP_WORKER" ]]; then
   ok "DRW-07: sampling decisions logged in action_config"
 
   # DRW-11: intellect_events for start + completed
-  EV_STARTED=$(psql -d porter -tAc "SELECT count(*) FROM intellect_events WHERE source='dream_worker' AND kind='dream_run_started' AND payload->>'dreamRunId'='$RUN_ID'")
-  EV_DONE=$(psql -d porter -tAc "SELECT count(*) FROM intellect_events WHERE source='dream_worker' AND kind='dream_run_completed' AND payload->>'dreamRunId'='$RUN_ID'")
+  EV_STARTED=$(psql -d porter -tAc "SELECT count(*) FROM intellect_events WHERE source_type='dream_worker' AND event_type='dream_run_started' AND details_json->>'dreamRunId'='$RUN_ID'")
+  EV_DONE=$(psql -d porter -tAc "SELECT count(*) FROM intellect_events WHERE source_type='dream_worker' AND event_type='dream_run_completed' AND details_json->>'dreamRunId'='$RUN_ID'")
   [[ "$EV_STARTED" -ge 1 ]] || fail "DRW-11: dream_run_started event missing"
   [[ "$EV_DONE" -ge 1 ]] || fail "DRW-11: dream_run_completed event missing"
   ok "DRW-11: started + completed audit events logged"
