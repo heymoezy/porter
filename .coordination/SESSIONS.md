@@ -253,3 +253,11 @@
   - backend/src/services/intellect/dream-parser.ts (NEW)
 - Not touching: anything outside the 3 files above.
 - Status: active
+
+### Porter Dream-Worker Prompt+Sampler+Parser — DONE 2026-05-13T07:47Z
+- Commits: 1fb6f09 (Task 1 prompt template), 2e4b178 (Task 2 dream-sampler.ts), 0a7d556 (Task 3 dream-parser.ts), 5654708 (docs).
+- Live: backend/src/services/intellect/dream-prompts/software.md (matches silos.prompt_path), dream-sampler.ts (deterministic stratified 5-pass), dream-parser.ts (Zod schemas + parseDreamResponse + validateRefinementDoctrine + assignSortOrder).
+- Smoke harness: DRW-01/02/03/08 all green; DRW-04..DRW-12 warn-skip pending dream-worker.ts (Plan 04).
+- Manual fixture test (node /tmp/parser-test-48.3-03.mjs): all 8 assertions pass — compliant parses+validates+sorts, malformed throws JSON-parse-failed, doctrine-violation throws at activeCount=6/passes at activeCount=4/empty-proposals always passes.
+- tsc clean. No service restart needed (library files only — Plan 04 wires them in).
+- Deferred: smoke harness directive-seed NOW()-vs-double-precision bug logged to deferred-items.md for Plan 04 to fix.
