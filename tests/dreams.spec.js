@@ -63,8 +63,6 @@ test.describe('Phase 48.4: Review Surface', () => {
 
   // ── RVS-08: Frontend route /dreams loads with sidebar nav entry ──────────
   test.describe('RVS-08: sidebar nav + /dreams route', () => {
-    test.skip(true, 'TODO: Enable in Plan 03 (frontend route + sidebar nav)');
-
     test('RVS-08: /dreams route loads with Dreams heading and sidebar entry', async ({ page }) => {
       await loginAdmin(page);
       await page.goto(`${ADMIN}/dreams`);
@@ -77,19 +75,24 @@ test.describe('Phase 48.4: Review Surface', () => {
 
   // ── RVS-09: Dreams list renders with filters + table ──────────────────────
   test.describe('RVS-09: Dreams list page filters + table', () => {
-    test.skip(true, 'TODO: Enable in Plan 03 (list page + silo/status filters)');
-
     test('RVS-09: list page renders filters, table rows, Run Now button, count badges', async ({ page }) => {
       await loginAdmin(page);
       await page.goto(`${ADMIN}/dreams`);
 
-      // Silo filter present (default 'software')
-      await expect(page.getByLabel(/Silo/i)).toBeVisible();
+      // Silo filter present (default 'software') — Radix Select renders as a
+      // combobox button; interact via role rather than .fill() (textbox).
+      const siloFilter = page.locator('#silo-filter');
+      await expect(siloFilter).toBeVisible();
       // Status filter present (default 'pending')
-      await expect(page.getByLabel(/Status/i)).toBeVisible();
+      const statusFilter = page.locator('#status-filter');
+      await expect(statusFilter).toBeVisible();
 
-      // Switch silo filter to smoke silo and assert >=7 seeded rows
-      await page.getByLabel(/Silo/i).fill(SMOKE_SILO);
+      // Switch silo filter to smoke silo via Radix Select pattern: click trigger,
+      // then click the option in the rendered SelectContent portal.
+      await siloFilter.click();
+      await page.getByRole('option', { name: /software-smoke-48\.4/i }).click();
+
+      // 7 seeded rows in fixture: 1 new_directive + 2 supersede + 2 merge + 2 delete.
       await expect(page.locator('table tbody tr')).toHaveCount(7, { timeout: 10000 });
 
       // Run Now button present
