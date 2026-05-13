@@ -31,6 +31,7 @@ export default [
     route("intelligence", "routes/intelligence.tsx"),
     route("files", "routes/files.tsx"),
     route("approvals", "routes/approvals.tsx"),
+    route("dreams", "routes/dreams.tsx"),
     route("decomposition", "routes/decomposition.tsx"),
     route("decisions", "routes/decisions.tsx"),
     route("sessions", "routes/sessions-admin.tsx"),

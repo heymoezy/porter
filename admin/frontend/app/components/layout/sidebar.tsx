@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight, Settings, LogOut,
   FolderOpen, Route, BookOpen,
   Code2, Palette, Network, Flame,
-  DollarSign, Wrench, GraduationCap, MessageCircle, Brain,
+  DollarSign, Wrench, GraduationCap, MessageCircle, Brain, Moon,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -37,6 +37,7 @@ const groups = [
   ]},
   { label: "Ops", items: [
     { icon: Brain, label: "Intellect", path: "/intelligence" },
+    { icon: Moon, label: "Dreams", path: "/dreams" },
     { icon: Route, label: "Bridge", path: "/bridge" },
     { icon: BookOpen, label: "Recall", path: "/recall" },
     { icon: DollarSign, label: "Costs", path: "/costs" },
