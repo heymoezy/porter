@@ -348,11 +348,11 @@ Plans:
   2. Every inter-agent message chain has a correlation ID visible in the msg_bus_events table along with hop count and full message history
   3. All inter-agent messages pass through Porter as coordinator — direct peer-to-peer routing is blocked and logged as a violation
   4. A subtask response from a delegated agent is automatically fed back into the decomposition engine for inclusion in the final synthesis
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete (2026-04-03)
 
 Plans:
-- [ ] 43-01-PLAN.md — Agent delegation service + peer-to-peer guard (IAM-01, IAM-02, IAM-03)
-- [ ] 43-02-PLAN.md — DAG executor delegation wiring + joiner synthesis integration (IAM-01, IAM-04)
+- [x] 43-01-PLAN.md — Agent delegation service + peer-to-peer guard (IAM-01, IAM-02, IAM-03)
+- [x] 43-02-PLAN.md — DAG executor delegation wiring + joiner synthesis integration (IAM-01, IAM-04)
 
 ### Phase 44: Autonomous Job Queue
 **Goal**: Porter maintains a persistent job queue where structured work items are matched to the best available agent by skills and gateway capabilities — and Porter can self-enqueue jobs without human trigger
@@ -430,11 +430,11 @@ Plans:
 **Plans:** 5/5 plans complete
 
 Plans:
-- [ ] 48.1-01-PLAN.md — Schema: silos table + software seed + session_silo_overrides + directive_immutable_moe_direct trigger
-- [x] 48.1-02-PLAN.md — Detection service + /api/v1/intellect/context silo injection (DONE 2026-05-11)
-- [ ] 48.1-03-PLAN.md — POST /silo-command endpoint + UserPromptSubmit hook /silo interception
-- [ ] 48.1-04-PLAN.md — Session-start hook stdin parse + version bump v6.12.0 + ship + human verify
-- [ ] 48.1-05-PLAN.md — Wave 0 smoke harness (tests/smoke-48.1.sh covering SC-1..SC-6)
+- [x] 48.1-01-PLAN.md — Schema: silos table + software seed + session_silo_overrides + directive_immutable_moe_direct trigger
+- [x] 48.1-02-PLAN.md — Detection service + /api/v1/intellect/context silo injection
+- [x] 48.1-03-PLAN.md — POST /silo-command endpoint + UserPromptSubmit hook /silo interception
+- [x] 48.1-04-PLAN.md — Session-start hook stdin parse + version bump v6.12.0 + ship + human verify
+- [x] 48.1-05-PLAN.md — Wave 0 smoke harness (tests/smoke-48.1.sh covering SC-1..SC-6)
 
 ## Progress
 
@@ -457,11 +457,14 @@ v6.0 phases execute in order: 40 → 41 (can parallel 40) → 42 → 43 (can par
 | 38. Adaptive Agent Context | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 39. Bridge Task Dispatch | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 40. Gateway Capability Registry | v6.0 | 2/2 | Complete | 2026-04-03 |
-| 41. Session Intelligence | 3/3 | Complete    | 2026-04-03 | - |
-| 42. Task Decomposition Engine | 4/4 | Complete    | 2026-04-03 | - |
-| 43. Inter-Agent Messaging | 1/2 | In Progress|  | - |
-| 44. Autonomous Job Queue | 2/2 | Complete    | 2026-04-03 | - |
-| 45. Porter Control Plane | 2/2 | Complete    | 2026-04-03 | - |
-| 46. Project Monitoring | 3/3 | Complete    | 2026-04-03 | - |
-| 47. Project Substrate | 3/3 | Complete    | 2026-04-03 | - |
-| 48.4. Review Surface | 5/5 | Complete    | 2026-05-13 | - |
+| 41. Session Intelligence | v6.0 | 3/3 | Complete | 2026-04-03 |
+| 42. Task Decomposition Engine | v6.0 | 4/4 | Complete | 2026-04-03 |
+| 43. Inter-Agent Messaging | v6.0 | 2/2 | Complete | 2026-04-03 |
+| 44. Autonomous Job Queue | v6.0 | 2/2 | Complete | 2026-04-03 |
+| 45. Porter Control Plane | v6.0 | 2/2 | Complete | 2026-04-03 |
+| 46. Project Monitoring | v6.0 | 3/3 | Complete | 2026-04-03 |
+| 47. Project Substrate | v6.0 | 3/3 | Complete | 2026-04-03 |
+| 48.1. Silo Foundation | v6.0 | 5/5 | Complete | 2026-05-11 |
+| 48.2. Transcript Capture | v6.0 | 5/5 | Complete | 2026-05-13 |
+| 48.3. Software Dream Worker | v6.0 | 5/5 | Complete | 2026-05-13 |
+| 48.4. Review Surface | v6.0 | 5/5 | Complete | 2026-05-13 |
