@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: The Orchestration Platform
-status: unknown
-stopped_at: "Completed 48.4-05-PLAN.md (v6.17.0 shipped; Dream Silos series complete: full smoke 4-phase green + Playwright 7/7 green + autonomous live verify 9-step pipeline confirmed end-to-end with next-CLI directive injection)"
-last_updated: "2026-05-13T22:43:58.525Z"
+status: milestone_audit_complete
+stopped_at: "v6.0 The Orchestration Platform — milestone audit READY-TO-CLOSE (2026-05-14): all 12 phases verified (40-48.4), all 60 reqs complete, 5 dormant infrastructure bugs fixed as positive externalities. Awaiting Moe to run /gsd:complete-milestone for formal archive + v7.0 scoping."
+last_updated: "2026-05-14T00:00:00.000Z"
 progress:
   total_phases: 18
   completed_phases: 17
@@ -19,7 +19,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
-**Current focus:** Phase 48.4 — review-surface
+**Current focus:** v6.0 milestone audit complete — awaiting `/gsd:complete-milestone` from Moe
 
 ## Current Position
 

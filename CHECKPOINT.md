@@ -4,8 +4,43 @@
 
 project: porter
 version: v6.17.0
-updated: 2026-05-13
-updated_by: claude-opus-4.7 (Porter Dreams 5 — 48.4 review-surface closeout / Dream Silos series complete)
+updated: 2026-05-14
+updated_by: claude-opus-4.7 (Porter Dreams 3 — v6.0 milestone audit + retro-verifies)
+milestone_status: READY-TO-CLOSE (audit 2026-05-14)
+
+## v6.0 Milestone Audit — READY-TO-CLOSE (2026-05-14)
+
+**v6.0 The Orchestration Platform** formally audited — READY-TO-CLOSE with 3 non-blocking v6.0.1 follow-ups.
+
+- 12 phases (40-48.4) all verified. 9 originally had VERIFICATION.md; 3 retro-verified today (40 GWC 4/4, 41 SIN 3/3, 42 TDE 5/5) plus Phase 43 IAM 4/4 from 2026-05-13.
+- 60 requirements all `[x]` complete. Traceability table drift fixed — DRW-01..13 + RVS-01..14 flipped from "Pending" to "Complete" (27 rows).
+- Zero anti-patterns across v6.0 service tree.
+- Dream Silos closed loop verified on production data (633 transcripts, real Sonnet 4.6 dispatch, next-CLI directive injection confirmed).
+
+**5 dormant infrastructure bugs fixed as positive externalities** (Dream Silos series surfaced them):
+1. Bridge circuit breaker `action` no-op since opossum 9 — dormant repo-wide because chat path bypasses breaker.fire.
+2. Frontend SSE never received named events since v3.0 — useAdminSSE refactor enables 14+ topics, fixes all existing live-update admin surfaces.
+3. dispatchDream undefined-result crash.
+4. Worker failure path lost dispatch_id.
+5. Test env defects (Chromium install, sonner selectors, stale `moe@themozaic.com` credentials).
+
+**Known limitations tracked as v6.1 follow-ups:**
+- Inter-agent delegation via decomposition is structurally complete but functionally cold — task-planner hard-codes `assignedAgentId: null`. Missing piece is planner's agent-selection logic, not messaging plumbing.
+- Phase 45 PCP-02 tool-restriction enforcement unimplemented (ROADMAP SC doesn't require it).
+- Multi-silo support (admin/data-room) deferred.
+- Bulk accept/reject + edit-in-place + proposal search on Dreams page.
+- Stale openclaw/ollama refs in `services/admin/prompt-pipeline.ts` + `gateway-versions.ts` — Bridge consolidation residue rendering dead admin UI.
+
+**Audit artifact:** `.planning/milestone-audit-v6.0.md`.
+
+**Next moves for Moe (when back):**
+- `/gsd:complete-milestone` — archive v6.0 ROADMAP + REQUIREMENTS, reset for v7.0
+- `/gsd:new-milestone` — scope v7.0 priorities
+- v6.0.1 cleanup pass for the non-blocking items above
+
+Pushed `ede2a5a` + `b6076b0`.
+
+---
 
 ## v6.17.0 — Phase 48.4 review-surface SHIPPED — Dream Silos series complete (2026-05-13)
 
