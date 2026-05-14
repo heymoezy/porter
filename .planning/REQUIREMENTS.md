@@ -185,33 +185,33 @@
 | TRC-06 | Phase 48.2 | Complete (48.2-01 schema + workflow, 48.2-04 retention-run endpoint) |
 | TRC-07 | Phase 48.2 | Complete (48.2-02 /silo-none gate, 48.2-04 global config flag) |
 | TRC-08 | Phase 48.2 | Complete (48.2-03) |
-| DRW-01 | Phase 48.3 | Pending (48.3-02) |
-| DRW-02 | Phase 48.3 | Pending (48.3-02) |
-| DRW-03 | Phase 48.3 | Pending (48.3-03) |
-| DRW-04 | Phase 48.3 | Pending (48.3-04) |
-| DRW-05 | Phase 48.3 | Pending (48.3-04, 48.3-05 live-verify) |
-| DRW-06 | Phase 48.3 | Pending (48.3-03 + 48.3-04) |
-| DRW-07 | Phase 48.3 | Pending (48.3-03 + 48.3-04) |
-| DRW-08 | Phase 48.3 | Pending (48.3-02) |
-| DRW-09 | Phase 48.3 | Pending (48.3-05) |
-| DRW-10 | Phase 48.3 | Pending (48.3-04) |
-| DRW-11 | Phase 48.3 | Pending (48.3-04) |
-| DRW-12 | Phase 48.3 | Pending (48.3-02 + 48.3-04) |
-| DRW-13 | Phase 48.3 | Pending (48.3-01) |
-| RVS-01 | Phase 48.4 | Pending (48.4-02) |
-| RVS-02 | Phase 48.4 | Pending (48.4-02) |
-| RVS-03 | Phase 48.4 | Pending (48.4-02) |
-| RVS-04 | Phase 48.4 | Pending (48.4-02) |
-| RVS-05 | Phase 48.4 | Pending (48.4-02) |
-| RVS-06 | Phase 48.4 | Pending (48.4-02) |
-| RVS-07 | Phase 48.4 | Pending (48.4-02 + 48.4-05 live-verify) |
-| RVS-08 | Phase 48.4 | Pending (48.4-03) |
-| RVS-09 | Phase 48.4 | Pending (48.4-03) |
-| RVS-10 | Phase 48.4 | Pending (48.4-04) |
-| RVS-11 | Phase 48.4 | Pending (48.4-04) |
-| RVS-12 | Phase 48.4 | Pending (48.4-04) |
-| RVS-13 | Phase 48.4 | Pending (48.4-01 scaffold + 48.4-05 live E2E) |
-| RVS-14 | Phase 48.4 | Pending (48.4-01) |
+| DRW-01 | Phase 48.3 | Complete |
+| DRW-02 | Phase 48.3 | Complete |
+| DRW-03 | Phase 48.3 | Complete |
+| DRW-04 | Phase 48.3 | Complete |
+| DRW-05 | Phase 48.3 | Complete |
+| DRW-06 | Phase 48.3 | Complete |
+| DRW-07 | Phase 48.3 | Complete |
+| DRW-08 | Phase 48.3 | Complete |
+| DRW-09 | Phase 48.3 | Complete |
+| DRW-10 | Phase 48.3 | Complete |
+| DRW-11 | Phase 48.3 | Complete |
+| DRW-12 | Phase 48.3 | Complete |
+| DRW-13 | Phase 48.3 | Complete |
+| RVS-01 | Phase 48.4 | Complete |
+| RVS-02 | Phase 48.4 | Complete |
+| RVS-03 | Phase 48.4 | Complete |
+| RVS-04 | Phase 48.4 | Complete |
+| RVS-05 | Phase 48.4 | Complete |
+| RVS-06 | Phase 48.4 | Complete |
+| RVS-07 | Phase 48.4 | Complete |
+| RVS-08 | Phase 48.4 | Complete |
+| RVS-09 | Phase 48.4 | Complete |
+| RVS-10 | Phase 48.4 | Complete |
+| RVS-11 | Phase 48.4 | Complete |
+| RVS-12 | Phase 48.4 | Complete |
+| RVS-13 | Phase 48.4 | Complete |
+| RVS-14 | Phase 48.4 | Complete |
 
 **Coverage:**
 - v6.0 requirements: 70 total (35 prior + 8 TRC for Phase 48.2 + 13 DRW for Phase 48.3 + 14 RVS for Phase 48.4)
