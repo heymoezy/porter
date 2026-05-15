@@ -116,7 +116,7 @@ describe('validateDAG()', () => {
 // ── planTasks (smoke test — requires live LLM, skip in unit) ──────────────────
 
 describe('planTasks()', () => {
-  it.todo('sends planner prompt to routingEngine with forceGatewayType ollama');
+  it.todo('sends planner prompt to routingEngine (single claude_cli gateway since v6.9.0)');
   it.todo('retries with error feedback when first response fails validation');
   it.todo('throws after second invalid response');
   it.todo('parses response stripping markdown code fences');

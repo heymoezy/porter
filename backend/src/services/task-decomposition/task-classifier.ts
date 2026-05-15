@@ -5,7 +5,7 @@
  * directly (simple). Two paths:
  *
  *   1. Fast path — pure heuristics, zero LLM calls, handles ~80%+ of messages
- *   2. LLM fallback — cheapest available model for ambiguous cases only
+ *   2. LLM fallback — Bridge dispatch (claude_cli, single gateway) for ambiguous cases
  *
  * The classifier is a pure input gate: it does NOT call any TDE services.
  * Classifier errors must NEVER block normal chat flow — fail-safe is 'simple'.
@@ -52,29 +52,12 @@ export function classifyFast(message: string): 'simple' | 'complex' | 'uncertain
 // ── LLM fallback ──────────────────────────────────────────────────────────────
 
 /**
- * Use the cheapest available model to classify an ambiguous message.
- * Returns ClassificationResult. On any error, defaults to 'simple' (fail-safe).
+ * Use the Bridge (single claude_cli gateway since v6.9.0) to classify an ambiguous
+ * message. Returns ClassificationResult. On any error, defaults to 'simple' (fail-safe).
  */
 export async function classifyWithLLM(message: string): Promise<ClassificationResult> {
   try {
-    const ctx = {
-      message,
-      // TODO(v7.0): Bridge consolidation — since v6.9.0, routingEngine.select ignores
-      // forceGatewayType and always returns claude_cli. This silently dispatches to
-      // claude_cli (the only gateway), not ollama. Either drop forceGatewayType + the
-      // outer try/catch fallback (both unused with single-gateway Bridge), or revive
-      // gateway-type routing in v7.0.
-      forceGatewayType: 'ollama',
-    };
-
-    let decision;
-    try {
-      decision = await routingEngine.select(ctx);
-    } catch {
-      // Ollama unavailable — fall back to any gateway (DEAD-PATHED post v6.9.0 — the
-      // inner try always succeeds because there's only one gateway candidate).
-      decision = await routingEngine.select({ message });
-    }
+    const decision = await routingEngine.select({ message });
 
     const prompt = `Classify this task. Respond with JSON only, no explanation, no markdown fences.
 {"complexity": "simple or complex", "reason": "one sentence max", "estimated_subtasks": 0}

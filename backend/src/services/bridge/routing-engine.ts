@@ -17,10 +17,8 @@ import { emitSSE } from '../scheduler.js';
 import { parseRateLimitHeaders, record429 } from './rate-limit-tracker.js';
 import { v4 as uuidv4 } from 'uuid';
 import { awardXP } from '../rpg-engine.js';
-import { compressToolOutput, estimateTokens, COMPRESS_MODEL } from '../context-compressor.js';
+import { compressToolOutput, estimateTokens } from '../context-compressor.js';
 import { getLegacyTags, normalizeCapabilities } from './capability-registry.js';
-
-const COMPRESS_MODEL_NAME = COMPRESS_MODEL;
 import { upsertSession } from '../session-registry.js';
 import type {
   GatewayRow,
@@ -467,7 +465,7 @@ export class RoutingEngine {
             compressionStats = {
               tool_outputs_compressed: 1,
               tokens_saved: compressed.originalTokens - compressed.compressedTokens,
-              compression_model: COMPRESS_MODEL_NAME,
+              compression_model: 'claude_cli',
             };
           }
         } catch {

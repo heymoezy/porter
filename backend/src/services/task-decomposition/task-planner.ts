@@ -2,9 +2,9 @@
  * task-planner.ts — Task Decomposition Engine: Phase 42 Plan 02
  *
  * Takes a complex user message and produces a validated DAG of subtasks.
- * Uses an LLM (cheapest available, prefers ollama) to generate the plan,
- * then validates it via Kahn's algorithm cycle detection before inserting
- * all task_nodes into PostgreSQL in a single transaction.
+ * Dispatches via the Bridge (claude_cli, single gateway since v6.9.0) to
+ * generate the plan, then validates it via Kahn's algorithm cycle detection
+ * before inserting all task_nodes into PostgreSQL in a single transaction.
  *
  * Exports: planTasks, validateDAG, insertTaskTree
  */
@@ -179,7 +179,7 @@ function parseResponse(raw: string): PlannedTask[] {
 /**
  * Generate a DAG plan from a complex user request via LLM.
  *
- * Dispatches via routingEngine (prefers ollama — cheap).
+ * Dispatches via routingEngine (single claude_cli gateway since v6.9.0).
  * Validates the result with validateDAG.
  * Retries once with error feedback on validation failure.
  * Throws if both attempts fail.
@@ -205,22 +205,8 @@ export async function planTasks(request: PlanRequest): Promise<PlanResult> {
 async function attemptPlan(request: PlanRequest, errorFeedback?: string): Promise<PlannedTask[]> {
   const prompt = buildPlannerPrompt(request, errorFeedback);
 
-  // Prefer ollama (cheap), fall back to any available gateway.
-  // TODO(v7.0): Bridge consolidation — since v6.9.0, routingEngine.select ignores
-  // forceGatewayType and always returns claude_cli (single gateway). The planner
-  // currently runs on Sonnet 4.6 via claude_cli, not the cheap classifier model.
-  // Either restore tiered routing in v7.0 or drop forceGatewayType + the try/catch
-  // fallback (DEAD-PATHED — selectAllCandidates can only return 0 candidates if the
-  // gateways table is empty, which would also break the catch branch).
-  let decision;
-  try {
-    decision = await routingEngine.select({
-      message: prompt,
-      forceGatewayType: 'ollama',
-    });
-  } catch {
-    decision = await routingEngine.select({ message: prompt });
-  }
+  // Single-gateway Bridge (claude_cli) since v6.9.0.
+  const decision = await routingEngine.select({ message: prompt });
 
   const result = await routingEngine.dispatchWithQueue(decision, {
     messages: [{ role: 'user', content: prompt }],
