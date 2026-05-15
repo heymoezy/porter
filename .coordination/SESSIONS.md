@@ -1,5 +1,24 @@
 # Porter — Active Sessions
 
+## v6.0.1 Bridge cleanup pass 3 (Opus 4.7 1M) — 2026-05-15T10:46Z
+- Workstream: Execute pass-3 of v6.0.1 Bridge consolidation cleanup on the safe-to-remove TODO(v7.0) markers from pass-2. Remove dead `forceGatewayType: 'ollama'` hints + surrounding stale "prefer cheap classifier" comments in 3 files (RoutingEngine silently ignores them since v6.9.0). Trim `cli/setup.ts` first-run wizard to claude_cli only. Harden `contact-analyzer.ts` with explicit throw (function still imported by scheduler.ts but DEAD-PATHED, 0 jobs queued).
+- Files claimed (edit):
+  - backend/src/services/context-compressor.ts (remove COMPRESS_MODEL + forceGatewayType)
+  - backend/src/services/bridge/routing-engine.ts (drop COMPRESS_MODEL import — comp_model_name follow-on)
+  - backend/src/services/task-decomposition/task-planner.ts (drop forceGatewayType + try/catch fallback)
+  - backend/src/services/task-decomposition/task-classifier.ts (drop forceGatewayType + try/catch fallback)
+  - backend/src/cli/setup.ts (trim to claude_cli; remove openclaw/ollama branches + "multi-model Bridge configurator" framing)
+  - backend/src/services/contact-analyzer.ts (replace function body with throw — Bridge consolidation signal)
+- Files SKIPPING (out of scope per directive):
+  - backend/src/services/learner.ts (LIVE-AND-WORKING, 2104 sessions)
+  - backend/src/config.ts (env defaults — ~10 consumers, scope decision)
+- Status: **DONE** 2026-05-15T10:55Z. 3 commits:
+  - `8de2cc4` refactor(bridge): remove dead forceGatewayType ollama hints. -46 LOC across 5 files (context-compressor.ts, routing-engine.ts, task-planner.ts, task-classifier.ts, task-planner.test.ts). COMPRESS_MODEL constant + PORTER_COMPRESS_MODEL env var + try/catch fallback retries deleted; compression_model label now hardcoded 'claude_cli'.
+  - `22981a8` refactor(cli): trim setup wizard to claude_cli only. -346 LOC (413 deleted, 67 added). Dropped registerCodexHook/registerGeminiHook/registerOpenClawHook + step7_gatewayContext writers (SOUL.md/IDENTITY.md/TOOLS.md/GEMINI.md) + pcodex/pgemini/popenclaw shell aliases.
+  - `1fbbfb8` refactor(crm): harden contact-analyzer with explicit throw. -168 LOC (199 deleted, 31 added). 213-LOC Ollama-direct impl collapsed to a 31-LOC stub: analyzeContact() throws with revival message; DEFAULT_ANALYSIS/parseAnalysis/buildMessagesSummary/clampScore deleted (no external consumers).
+- Verification: tsc clean × 3; `npm run build` clean; Porter restarted v6.17.1, /health 200. All 4 smoke harnesses green (smoke-48.{1,2,3,4}). Sanity decomposition test passed end-to-end — classify→complex fast-path, planTasks produced valid 5-node DAG via single-gateway claude_cli (no forceGatewayType, no retry fallback).
+- Net: -560 LOC across 6 source files. Zero `forceGatewayType.*ollama` matches in backend/src/. No version bump (admin/setup-script + dead-code cleanup; zero user-visible behavior change).
+
 ## v6.0 Milestone Archive (Opus 4.7 1M) — 2026-05-15T09:00Z
 - Workstream: Execute `/gsd:complete-milestone` autonomously for v6.0 The Orchestration Platform — archive ROADMAP/REQUIREMENTS/audit to `.planning/milestones/v6.0-*.md`, compress ROADMAP to one-line summary, reset REQUIREMENTS to active+carry-over, update PROJECT/STATE/CHECKPOINT, create local git tag (not pushed). Non-destructive — all historical detail preserved in archive files.
 - Status: **DONE** 2026-05-15T09:30Z — single commit `d7025ed` pushed to origin/master (9 files: 3 NEW archive files, 1 rename of audit, 4 active planning compressions, CHECKPOINT update, SESSIONS ledger). Local tag `v6.0.0` created — NOT pushed (Moe reviews before public). `npx tsc --noEmit` clean (no code touched). All 60 v6.0 requirements preserved with traceability in archive; active REQUIREMENTS.md tracks 7 carry-over groups + Self-Improvement + Billing as v7.0 candidates. v6.0 milestone formally closed; awaiting Moe's `/gsd:new-milestone` for v7.0 scoping.
