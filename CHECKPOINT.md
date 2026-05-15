@@ -8,6 +8,36 @@ updated: 2026-05-15
 updated_by: claude-opus-4.7 (Porter Dreams 3 — autonomous /gsd:complete-milestone + v6.0.1 deep cleanup)
 milestone_status: ARCHIVED 2026-05-15 — between milestones, awaiting v7.0
 
+## v6.0.1 Cleanup Pass 3 — Safe TODO(v7.0) removals (2026-05-15)
+
+Took a third pass at the v6.0.1 TODO markers, addressing only items with unambiguous + safe right moves. **Net: -560 LOC across 6 source files. Zero user-visible behavior change.**
+
+**Changes:**
+- `context-compressor.ts` + `routing-engine.ts` — removed `COMPRESS_MODEL` constant + `PORTER_COMPRESS_MODEL` env var + `forceGatewayType: 'ollama'` arg (silently overridden by simplified RoutingEngine since v6.9.0).
+- `task-planner.ts` + `task-classifier.ts` — dropped `forceGatewayType: 'ollama'` + try/catch ollama→claude_cli fallback. Simplified to single `routingEngine.select({message})`. Sanity decomposition test confirms 5-node DAG still works correctly.
+- `cli/setup.ts` — trimmed first-run wizard from 9 steps to 8: removed detection paths + hook registrars + context-file writers (SOUL.md/IDENTITY.md/TOOLS.md/GEMINI.md) for Codex/Gemini/OpenClaw/Ollama. Kept claude binary detection + `pclaude` alias.
+- `contact-analyzer.ts` — `analyzeContact()` body replaced with explicit throw + clear revival message (DEAD-PATHED — no callers in production for 6+ weeks; scheduler import preserved + existing try/catch wraps the throw safely).
+
+**Commits (all pushed):**
+- `8de2cc4` — `refactor(bridge): remove dead forceGatewayType ollama hints`
+- `22981a8` — `refactor(cli): trim setup wizard to claude_cli only`
+- `1fbbfb8` — `refactor(crm): harden contact-analyzer with explicit throw`
+- `60b46fa` — `docs(coordination): mark v6.0.1 bridge cleanup pass-3 DONE`
+
+**Verification:** tsc clean × 3, npm build clean, /health 200 v6.17.1, all 4 smoke harnesses green, decomposition probe passes.
+
+**Still tracked as TODO(v7.0)** (require architectural calls from Moe):
+- `learner.ts` direct ollama daemon call — LIVE-AND-WORKING with 2104 sessions; needs Bridge migration or feature-removal decision.
+- `config.ts` ollamaUrl/openclawUrl/openclawToken env defaults — consumed by ~10 routes; needs scope decision.
+
+---
+
+## v6.0.0 Tag Pushed (2026-05-15)
+
+`git push origin v6.0.0` — public release tag for v6.0 The Orchestration Platform.
+
+---
+
 ## v6.0.1 Deep Bridge Cleanup — DONE (2026-05-15)
 
 Second cleanup pass investigated 9 files flagged in the first pass (commit c6424ed) as out-of-scope. Net -7900 LOC removed, zero user-visible behavior change.
