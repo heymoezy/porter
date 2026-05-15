@@ -2,18 +2,7 @@
 
 ## v6.0 Milestone Archive (Opus 4.7 1M) — 2026-05-15T09:00Z
 - Workstream: Execute `/gsd:complete-milestone` autonomously for v6.0 The Orchestration Platform — archive ROADMAP/REQUIREMENTS/audit to `.planning/milestones/v6.0-*.md`, compress ROADMAP to one-line summary, reset REQUIREMENTS to active+carry-over, update PROJECT/STATE/CHECKPOINT, create local git tag (not pushed). Non-destructive — all historical detail preserved in archive files.
-- Files claimed:
-  - .planning/milestones/v6.0-ROADMAP.md (NEW)
-  - .planning/milestones/v6.0-REQUIREMENTS.md (NEW)
-  - .planning/milestones/v6.0-MILESTONE-AUDIT.md (NEW — moved from .planning/milestone-audit-v6.0.md)
-  - .planning/ROADMAP.md (compress v6.0 section)
-  - .planning/REQUIREMENTS.md (reset to active + carry-over from v6.0)
-  - .planning/PROJECT.md (move v6.0 reqs to Validated, between-milestones state)
-  - .planning/STATE.md (status=between_milestones)
-  - CHECKPOINT.md (v6.0 ARCHIVED entry at top)
-  - .planning/milestone-audit-v6.0.md (DELETE after move)
-- Files NOT touching: any backend/**, admin/**, tests/**, no code changes.
-- Status: active
+- Status: **DONE** 2026-05-15T09:30Z — single commit `d7025ed` pushed to origin/master (9 files: 3 NEW archive files, 1 rename of audit, 4 active planning compressions, CHECKPOINT update, SESSIONS ledger). Local tag `v6.0.0` created — NOT pushed (Moe reviews before public). `npx tsc --noEmit` clean (no code touched). All 60 v6.0 requirements preserved with traceability in archive; active REQUIREMENTS.md tracks 7 carry-over groups + Self-Improvement + Billing as v7.0 candidates. v6.0 milestone formally closed; awaiting Moe's `/gsd:new-milestone` for v7.0 scoping.
 
 ## v6.0.1 Bridge cleanup (Opus 4.7 1M) — 2026-05-15T08:00Z
 - Workstream: Remove openclaw/ollama/codex_cli/gemini_cli residue from `backend/src/services/admin/prompt-pipeline.ts` + `backend/src/services/admin/gateway-versions.ts`. Pure cleanup — no behavioral change for live claude_cli users.
