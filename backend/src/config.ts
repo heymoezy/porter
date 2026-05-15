@@ -11,6 +11,18 @@ export const config = {
 
   // AI backend URLs — override these in the environment for your deployment.
   // Defaults reflect the standard local dev setup documented in porter/CLAUDE.md.
+  //
+  // TODO(v7.0): Bridge consolidation — since v6.9.0, claude_cli is the only Bridge
+  // gateway. These keys are still consumed by direct (non-Bridge) callers:
+  //   - learner.ts          → calls ollama directly for concept extraction (live, ~2100 sessions)
+  //   - contact-analyzer.ts → calls ollama directly for CRM sentiment (dead-pathed, 0 jobs queued)
+  //   - routes/v1/health.ts + routes/admin/{settings,models}.ts + routes/brain-ui.ts +
+  //     routes/v1/templates.ts + routes/v1/chat.ts + routes/v1/admin/{settings,models}.ts
+  //     → all expose these URLs in diagnostic/settings endpoints (no-op gracefully when
+  //       the underlying daemon is offline — the ollama and openclaw daemons happen to be
+  //       running on this host so probes still succeed).
+  // The names "ollamaUrl/openclawUrl" no longer reflect Bridge concepts — they're just
+  // host-side service URLs. Rename + scope-narrow during v7.0 cleanup.
   ollamaUrl: process.env.OLLAMA_URL || 'http://127.0.0.1:11434',
   openclawUrl: process.env.OPENCLAW_URL || 'http://127.0.0.1:18789',
   ollamaModel: process.env.OLLAMA_MODEL || 'qwen2.5-coder:1.5b',
@@ -18,6 +30,7 @@ export const config = {
 
   // Auth token for openclaw gateway. Must be set via OPENCLAW_TOKEN env var.
   // No hardcoded fallback — if unset, openclaw dispatch will fail with a clear error.
+  // TODO(v7.0): no in-repo callers since v6.9.0 — consumed only by external tools.
   openclawToken: process.env.OPENCLAW_TOKEN ?? '',
 
   // Credential encryption key for external connections (Phase 7).

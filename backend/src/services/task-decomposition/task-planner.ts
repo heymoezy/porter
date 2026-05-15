@@ -205,7 +205,13 @@ export async function planTasks(request: PlanRequest): Promise<PlanResult> {
 async function attemptPlan(request: PlanRequest, errorFeedback?: string): Promise<PlannedTask[]> {
   const prompt = buildPlannerPrompt(request, errorFeedback);
 
-  // Prefer ollama (cheap), fall back to any available gateway
+  // Prefer ollama (cheap), fall back to any available gateway.
+  // TODO(v7.0): Bridge consolidation — since v6.9.0, routingEngine.select ignores
+  // forceGatewayType and always returns claude_cli (single gateway). The planner
+  // currently runs on Sonnet 4.6 via claude_cli, not the cheap classifier model.
+  // Either restore tiered routing in v7.0 or drop forceGatewayType + the try/catch
+  // fallback (DEAD-PATHED — selectAllCandidates can only return 0 candidates if the
+  // gateways table is empty, which would also break the catch branch).
   let decision;
   try {
     decision = await routingEngine.select({

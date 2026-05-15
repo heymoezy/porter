@@ -411,6 +411,13 @@ async function searchReddit(
  * Applies scrubPII() to every extracted concept content.
  * Returns empty concepts on parse failure — never throws.
  * Counts as 1 request against session budget.
+ *
+ * TODO(v7.0): Bridge consolidation — this bypasses the Bridge (claude_cli) entirely
+ * and calls the host's ollama daemon (127.0.0.1:11434) directly. Live: ~2100 sessions
+ * completed against this path via the agent_jobs queue. Decide in v7.0 whether learner
+ * should keep its direct ollama dependency or route through the Bridge (which would
+ * unify cost tracking + dispatch_log + skills routing at the cost of latency on this
+ * cheap-classifier workload).
  */
 async function extractConcepts(
   contentChunks: string[],

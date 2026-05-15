@@ -59,6 +59,11 @@ export async function classifyWithLLM(message: string): Promise<ClassificationRe
   try {
     const ctx = {
       message,
+      // TODO(v7.0): Bridge consolidation — since v6.9.0, routingEngine.select ignores
+      // forceGatewayType and always returns claude_cli. This silently dispatches to
+      // claude_cli (the only gateway), not ollama. Either drop forceGatewayType + the
+      // outer try/catch fallback (both unused with single-gateway Bridge), or revive
+      // gateway-type routing in v7.0.
       forceGatewayType: 'ollama',
     };
 
@@ -66,7 +71,8 @@ export async function classifyWithLLM(message: string): Promise<ClassificationRe
     try {
       decision = await routingEngine.select(ctx);
     } catch {
-      // Ollama unavailable — fall back to any gateway
+      // Ollama unavailable — fall back to any gateway (DEAD-PATHED post v6.9.0 — the
+      // inner try always succeeds because there's only one gateway candidate).
       decision = await routingEngine.select({ message });
     }
 

@@ -38,7 +38,16 @@ export const COMPRESS_KEEP_RECENT = parseInt(
   10
 );
 
-/** Preferred compression model gateway type (default 'ollama' — cheapest local) */
+/**
+ * Preferred compression model gateway type (default 'ollama' — cheapest local).
+ *
+ * TODO(v7.0): Bridge consolidation — since v6.9.0, routing-engine.ts:select() ignores
+ * forceGatewayType entirely and always returns the single claude_cli gateway. The
+ * 'ollama' default here is silently overridden — compression calls succeed via
+ * claude_cli, not ollama. Either remove this env var + COMPRESS_MODEL constant (and
+ * the forceGatewayType arg in dispatchCompression), or revive forceGatewayType
+ * routing in v7.0 if Bridge regains multiple gateway types.
+ */
 export const COMPRESS_MODEL = process.env.PORTER_COMPRESS_MODEL ?? 'ollama';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

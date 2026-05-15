@@ -103,6 +103,13 @@ function parseAnalysis(raw: unknown): ContactAnalysis {
  * Returns DEFAULT_ANALYSIS for contacts with no message history.
  * Throws on Ollama network/parse errors so the scheduler can mark the job failed
  * and re-enqueue with an error backoff.
+ *
+ * TODO(v7.0): Bridge consolidation — invocation path is alive in scheduler.ts (CRM-03
+ * contact_analysis trigger) but zero contact_analysis jobs have ever been queued
+ * (agent_jobs WHERE trigger_type='contact_analysis' returns 0 rows as of 2026-05-15).
+ * Function is dead-pathed but still callable. Decide in v7.0: delete entire CRM-03
+ * pipeline (analyzer + scheduler trigger + contact_analyses table), or actually wire
+ * up automatic triggers and route through the Bridge.
  */
 export async function analyzeContact(contactId: string): Promise<ContactAnalysis> {
   // 1. Fetch contact display name for the prompt

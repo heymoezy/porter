@@ -5,6 +5,15 @@
  * Usage: cd /home/lobster/documents/porter/backend && npx tsx src/cli/setup.ts
  *
  * Idempotent — safe to run multiple times.
+ *
+ * TODO(v7.0): Bridge consolidation — Porter's Bridge collapsed to claude_cli only in
+ * v6.9.0, but this first-run wizard still detects + registers session hooks for all 5
+ * historical CLIs (Claude/Codex/Gemini/OpenClaw/Ollama). The mechanical actions are
+ * still valid (binary detection + hook registration on the user's box), but the
+ * "multi-model Bridge configurator" framing and the gateway-context files written for
+ * each CLI (SOUL.md/IDENTITY.md/TOOLS.md) are stale. Decide in v7.0: drop the
+ * openclaw/ollama detection entirely (claude_cli only), or rework the wizard around
+ * "tools the user has installed" rather than "gateways in the Bridge".
  */
 
 import fs from 'fs';
