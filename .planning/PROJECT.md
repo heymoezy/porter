@@ -8,23 +8,26 @@ Porter is an AI orchestration platform where non-technical users create projects
 
 Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input — the "GSD-like flow" applied to everything Porter does.
 
-## Current Milestone: v6.0 The Orchestration Platform
+## Current Milestone: Between milestones — v7.0 TBD
 
-**Goal:** Transform Porter from a chat router into a real multi-model orchestration platform. Task decomposition, inter-agent messaging, autonomous job queues, tool-use dispatch across ALL gateways, project monitoring/watchers, and project substrate architecture.
+**Status (2026-05-15):** v6.0 The Orchestration Platform formally archived. All 12 phases (40-48.4), 41 plans, 60 requirements shipped. Awaiting Moe's `/gsd:new-milestone` to scope v7.0.
 
-**Target features:**
-- Task decomposition engine (complex → DAG → parallel execution → synthesis)
-- Inter-agent messaging plane (structured handoffs, coordination, not just chat forwarding)
-- Autonomous job queue (agents pull work, Porter assigns based on capabilities)
-- Tool-use dispatch for ALL gateways (CLI subprocess + HTTP agent loop — already started in v5.2)
-- Project monitoring/watchers (scheduled agents watching external sources per project)
-- Project substrate V1 (every folder = project container with structure/intake/memory/governance)
-- Frozen memory snapshots (immutable at session start, writes go to next session)
-- Dynamic tool schema (strip tools for unavailable backends)
-- Capability registry (per-gateway strengths, cost tier, context window)
-- Porter control plane (Porter as master orchestrator, agents as subordinate workers)
+**Likely v7.0 candidates** (carried over from v6.0 closeout — see `.planning/REQUIREMENTS.md`):
+- Inter-agent delegation activation (task-planner agent-selection logic)
+- PCP-02 tool-restriction enforcement on child dispatches
+- Multi-silo support (admin / data-room silo) — extend Dream Silos beyond software
+- Dreams page UX polish (bulk accept/reject, edit-in-place, proposal search)
+- Deeper Bridge consolidation cleanup (`config.ts`, `learner.ts`, `contact-analyzer.ts`, etc.)
+- Self-Improvement (SIM-01..03) — agent-driven development, pattern mining, self-modifying codebase
+- SaaS Billing (BIL-01..03) — Lemon Squeezy, usage metering, plan limits
 
-**Previous milestone:** v5.0 Living Skills (8 phases shipped — skill selection, feedback telemetry, evolution, quality scoring, template UX, adaptive context, bridge task dispatch)
+**Completed milestones:**
+- v1.0 Foundation + Core Platform (2026-03-21) — 7 phases, 30/30 reqs
+- v2.0 Backend Ready (2026-03-24) — 9 phases, 38/41 reqs (3 billing deferred)
+- v3.0 Porter Bridge (2026-03-25) — 8 phases, 46/46 reqs
+- v4.0 The Arena (2026-04-02) — 6 phases, 17/17 plans (Phase 28 Battle Arena deferred)
+- v5.0 Living Skills (2026-04-03) — 9 phases, 30/30 reqs
+- **v6.0 The Orchestration Platform (2026-05-13)** — 12 phases, 41 plans, 60/60 reqs, archived 2026-05-15. See `.planning/milestones/v6.0-ROADMAP.md`
 
 ## Requirements
 
@@ -70,10 +73,22 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ Smart routing engine (DB-driven gateway selection, routing rules, dispatch logging, concurrency queuing, session context) — v3.0 Phase 20
 - ✓ Error capture (frontend error POST endpoint with stack traces, component context) — v2.0 Phase 8
 - ✓ Bridge task dispatch (CLI subprocess + HTTP agent loop for real code execution) — v5.2
+- ✓ Gateway capability registry (strengths, cost_tier, context_window, tool_support, agentic flag per gateway) — v6.0 Phase 40
+- ✓ Session intelligence (frozen memory snapshots, cross-session FTS search, outcome-driven routing confidence) — v6.0 Phase 41
+- ✓ Task decomposition engine (classifier → DAG → parallel executor → joiner → synthesis) — v6.0 Phase 42
+- ✓ Inter-agent messaging (Porter-coordinated delegation, correlation IDs, hop limits, peer-to-peer guard) — v6.0 Phase 43
+- ✓ Autonomous job queue (agent_jobs lifecycle, skill+gateway matched assignment, self-scheduled jobs) — v6.0 Phase 44
+- ✓ Porter control plane (delegation doctrine, depth limits, approval gates for high-risk actions) — v6.0 Phase 45
+- ✓ Project monitoring (web_search/email/rss/custom watchers, findings in activity feed, notifications) — v6.0 Phase 46
+- ✓ Project substrate (canonical /_system/ directory, intelligence ingress, Atlas structural agent) — v6.0 Phase 47
+- ✓ Silo foundation (silos registry table, software seed, silo-aware /context injection, /silo CLI command) — v6.0 Phase 48.1
+- ✓ Transcript capture (Stop + UserPromptSubmit hooks, PII scrub, 30-day retention, /silo none kill switch) — v6.0 Phase 48.2
+- ✓ Software dream worker (weekly Sonnet 4.6 raw-passthrough consolidation, refine-don't-append doctrine, memory_proposals) — v6.0 Phase 48.3
+- ✓ Dream review surface (admin /dreams page, transactional 4-kind accept matrix, auto-expiry, SSE-driven UI) — v6.0 Phase 48.4
 
 ### Active
 
-- [ ] SaaS billing (Lemon Squeezy subscriptions, usage metering, plan limit enforcement)
+- [ ] v7.0 — TBD, awaiting `/gsd:new-milestone`. See `.planning/REQUIREMENTS.md` "Carry-over from v6.0" for candidates.
 
 ### Out of Scope
 
@@ -129,7 +144,13 @@ Porter has been in development since Feb 18, 2026. Current version is v6.12.0. S
 | Bridge task dispatch (v5.2) | CLI subprocess + HTTP agent loop for real code execution | ✓ Verified — Claude + Codex + Gemini all working |
 | Brain + Admin merge | One process, one port, one version number | ✓ Shipped v5.0 |
 | porter.py deleted | Fastify is sole backend | ✓ Complete |
-| Orchestration is THE feature | Not a chat router — task decomposition + agent coordination | — v6.0 scope |
+| Orchestration is THE feature | Not a chat router — task decomposition + agent coordination | ✓ Shipped v6.0 |
+| Bridge consolidated to claude_cli only | OpenClaw/Ollama/Codex/Gemini removed during v6.0 (v6.9.0 strip, v6.14/v6.15 isolation+raw, v6.0.1 admin cleanup). Single-backend posture is the new floor. | ✓ Shipped v6.0 |
+| Three-layer Refinement Doctrine for Dream Silos | Prompt instruction + worker `validateRefinementDoctrine` + DB `sort_order` enforce refine-before-append at write-time AND display-time | ✓ Shipped v6.0 Phase 48.3 |
+| Raw passthrough by omission (not a flag) | Dream-worker omits `agentId`/`projectId`/`skillsUsed`/`directiveStats`/`dispatchStrategy` instead of `raw: true`. Memory V3 / skills / doctrine only engage when fields are set. Verified empirically on live Sonnet dispatch. | ✓ Shipped v6.0 Phase 48.3 |
+| Silo-scoped reinforcement learning is first-class scope | `scope='silo'`, parallel to global/project/agent. Cross-silo bleed impossible by construction. Software silo seeded with 4 sealed `moe-direct` directives. | ✓ Shipped v6.0 Phase 48 series |
+| Wave 0 smoke harness pattern | Phases 48.1-48.4 each shipped tests/smoke-48.X.sh BEFORE implementation plans. Every downstream task got a single-shot `<verify>` command. Pattern established as standard for future complex phases. | ✓ Shipped v6.0 |
+| Hooks live outside Porter repo | `porter-user-prompt.js` + `porter-stop.js` are global Claude Code hooks at `/home/lobster/.claude/hooks/`. Deliberately uncommitted; full contents reproduced in plan SUMMARYs for re-deployment. | ✓ Shipped v6.0 Phase 48.1-48.2 |
 
 ---
-*Last updated: 2026-05-13 after Phase 48.4 review-surface shipped (v6.17.0) — Dream Silos series COMPLETE*
+*Last updated: 2026-05-15 after v6.0 milestone archive — between milestones, awaiting v7.0 scoping*

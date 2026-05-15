@@ -1,5 +1,20 @@
 # Porter — Active Sessions
 
+## v6.0 Milestone Archive (Opus 4.7 1M) — 2026-05-15T09:00Z
+- Workstream: Execute `/gsd:complete-milestone` autonomously for v6.0 The Orchestration Platform — archive ROADMAP/REQUIREMENTS/audit to `.planning/milestones/v6.0-*.md`, compress ROADMAP to one-line summary, reset REQUIREMENTS to active+carry-over, update PROJECT/STATE/CHECKPOINT, create local git tag (not pushed). Non-destructive — all historical detail preserved in archive files.
+- Files claimed:
+  - .planning/milestones/v6.0-ROADMAP.md (NEW)
+  - .planning/milestones/v6.0-REQUIREMENTS.md (NEW)
+  - .planning/milestones/v6.0-MILESTONE-AUDIT.md (NEW — moved from .planning/milestone-audit-v6.0.md)
+  - .planning/ROADMAP.md (compress v6.0 section)
+  - .planning/REQUIREMENTS.md (reset to active + carry-over from v6.0)
+  - .planning/PROJECT.md (move v6.0 reqs to Validated, between-milestones state)
+  - .planning/STATE.md (status=between_milestones)
+  - CHECKPOINT.md (v6.0 ARCHIVED entry at top)
+  - .planning/milestone-audit-v6.0.md (DELETE after move)
+- Files NOT touching: any backend/**, admin/**, tests/**, no code changes.
+- Status: active
+
 ## v6.0.1 Bridge cleanup (Opus 4.7 1M) — 2026-05-15T08:00Z
 - Workstream: Remove openclaw/ollama/codex_cli/gemini_cli residue from `backend/src/services/admin/prompt-pipeline.ts` + `backend/src/services/admin/gateway-versions.ts`. Pure cleanup — no behavioral change for live claude_cli users.
 - Files claimed:

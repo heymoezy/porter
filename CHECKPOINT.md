@@ -5,8 +5,45 @@
 project: porter
 version: v6.17.1
 updated: 2026-05-15
-updated_by: claude-opus-4.7 (Tom 3 — handover-2026-05-15 outstanding cleanup + v6.0.1 file-watcher patch)
-milestone_status: READY-TO-CLOSE (audit 2026-05-14)
+updated_by: claude-opus-4.7 (v6.0 Milestone Archive — autonomous /gsd:complete-milestone execution)
+milestone_status: ARCHIVED 2026-05-15 — between milestones, awaiting v7.0
+
+## v6.0 ARCHIVED 2026-05-15 — Milestone formally closed
+
+**v6.0 The Orchestration Platform** formally archived via autonomous `/gsd:complete-milestone` execution (Moe unavailable).
+
+**Archive artifacts created:**
+- `.planning/milestones/v6.0-ROADMAP.md` — full phase details for all 12 phases (40-48.4), Plans checked off, Milestone Summary with decisions/issues/tech-debt
+- `.planning/milestones/v6.0-REQUIREMENTS.md` — full 60-row traceability with archive header
+- `.planning/milestones/v6.0-MILESTONE-AUDIT.md` — moved from `.planning/milestone-audit-v6.0.md` (original deleted)
+
+**Active planning files compressed:**
+- `.planning/ROADMAP.md` — v6.0 compressed to one-line entry pointing at archive; past-milestones line summaries (v1.0-v6.0) preserved; "Upcoming: v7.0 TBD" placeholder added
+- `.planning/REQUIREMENTS.md` — reset to "Active + Carry-over from v6.0" shape with v7.0 placeholder + 7 carry-over groups (inter-agent delegation activation, PCP-02 tool-restrictions, multi-silo, Dreams UX, deeper Bridge cleanup, Self-Improvement, Billing)
+- `.planning/PROJECT.md` — all 13 v6.0 phase deliverables moved from Active to Validated; Current Milestone now "Between milestones — v7.0 TBD"; Key Decisions table extended with 6 v6.0 decisions
+- `.planning/STATE.md` — `status: between_milestones`, stopped_at: "v6.0 archived 2026-05-15. Awaiting v7.0 scope from Moe."
+
+**Git state:**
+- Local tag `v6.0.0` created (NOT pushed — Moe reviews tags before they go public)
+- Single archive commit pushed to origin/master
+
+**Scope:** 12 phases (40-48.4), 41 plans, 60 requirements all complete. Dream Silos series (48.1-48.4 inserted decimal phases) is the milestone's most architecturally substantial work — full closed loop verified live on production data (real Sonnet 4.6 dispatch → directive injection in next CLI session).
+
+**v6.1+ tech debt tracked in active REQUIREMENTS.md:** task-planner agent-selection, PCP-02 tool-restrictions, multi-silo, bulk accept/reject, edit-in-place, proposal search, deeper Bridge cleanup (`config.ts`, `learner.ts`, `contact-analyzer.ts`, `context-compressor.ts`, `cli/setup.ts`, `/gateways/restart`+`/speed-test`, `migrate-bridge-v7/15`, orphaned `admin/backend/**`).
+
+**5 dormant infrastructure bugs surfaced + fixed as positive externalities during v6.0:**
+1. Bridge circuit breaker `action` no-op since opossum 9 — dormant repo-wide because chat path bypasses breaker.fire
+2. Frontend SSE never received named events since v3.0 — useAdminSSE refactor enables 14+ topics, fixes all existing live-update admin surfaces
+3. dispatchDream undefined-result crash
+4. Worker failure path lost dispatch_id
+5. Test env defects (Chromium install, sonner selectors, stale `moe@themozaic.com` credentials in 10 test files — fixed in v6.0.1 pass)
+
+**Next moves for Moe:**
+- `/gsd:new-milestone` — scope v7.0 priorities (likely candidates listed in `.planning/REQUIREMENTS.md` "Carry-over from v6.0")
+- `git push origin v6.0.0` — push tag when ready to make milestone public
+- Optionally pick up v7.0 carry-over items in priority order
+
+---
 
 ## v6.17.1 — file-watcher inotify regression patch + handover cleanup (2026-05-15)
 
