@@ -402,8 +402,9 @@
   - tests/skill-pack-explorer.spec.js
   - tests/ui-regression.spec.js
   - tests/smoke-phase11.sh, smoke-phase12.sh, smoke-phase13.sh, smoke-phase13.1.sh
+  - tests/dreams.spec.js (stale comment ref)
   - /home/lobster/.claude/projects/-home-lobster/memory/MEMORY.md (lines 30, 146 — credential-stating refs)
-- Status: active
+- Status: **DONE** — 10 test files patched, MEMORY.md corrected, ui-regression Auth test green against live v6.17.0. Bonus Rule 1: `.sidebar` post-login marker also retired in v4.x refresh (admin shell uses `<aside><nav>` now) — updated all post-login waitForSelector calls. Active code has zero `themozaic.com` / `#uname` / `#pw` / `.login-btn` references.
 
 ## Tom 3 (Opus 4.7 1M) — 2026-05-15T00:00Z
 - Workstream: Finish handover-2026-05-15-tom-next outstanding items — ship orphan file-watcher.ts inotify regression fix, scrub junk binaries from backend/, archive handover doc, update CHECKPOINT.
