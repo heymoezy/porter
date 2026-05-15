@@ -18,7 +18,7 @@ FAIL=0
 # Extract session cookie from login
 COOKIE=$(curl -s -c - "$BASE_URL/../login" -X POST \
   -H "Content-Type: application/json" \
-  -d '{"email":"moe@themozaic.com","password":"porter"}' | grep porter_session | awk '{print $NF}')
+  -d '{"email":"moe@askporter.app","password":"porter"}' | grep porter_session | awk '{print $NF}')
 
 if [ -z "$COOKIE" ]; then
   echo "FATAL: Login failed — no porter_session cookie returned"

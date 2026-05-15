@@ -40,7 +40,7 @@ echo "=== Auth ==="
 LOGIN_RESP=$(curl -s -c /tmp/smoke-ph131-cookies.txt "$BASE_URL/auth/login" \
   -X POST \
   -H "Content-Type: application/json" \
-  -d '{"email":"moe@themozaic.com","password":"porter"}')
+  -d '{"email":"moe@askporter.app","password":"porter"}')
 
 COOKIE=$(grep porter_session /tmp/smoke-ph131-cookies.txt 2>/dev/null | awk '{print $NF}' || true)
 
