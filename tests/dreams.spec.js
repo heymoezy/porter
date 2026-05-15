@@ -7,8 +7,9 @@
 //   - Plan 05 enables RVS-13 (full E2E loop: dispatch → SSE → accept → DB)
 //
 // CommonJS module shape mirrors tests/skill-evolution.spec.js (the canonical
-// scaffold-then-enable predecessor). Auth uses the same #uname / #pw / .login-btn
-// selectors as the rest of the suite. DB probes use execSync('psql -d porter -tAc').
+// scaffold-then-enable predecessor). Auth uses the refreshed v4.x selectors
+// (#email / #password / role=button) — old #uname/#pw/.login-btn were stale
+// across the suite and cleaned up in v6.0.1. DB probes use execSync('psql -d porter -tAc').
 
 const { test, expect } = require('@playwright/test');
 const { execSync } = require('child_process');

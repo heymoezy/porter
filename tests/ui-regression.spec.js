@@ -13,11 +13,15 @@ test.setTimeout(30000);
 // ── Auth helper ──────────────────────────────────────────────────────────────
 
 async function login(page) {
+  // Refreshed v4.x selectors: #email / #password / role=button. Old #uname/#pw/.login-btn
+  // stale across the suite — caught by Plan 48.4-05 and cleaned up in v6.0.1.
+  // Post-login shell uses <aside>/<nav> (.sidebar class also retired in the v4.x refresh).
   await page.goto('/login');
-  await page.fill('#uname', 'moe');
-  await page.fill('#pw', 'porter');
-  await page.click('.login-btn');
-  await page.waitForSelector('.sidebar', { timeout: 15000 });
+  await page.waitForSelector('#email', { timeout: 15000 });
+  await page.fill('#email', 'moe@askporter.app');
+  await page.fill('#password', 'porter');
+  await page.getByRole('button', { name: /sign in/i }).click();
+  await page.waitForSelector('aside nav, .sidebar, [class*="sidebar"]', { timeout: 15000 });
 }
 
 // ── Helper: switch to a module tab ───────────────────────────────────────────
@@ -53,7 +57,11 @@ async function isVisible(page, selector) {
 test.describe('Auth', () => {
   test('can log in and reach main app', async ({ page }) => {
     await login(page);
-    expect(await page.locator('.sidebar').isVisible()).toBe(true);
+    // v4.x admin shell uses <aside> with <nav> inside (no .sidebar class anymore).
+    const shellVisible =
+      (await page.locator('aside nav').isVisible().catch(() => false)) ||
+      (await page.locator('.sidebar').isVisible().catch(() => false));
+    expect(shellVisible).toBe(true);
   });
 });
 

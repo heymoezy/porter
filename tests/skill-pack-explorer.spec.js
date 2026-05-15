@@ -16,11 +16,14 @@ const TEST_SKILL = 'motion-designer';
 // ── Auth helper ───────────────────────────────────────────────────────────────
 
 async function loginAdmin(page) {
+  // Refreshed v4.x selectors: #email / #password / role=button. Old #uname/#pw/.login-btn
+  // stale across the suite — caught by Plan 48.4-05 and cleaned up in v6.0.1.
   await page.goto(`${ADMIN}/login`);
-  await page.fill('#uname', 'moe');
-  await page.fill('#pw', 'porter');
-  await page.click('.login-btn');
-  await page.waitForSelector('.sidebar', { timeout: 15000 });
+  await page.waitForSelector('#email', { timeout: 15000 });
+  await page.fill('#email', 'moe@askporter.app');
+  await page.fill('#password', 'porter');
+  await page.getByRole('button', { name: /sign in/i }).click();
+  await page.waitForSelector('aside nav, .sidebar, [class*="sidebar"]', { timeout: 15000 });
 }
 
 // ── PKX-01: File tree visible in pack explorer ────────────────────────────────

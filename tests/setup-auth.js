@@ -14,13 +14,15 @@ const { chromium } = require('playwright');
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await page.goto('http://127.0.0.1:3001');
-  await page.fill('#uname', 'moe');
-  await page.fill('#pw', password);
-  await page.click('.login-btn');
+  await page.goto('http://127.0.0.1:3001/login');
+  // Refreshed v4.x selectors: #email / #password / role=button (old #uname/#pw/.login-btn stale).
+  await page.waitForSelector('#email', { timeout: 5000 });
+  await page.fill('#email', 'moe@askporter.app');
+  await page.fill('#password', password);
+  await page.getByRole('button', { name: /sign in/i }).click();
 
   try {
-    await page.waitForSelector('.sidebar', { timeout: 5000 });
+    await page.waitForSelector('aside nav, .sidebar, [class*="sidebar"]', { timeout: 5000 });
     await context.storageState({ path: './auth.json' });
     console.log('Auth saved to auth.json');
   } catch (e) {
