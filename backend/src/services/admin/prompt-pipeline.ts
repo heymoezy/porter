@@ -7,6 +7,9 @@
  * 3. Directives — workspace/project rules from directives table
  * 4. Memory Context — relevant concepts/notes
  * 5. Gateway Instructions — per-gateway behavioral tweaks
+ *
+ * NOTE: Bridge consolidation (v6.9.0) collapsed to a single backend (claude_cli).
+ * Stale ollama/openclaw/codex_cli/gemini_cli probes were removed in v6.0.1.
  */
 
 import { readFileSync, existsSync } from 'fs';
@@ -48,48 +51,17 @@ function readFileSafe(path: string): string | null {
 // ── Gateway config file locations ─────────────────────
 
 const GATEWAY_CONFIG_FILES: Record<string, Array<{ name: string; path: string }>> = {
-  ollama: [
-    { name: 'Ollama Service', path: '/etc/systemd/system/ollama.service' },
-  ],
-  openclaw: [
-    { name: 'openclaw.json', path: join(homedir(), '.openclaw', 'openclaw.json') },
-    { name: 'SOUL.md', path: join(homedir(), '.openclaw', 'workspace', 'SOUL.md') },
-    { name: 'IDENTITY.md', path: join(homedir(), '.openclaw', 'workspace', 'IDENTITY.md') },
-    { name: 'AGENTS.md', path: join(homedir(), '.openclaw', 'workspace', 'AGENTS.md') },
-    { name: 'USER.md', path: join(homedir(), '.openclaw', 'workspace', 'USER.md') },
-    { name: 'TOOLS.md', path: join(homedir(), '.openclaw', 'workspace', 'TOOLS.md') },
-    { name: 'HEARTBEAT.md', path: join(homedir(), '.openclaw', 'workspace', 'HEARTBEAT.md') },
-    { name: 'BOOTSTRAP.md', path: join(homedir(), '.openclaw', 'workspace', 'BOOTSTRAP.md') },
-    { name: 'models.json', path: join(homedir(), '.openclaw', 'agents', 'main', 'agent', 'models.json') },
-    { name: 'paired.json', path: join(homedir(), '.openclaw', 'devices', 'paired.json') },
-    { name: 'exec-approvals.json', path: join(homedir(), '.openclaw', 'exec-approvals.json') },
-    { name: 'cron/jobs.json', path: join(homedir(), '.openclaw', 'cron', 'jobs.json') },
-    { name: 'config-health.json', path: join(homedir(), '.openclaw', 'logs', 'config-health.json') },
-  ],
   claude_cli: [
     { name: 'CLAUDE.md (global)', path: join(homedir(), 'CLAUDE.md') },
     { name: 'CLAUDE.md (porter)', path: join(homedir(), 'documents', 'porter', 'CLAUDE.md') },
     { name: 'CLAUDE.md (admin)', path: join(homedir(), 'documents', 'porter-admin', 'CLAUDE.md') },
-  ],
-  codex_cli: [
-    { name: 'config.toml', path: join(homedir(), '.codex', 'config.toml') },
-    { name: 'version.json', path: join(homedir(), '.codex', 'version.json') },
-    { name: 'models_cache.json', path: join(homedir(), '.codex', 'models_cache.json') },
-  ],
-  gemini_cli: [
-    { name: 'GEMINI.md', path: join(homedir(), '.gemini', 'GEMINI.md') },
-    { name: 'settings.json', path: join(homedir(), '.gemini', 'settings.json') },
   ],
 };
 
 // ── Build prompt profile for a gateway ────────────────
 
 const PORTER_GATEWAY_PROMPTS: Record<string, string> = {
-  ollama: `You are Porter, an AI orchestration platform. Running on local Ollama (limited context). Be concise and direct.`,
-  openclaw: `You are Porter, an AI orchestration platform. Dispatching through OpenClaw gateway. Be helpful and thorough.`,
   claude_cli: `You are Porter, an AI orchestration platform. Running through Claude. Use deep reasoning for complex analysis.`,
-  codex_cli: `You are Porter, an AI orchestration platform. Running through Codex. Optimize for code generation and structured output.`,
-  gemini_cli: `You are Porter, an AI orchestration platform. Running through Gemini. Leverage broad knowledge and multimodal capabilities.`,
 };
 
 export async function buildGatewayPromptProfile(gatewayType: string, gatewayName: string): Promise<GatewayPromptProfile> {

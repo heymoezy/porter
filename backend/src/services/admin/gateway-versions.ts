@@ -1,13 +1,16 @@
 /**
  * Gateway Version Service — detects running + latest versions at startup
  *
- * Replicates porter.py's version detection:
- * - Running version: CLI --version or HTTP API endpoint
- * - Latest version: npm view / GitHub releases API
+ * For each enabled gateway:
+ * - Running version: CLI --version on metadata.binary_path
+ * - Latest version: npm view <package>
  * - Persists to gateways.metadata.version + last_health_at
  * - Caches latest versions for 6 hours
  *
  * Runs once at startup, then on-demand via probeAllGateways().
+ *
+ * NOTE: Bridge consolidation (v6.9.0) collapsed to a single backend (claude_cli).
+ * Stale ollama/openclaw/codex_cli/gemini_cli probes were removed in v6.0.1.
  */
 
 import { execSync } from 'child_process';
@@ -64,28 +67,6 @@ function cliVersion(binaryPath: string): string | null {
   }
 }
 
-async function httpVersion(url: string, type: string): Promise<string | null> {
-  try {
-    const base = url.replace(/\/$/, '');
-    if (type === 'ollama') {
-      const resp = await fetch(`${base}/api/version`, { signal: AbortSignal.timeout(3000) });
-      if (resp.ok) {
-        const d = await resp.json() as { version?: string };
-        return d.version ? extractSemver(d.version) ?? d.version : null;
-      }
-    } else if (type === 'openclaw') {
-      const resp = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
-      if (resp.ok) {
-        const d = await resp.json() as Record<string, unknown>;
-        const v = d.version ?? d.server_version ?? d.openclaw_version;
-        if (typeof v === 'string') return extractSemver(v) ?? v;
-      }
-      return cliVersion('openclaw');
-    }
-  } catch { /* best-effort */ }
-  return null;
-}
-
 function npmLatest(pkg: string): string | null {
   try {
     const out = execSync(`npm view ${pkg} version 2>/dev/null`, { timeout: 5000, encoding: 'utf8' });
@@ -95,20 +76,6 @@ function npmLatest(pkg: string): string | null {
   }
 }
 
-async function githubLatestRelease(repo: string): Promise<string | null> {
-  try {
-    const resp = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
-      signal: AbortSignal.timeout(5000),
-      headers: { 'User-Agent': 'porter-admin' },
-    });
-    if (resp.ok) {
-      const d = await resp.json() as { tag_name?: string };
-      return d.tag_name ? extractSemver(d.tag_name) : null;
-    }
-  } catch { /* best-effort */ }
-  return null;
-}
-
 // ── Hook detection per gateway type ───────────────────
 
 function detectHooks(gwType: string): GatewayHookInfo {
@@ -116,37 +83,6 @@ function detectHooks(gwType: string): GatewayHookInfo {
   try {
     if (gwType === 'claude_cli') {
       const settingsPath = join(homedir(), '.claude', 'settings.json');
-      const data = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
-      const hooks = data.hooks as Record<string, unknown[]> | undefined;
-      if (!hooks) return none;
-      let count = 0;
-      for (const eventHooks of Object.values(hooks)) {
-        if (Array.isArray(eventHooks)) {
-          for (const group of eventHooks) {
-            const g = group as { hooks?: unknown[] };
-            if (Array.isArray(g.hooks)) count += g.hooks.length;
-          }
-        }
-      }
-      return { hooks_configured: count > 0, hook_count: count };
-    }
-
-    if (gwType === 'codex_cli') {
-      const configPath = join(homedir(), '.codex', 'config.toml');
-      const content = readFileSync(configPath, 'utf8');
-      const matches = content.match(/^\[\[hooks\]\]/gm);
-      const count = matches ? matches.length : 0;
-      return { hooks_configured: count > 0, hook_count: count };
-    }
-
-    if (gwType === 'openclaw') {
-      const agentsPath = join(homedir(), '.openclaw', 'workspace', 'AGENTS.md');
-      readFileSync(agentsPath, 'utf8');
-      return { hooks_configured: true, hook_count: 1 };
-    }
-
-    if (gwType === 'gemini_cli') {
-      const settingsPath = join(homedir(), '.gemini', 'settings.json');
       const data = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
       const hooks = data.hooks as Record<string, unknown[]> | undefined;
       if (!hooks) return none;
@@ -172,9 +108,6 @@ function detectHooks(gwType: string): GatewayHookInfo {
 
 const NPM_PACKAGES: Record<string, string> = {
   claude_cli: '@anthropic-ai/claude-code',
-  codex_cli: '@openai/codex',
-  gemini_cli: '@google/gemini-cli',
-  openclaw: 'openclaw',
 };
 
 // ── Core: probe all gateways ──────────────────────────
@@ -185,24 +118,12 @@ export async function probeAllGateways(): Promise<GatewayVersionInfo[]> {
     metadata: Record<string, unknown>; status: string;
   }>('SELECT id, type, name, url, metadata, status FROM gateways WHERE enabled = 1 ORDER BY priority ASC');
 
-  // Refresh latest versions if stale (6h TTL, like porter.py)
+  // Refresh latest versions if stale (6h TTL)
   const now = Date.now();
   if (now - latestCache.ts > LATEST_TTL) {
     const refreshed: typeof latestCache.data = {};
 
-    // OpenClaw — check ~/.openclaw/update-check.json first (like porter.py)
-    try {
-      const ocFile = join(homedir(), '.openclaw', 'update-check.json');
-      const ocData = JSON.parse(readFileSync(ocFile, 'utf8')) as { lastNotifiedVersion?: string };
-      const ocLatest = ocData.lastNotifiedVersion ? extractSemver(ocData.lastNotifiedVersion) ?? ocData.lastNotifiedVersion : null;
-      if (ocLatest) {
-        refreshed['openclaw'] = { latest: ocLatest, update_cmd: 'npm uninstall -g openclaw && npm i -g openclaw' };
-      }
-    } catch { /* no update-check.json */ }
-
-    // npm packages (skip openclaw if already got from file)
     for (const [gwType, pkg] of Object.entries(NPM_PACKAGES)) {
-      if (refreshed[gwType]) continue;
       const latest = npmLatest(pkg);
       if (latest) {
         refreshed[gwType] = {
@@ -210,12 +131,6 @@ export async function probeAllGateways(): Promise<GatewayVersionInfo[]> {
           update_cmd: `npm i -g ${pkg}`,
         };
       }
-    }
-
-    // Ollama via GitHub releases
-    const ollamaLatest = await githubLatestRelease('ollama/ollama');
-    if (ollamaLatest) {
-      refreshed['ollama'] = { latest: ollamaLatest, update_cmd: 'curl -fsSL https://ollama.com/install.sh | sh' };
     }
 
     latestCache.data = refreshed;
@@ -233,25 +148,10 @@ export async function probeAllGateways(): Promise<GatewayVersionInfo[]> {
     let healthy = false;
 
     try {
-      if (gw.url) {
-        const base = gw.url.replace(/\/$/, '');
-        const healthUrl = base + (gw.type === 'ollama' ? '/api/tags' : '/health');
-        await fetch(healthUrl, { signal: AbortSignal.timeout(5000) });
-        healthy = true;
-        version = await httpVersion(gw.url, gw.type);
-      }
-      if (!version && binaryPath) {
+      if (binaryPath) {
         version = cliVersion(binaryPath);
       }
-      if (!version && gw.type === 'openclaw') {
-        try {
-          const out = execSync('openclaw --version 2>&1', { timeout: 5000, encoding: 'utf8' });
-          version = extractSemver(out);
-        } catch { /* best-effort */ }
-      }
-      if (!gw.url && !healthy) {
-        healthy = version !== null;
-      }
+      healthy = version !== null;
     } catch {
       healthy = false;
     }

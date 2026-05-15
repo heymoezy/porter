@@ -1,5 +1,13 @@
 # Porter — Active Sessions
 
+## v6.0.1 Bridge cleanup (Opus 4.7 1M) — 2026-05-15T08:00Z
+- Workstream: Remove openclaw/ollama/codex_cli/gemini_cli residue from `backend/src/services/admin/prompt-pipeline.ts` + `backend/src/services/admin/gateway-versions.ts`. Pure cleanup — no behavioral change for live claude_cli users.
+- Files claimed:
+  - backend/src/services/admin/prompt-pipeline.ts (trim to claude_cli only)
+  - backend/src/services/admin/gateway-versions.ts (trim to claude_cli only)
+- Files NOT touching: routes/admin/bridge.ts (out of scope, only imports stay), index.ts (only checks import path), admin/backend/** (orphaned legacy), config.ts / contact-analyzer / learner / setup.ts (still reference ollama/openclaw but out of scope for this cleanup).
+- Status: active
+
 ## GSD Phase 48.4 Executor Plan-04 (Opus 4.7) — 2026-05-13T18:45Z
 - Workstream: Execute 48.4-04-PLAN.md — proposal detail drawer + accept/reject + delete-confirm + failure toasts + expanded run-history sidebar + sonner toast lib install. Pure admin/frontend work — NO backend code, NO Porter restart (Plan 05 owns).
 - Files claimed:
@@ -384,3 +392,26 @@
 - Files NOT touching: backend/src/routes/admin/**, admin/frontend/app/routes/**, components/** (Plans 02/03/04 owned)
 - Status: active
 - **DONE** 2026-05-13T22:05Z — 4 commits shipped (bc003b0 version bump, f2f744a Playwright/smoke fixes + RVS-13 un-skip, f2fd9fe CHECKPOINT, 971c260 final metadata). Porter live at v6.17.0; /health verified. All 7 Playwright tests green; full 4-phase smoke suite (48.1 + 48.2 + 48.3 + 48.4) green. Autonomous live verify (Moe unavailable today): 9-step pipeline executed end-to-end via mock injection — dispatch → SSE wire capture (proposals:created + dreams:run-completed both fired) → admin endpoint review → accept → directive landed (d_084f9fe4) → intellect_events audit (ie_c0431992) → next-CLI-session injection confirmed in /api/v1/intellect/context silo block → DB cleanup restored 5-seed baseline. Pushed to remote. Dream Silos series COMPLETE (48.1 + 48.2 + 48.3 + 48.4 — 20 plans, 40 requirements, capture → dispatch → propose → review → injection loop live).
+
+## v6.0.1 Cleanup — Stale Credentials + Selectors — 2026-05-15T00:00Z
+- Workstream: Replace `moe@themozaic.com` → `moe@askporter.app` + `#uname`/`#pw`/`.login-btn` → `#email`/`#password`/role=button across tests/ + MEMORY.md
+- Files claimed:
+  - tests/setup-auth.js
+  - tests/skill-evolution.spec.js
+  - tests/skill-feedback.spec.js
+  - tests/skill-pack-explorer.spec.js
+  - tests/ui-regression.spec.js
+  - tests/smoke-phase11.sh, smoke-phase12.sh, smoke-phase13.sh, smoke-phase13.1.sh
+  - /home/lobster/.claude/projects/-home-lobster/memory/MEMORY.md (lines 30, 146 — credential-stating refs)
+- Status: active
+
+## Tom 3 (Opus 4.7 1M) — 2026-05-15T00:00Z
+- Workstream: Finish handover-2026-05-15-tom-next outstanding items — ship orphan file-watcher.ts inotify regression fix, scrub junk binaries from backend/, archive handover doc, update CHECKPOINT.
+- Files claimed:
+  - backend/src/services/intellect/file-watcher.ts (commit existing diff)
+  - backend/package.json + backend/src/index.ts + backend/src/routes/v1/health.ts (v6.17.0 → v6.17.1)
+  - CHANGELOG.md, CHECKPOINT.md
+  - backend/<3 zero-byte garbage files> (delete)
+  - HANDOVER-2026-05-15-tom-next.md (move to .archive/handovers/)
+- Files NOT touching: any 48.x plans, admin/frontend, ymc.capital/**, anything under another active session's claim.
+- Status: active
