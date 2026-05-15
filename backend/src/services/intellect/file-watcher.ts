@@ -28,18 +28,31 @@ export function startFileWatcher(projectDirs: string[]): void {
     return;
   }
 
+  // depth: 3 covers projects/<name>/<sub>/<sub> — enough for stale-reference
+  // detection without exploding the inotify watch budget on a busy machine
+  // (regressed 2026-05-11: depth: 10 + sparse ignores consumed 124k watches,
+  // exhausting max_user_watches and causing systemd cgroup failures).
   watcher = chokidar.watch(dirs, {
     persistent: true,
     ignoreInitial: true,
-    depth: 10,
+    depth: 3,
     ignored: [
       '**/node_modules/**',
       '**/.git/**',
       '**/build/**',
       '**/dist/**',
       '**/.next/**',
+      '**/.cache/**',
+      '**/.venv/**',
+      '**/venv/**',
+      '**/target/**',
+      '**/coverage/**',
+      '**/storage/**',
+      '**/tmp/**',
       '**/__pycache__/**',
       '**/*.pyc',
+      '**/*.log',
+      '**/*.sqlite*',
       '**/package-lock.json',
     ],
     awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },

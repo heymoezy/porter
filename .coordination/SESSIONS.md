@@ -6,7 +6,7 @@
   - backend/src/services/admin/prompt-pipeline.ts (trim to claude_cli only)
   - backend/src/services/admin/gateway-versions.ts (trim to claude_cli only)
 - Files NOT touching: routes/admin/bridge.ts (out of scope, only imports stay), index.ts (only checks import path), admin/backend/** (orphaned legacy), config.ts / contact-analyzer / learner / setup.ts (still reference ollama/openclaw but out of scope for this cleanup).
-- Status: active
+- Status: **DONE** 2026-05-15T08:30Z — commit c6424ed pushed. -140 LOC, +43 LOC. tsc clean, react-router build clean. /api/admin/bridge/versions returns 1 row (claude_cli v2.1.140, healthy, hooks=8). /api/admin/bridge/prompts returns 1 profile (claude_cli with CLAUDE.md configs). No version bump (pure refactor, no user-visible change).
 
 ## GSD Phase 48.4 Executor Plan-04 (Opus 4.7) — 2026-05-13T18:45Z
 - Workstream: Execute 48.4-04-PLAN.md — proposal detail drawer + accept/reject + delete-confirm + failure toasts + expanded run-history sidebar + sonner toast lib install. Pure admin/frontend work — NO backend code, NO Porter restart (Plan 05 owns).

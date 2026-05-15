@@ -1,3 +1,25 @@
+## v6.1.0 (2026-05-15)
+
+- refactor(bridge): remove openclaw/ollama/codex_cli/gemini_cli residue from admin Bridge diagnostics
+- docs(state+checkpoint): v6.0 milestone audit READY-TO-CLOSE — awaiting Moe to run /gsd:complete-milestone
+- docs(milestone-v6.0): audit + retro-verify Phases 40/41/42 + flip DRW/RVS traceability to Complete
+- docs(roadmap): close v6.0 audit hygiene — retro-verify Phase 43, fix progress table, mark IAM-04 complete
+- docs(phase-48.4): complete review-surface + VERIFICATION + PROJECT.md — Dream Silos series complete
+- docs(48.4-05): complete Phase 48.4 Review Surface — Dream Silos series complete
+- docs(48.4-05): CHECKPOINT v6.17.0 — Dream Silos series complete
+- test(48.4-05): un-skip RVS-13 + fix stale Playwright + smoke harness auth
+
+
+## v6.17.1 — file-watcher inotify regression fix (2026-05-15)
+
+### Fixed
+- **`intellect/file-watcher.ts`** — `depth: 10` + sparse ignore list consumed 124k inotify watches on 2026-05-11, exhausted `max_user_watches`, broke systemd cgroup file events. Reduced `depth: 3` (still covers `projects/<name>/<sub>/<sub>`, the ceiling for stale-reference detection) and expanded ignore list (`.cache`, `.venv`, `venv`, `target`, `coverage`, `storage`, `tmp`, `*.log`, `*.sqlite*`). Watch budget back inside `fs.inotify.max_user_watches` default.
+
+### Chore
+- Removed three 0-byte garbage files in `backend/` (editor crash debris from late April).
+- Archived `HANDOVER-2026-05-15-tom-next.md` after closing its outstanding items.
+
+
 ## v6.1.0 (2026-05-13)
 
 - docs(checkpoint): Tom unblock end-to-end green — "Tom from YMC Capital 👋" in 6.1s
