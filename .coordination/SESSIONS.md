@@ -416,3 +416,12 @@
   - HANDOVER-2026-05-15-tom-next.md (move to .archive/handovers/)
 - Files NOT touching: any 48.x plans, admin/frontend, ymc.capital/**, anything under another active session's claim.
 - Status: active
+
+### Tom 3 — DONE 2026-05-15T07:55Z
+- Cleared 3 outstanding cleanup items from HANDOVER-2026-05-15-tom-next.md.
+- Live: porter-fastify v6.17.1 (verified `/health`).
+- Files committed (sandwiched into parallel session's commits 4a7500c + cf60161): backend/src/services/intellect/file-watcher.ts (depth 10→3 + ignore expansion), backend/src/index.ts + backend/src/routes/v1/health.ts (version 6.17.0→6.17.1), backend/package.json (version 6.17.0→6.17.1), CHANGELOG.md (v6.17.1 entry), .archive/handovers/HANDOVER-2026-05-15-tom-next.md (NEW), CHECKPOINT.md (v6.17.1 update).
+- Junk: 3 zero-byte backend/ files (Apr crash debris) deleted.
+- Verified-still-applied: openclaw whisper SSRF patch `PATCH (Moe, 2026-05-13)` at media-understanding-bGVGc1zV.js:42.
+- Verified-already-shipped (handover was stale): Phase 48.3 Software Dream Worker — dream-worker.ts + dream_runs + memory_proposals tables + software.md prompt all exist; checkpoint already records 48.3 + 48.4 shipped on 2026-05-13.
+- Status: done.

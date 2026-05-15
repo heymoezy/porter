@@ -3,10 +3,34 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.17.0
-updated: 2026-05-14
-updated_by: claude-opus-4.7 (Porter Dreams 3 — v6.0 milestone audit + retro-verifies)
+version: v6.17.1
+updated: 2026-05-15
+updated_by: claude-opus-4.7 (Tom 3 — handover-2026-05-15 outstanding cleanup + v6.0.1 file-watcher patch)
 milestone_status: READY-TO-CLOSE (audit 2026-05-14)
+
+## v6.17.1 — file-watcher inotify regression patch + handover cleanup (2026-05-15)
+
+**Outstanding from handover-2026-05-15-tom-next.md cleared:**
+- `intellect/file-watcher.ts` regressed 2026-05-11 with `depth: 10` + sparse ignore list — consumed 124k inotify watches, exhausted `max_user_watches`. Reduced to `depth: 3` + expanded ignore list (`.cache`, `.venv`, `venv`, `target`, `coverage`, `storage`, `tmp`, `*.log`, `*.sqlite*`). Watch budget back inside default. Comment notes the regression date so future depth bumps see the history.
+- Three 0-byte garbage files in `backend/` (Apr 22-29 editor crash debris) deleted.
+- `HANDOVER-2026-05-15-tom-next.md` archived to `.archive/handovers/` after closing.
+
+**Verified handover claims that were already shipped:**
+- Phase 48.3 Software Dream Worker — handover said "code not started"; checked: `dream-worker.ts` exists, `dream_runs` + `memory_proposals` tables exist, `dream-prompts/software.md` exists. The handover was written before 48.3 + 48.4 actually shipped on 2026-05-13. v6.0 Dream Silos series is fully closed.
+- Five user-services all `active`: porter-fastify, ymc-backend, openclaw-gateway, whisper-server, whisper-proxy.
+- openclaw whisper SSRF patch (`PATCH (Moe, 2026-05-13)`) still applied at line 42 of `~/.npm-global/lib/node_modules/openclaw/dist/media-understanding-bGVGc1zV.js` — reapply if `npm i -g openclaw@*`.
+
+**Concurrent commit collision:** A parallel "Porter" session ran v6.0.1 cleanup work in the same window. Their commits (`c6424ed`, `4a7500c`, `cf60161`, `3cba13b`) bundled in my staged file-watcher patch + version bumps + CHANGELOG entry + handover archive under their commit messages. Net repo state is correct; commit-message attribution is muddled. Live `/health` returns `6.17.1` post-restart.
+
+**Likely next asks (per handover, unchanged):**
+- **Phase 48.5 YMC Silo** — extend the Dream Silos machinery to the YMC corpus (contact_notes, documents.extracted_text, audit_events) instead of CLI transcripts. Surfaces back to Tom via Bridge with `silo: "ymc"`. Not planned yet (would need `/gsd:plan-phase 48.5`).
+- **More Tom tools**: `ymc_mark_contact_as_investor` (set subscription_status='subscribed'), deal-creation, capital-call surface.
+- **Tom proactive surfaces**: daily digest, KYC chase reminders. Needs scheduled-jobs design for Tom (doesn't exist yet).
+- **v6.0 milestone**: still READY-TO-CLOSE awaiting Moe's `/gsd:complete-milestone` run.
+
+---
+
+
 
 ## v6.0 Milestone Audit — READY-TO-CLOSE (2026-05-14)
 
