@@ -5,8 +5,58 @@
 project: porter
 version: v6.17.1
 updated: 2026-05-15
-updated_by: claude-opus-4.7 (v6.0 Milestone Archive — autonomous /gsd:complete-milestone execution)
+updated_by: claude-opus-4.7 (Porter Dreams 3 — autonomous /gsd:complete-milestone + v6.0.1 deep cleanup)
 milestone_status: ARCHIVED 2026-05-15 — between milestones, awaiting v7.0
+
+## v6.0.1 Deep Bridge Cleanup — DONE (2026-05-15)
+
+Second cleanup pass investigated 9 files flagged in the first pass (commit c6424ed) as out-of-scope. Net -7900 LOC removed, zero user-visible behavior change.
+
+**Code removed (DEAD-PATHED):**
+- `backend/src/routes/admin/bridge.ts` (-66 LOC) — `/gateways/restart` ollama systemctl + openclaw pkill branches collapsed to early-return; `/speed-test` HTTP-probe branch removed (claude_cli row has empty URL).
+- `admin/backend/` ENTIRE PACKAGE DELETED (-7851 LOC across 39 files) — pre-merge admin backend orphaned since Brain+Admin merge (April 2026). Zero imports from active code. `porter-admin.service` systemd unit already disabled. Last modified March 2026.
+
+**TODO(v7.0) markers added (LIVE-AND-WORKING — too risky to touch autonomously):**
+- `backend/src/config.ts` — ollamaUrl/openclawUrl env defaults still consumed by ~10 diagnostic routes (ollama daemon actually running on host).
+- `backend/src/services/learner.ts` — direct ollama daemon call (bypasses Bridge). 2104 learning_sessions in DB.
+- `backend/src/services/contact-analyzer.ts` — DEAD-PATHED but callable; would work if invoked.
+- `backend/src/services/context-compressor.ts` — `forceGatewayType: 'ollama'` silently overridden by simplified RoutingEngine.select() returning claude_cli. Compression succeeds.
+- `backend/src/services/task-decomposition/task-planner.ts` + `task-classifier.ts` — same forceGatewayType silent override. Decomposition runs on claude_cli (Sonnet 4.6) instead of cheap classifier model. Functional, just more expensive than originally designed.
+- `backend/src/cli/setup.ts` — first-run wizard "multi-model Bridge configurator" framing is stale; mechanical actions still valid.
+
+**Out of scope (preserved):**
+- `backend/src/db/migrate-bridge-v7.ts` + `migrate-15.ts` — historical migrations (NEVER edit).
+
+**Verification:**
+- `npx tsc --noEmit` clean
+- `npm run build` clean
+- Porter restart clean, /health 200 v6.17.1
+- All 4 smoke harnesses (48.1, 48.2, 48.3, 48.4) green
+- Decomposition path verified live (87 task_nodes in last 7 days, most recent 3-node tree completed successfully)
+
+**Commits (pushed):**
+- `2fe36e3` admin/bridge.ts dead-branch removal
+- `c5e099c` admin/backend/ orphan deletion (39-file rmdir)
+- `843dd8d` TODO(v7.0) markers in 7 files
+- `cf2a54e` ledger update
+
+---
+
+## v6.0.1 Pass 1 — Bridge Diagnostic Cleanup + Test Helper Hygiene (2026-05-15)
+
+First cleanup pass after milestone audit:
+
+**Stale gateway diagnostic surfaces** (commit `c6424ed`):
+- `backend/src/services/admin/prompt-pipeline.ts` (-8 LOC) — removed ollama/openclaw/codex_cli/gemini_cli config file paths + prompt strings.
+- `backend/src/services/admin/gateway-versions.ts` (-110 LOC) — removed httpVersion() / githubLatestRelease() / openclaw update-check / ollama health probe; collapsed to claude_cli CLI version probe.
+- Admin Bridge `/versions` + `/prompts` endpoints return well-formed claude_cli rows.
+
+**Stale test helper credentials + selectors** (commits `cf60161`, `3cba13b`):
+- 10 test files touched. 8 credential replacements (`moe@themozaic.com` → `moe@askporter.app`), 5 selector refresh sets (`#uname`/`#pw`/`.login-btn` → `#email`/`#password`/`getByRole('button')`), 5 `.sidebar` → `aside nav, .sidebar, [class*="sidebar"]` (bonus Rule 1 fix).
+- MEMORY.md (out-of-repo) credential refs corrected at lines 30 + 146.
+- `npx playwright test ui-regression.spec.js -g "can log in"` green against live v6.17.0.
+
+---
 
 ## v6.0 ARCHIVED 2026-05-15 — Milestone formally closed
 
