@@ -421,6 +421,25 @@
 - Files NOT touching: any 48.x plans, admin/frontend, ymc.capital/**, anything under another active session's claim.
 - Status: active
 
+## v6.0.1 Bridge cleanup pass 2 (Opus 4.7 1M) — 2026-05-15T10:00Z
+- Workstream: Investigate 7 files flagged in pass-1's "Out of scope" list for stale openclaw/ollama refs. Classify each as DEAD / DEAD-PATHED / LIVE-BUT-BROKEN / LIVE-AND-WORKING. Remove only verifiably dead code; add TODO(v7.0) markers where unsafe. Plus orphaned admin/backend/src/ confirmation + deletion.
+- Files claimed (investigate, possibly edit):
+  - backend/src/config.ts
+  - backend/src/services/learner.ts
+  - backend/src/services/contact-analyzer.ts
+  - backend/src/services/context-compressor.ts
+  - backend/src/services/task-decomposition/* (planner, classifier, executor, joiner)
+  - backend/src/cli/setup.ts
+  - backend/src/routes/admin/bridge.ts (lines 719-728, 863-880 only)
+  - admin/backend/src/** (delete if confirmed orphaned)
+- Files NOT touching: backend/src/db/migrate-bridge-v7.ts, backend/src/db/migrate-15.ts (historical migrations — never edit).
+- Status: **DONE** 2026-05-15T10:30Z. 3 commits pushed:
+  - `2fe36e3` refactor(bridge): remove dead ollama/openclaw branches from admin/bridge.ts. -66 LOC. /gateways/restart collapsed to single early-return; /speed-test if(gw.url) HTTP probe entirely removed (gateways table only has claude_cli with empty url).
+  - `c5e099c` chore(admin): delete orphaned admin/backend/ legacy package. -7851 LOC across 39 source files. Pre-merge SaaS admin (port 5175); zero in-repo imports; systemd unit disabled + WorkingDirectory points to obsolete path.
+  - `843dd8d` chore(bridge): mark v7.0 cleanup TODOs in 7 files with live gateway refs. config.ts (LIVE-AND-WORKING, host-daemon URLs consumed by 10+ diagnostic routes), learner.ts (LIVE-AND-WORKING, 2100+ completed ollama sessions, direct daemon call), contact-analyzer.ts (DEAD-PATHED, scheduler trigger exists but 0 jobs ever queued), context-compressor.ts (LIVE-AND-WORKING, forceGatewayType silently ignored by simplified RoutingEngine), task-planner.ts + task-classifier.ts (LIVE-AND-WORKING, same forceGatewayType silent override, decomposition runs on claude_cli), cli/setup.ts (LIVE-AND-WORKING first-run wizard, stale Bridge framing).
+- Post-cleanup verification: tsc clean; npm run build clean; Porter restarted (PID 39660+) /health 200 v6.17.1; smoke-48.1 + smoke-48.4 all green; task_nodes table shows 87 nodes in last 7 days, most recent decomposition produced 3-node tree successfully (no functional change to RoutingEngine path).
+- No version bump (admin-only diagnostic endpoints + dead code deletion + comments; zero user-visible behavior change).
+
 ### Tom 3 — DONE 2026-05-15T07:55Z
 - Cleared 3 outstanding cleanup items from HANDOVER-2026-05-15-tom-next.md.
 - Live: porter-fastify v6.17.1 (verified `/health`).
