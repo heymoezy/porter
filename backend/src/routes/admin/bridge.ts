@@ -708,38 +708,11 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
     if (rows.length === 0) return reply.send(err('NOT_FOUND', 'Gateway not found'));
 
     const gw = rows[0];
-    const meta = (typeof gw.metadata === 'object' && gw.metadata !== null ? gw.metadata : {}) as Record<string, unknown>;
-    const { execSync } = await import('child_process');
 
-    try {
-      let output = '';
-
-      if (gw.type === 'ollama') {
-        // Ollama runs as system service
-        output = execSync('sudo systemctl restart ollama 2>&1 || systemctl --user restart ollama 2>&1', { timeout: 15_000, encoding: 'utf8' });
-      } else if (gw.type === 'openclaw') {
-        // OpenClaw: kill all processes, restart main + gateway
-        execSync('pkill -f "^openclaw" 2>/dev/null || true', { timeout: 5_000, encoding: 'utf8' });
-        // Give processes time to die
-        execSync('sleep 2', { timeout: 5_000, encoding: 'utf8' });
-        // Restart in background
-        const bp = (meta.binary_path as string) || 'openclaw';
-        execSync(`nohup ${bp} > /dev/null 2>&1 &`, { timeout: 5_000, encoding: 'utf8', shell: '/bin/bash' });
-        output = `Killed openclaw processes and restarted ${bp}`;
-      } else {
-        // CLI gateways don't have persistent processes — nothing to restart
-        return reply.send(ok({ restarted: false, message: `${gw.name} is a CLI tool — no persistent process to restart` }));
-      }
-
-      // Re-probe after restart
-      setTimeout(() => probeAllGateways().catch(() => {}), 5_000);
-
-      emitAdminEvent('bridge:restarted', { gateway_id, gateway_name: gw.name });
-      return reply.send(ok({ restarted: true, output: output.trim(), gateway_name: gw.name }));
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      return reply.send(ok({ restarted: false, error: message }));
-    }
+    // v6.9.0 Bridge consolidation: only claude_cli remains as a gateway type.
+    // CLI gateways don't have persistent processes — nothing to restart.
+    // (Historical ollama/openclaw systemd-restart branches removed 2026-05-15 — v6.0.1 cleanup.)
+    return reply.send(ok({ restarted: false, message: `${gw.name} is a CLI tool — no persistent process to restart` }));
   });
 
   // POST /api/admin/bridge/gateways/run-update — execute update_cmd for a gateway
@@ -851,46 +824,16 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
     let version: string | undefined;
 
     try {
-      if (gw.url) {
-        const base = gw.url.replace(/\/$/, '');
-        // Health check
-        const healthUrl = base + (gw.type === 'ollama' ? '/api/tags' : '/models');
-        await fetch(healthUrl, { signal: AbortSignal.timeout(5000) });
-
-        // Fetch version (best-effort)
+      // v6.9.0 Bridge consolidation: only claude_cli remains (no URL, CLI-based).
+      // Historical ollama/openclaw HTTP probe branches removed 2026-05-15 (v6.0.1 cleanup).
+      const binaryPath = meta.binary_path as string | undefined;
+      if (binaryPath) {
         try {
-          if (gw.type === 'ollama') {
-            const vResp = await fetch(`${base}/api/version`, { signal: AbortSignal.timeout(3000) });
-            if (vResp.ok) { const d = await vResp.json() as { version?: string }; version = d.version; }
-          } else if (gw.type === 'openclaw') {
-            // OpenClaw /health has no version field — try it, then CLI fallback
-            const vResp = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
-            if (vResp.ok) {
-              const d = await vResp.json() as Record<string, unknown>;
-              const v = d.version ?? d.server_version ?? d.openclaw_version;
-              if (typeof v === 'string') version = v;
-            }
-            if (!version) {
-              try {
-                const { execSync } = await import('child_process');
-                const out = execSync('openclaw --version 2>&1', { timeout: 5000, encoding: 'utf8' });
-                const match = out.match(/(\d+\.\d+[\.\d]*)/);
-                if (match) version = match[1];
-              } catch { /* CLI fallback best-effort */ }
-            }
-          }
-        } catch { /* version fetch is best-effort */ }
-      } else {
-        // CLI-based gateways — check binary exists via which
-        const binaryPath = meta.binary_path as string | undefined;
-        if (binaryPath) {
-          try {
-            const { execSync } = await import('child_process');
-            const out = execSync(`${binaryPath} --version 2>&1 || true`, { timeout: 5000, encoding: 'utf8' });
-            const match = out.match(/(\d+\.\d+[\.\d]*)/);
-            if (match) version = match[1];
-          } catch { /* version detection best-effort */ }
-        }
+          const { execSync } = await import('child_process');
+          const out = execSync(`${binaryPath} --version 2>&1 || true`, { timeout: 5000, encoding: 'utf8' });
+          const match = out.match(/(\d+\.\d+[\.\d]*)/);
+          if (match) version = match[1];
+        } catch { /* version detection best-effort */ }
       }
 
       const latency_ms = Date.now() - start;
