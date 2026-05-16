@@ -13,6 +13,15 @@
  *
  * Cache: enabled silos are loaded into memory at startup via loadSiloCache().
  * Reload via reloadSiloCache() when silos table changes (admin-mediated).
+ *
+ * Phase 49 LRN-04 adds:
+ *   - detectProject(cwd): pure function returning project slug from
+ *     /home/lobster/projects/<X>/... or null otherwise. Mirrors the
+ *     production hook regex at ~/.claude/hooks/porter-session-start.js:21-27.
+ *     Operates on cwd as-supplied — no symlink resolution, by design.
+ *   - detectContext(args, pool): convenience composite returning both
+ *     silos + projectId in one call. Used by /context (intellect.ts) to
+ *     layer project directives on top of silo directives.
  */
 
 import fs from 'node:fs';
@@ -129,4 +138,65 @@ export async function detectSilos(args: DetectArgs, pool: pg.Pool): Promise<Dete
   }
 
   return Array.from(matches.values());
+}
+
+// ── LRN-04 (Phase 49): server-side project-id derivation ─────────────────────
+//
+// Mirrors the production hook regex AND raw-cwd semantics at
+// ~/.claude/hooks/porter-session-start.js:21-27. Identical pattern; deliberate
+// duplication so the hook stays independent of backend availability. Phase 50
+// may extract a shared helper if cross-process sharing becomes practical, but
+// cross-runtime (bash/node hook vs node server) makes that non-trivial today.
+// See 49-RESEARCH.md Risk 6 + Open Question 6.
+//
+// SYMLINK BEHAVIOR — INTENTIONAL:
+//   detectProject operates on cwd AS-SUPPLIED. No fs.realpathSync, no symlink
+//   resolution. This matches the porter-session-start.js hook precedent which
+//   uses raw process.cwd(). Consequence: if a session's cwd is a symlink target
+//   that resolves outside /home/lobster/projects/ (e.g. /home/websites/ymc.capital
+//   even when reachable via /home/lobster/projects/ymc.capital → /home/websites/...),
+//   this function returns null. Callers responsible for symlink resolution if
+//   needed — call fs.realpathSync BEFORE invoking detectProject.
+//
+// NOTE on /i flag: NOT used here. The hook regex is case-sensitive on the
+// `/home/lobster/projects/` prefix (it is a Linux path, case-sensitive by file
+// system). Project slugs preserve case (`ymc.capital` lowercase, `Baan Yin Dee`
+// title case) because the regex captures `[^/]+` verbatim — case is preserved
+// by JavaScript's match group, not normalized.
+
+const PROJECT_CWD_REGEX = /^\/home\/lobster\/projects\/([^/]+)/;
+
+/**
+ * Derive a project slug from cwd. Pure function — no I/O, no async.
+ *
+ * Operates on cwd AS-SUPPLIED. Does NOT call fs.realpathSync; does NOT resolve
+ * symlinks. This is deliberate: mirrors the porter-session-start.js hook
+ * precedent (which uses raw process.cwd()) so backend and hook stay in lockstep
+ * on what counts as "the project for this session".
+ *
+ * If you need symlink resolution, call fs.realpathSync(cwd) BEFORE this function.
+ *
+ * @returns project slug (everything between /home/lobster/projects/ and the next /),
+ *          or null for any cwd outside that hardcoded prefix.
+ */
+export function detectProject(cwd: string | null | undefined): string | null {
+  if (!cwd || typeof cwd !== 'string') return null;
+  const trimmed = cwd.trim();
+  if (!trimmed) return null;
+  const m = trimmed.match(PROJECT_CWD_REGEX);
+  return m ? m[1] : null;
+}
+
+export interface DetectedContext {
+  silos: DetectedSilo[];
+  projectId: string | null;
+}
+
+export async function detectContext(
+  args: DetectArgs,
+  pool: pg.Pool,
+): Promise<DetectedContext> {
+  const silos = await detectSilos(args, pool);
+  const projectId = detectProject(args.cwd);
+  return { silos, projectId };
 }
