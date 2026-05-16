@@ -50,6 +50,7 @@ import {
   assignSortOrder,
   type ParsedDreamResponse,
   type ParsedProposal,
+  type ParsedFailurePattern,
 } from './dream-parser.js';
 
 const BRIDGE_TIMEOUT_MS = 180_000;
@@ -85,6 +86,20 @@ export interface RunDreamResult {
   dreamRunId: string;
   proposalsExtracted: number;
   status: 'completed' | 'failed' | 'skipped';
+}
+
+// ── Phase 49 LRN-02 helpers ──────────────────────────────────────────────────
+// slugifyPatternName: convert a free-form failure-pattern label into a
+// stable conceptual_area suffix. Used inside proposed_metadata.conceptual_area
+// (`failure-pattern:<slug>`) so the 48.4 review surface and Phase 51 filters
+// can group/dedupe by pattern. Max 40 chars keeps the eventual conceptual_area
+// well under proposalSchema's 60-char ceiling.
+function slugifyPatternName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
 }
 
 // ── dispatchDream: direct routingEngine call with mock-injection support ────
@@ -196,6 +211,7 @@ async function insertProposalsTransactionally(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Existing: regular proposals (refinements + new_directive)
     for (const p of parsed.proposals as ParsedProposal[]) {
       const id = 'mp_' + randomUUID();
       const metadata = {
@@ -222,6 +238,64 @@ async function insertProposalsTransactionally(
           EXPIRES_IN_S,
         ],
       );
+    }
+    // Phase 49 LRN-02: failure-pattern proposals. Same memory_proposals shape,
+    // REUSES the existing 'new_directive' kind so the DB CHECK constraint
+    // (CHECK proposal_kind IN ('merge','supersede','delete','new_directive')) is
+    // untouched and the 48.4 list endpoint surfaces these alongside ordinary
+    // proposals without code changes. The discriminator lives in
+    // proposed_metadata.source = 'failure_pattern'. sort_order in the 850-899
+    // band sits between merge (300) and new_directive (900) so failure-pattern
+    // rows surface BEFORE generic new directives within the same dream_run.
+    //
+    // Atomicity: this loop runs inside the same BEGIN/COMMIT block as the
+    // regular proposals loop above. A failure mid-loop ROLLBACKs the entire
+    // run — earlier proposals included.
+    //
+    // Phase 51 deferral: the 48.4 accept handler reads proposal_kind to decide
+    // scope (currently always 'silo' for new_directive). proposed_metadata
+    // carries suggested_scope + suggested_scope_id for failure-pattern rows,
+    // but the accept handler does not yet read those fields. DRX-02 (Phase 51,
+    // edit-in-place) automates honoring suggested_scope. For v7.0 the reviewer
+    // adjusts scope manually via the admin UI if a failure-pattern directive
+    // should land at project-scope rather than silo.
+    const failurePatterns: ParsedFailurePattern[] = parsed.failure_patterns ?? [];
+    let failurePatternCounter = 0;
+    for (const fp of failurePatterns) {
+      const id = 'mp_' + randomUUID();
+      const metadata = {
+        source: 'failure_pattern',
+        source_type: 'dream_worker',
+        pattern_name: fp.pattern_name,
+        recurrence_count: fp.recurrence_count,
+        suggested_scope: fp.suggested_scope,
+        suggested_scope_id: fp.suggested_scope_id,
+        priority: 60,
+        conceptual_area: `failure-pattern:${slugifyPatternName(fp.pattern_name)}`,
+      };
+      const evidence = {
+        sample_turn_ids: fp.evidence_turn_ids,
+        phrasing_examples: [] as string[],
+        reasoning: fp.description,
+      };
+      await client.query(
+        `INSERT INTO memory_proposals
+           (id, dream_run_id, silo_id, proposal_kind, target_directive_ids,
+            proposed_content, proposed_metadata, source_evidence, sort_order, expires_at)
+         VALUES ($1, $2, $3, 'new_directive', '{}'::text[], $4, $5::jsonb, $6::jsonb, $7,
+                 EXTRACT(EPOCH FROM NOW()) + $8)`,
+        [
+          id,
+          dreamRunId,
+          siloId,
+          fp.suggested_directive,
+          JSON.stringify(metadata),
+          JSON.stringify(evidence),
+          850 + failurePatternCounter,
+          EXPIRES_IN_S,
+        ],
+      );
+      failurePatternCounter += 1;
     }
     await client.query('COMMIT');
   } catch (err) {
@@ -481,19 +555,42 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
       });
     }
 
+    // Phase 49 LRN-02: total proposals = refinement proposals + failure-pattern
+    // rows. Used for the dreams:run-completed broadcast count, the
+    // dream_runs.proposals_extracted column, and the audit event payload so the
+    // review surface and audit trail reflect the true total.
+    const failurePatternCount = parsed.failure_patterns?.length ?? 0;
+    const totalProposals = parsed.proposals.length + failurePatternCount;
+
     // ── 13. Insert proposals (or skip in dry-run mode) ────
     if (!args.dryRun) {
       await insertProposalsTransactionally(dreamRunId, args.siloId, parsed);
       // Phase 48.4 SSE wiring: notify connected admin clients that new proposals
       // exist. Post-commit only — runs AFTER the COMMIT inside
       // insertProposalsTransactionally has returned (Pitfall 1). Quiet weeks
-      // (empty proposals) skip the broadcast; the dreams:run-completed event
+      // (totalProposals=0) skip the broadcast; the dreams:run-completed event
       // below still fires so the UI clears any "running" pill.
-      if (parsed.proposals.length > 0) {
+      // Phase 49 LRN-02: count includes failure-pattern rows.
+      if (totalProposals > 0) {
         broadcast('proposals:created', {
           dream_run_id: dreamRunId,
           silo_id: args.siloId,
-          count: parsed.proposals.length,
+          count: totalProposals,
+        });
+      }
+      // Phase 49 LRN-02: per-failure-pattern audit signal. One event per
+      // pattern. Audit-only — payload NEVER includes turn content (matches
+      // dream_seed_flagged posture). Post-commit so a transactional rollback
+      // leaves no orphan audit rows. Fire-and-forget like the flagged_seeds
+      // loop above.
+      for (const fp of parsed.failure_patterns ?? []) {
+        await logIntellectEvent('dream_failure_pattern_detected', 'dream_worker', {
+          dreamRunId,
+          siloId: args.siloId,
+          patternName: fp.pattern_name,
+          recurrenceCount: fp.recurrence_count,
+          suggestedScope: fp.suggested_scope,
+          suggestedScopeId: fp.suggested_scope_id,
         });
       }
     }
@@ -508,7 +605,7 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
        WHERE id=$10`,
       [
         Date.now() - startedAtMs,
-        parsed.proposals.length,
+        totalProposals,
         sampledTurns.length,
         sessionsSampled,
         modelUsed,
@@ -521,10 +618,11 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
     );
     await logIntellectEvent('dream_run_completed', 'dream_worker', {
       dreamRunId,
-      proposalsExtracted: parsed.proposals.length,
+      proposalsExtracted: totalProposals,
       modelUsed,
       durationMs: Date.now() - startedAtMs,
       dryRun: !!args.dryRun,
+      failurePatternCount,
     });
     // Phase 48.4 SSE wiring: notify connected admin clients that the run
     // completed. Post-UPDATE only.
@@ -532,11 +630,11 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
       dream_run_id: dreamRunId,
       silo_id: args.siloId,
       status: 'completed',
-      proposals_extracted: parsed.proposals.length,
+      proposals_extracted: totalProposals,
     });
     return {
       dreamRunId,
-      proposalsExtracted: parsed.proposals.length,
+      proposalsExtracted: totalProposals,
       status: 'completed',
     };
   } catch (err) {
