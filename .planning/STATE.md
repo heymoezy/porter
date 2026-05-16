@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: The Living Memory
-status: scoped
-stopped_at: "v7.0 scoped 2026-05-16 (autonomous strategic call). 4 phases (49-52), 17 requirements. Trigger: 2026-05-16 logo-freehand incident exposed dream worker blindness to recurring-failure signal. Awaiting /gsd:plan-phase 49 to start execution."
-last_updated: "2026-05-16T14:45:00.000Z"
+status: unknown
+stopped_at: "Completed 49-04-PLAN.md (LRN-04 server-side project derivation: detectProject + detectContext + DetectedContext added to silo-detector.ts; additive sibling exports; tsc clean; 14/14 inline tests pass including symlink-target null case)"
+last_updated: "2026-05-16T18:49:57.509Z"
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 5
+  completed_plans: 2
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-05-15)
 
 ## Current Position
 
-Phase: 48.4 (review-surface) — COMPLETE
-Plan: 5 of 5
+Phase: 49 (pattern-detection) — IN PROGRESS
+Plan: 3 of 5 complete (Wave 1: 49-02 + 49-04 shipped; 49-01 sampler running in parallel)
 
 ## Performance Metrics
 
@@ -51,6 +51,8 @@ Plan: 5 of 5
 | Phase 48.4 P03 | 45min | 3 tasks | 6 files |
 | Phase 48.4-review-surface P04 | 42min | 5 tasks | 6 files |
 | Phase 48.4-review-surface P05 | 128min | 4 tasks | 7 files |
+| Phase 49-pattern-detection P02 | 41 min | 3 tasks | 3 files |
+| Phase 49-pattern-detection P04 | 16 min | 1 task  | 1 file  |
 
 ## Accumulated Context
 
@@ -227,6 +229,17 @@ Plan: 5 of 5
 - [Phase 48.4-review-surface]: [Phase 48.4-05]: SSE broadcast fanout channel is /api/events (single channel, see backend/src/routes/events.ts) — not /api/admin/events. proposals:created + proposals:resolved + dreams:run-completed events all fanout through this single endpoint.
 - [Phase 48.4-review-surface]: [Phase 48.4-05]: Admin login credentials are moe@askporter.app / porter (NOT moe@themozaic.com — that's a stale MEMORY.md note; users table verified). Login endpoint is /api/v1/auth/login (NOT /api/auth/login).
 - [Phase 48.4-review-surface]: [Phase 48.4-05]: Mock-injection for autonomous live verify: POST /api/v1/intellect/dream-run body field _mock_response_path with a doctrine-compliant fixture (dream-response-software.json) gives <30ms deterministic pipeline traversal. Production never sets this field. RVS-13 Playwright + autonomous verify both use it.
+- [Phase 49-pattern-detection]: [Phase 49-02]: failure-pattern rows REUSE proposal_kind='new_directive' with proposed_metadata.source='failure_pattern' discriminator — zero DB CHECK change, zero 48.4 UI fork; future filters use the metadata key
+- [Phase 49-pattern-detection]: [Phase 49-02]: failure_patterns BYPASSES validateRefinementDoctrine — they carry their own >=2 recurrence + cited evidence_turn_ids enforced at Zod boundary; module-header note documents the bypass so it doesn't get 'fixed'
+- [Phase 49-pattern-detection]: [Phase 49-02]: sort_order band 850-899 (between merge=300 and new_directive=900) — failure-pattern rows surface BEFORE generic new directives because they carry concrete recurrence evidence
+- [Phase 49-pattern-detection]: [Phase 49-02]: Failure-pattern INSERT runs inside the SAME BEGIN/COMMIT block as regular proposals — atomic posture preserved; failure mid-loop rolls back both proposal types together
+- [Phase 49-pattern-detection]: [Phase 49-02]: Per-pattern audit event (dream_failure_pattern_detected) emitted POST-commit, fire-and-forget — matches existing flagged_seeds posture; rollback leaves no orphan audit rows
+- [Phase 49-pattern-detection]: [Phase 49-02]: proposed_metadata carries suggested_scope + suggested_scope_id but 48.4 accept handler does NOT yet read them — deferred to Phase 51 DRX-02; v7.0 reviewers manually adjust scope via admin UI
+- [Phase 49-pattern-detection]: [Phase 49-02]: slugifyPatternName: lowercase + non-alnum collapse + trim + 40-char cap keeps conceptual_area ('failure-pattern:<slug>') under proposalSchema's 60-char ceiling; drops punctuation like '!!!' cleanly
+- [Phase 49-pattern-detection]: [Phase 49-04]: detectProject is a pure function with no I/O — no fs.realpathSync, no symlink resolution. Operates on cwd as-supplied to mirror porter-session-start.js:21-27 hook precedent. Callers needing symlink resolution must call fs.realpathSync BEFORE invoking detectProject.
+- [Phase 49-pattern-detection]: [Phase 49-04]: Additive sibling export (detectProject + detectContext + DetectedContext) — detectSilos signature UNCHANGED to preserve zero-risk to 4 existing callers (transcript-capture, intellect/context, intellect/silo-command-status, future MSF). 49-RESEARCH locks this posture.
+- [Phase 49-pattern-detection]: [Phase 49-04]: PROJECT_CWD_REGEX hardcoded /^\/home\/lobster\/projects\/([^/]+)/ — identical to porter-session-start.js hook regex verbatim. Deliberate duplication; hook stays independent of backend availability. Phase 50 may extract shared helper if cross-process sharing becomes practical.
+- [Phase 49-pattern-detection]: [Phase 49-04]: detectContext returns { silos: DetectedSilo[], projectId: string | null } in one async call. Plan 49-03 will import this directly in /context handler — saves one line of plumbing while keeping detectProject usable in pool-less contexts (future Phase 52 task-planner agent selection).
 
 ### Pending Todos
 
@@ -239,6 +252,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-13T22:07:09.566Z
-Stopped at: Completed 48.4-05-PLAN.md (v6.17.0 shipped; Dream Silos series complete: full smoke 4-phase green + Playwright 7/7 green + autonomous live verify 9-step pipeline confirmed end-to-end with next-CLI directive injection)
+Last session: 2026-05-16T18:49:57.506Z
+Stopped at: Completed 49-04-PLAN.md (LRN-04 server-side project derivation: detectProject + detectContext + DetectedContext added to silo-detector.ts; additive sibling exports; tsc clean; 14/14 inline tests pass including symlink-target null case)
 Resume file: None

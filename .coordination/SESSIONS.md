@@ -498,3 +498,21 @@
   - .planning/STATE.md, .planning/ROADMAP.md (state updates)
 - Files NOT touching: 49-01 sampler scope, 49-04 detector scope (disjoint by design).
 - Status: active
+
+## GSD Executor 49-04 (Opus 4.7 1M) — 2026-05-16T18:20Z
+- Workstream: Execute Phase 49 Plan 04 (LRN-04 — detectProject pure function + detectContext composite in silo-detector.ts). Additive sibling exports; detectSilos unchanged. Wave 1 — disjoint from 49-01 (sampler) and 49-02 (just shipped).
+- Files claimed:
+  - backend/src/services/intellect/silo-detector.ts
+  - .planning/phases/49-pattern-detection/49-04-SUMMARY.md (new)
+  - .planning/STATE.md, .planning/ROADMAP.md (state updates)
+- Files NOT touching: dream-sampler.ts (49-01), dream-prompts/software.md (49-02 shipped), dream-parser.ts (49-02 shipped), dream-worker.ts (49-02 shipped), intellect.ts (49-03 next wave).
+- Status: **DONE** 2026-05-16T18:50Z. 1 commit: `0946135` feat(49-04): add detectProject + detectContext to silo-detector (+70 LOC additive sibling exports). tsc clean on silo-detector.ts. 14/14 inline regex tests pass including symlink-target null case (/home/websites/ymc.capital → null). detectSilos signature preserved — 4 existing callers unaffected. Plan 49-03 unblocked.
+
+## GSD Executor 49-01 (Opus 4.7 1M) — 2026-05-16T18:05Z
+- Workstream: Execute Phase 49 Plan 01 (LRN-01 — Frustration-marker boost in dream-sampler). Add FRUSTRATION_REGEX + sanitizeForFrustrationCheck (3 guards + SQL-keyword exclusion) + is_frustration tagging + Pass A0 force-include lane + frustration_forced / frustration_forced_examples in SamplingLog. Calibrated against 49-FRUSTRATION-CALIBRATION.md.
+- Files claimed:
+  - backend/src/services/intellect/dream-sampler.ts (single file in scope)
+  - .planning/phases/49-pattern-detection/49-01-SUMMARY.md (new)
+  - .planning/STATE.md, .planning/ROADMAP.md, .planning/REQUIREMENTS.md (state updates)
+- Files NOT touching: 49-02 scope (prompt + parser + worker — just shipped), 49-04 scope (silo-detector — running in parallel). Disjoint by design.
+- Status: active

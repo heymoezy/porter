@@ -26,7 +26,7 @@
 
 ### Phase 49: Pattern Detection (LRN-*)
 **Goal:** Dream worker actually catches recurring failures (the YMC logo pattern that v6.0 missed). Project-level directive scoping so project-specific rules (YMC logo at X, brand casing Y) live at the project, not the global silo.
-**Plans:** 5 plans + VALIDATION
+**Plans:** 2/5 plans executed
 - [ ] 49-01-PLAN.md — LRN-01 frustration-marker boost in dream-sampler.ts (Pass A0 + recency-first force-include + samplingLog audit fields)
 - [ ] 49-02-PLAN.md — LRN-02 prompt rewrite (Failure Patterns section in software.md) + dream-parser.ts Zod schema extension + dream-worker.ts failure_pattern proposal insertion + audit event
 - [ ] 49-03-PLAN.md — LRN-03 project-scope directive layering in /context (effectiveProject derivation + symmetric concepts/episodes scoping + optional partial-index migration 049) [Wave 2 — depends on 49-04]
