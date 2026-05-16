@@ -453,11 +453,18 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
 
     // ── 9. Doctrine validation (Layer 2 — refinement-before-append) ─────
     //
-    // NOTE: validateRefinementDoctrine(parsed, directiveRows.length) deliberately
-    // uses the DB row count (ground truth, queried in step 3) — NOT
-    // parsed.active_directive_count_before (model self-report). The model field
-    // is logged for audit but never used for validation. Trust DB > trust model.
-    validateRefinementDoctrine(parsed, directiveRows.length);
+    // We pass REFINEABLE count (non-sealed only), not total. Sealed seeds
+    // (source_type='moe-direct') can never be merged/superseded/deleted —
+    // the directive_immutable_moe_direct trigger blocks the mutation. Counting
+    // them against the doctrine creates a deadlock when a silo has many seeds
+    // and no refineables (model is forced to refine something it can't).
+    //
+    // Trust DB > trust model — parsed.active_directive_count_before (model
+    // self-report) is logged for audit but never used for validation.
+    const refineableCount = directiveRows.filter(
+      r => r.source_type !== 'moe-direct',
+    ).length;
+    validateRefinementDoctrine(parsed, refineableCount);
 
     // ── 10. Pre-flight: target ids exist + no sealed-seed deletes ──────
     await preFlightValidateTargets(parsed);

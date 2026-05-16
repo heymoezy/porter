@@ -105,22 +105,31 @@ export function parseDreamResponse(raw: string): ParsedDreamResponse {
 
 // ── validateRefinementDoctrine: DRW-06 Layer 2 ───────────────────────────────
 
-const SEED_BASELINE = 4; // 4 hand-curated software-silo seeds; doctrine engages above this
-
 export function validateRefinementDoctrine(
   parsed: ParsedDreamResponse,
-  activeCountBefore: number,
+  refineableCountBefore: number,
 ): void {
-  // Ground-truth contract: `activeCountBefore` is DB-queried by the worker.
-  // parsed.active_directive_count_before is the model's self-report — IGNORED here.
-  // The model could lie (report "before: 4" to bypass the doctrine when real count is 9).
-  // Trust DB > trust model. The worker passes directiveRows.length as the parameter.
+  // Ground-truth contract: `refineableCountBefore` is DB-queried by the worker
+  // and counts ONLY non-sealed directives (source_type != 'moe-direct'). Sealed
+  // seeds can never be merged/superseded/deleted (the directive_immutable_moe_direct
+  // trigger blocks the mutation). If there are no refineable directives in the
+  // silo, the model has no choice but to append — the doctrine MUST NOT block.
+  //
+  // parsed.active_directive_count_before is the model's self-report — IGNORED.
+  // Trust DB > trust model.
+  //
+  // History: pre-fix this counted total directives against a SEED_BASELINE=4.
+  // That created a deadlock for silos with ≥5 sealed directives + 0 refineables:
+  // every dream-run got rejected because the model couldn't propose any
+  // refinement that wouldn't violate the sealed-seed pre-flight. Fixed
+  // 2026-05-16 (Porter Dreams 3) after the silo-sw-* sealed-seed set hit 6
+  // entries and dream-runs began failing on real corpus.
 
   // Empty proposals is SUCCESS (legitimate quiet week — model found nothing to refine)
   if (parsed.proposals.length === 0) return;
 
-  // Doctrine: when active count exceeds seed baseline, refinement MUST precede addition
-  if (activeCountBefore <= SEED_BASELINE) return;
+  // Nothing refineable in silo → model can append freely (no deadlock)
+  if (refineableCountBefore === 0) return;
 
   const hasNew = parsed.proposals.some(p => p.kind === 'new_directive');
   const hasRefinement = parsed.proposals.some(
@@ -130,7 +139,7 @@ export function validateRefinementDoctrine(
   if (hasNew && !hasRefinement) {
     throw new Error(
       `Doctrine violation: new_directive proposed without prior refinement ` +
-        `(active dir count: ${activeCountBefore}, refinement proposals: 0). ` +
+        `(refineable dir count: ${refineableCountBefore}, refinement proposals: 0). ` +
         `Worker rejecting run to enforce refine-before-append.`,
     );
   }
