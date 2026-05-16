@@ -16,6 +16,14 @@
  * field that the model self-reports — that field is logged for audit but
  * is NEVER used for validation. The model could lie (e.g. report "before: 4"
  * to bypass the doctrine when the real count is 9). Trust DB > trust model.
+ *
+ * Phase 49 LRN-02: dreamResponseSchema also parses a `failure_patterns` array
+ * (concrete recurring failures with ≥2 evidence_turn_ids). These bypass
+ * validateRefinementDoctrine — they are not subject to the refine-before-append
+ * rule because they are not "proposals" in the doctrinal sense. The worker
+ * inserts them as memory_proposals rows with proposed_metadata.source='failure_pattern'
+ * and a dedicated sort_order band (850-899) so the 48.4 review surface can
+ * distinguish them.
  */
 
 import { z } from 'zod';
@@ -48,6 +56,21 @@ export const proposalSchema = z
     },
   );
 
+// Phase 49 LRN-02 — concrete-recurrence failure pattern. Surfaced by the model
+// as a SEPARATE first-class array in the response, parsed but NOT subject to
+// validateRefinementDoctrine (it's not a "proposal" in the refine-before-append
+// sense). The worker inserts each entry as a memory_proposals row tagged
+// proposed_metadata.source='failure_pattern' for the 48.4 review surface.
+export const failurePatternSchema = z.object({
+  pattern_name: z.string().min(1).max(120),
+  description: z.string().min(1).max(500),
+  recurrence_count: z.number().int().min(2),
+  evidence_turn_ids: z.array(z.number().int()).min(2),
+  suggested_directive: z.string().min(1).max(8000),
+  suggested_scope: z.enum(['project', 'silo']),
+  suggested_scope_id: z.string().min(1).max(120),
+});
+
 export const dreamResponseSchema = z.object({
   summary: z.string(),
   proposals: z.array(proposalSchema),
@@ -61,12 +84,17 @@ export const dreamResponseSchema = z.object({
     )
     .optional()
     .default([]),
+  // Phase 49 LRN-02 — optional + default([]) preserves backwards-compat with
+  // older fixtures (dream-response-software.json etc.) that don't carry the
+  // new field. New runs emit it via the extended software.md prompt.
+  failure_patterns: z.array(failurePatternSchema).optional().default([]),
   active_directive_count_before: z.number().int().nonnegative(),
   active_directive_count_after_proposed: z.number().int().nonnegative(),
 });
 
 export type ParsedDreamResponse = z.infer<typeof dreamResponseSchema>;
 export type ParsedProposal = ParsedDreamResponse['proposals'][number] & { _sort_order?: number };
+export type ParsedFailurePattern = z.infer<typeof failurePatternSchema>;
 
 // ── parseDreamResponse: JSON.parse with fence-extraction fallback ────────────
 
