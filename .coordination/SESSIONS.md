@@ -1,5 +1,15 @@
 # Porter — Active Sessions
 
+## GSD Phase 49 Plan-05 Executor (Opus 4.7 1M) — 2026-05-16T20:45Z
+- Workstream: Execute 49-05-PLAN.md — Wave 3 smoke harness for Phase 49 (LRN-01..LRN-05). Single command (`bash tests/smoke-49.sh`) exercises frustration force-include + failure-pattern insertion + project-scope CRUD + trigger immutability + /context layering + detectProject probe. Idempotent. Smoke silo isolation (silo_id='software-smoke-49') + smoke project isolation (scope_id='smoke-49-project').
+- Files claimed:
+  - tests/fixtures/dream-response-pattern-detection.json (NEW)
+  - tests/smoke-49.sh (NEW, executable)
+  - .planning/phases/49-pattern-detection/49-05-SUMMARY.md (NEW, on completion)
+  - .planning/STATE.md / ROADMAP.md / REQUIREMENTS.md (state updates)
+- Files NOT touching: backend/**, admin/**, any other tests/*.
+- Status: **DONE** 2026-05-16T21:25Z — 2 task commits (`75a9afc` fixture, `ec1222d` smoke harness) + 1 metadata commit. Phase gate green: smoke-48.1 → smoke-49 all exit 0. Idempotent (zero leftover smoke rows). LRN-03 trigger scope-agnosticism proof: scope='project' moe-direct UPDATE raises without bypass + succeeds with SET LOCAL porter.allow_moe_direct_mutation. STATE/ROADMAP/REQUIREMENTS updated; Phase 49 marked Complete (5/5 plans, all 5 LRN requirements). Carry-forward: Phase 51 DRX-02 will need to extend smoke-49 with an accept-flow check when failure_pattern proposed_metadata.suggested_scope honor lands.
+
 ## v6.0.1 Bridge cleanup pass 3 (Opus 4.7 1M) — 2026-05-15T10:46Z
 - Workstream: Execute pass-3 of v6.0.1 Bridge consolidation cleanup on the safe-to-remove TODO(v7.0) markers from pass-2. Remove dead `forceGatewayType: 'ollama'` hints + surrounding stale "prefer cheap classifier" comments in 3 files (RoutingEngine silently ignores them since v6.9.0). Trim `cli/setup.ts` first-run wizard to claude_cli only. Harden `contact-analyzer.ts` with explicit throw (function still imported by scheduler.ts but DEAD-PATHED, 0 jobs queued).
 - Files claimed (edit):

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: The Living Memory
 status: unknown
-stopped_at: "Completed 49-03-PLAN.md (LRN-03 project-scope layering in /context: detectContext composite + effectiveProject derivation + symmetric directives/concepts/episodes scoping + projectIdSource/effectiveProject stats observability + idx_directives_scope_scope_id_status partial index; tsc clean; live 6-case behavior matrix green; 4 prior-phase smoke harnesses green)"
-last_updated: "2026-05-16T20:37:40.576Z"
+stopped_at: "Completed 49-05-PLAN.md (LRN-05 Phase 49 smoke harness: tests/smoke-49.sh + dream-response-pattern-detection.json fixture; covers LRN-01..LRN-05 with per-LRN graceful-skip; idempotent (zero leftovers post-run); proves directive_immutable_moe_direct trigger is scope-agnostic via scope='project' moe-direct UPDATE test + bypass GUC; phase gate green — all 5 harnesses (smoke-48.1..48.4 + smoke-49) exit 0)"
+last_updated: "2026-05-16T21:23:00.000Z"
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-05-15)
 
 ## Current Position
 
-Phase: 49 (pattern-detection) — IN PROGRESS
-Plan: 4 of 5 complete (Wave 1 fully shipped: 49-01 + 49-02 + 49-04; Wave 2: 49-03 SHIPPED; 49-05 pending)
+Phase: 49 (pattern-detection) — COMPLETE
+Plan: 5 of 5 complete (Wave 1: 49-01 + 49-02 + 49-04; Wave 2: 49-03; Wave 3: 49-05 — phase gate green)
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Plan: 4 of 5 complete (Wave 1 fully shipped: 49-01 + 49-02 + 49-04; Wave 2: 49-0
 | Phase 49-pattern-detection P04 | 16 min | 1 task  | 1 file  |
 | Phase 49-pattern-detection P01 | 65 min | 1 task  | 1 file  |
 | Phase 49-pattern-detection P03 | 40 min | 2 tasks | 4 files |
+| Phase 49-pattern-detection P05 | 18 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -255,6 +256,12 @@ Plan: 4 of 5 complete (Wave 1 fully shipped: 49-01 + 49-02 + 49-04; Wave 2: 49-0
 - [Phase 49-pattern-detection]: [Phase 49-03]: Symmetric project-scope queries — directives + concepts + episodes all key off effectiveProject. cwd-only callers now see project-scope concepts (LIMIT 20 vs the previous LIMIT 10 global-only) and project-scope episodes that previously required explicit ?project=.
 - [Phase 49-pattern-detection]: [Phase 49-03]: 'server-derived' suffix on Project Directives header when projectIdSource='cwd' — cosmetic but high-signal for client debugging. stats.projectIdSource is a 3-state string union ('query'|'cwd'|'none'), not boolean, so 'no project scoping at all' stays distinguishable.
 - [Phase 49-pattern-detection]: [Phase 49-03]: TS shim around .sql artifact — plan locks the SQL file path (backend/src/db/migrations/049-directives-scope-index.sql) but Porter's migration convention is TS modules registered in index.ts. The shim migrate-directives-scope-idx-v1.ts reads the .sql once at boot and stamps schema_migrations.id='directives_scope_idx_v1'. Double-safe on re-run via both the schema_migrations guard AND CREATE INDEX IF NOT EXISTS inside the SQL.
+- [Phase 49-pattern-detection]: [Phase 49-05]: Mock injection via `_mock_response_path` body field (NOT DREAM_WORKER_MOCK_RESPONSE_PATH env var) — env vars don't propagate from curl to backend process. 48.3-05 body-field path is canonical mock contract honored by smoke-49.
+- [Phase 49-pattern-detection]: [Phase 49-05]: Pre-seed 4 moe-direct silo directives keeps smoke silo's refineableCount at 0 → validateRefinementDoctrine early-returns and fixture's append-only new_directive + failure_pattern lands without doctrine violation. Smoke project directives use scope='project'+scope_id='smoke-49-project' (NOT silo-scoped) so silo refineableCount stays 0.
+- [Phase 49-pattern-detection]: [Phase 49-05]: directive_immutable_moe_direct trigger is SCOPE-AGNOSTIC — reads OLD.source_type only, never inspects OLD.scope. Smoke-49 LRN-03 proves this by exercising UPDATE on scope='project'+source_type='moe-direct' (raises without bypass, succeeds with SET LOCAL porter.allow_moe_direct_mutation='true'). Complements smoke-48.1 SC-3 which only exercised scope='silo'.
+- [Phase 49-pattern-detection]: [Phase 49-05]: intellect_events live schema is source_type/event_type/details_json (NOT source/kind/payload as some legacy docs imply). directives.created_at/updated_at are double precision epoch seconds — use EXTRACT(EPOCH FROM NOW()), NOT NOW(). Pre-write psql \\d verification catches these template bugs before they reach disk.
+- [Phase 49-pattern-detection]: [Phase 49-05]: Smoke harness phase gate = bash tests/smoke-48.1.sh && bash tests/smoke-48.2.sh && bash tests/smoke-48.3.sh && bash tests/smoke-48.4.sh && bash tests/smoke-49.sh — all five exit 0. Phase 49 ships when this chain is green; future phases append their harness to the chain.
+- [Phase 49-pattern-detection]: [Phase 49-05]: Per-LRN graceful-skip via source-on-disk grep guards (FRUSTRATION_REGEX, failurePatternSchema, detectContext/effectiveProject, detectProject) lets Wave 1/2 partial runs warn-skip without failing. Smoke harness can ship at end of phase OR Wave 0 — both patterns valid; Wave-end gets concrete schema/audit verbatim from disk.
 
 ### Pending Todos
 
@@ -267,6 +274,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-16T20:33:24.451Z
-Stopped at: Completed 49-03-PLAN.md (LRN-03 project-scope layering in /context: detectContext composite + effectiveProject derivation + symmetric directives/concepts/episodes scoping + projectIdSource/effectiveProject stats observability + idx_directives_scope_scope_id_status partial index; tsc clean; live 6-case behavior matrix green; 4 prior-phase smoke harnesses green)
+Last session: 2026-05-16T21:23:00.000Z
+Stopped at: Completed 49-05-PLAN.md (LRN-05 Phase 49 smoke harness: tests/smoke-49.sh + dream-response-pattern-detection.json fixture; covers LRN-01..LRN-05 with per-LRN graceful-skip; idempotent (zero leftovers post-run); proves directive_immutable_moe_direct trigger is scope-agnostic via scope='project' moe-direct UPDATE test + bypass GUC; phase gate green — all 5 harnesses (smoke-48.1..48.4 + smoke-49) exit 0)
 Resume file: None
