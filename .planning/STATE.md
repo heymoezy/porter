@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: The Living Memory
 status: unknown
-stopped_at: "Completed 49-04-PLAN.md (LRN-04 server-side project derivation: detectProject + detectContext + DetectedContext added to silo-detector.ts; additive sibling exports; tsc clean; 14/14 inline tests pass including symlink-target null case)"
-last_updated: "2026-05-16T18:49:57.509Z"
+stopped_at: "Completed 49-01-PLAN.md (LRN-01 frustration-marker boost in dream-sampler: FRUSTRATION_REGEX with 10 calibrated markers + sanitizeForFrustrationCheck with 3 guards + SQL-keyword line exclusion + Pass A0 user-role recency-first 10% lane + frustration_forced/frustration_forced_examples in SamplingLog; tsc clean; live verify confirmed YMC turn 1604 tagged is_frustration=true and force-included at 2.5MB budget)"
+last_updated: "2026-05-16T19:11:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 5
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-05-15)
 ## Current Position
 
 Phase: 49 (pattern-detection) — IN PROGRESS
-Plan: 3 of 5 complete (Wave 1: 49-02 + 49-04 shipped; 49-01 sampler running in parallel)
+Plan: 3 of 5 complete (Wave 1 fully shipped: 49-01 + 49-02 + 49-04; Wave 2: 49-03 + 49-05 pending)
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Plan: 3 of 5 complete (Wave 1: 49-02 + 49-04 shipped; 49-01 sampler running in p
 | Phase 48.4-review-surface P05 | 128min | 4 tasks | 7 files |
 | Phase 49-pattern-detection P02 | 41 min | 3 tasks | 3 files |
 | Phase 49-pattern-detection P04 | 16 min | 1 task  | 1 file  |
+| Phase 49-pattern-detection P01 | 65 min | 1 task  | 1 file  |
 
 ## Accumulated Context
 
@@ -240,6 +241,15 @@ Plan: 3 of 5 complete (Wave 1: 49-02 + 49-04 shipped; 49-01 sampler running in p
 - [Phase 49-pattern-detection]: [Phase 49-04]: Additive sibling export (detectProject + detectContext + DetectedContext) — detectSilos signature UNCHANGED to preserve zero-risk to 4 existing callers (transcript-capture, intellect/context, intellect/silo-command-status, future MSF). 49-RESEARCH locks this posture.
 - [Phase 49-pattern-detection]: [Phase 49-04]: PROJECT_CWD_REGEX hardcoded /^\/home\/lobster\/projects\/([^/]+)/ — identical to porter-session-start.js hook regex verbatim. Deliberate duplication; hook stays independent of backend availability. Phase 50 may extract shared helper if cross-process sharing becomes practical.
 - [Phase 49-pattern-detection]: [Phase 49-04]: detectContext returns { silos: DetectedSilo[], projectId: string | null } in one async call. Plan 49-03 will import this directly in /context handler — saves one line of plumbing while keeping detectProject usable in pool-less contexts (future Phase 52 task-planner agent selection).
+- [Phase 49-pattern-detection]: [Phase 49-01]: Pattern set is FROZEN to 49-FRUSTRATION-CALIBRATION.md §2 — calibration doc supersedes the draft regex in 49-RESEARCH.md when they disagree. 10 markers (rant_caps, every_time, same_mistake, still_broken, i_told_you, direct_address, freehand, stop_doing, profanity, repeat_punct). Empirical 4.0% any-marker hit rate on 223-turn 7-day corpus.
+- [Phase 49-pattern-detection]: [Phase 49-01]: is_frustration tagging uses SANITIZED content, not raw. Tagging against raw would create downstream mismatch (turn flagged but match came from a task-notification blob or WhatsApp paste). Sanitize once, match once.
+- [Phase 49-pattern-detection]: [Phase 49-01]: Pass A0 sort is RECENCY-first (b.captured_at - a.captured_at DESC), Pass A is length-first. Different signal types, different ranking heuristics — rants are ephemeral (newest = strongest), imperatives are stable (longest = most context).
+- [Phase 49-pattern-detection]: [Phase 49-01]: Pass A0 runs BEFORE Pass A imperative. When a fresh frustration turn and a long-but-old imperative compete for the global counters.total clamp on tight budgets, frustration wins. Explicit ordering per plan.
+- [Phase 49-pattern-detection]: [Phase 49-01]: 3 sanitization guards + SQL-keyword line exclusion — task-notification XML strip (system noise), WhatsApp [H:MM, M/D/YYYY] line drop (third-party chatter), fenced+inline code strip (variable names), SQL-DDL line strip (kills FPs at turn ids 297, 364 in calibration).
+- [Phase 49-pattern-detection]: [Phase 49-01]: Global /i flag accepted with documented escape hatch. rant_caps becomes case-insensitive under /i but 4+/2+/2+ word-length minimum + SQL-keyword guard keep noise low. Per-pattern (?i:...) inline flags are the swap-in if audit logs reveal lowercase rant_caps garbage.
+- [Phase 49-pattern-detection]: [Phase 49-01]: Existing Pass A imperative loop hardened as bycatch — now skips Pass A0 selections AND honors counters.total <= maxBytes clamp. Both were missing in 48.3 (no-ops then, but become double-budget bugs once Pass A0 lands). Defense in depth.
+- [Phase 49-pattern-detection]: [Phase 49-01]: Empty-corpus early-return populates frustration_forced=0 + frustration_forced_examples=[] safe defaults — no NaN, no undefined, no runtime exception when SamplingLog is consumed.
+- [Phase 49-pattern-detection]: [Phase 49-01]: Live verification on production DB: turn 1604 (YMC 'EVERY SINGLE TIME / freehanding' rant) correctly tagged is_frustration=true. At 2.5MB budget frustration_forced=1622 (turn 1604 included); at default 200KB budget 104 user-role frustration turns saturate 10% lane recency-first as designed.
 
 ### Pending Todos
 
@@ -252,6 +262,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-16T18:49:57.506Z
-Stopped at: Completed 49-04-PLAN.md (LRN-04 server-side project derivation: detectProject + detectContext + DetectedContext added to silo-detector.ts; additive sibling exports; tsc clean; 14/14 inline tests pass including symlink-target null case)
+Last session: 2026-05-16T19:11:00.000Z
+Stopped at: Completed 49-01-PLAN.md (LRN-01 frustration-marker boost in dream-sampler: FRUSTRATION_REGEX with 10 calibrated markers + sanitizeForFrustrationCheck with 3 guards + SQL-keyword line exclusion + Pass A0 user-role recency-first 10% lane + frustration_forced/frustration_forced_examples in SamplingLog; tsc clean; live verify confirmed YMC turn 1604 tagged is_frustration=true and force-included at 2.5MB budget; Wave 1 fully shipped — Wave 2 49-03 + 49-05 next)
 Resume file: None

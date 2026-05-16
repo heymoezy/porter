@@ -515,4 +515,4 @@
   - .planning/phases/49-pattern-detection/49-01-SUMMARY.md (new)
   - .planning/STATE.md, .planning/ROADMAP.md, .planning/REQUIREMENTS.md (state updates)
 - Files NOT touching: 49-02 scope (prompt + parser + worker — just shipped), 49-04 scope (silo-detector — running in parallel). Disjoint by design.
-- Status: active
+- Status: **DONE** 2026-05-16T19:13Z — commit `7aea2bf` shipped (dream-sampler.ts +117/−6 LOC). TypeScript clean. All 21 acceptance grep gates green. Live-DB verification: turn 1604 (YMC 'EVERY SINGLE TIME / freehanding' rant) correctly tagged is_frustration=true and force-included at adequate budget. At default 200KB budget, 104 user-role frustration turns saturate 10% lane recency-first as designed (~5.7% any-marker rate, consistent with calibration prediction). SUMMARY + STATE + ROADMAP + REQUIREMENTS updated. NOT pushed (orchestrator pushes after Wave 1 — Wave 1 now complete: 49-01 + 49-02 + 49-04).
