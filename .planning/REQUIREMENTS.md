@@ -2,7 +2,7 @@
 
 **Milestone:** v7.0 Living Memory
 **Last updated:** 2026-05-16
-**Status:** Phase 49 planned (5 plans + VALIDATION). Awaiting `/gsd:execute-phase 49` to start execution.
+**Status:** Phase 49 Pattern Detection COMPLETE (2026-05-16) — 5/5 plans shipped + verified (LRN-01..05). Phase 50 Multi-Silo Foundation is next; awaiting `/gsd:plan-phase 50`.
 
 For shipped v6.0 requirements + traceability, see `.planning/milestones/v6.0-REQUIREMENTS.md`.
 
@@ -26,7 +26,7 @@ For shipped v6.0 requirements + traceability, see `.planning/milestones/v6.0-REQ
 ### Phase 49 — Pattern Detection (LRN-*)
 
 - [x] **LRN-01** → plan `49-01-PLAN.md`: Frustration-marker boost in transcript sampler — recent turns containing repeated user complaints, all-caps emphasis, "EVERY TIME"-style markers get force-included in the stratified sample (currently a uniformly-sampled turn buried in 1416 has no chance against generic structural patterns). **COMPLETE** (2026-05-16, commit `7aea2bf`)
-- [ ] **LRN-02** → plan `49-02-PLAN.md`: Dream prompt rewrite to extract failure patterns explicitly — current prompt asks model to refine operating rules; new section asks "list any failure pattern that recurred ≥2 times in the corpus" as a separate output field, surfaced into proposals via `proposed_metadata.source='failure_pattern'` (reuses existing `new_directive` kind — no DB schema change).
+- [x] **LRN-02** → plan `49-02-PLAN.md`: Dream prompt rewrite to extract failure patterns explicitly — current prompt asks model to refine operating rules; new section asks "list any failure pattern that recurred ≥2 times in the corpus" as a separate output field, surfaced into proposals via `proposed_metadata.source='failure_pattern'` (reuses existing `new_directive` kind — no DB schema change). **COMPLETE** (2026-05-16, commits `570d06b` + `4445e64` + `71187da`)
 - [x] **LRN-03** → plan `49-03-PLAN.md`: Project-level directive scoping — `directives.scope='project'` with `scope_id=<project-slug>`. Sessions in a software-silo cwd inherit silo directives AND any project-scope directives for that project. Lets YMC-specific rules (logo at X, brand casing Y) live at the YMC project, not in the global software silo. Schema already supports it (83 rows in production); plan adds optional forward-investment partial index + /context handler wiring.
 - [x] **LRN-04** → plan `49-04-PLAN.md`: Project detection from cwd — silo-detector gains a new pure `detectProject(cwd)` export + a `detectContext` composite returning `{silos, projectId}`. `/context` layers project directives on top of silo ones. Project-id derivation: trailing path segment of cwd (e.g., `/home/lobster/projects/ymc.capital` → `ymc.capital`). Identical regex to the production hook at `~/.claude/hooks/porter-session-start.js:21-27`.
 - [x] **LRN-05** → plan `49-05-PLAN.md`: Smoke harness for pattern detection — `tests/smoke-49.sh` covering frustration-boost (LRN-01), failure-pattern extraction (LRN-02), project-scope CRUD + trigger uniformity (LRN-03), `/context` layering with cwd-derived projectId (LRN-04). Mock-injection contract reused from Phase 48.3.

@@ -24,15 +24,16 @@
 
 **4 phases, ~17 requirements** — full breakdown in `.planning/REQUIREMENTS.md`:
 
-### Phase 49: Pattern Detection (LRN-*)
+### Phase 49: Pattern Detection (LRN-*)  ✅ COMPLETE (2026-05-16)
 **Goal:** Dream worker actually catches recurring failures (the YMC logo pattern that v6.0 missed). Project-level directive scoping so project-specific rules (YMC logo at X, brand casing Y) live at the project, not the global silo.
-**Plans:** 5/5 plans complete
+**Plans:** 5/5 plans complete. 49-VERIFICATION.md PASSED 5/5 LRN must-haves. Porter v6.17.1 live, all 5 phase smokes (48.1-48.4 + 49) green, TSC clean.
 - [x] 49-01-PLAN.md — LRN-01 frustration-marker boost in dream-sampler.ts (Pass A0 + recency-first force-include + samplingLog audit fields)
 - [x] 49-02-PLAN.md — LRN-02 prompt rewrite (Failure Patterns section in software.md) + dream-parser.ts Zod schema extension + dream-worker.ts failure_pattern proposal insertion + audit event
 - [x] 49-03-PLAN.md — LRN-03 project-scope directive layering in /context (effectiveProject derivation + symmetric concepts/episodes scoping + optional partial-index migration 049) [Wave 2 — depends on 49-04]
 - [x] 49-04-PLAN.md — LRN-04 detectProject pure function + detectContext composite + DetectedContext interface in silo-detector.ts (additive sibling exports, detectSilos unchanged)
-- [ ] 49-05-PLAN.md — LRN-05 smoke harness tests/smoke-49.sh + fixture dream-response-pattern-detection.json (covers all 5 LRNs + trigger immutability across scopes) [Wave 3 — depends on 49-01..04]
-- [ ] 49-VALIDATION.md — Nyquist coverage map (per-LRN sampling strategy, manual-only verifications, sign-off checklist)
+- [x] 49-05-PLAN.md — LRN-05 smoke harness tests/smoke-49.sh + fixture dream-response-pattern-detection.json (covers all 5 LRNs + trigger immutability across scopes) [Wave 3 — depends on 49-01..04]
+- [x] 49-VALIDATION.md — Nyquist coverage map (per-LRN sampling strategy, manual-only verifications, sign-off checklist)
+- [x] 49-VERIFICATION.md — 5/5 must-haves PASSED, autonomous execution under Moe delegation
 **Depends on:** Phase 48.3 + 48.4 (Dream Silos series — shipped).
 
 ### Phase 50: Multi-Silo Foundation (MSF-*)
@@ -50,11 +51,11 @@
 **Plans:** 3 (planner agent-selection, tool-restrictions, Bridge deeper cleanup).
 **Depends on:** Phase 49 (project scope informs agent selection).
 
-**Execution order:** 49 → 50 → 51 → 52 (linear; each phase enables the next).
+**Execution order:** 49 ✅ → 50 → 51 → 52 (linear; each phase enables the next).
 
 Deferred to v8.0: SIM-01..03 (Self-Improvement), BIL-01..03 (SaaS Billing).
 
-Run `/gsd:plan-phase 49` to start.
+Run `/gsd:plan-phase 50` to continue (Phase 49 shipped 2026-05-16).
 
 ## Progress
 
@@ -68,3 +69,4 @@ Run `/gsd:plan-phase 49` to start.
 | 24-30 | v4.0 | 17/17 | Partial (28 deferred) | 2026-04-02 |
 | 31-39 | v5.0 | 27/27 | Complete | 2026-04-03 |
 | 40-48.4 | v6.0 | 41/41 | Complete | 2026-05-13 |
+| 49 | v7.0 | 5/5 | Complete | 2026-05-16 |

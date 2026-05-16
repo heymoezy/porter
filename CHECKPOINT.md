@@ -5,8 +5,39 @@
 project: porter
 version: v6.17.1
 updated: 2026-05-16
-updated_by: claude-opus-4.7 (Porter Dreams 3 — v7.0 Phase 49 planning + dream loop closeout + frustration calibration)
-milestone_status: ARCHIVED 2026-05-15 — between milestones, awaiting v7.0
+updated_by: claude-opus-4.7 (Porter Dreams 3 — Phase 49 Pattern Detection complete)
+milestone_status: v7.0 IN PROGRESS — Phase 49 complete 2026-05-16, Phase 50 next
+
+## Phase 49 Pattern Detection — COMPLETE 2026-05-16
+
+**Phase 49 shipped end-to-end.** 5/5 plans (49-01..49-05) + 49-VALIDATION.md + 49-VERIFICATION.md all complete. Verifier PASSED 5/5 LRN must-haves. All 5 phase smokes green (smoke-48.1..48.4 + smoke-49 each exit 0); TSC clean; Porter v6.17.1 live and serving.
+
+**What shipped (5 plans, LRN-01..LRN-05):**
+- **LRN-01** — frustration-marker boost lane (Pass A0) in `dream-sampler.ts`: FRUSTRATION_REGEX + sanitizer (task-notification XML strip, WhatsApp third-party drop, fenced/inline code strip, SQL-keyword line exclusion) + recency-first force-include at 10% byte budget + samplingLog audit fields (`frustration_forced`, `frustration_forced_examples`)
+- **LRN-02** — `## Failure Patterns` section in `dream-prompts/software.md` (recurrence_count ≥ 2 + evidence_turn_ids ≥ 2 contract); `failurePatternSchema` + `ParsedFailurePattern` in `dream-parser.ts`; `dream-worker.ts` inserts failure_pattern proposals (`proposed_metadata.source='failure_pattern'`, sort_order 850-899 band between merge=300 and new_directive=900) + emits `dream_failure_pattern_detected` audit event. Bypasses `validateRefinementDoctrine` (carries own ≥2 recurrence + evidence enforcement at Zod boundary).
+- **LRN-03** — project-scope directive layering in `/api/v1/intellect/context`: `effectiveProject` derivation (explicit `?project=` ?? cwd-derived projectId) + symmetric concepts/episodes scoping + new `## Project Directives` section render. Migration `049-directives-scope-index.sql` ships partial index `idx_directives_scope_scope_id_status`. Immutability trigger `directive_immutable_moe_direct` confirmed scope-agnostic (uniform enforcement on scope='project' moe-direct UPDATE + bypass GUC).
+- **LRN-04** — additive sibling exports in `silo-detector.ts`: `detectProject(cwd)` pure function (PROJECT_CWD_REGEX identical to porter-session-start.js hook line 21-27) + `detectContext` composite returning `{silos, projectId}` + `DetectedContext` interface. `detectSilos` signature UNCHANGED — zero risk to 4 existing callers.
+- **LRN-05** — `tests/smoke-49.sh` (17531 bytes, 25 deterministic checks, idempotent w/ trap cleanup) + `tests/fixtures/dream-response-pattern-detection.json`. Mock injection via body field `_mock_response_path` (canonical contract from 48.3-05). Per-LRN graceful-skip via source-on-disk grep guards.
+
+**Key commits (all pushed to origin/master):**
+- `7aea2bf` — feat(49-01): frustration-marker boost lane in dream-sampler (LRN-01)
+- `570d06b` — feat(49-02): Failure Patterns section in software dream prompt
+- `4445e64` — feat(49-02): Zod schema extended with failure_patterns array
+- `71187da` — feat(49-02): insert failure-pattern proposals + audit events
+- `ad786f1` — feat(49-03): directives (scope, scope_id, status) partial index migration
+- `8494b4e` — feat(49-03): server-derived project scope into /context handler
+- `0946135` — feat(49-04): detectProject + detectContext in silo-detector
+- `ec1222d` — test(49-05): Phase 49 pattern-detection smoke harness
+- `75a9afc` — test(49-05): dream-response-pattern-detection fixture for LRN-02
+
+**Real-world validation (not just smoke):**
+- **YMC reference turns 1604+1605 force-include works through production code path.** Live DB probe against `session_transcript_turns` shows turn 1604 fires 5 frustration markers (rant_caps + every_time + same_mistake + still_broken + freehand) and turn 1605 fires 3 markers (direct_address + freehand + same_mistake) — exactly matching the 49-FRUSTRATION-CALIBRATION.md empirical validation. The 2026-05-16 logo rant that v6.0 missed is now catchable.
+- **Calibration doc** at `.planning/phases/49-pattern-detection/49-FRUSTRATION-CALIBRATION.md` documents 5.7% any-marker rate on the 1827-turn corpus (10 frustration markers + 3 noise guards, per-pattern precision table, YMC reference validation table).
+- **Cross-scope immutability trigger confirmed** — smoke-49 exercises UPDATE on scope='project' + source_type='moe-direct' (raises without bypass, succeeds with `SET LOCAL porter.allow_moe_direct_mutation='true'`). Complements smoke-48.1 SC-3 which only exercised scope='silo'.
+
+**Next:** Phase 50 Multi-Silo Foundation (MSF-01..04) — admin silo seed + data-room silo seed + silo enrollment workflow (one SQL block + one prompt file, no code change) + per-silo dream cadence. Run `/gsd:plan-phase 50` to begin.
+
+---
 
 ## v7.0 Phase 49 Planning + Dream Loop Closeout (2026-05-16)
 
