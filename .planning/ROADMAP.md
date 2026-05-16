@@ -30,7 +30,7 @@
 - [ ] 49-01-PLAN.md — LRN-01 frustration-marker boost in dream-sampler.ts (Pass A0 + recency-first force-include + samplingLog audit fields)
 - [ ] 49-02-PLAN.md — LRN-02 prompt rewrite (Failure Patterns section in software.md) + dream-parser.ts Zod schema extension + dream-worker.ts failure_pattern proposal insertion + audit event
 - [ ] 49-03-PLAN.md — LRN-03 project-scope directive layering in /context (effectiveProject derivation + symmetric concepts/episodes scoping + optional partial-index migration 049) [Wave 2 — depends on 49-04]
-- [ ] 49-04-PLAN.md — LRN-04 detectProject pure function + detectContext composite + DetectedContext interface in silo-detector.ts (additive sibling exports, detectSilos unchanged)
+- [x] 49-04-PLAN.md — LRN-04 detectProject pure function + detectContext composite + DetectedContext interface in silo-detector.ts (additive sibling exports, detectSilos unchanged)
 - [ ] 49-05-PLAN.md — LRN-05 smoke harness tests/smoke-49.sh + fixture dream-response-pattern-detection.json (covers all 5 LRNs + trigger immutability across scopes) [Wave 3 — depends on 49-01..04]
 - [ ] 49-VALIDATION.md — Nyquist coverage map (per-LRN sampling strategy, manual-only verifications, sign-off checklist)
 **Depends on:** Phase 48.3 + 48.4 (Dream Silos series — shipped).
