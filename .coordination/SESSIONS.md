@@ -516,3 +516,15 @@
   - .planning/STATE.md, .planning/ROADMAP.md, .planning/REQUIREMENTS.md (state updates)
 - Files NOT touching: 49-02 scope (prompt + parser + worker — just shipped), 49-04 scope (silo-detector — running in parallel). Disjoint by design.
 - Status: **DONE** 2026-05-16T19:13Z — commit `7aea2bf` shipped (dream-sampler.ts +117/−6 LOC). TypeScript clean. All 21 acceptance grep gates green. Live-DB verification: turn 1604 (YMC 'EVERY SINGLE TIME / freehanding' rant) correctly tagged is_frustration=true and force-included at adequate budget. At default 200KB budget, 104 user-role frustration turns saturate 10% lane recency-first as designed (~5.7% any-marker rate, consistent with calibration prediction). SUMMARY + STATE + ROADMAP + REQUIREMENTS updated. NOT pushed (orchestrator pushes after Wave 1 — Wave 1 now complete: 49-01 + 49-02 + 49-04).
+
+## GSD Executor 49-03 (Opus 4.7 1M) — 2026-05-16T19:48Z
+- Workstream: Execute Phase 49 Plan 03 (LRN-03 — Project-scope directive layering in /context). Wire detectContext from silo-detector.ts (just shipped by 49-04) into /context handler; derive effectiveProject from explicit ?project= OR cwd-derived projectId; symmetric concept/episode/directive scoping. Plus forward-investment partial index on (scope, scope_id, status) WHERE status='active'.
+- Files claimed:
+  - backend/src/routes/v1/intellect.ts (refactor /context handler)
+  - backend/src/db/migrations/049-directives-scope-index.sql (new SQL artifact per plan must_haves)
+  - backend/src/db/migrate-directives-scope-idx-v1.ts (new TS migration module to register & apply the SQL — matches Porter convention)
+  - backend/src/index.ts (register the new TS migration after migrateDreamsV1)
+  - .planning/phases/49-pattern-detection/49-03-SUMMARY.md (new)
+  - .planning/STATE.md, .planning/ROADMAP.md (state updates)
+- Files NOT touching: silo-detector.ts (49-04 just shipped), dream-sampler.ts (49-01 shipped), dream-prompts/software.md + dream-parser.ts + dream-worker.ts (49-02 shipped), tests/smoke-49.sh (49-05 — next).
+- Status: **DONE** 2026-05-16T20:30Z — 2 commits: `ad786f1` feat(49-03): partial-index migration (SQL + TS shim), `8494b4e` feat(49-03): detectContext + effectiveProject + symmetric scoping in /context. tsc clean, porter restarted v6.17.1, /health 200, index applied (schema_migrations id='directives_scope_idx_v1'), 6 live behavior tests green (incl. insert/cleanup smoke for scope_id='smoke-49-03-test'), 4 prior-phase smoke harnesses (48.1..48.4) green — zero regression. LRN-03 complete. NOT pushed (orchestrator pushes after Wave 2 — 49-05 still pending).

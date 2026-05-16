@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: The Living Memory
 status: unknown
-stopped_at: "Completed 49-01-PLAN.md (LRN-01 frustration-marker boost in dream-sampler: FRUSTRATION_REGEX with 10 calibrated markers + sanitizeForFrustrationCheck with 3 guards + SQL-keyword line exclusion + Pass A0 user-role recency-first 10% lane + frustration_forced/frustration_forced_examples in SamplingLog; tsc clean; live verify confirmed YMC turn 1604 tagged is_frustration=true and force-included at 2.5MB budget)"
-last_updated: "2026-05-16T19:11:00.000Z"
+stopped_at: "Completed 49-03-PLAN.md (LRN-03 project-scope layering in /context: detectContext composite + effectiveProject derivation + symmetric directives/concepts/episodes scoping + projectIdSource/effectiveProject stats observability + idx_directives_scope_scope_id_status partial index; tsc clean; live 6-case behavior matrix green; 4 prior-phase smoke harnesses green)"
+last_updated: "2026-05-16T20:37:40.576Z"
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-05-15)
 ## Current Position
 
 Phase: 49 (pattern-detection) — IN PROGRESS
-Plan: 3 of 5 complete (Wave 1 fully shipped: 49-01 + 49-02 + 49-04; Wave 2: 49-03 + 49-05 pending)
+Plan: 4 of 5 complete (Wave 1 fully shipped: 49-01 + 49-02 + 49-04; Wave 2: 49-03 SHIPPED; 49-05 pending)
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Plan: 3 of 5 complete (Wave 1 fully shipped: 49-01 + 49-02 + 49-04; Wave 2: 49-0
 | Phase 49-pattern-detection P02 | 41 min | 3 tasks | 3 files |
 | Phase 49-pattern-detection P04 | 16 min | 1 task  | 1 file  |
 | Phase 49-pattern-detection P01 | 65 min | 1 task  | 1 file  |
+| Phase 49-pattern-detection P03 | 40 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -250,6 +251,10 @@ Plan: 3 of 5 complete (Wave 1 fully shipped: 49-01 + 49-02 + 49-04; Wave 2: 49-0
 - [Phase 49-pattern-detection]: [Phase 49-01]: Existing Pass A imperative loop hardened as bycatch — now skips Pass A0 selections AND honors counters.total <= maxBytes clamp. Both were missing in 48.3 (no-ops then, but become double-budget bugs once Pass A0 lands). Defense in depth.
 - [Phase 49-pattern-detection]: [Phase 49-01]: Empty-corpus early-return populates frustration_forced=0 + frustration_forced_examples=[] safe defaults — no NaN, no undefined, no runtime exception when SamplingLog is consumed.
 - [Phase 49-pattern-detection]: [Phase 49-01]: Live verification on production DB: turn 1604 (YMC 'EVERY SINGLE TIME / freehanding' rant) correctly tagged is_frustration=true. At 2.5MB budget frustration_forced=1622 (turn 1604 included); at default 200KB budget 104 user-role frustration turns saturate 10% lane recency-first as designed.
+- [Phase 49-pattern-detection]: [Phase 49-03]: detectContext composite call at /context handler top — single call yields silos[] + projectId, replaces standalone detectSilos invocation. effectiveProject = explicit ?project= ?? detectedContext.projectId with explicit-wins precedence preserves porter-session-start hook back-compat exactly.
+- [Phase 49-pattern-detection]: [Phase 49-03]: Symmetric project-scope queries — directives + concepts + episodes all key off effectiveProject. cwd-only callers now see project-scope concepts (LIMIT 20 vs the previous LIMIT 10 global-only) and project-scope episodes that previously required explicit ?project=.
+- [Phase 49-pattern-detection]: [Phase 49-03]: 'server-derived' suffix on Project Directives header when projectIdSource='cwd' — cosmetic but high-signal for client debugging. stats.projectIdSource is a 3-state string union ('query'|'cwd'|'none'), not boolean, so 'no project scoping at all' stays distinguishable.
+- [Phase 49-pattern-detection]: [Phase 49-03]: TS shim around .sql artifact — plan locks the SQL file path (backend/src/db/migrations/049-directives-scope-index.sql) but Porter's migration convention is TS modules registered in index.ts. The shim migrate-directives-scope-idx-v1.ts reads the .sql once at boot and stamps schema_migrations.id='directives_scope_idx_v1'. Double-safe on re-run via both the schema_migrations guard AND CREATE INDEX IF NOT EXISTS inside the SQL.
 
 ### Pending Todos
 
@@ -262,6 +267,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-16T19:11:00.000Z
-Stopped at: Completed 49-01-PLAN.md (LRN-01 frustration-marker boost in dream-sampler: FRUSTRATION_REGEX with 10 calibrated markers + sanitizeForFrustrationCheck with 3 guards + SQL-keyword line exclusion + Pass A0 user-role recency-first 10% lane + frustration_forced/frustration_forced_examples in SamplingLog; tsc clean; live verify confirmed YMC turn 1604 tagged is_frustration=true and force-included at 2.5MB budget; Wave 1 fully shipped — Wave 2 49-03 + 49-05 next)
+Last session: 2026-05-16T20:33:24.451Z
+Stopped at: Completed 49-03-PLAN.md (LRN-03 project-scope layering in /context: detectContext composite + effectiveProject derivation + symmetric directives/concepts/episodes scoping + projectIdSource/effectiveProject stats observability + idx_directives_scope_scope_id_status partial index; tsc clean; live 6-case behavior matrix green; 4 prior-phase smoke harnesses green)
 Resume file: None
