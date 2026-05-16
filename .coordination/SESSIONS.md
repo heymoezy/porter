@@ -467,3 +467,34 @@
 - Verified-still-applied: openclaw whisper SSRF patch `PATCH (Moe, 2026-05-13)` at media-understanding-bGVGc1zV.js:42.
 - Verified-already-shipped (handover was stale): Phase 48.3 Software Dream Worker — dream-worker.ts + dream_runs + memory_proposals tables + software.md prompt all exist; checkpoint already records 48.3 + 48.4 shipped on 2026-05-13.
 - Status: done.
+
+## Tom 3 (Opus 4.7 1M) — 2026-05-16T03:30Z [follow-on]
+- Workstream: NO Porter code this wave. Tom workspace integration is YMC-side only for Wave 1a. Porter touches arrive in Wave 2 (workflow-engine.ts cron extension) and Wave 5 (Phase 48.5 YMC dream silo) — neither claimed yet. Declaring here for cross-project visibility.
+- Files claimed: NONE in Porter repo this session.
+- Status: planning-only
+
+---
+
+## Porter Dreams 3 (Opus 4.7 1M) — 2026-05-16T(orchestrator)
+- Workstream: v7.0 Phase 49 Pattern Detection — planning shipped (5 PLAN.md + VALIDATION.md, commit `25b90d6` pushed) + plan-check PASS (2 warnings + 1 info, no blockers) + empirical frustration-pattern calibration (10 markers, 3 guards, validated against YMC reference turns 1604+1605) + dream proposal review closeout (2 accepted → directives d_9b3e882c, d_c86b0a89; 1 rejected as CLAUDE.md duplicate).
+- Files claimed:
+  - .planning/phases/49-pattern-detection/* (planning + revision + 49-FRUSTRATION-CALIBRATION.md)
+  - backend/src/services/intellect/dream-prompts/software.md (49-02 in flight — gsd-executor)
+  - backend/src/services/intellect/dream-parser.ts (49-02 in flight)
+  - backend/src/services/intellect/dream-worker.ts (49-02 in flight)
+- In-flight parallel agents:
+  - gsd-planner — revising 49-01 + 49-04 per plan-check warnings
+  - gsd-executor — executing 49-02 (prompt + parser + worker for failure_patterns)
+- Cross-project trigger: same dream-run that closed this loop surfaced YMC freehand violations; 3 fixed in parallel (insight cover, kyc letterhead, signing email, og-image) under separate YMC session — software silo directive correctly fired across both projects.
+- Status: active
+
+## GSD Executor 49-02 (Opus 4.7 1M) — 2026-05-16T15:50Z
+- Workstream: Execute Phase 49 Plan 02 (LRN-02 — Failure pattern detection in dream worker). Extend software.md prompt + dream-parser.ts Zod schema + dream-worker.ts insertion logic.
+- Files claimed:
+  - backend/src/services/intellect/dream-prompts/software.md
+  - backend/src/services/intellect/dream-parser.ts
+  - backend/src/services/intellect/dream-worker.ts
+  - .planning/phases/49-pattern-detection/49-02-SUMMARY.md (new)
+  - .planning/STATE.md, .planning/ROADMAP.md (state updates)
+- Files NOT touching: 49-01 sampler scope, 49-04 detector scope (disjoint by design).
+- Status: active

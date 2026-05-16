@@ -4,9 +4,26 @@
 
 project: porter
 version: v6.17.1
-updated: 2026-05-15
-updated_by: claude-opus-4.7 (Porter Dreams 3 — autonomous /gsd:complete-milestone + v6.0.1 deep cleanup)
+updated: 2026-05-16
+updated_by: claude-opus-4.7 (Porter Dreams 3 — v7.0 Phase 49 planning + dream loop closeout + frustration calibration)
 milestone_status: ARCHIVED 2026-05-15 — between milestones, awaiting v7.0
+
+## v7.0 Phase 49 Planning + Dream Loop Closeout (2026-05-16)
+
+**Phase 49 Pattern Detection planned and entering execution.** 5 plans (49-01..49-05) + VALIDATION.md shipped in commit `25b90d6` and pushed. Plan-check PASS — 2 warnings (addressed by in-flight revision of 49-01 + 49-04 via gsd-planner) + 1 info, no blockers. gsd-executor running 49-02 in parallel (prompt template + parser + worker for `failure_patterns` proposal kind).
+
+**Empirical frustration-pattern calibration produced** at `.planning/phases/49-pattern-detection/49-FRUSTRATION-CALIBRATION.md`. 10 frustration markers + 3 noise guards, validated against YMC reference turns 1604+1605 (the freehand logo incident that triggered v7.0 scoping). Calibration feeds the LRN-01 sampling boost so the dream worker can detect what it currently misses.
+
+**Dream loop closed.** The dream-run that surfaced the doctrine deadlock produced 3 proposals; all 3 reviewed:
+- mp_b58ad3ce (root-cause as structural bug) — ACCEPTED → directive d_9b3e882c
+- mp_f61c85f8 (ship verification artifacts) — ACCEPTED → directive d_c86b0a89
+- mp_0bd96c69 (autonomous vs strategic) — REJECTED (duplicates CLAUDE.md "never ask shall I proceed")
+
+Software silo now carries 8 active directives (6 moe-direct sealed + 2 dream_worker-accepted).
+
+**Cross-project sweep.** Same silo directive correctly fired across project boundaries: 3 YMC freehand violations fixed in parallel (insight cover, kyc letterhead, signing email, og-image) under a separate YMC session — concrete evidence that the silo-scoped directive injection is working as designed.
+
+---
 
 ## v7.0 Scoped + Dream Loop Closed (2026-05-16)
 
