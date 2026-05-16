@@ -1,0 +1,31 @@
+{
+  "summary": "Smoke fixture for Phase 49 LRN-02 — surfaces one failure pattern at project scope plus one ordinary refinement.",
+  "proposals": [
+    {
+      "kind": "new_directive",
+      "conceptual_area": "ship-discipline",
+      "target_directive_ids": [],
+      "proposed_content": "Always restart porter-fastify after frontend rebuild. Backend serves statics; rebuild without restart = blank screen.",
+      "priority": 70,
+      "source_evidence": {
+        "sample_turn_ids": [9001, 9002],
+        "phrasing_examples": ["always restart after build", "rebuild without restart breaks the bundle"],
+        "reasoning": "Two smoke sessions reinforced the served-stale-bundle pattern."
+      }
+    }
+  ],
+  "flagged_seeds": [],
+  "failure_patterns": [
+    {
+      "pattern_name": "YMC logo freehanded instead of vector asset",
+      "description": "Across three sessions Moe complained that the model freehanded the logo SVG path instead of using the vector asset at /assets/logo.svg. Same right-bracket position, same wrong size, same missing capital Y.",
+      "recurrence_count": 3,
+      "evidence_turn_ids": [9101, 9102, 9103],
+      "suggested_directive": "YMC logo: use the vector asset at /assets/logo.svg. Never freehand SVG paths for the logo. Right bracket position and YMC capitalization are fixed by the asset.",
+      "suggested_scope": "project",
+      "suggested_scope_id": "smoke-49-project"
+    }
+  ],
+  "active_directive_count_before": 6,
+  "active_directive_count_after_proposed": 7
+}
