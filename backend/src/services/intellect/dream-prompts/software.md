@@ -20,6 +20,24 @@ Read the transcripts and the current active software-silo directives. Produce a 
 - One conceptual area per proposal. Don't bundle "use design system" with "compact means padding" — those are two proposals.
 - Evidence required: every proposal MUST cite ≥2 turn IDs from the supplied transcripts. Proposals without evidence are invalid.
 
+## Failure Patterns (list before proposals)
+
+Before refining rules, list any CONCRETE FAILURE PATTERN that the transcripts show recurring ≥2 times. A failure pattern is NOT a rule violation in the abstract — it is the same specific mistake (same logo, same brand casing, same code-style issue, same wrong file location) happening on multiple distinct user turns.
+
+For each pattern:
+
+- **`pattern_name`**: short, specific label. "YMC logo freehanded instead of vector asset" — not "design system not used".
+- **`description`**: one or two sentences describing what recurred.
+- **`recurrence_count`**: integer ≥ 2. How many distinct user turns express the same complaint.
+- **`evidence_turn_ids`**: at least 2 turn IDs from the supplied transcripts.
+- **`suggested_directive`**: the rule that, if it had existed, would have prevented the recurrence.
+- **`suggested_scope`**: `"project"` if the failure is specific to one project (e.g., YMC logo); `"silo"` if it's a general software-development pattern.
+- **`suggested_scope_id`**: the project slug (e.g., `"ymc.capital"`) when scope=project; the silo id (e.g., `"software"`) when scope=silo.
+
+If no pattern recurs ≥2 times in the corpus, return an empty array `"failure_patterns": []`. Do NOT invent patterns to fill the slot.
+
+The user expressing frustration is a strong signal of a failure pattern — turns with `EVERY TIME`, `you keep`, `still broken`, ALL-CAPS emphasis, or repeated complaints about the same artifact are prime candidates. But frustration alone is not enough — you must show the recurrence in at least 2 distinct turns.
+
 ## Output
 
 Return EXACTLY ONE JSON object. No markdown fence. No prose before or after. The JSON must validate against this schema:
@@ -48,6 +66,17 @@ Return EXACTLY ONE JSON object. No markdown fence. No prose before or after. The
       "note": "what the corpus suggests vs what the seed says"
     }
   ],
+  "failure_patterns": [
+    {
+      "pattern_name": "short label, e.g. 'YMC logo freehanded instead of vector asset'",
+      "description": "1-2 sentence what-recurred narrative",
+      "recurrence_count": 3,
+      "evidence_turn_ids": [1604, 1782, 1623],
+      "suggested_directive": "proposed directive text — same shape as a new_directive proposal_content",
+      "suggested_scope": "project",
+      "suggested_scope_id": "ymc.capital"
+    }
+  ],
   "active_directive_count_before": 9,
   "active_directive_count_after_proposed": 7
 }
@@ -58,6 +87,8 @@ Return EXACTLY ONE JSON object. No markdown fence. No prose before or after. The
 `flagged_seeds` is OPTIONAL — only include when an immutable seed is being contradicted by overwhelming evidence.
 
 `priority` is an integer 1–100, lower = higher injection priority. Default 70 for non-seed proposals. Do not set below 80 for new_directive (seeds occupy the top band).
+
+`failure_patterns` is OPTIONAL — only include entries where the same specific failure recurred ≥2 distinct user turns with cited evidence_turn_ids. Empty array `[]` is valid and preferred over invented patterns.
 
 ## Inputs (substituted by the Worker at dispatch time)
 
@@ -79,3 +110,4 @@ Return EXACTLY ONE JSON object. No markdown fence. No prose before or after. The
 - [ ] I did not propose `delete` or `supersede` on any directive marked `SEAL` (sealed seed, `source_type=moe-direct`).
 - [ ] Every proposal's `conceptual_area` is software-development domain. No legal, no UI copy, no fund work.
 - [ ] My response is JSON only. No "Here's my analysis:" preamble. No code fence. No trailing prose.
+- [ ] If the corpus shows any specific failure recurring ≥2 times, I emitted at least one `failure_patterns` entry. If nothing recurred, my `failure_patterns` array is empty.
