@@ -22,7 +22,7 @@ import { runSelfMonitor } from '../../services/intellect/self-monitor.js';
 import { runPatternMining } from '../../services/intellect/pattern-miner.js';
 import { runToolDetection } from '../../services/intellect/tool-detector.js';
 import { runSubscriptionCheck } from '../../services/intellect/subscription-manager.js';
-import { detectSilos } from '../../services/intellect/silo-detector.js';
+import { detectContext } from '../../services/intellect/silo-detector.js';
 import { insertTurn } from '../../services/intellect/transcript-capture.js';
 import { runTranscriptRetention } from '../../services/intellect/transcript-retention.js';
 import { runDreamWorker } from '../../services/intellect/dream-worker.js';
@@ -74,6 +74,34 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     };
     void scope; // currently unused but reserved for future scope filtering
 
+    // ─── Phase 49 LRN-03/04 ─────────────────────────────────────────────
+    // detectContext composes detectSilos + detectProject in a single call.
+    // Silos feed the silo section below; projectId is the server-side
+    // cwd→project mapping that LRN-03 layers into project-scope queries.
+    // The explicit ?project= query param wins for back-compat (the
+    // porter-session-start hook still passes both project= and cwd=, so
+    // live hook behavior is unchanged). Fail-open: never break /context
+    // because of detection failure.
+    let detectedContext: { silos: Array<{ id: string; displayName: string }>; projectId: string | null } = {
+      silos: [],
+      projectId: null,
+    };
+    try {
+      detectedContext = await detectContext(
+        { cwd, projectName: project, sessionId: session_id },
+        pool,
+      );
+    } catch (detectErr) {
+      request.log.warn(
+        { err: detectErr },
+        '[intellect] detectContext failed — continuing without silo/project derivation',
+      );
+    }
+    const effectiveProject: string | null = project ?? detectedContext.projectId ?? null;
+    const projectIdSource: 'query' | 'cwd' | 'none' =
+      project ? 'query' : detectedContext.projectId ? 'cwd' : 'none';
+    const projectIsServerDerived = projectIdSource === 'cwd';
+
     // Fetch system directives (always apply)
     const { rows: systemDirectives } = await pool.query<DirectiveRow>(
       `SELECT id, scope, scope_id, content, priority, verified_at
@@ -82,21 +110,23 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
        ORDER BY priority DESC`
     );
 
-    // Fetch project-scoped directives if project specified
+    // Fetch project-scoped directives — uses effectiveProject so cwd-only
+    // callers see the same project directives that explicit-?project= callers see.
     let projectDirectives: DirectiveRow[] = [];
-    if (project) {
+    if (effectiveProject) {
       const { rows } = await pool.query<DirectiveRow>(
         `SELECT id, scope, scope_id, content, priority, verified_at
          FROM directives
          WHERE status = 'active' AND scope = 'project' AND scope_id = $1
          ORDER BY priority DESC`,
-        [project]
+        [effectiveProject]
       );
       projectDirectives = rows;
     }
 
-    // Fetch relevant concepts (global + project-scoped)
-    const conceptQuery = project
+    // Fetch relevant concepts (global + project-scoped) — symmetric with
+    // project directives: cwd-only callers now also see project-scope concepts.
+    const conceptQuery = effectiveProject
       ? `SELECT id, scope, scope_id, content, trust_tier, confidence_score
          FROM concepts
          WHERE status = 'active' AND (scope = 'global' OR (scope = 'project' AND scope_id = $1))
@@ -109,13 +139,14 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
          LIMIT 10`;
     const { rows: concepts } = await pool.query<ConceptRow>(
       conceptQuery,
-      project ? [project] : []
+      effectiveProject ? [effectiveProject] : []
     );
 
     // Fetch recent episodes — project-scoped first, then workspace-scoped fallback.
     // Most episodes are workspace-scoped (session analyzer doesn't always know the project).
+    // Uses effectiveProject for symmetry — cwd-only callers see project-scope episodes too.
     let episodes: EpisodeRow[] = [];
-    if (project) {
+    if (effectiveProject) {
       const { rows } = await pool.query<EpisodeRow>(
         `SELECT id, scope_id, summary, files_changed_json, created_at
          FROM episodes
@@ -123,7 +154,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
             OR scope = 'workspace'
          ORDER BY created_at DESC
          LIMIT 5`,
-        [project]
+        [effectiveProject]
       );
       episodes = rows;
     } else {
@@ -194,7 +225,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     const sections: string[] = [];
 
     sections.push('## Porter Context');
-    if (project) sections.push(`Project: **${project}**`);
+    if (effectiveProject) sections.push(`Project: **${effectiveProject}**`);
     sections.push('');
 
     if (systemDirectives.length > 0) {
@@ -206,15 +237,13 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     }
 
     // ─── Phase 48.1: Silo Foundation — silo-scoped directives ───────────────
-    // Detect silos from cwd + session override, then inject a labeled section
-    // per matching silo BETWEEN System Directives and Project Directives so
-    // silo rules can amplify workspace rules but project rules can still
-    // customize. Fail-open: never break /context because of silo detection.
+    // Silos are pre-detected at the top of the handler via detectContext
+    // (Phase 49 LRN-04 — composite call avoids a second DB round trip).
+    // Inject a labeled section per matching silo BETWEEN System Directives
+    // and Project Directives so silo rules can amplify workspace rules but
+    // project rules can still customize. Fail-open: never break /context.
     try {
-      const silos = await detectSilos(
-        { cwd, projectName: project, sessionId: session_id },
-        pool,
-      );
+      const silos = detectedContext.silos;
       if (silos.length > 0) {
         const siloIds = silos.map((s) => s.id);
         const siloDirectivesRes = await pool.query<{
@@ -251,8 +280,12 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       );
     }
 
-    if (projectDirectives.length > 0) {
-      sections.push(`### Project Directives (${project})`);
+    if (projectDirectives.length > 0 && effectiveProject) {
+      // Phase 49 LRN-03: header annotated when projectId came from cwd-derivation
+      // rather than explicit ?project=. Purely cosmetic — helps debugging when a
+      // client sees project directives it didn't explicitly ask for.
+      const suffix = projectIsServerDerived ? ' — server-derived' : '';
+      sections.push(`### Project Directives (${effectiveProject})${suffix}`);
       for (const d of projectDirectives) {
         sections.push(`- ${d.content}`);
       }
@@ -304,6 +337,10 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
         projectDirectives: projectDirectives.length,
         episodes: episodes.length,
         concepts: concepts.length,
+        // Phase 49 LRN-03 observability — clients can see whether the project
+        // scoping came from their explicit ?project= or from cwd-derivation.
+        projectIdSource,
+        effectiveProject,
       },
     }));
   });
