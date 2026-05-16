@@ -8,18 +8,19 @@ Porter is an AI orchestration platform where non-technical users create projects
 
 Creating a project should trigger an intelligent flow that assigns agents, builds a plan, and starts work with minimal user input — the "GSD-like flow" applied to everything Porter does.
 
-## Current Milestone: Between milestones — v7.0 TBD
+## Current Milestone: v7.0 The Living Memory
 
-**Status (2026-05-15):** v6.0 The Orchestration Platform formally archived. All 12 phases (40-48.4), 41 plans, 60 requirements shipped. Awaiting Moe's `/gsd:new-milestone` to scope v7.0.
+**Status (2026-05-16):** Scoped. 4 phases (49-52), ~17 requirements. Trigger: 2026-05-16 YMC logo freehand incident exposed that the Dream Silos system was capturing the recurring-failure signal in transcripts but the dream worker was extracting generic structural patterns instead. v7.0 fixes that, scales memory beyond software silo, and activates the dormant Phase 43 inter-agent delegation loop.
 
-**Likely v7.0 candidates** (carried over from v6.0 closeout — see `.planning/REQUIREMENTS.md`):
-- Inter-agent delegation activation (task-planner agent-selection logic)
-- PCP-02 tool-restriction enforcement on child dispatches
-- Multi-silo support (admin / data-room silo) — extend Dream Silos beyond software
-- Dreams page UX polish (bulk accept/reject, edit-in-place, proposal search)
-- Deeper Bridge consolidation cleanup (`config.ts`, `learner.ts`, `contact-analyzer.ts`, etc.)
-- Self-Improvement (SIM-01..03) — agent-driven development, pattern mining, self-modifying codebase
-- SaaS Billing (BIL-01..03) — Lemon Squeezy, usage metering, plan limits
+**Phases:**
+- **Phase 49 Pattern Detection (LRN-*):** Frustration-marker boost in sampler, dream prompt rewrite to extract recurring-failure patterns, project-level directive scoping (`scope='project'`).
+- **Phase 50 Multi-Silo Foundation (MSF-*):** Admin silo + data-room silo + silo enrollment workflow + per-silo dream cadence.
+- **Phase 51 Dreams Review UX (DRX-*):** Bulk accept/reject, edit-in-place on proposals, proposal search, live silos list endpoint.
+- **Phase 52 Closed Loop Activation (CLA-*):** Task-planner agent-selection (activates Phase 43 delegation), PCP-02 tool-restrictions, deeper Bridge cleanup.
+
+**Deferred to v8.0:** SIM-01..03 (Self-Improvement), BIL-01..03 (SaaS Billing).
+
+**Run `/gsd:plan-phase 49` to start execution.**
 
 **Completed milestones:**
 - v1.0 Foundation + Core Platform (2026-03-21) — 7 phases, 30/30 reqs
@@ -86,9 +87,12 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ Software dream worker (weekly Sonnet 4.6 raw-passthrough consolidation, refine-don't-append doctrine, memory_proposals) — v6.0 Phase 48.3
 - ✓ Dream review surface (admin /dreams page, transactional 4-kind accept matrix, auto-expiry, SSE-driven UI) — v6.0 Phase 48.4
 
-### Active
+### Active (v7.0 Living Memory — 17 requirements)
 
-- [ ] v7.0 — TBD, awaiting `/gsd:new-milestone`. See `.planning/REQUIREMENTS.md` "Carry-over from v6.0" for candidates.
+- [ ] **LRN-01..05:** Pattern detection — frustration-marker sampling boost, dream prompt rewrite for recurring-failure extraction, project-level directive scoping, cwd→project derivation, smoke harness (Phase 49)
+- [ ] **MSF-01..04:** Multi-silo foundation — admin + data-room silos, enrollment workflow, per-silo cadence (Phase 50)
+- [ ] **DRX-01..04:** Dreams review UX — bulk actions, edit-in-place, search, silos endpoint (Phase 51)
+- [ ] **CLA-01..03:** Closed loop activation — task-planner agent-selection, PCP-02 tool-restrictions, Bridge deeper cleanup (Phase 52)
 
 ### Out of Scope
 

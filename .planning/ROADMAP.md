@@ -18,21 +18,37 @@
 - **v5.0** — Living Skills: source-of-truth cleanup, skill pack explorer, runtime selector, feedback telemetry, evolution loop, quality scoring, template UX, adaptive context, bridge task dispatch. 30/30 reqs. 9 phases.
 - **v6.0** — The Orchestration Platform: gateway capabilities, session intelligence, task decomposition, inter-agent messaging, autonomous job queue, Porter control plane, project monitoring, project substrate, **Dream Silos series (48.1-48.4 inserted)**: silo foundation, transcript capture, software dream worker, review surface. 60/60 reqs. 12 phases. Archive: `milestones/v6.0-ROADMAP.md`.
 
-## Upcoming: v7.0
+## In Progress: v7.0 The Living Memory
 
-**TBD — awaiting Moe's scoping.**
+**Scoped:** 2026-05-16. **Trigger:** the YMC logo freehand incident — dream worker had Moe's frustrated turns in the corpus but extracted generic structural patterns instead of the recurring failure. System is alive but blind to its primary signal. v7.0 fixes that, scales memory beyond software silo, and activates the dormant Phase 43 delegation loop.
 
-Likely candidates carried over from v6.0 closeout (see `.planning/REQUIREMENTS.md` → "Carry-over from v6.0" section):
+**4 phases, ~17 requirements** — full breakdown in `.planning/REQUIREMENTS.md`:
 
-- Inter-agent delegation activation (task-planner agent-selection logic)
-- PCP-02 tool-restriction enforcement on child dispatches
-- Multi-silo support (admin / data-room silo)
-- Dreams page UX (bulk accept/reject, edit-in-place, proposal search)
-- Deeper Bridge consolidation cleanup
-- Self-Improvement (SIM-01..03) — agent-driven development, pattern mining, self-modifying codebase
-- SaaS Billing (BIL-01..03) — Lemon Squeezy, usage metering, plan limits
+### Phase 49: Pattern Detection (LRN-*)
+**Goal:** Dream worker actually catches recurring failures. Project-level directive scoping so project-specific rules (YMC logo at X, brand casing Y) live at the project, not the global silo.
+**Plans:** 5 (frustration-marker boost, prompt rewrite, project scope schema, cwd→project derivation, smoke harness).
+**Depends on:** Phase 48.3 + 48.4 (Dream Silos series — shipped).
 
-Run `/gsd:new-milestone` when ready to scope v7.0.
+### Phase 50: Multi-Silo Foundation (MSF-*)
+**Goal:** Admin silo + data-room silo + silo enrollment workflow (adding a silo = one SQL block + one prompt file, no code change). Per-silo dream cadence wired.
+**Plans:** 4 (admin silo seed, data-room silo seed, enrollment refactor, per-silo cadence).
+**Depends on:** Phase 49 (project scoping makes per-silo cadence meaningful).
+
+### Phase 51: Dreams Review UX (DRX-*)
+**Goal:** Make the review surface actually usable at volume — bulk accept/reject, edit-in-place, proposal search, live silos list.
+**Plans:** 4 (bulk actions, edit-in-place, search, silos endpoint).
+**Depends on:** Phase 50 (more silos = more proposals = the UX matters).
+
+### Phase 52: Closed Loop Activation (CLA-*)
+**Goal:** Wire the cold loops from v6.0 — task-planner picks an agent (activates Phase 43), child dispatches inherit tool restrictions (PCP-02), and deeper Bridge cleanup removes Ollama refs from `learner.ts` / `config.ts` / `task-decomposition` / etc.
+**Plans:** 3 (planner agent-selection, tool-restrictions, Bridge deeper cleanup).
+**Depends on:** Phase 49 (project scope informs agent selection).
+
+**Execution order:** 49 → 50 → 51 → 52 (linear; each phase enables the next).
+
+Deferred to v8.0: SIM-01..03 (Self-Improvement), BIL-01..03 (SaaS Billing).
+
+Run `/gsd:plan-phase 49` to start.
 
 ## Progress
 

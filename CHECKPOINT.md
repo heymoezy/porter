@@ -8,6 +8,30 @@ updated: 2026-05-15
 updated_by: claude-opus-4.7 (Porter Dreams 3 — autonomous /gsd:complete-milestone + v6.0.1 deep cleanup)
 milestone_status: ARCHIVED 2026-05-15 — between milestones, awaiting v7.0
 
+## v7.0 Scoped + Dream Loop Closed (2026-05-16)
+
+**v7.0 The Living Memory** scoped autonomously after Moe delegated the strategic call. 4 phases, 17 requirements:
+
+- Phase 49 Pattern Detection (LRN-01..05) — frustration-marker sampling boost, dream prompt rewrite, project-level directive scoping
+- Phase 50 Multi-Silo Foundation (MSF-01..04) — admin + data-room silos, enrollment workflow, per-silo cadence
+- Phase 51 Dreams Review UX (DRX-01..04) — bulk accept/reject, edit-in-place, search, silos endpoint
+- Phase 52 Closed Loop Activation (CLA-01..03) — task-planner agent-selection, PCP-02 tool-restrictions, Bridge deeper cleanup
+
+Deferred to v8.0: SIM (self-improvement), BIL (billing).
+
+**Trigger:** the 2026-05-16 YMC logo freehand incident. Dream worker had Moe's frustrated turns in the 1416-turn corpus but extracted generic structural patterns instead of the recurring-failure signal. v7.0 fixes the memory layer to catch what it currently misses.
+
+**Dream proposals review (closed loop):**
+- mp_b58ad3ce (root-cause as structural bug) — ACCEPTED → directive d_9b3e882c
+- mp_f61c85f8 (ship verification artifacts) — ACCEPTED → directive d_c86b0a89
+- mp_0bd96c69 (autonomous vs strategic) — REJECTED (duplicates CLAUDE.md "never ask shall I proceed")
+
+Software silo now has 8 active directives (6 moe-direct sealed + 2 dream_worker-accepted + 1 carryover).
+
+Files updated: ROADMAP.md, REQUIREMENTS.md, PROJECT.md, STATE.md.
+
+---
+
 ## v6.0.1 Cleanup Pass 3 — Safe TODO(v7.0) removals (2026-05-15)
 
 Took a third pass at the v6.0.1 TODO markers, addressing only items with unambiguous + safe right moves. **Net: -560 LOC across 6 source files. Zero user-visible behavior change.**
