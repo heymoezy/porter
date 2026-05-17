@@ -584,7 +584,7 @@
   - Disk-only: /home/lobster/projects/ymc.capital-private/dealdocs/.data-room-silo (non-git)
   - Disk-only or commit: /home/lobster/projects/Funds/.data-room-silo (not a git repo per pre-flight check)
 - Files NOT touching: PLAN 50-02 admin block in migrate-multi-silo-v1.ts (already shipped, intact), scheduler.ts (50-01 shipped), dream-worker.ts (50-01 shipped), admin.md (50-02 shipped).
-- Status: active
+- Status: **DONE** 2026-05-17T04:50Z — 3 Porter commits: `7348e31` feat(50-03) data-room silo row + 5 moe-direct seeds in migrate-multi-silo-v1, `c9ccee5` feat(50-03) data-room.md prompt template (113 LOC), `f32477b` fix(50-03) rebase smoke-48.1 SC-4 to /tmp cwd (Funds is now a data-room marker cwd). 1 ymc.capital commit pushed to origin/main: `57fbb472` chore(silo) .data-room-silo marker for Porter data-room silo detection (force-added past storage/ gitignore). 3 disk-only markers on non-git repos (ymc.capital-private workoutdocs+dealdocs, Funds). tsc clean. Porter restarted v6.17.1, schema stamp cleared + re-applied, data-room silo + 5 directives live in DB (3 silos coexist: admin/data-room/software), /context emits data-room silo only from all 4 marker cwds (no overlap with software/admin), trigger immutability verified on data-room scope, all 5 prior smokes (48.1/48.2/48.3/48.4/49) re-ran green — zero regression. MSF-02 complete. NOT pushed Porter commits (orchestrator pushes after Wave 3).
 
 ## Porter Dreams 3 Checkpoint Update (Opus 4.7 1M) — 2026-05-17T(checkpoint)
 - Workstream: Update CHECKPOINT.md head section with Phase 49 complete + doctrine failure_patterns fix + Phase 50 Wave 2 in-flight status. Bump `updated:` to 2026-05-17. Preserve all existing content.

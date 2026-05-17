@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: The Living Memory
 status: unknown
-stopped_at: Completed 50-02-PLAN.md — admin silo live (4 directives, 3d cadence), multi-match working at Porter admin/frontend, .admin-silo markers in both repos, ready for 50-03 data-room silo
-last_updated: "2026-05-17T03:38:08.053Z"
+stopped_at: Completed 50-03-PLAN.md — data-room silo live (5 directives, 7d cadence), 3-silo set coexisting (admin 3d + data-room 7d + software 7d), markers across ymc.capital + ymc.capital-private + Funds (1 committed, 3 disk-only), all 5 prior smokes green. Wave 3 (50-04 smoke harness) is next.
+last_updated: "2026-05-17T05:02:18.686Z"
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-05-15)
 ## Current Position
 
 Phase: 50 (multi-silo-foundation) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Plan: 3 of 4
 | Phase 49-pattern-detection P05 | 18 min | 2 tasks | 3 files |
 | Phase 50 P01 | 48 min | 4 tasks | 6 files |
 | Phase 50 P02 | 53 min | 4 tasks | 4 files |
+| Phase 50 P03 | 50 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -274,6 +275,11 @@ Plan: 3 of 4
 - [Phase 50]: [Phase 50-02]: Multi-match intentional at Porter admin/frontend — package.json (software) + .admin-silo (admin) both fire, /context emits both silo sections so operator sees layered rule sets
 - [Phase 50]: [Phase 50-02]: Cross-repo work executed autonomously per orchestrator constraint — staged ONLY new .admin-silo marker + own ledger entry in ymc.capital, never touching 14+ unrelated in-flight files (CLAUDE.md multi-session safety)
 - [Phase 50]: [Phase 50-02]: Ship 4 admin seeds (ADM-01..04), defer optional ADM-05 'error-state-never-silent' — keeps surface tight per RESEARCH, leaves room for dream-worker-derived directives
+- [Phase 50]: [Phase 50-03]: Multi-plan migration scaffold lifecycle battle-tested twice — 50-02 established, 50-03 confirmed. Placeholder fill → stamp-clear → restart → re-run with ON CONFLICT DO NOTHING idempotency lands cleanly
+- [Phase 50]: [Phase 50-03]: Marker placement across mixed-git topology — silo-detector.ts only requires fs.existsSync, so commit-vs-disk-only is purely a durability concern. ymc.capital storage/data-room committed (force-add past gitignore); ymc.capital-private workoutdocs+dealdocs and Funds disk-only (non-git)
+- [Phase 50]: [Phase 50-03]: Force-add (-f) for silo markers past wholesale gitignore — storage/ is wholesale gitignored in ymc.capital (PDFs), but .data-room-silo is silo-detection infrastructure, not data. Correct posture; gitignore intent is excluding raw PDFs, not blocking intentional small markers
+- [Phase 50]: [Phase 50-03]: Data-room silo framing = document handling, citation discipline, regulatory filings, investor communications, entity investigation, confidentiality posture, KYC review, deal-flow analysis, workout-file work. NOT code (software silo), NOT admin/RBAC/SSE (admin silo). Three-way disjoint silo set
+- [Phase 50]: [Phase 50-03]: Stale-invariant test rebase pattern — when planned expansion changes the input space a test was anchored to, rebase the test input to one still satisfying the original invariant. NOT weaken the assertion. NOT add a skip. smoke-48.1 SC-4: Funds → /tmp (same 'no marker → 0 silos' invariant, different cwd)
 
 ### Pending Todos
 
@@ -286,6 +292,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-17T03:38:08.049Z
-Stopped at: Completed 50-02-PLAN.md — admin silo live (4 directives, 3d cadence), multi-match working at Porter admin/frontend, .admin-silo markers in both repos, ready for 50-03 data-room silo
+Last session: 2026-05-17T05:02:18.679Z
+Stopped at: Completed 50-03-PLAN.md — data-room silo live (5 directives, 7d cadence), 3-silo set coexisting (admin 3d + data-room 7d + software 7d), markers across ymc.capital + ymc.capital-private + Funds (1 committed, 3 disk-only), all 5 prior smokes green. Wave 3 (50-04 smoke harness) is next.
 Resume file: None
