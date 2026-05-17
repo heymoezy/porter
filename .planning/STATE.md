@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: The Living Memory
-status: phase_complete
-stopped_at: "Phase 49 Pattern Detection COMPLETE 2026-05-16 — 5/5 plans, 5/5 LRN requirements verified. Phase 50 Multi-Silo Foundation is next; awaiting /gsd:plan-phase 50."
-last_updated: "2026-05-16T23:10:00.000Z"
+status: unknown
+stopped_at: Completed 50-01-PLAN.md — per-silo cadence tick live, legacy software-weekly workflow row deleted, multi-silo migration scaffold ready for 50-02 + 50-03 INSERTs
+last_updated: "2026-05-17T02:26:14.677Z"
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 9
+  completed_plans: 6
 ---
 
 # Project State
@@ -19,13 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-15)
 
 **Core value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
-**Current focus:** v7.0 Living Memory — Phase 49 Pattern Detection COMPLETE 2026-05-16 (5/5 LRN verified). Phase 50 Multi-Silo Foundation is next. Run `/gsd:plan-phase 50`.
+**Current focus:** Phase 50 — multi-silo-foundation
 
 ## Current Position
 
-Phase: 49 (pattern-detection) — COMPLETE 2026-05-16 (verified 5/5 LRN must-haves)
-Plan: 5 of 5 complete (Wave 1: 49-01 + 49-02 + 49-04; Wave 2: 49-03; Wave 3: 49-05 — phase gate green)
-Next phase: 50 (multi-silo-foundation) — awaiting `/gsd:plan-phase 50`
+Phase: 50 (multi-silo-foundation) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -57,6 +56,7 @@ Next phase: 50 (multi-silo-foundation) — awaiting `/gsd:plan-phase 50`
 | Phase 49-pattern-detection P01 | 65 min | 1 task  | 1 file  |
 | Phase 49-pattern-detection P03 | 40 min | 2 tasks | 4 files |
 | Phase 49-pattern-detection P05 | 18 min | 2 tasks | 3 files |
+| Phase 50 P01 | 48 min | 4 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -263,6 +263,12 @@ Next phase: 50 (multi-silo-foundation) — awaiting `/gsd:plan-phase 50`
 - [Phase 49-pattern-detection]: [Phase 49-05]: intellect_events live schema is source_type/event_type/details_json (NOT source/kind/payload as some legacy docs imply). directives.created_at/updated_at are double precision epoch seconds — use EXTRACT(EPOCH FROM NOW()), NOT NOW(). Pre-write psql \\d verification catches these template bugs before they reach disk.
 - [Phase 49-pattern-detection]: [Phase 49-05]: Smoke harness phase gate = bash tests/smoke-48.1.sh && bash tests/smoke-48.2.sh && bash tests/smoke-48.3.sh && bash tests/smoke-48.4.sh && bash tests/smoke-49.sh — all five exit 0. Phase 49 ships when this chain is green; future phases append their harness to the chain.
 - [Phase 49-pattern-detection]: [Phase 49-05]: Per-LRN graceful-skip via source-on-disk grep guards (FRUSTRATION_REGEX, failurePatternSchema, detectContext/effectiveProject, detectProject) lets Wave 1/2 partial runs warn-skip without failing. Smoke harness can ship at end of phase OR Wave 0 — both patterns valid; Wave-end gets concrete schema/audit verbatim from disk.
+- [Phase 50]: [Phase 50-01]: Per-silo cadence reads silos.cadence_seconds from DB instead of hardcoded constant — enrollment is now truly data-driven (INSERT silos (...cadence_seconds=N) and runSiloCadenceCheck picks it up); no code change required for new cadence values
+- [Phase 50]: [Phase 50-01]: 95% cadence floor (Math.floor(cadence * 0.95)) in dream-worker checkSkipRecent mirrors prior 6.5/7 software ratio — admin (259200s) → 246240s floor, data-room/software (604800s) → 574560s floor; software behavior unchanged within rounding
+- [Phase 50]: [Phase 50-01]: SILO_CADENCE_CHECK_INTERVAL = 1800 ticks × 2s = 1h granularity — per-silo cadence is day-scale, hourly is plenty; manual /dream-run unaffected (skip-recent guard only fires for triggeredBy='schedule', not 'manual')
+- [Phase 50]: [Phase 50-01]: Single migrate-multi-silo-v1.ts shared across 50-01/50-02/50-03 with literal placeholder comments (PLAN 50-02:, PLAN 50-03:) — all-or-nothing BEGIN/COMMIT posture spans plans; schema_migrations INSERT remains LAST so partial migrations roll back cleanly
+- [Phase 50]: [Phase 50-01]: MSF-03 surviving 'software' defaults retained as anti-fragile fallbacks (not retired) — both annotated with greppable hook 'SAFE DEFAULT (Phase 50 MSF-03)'; explicit silo_id ALWAYS overrides; documented over deleted because deletion would break missing-silo-id callers
+- [Phase 50]: [Phase 50-01]: dream_run_skipped event payload upgraded — adds cadenceSeconds field + reason changed from 'recent_run_within_6_5_days' to 'recent_run_within_cadence_floor' so admin/data-room skip events report semantically accurate floors per silo
 
 ### Pending Todos
 
@@ -275,6 +281,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-16T23:10:00.000Z
-Stopped at: Phase 49 Pattern Detection COMPLETE 2026-05-16 — 5/5 plans, 5/5 LRN requirements verified. Phase 50 Multi-Silo Foundation is next; awaiting /gsd:plan-phase 50.
+Last session: 2026-05-17T02:21:59.628Z
+Stopped at: Completed 50-01-PLAN.md — per-silo cadence tick live, legacy software-weekly workflow row deleted, multi-silo migration scaffold ready for 50-02 + 50-03 INSERTs
 Resume file: None
