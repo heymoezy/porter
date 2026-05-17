@@ -19,6 +19,7 @@ import { runDigestCycle } from './mail/newsletter-service.js';
 import { runMemoryValidation } from './intellect/memory-validator.js';
 import { runScheduledWorkflows } from './intellect/workflow-engine.js';
 import { runDispatchScoring } from './intellect/dispatch-scorer.js';
+import { runDreamWorker } from './intellect/dream-worker.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -37,6 +38,7 @@ const MEMORY_VALIDATION_INTERVAL = 900;  // 900 ticks x 2s = 30 min — validate
 const DISPATCH_SCORING_INTERVAL = 10800; // 10800 ticks x 2s = 6h — auto-score recent dispatches
 const INTELLECT_DAILY_INTERVAL = 43200;  // 43200 ticks x 2s = 24h — daily intellect maintenance (prune, mine)
 const INTELLECT_WEEKLY_INTERVAL = 302400; // 302400 ticks x 2s = 7d — weekly intellect maintenance (dream workers)
+const SILO_CADENCE_CHECK_INTERVAL = 1800; // 1800 ticks × 2s = 1h. Per-silo cadence is day-scale; hourly granularity is plenty.
 const CONTEXT_PRESSURE_THRESHOLD = 0.8;
 const CONTEXT_ROTATION_THRESHOLD = 0.95;
 const WORKER_ID = crypto.randomUUID();
@@ -327,6 +329,44 @@ export async function scheduleSystemJob(
   return id;
 }
 
+// ── Per-silo dream cadence tick (Phase 50 MSF-04) ──────────────────────────
+
+/**
+ * Phase 50 MSF-04 — Per-silo dream cadence tick.
+ *
+ * Reads silos.cadence_seconds per enabled silo, compares against the max
+ * started_at from dream_runs for that silo (status IN completed/running),
+ * and fires runDreamWorker({siloId, triggeredBy:'schedule'}) for any silo
+ * whose cadence has elapsed. The dream-worker's own checkSkipRecent guard
+ * then re-applies the same 95% floor as a defensive race check.
+ *
+ * Per-silo errors are caught — one failing silo never blocks the others.
+ */
+async function runSiloCadenceCheck(): Promise<void> {
+  const { rows } = await pool.query<{
+    id: string;
+    cadence_seconds: number;
+    last_started_at: string | null;
+  }>(`
+    SELECT s.id,
+           s.cadence_seconds,
+           (SELECT MAX(started_at)::text
+              FROM dream_runs dr
+             WHERE dr.silo_id = s.id
+               AND dr.status IN ('completed','running')) AS last_started_at
+      FROM silos s
+     WHERE s.enabled = TRUE
+  `);
+  const nowEpoch = Date.now() / 1000;
+  for (const row of rows) {
+    const last = row.last_started_at ? Number(row.last_started_at) : 0;
+    if (nowEpoch - last < row.cadence_seconds) continue;
+    runDreamWorker({ siloId: row.id, triggeredBy: 'schedule' }).catch((err) =>
+      console.error(`[scheduler:silo-cadence] dream run for ${row.id} failed:`, err),
+    );
+  }
+}
+
 export async function start() {
   if (intervalId) return;
   console.log('[scheduler] started — polling every %dms, worker=%s', POLL_INTERVAL_MS, WORKER_ID.slice(0, 8));
@@ -420,6 +460,12 @@ async function tick() {
     if (tickCount > 0 && tickCount % INTELLECT_WEEKLY_INTERVAL === 0) {
       runScheduledWorkflows('every_week').catch(err =>
         console.error('[scheduler:intellect] every_week workflows error', err));
+    }
+
+    // Phase 50 MSF-04 — per-silo dream cadence check (1h granularity).
+    if (tickCount > 0 && tickCount % SILO_CADENCE_CHECK_INTERVAL === 0) {
+      runSiloCadenceCheck().catch((err) =>
+        console.error('[scheduler:silo-cadence] check error', err));
     }
 
     // ── Agent jobs — require agentScheduling flag ──────────────────────────
