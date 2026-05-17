@@ -42,9 +42,59 @@ export async function migrateMultiSiloV1(pool: pg.Pool): Promise<void> {
       return;
     }
 
-    // ── PLAN 50-02: INSERT ADMIN SILO + DIRECTIVES HERE ──────────────────────
-    // (Admin silos row INSERT ... ON CONFLICT DO NOTHING)
-    // (Admin 4 directives INSERTs ... ON CONFLICT DO NOTHING)
+    // ── Admin silo row ────────────────────────────────────────────────────────
+    await client.query(
+      `
+      INSERT INTO silos (id, display_name, description, prompt_path, cadence_seconds, default_model, detect_rules, enabled)
+      VALUES (
+        'admin',
+        'Admin & Platform Operations',
+        'Porter admin pages, audit hygiene, RBAC posture, review-surface workflows. Internal operator work, not product code.',
+        'backend/src/services/intellect/dream-prompts/admin.md',
+        259200,
+        'claude-sonnet-4-6',
+        $1::jsonb,
+        TRUE
+      )
+      ON CONFLICT (id) DO NOTHING
+      `,
+      [JSON.stringify({
+        project_types: [],
+        cwd_markers: ['.admin-silo'],
+        file_globs: [],
+      })],
+    );
+    console.log('[migrate-multi-silo-v1] admin silo row inserted (or already present)');
+
+    // ── Admin silo seed directives (4 moe-direct, priority 95) ────────────────
+    const adminSeeds: Array<[string, string]> = [
+      [
+        'silo-admin-audit-events-transactional',
+        'Audit-event writes MUST happen inside the same transaction as the mutation they describe. If an accept/reject/edit handler writes to a primary table (directives, proposals, users), the corresponding audit_event INSERT goes in the same BEGIN/COMMIT block. A failed mutation that leaves an audit row is a worse bug than a failed mutation with no audit row.',
+      ],
+      [
+        'silo-admin-rbac-platform-admin-guard',
+        'Every admin route MUST go through requirePlatformAdmin (or equivalent capability check) at the handler entry. Never rely on UI-side route gating alone. If a route mutates platform state (users, silos, workflows, directives, proposals), the auth check is non-negotiable. Workspace-scoped reads can use basic-auth; mutations need admin cap.',
+      ],
+      [
+        'silo-admin-sse-post-commit-only',
+        'SSE broadcasts (proposals:created, proposals:resolved, dreams:run-completed, etc.) MUST fire AFTER the database COMMIT. Never broadcast inside a transaction — a rollback after a broadcast leaves connected clients with phantom state. Wrap the broadcast in its own try/catch so a broadcast failure cannot mask the original mutation error.',
+      ],
+      [
+        'silo-admin-review-surface-confirms-before-bulk',
+        'Bulk operations on the review surface (bulk accept, bulk reject, bulk archive) MUST show a confirmation modal with the count of affected rows BEFORE the mutation fires. The modal copy names the action verb and the count ("Accept 12 proposals?"). No silent bulk-mutations — Moe must always have a one-keypress veto path. Single-row actions can skip confirmation.',
+      ],
+    ];
+
+    for (const [id, content] of adminSeeds) {
+      await client.query(
+        `INSERT INTO directives (id, scope, scope_id, content, priority, source_type, status, created_by, created_at, updated_at)
+         VALUES ($1, 'silo', 'admin', $2, 95, 'moe-direct', 'active', 'moe', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+         ON CONFLICT (id) DO NOTHING`,
+        [id, content],
+      );
+    }
+    console.log(`[migrate-multi-silo-v1] admin seed directives inserted (${adminSeeds.length})`);
 
     // ── PLAN 50-03: INSERT DATA-ROOM SILO + DIRECTIVES HERE ──────────────────
     // (Data-room silos row INSERT ... ON CONFLICT DO NOTHING)
