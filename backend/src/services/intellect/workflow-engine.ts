@@ -348,13 +348,12 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_value: 'every_24h',
     action_type: 'transcript_retain',
   },
-  {
-    name: 'Software dream — weekly consolidation',
-    trigger_type: 'schedule',
-    trigger_value: 'every_week',
-    action_type: 'dream_run',
-    action_config: { silo_id: 'software' },
-  },
+  // Phase 50 MSF-04 (deferred-items, 50-02): legacy 'Software dream — weekly consolidation'
+  // BUILTIN_WORKFLOWS entry REMOVED. Single source of truth for per-silo dream cadence is now
+  // silos.cadence_seconds, driven by scheduler.runSiloCadenceCheck (Plan 50-01). Keeping a
+  // built-in startup re-seed here re-installed the row Plan 50-01's migration deleted, causing
+  // duplicate weekly fires (skip-recent deduped, but audit logs gained orphan rows).
+  // smoke-50.sh SC-18 asserts this row stays at count=0 across restarts.
   {
     name: 'Sweep stuck dream runs (>30 min)',
     trigger_type: 'schedule',
