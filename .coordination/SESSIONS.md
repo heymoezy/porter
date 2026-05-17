@@ -559,3 +559,15 @@
   - .planning/STATE.md, .planning/ROADMAP.md (state updates)
 - Files NOT touching: silo-detector.ts (49-04 just shipped), dream-sampler.ts (49-01 shipped), dream-prompts/software.md + dream-parser.ts + dream-worker.ts (49-02 shipped), tests/smoke-49.sh (49-05 — next).
 - Status: **DONE** 2026-05-16T20:30Z — 2 commits: `ad786f1` feat(49-03): partial-index migration (SQL + TS shim), `8494b4e` feat(49-03): detectContext + effectiveProject + symmetric scoping in /context. tsc clean, porter restarted v6.17.1, /health 200, index applied (schema_migrations id='directives_scope_idx_v1'), 6 live behavior tests green (incl. insert/cleanup smoke for scope_id='smoke-49-03-test'), 4 prior-phase smoke harnesses (48.1..48.4) green — zero regression. LRN-03 complete. NOT pushed (orchestrator pushes after Wave 2 — 49-05 still pending).
+
+## GSD Executor 50-02 (Opus 4.7 1M) — 2026-05-17T02:35Z
+- Workstream: Execute Phase 50 Plan 02 (MSF-01 — Admin silo seed: silos INSERT + 4 moe-direct directives + admin.md prompt template + .admin-silo marker files in Porter AND ymc.capital). Wave 2 plan 1 of 2 (serialized with 50-03 — both edit migrate-multi-silo-v1.ts at different placeholders).
+- Files claimed:
+  - backend/src/db/migrate-multi-silo-v1.ts (PLAN 50-02 placeholder ONLY — 50-03 placeholder stays untouched)
+  - backend/src/services/intellect/dream-prompts/admin.md (NEW)
+  - admin/frontend/.admin-silo (NEW marker)
+  - .planning/phases/50-multi-silo-foundation/50-02-SUMMARY.md (new)
+  - .planning/STATE.md, .planning/ROADMAP.md (state updates)
+  - Cross-repo: /home/lobster/projects/ymc.capital/site/app/routes/admin/.admin-silo (NEW marker — separate commit + push to ymc.capital repo)
+- Files NOT touching: PLAN 50-03 placeholder block in migrate-multi-silo-v1.ts (next executor's job), scheduler.ts, dream-worker.ts (50-01 shipped).
+- Status: active
