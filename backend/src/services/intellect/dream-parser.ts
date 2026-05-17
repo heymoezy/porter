@@ -152,6 +152,16 @@ export function validateRefinementDoctrine(
   // refinement that wouldn't violate the sealed-seed pre-flight. Fixed
   // 2026-05-16 (Porter Dreams 3) after the silo-sw-* sealed-seed set hit 6
   // entries and dream-runs began failing on real corpus.
+  //
+  // 2026-05-17 fix: `failure_patterns` (Phase 49 LRN-02) also satisfy the
+  // doctrine. The doctrine's INTENT is to prevent lazy append-only piles — the
+  // model must demonstrate engagement with existing rules before adding more.
+  // Emitting a concrete failure_pattern (≥2 recurrences, ≥2 evidence_turn_ids)
+  // IS substantive engagement: the model mined the corpus, identified a real
+  // recurring failure, and produced a directive-shaped fix tagged with scope.
+  // That's more rigorous work than a merge/supersede/delete on a stale rule.
+  // Trigger: live run dr_acd482ff was killed despite emitting failure_patterns
+  // alongside new_directives because the doctrine only looked at `proposals`.
 
   // Empty proposals is SUCCESS (legitimate quiet week — model found nothing to refine)
   if (parsed.proposals.length === 0) return;
@@ -163,12 +173,18 @@ export function validateRefinementDoctrine(
   const hasRefinement = parsed.proposals.some(
     p => p.kind === 'merge' || p.kind === 'supersede' || p.kind === 'delete',
   );
+  // failure_patterns are first-class substantive output — they prove the model
+  // engaged with the corpus and aren't lazily piling on generic rules.
+  const failurePatternCount = parsed.failure_patterns?.length ?? 0;
+  const hasFailurePatterns = failurePatternCount > 0;
 
-  if (hasNew && !hasRefinement) {
+  if (hasNew && !hasRefinement && !hasFailurePatterns) {
     throw new Error(
       `Doctrine violation: new_directive proposed without prior refinement ` +
-        `(refineable dir count: ${refineableCountBefore}, refinement proposals: 0). ` +
-        `Worker rejecting run to enforce refine-before-append.`,
+        `(refineable dir count: ${refineableCountBefore}, refinement proposals: 0, ` +
+        `failure_patterns: 0) — model must engage with existing rules OR extract ` +
+        `concrete recurring failures. Worker rejecting run to enforce ` +
+        `refine-before-append.`,
     );
   }
 }

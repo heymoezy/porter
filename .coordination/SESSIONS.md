@@ -1,5 +1,13 @@
 # Porter — Active Sessions
 
+## Doctrine fix — failure_patterns count as substantive work (Opus 4.7 1M) — 2026-05-17T00:00Z
+- Workstream: dream-parser doctrine bug fix. Phase 49 introduced `failure_patterns` as substantive output but `validateRefinementDoctrine` only counts proposals — dream-runs with N new_directives + M failure_patterns get rejected even though the model engaged. Extend doctrine: allow new_directive if hasRefinement OR failure_patterns.length > 0.
+- Files claimed (edit):
+  - backend/src/services/intellect/dream-parser.ts (validateRefinementDoctrine)
+- Files NOT touching: dream-worker.ts (caller signature unchanged), fixtures (doctrine-violation fixture intentionally lacks failure_patterns; pattern-detection fixture exercises new path but smoke already seeds refineableCount=0 so smoke harness is doctrine-neutral).
+- Verification: tsc → restart porter-fastify → re-run dr_acd482ff-equivalent live dream-run → all 5 smokes (48.1, 48.2, 48.3, 48.4, 49) green.
+- Status: active.
+
 ## GSD Phase 49 Plan-05 Executor (Opus 4.7 1M) — 2026-05-16T20:45Z
 - Workstream: Execute 49-05-PLAN.md — Wave 3 smoke harness for Phase 49 (LRN-01..LRN-05). Single command (`bash tests/smoke-49.sh`) exercises frustration force-include + failure-pattern insertion + project-scope CRUD + trigger immutability + /context layering + detectProject probe. Idempotent. Smoke silo isolation (silo_id='software-smoke-49') + smoke project isolation (scope_id='smoke-49-project').
 - Files claimed:
