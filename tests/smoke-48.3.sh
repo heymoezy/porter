@@ -78,19 +78,25 @@ DR_MIG=$(psql -d porter -tAc "SELECT count(*) FROM schema_migrations WHERE id='d
 [[ "$DR_MIG" -eq 1 ]] || fail "DRW-02: schema_migrations row 'dreams_v1' missing"
 ok "DRW-02: schema_migrations recorded"
 
-# --- DRW-08: weekly workflow + stuck-sweep workflow + every_week scheduler tag
-echo "DRW-08: weekly workflow + stuck-sweep + scheduler tag"
-WK_DREAM=$(psql -d porter -tAc "SELECT count(*) FROM workflows WHERE trigger_value='every_week' AND action_type='dream_run'")
-[[ "$WK_DREAM" -ge 1 ]] || fail "DRW-08: every_week dream_run workflow row missing"
-ok "DRW-08: weekly dream workflow seeded"
-
+# --- DRW-08: dream-cadence scheduler wiring + stuck-sweep workflow ----------
+# REBASED 2026-05-17 (Phase 50 MSF-04, smoke-50 SC-18):
+#   Pre-Phase-50, DRW-08 asserted the BUILTIN_WORKFLOWS 'Software dream — weekly
+#   consolidation' row (trigger_value='every_week', action_type='dream_run') existed
+#   and the scheduler had an every_week (302400-tick) branch. Phase 50 Plan 01
+#   retired that mechanism in favor of per-silo runSiloCadenceCheck reading
+#   silos.cadence_seconds from the DB (1h tick, 95% floor). Plan 50-04 smoke-50
+#   SC-18 asserts the legacy row stays DELETED. The invariant under test here —
+#   "dream cadence is wired into the scheduler" — is unchanged; only the
+#   mechanism is. Re-anchored to the per-silo tick. Stuck-sweep workflow check
+#   is unaffected (Plan 48.3, still live).
+echo "DRW-08: dream cadence wiring + stuck-sweep workflow"
 WK_SWEEP=$(psql -d porter -tAc "SELECT count(*) FROM workflows WHERE action_type='dream_runs_stuck_sweep'")
 [[ "$WK_SWEEP" -ge 1 ]] || fail "DRW-08: dream_runs_stuck_sweep workflow row missing"
 ok "DRW-08: stuck-sweep workflow seeded"
 
-grep -q "every_week" backend/src/services/scheduler.ts || fail "DRW-08: scheduler.ts missing every_week tick bucket"
-grep -q "302400" backend/src/services/scheduler.ts || fail "DRW-08: scheduler.ts every_week interval (302400 ticks) missing"
-ok "DRW-08: scheduler.ts has every_week bucket (302400 ticks)"
+grep -q "runSiloCadenceCheck" backend/src/services/scheduler.ts || fail "DRW-08: scheduler.ts missing runSiloCadenceCheck (Phase 50 MSF-04 per-silo cadence replacement for every_week)"
+grep -q "SILO_CADENCE_CHECK_INTERVAL" backend/src/services/scheduler.ts || fail "DRW-08: scheduler.ts missing SILO_CADENCE_CHECK_INTERVAL constant"
+ok "DRW-08: scheduler.ts has per-silo cadence tick (runSiloCadenceCheck + SILO_CADENCE_CHECK_INTERVAL)"
 
 # --- DRW-03: prompt template file + substitution markers ---------------------
 echo "DRW-03: prompt template at silos.prompt_path"
