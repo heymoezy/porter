@@ -96,9 +96,63 @@ export async function migrateMultiSiloV1(pool: pg.Pool): Promise<void> {
     }
     console.log(`[migrate-multi-silo-v1] admin seed directives inserted (${adminSeeds.length})`);
 
-    // ── PLAN 50-03: INSERT DATA-ROOM SILO + DIRECTIVES HERE ──────────────────
-    // (Data-room silos row INSERT ... ON CONFLICT DO NOTHING)
-    // (Data-room 5 directives INSERTs ... ON CONFLICT DO NOTHING)
+    // ── Data-room silo row ────────────────────────────────────────────────────
+    await client.query(
+      `
+      INSERT INTO silos (id, display_name, description, prompt_path, cadence_seconds, default_model, detect_rules, enabled)
+      VALUES (
+        'data-room',
+        'Data Room & Fund Operations',
+        'KYC, deal-flow, investor docs, workout files, exhibits, regulatory submissions. Document-handling work, not code.',
+        'backend/src/services/intellect/dream-prompts/data-room.md',
+        604800,
+        'claude-sonnet-4-6',
+        $1::jsonb,
+        TRUE
+      )
+      ON CONFLICT (id) DO NOTHING
+      `,
+      [JSON.stringify({
+        project_types: [],
+        cwd_markers: ['.data-room-silo'],
+        file_globs: [],
+      })],
+    );
+    console.log('[migrate-multi-silo-v1] data-room silo row inserted (or already present)');
+
+    // ── Data-room silo seed directives (5 moe-direct, priority 95) ────────────
+    const dataRoomSeeds: Array<[string, string]> = [
+      [
+        'silo-dataroom-no-synthetic-exhibits',
+        `Case-file exhibits, regulatory submissions, and investor-facing documents are PRIMARY SOURCE PDFs only. Never re-render, restyle, regenerate, add cover pages, or compose framing pages onto an exhibit. Synthesized work product (memos, analyses, summaries) goes under Working_Papers/ or research/ and is labelled as derivative. Treat any user request to "clean up" or "reformat" an exhibit as a tripwire — the answer is almost always "use the original".`,
+      ],
+      [
+        'silo-dataroom-audit-primary-sources',
+        `Every factual claim in a data-room artifact MUST cite a primary source by file path. Never assert dates, dollar amounts, party names, signing parties, jurisdictional facts, or regulatory status from memory. If the primary source is not readable from the data-room, ASK Moe for the source. "Synthesizing the gist" is a worse failure than asking. The audit trail starts with a citation, not a confident sentence.`,
+      ],
+      [
+        'silo-dataroom-confidentiality-no-leaks',
+        `Data-room work is confidential by default. Never paste investor names, fund details, deal terms, KYC PII, or regulatory submission content into commits, public chat surfaces, or non-private logs. When extracting signals or capturing transcripts, redact specific identifiers. Confidentiality posture is asymmetric: a leak is irreversible; an over-redaction is recoverable. Err toward over-redaction.`,
+      ],
+      [
+        'silo-dataroom-regulatory-filer-profile',
+        `Regulatory submissions (IRS, SEC, bank, KYC, AML) MUST use Moe's filer profile from memory (Mohamed Ibrahim, US person, NJ address per the user_filer_profile memory). Never invent a surname, SSN, address, or tax ID. SSNs and other secrets are ask-per-filing — not stored. Cross-check entity names against the canonical entity registry before submission; "the LLC" is never a specific enough identifier.`,
+      ],
+      [
+        'silo-dataroom-strategic-communication-guarded',
+        `When drafting communications about data-room subjects (legal recovery, fund operations, investor due diligence), follow the strategic-communication posture from memory: short demands to targets, guarded with allies. Get more than you give. Never reveal the full hand. Drafts default to under-disclosing — Moe expands if more is needed, but cannot un-disclose what is already been sent.`,
+      ],
+    ];
+
+    for (const [id, content] of dataRoomSeeds) {
+      await client.query(
+        `INSERT INTO directives (id, scope, scope_id, content, priority, source_type, status, created_by, created_at, updated_at)
+         VALUES ($1, 'silo', 'data-room', $2, 95, 'moe-direct', 'active', 'moe', EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+         ON CONFLICT (id) DO NOTHING`,
+        [id, content],
+      );
+    }
+    console.log(`[migrate-multi-silo-v1] data-room seed directives inserted (${dataRoomSeeds.length})`);
 
     // ── DELETE legacy workflow row (per-silo cadence tick replaces it) ──────
     const deleteResult = await client.query(
