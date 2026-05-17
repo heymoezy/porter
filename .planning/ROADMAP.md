@@ -36,9 +36,14 @@
 - [x] 49-VERIFICATION.md — 5/5 must-haves PASSED, autonomous execution under Moe delegation
 **Depends on:** Phase 48.3 + 48.4 (Dream Silos series — shipped).
 
-### Phase 50: Multi-Silo Foundation (MSF-*)
+### Phase 50: Multi-Silo Foundation (MSF-*)  📋 PLANNED (2026-05-17)
 **Goal:** Admin silo + data-room silo + silo enrollment workflow (adding a silo = one SQL block + one prompt file, no code change). Per-silo dream cadence wired.
-**Plans:** 4 (admin silo seed, data-room silo seed, enrollment refactor, per-silo cadence).
+**Plans:** 4 plans + VALIDATION.md. Ready for `/gsd:execute-phase 50`.
+- [ ] 50-01-PLAN.md — MSF-04 + MSF-03 scheduler refactor (runSiloCadenceCheck + SILO_CADENCE_CHECK_INTERVAL) + dream-worker checkSkipRecent per-silo rewrite (SKIP_RECENT_THRESHOLD_S deleted) + migration scaffold + delete legacy `Software dream — weekly consolidation` workflow row + document `software` safe-default fallbacks [Wave 1 — gates Wave 2]
+- [ ] 50-02-PLAN.md — MSF-01 admin silo seed (silos row id=admin cadence 259200 + 4 moe-direct directives + dream-prompts/admin.md + .admin-silo marker files in Porter admin/frontend AND ymc.capital site/app/routes/admin via cross-repo commit) [Wave 2 — parallel with 50-03]
+- [ ] 50-03-PLAN.md — MSF-02 data-room silo seed (silos row id=data-room cadence 604800 + 5 moe-direct directives + dream-prompts/data-room.md + 4 .data-room-silo marker files across ymc.capital dealdocs/workoutdocs + ymc.capital-private/workoutdocs + Funds via cross-repo commits) [Wave 2 — parallel with 50-02]
+- [ ] 50-04-PLAN.md — Smoke harness tests/smoke-50.sh + 2 fixtures (dream-response-admin.json + dream-response-data-room.json) covering MSF-01..04 + silo-agnostic synthetic-silo enrollment proof (SC-11) + multi-silo /context layering (SC-19/20) + trigger immutability across new silos [Wave 3 — depends on 50-01..03]
+- [ ] 50-VALIDATION.md — Nyquist coverage map (per-MSF sampling, manual-only verifications, cross-repo coordination notes, sign-off checklist)
 **Depends on:** Phase 49 (project scoping makes per-silo cadence meaningful).
 
 ### Phase 51: Dreams Review UX (DRX-*)
@@ -55,7 +60,7 @@
 
 Deferred to v8.0: SIM-01..03 (Self-Improvement), BIL-01..03 (SaaS Billing).
 
-Run `/gsd:plan-phase 50` to continue (Phase 49 shipped 2026-05-16).
+Run `/gsd:execute-phase 50` to continue (Phase 50 planned 2026-05-17).
 
 ## Progress
 

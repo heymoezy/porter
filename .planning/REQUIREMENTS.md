@@ -2,7 +2,7 @@
 
 **Milestone:** v7.0 Living Memory
 **Last updated:** 2026-05-16
-**Status:** Phase 49 Pattern Detection COMPLETE (2026-05-16) — 5/5 plans shipped + verified (LRN-01..05). Phase 50 Multi-Silo Foundation is next; awaiting `/gsd:plan-phase 50`.
+**Status:** Phase 49 Pattern Detection COMPLETE (2026-05-16) — 5/5 plans shipped + verified (LRN-01..05). Phase 50 Multi-Silo Foundation planned 2026-05-17 (4 plans + VALIDATION); ready for `/gsd:execute-phase 50`.
 
 For shipped v6.0 requirements + traceability, see `.planning/milestones/v6.0-REQUIREMENTS.md`.
 
@@ -33,10 +33,10 @@ For shipped v6.0 requirements + traceability, see `.planning/milestones/v6.0-REQ
 
 ### Phase 50 — Multi-Silo Foundation (MSF-*)
 
-- [ ] **MSF-01:** Admin silo seed — `silos` row with `id='admin'`, prompt template at `dream-prompts/admin.md`, detect rules for admin-work cwds (Porter project, ymc admin code paths). Initial directive set: review-surface workflow, audit-event hygiene, RBAC posture.
-- [ ] **MSF-02:** Data-room silo seed — `silos` row with `id='data-room'`, prompt template at `dream-prompts/data-room.md`, detect rules for fund operations (KYC, deal-flow, investor docs). Initial directives: no synthetic exhibits, audit primary sources, confidentiality posture.
-- [ ] **MSF-03:** Silo enrollment workflow — adding a new silo requires only (a) a `silos` row, (b) a prompt template file, (c) seed directives via SQL. No code changes needed. `dream-worker.ts` is silo-agnostic by design but currently hardcodes some software-silo assumptions in the sampler — extract.
-- [ ] **MSF-04:** Per-silo dream cadence — `silos.cadence_seconds` already exists but unused; wire scheduler to pick per-silo cadence (admin: every 3 days, data-room: weekly, software: weekly).
+- [ ] **MSF-01** → plan `50-02-PLAN.md`: Admin silo seed — `silos` row with `id='admin'`, prompt template at `dream-prompts/admin.md`, detect rules for admin-work cwds (Porter project, ymc admin code paths). Initial directive set: review-surface workflow, audit-event hygiene, RBAC posture.
+- [ ] **MSF-02** → plan `50-03-PLAN.md`: Data-room silo seed — `silos` row with `id='data-room'`, prompt template at `dream-prompts/data-room.md`, detect rules for fund operations (KYC, deal-flow, investor docs). Initial directives: no synthetic exhibits, audit primary sources, confidentiality posture.
+- [ ] **MSF-03** → plan `50-01-PLAN.md` + `50-04-PLAN.md`: Silo enrollment workflow — adding a new silo requires only (a) a `silos` row, (b) a prompt template file, (c) seed directives via SQL. No code changes needed. `dream-worker.ts` is silo-agnostic by design but currently hardcodes some software-silo assumptions in the sampler — extract.
+- [ ] **MSF-04** → plan `50-01-PLAN.md`: Per-silo dream cadence — `silos.cadence_seconds` already exists but unused; wire scheduler to pick per-silo cadence (admin: every 3 days, data-room: weekly, software: weekly).
 
 ### Phase 51 — Dreams Review UX (DRX-*)
 
