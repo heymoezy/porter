@@ -54,7 +54,6 @@ import {
 } from './dream-parser.js';
 
 const BRIDGE_TIMEOUT_MS = 180_000;
-const SKIP_RECENT_THRESHOLD_S = 6.5 * 86400;
 const EXPIRES_IN_S = 30 * 86400;
 const ERROR_MESSAGE_CAP = 1000;
 
@@ -354,15 +353,23 @@ async function checkConcurrency(siloId: string): Promise<boolean> {
   return (r.rowCount ?? 0) > 0;
 }
 
-async function checkSkipRecent(siloId: string): Promise<{ skip: boolean; lastRunAt?: number }> {
-  const r = await pool.query<{ last: string | null }>(
-    `SELECT MAX(started_at)::text AS last FROM dream_runs WHERE silo_id = $1 AND status = 'completed'`,
+async function checkSkipRecent(
+  siloId: string,
+): Promise<{ skip: boolean; lastRunAt?: number; cadenceSeconds?: number }> {
+  // Phase 50 MSF-04: per-silo cadence floor. Reads silos.cadence_seconds (the
+  // declared cadence for THIS silo) instead of a hardcoded constant. Floor =
+  // cadence * 0.95 mirrors the prior 6.5/7 ratio software was running at.
+  const r = await pool.query<{ last: string | null; cadence: number | null }>(
+    `SELECT (SELECT MAX(started_at)::text FROM dream_runs WHERE silo_id = $1 AND status = 'completed') AS last,
+            (SELECT cadence_seconds FROM silos WHERE id = $1) AS cadence`,
     [siloId],
   );
   const lastRaw = r.rows[0]?.last;
   const last = lastRaw ? Number(lastRaw) : null;
-  if (last && Date.now() / 1000 - last < SKIP_RECENT_THRESHOLD_S) {
-    return { skip: true, lastRunAt: last };
+  const cadence = r.rows[0]?.cadence ?? 604800; // defensive default (weekly) when silos row missing
+  const floor = Math.floor(cadence * 0.95); // 95% of cadence — matches the 6.5/7 ratio software had before
+  if (last && Date.now() / 1000 - last < floor) {
+    return { skip: true, lastRunAt: last, cadenceSeconds: cadence };
   }
   return { skip: false };
 }
@@ -389,7 +396,8 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
       await logIntellectEvent('dream_run_skipped', 'dream_worker', {
         siloId: args.siloId,
         lastRunAt: recent.lastRunAt,
-        reason: 'recent_run_within_6_5_days',
+        cadenceSeconds: recent.cadenceSeconds,
+        reason: 'recent_run_within_cadence_floor',
       });
       return { dreamRunId: '', proposalsExtracted: 0, status: 'skipped' };
     }
