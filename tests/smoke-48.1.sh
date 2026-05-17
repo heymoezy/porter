@@ -87,12 +87,18 @@ for SLUG in "silo-sw-parallelize-aggressively" "silo-sw-design-system" "silo-sw-
 done
 ok "SC-2: all 5 seed directive bodies present in context"
 
-# --- SC-4: non-code project returns zero silo sections -----------------------
-echo "SC-4: /context for non-code cwd returns no silo section"
-CTX_FUNDS=$(curl -sf "$API/api/v1/intellect/context?project=Funds&cwd=/home/lobster/projects/Funds" || true)
-FUNDS_SILO_COUNT=$(echo "$CTX_FUNDS" | grep -c "## Silo:" || true)
-[[ "$FUNDS_SILO_COUNT" -eq 0 ]] || fail "SC-4: expected 0 silo sections for Funds cwd, got $FUNDS_SILO_COUNT"
-ok "SC-4: no silo section in Funds cwd"
+# --- SC-4: marker-free cwd returns zero silo sections -----------------------
+# Tests the same invariant the prior assertion did: "no silo marker on path
+# means no silo section in /context". The prior version used /home/lobster/
+# projects/Funds which became a data-room silo marker path as of Phase 50
+# Plan 50-03 (correctly emitting 1 silo section now). Rebased to /tmp which
+# has no marker on the path. The invariant ("no marker → 0 silos") is
+# preserved; the cwd is updated to a genuinely marker-free location.
+echo "SC-4: /context for marker-free cwd returns no silo section"
+CTX_TMP=$(curl -sf "$API/api/v1/intellect/context?cwd=/tmp" || true)
+TMP_SILO_COUNT=$(echo "$CTX_TMP" | grep -c "## Silo:" || true)
+[[ "$TMP_SILO_COUNT" -eq 0 ]] || fail "SC-4: expected 0 silo sections for /tmp cwd, got $TMP_SILO_COUNT"
+ok "SC-4: no silo section in marker-free /tmp cwd"
 
 # --- SC-4b: BLOCKER 2 — no-cwd backward-compat (DRM-03 null-return path) ----
 echo "SC-4b: /context with NO cwd param returns zero silo sections (DRM-03 null-return)"
