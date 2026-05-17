@@ -5,8 +5,7 @@
 - Files claimed (edit):
   - backend/src/services/intellect/dream-parser.ts (validateRefinementDoctrine)
 - Files NOT touching: dream-worker.ts (caller signature unchanged), fixtures (doctrine-violation fixture intentionally lacks failure_patterns; pattern-detection fixture exercises new path but smoke already seeds refineableCount=0 so smoke harness is doctrine-neutral).
-- Verification: tsc → restart porter-fastify → re-run dr_acd482ff-equivalent live dream-run → all 5 smokes (48.1, 48.2, 48.3, 48.4, 49) green.
-- Status: active.
+- Status: **DONE** 2026-05-17T00:25Z — commit `fd3f637` pushed to origin/master. tsc clean, build clean, porter-fastify restarted (v6.17.1, /health 200). Live re-run dr_7a20e910 completed with proposals_extracted=3 (2 failure_patterns sort_order 850/851 + 1 new_directive sort_order 900). Model caught "duplicate logic instead of reusing existing components" pattern across portal/dashboard.tsx + admin landing surfaces — exactly the kind of high-value engagement the old doctrine was killing. All 5 smokes (48.1, 48.2, 48.3, 48.4, 49) green.
 
 ## GSD Phase 49 Plan-05 Executor (Opus 4.7 1M) — 2026-05-16T20:45Z
 - Workstream: Execute 49-05-PLAN.md — Wave 3 smoke harness for Phase 49 (LRN-01..LRN-05). Single command (`bash tests/smoke-49.sh`) exercises frustration force-include + failure-pattern insertion + project-scope CRUD + trigger immutability + /context layering + detectProject probe. Idempotent. Smoke silo isolation (silo_id='software-smoke-49') + smoke project isolation (scope_id='smoke-49-project').
