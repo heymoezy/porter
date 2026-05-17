@@ -4,9 +4,26 @@
 
 project: porter
 version: v6.17.1
-updated: 2026-05-16
-updated_by: claude-opus-4.7 (Porter Dreams 3 — Phase 49 Pattern Detection complete)
-milestone_status: v7.0 IN PROGRESS — Phase 49 complete 2026-05-16, Phase 50 next
+updated: 2026-05-17
+updated_by: claude-opus-4.7 (Porter Dreams 3 — Phase 50 Wave 2 in flight)
+milestone_status: v7.0 IN PROGRESS — Phase 49 + doctrine fix complete, Phase 50 Wave 2 in flight
+
+## Phase 49 + Doctrine Fix + Phase 50 in flight (2026-05-16 → 2026-05-17)
+
+**Phase 49 Pattern Detection — COMPLETE 2026-05-16.** 5 plans (49-01..49-05) + 49-VALIDATION.md + 49-VERIFICATION.md shipped, 5/5 LRN must-haves verified. Key commits: `7aea2bf` (LRN-01 frustration sampler), `570d06b` + `4445e64` + `71187da` (LRN-02 failure_patterns prompt/parser/worker), `ad786f1` + `8494b4e` (LRN-03 project-scope directive layering + partial index), `0946135` (LRN-04 detectProject + detectContext), `ec1222d` + `75a9afc` (LRN-05 smoke harness + fixture). Closeout commit `e66693b`. See dedicated Phase 49 section below for full LRN-by-LRN detail.
+
+**Doctrine bug fix — 2026-05-17 (commit `fd3f637`).** Live validation of Phase 49 surfaced a second doctrine bug. `validateRefinementDoctrine` was rejecting runs that emitted `failure_patterns` but no merge/supersede/delete refinement, even though failure_patterns are substantive output (concrete recurring failures with ≥2 occurrences and ≥2 `evidence_turn_ids` enforced at the Zod boundary in 49-02). They are arguably MORE rigorous than generic new_directive proposals because the model has to mine the corpus, identify recurrence, and produce a scoped directive-shaped fix. Fix: doctrine now accepts `failure_patterns.length > 0` as proof of anti-pile-on engagement (allow `new_directive` if `hasRefinement OR failure_patterns.length > 0`). Original failing run `dr_acd482ff` died on this trap; after the fix, re-run `dr_7a20e910` COMPLETED with `proposals_extracted=3` (2 failure_patterns at sort_order 850/851 + 1 new_directive at 900), `frustration_forced=99`, and caught a real recurring "duplicate logic instead of reusing existing components" pattern. tsc clean, porter restarted, /health 200, smoke-48.{1,2,3,4} + smoke-49 all green.
+
+**Phase 50 Multi-Silo Foundation — IN PROGRESS (Wave 2 in flight).**
+- Planning shipped: 4 plans (50-01..50-04) + VALIDATION.md, commit `ab4bda2`, plan-checker revision `437cb4d` (fix mock body field, re-base data-room paths, handle 'skipped' status).
+- **Wave 1 COMPLETE (50-01 scheduler refactor + per-silo cadence + multi-silo migration scaffold).** Commits: `d50c34d` (scaffold `migrate-multi-silo-v1` + delete legacy software-weekly workflow row), `31602ca` (checkSkipRecent reads per-silo cadence_seconds), `c1c0dbe` (`runSiloCadenceCheck` per-silo dream cadence tick, 1h granularity), `34d0d8b` (document MSF-03 software fallbacks at both surviving default sites), `f796181` (plan completion).
+- **Wave 2 plan 50-02 COMPLETE (admin silo seed).** Porter commits: `870ef73` (admin silo row + 4 moe-direct seed directives), `9d97e2a` (admin.md dream-worker prompt template, 113 LOC), `5d8a5d3` (`.admin-silo` marker for Porter admin/frontend), `c62e5e5` (plan completion), `64137a9` (ledger done). Cross-repo commit: `d173ac9b` in ymc.capital (`.admin-silo` marker at `site/app/routes/admin/`). Verified: porter restarted, schema stamp cleared + re-applied, admin silo + 4 directives live in DB, /context emits both silo sections from Porter admin/frontend (multi-match) + admin-only from YMC admin routes, trigger immutability verified on admin scope. BUILTIN_WORKFLOWS re-seed regression logged to `deferred-items.md` (out of scope; 50-01 followup).
+- **Wave 2 plan 50-03 IN FLIGHT (data-room silo seed).** Parallel executor active — DO NOT touch `backend/src/db/migrate-multi-silo-v1.ts` (50-03 placeholder block) or `backend/src/services/intellect/dream-prompts/data-room.md` (new file in progress) until that session closes its ledger entry.
+- **Wave 3 not yet started:** 50-04 cross-silo smoke harness (`tests/smoke-50.sh`).
+
+**Live state:** Porter v6.17.1, software silo carries 8+ active directives, dream loop validated end-to-end (dr_7a20e910 catching real patterns), Phase 50 Wave 2 ~half complete.
+
+---
 
 ## Phase 49 Pattern Detection — COMPLETE 2026-05-16
 
