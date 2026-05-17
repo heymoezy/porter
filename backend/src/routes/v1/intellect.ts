@@ -620,6 +620,8 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       dry_run?: boolean;
       _mock_response_path?: string;  // SMOKE-TEST-ONLY: per-call mock injection (env vars can't cross HTTP)
     };
+    // SAFE DEFAULT (Phase 50 MSF-03): software is the dominant silo; explicit silo_id
+    // in the POST body (admin, data-room, future) ALWAYS overrides this fallback.
     const siloId = body.silo_id ?? 'software';
 
     // Validate silo exists + enabled

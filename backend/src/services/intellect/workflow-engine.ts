@@ -109,6 +109,8 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
     // Wired in Plan 48.3-04: scheduled every_week trigger invokes runDreamWorker for
     // the configured silo. Errors re-thrown by the worker bubble up here and get
     // caught by runWorkflow's outer try/catch (which logs workflow_failed).
+    // SAFE DEFAULT (Phase 50 MSF-03): software is the dominant silo; explicit silo_id
+    // (admin, data-room, future) in the workflow row's action_config ALWAYS overrides this fallback.
     const siloId = (config?.silo_id as string) ?? 'software';
     return runDreamWorker({ siloId, triggeredBy: 'schedule' });
   },
