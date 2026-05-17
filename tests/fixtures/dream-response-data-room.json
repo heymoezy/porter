@@ -1,0 +1,21 @@
+{
+  "summary": "Smoke fixture for Phase 50 MSF-02 data-room silo — empty refinement to keep the doctrine path simple.",
+  "proposals": [
+    {
+      "kind": "new_directive",
+      "conceptual_area": "data-room-citation",
+      "target_directive_ids": [],
+      "proposed_content": "When summarizing a deal memo for an investor email, every claim about deal terms (date, parties, dollar amount, jurisdiction) MUST cite the underlying PDF by file path in the email draft. Drafts that summarize without citations are rejected before send.",
+      "priority": 70,
+      "source_evidence": {
+        "sample_turn_ids": [7101, 7102],
+        "phrasing_examples": ["cite the source PDF", "every dollar figure needs a file path"],
+        "reasoning": "Two smoke data-room sessions reinforced the citation-by-path discipline."
+      }
+    }
+  ],
+  "flagged_seeds": [],
+  "failure_patterns": [],
+  "active_directive_count_before": 5,
+  "active_directive_count_after_proposed": 6
+}

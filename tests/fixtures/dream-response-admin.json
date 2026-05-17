@@ -1,0 +1,21 @@
+{
+  "summary": "Smoke fixture for Phase 50 MSF-01 admin silo — empty refinement to keep the doctrine path simple.",
+  "proposals": [
+    {
+      "kind": "new_directive",
+      "conceptual_area": "admin-rbac",
+      "target_directive_ids": [],
+      "proposed_content": "Admin routes for proposal-bulk-actions MUST verify platform_admin capability at the handler entry, BEFORE reading the request body. Currently the requirePlatformAdmin check fires after body parse on the bulk-accept endpoint, which leaks request shape to non-admins via Zod validation errors.",
+      "priority": 70,
+      "source_evidence": {
+        "sample_turn_ids": [7001, 7002],
+        "phrasing_examples": ["bulk accept handler should require admin before parsing", "auth gate must be first thing in the handler"],
+        "reasoning": "Two smoke admin sessions reinforced the auth-first-then-parse pattern."
+      }
+    }
+  ],
+  "flagged_seeds": [],
+  "failure_patterns": [],
+  "active_directive_count_before": 4,
+  "active_directive_count_after_proposed": 5
+}
