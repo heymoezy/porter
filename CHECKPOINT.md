@@ -3,10 +3,35 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.18.0
-updated: 2026-05-17
-updated_by: claude-opus-4.7 (Recall doc-QA shipped — P1..P3 in Porter, P4+P5 in ymc.capital)
-milestone_status: v7.0 IN PROGRESS — Phase 49 + doctrine fix complete, Phase 50 Wave 2 in flight, Recall doc-QA shipped end-to-end
+version: v6.21.0
+updated: 2026-05-18
+updated_by: claude-opus-4.7 (Tom-bug double fix + Bridge codex adapter + Recall summarize)
+milestone_status: v7.0 IN PROGRESS — Phase 49 + doctrine fix complete, Phase 50 Wave 2 in flight, Recall doc-QA shipped, Tom runtime locked
+
+## Tom-bug double fix + Bridge codex adapter (2026-05-18) — SHIPPED
+
+Tom broke on WhatsApp with two stacked failures:
+
+**Bug A — Porter claude_cli adapter spawned agentic claude.** Until today claude_cli ran with `--permission-mode auto --allowedTools WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent`. Cross-app consumers (Tom via ymc.capital/backend/src/routes/tom-llm.ts, Recall summarize+query) feed claude a STRUCTURED-TEXT tool-call convention — they list ymc-tom__* tools and tell claude to emit `<tool_use>` markers. Agentic claude tried to call those names natively, found no MCP, bubbled "I'm Claude in a sandbox — ymc-tom__* tools aren't wired here."
+
+**Bug B — Echo loop.** Even after Bug A's adapter fix, Tom kept saying the same sandbox line on every WhatsApp turn. openclaw replays the full ~46k-token session history each turn, and claude pattern-matches its own prior broken assistant outputs and parrots them. Five identical replies in a row across 14:17→15:11.
+
+**Fixes (both shipped):**
+
+- Porter commit `8b83fe5` (v6.21.0). `BridgeDispatchRequest.tools: 'none'|'default'`. claude_cli adapter spawns with `--tools ""` when `tools:'none'`. `/api/v1/chat/stream` auto-defaults to `tools:'none'` when `raw:true`. Plumbed through stream-service. Both dispatch() and stream() paths covered.
+- Porter commit `5a3b6bc` (v6.20.0). NEW codex_cli Bridge adapter (`services/bridge/adapters/codex-cli.ts`, ~245 LOC) + `routing-engine.select()` SILENT-FALLBACK BUG FIX — `forceGatewayType` was literally being ignored (`chosen = candidates[0]`), so months of "force codex" calls silently routed to claude. Codex spawn works; auth quota on Moe's ChatGPT OAuth blocks until **2026-05-23 09:09 PM**. Claude_cli handles everything until then.
+- ymc.capital commit `1a358bff` (v1.267.0). tom-llm.ts `sanitiseHistory()` drops assistant messages matching SANDBOX_LEAK_PATTERNS from history before flattening. Conservative regex set; won't false-positive on Tom's normal voice.
+- ymc.capital commit `d617afea` (v1.268.0). NEW `tom/ARCHITECTURE.md` — canonical runtime doc. NEW `backend/scripts/smoke-tom.ts` — regression smoke that replays the EXACT poisoned-history payload from session 7cb408a2 and asserts backend=claude_cli + stop=tool_use + no leak phrases. **Mandatory gate before any Tom-touching change is shipped.** Memory entry `project_tom_architecture_lock` + `feedback_tom_soul_lean` enforce: persona is sacred, fix the runtime.
+
+**Verification (commit-blocking):**
+- smoke-tom.ts: PASS, latency 4080ms, backend claude_cli, stop tool_use, tool_use=ymc-tom__ymc_contact_search {"q":"Frank Phuan"}.
+- Live `/health` 3001 → 6.21.0, 5182 → 1.268.0.
+
+**Decision locks recorded:**
+1. Persona files (tom/SOUL.md, tom/IDENTITY.md) are NEVER touched to fix runtime bugs. Both bugs landed in tom-llm.ts and Porter's claude-cli.ts. Future fixes go to ARCHITECTURE.md + runtime code only.
+2. After any Tom-touching change: run `npx tsx scripts/smoke-tom.ts` from ymc.capital/backend/. Output is the proof-of-life. Never claim "Tom is back" without it.
+3. After any Porter restart: `curl /health` and verify version matches package.json. A restart on 2026-05-18 silently kept the old PID for ~25 min — don't trust uptime alone.
+4. Bridge dispatches that need pure chat-completion (no agent loop) must set `raw:true` or `tools:'none'` explicitly.
 
 ## Recall doc-QA — SHIPPED end-to-end (2026-05-17)
 
