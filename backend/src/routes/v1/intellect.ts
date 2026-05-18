@@ -27,6 +27,7 @@ import { insertTurn } from '../../services/intellect/transcript-capture.js';
 import { runTranscriptRetention } from '../../services/intellect/transcript-retention.js';
 import { runDreamWorker } from '../../services/intellect/dream-worker.js';
 import { randomUUID } from 'node:crypto';
+import { resolveActiveProject, setActiveProject, clearActiveProject, recentProjects } from '../../services/intellect/active-project.js';
 
 interface DirectiveRow {
   id: string;
@@ -456,6 +457,46 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       const message = e instanceof Error ? e.message : String(e);
       return reply.status(500).send(err('CORRECTION_FAILED', message));
     }
+  });
+
+  // ── Active project (Porter Backbone Identity, v6.22.0) ───────────────────
+  //
+  // Porter is infrastructure, not a project. The "active project" is which
+  // peer the user is currently working on (ymc.capital, Porter-the-repo,
+  // Deals/Stablekey, etc.). One source of truth. Hooks query this; deploy
+  // scripts write it; cwd takes priority over the DB pin when available.
+
+  fastify.get('/active-project', async (request, reply) => {
+    const q = request.query as { cwd?: string; session_id?: string };
+    const result = await resolveActiveProject(pool, {
+      cwd: q?.cwd ?? null,
+      sessionId: q?.session_id ?? null,
+    });
+    const hints = result.source === 'none' ? recentProjects() : [];
+    return reply.send(ok({ ...result, recent_hints: hints }));
+  });
+
+  fastify.post('/active-project', async (request, reply) => {
+    const body = (request.body || {}) as { project?: string; subproject?: string; session_id?: string; set_by?: string };
+    if (!body.project) return reply.code(400).send(err('INVALID_INPUT', 'project required'));
+    try {
+      const pin = await setActiveProject(pool, {
+        project: body.project,
+        subproject: body.subproject ?? null,
+        sessionId: body.session_id ?? null,
+        setBy: body.set_by ?? null,
+      });
+      return reply.send(ok({ pinned: pin, message: `Active project pinned to ${pin.project}${pin.subproject ? '/' + pin.subproject : ''} (scope=${pin.scope})` }));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.code(400).send(err('SET_FAILED', message));
+    }
+  });
+
+  fastify.delete('/active-project', async (request, reply) => {
+    const q = request.query as { session_id?: string };
+    await clearActiveProject(pool, q?.session_id ?? null);
+    return reply.send(ok({ cleared: q?.session_id || '_global' }));
   });
 
   // ── POST /silo-command — Phase 48.1 /silo CLI slash-command handler ──

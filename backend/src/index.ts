@@ -46,6 +46,7 @@ import { migrateMailV1 } from './db/migrate-mail-v1.js';
 import { migrateIntellectV1 } from './db/migrate-intellect-v1.js';
 import { migrateBornCheckV1 } from './db/migrate-born-check-v1.js';
 import { migrateSilosV1 } from './db/migrate-silos-v1.js';
+import { migrateActiveProjectV1 } from './db/migrate-active-project-v1.js';
 import { migrateTranscriptsV1 } from './db/migrate-transcripts-v1.js';
 import { migrateDreamsV1 } from './db/migrate-dreams-v1.js';
 import { migrateDirectivesScopeIdxV1 } from './db/migrate-directives-scope-idx-v1.js';
@@ -174,7 +175,7 @@ fastify.get('/health', async () => {
   return {
     status: 'ok',
     engine: 'fastify',
-    version: '6.21.0',
+    version: '6.22.0',
     mail: {
       provider: config.mail.provider,
       domain: config.mail.defaultDomain,
@@ -288,6 +289,9 @@ const start = async () => {
     // No dependencies on prior migrations; ordered last for monotonic timeline.
     await migrateRecallDocChunksV1(pool);
     await migrateRecallDocSummaryV1(pool);
+    // v6.22.0 — Porter backbone identity: active_project pin (which peer
+    // project is the human currently working on?). Separate from Porter-the-repo.
+    await migrateActiveProjectV1(pool);
     // Phase 48.1: warm the silo-detector cache after silos migration.
     // Lazy-load fallback exists in the detector so cold-start works; this is
     // just a perf optimization. Never crash boot if it fails.

@@ -3,12 +3,56 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.21.0
+version: v6.22.0
 updated: 2026-05-18
-updated_by: claude-opus-4.7 (Tom-bug double fix + Bridge codex adapter + Recall summarize)
-milestone_status: v7.0 IN PROGRESS — Phase 49 + doctrine fix complete, Phase 50 Wave 2 in flight, Recall doc-QA shipped, Tom runtime locked
+updated_by: claude-opus-4.7 (Porter backbone identity — active_project table + 2 routes + session-hook rewrite)
+milestone_status: v7.0 IN PROGRESS — Phase 49 + doctrine fix complete, Phase 50 Wave 2 in flight, Recall doc-QA shipped, Tom runtime locked, Porter identity fixed
 
-## Tom-bug double fix + Bridge codex adapter (2026-05-18) — SHIPPED
+## Porter Backbone Identity (2026-05-18 v6.22.0) — SHIPPED
+
+**Root-cause fix** for the "Porter thinks every session is about Porter" bug
+Moe diagnosed during autonomous run.
+
+Until tonight, Porter's SessionStart hooks conflated Porter-the-orchestrator
+(infrastructure backbone, always-on) with Porter-the-project (the repo at
+`/home/lobster/projects/Porter/`, just one of 33 peer projects). Hooks
+dumped Porter-the-project's CHECKPOINT.md on every session and hardcoded
+"Loaded Porter [version]" as the ACTION REQUIRED — wrong for every non-
+Porter session.
+
+**Fixes shipped:**
+
+- New `active_project` table (scope='_global' or session_id; project + subproject).
+- New routes: `GET/POST/DELETE /api/v1/intellect/active-project`.
+  Resolution order: cwd → session pin → global pin → ASK MOE with hints.
+- New service: `services/intellect/active-project.ts` (resolveActiveProject,
+  setActiveProject, clearActiveProject, recentProjects).
+- Rewritten `backend/src/cli/session-hook.cjs`: two distinct sections —
+  Porter Backbone (always) + Active Project (variable, never defaults to
+  Porter-the-project).
+- Slimmed `~/.claude/hooks/porter-session-start.js` → silo-directives shim
+  only; symlinked into Porter repo as `backend/src/cli/claude-silo-shim.cjs`
+  (one truth — ships via Porter commit).
+- `scripts/ship.sh` (NEW): bundles tsc → build → restart → /health verify →
+  active-project pin (Porter).
+- Pre-commit hook extended: blocks code commits without CHECKPOINT.md touch
+  (override `SKIP_CHECKPOINT_GATE=1`).
+
+**Verification:**
+- `tsc --noEmit` clean. `npm run build` clean.
+- `/health` returns 6.22.0.
+- GET `/api/v1/intellect/active-project` with no pin → source='none' + recent_hints.
+- POST `{"project":"ymc.capital"}` → pinned globally.
+- GET with cwd=/home/lobster/projects/Deals/Stablekey → source='cwd',
+  project='Deals', subproject='Stablekey', checkpoint loaded.
+- Tom smoke (after Porter restart): PASS.
+
+**Identity rule (new):** Porter is the only switchboard for memory + dispatch
++ routing. No flat-file mailboxes; no side channels. The active-project pin
+lives in Porter Brain, not `~/.claude/`. Global CLAUDE.md updated to point at
+Porter API for runtime state.
+
+## Tom-bug double fix + Bridge codex adapter (2026-05-18 v6.21.0) — SHIPPED
 
 Tom broke on WhatsApp with two stacked failures:
 
