@@ -3,10 +3,41 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.17.1
+version: v6.18.0
 updated: 2026-05-17
-updated_by: claude-opus-4.7 (Porter Dreams 3 — Phase 50 Wave 2 in flight)
-milestone_status: v7.0 IN PROGRESS — Phase 49 + doctrine fix complete, Phase 50 Wave 2 in flight
+updated_by: claude-opus-4.7 (Recall doc-QA shipped — P1..P3 in Porter, P4+P5 in ymc.capital)
+milestone_status: v7.0 IN PROGRESS — Phase 49 + doctrine fix complete, Phase 50 Wave 2 in flight, Recall doc-QA shipped end-to-end
+
+## Recall doc-QA — SHIPPED end-to-end (2026-05-17)
+
+Cross-project document Q&A inside Porter's Recall pillar. First consumer is Tom (YMC WhatsApp). Architecture lets any future agent plug into the same brain — one schema, one pipeline, many consumers.
+
+**Porter (commits `73a8270`, `da2ebde`, v6.18.0):**
+- Migration 050: `recall_doc_sources` (UNIQUE on project+source_id, idempotent re-ingest) + `recall_doc_chunks` (tsvector + pg_trgm GIN; nullable `vector(1536)` reserved for future OpenAI embeddings, NULL today).
+- `services/recall-ingest.ts`: sentence-aware ~3200-char chunks with 400-char overlap, bulk insert in a single tx, transactional replace on re-ingest.
+- `services/recall-query.ts`: plainto_tsquery + ts_rank_cd with ts_headline snippets, pg_trgm fallback when tsquery empty, short-circuit "Nothing on file." when both retrieval paths empty (saves a dispatch).
+- `routes/v1/recall.ts`: POST /api/v1/recall/docs/ingest + /docs/query. Auth via requireAuth (X-Porter-Service-Token from localhost grants platform_admin).
+- Synthesis: forced `codex_cli` via `routingEngine` in-process (no HTTP round-trip). System prompt pulls up to 20 active `silo/data-room` directives — this is the "Tom Dream Silo enhances Porter Intelligence" coupling Moe was looking for.
+
+**YMC (commit `300d4590` on ymc.capital@main, v1.263.0):**
+- `services/recall-ingest-client.ts` + fire-and-forget call in `doc-intel-phase-a.ts` (data-room docs now included; Phase A text-search excluded them).
+- `scripts/backfill-recall-ingest.ts`: pushed 78 docs / 0 failed / 12 skipped (whitespace-only). Porter DB: 78 sources, 876 chunks.
+- `routes/whatsapp-tom.ts`: POST /api/admin/whatsapp/tom/documents/qa proxies to Porter.
+- `services/ymc-tom-mcp/server.mjs`: new `ymc_doc_qa` MCP tool.
+- `tom/SOUL.md`: new "Clause/term/value questions" routing bullet placed BEFORE "Open-ended fact questions" so qa is tried before text-search for clause/term questions.
+
+**Verification (real YMC docs after backfill):**
+- "What is Stablekey Holdings Limited?" → full BVI incorporation details (company number 2169445, Hermes registered office, 50,000-share M&A) with 6 citations across M&A + fee note + certificate of good standing. 5.7s latency.
+- "Who is the registered agent for Stablekey?" → "Hermes Corporate Services (BVI) Ltd., Water's Edge..." with 3 citations. 10.2s latency.
+- Irrelevant question → "Nothing on file." with 0 citations, 277ms (no model dispatch).
+
+**Known limitation (not blocker):** `plainto_tsquery` ANDs all non-stop-word lexemes, so multi-clause questions can over-constrain to zero chunks. Sharper questions work today; future refinement can OR the lexemes or pre-extract key terms before retrieval.
+
+**Decision locks recorded for future sessions:**
+1. No Ollama embeddings. Synthesis via codex_cli through Bridge. Switching backend = change one string (`forceGatewayType`).
+2. FTS-only retrieval; embeddings can be added without schema change (`embedding vector(1536)` column already exists, NULL today).
+3. Porter owns the pipeline; YMC backend is a producer (ingest hook) + Tom is a consumer (qa). Any future project agent plugs in the same way.
+
 
 ## Phase 49 + Doctrine Fix + Phase 50 in flight (2026-05-16 → 2026-05-17)
 
