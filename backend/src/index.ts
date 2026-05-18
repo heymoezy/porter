@@ -50,6 +50,7 @@ import { migrateTranscriptsV1 } from './db/migrate-transcripts-v1.js';
 import { migrateDreamsV1 } from './db/migrate-dreams-v1.js';
 import { migrateDirectivesScopeIdxV1 } from './db/migrate-directives-scope-idx-v1.js';
 import { migrateMultiSiloV1 } from './db/migrate-multi-silo-v1.js';
+import { migrateRecallDocChunksV1 } from './db/migrate-recall-doc-chunks-v1.js';
 import { startFileWatcher } from './services/intellect/file-watcher.js';
 import { loadSiloCache } from './services/intellect/silo-detector.js';
 import { seedBuiltinWorkflows } from './services/intellect/workflow-engine.js';
@@ -282,6 +283,9 @@ const start = async () => {
     // Phase 50: multi-silo seed (admin + data-room) + legacy workflow row delete.
     // Runs BEFORE loadSiloCache so the cache picks up new silos on first boot.
     await migrateMultiSiloV1(pool);
+    // Recall doc-QA: chunk + source tables for cross-project document Q&A.
+    // No dependencies on prior migrations; ordered last for monotonic timeline.
+    await migrateRecallDocChunksV1(pool);
     // Phase 48.1: warm the silo-detector cache after silos migration.
     // Lazy-load fallback exists in the detector so cold-start works; this is
     // just a perf optimization. Never crash boot if it fails.

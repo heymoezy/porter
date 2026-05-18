@@ -31,6 +31,7 @@ import approvalV1Routes from './approvals.js';
 import mailV1Routes from './mail.js';
 import mailAdminV1Routes from './mail-admin.js';
 import intellectV1Routes from './intellect.js';
+import recallV1Routes from './recall.js';
 // TODO: admin routes need import path fixes + PG conversion before enabling
 // import adminV1Routes from './admin/index.js';
 
@@ -68,5 +69,6 @@ export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(mailV1Routes, { prefix: '/mail' });
   fastify.register(mailAdminV1Routes, { prefix: '/mail-admin' });
   fastify.register(intellectV1Routes, { prefix: '/intellect' });
+  fastify.register(recallV1Routes, { prefix: '/recall' });
   // fastify.register(adminV1Routes, { prefix: '/admin' });
 }

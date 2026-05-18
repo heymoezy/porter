@@ -593,3 +593,50 @@
   - .coordination/SESSIONS.md (this entry)
 - Files NOT touching: backend/src/db/migrate-multi-silo-v1.ts (50-03 in flight), backend/src/services/intellect/dream-prompts/data-room.md (50-03 new), any 50-03 ledger entries.
 - Status: done
+
+## GSD Executor 50-04 (Opus 4.7 1M) — 2026-05-17T05:10Z
+- Workstream: Execute Phase 50 Plan 04 (MSF-01/02/03/04 smoke harness — Wave 3 plan, phase gate). Single command (`bash tests/smoke-50.sh`) covers all 4 MSF requirements + silo-agnostic synthetic-silo enrollment proof + multi-silo /context layering + per-silo cadence verification + trigger immutability. Idempotent. Self-cleaning. Mock body field `_mock_response_path` (snake_case underscore-prefixed per intellect.ts:621). Poll loops accept `skipped` as terminal (W-4). Header documents `run after Porter restart` cache assumption (W-2). Data-room marker path re-verified (B-2 — storage/data-room).
+- Files claimed (new):
+  - tests/smoke-50.sh (NEW, executable bash, ~320+ lines)
+  - tests/fixtures/dream-response-admin.json (NEW)
+  - tests/fixtures/dream-response-data-room.json (NEW)
+  - tests/fixtures/dream-prompts/msf-03-synthetic.md (transient — created + deleted by smoke during run)
+  - .planning/phases/50-multi-silo-foundation/50-04-SUMMARY.md (new)
+  - .planning/STATE.md, .planning/ROADMAP.md, .planning/REQUIREMENTS.md (state updates)
+- Files NOT touching: backend/* (Wave 1/2 already shipped), migrate-multi-silo-v1.ts (closed). Disjoint by design — tests/ only.
+- Status: active
+
+## Porter Recall Doc Q&A — P1 schema (Opus 4.7 1M) — 2026-05-17T08:30Z
+- Workstream: Build cross-project document Q&A inside Porter Recall. Phase 1 = schema only. New tables `recall_doc_sources` + `recall_doc_chunks` with Postgres FTS (tsvector + pg_trgm GIN) for keyword retrieval; nullable `embedding vector(1536)` column reserved for future OpenAI-API embeddings. Codex CLI handles synthesis via existing Bridge; no Ollama. Tom (YMC) is the first consumer.
+- Files claimed (edit/new):
+  - backend/src/db/migrations/050-recall-doc-chunks.sql (NEW)
+  - backend/src/db/migrate-recall-doc-chunks-v1.ts (NEW)
+  - backend/src/index.ts (register new migration after migrateMultiSiloV1)
+  - .coordination/SESSIONS.md (this entry)
+- Files NOT touching: any route/service files (P2/P3 phases), migrate-multi-silo-v1.ts, intellect/* (Recall Q&A endpoints land in P2/P3 under v1/recall.ts).
+- Status: active
+
+## Porter Recall Doc Q&A — P2 ingest service (Opus 4.7 1M) — 2026-05-17T09:10Z
+- Workstream: Phase 2 sub-task — pure ingest service module only (no route, no migration). Exports `ingestDoc(pool, input)` from `backend/src/services/recall-ingest.ts`. Sentence-aware chunking (~3,200 char target, ~400 char overlap, 4,000 char hard cap), idempotent on `(project, source_id)` via explicit DELETE-then-INSERT inside a single BEGIN/COMMIT transaction, bulk parameterized INSERT for chunks, throws on empty text. Embedding column left NULL (codex CLI synthesis + FTS retrieval per design). Route wiring is left to the parent orchestrator.
+- Files claimed (NEW):
+  - backend/src/services/recall-ingest.ts (NEW, ~240 LOC)
+- Files NOT touching: any route file, migrations (050 already shipped), other services. Disjoint from MSF + P1 schema work.
+- Status: **DONE** 2026-05-17T09:10Z — `npx tsc --noEmit` clean (EXIT=0). Smoke 1 (~5,000 chars): `chunks_written=2`, `replaced=false`. Smoke 2 (~18.7k chars, double-ingest on same source_id): first run `chunks_written=7 replaced=false`, second run `chunks_written=7 replaced=true`, chunk 0 contains new seed `beta` and not old seed `alpha` → old chunks confirmed gone. Empty-text guard throws `recall-ingest: empty text` as specified. No deviations from spec.
+
+## Porter Recall Doc Q&A — PAUSED (Opus 4.7 1M) — 2026-05-17T08:55Z
+- Workstream paused mid-build per Moe. Will resume.
+- State at pause:
+  - **P1 schema** — SHIPPED LOCAL (not pushed). Files: backend/src/db/migrations/050-recall-doc-chunks.sql, backend/src/db/migrate-recall-doc-chunks-v1.ts, backend/src/index.ts (registration). Tables `recall_doc_sources` + `recall_doc_chunks` exist in DB, schema_migrations stamp `recall_doc_chunks_v1` applied. Porter v6.17.1 restarted clean. **Not committed yet.**
+  - **P2 ingest service** — SHIPPED LOCAL (not committed). File: backend/src/services/recall-ingest.ts (~240 LOC). Smoke-tested locally: 2-chunk + 7-chunk runs, idempotent replace verified. No route wired yet (route is parent-orchestrator's job in P3 integration step).
+  - **P3 query/synthesis** — NOT STARTED. Was about to spawn agent in parallel with P2; cancelled.
+  - **P4 Tom tool + SOUL routing** — blocked on P3.
+  - **P5 YMC ingest hook + backfill** — blocked on P2 route landing.
+  - **P6 smoke + ship** — blocked on P4+P5.
+- Resume entry point: write `backend/src/routes/v1/recall.ts` wiring `ingestDoc()` from recall-ingest.ts as `POST /v1/recall/docs/ingest`, register in routes/v1/index.ts, then proceed to P3 (retrieval + codex synthesis). Task list IDs 1-6 retained.
+- Decision locks (so we don't re-debate on resume):
+  1. No Ollama. Codex CLI handles answer synthesis via existing Bridge dispatch. Embeddings deferred (column reserved, NULL today).
+  2. Retrieval = Postgres FTS (tsvector + pg_trgm fallback). YMC scale doesn't need semantic.
+  3. Porter owns the pipeline; YMC backend is a producer (ingest) + Tom is a consumer (query).
+  4. Tom Dream Silo (data-room) directives get injected into synthesis system prompt — that's the "enhanced by silo" coupling.
+- Files touched but not committed: 050-recall-doc-chunks.sql, migrate-recall-doc-chunks-v1.ts, src/index.ts (2 edits — import + registration), services/recall-ingest.ts, .coordination/SESSIONS.md (this entry + earlier P1 claim).
+- Status: paused
