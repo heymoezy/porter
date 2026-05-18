@@ -28,6 +28,14 @@ export const GATEWAY_CAPABILITY_REGISTRY: Record<GatewayType, GatewayCapabilityR
     tool_support: 'full',
     agentic: true,
   },
+  codex_cli: {
+    legacy_tags: ['chat', 'one_shot', 'no_tools'],
+    strengths: ['reasoning', 'coding', 'analysis'],
+    cost_tier: 'premium',
+    context_window: 200_000,
+    tool_support: 'none',
+    agentic: false,
+  },
 };
 
 // ── Helper functions ──────────────────────────────────────────────────────────

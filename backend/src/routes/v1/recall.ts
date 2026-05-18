@@ -3,6 +3,7 @@ import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
 import { ingestDoc, type IngestInput } from '../../services/recall-ingest.js';
 import { queryDocs, type QueryInput } from '../../services/recall-query.js';
+import { summarizeDoc, type SummarizeInput } from '../../services/recall-summarize.js';
 
 // Recall doc-Q&A routes. Mounted at /api/v1/recall by routes/v1/index.ts.
 // Project-scoped storage for cross-project document retrieval — first
@@ -111,6 +112,44 @@ export default async function recallV1Routes(
         return reply
           .code(500)
           .send(err('QUERY_FAILED', e?.message ?? 'query failed', request.id));
+      }
+    },
+  );
+
+  // POST /api/v1/recall/docs/summarize
+  // Body: { project, source_id, force_refresh? }
+  // Returns the structured LLM extraction for the doc (summary, doc_type,
+  // entities, key_facts). Cached on recall_doc_sources.summary — repeat
+  // asks are free unless force_refresh=true.
+  fastify.post<{ Body: Partial<SummarizeInput> }>(
+    '/docs/summarize',
+    { preHandler: [fastify.requireAuth] },
+    async (request, reply) => {
+      const body = request.body ?? {};
+      const project = typeof body.project === 'string' ? body.project.trim() : '';
+      const sourceId = typeof body.source_id === 'string' ? body.source_id.trim() : '';
+      const forceRefresh = body.force_refresh === true;
+
+      if (!project) {
+        return reply.code(400).send(err('INVALID_INPUT', 'project is required', request.id));
+      }
+      if (!sourceId) {
+        return reply.code(400).send(err('INVALID_INPUT', 'source_id is required', request.id));
+      }
+
+      try {
+        const result = await summarizeDoc(pool, { project, source_id: sourceId, force_refresh: forceRefresh });
+        return reply.send(ok(result, request.id));
+      } catch (e: any) {
+        if (e?.code === 'NOT_FOUND') {
+          return reply.code(404).send(err('NOT_FOUND', e.message, request.id));
+        }
+        if (e?.code === 'NO_TEXT') {
+          return reply.code(409).send(err('NO_TEXT', e.message, request.id));
+        }
+        return reply
+          .code(500)
+          .send(err('SUMMARIZE_FAILED', e?.message ?? 'summarize failed', request.id));
       }
     },
   );

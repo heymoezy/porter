@@ -7,7 +7,7 @@
 
 // ── Type aliases matching DB column values ────────────────────────────────────
 
-export type GatewayType = 'claude_cli';
+export type GatewayType = 'claude_cli' | 'codex_cli';
 
 export type GatewayStatus = 'active' | 'stale' | 'unavailable';
 

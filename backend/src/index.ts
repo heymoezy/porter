@@ -51,6 +51,7 @@ import { migrateDreamsV1 } from './db/migrate-dreams-v1.js';
 import { migrateDirectivesScopeIdxV1 } from './db/migrate-directives-scope-idx-v1.js';
 import { migrateMultiSiloV1 } from './db/migrate-multi-silo-v1.js';
 import { migrateRecallDocChunksV1 } from './db/migrate-recall-doc-chunks-v1.js';
+import { migrateRecallDocSummaryV1 } from './db/migrate-recall-doc-summary-v1.js';
 import { startFileWatcher } from './services/intellect/file-watcher.js';
 import { loadSiloCache } from './services/intellect/silo-detector.js';
 import { seedBuiltinWorkflows } from './services/intellect/workflow-engine.js';
@@ -173,7 +174,7 @@ fastify.get('/health', async () => {
   return {
     status: 'ok',
     engine: 'fastify',
-    version: '6.18.0',
+    version: '6.20.0',
     mail: {
       provider: config.mail.provider,
       domain: config.mail.defaultDomain,
@@ -286,6 +287,7 @@ const start = async () => {
     // Recall doc-QA: chunk + source tables for cross-project document Q&A.
     // No dependencies on prior migrations; ordered last for monotonic timeline.
     await migrateRecallDocChunksV1(pool);
+    await migrateRecallDocSummaryV1(pool);
     // Phase 48.1: warm the silo-detector cache after silos migration.
     // Lazy-load fallback exists in the detector so cold-start works; this is
     // just a perf optimization. Never crash boot if it fails.

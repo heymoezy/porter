@@ -135,6 +135,47 @@ export async function detectAndUpsertGateways(pool: pg.Pool): Promise<DetectionR
       console.log('[bridge] ✗ claude not found on PATH');
     }
 
+    // Detect Codex CLI binary (env override or PATH scan)
+    const codexBinaryPath = process.env.PORTER_CODEX_PATH ?? await which('codex').catch(() => null);
+
+    if (codexBinaryPath) {
+      const codexId = crypto.randomUUID();
+      await pool.query(
+        `INSERT INTO gateways (id, type, name, url, auth_method, status, source, priority, capabilities, metadata, enabled, created_at, updated_at)
+         VALUES ($1, 'codex_cli', 'Codex CLI', NULL, 'none', 'active', 'auto_detected', 20, $2, $3, 1, EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+         ON CONFLICT (type, source) WHERE source IN ('auto_detected', 'env_bootstrap')
+         DO UPDATE SET
+           status       = 'active',
+           capabilities = EXCLUDED.capabilities,
+           metadata     = EXCLUDED.metadata,
+           updated_at   = EXTRACT(EPOCH FROM NOW())`,
+        [
+          codexId,
+          JSON.stringify(GATEWAY_CAPABILITY_REGISTRY.codex_cli),
+          JSON.stringify({ binary_path: codexBinaryPath }),
+        ],
+      );
+      console.log(`[bridge] ✓ codex detected at ${codexBinaryPath}`);
+
+      // Probe the freshly upserted gateway
+      const { rows } = await pool.query(
+        `SELECT * FROM gateways WHERE type = 'codex_cli' AND source = 'auto_detected'`,
+      );
+      if (rows.length > 0) {
+        results.push(await probeGateway(mapRawToGatewayRow(rows[0])));
+      } else {
+        results.push({ type: 'codex_cli', name: 'Codex CLI', found: true, healthy: false, models: [] });
+      }
+    } else {
+      // Mark stale if binary not found
+      await pool.query(
+        `UPDATE gateways SET status = 'stale', updated_at = EXTRACT(EPOCH FROM NOW())
+         WHERE type = 'codex_cli' AND source = 'auto_detected' AND status != 'stale'`,
+      );
+      results.push({ type: 'codex_cli', name: 'Codex CLI', found: false, healthy: false, models: [] });
+      console.log('[bridge] ✗ codex not found on PATH');
+    }
+
     console.log('[bridge] Gateway detection complete');
 
     const zeroConfigReady = results.some(g => g.found && g.healthy);

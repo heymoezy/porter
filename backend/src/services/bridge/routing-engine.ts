@@ -84,7 +84,12 @@ export class RoutingEngine {
   }
 
   /**
-   * Select the Claude CLI gateway for the given routing context.
+   * Select a gateway for the given routing context.
+   *
+   * Selection order:
+   *   1. forceGatewayType — pin to the matching candidate if active+enabled.
+   *   2. Otherwise the first candidate (sorted by priority ASC).
+   *
    * If forceModelName is set, overrides the default_model on the gateway row.
    */
   async select(ctx: RoutingContext): Promise<RoutingDecision> {
@@ -94,7 +99,22 @@ export class RoutingEngine {
       throw new Error('No active gateways available');
     }
 
-    let chosen = candidates[0];
+    let chosen: GatewayCandidate;
+    let reason: string;
+
+    if (ctx.forceGatewayType) {
+      const forced = candidates.find(c => c.row.type === ctx.forceGatewayType);
+      if (!forced) {
+        throw new Error(
+          `Forced gateway type '${ctx.forceGatewayType}' not available (active candidates: ${candidates.map(c => c.row.type).join(', ') || 'none'})`,
+        );
+      }
+      chosen = forced;
+      reason = `Forced gateway type: ${ctx.forceGatewayType}`;
+    } else {
+      chosen = candidates[0];
+      reason = `${chosen.row.name} (priority ${chosen.row.priority})`;
+    }
 
     // Apply model override if requested
     if (ctx.forceModelName) {
@@ -111,7 +131,7 @@ export class RoutingEngine {
       gatewayRow: chosen.row,
       adapter: chosen.adapter,
       modelName: resolveModelName(chosen.row),
-      reason: `Claude CLI (single gateway)`,
+      reason,
       alternatives: [],
       matchedRuleId: null,
     };

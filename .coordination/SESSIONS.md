@@ -656,3 +656,36 @@
 - Deviations from spec:
   - Spec referenced `directives.body` column; actual schema column is `content`. Used `content`. (Verified via `\d directives`.)
 - Status: **DONE** 2026-05-18T00:00Z — ready for P4 (Tom tool + SOUL routing). Not committed/pushed — orchestrator handles.
+
+## Porter Recall doc-decoder — P7 schema + summarize (Opus 4.7 1M) — 2026-05-17T16:30Z
+- Workstream: New /v1/recall/docs/summarize endpoint. Generic LLM extraction → structured JSON {summary, doc_type, entities, key_facts}. Cached on recall_doc_sources row so repeat asks are free. Reusable by any future project agent (YMC's cross-reference is project-specific, lives in YMC).
+- Files claimed (edit/new):
+  - backend/src/db/migrations/051-recall-doc-summary.sql (NEW)
+  - backend/src/db/migrate-recall-doc-summary-v1.ts (NEW)
+  - backend/src/index.ts (register migration after migrateRecallDocChunksV1)
+  - backend/src/services/recall-summarize.ts (NEW)
+  - backend/src/routes/v1/recall.ts (add /docs/summarize handler)
+  - backend/package.json (version bump)
+  - .coordination/SESSIONS.md (this entry)
+- Files NOT touching: recall-ingest.ts, recall-query.ts, intellect/*, migrate-multi-silo-v1.ts.
+- Status: active
+
+### codex_cli Bridge adapter (sub-agent of P7) — 2026-05-18T09:00Z
+- Workstream: register codex_cli as a real auto-detected gateway with a working adapter that mirrors claude-cli's shape.
+- Files touched:
+  - backend/src/services/bridge/adapters/codex-cli.ts (NEW, ~245 LOC) — CodexCLIAdapter implements GatewayAdapter. Spawns `codex exec --skip-git-repo-check "<prompt>"`, parses stdout for `model:`, body between `codex\n` and `tokens used\n`, and trailing token count. Stream is degenerate (one chunk after dispatch). cwd=/tmp/porter-bridge-sandbox, env PORTER_BRIDGE_DISPATCH=1, 5min timeout, stderr drained.
+  - backend/src/services/bridge/adapters/index.ts — added CodexCLIAdapter export + ADAPTER_MAP.codex_cli entry.
+  - backend/src/services/bridge/types.ts — extended GatewayType to `'claude_cli' | 'codex_cli'`.
+  - backend/src/services/bridge/capability-registry.ts — added codex_cli record (legacy_tags: chat/one_shot/no_tools, tool_support: 'none', agentic: false, context_window 200k).
+  - backend/src/services/bridge/startup-detector.ts — added second detection block (PORTER_CODEX_PATH env override → `which codex` fallback). priority=20 (claude=10, lower=preferred). Same INSERT/ON CONFLICT pattern as claude.
+  - backend/src/services/bridge/routing-engine.ts — **scope-creep fix:** `select()` previously ignored `ctx.forceGatewayType` (the exact silent-fallback bug Moe described). Added pin-by-forceGatewayType branch with throw-if-unavailable. Without this fix the deliverable is dead (forceGatewayType still falls back). One-line root cause; flagged here for review.
+- Files NOT touching: routes, task-executor (codex stays out of TASK_CAPABLE_TYPES — no tool surface), agent-delegation, dispatch-queues, usage-collector. No DB migrations.
+- Verification:
+  - `npx tsc --noEmit` → EXIT=0 (clean).
+  - `npm run build` → clean.
+  - `systemctl --user restart porter-fastify` → logs show `[bridge] ✓ codex detected at /home/lobster/node_modules/.bin/codex` and `Gateway probe: 2/2 versions detected`.
+  - DB: both rows active. codex_cli priority=20, version=0.128.0, binary_path=/home/lobster/node_modules/.bin/codex. claude_cli priority=10 (unchanged).
+  - Smoke 1 (forceGatewayType=codex_cli, "Reply with one word: pong"): decision.gateway=codex_cli, model=Codex CLI, adapter spawned + parsed cleanly. Response error: codex account hit its ChatGPT OAuth usage cap ("You've hit your usage limit ... try again at May 23rd, 2026 9:09 PM"). Exit code 1 surfaced as Error by adapter — correct behaviour. Not a code bug — auth/quota issue on Moe's account.
+  - Smoke 2 (forceGatewayType=claude_cli, same prompt): decision.gateway=claude_cli, model=claude-opus-4-7[1m], latencyMs=3307, response="pong". No regression.
+- Note for Moe: `/home/lobster/.npm-global/bin/codex` is 0.130.0 but `/home/lobster/node_modules/.bin/codex` (0.128.0) wins on porter-fastify's PATH. To prefer 0.130.0 set `PORTER_CODEX_PATH=/home/lobster/.npm-global/bin/codex` in the service env.
+- Status: **DONE** 2026-05-18T09:00Z — orchestrator commits.
