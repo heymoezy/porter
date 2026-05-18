@@ -206,6 +206,13 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
                       // selection + delegation doctrine. Pure passthrough for
                       // cross-app consumers (e.g. YMC Tom). The caller owns the
                       // system prompt; Porter Bridge does not layer its own.
+      tools?: 'none' | 'default';  // v6.21.0 (Tom-bug fix 2026-05-18): tool surface
+                      // on the underlying adapter. Cross-app callers (Tom on
+                      // openclaw, Recall summarize/query) MUST pass 'none' so
+                      // claude doesn't try to use its agentic tools (WebSearch,
+                      // Read, etc.) on a prompt that lists upstream MCP tools.
+                      // raw:true defaults tools to 'none' automatically — direct
+                      // Porter admin chat (raw:false) keeps the historic 'default'.
     } | null;
 
     const message = body?.message?.trim();
@@ -218,6 +225,8 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     const projectId = body?.project_id;
     const backend = body?.backend;
     const raw = body?.raw === true;
+    // Explicit tools override > raw default. raw=true → tools='none' unless caller overrides.
+    const tools: 'none' | 'default' = body?.tools ?? (raw ? 'none' : 'default');
 
     // COLLAB-03: If a project context is provided, verify project access (chat role minimum)
     if (projectId) {
@@ -446,6 +455,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       skillsUsed,  // Phase 33: skill selection telemetry for dispatch logging
       directiveStats,  // Phase 38: directive selection stats for context_stats logging
       dispatchStrategy,  // Phase 45: strategy logged in bridge_dispatch_log
+      tools,  // Tom-bug fix 2026-05-18: pass through tool surface knob
     });
     let fullResponse = '';
     // Phase 34: capture dispatch_id yielded by routing-engine as __DISPATCH_META__ token

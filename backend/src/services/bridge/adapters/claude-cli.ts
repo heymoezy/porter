@@ -110,14 +110,24 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
 
     // Porter Bridge dispatches run non-interactively — enable tool auto-approval
     // so agents can use web search, file I/O, and bash without a terminal.
+    // Tom-bug fix 2026-05-18: when the caller asks for no tool surface
+    // (req.tools === 'none'), pass `--tools ""` so claude has NO native
+    // tools at all. Without this, claude in agent mode tries to call
+    // Read/WebSearch/etc on prompts that reference filenames or external
+    // info, and bubbles "I don't have ymc-tom__* tools" back at the user.
+    // Cross-app consumers (Tom on openclaw, Recall summarize/query)
+    // manage tools UPSTREAM of this adapter — claude just emits text.
+    const noTools = req.tools === 'none';
     const args = [
       '-p',
       '--output-format', 'stream-json',
       '--verbose',
       '--include-partial-messages',
       '--no-session-persistence',
-      '--permission-mode', 'auto',
-      '--allowedTools', 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent',
+      ...(noTools
+        ? ['--tools', '']
+        : ['--permission-mode', 'auto',
+           '--allowedTools', 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
       // Isolation: skip user-level settings (hooks like porter-session-start
       // that inject Porter Memory/directives). Combined with cwd=SANDBOX_CWD
       // (no CLAUDE.md ancestors), this keeps cross-app consumers (e.g. YMC
@@ -241,14 +251,24 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     const userContent = req.messages.filter((m) => m.role === 'user').at(-1)?.content ?? '';
     const prompt = req.systemPrompt ? `${req.systemPrompt}\n\n${userContent}` : userContent;
 
+    // Tom-bug fix 2026-05-18: when the caller asks for no tool surface
+    // (req.tools === 'none'), pass `--tools ""` so claude has NO native
+    // tools at all. Without this, claude in agent mode tries to call
+    // Read/WebSearch/etc on prompts that reference filenames or external
+    // info, and bubbles "I don't have ymc-tom__* tools" back at the user.
+    // Cross-app consumers (Tom on openclaw, Recall summarize/query)
+    // manage tools UPSTREAM of this adapter — claude just emits text.
+    const noTools = req.tools === 'none';
     const args = [
       '-p',
       '--output-format', 'stream-json',
       '--verbose',
       '--include-partial-messages',
       '--no-session-persistence',
-      '--permission-mode', 'auto',
-      '--allowedTools', 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent',
+      ...(noTools
+        ? ['--tools', '']
+        : ['--permission-mode', 'auto',
+           '--allowedTools', 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
       // Isolation: skip user-level settings (hooks like porter-session-start
       // that inject Porter Memory/directives). Combined with cwd=SANDBOX_CWD
       // (no CLAUDE.md ancestors), this keeps cross-app consumers (e.g. YMC

@@ -39,6 +39,20 @@ export interface BridgeDispatchRequest {
   temperature?: number;
   maxTokens?: number;
   systemPrompt?: string;
+  /**
+   * Tool surface for backends that expose one (claude_cli).
+   *   'none'    — spawn with no tool access; the model can ONLY emit text.
+   *               Required for cross-app consumers (Tom on openclaw, Recall
+   *               summarize/query) where tools are managed UPSTREAM of the
+   *               adapter (openclaw MCPs, application-side logic). Without
+   *               this, claude_cli's default agentic mode tries to call
+   *               WebSearch/Read/Bash and either deadlocks or bubbles back
+   *               "I don't have ymc-tom__* tools" — see Tom-bug 2026-05-18.
+   *   'default' — keep the historic agentic tool set. Used for direct Porter
+   *               admin chat where the user expects Claude Code behaviour.
+   * Adapters that don't expose tools (codex_cli) ignore this field.
+   */
+  tools?: 'none' | 'default';
 }
 
 export interface BridgeDispatchResult {
