@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
 import { ingestDoc, type IngestInput } from '../../services/recall-ingest.js';
+import { queryDocs, type QueryInput } from '../../services/recall-query.js';
 
 // Recall doc-Q&A routes. Mounted at /api/v1/recall by routes/v1/index.ts.
 // Project-scoped storage for cross-project document retrieval — first
@@ -48,6 +49,68 @@ export default async function recallV1Routes(
         return reply
           .code(500)
           .send(err('INGEST_FAILED', e?.message ?? 'ingest failed', request.id));
+      }
+    },
+  );
+
+  // POST /api/v1/recall/docs/query
+  // Body: { project, question, filters?: { source_ids?: string[] }, k? }
+  // Retrieves top-K chunks via Postgres FTS (trigram fallback) and synthesises
+  // an answer via codex_cli through the Bridge. Returns {answer, citations,
+  // chunks_considered, latencyMs}.
+  fastify.post<{ Body: Partial<QueryInput> }>(
+    '/docs/query',
+    { preHandler: [fastify.requireAuth] },
+    async (request, reply) => {
+      const body = request.body ?? {};
+      const project = typeof body.project === 'string' ? body.project.trim() : '';
+      const question = typeof body.question === 'string' ? body.question.trim() : '';
+
+      if (!project) {
+        return reply.code(400).send(err('INVALID_INPUT', 'project is required', request.id));
+      }
+      if (!question) {
+        return reply.code(400).send(err('INVALID_INPUT', 'question is required and must be non-empty', request.id));
+      }
+
+      // Validate filters.source_ids if provided
+      let sourceIds: string[] | undefined;
+      if (body.filters !== undefined && body.filters !== null) {
+        if (typeof body.filters !== 'object' || Array.isArray(body.filters)) {
+          return reply.code(400).send(err('INVALID_INPUT', 'filters must be an object', request.id));
+        }
+        const sids = (body.filters as { source_ids?: unknown }).source_ids;
+        if (sids !== undefined) {
+          if (!Array.isArray(sids) || !sids.every((x) => typeof x === 'string')) {
+            return reply.code(400).send(err('INVALID_INPUT', 'filters.source_ids must be an array of strings', request.id));
+          }
+          sourceIds = sids as string[];
+        }
+      }
+
+      // Validate + clamp k
+      let k: number | undefined;
+      if (body.k !== undefined && body.k !== null) {
+        if (typeof body.k !== 'number' || !Number.isFinite(body.k)) {
+          return reply.code(400).send(err('INVALID_INPUT', 'k must be a number', request.id));
+        }
+        k = Math.floor(body.k);
+        if (k < 1) k = 1;
+        if (k > 20) k = 20;
+      }
+
+      try {
+        const result = await queryDocs(pool, {
+          project,
+          question,
+          filters: sourceIds ? { source_ids: sourceIds } : undefined,
+          k,
+        });
+        return reply.send(ok(result, request.id));
+      } catch (e: any) {
+        return reply
+          .code(500)
+          .send(err('QUERY_FAILED', e?.message ?? 'query failed', request.id));
       }
     },
   );

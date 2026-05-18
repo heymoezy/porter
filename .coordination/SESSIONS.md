@@ -640,3 +640,19 @@
   4. Tom Dream Silo (data-room) directives get injected into synthesis system prompt — that's the "enhanced by silo" coupling.
 - Files touched but not committed: 050-recall-doc-chunks.sql, migrate-recall-doc-chunks-v1.ts, src/index.ts (2 edits — import + registration), services/recall-ingest.ts, .coordination/SESSIONS.md (this entry + earlier P1 claim).
 - Status: paused
+
+## Porter Recall Doc Q&A — P3 query + synthesis (Opus 4.7 1M) — 2026-05-18T00:00Z
+- Workstream: Phase 3 — retrieval + synthesis. `POST /api/v1/recall/docs/query` now live. Service `queryDocs()` runs FTS via `plainto_tsquery` + `ts_rank_cd` with `ts_headline` snippets, falls back to `pg_trgm` similarity when tsquery is empty or returns zero rows, and short-circuits to `answer: "Nothing on file."` (no model call) when both paths return zero. Synthesis dispatches to `codex_cli` via in-process `routingEngine.select + dispatchWithQueue`. System prompt is grounded with up to 20 active `silo/data-room` directives (Tom's Dream Silo coupling) loaded with `ORDER BY priority DESC NULLS LAST`; warns and proceeds if the directives query throws. Validation: trim non-empty `project` + `question`, `k` clamped [1,20] default 6, `filters.source_ids` must be string[] when present.
+- Files claimed (new/edit):
+  - backend/src/services/recall-query.ts (NEW, ~250 LOC)
+  - backend/src/routes/v1/recall.ts (EDIT — added /docs/query handler + import)
+- Files NOT touching: backend/src/services/recall-ingest.ts, migration 050, routes/v1/index.ts (recall already registered).
+- Verification:
+  - `npx tsc --noEmit` clean (EXIT=0).
+  - `systemctl --user restart porter-fastify` then /health returns version 6.17.1 OK.
+  - **Smoke 1** (ingest sk-doc then ask "What is the lockup on Stablekey?"): answer = "Stablekey Holdings has a 24-month lockup on Series A tokens. [1]"; citations[0].source_id = "sk-doc", title = "Stablekey terms", snippet wraps «Stablekey»/«lockup», chunks_considered = 1, latencyMs = 3341.
+  - **Smoke 2** (same project, "what is the GDP of France"): `answer: "Nothing on file."`, citations: [], chunks_considered: 0, latencyMs: 5 — model not called, as designed.
+  - Cleanup: `DELETE FROM recall_doc_sources WHERE project='test.qa'` → 1 row.
+- Deviations from spec:
+  - Spec referenced `directives.body` column; actual schema column is `content`. Used `content`. (Verified via `\d directives`.)
+- Status: **DONE** 2026-05-18T00:00Z — ready for P4 (Tom tool + SOUL routing). Not committed/pushed — orchestrator handles.
