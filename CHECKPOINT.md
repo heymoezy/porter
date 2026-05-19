@@ -3,10 +3,30 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.22.0
-updated: 2026-05-18
-updated_by: claude-opus-4.7 (Porter backbone identity — active_project table + 2 routes + session-hook rewrite)
-milestone_status: v7.0 IN PROGRESS — Phase 49 + doctrine fix complete, Phase 50 Wave 2 in flight, Recall doc-QA shipped, Tom runtime locked, Porter identity fixed
+version: v6.23.0
+updated: 2026-05-19
+updated_by: claude-opus-4.7 (directives GET endpoint — Tom learning loop now reads from Porter Dream Silo)
+milestone_status: v7.0 IN PROGRESS — backbone identity locked, active_project pin live, directives GET enables silo-coherent agent injection
+
+## Directives lookup endpoint (2026-05-19 v6.23.0) — SHIPPED
+
+`GET /api/v1/intellect/directives?scope=X&scope_id=Y[&limit=40]` — returns
+active directives for any scope (workspace / silo / project) in priority
+order. Closes the loop that lets external consumers (YMC tom-llm) pull
+Porter-managed learned rules without bypassing the backbone with a local
+copy.
+
+YMC ships v1.275.0 alongside, wiring Tom's `/feedback` to mirror corrections
+to `/intellect/correction` (existing promotion pipeline) and tom-llm.ts to
+fetch project-scoped directives every turn (~2KB cap, 1.5s timeout, best-
+effort — never blocks the turn). Tom's learning loop is now coherent with
+Porter's Dream Silo — no parallel YMC pipeline.
+
+**Verified:**
+- `tsc --noEmit` clean. `npm run build` clean.
+- `/health` returns 6.23.0.
+- `GET /directives?scope=project&scope_id=ymc.capital` → 1 active directive (sample: "use porter agents be better").
+- Tom smoke PASS post-restart.
 
 ## Porter Backbone Identity (2026-05-18 v6.22.0) — SHIPPED
 

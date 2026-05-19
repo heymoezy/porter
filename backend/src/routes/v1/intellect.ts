@@ -466,6 +466,35 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
   // Deals/Stablekey, etc.). One source of truth. Hooks query this; deploy
   // scripts write it; cwd takes priority over the DB pin when available.
 
+  // ── GET /directives — scoped directive lookup ────────────────────────────
+  //
+  // Returns active directives by scope. Consumers (YMC tom-llm, future agent
+  // shims) call this to fetch project-scoped or silo-scoped operating rules
+  // and inject them into a prompt. ONE TRUTH lives here — agents don't keep
+  // local directive copies; they pull on every turn (or cache briefly).
+
+  fastify.get('/directives', async (request, reply) => {
+    const q = request.query as { scope?: string; scope_id?: string; limit?: string };
+    const scope = String(q?.scope || 'workspace').trim();
+    const scopeId = q?.scope_id ? String(q.scope_id).trim() : null;
+    const limit = Math.min(parseInt(String(q?.limit || '40'), 10) || 40, 200);
+    const args: any[] = [scope, limit];
+    let sql = `SELECT id, scope, scope_id, content, priority, source_type, tags, created_at
+                 FROM directives
+                WHERE status = 'active' AND scope = $1`;
+    if (scopeId) { sql += ` AND scope_id = $3`; args.splice(1, 0, scopeId); /* awkward — rebuild */ }
+    // Rebuild cleanly to avoid placeholder confusion
+    const params: any[] = [scope];
+    let where = `status = 'active' AND scope = $1`;
+    if (scopeId) { params.push(scopeId); where += ` AND scope_id = $${params.length}`; }
+    params.push(limit);
+    const finalSql = `SELECT id, scope, scope_id, content, priority, source_type, tags, created_at
+                        FROM directives WHERE ${where}
+                       ORDER BY priority DESC NULLS LAST, created_at DESC LIMIT $${params.length}`;
+    const rows = (await pool.query(finalSql, params)).rows;
+    return reply.send(ok({ scope, scope_id: scopeId, count: rows.length, directives: rows }));
+  });
+
   fastify.get('/active-project', async (request, reply) => {
     const q = request.query as { cwd?: string; session_id?: string };
     const result = await resolveActiveProject(pool, {
