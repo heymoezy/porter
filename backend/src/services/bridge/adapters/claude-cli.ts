@@ -104,9 +104,13 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
   async dispatch(req: BridgeDispatchRequest): Promise<BridgeDispatchResult> {
     const start = Date.now();
 
-    // Build prompt: systemPrompt prepended if provided
+    // v6.24.0: systemPrompt goes to claude's --system-prompt FLAG, never
+    // prepended into the -p user text. claude_cli 2.1.x is prompt-injection
+    // hardened — a fake "System: …" prefix inside the user turn is rejected
+    // as an injection attempt ("text formatted to impersonate a system
+    // instruction"). The flag is the legitimate channel.
     const userContent = req.messages.filter((m) => m.role === 'user').at(-1)?.content ?? '';
-    const prompt = req.systemPrompt ? `${req.systemPrompt}\n\n${userContent}` : userContent;
+    const prompt = userContent;
 
     // Porter Bridge dispatches run non-interactively — enable tool auto-approval
     // so agents can use web search, file I/O, and bash without a terminal.
@@ -124,6 +128,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       '--verbose',
       '--include-partial-messages',
       '--no-session-persistence',
+      ...(req.systemPrompt ? ['--system-prompt', req.systemPrompt] : []),
       ...(noTools
         ? ['--tools', '']
         : ['--permission-mode', 'auto',
@@ -248,8 +253,9 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
   // ── stream ───────────────────────────────────────────────────────────────────
 
   async *stream(req: BridgeDispatchRequest, signal: AbortSignal): AsyncIterable<string> {
+    // v6.24.0: systemPrompt → --system-prompt flag (see dispatch() note).
     const userContent = req.messages.filter((m) => m.role === 'user').at(-1)?.content ?? '';
-    const prompt = req.systemPrompt ? `${req.systemPrompt}\n\n${userContent}` : userContent;
+    const prompt = userContent;
 
     // Tom-bug fix 2026-05-18: when the caller asks for no tool surface
     // (req.tools === 'none'), pass `--tools ""` so claude has NO native
@@ -265,6 +271,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       '--verbose',
       '--include-partial-messages',
       '--no-session-persistence',
+      ...(req.systemPrompt ? ['--system-prompt', req.systemPrompt] : []),
       ...(noTools
         ? ['--tools', '']
         : ['--permission-mode', 'auto',

@@ -8,6 +8,17 @@ updated: 2026-05-19
 updated_by: claude-opus-4.7 (directives GET endpoint — Tom learning loop now reads from Porter Dream Silo)
 milestone_status: v7.0 IN PROGRESS — backbone identity locked, active_project pin live, directives GET enables silo-coherent agent injection
 
+## Bridge systemPrompt fix (2026-05-22 v6.24.0) — SHIPPED
+
+claude_cli 2.1.x is prompt-injection hardened. The claude-cli adapter was
+prepending req.systemPrompt into the -p user text — claude 2.1.148 rejects
+that fake "System:" prefix as an injection attempt. Fix: pass systemPrompt
+via the dedicated --system-prompt flag (dispatch + stream paths). chat.ts
+/chat/stream now accepts a `system` body field; raw callers own the prompt.
+Unblocks YMC Tom (was returning "tools not wired / sandbox" refusals).
+Verified: direct Bridge test emits proper <tool_use>.
+
+
 ## Directives lookup endpoint (2026-05-19 v6.23.0) — SHIPPED
 
 `GET /api/v1/intellect/directives?scope=X&scope_id=Y[&limit=40]` — returns

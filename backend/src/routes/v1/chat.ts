@@ -206,6 +206,11 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
                       // selection + delegation doctrine. Pure passthrough for
                       // cross-app consumers (e.g. YMC Tom). The caller owns the
                       // system prompt; Porter Bridge does not layer its own.
+      system?: string;  // v6.24.0 (Tom-bug fix 2026-05-22): caller-supplied system
+                      // prompt for raw passthrough. Routed to the adapter's
+                      // --system-prompt flag — NOT flattened into the user
+                      // message. claude_cli 2.1.x rejects fake "System:" text
+                      // in the user turn as a prompt-injection attempt.
       tools?: 'none' | 'default';  // v6.21.0 (Tom-bug fix 2026-05-18): tool surface
                       // on the underlying adapter. Cross-app callers (Tom on
                       // openclaw, Recall summarize/query) MUST pass 'none' so
@@ -271,8 +276,14 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       identityPrefix = `[Collaborator: ${displayName}, Project Role: ${request.projectRole}]\n`;
     }
 
-    // Build dynamic system prompt from agent template (if available)
+    // Build dynamic system prompt from agent template (if available).
+    // v6.24.0: a raw caller may supply its own system prompt — it owns the
+    // whole prompt (e.g. YMC Tom's persona + tool convention). Honoured
+    // verbatim; routed to the adapter's --system-prompt flag downstream.
     let systemPrompt: string | undefined;
+    if (raw && typeof body?.system === 'string' && body.system.trim()) {
+      systemPrompt = body.system;
+    }
     if (agentId) {
       try {
         const tplRows = await pool.query(
