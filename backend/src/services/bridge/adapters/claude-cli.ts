@@ -140,6 +140,15 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       // ~/.claude/projects/* is loaded by these hooks, not the binary, so it
       // is dropped too. OAuth (keychain) still works — only --bare disables that.
       '--setting-sources', 'project',
+      // v6.25.0 — MCP-server isolation. --setting-sources only filters the
+      // settings.json hierarchy; MCP servers ride a SEPARATE channel and
+      // still get loaded from ~/.claude.json (e.g. gmail-themozaic,
+      // gmail-ymc, and the claude.ai Gmail/Calendar/Drive connectors). Tom
+      // saw those as a foreign toolbelt and narrated "wrong surface, finger
+      // slipped" every turn. --strict-mcp-config ignores all MCP configs
+      // unless explicitly passed via --mcp-config (Porter doesn't, so Tom
+      // gets ZERO MCP tools — exactly the contract).
+      '--strict-mcp-config',
     ];
 
     const child = spawn(this.binaryPath, args, {
@@ -283,6 +292,15 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       // ~/.claude/projects/* is loaded by these hooks, not the binary, so it
       // is dropped too. OAuth (keychain) still works — only --bare disables that.
       '--setting-sources', 'project',
+      // v6.25.0 — MCP-server isolation. --setting-sources only filters the
+      // settings.json hierarchy; MCP servers ride a SEPARATE channel and
+      // still get loaded from ~/.claude.json (e.g. gmail-themozaic,
+      // gmail-ymc, and the claude.ai Gmail/Calendar/Drive connectors). Tom
+      // saw those as a foreign toolbelt and narrated "wrong surface, finger
+      // slipped" every turn. --strict-mcp-config ignores all MCP configs
+      // unless explicitly passed via --mcp-config (Porter doesn't, so Tom
+      // gets ZERO MCP tools — exactly the contract).
+      '--strict-mcp-config',
     ];
 
     const child = spawn(this.binaryPath, args, {

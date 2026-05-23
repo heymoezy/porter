@@ -3,10 +3,31 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.23.0
-updated: 2026-05-19
-updated_by: claude-opus-4.7 (directives GET endpoint — Tom learning loop now reads from Porter Dream Silo)
+version: v6.25.0
+updated: 2026-05-23
+updated_by: claude-opus-4.7 (claude-cli adapter: --strict-mcp-config — stops user-scope MCP tools leaking into consumer subprocesses, fixed Tom "wrong surface" noise)
 milestone_status: v7.0 IN PROGRESS — backbone identity locked, active_project pin live, directives GET enables silo-coherent agent injection
+
+## Bridge MCP isolation fix (2026-05-23 v6.25.0) — SHIPPED
+
+Tom (YMC) kept narrating "(ignore — wrong surface, my finger slipped)"
+before every tool call. Moe noticed: Tom was apologising for noise but
+the real YMC tool always fired underneath. Tom's own diagnosis via the
+relay: "the runtime keeps offering me a claude.ai Gmail toolbelt that
+isn't mine — every tool call triggers a permission prompt on the wrong
+surface."
+
+Root cause: --setting-sources project filters the settings.json
+hierarchy only. MCP servers ride a SEPARATE channel and still loaded
+from ~/.claude.json — gmail-themozaic, gmail-ymc, and the claude.ai
+Gmail/Calendar/Drive connectors — 22+ foreign tools surfaced into every
+Tom turn. Probe confirmed: claude -p --tools "" --setting-sources project
+listed all 22; adding --strict-mcp-config gave zero.
+
+Fix: claude-cli.ts adapter (both dispatch + stream args arrays) now
+appends --strict-mcp-config. Porter doesn't pass --mcp-config, so the
+spawned claude sees ZERO MCP tools — exactly the contract for raw:true
+consumers like Tom.
 
 ## Bridge systemPrompt fix (2026-05-22 v6.24.0) — SHIPPED
 
