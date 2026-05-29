@@ -3,10 +3,47 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.25.0
-updated: 2026-05-23
-updated_by: claude-opus-4.7 (claude-cli adapter: --strict-mcp-config — stops user-scope MCP tools leaking into consumer subprocesses, fixed Tom "wrong surface" noise)
+version: v6.26.0
+updated: 2026-05-29
+updated_by: claude-opus-4.8-1m (stripped dead client-app SaaS + people/costs admin tabs)
 milestone_status: v7.0 IN PROGRESS — backbone identity locked, active_project pin live, directives GET enables silo-coherent agent injection
+
+## Strip client app + people/costs tabs (2026-05-29 v6.26.0) — SHIPPED
+
+Moe: Porter is a background-services backbone, not a product. Deleted the dead
+customer SaaS app and all its API support; deleted the People + Costs admin tabs.
+
+Validated kill-list against live consumers before cutting (no comprehensive audit
+— targeted): ymc.capital / BYD / Tom hit Porter only at bridge/agent-message,
+chat/stream, recall/docs/{ingest,query,summarize}, intellect/*, /health. The admin
+SPA (kept) drives agents/templates/decisions via /api/admin/*, not /api/v1/*.
+
+Deleted:
+- **Client-app SPA wiring** — `/v2/*` static + `frontend/dist` refs in index.ts
+  (the `frontend/` dir itself was already removed as dead code earlier).
+- **16 client-app v1 modules** — agents, collaborators, jobs, wizard, decisions,
+  preferences, profile, billing, connections, oauth-github, oauth-google,
+  contacts, conversations, templates, tasks, errors. Deregistered from v1/index.ts.
+- **Dead routes/v1/admin/ tree** (19 files; v1/index import was commented out,
+  only `jobs` was still pulled by admin/index).
+- **People tab** — routes/{users,user-detail}.tsx, components/customer/*,
+  pipeline-view.tsx, orphaned hooks/use-admin-api.ts (entirely customer code),
+  + backend /api/admin/{users,customers,customer-scores}.
+- **Costs tab** — routes/costs.tsx + /api/admin/costs. Bridge tab retains
+  CostAnalytics component + /api/admin/bridge/costs (shared — NOT deleted).
+- **Orphaned /api/admin/billing** — no surviving frontend consumer.
+
+Kept v1 (backbone + admin deps): auth, projects, health, chat, files,
+webhooks/whatsapp, memory, bridge, feedback, dispatch-outcome, sessions,
+decomposition, approvals, mail, mail-admin, intellect, recall.
+
+Verified: backend tsc clean, admin react-router build clean, backend build clean,
+porter-fastify restarted → /health + /api/v1/health both report v6.26.0; backbone
+endpoints resolve 401/200, every deleted route 404, kept admin routes 401. 51
+source files deleted. No DB tables dropped (data preserved; code-only trim).
+
+NEXT (not done — Moe deferred): comprehensive audit to strip remaining unused
+tools down to the minimal set powering ymc admin / byd website.
 
 ## Bridge MCP isolation fix (2026-05-23 v6.25.0) — SHIPPED
 

@@ -72,7 +72,6 @@ import { probeAllGateways } from './services/admin/gateway-versions.js';
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const frontendDist = path.resolve(__dirname, '../../frontend/dist');
 const adminFrontendDist = path.resolve(__dirname, '../../admin/frontend/build/client');
 
 const fastify = Fastify({
@@ -175,7 +174,7 @@ fastify.get('/health', async () => {
   return {
     status: 'ok',
     engine: 'fastify',
-    version: '6.25.0',
+    version: '6.26.0',
     mail: {
       provider: config.mail.provider,
       domain: config.mail.defaultDomain,
@@ -190,37 +189,19 @@ fastify.get('/api/v1/openapi.json', async () => {
   return fastify.swagger();
 });
 
-// Serve React SPA static files at /v2/
-// wildcard: false prevents @fastify/static from registering its own /v2/* catch-all
-// (we handle that ourselves below)
-fastify.register(staticFiles, {
-  root: frontendDist,
-  prefix: '/v2/',
-  wildcard: false, // disable auto-wildcard so we control the SPA fallback
-});
-
-// SPA catch-all for /v2/* routes (React Router handles client-side routing)
-// Reads index.html directly — sendFile is scoped to plugin and not available here
-fastify.get('/v2/*', async (_request, reply) => {
-  const indexPath = path.join(frontendDist, 'index.html');
-  const html = fs.readFileSync(indexPath, 'utf8');
-  return reply.type('text/html').send(html);
-});
-
 // Serve admin frontend static files at root
 if (fs.existsSync(adminFrontendDist)) {
   fastify.register(staticFiles, {
     root: adminFrontendDist,
     prefix: '/',
     wildcard: false,
-    decorateReply: false, // already decorated by the first static registration
   });
 
   // SPA catch-all — serve index.html for client-side routing
-  // API routes, /health, /v2/* are registered above and take priority
+  // API routes and /health are registered above and take priority
   fastify.setNotFoundHandler(async (request, reply) => {
     // Only serve SPA for non-API, non-asset GET requests
-    if (request.method === 'GET' && !request.url.startsWith('/api/') && !request.url.startsWith('/v2/')) {
+    if (request.method === 'GET' && !request.url.startsWith('/api/')) {
       // Landing page: serve landing.html for unauthenticated visitors at root
       if (request.url === '/' || request.url === '') {
         const cookies = request.cookies as Record<string, string> | undefined;

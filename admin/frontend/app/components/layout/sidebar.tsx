@@ -5,11 +5,11 @@ import { PixelPortrait } from "~/components/pixel-portrait"
 import { Badge } from "~/components/ui/badge"
 import { Separator } from "~/components/ui/separator"
 import {
-  Users, Mail, LayoutDashboard,
+  Mail, LayoutDashboard,
   ChevronLeft, ChevronRight, Settings, LogOut,
   FolderOpen, Route, BookOpen,
   Code2, Palette, Network, Flame,
-  DollarSign, Wrench, GraduationCap, MessageCircle, Brain, Moon,
+  Wrench, GraduationCap, MessageCircle, Brain, Moon,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -27,7 +27,6 @@ const groups = [
   ]},
   { label: "Projects", items: [
     { icon: FolderOpen, label: "Projects", path: "/files" },
-    { icon: Users, label: "People", path: "/users" },
   ]},
   { label: "Agents", items: [
     { icon: Flame, label: "Forge", path: "/forge" },
@@ -40,7 +39,6 @@ const groups = [
     { icon: Moon, label: "Dreams", path: "/dreams" },
     { icon: Route, label: "Bridge", path: "/bridge" },
     { icon: BookOpen, label: "Recall", path: "/recall" },
-    { icon: DollarSign, label: "Costs", path: "/costs" },
   ]},
   { label: "Dev", items: [
     { icon: Wrench, label: "Env Tools", path: "/env-tools" },

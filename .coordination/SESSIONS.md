@@ -1,5 +1,18 @@
 # Porter — Active Sessions
 
+## Strip client app + people/costs tabs (Opus 4.8 1M) — 2026-05-29T (SGT)
+- Workstream: Aggressive trim per Moe. (1) Delete People + Costs admin tabs. (2) Delete dead /v2 client-app SPA serving wiring. (3) Delete 16 client-app v1 API route modules with zero live consumers. Validated: ymc.capital/BYD/Tom use only bridge/recall/intellect/chat/health; admin app uses /api/admin/* for agents/templates/decisions.
+- Files claimed (edit/delete):
+  - admin/frontend/app/routes/{users,user-detail,costs}.tsx (DELETE)
+  - admin/frontend/app/components/customer/** + components/pipeline-view.tsx (DELETE)
+  - admin/frontend/app/routes.ts, components/layout/{sidebar,top-bar}.tsx, routes/layout.tsx, hooks/use-admin-api.ts (EDIT — remove people/costs)
+  - backend/src/routes/admin/{users,customers,customer-scores,costs,billing}.ts (DELETE) + admin/index.ts (EDIT deregister)
+  - backend/src/routes/v1/{agents,collaborators,jobs,wizard,decisions,preferences,profile,billing,connections,oauth-github,oauth-google,contacts,conversations,templates,tasks,errors}.ts (DELETE) + v1/index.ts (EDIT deregister)
+  - backend/src/index.ts (EDIT — remove /v2 SPA wiring)
+  - backend/package.json + CHANGELOG.md + CHECKPOINT.md (version bump/ship)
+- Files NOT touching: bridge/recall/intellect/chat/memory/mail/webhooks services, scheduler, dream-worker.
+- Status: **DONE** 2026-05-29 — v6.26.0 shipped. 51 source files deleted. tsc+builds clean, /health v6.26.0, backbone endpoints 401/200, deleted routes 404. Committed scoped (admin/ backend/ CHANGELOG/CHECKPOINT/SESSIONS only — excluded other sessions' .planning WIP).
+
 ## GSD Phase 50 Plan-01 Executor (Opus 4.7 1M) — 2026-05-17T01:30Z
 - Workstream: Execute 50-01-PLAN.md — Phase 50 Wave 1 multi-silo foundation. Scheduler refactor (per-silo cadence tick + runSiloCadenceCheck), dream-worker checkSkipRecent refactor (per-silo cadence_seconds from DB, 95% floor), migrate-multi-silo-v1.ts scaffold (idempotent BEGIN/COMMIT + DELETE legacy workflow row + Plan 50-02/50-03 placeholder blocks + schema_migrations stamp), MSF-03 documented `'software'` fallbacks. Gating for Wave 2 (50-02 admin + 50-03 data-room serialized).
 - Files claimed (edit):

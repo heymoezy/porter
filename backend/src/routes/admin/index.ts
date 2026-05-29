@@ -1,6 +1,5 @@
 import { FastifyInstance } from 'fastify';
 import healthRoutes from './health.js';
-import usersRoutes from './users.js';
 import emailRoutes from './email.js';
 import bridgeRoutes from './bridge.js';
 import agentsRoutes from './agents.js';
@@ -14,11 +13,9 @@ import systemRoutes from './system.js';
 import activityRoutes from './activity.js';
 import settingsRoutes from './settings.js';
 import chatRoutes from './chat.js';
-import customersRoutes from './customers.js';
 import intelligenceRoutes from './intelligence.js';
 import decisionsRoutes from './decisions.js';
 import sessionsAdminRoutes from './sessions-admin.js';
-import costsRoutes from './costs.js';
 import evolutionRoutes from './evolution.js';
 import dreamsRoutes from './dreams.js';
 import msgBusRoutes from './msg-bus.js';
@@ -26,13 +23,9 @@ import envToolsRoutes from './env-tools.js';
 import learningsRoutes from './learnings.js';
 import skillFeedbackRoutes from './skill-feedback.js';
 import routingRoutes from './routing.js';
-import billingRoutes from './billing.js';
-import jobsRoutes from '../v1/admin/jobs.js';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(healthRoutes, { prefix: '/health' });
-  fastify.register(usersRoutes, { prefix: '/users' });
-  fastify.register(customersRoutes, { prefix: '/customers' });
   fastify.register(emailRoutes, { prefix: '/email' });
   fastify.register(agentsRoutes, { prefix: '/agents' });
   fastify.register(diagnosticsRoutes, { prefix: '/diagnostics' });
@@ -49,7 +42,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(intelligenceRoutes, { prefix: '/intelligence' });
   fastify.register(decisionsRoutes, { prefix: '/decisions' });
   fastify.register(sessionsAdminRoutes, { prefix: '/sessions' });
-  fastify.register(costsRoutes, { prefix: '/costs' });
   fastify.register(evolutionRoutes, { prefix: '/evolution' });
   fastify.register(dreamsRoutes, { prefix: '/dreams' });
   fastify.register(msgBusRoutes, { prefix: '/msg-bus' });
@@ -57,6 +49,4 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(learningsRoutes, { prefix: '/learnings' });
   fastify.register(skillFeedbackRoutes, { prefix: '/skill-feedback' });
   fastify.register(routingRoutes, { prefix: '/routing' });
-  fastify.register(billingRoutes, { prefix: '/billing' });
-  fastify.register(jobsRoutes, { prefix: '/jobs' });
 }

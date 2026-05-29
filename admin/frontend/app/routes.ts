@@ -7,10 +7,7 @@ export default [
   // All authenticated routes share one AdminShell instance (no remount on navigation)
   layout("routes/layout.tsx", [
     route("dashboard", "routes/home.tsx"),
-    route("users", "routes/users.tsx"),
-    route("users/:username", "routes/user-detail.tsx"),
     route("email", "routes/email.tsx"),
-    route("costs", "routes/costs.tsx"),
     route("forge", "routes/forge.tsx"),
     route("agents/:id", "routes/agent-detail.tsx"),
     route("system", "routes/system.tsx"),

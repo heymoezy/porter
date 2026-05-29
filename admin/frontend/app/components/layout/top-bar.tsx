@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router"
 import {
   Bell, Moon, Sun, ArrowLeft, X,
-  LayoutDashboard, Users,
+  LayoutDashboard,
   Sparkles, Wrench, Activity, Bug, Monitor, Mail, FileText, Settings, Network, Flame, Route,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -22,12 +22,11 @@ interface TopBarProps {
 }
 
 /** Detail routes that show a back button instead of a page title */
-const detailPrefixes = ["/users/", "/agents/"]
+const detailPrefixes = ["/agents/"]
 
 const pageTitles: Array<{ path: string; exact?: boolean; label: string; icon: LucideIcon }> = [
   { path: "/", exact: true, label: "Dashboard", icon: LayoutDashboard },
   { path: "/dashboard", exact: true, label: "Dashboard", icon: LayoutDashboard },
-  { path: "/users", label: "Customers", icon: Users },
   { path: "/forge", label: "Agent Forge", icon: Flame },
   { path: "/skills", label: "Skills", icon: Sparkles },
   { path: "/tools", label: "Tools", icon: Wrench },

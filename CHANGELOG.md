@@ -1,3 +1,97 @@
+## v6.1.0 (2026-05-29)
+
+- bridge(claude-cli): --strict-mcp-config (v6.25.0) — fix Tom "wrong surface" noise
+- fix(bridge): route systemPrompt to claude --system-prompt flag (v6.24.0)
+- feat(intellect): /directives lookup endpoint — agents fetch promoted rules (v6.23.0)
+- feat(backbone): Porter identity split — active_project pin + session-hook rewrite (v6.22.0)
+- docs(checkpoint): bump to v6.21.0 — Tom-bug fixes + codex adapter shipped
+- fix(bridge,chat): claude_cli tool-mode broke cross-app dispatch (Tom)
+- feat(bridge,recall): codex_cli adapter + routing fix + summarize endpoint
+- docs(checkpoint): record Recall doc-QA shipped end-to-end (Porter v6.18.0 + ymc.capital v1.263.0)
+- feat(recall): doc-QA P3 retrieval + codex synthesis
+- feat(recall): doc-QA P1 schema + P2 ingest endpoint
+- fix(50-04): rebase smoke-48.3 DRW-08 onto per-silo cadence tick
+- fix(50-04): remove legacy weekly-software workflow from BUILTIN_WORKFLOWS
+- feat(50-04): smoke harness covering MSF-01..04 + silo-agnostic enrollment proof
+- feat(50-04): add admin + data-room dream-worker mock fixtures
+- docs(50-03): complete data-room silo seed plan
+- fix(50-03): rebase smoke-48.1 SC-4 to marker-free /tmp cwd
+- feat(50-03): data-room silo dream-worker prompt template (dream-prompts/data-room.md)
+- feat(50-03): data-room silo row + 5 moe-direct seed directives in migrate-multi-silo-v1
+- docs(checkpoint): record Phase 49 complete + doctrine failure_patterns fix + Phase 50 Wave 2 progress
+- chore(50-02): mark ledger entry done
+- docs(50-02): complete admin silo seed plan
+- chore(50-02): add .admin-silo marker for Porter admin frontend
+- feat(50-02): admin silo dream-worker prompt template (dream-prompts/admin.md)
+- feat(50-02): admin silo row + 4 moe-direct seed directives in migrate-multi-silo-v1
+- docs(50-01): complete scheduler-refactor + multi-silo migration scaffold plan
+- docs(50-01): document MSF-03 software fallbacks at both surviving default sites
+- feat(50-01): per-silo dream cadence tick — runSiloCadenceCheck (1h granularity)
+- refactor(50-01): checkSkipRecent reads per-silo cadence_seconds from DB
+- feat(50-01): scaffold migrate-multi-silo-v1 + delete legacy software-weekly workflow row
+- plan(50): revise per plan-checker — fix mock body field, re-base data-room paths, handle 'skipped' status
+- chore(coord): mark doctrine-fix session done
+- fix(dreams): doctrine accepts failure_patterns as substantive work (proves anti-pile-on engagement)
+- plan(50): multi-silo-foundation — 4 plans + VALIDATION (v7.0 Living Memory phase 2)
+- docs(phase-49): complete pattern-detection — 5 LRN reqs verified, YMC freehand pattern now catchable
+- docs(49-05): complete Phase 49 pattern-detection smoke harness plan
+- test(49-05): add Phase 49 pattern-detection smoke harness
+- test(49-05): add dream-response-pattern-detection fixture for LRN-02
+- docs(49-03): complete project-scope layering plan (LRN-03)
+- feat(49-03): layer server-derived project scope into /context handler (LRN-03)
+- feat(49-03): add directives (scope, scope_id, status) partial index migration
+- docs(49-01): complete frustration-marker boost plan (LRN-01)
+- docs(49-04): mark 49-04 plan complete in roadmap checkbox
+- feat(49-01): add frustration-marker boost lane to dream-sampler (LRN-01)
+- feat(49-04): add detectProject + detectContext to silo-detector (LRN-04)
+- feat(49-02): insert failure-pattern proposals + audit events (LRN-02)
+- feat(49-02): extend Zod schema with failure_patterns array (LRN-02)
+- feat(49-02): add Failure Patterns section to software dream prompt (LRN-02)
+- plan(49-01,49-04): revise per plan-checker — integrate calibration guards + symlink note
+- docs(checkpoint): v7.0 Phase 49 planning + dream loop closeout + YMC freehand sweep cross-ref
+- plan(49): pattern-detection — 5 plans + VALIDATION (v7.0 Living Memory phase 1)
+- scope(v7.0): Living Memory milestone — 4 phases, 17 requirements
+- fix(dreams): doctrine counts refineable directives only; add silo-sw-never-freehand-brand seed
+- docs(checkpoint): v6.0.1 pass 3 + v6.0.0 tag pushed
+- docs(coordination): mark v6.0.1 bridge cleanup pass-3 DONE
+- refactor(crm): harden contact-analyzer with explicit throw (v6.0.1 cleanup pass 3)
+- refactor(cli): trim setup wizard to claude_cli only (v6.0.1 cleanup pass 3)
+- refactor(bridge): remove dead forceGatewayType ollama hints (v6.0.1 cleanup pass 3)
+- docs(checkpoint): document v6.0.1 deep cleanup pass — net -7900 LOC, TODO(v7.0) markers
+- docs(coordination): mark v6.0.1 bridge cleanup pass-2 DONE
+- chore(bridge): mark v7.0 cleanup TODOs in files with live gateway refs
+- chore(admin): delete orphaned admin/backend/ legacy package (v6.0.1 cleanup)
+- refactor(bridge): remove dead ollama/openclaw branches from admin/bridge.ts (v6.0.1 cleanup)
+- docs(coordination): mark v6.0 milestone archive DONE
+- chore(milestone): archive v6.0 The Orchestration Platform — 12 phases, 60 reqs complete
+- docs(checkpoint): bump CHECKPOINT to v6.17.1 + close Tom 3 session ledger
+- docs(coordination): mark v6.0.1 test-credential cleanup DONE
+- test(v6.0.1): replace stale moe@themozaic.com credential in smoke shell scripts
+- test(v6.0.1): refresh stale Playwright login helpers — askporter.app + #email/#password
+
+
+## v6.26.0 — Strip client app + people/costs tabs (2026-05-29)
+
+Porter is a background-services backbone, not a product surface (per CLAUDE.md).
+Removed the dead customer SaaS app and its API support. Validated zero live
+consumers: ymc.capital / BYD / Tom call only bridge, recall, intellect, chat,
+health; admin uses `/api/admin/*` for agents/templates/decisions.
+
+### Removed
+- **Client-app SPA wiring** — `/v2/*` static serving + `frontend/dist` refs in `index.ts` (the `frontend/` dir was already deleted).
+- **16 client-app v1 API modules** — agents, collaborators, jobs, wizard, decisions, preferences, profile, billing, connections, oauth-github, oauth-google, contacts, conversations, templates, tasks, errors.
+- **Dead `routes/v1/admin/` tree** (19 files; disabled import, only `jobs` was pulled in).
+- **Admin People tab** — `users`/`user-detail` routes, `components/customer/*`, `pipeline-view`, orphaned `use-admin-api.ts`, and `/api/admin/{users,customers,customer-scores}`.
+- **Admin Costs tab** — `costs` route + `/api/admin/costs` (Bridge tab keeps `CostAnalytics` + `/api/admin/bridge/costs`).
+- **Orphaned `/api/admin/billing`** — no frontend consumer.
+
+### Kept (backbone + admin deps)
+- v1: auth, projects, health, chat, files, webhooks/whatsapp, memory, bridge, feedback, dispatch-outcome, sessions, decomposition, approvals, mail, mail-admin, intellect, recall.
+
+### Verified
+- `tsc` clean (backend + admin build), `/health` 200 → v6.26.0, backbone endpoints (`bridge/agent-message`, `chat/stream`, `recall/docs/ingest`, `intellect/*`) resolve 401/200; all deleted routes 404.
+
+
 ## v6.1.0 (2026-05-15)
 
 - refactor(bridge): remove openclaw/ollama/codex_cli/gemini_cli residue from admin Bridge diagnostics
