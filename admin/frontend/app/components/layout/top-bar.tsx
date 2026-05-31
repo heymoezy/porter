@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router"
 import {
   Bell, Moon, Sun, ArrowLeft, X,
   LayoutDashboard,
-  Sparkles, Wrench, Activity, Bug, Monitor, Mail, FileText, Settings, Network, Flame, Route,
+  Sparkles, Wrench, Activity, Bug, Monitor, Mail, FileText, Settings, Flame, Route,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -37,7 +37,6 @@ const pageTitles: Array<{ path: string; exact?: boolean; label: string; icon: Lu
   { path: "/email", label: "Email", icon: Mail },
   { path: "/changelog", label: "Changelog", icon: FileText },
   { path: "/settings", label: "Settings", icon: Settings },
-  { path: "/org-chart", label: "Org Chart", icon: Network },
   { path: "/brain", label: "Brain", icon: LayoutDashboard },
   { path: "/intelligence", label: "Intelligence", icon: LayoutDashboard },
   { path: "/architecture", label: "Architecture", icon: LayoutDashboard },

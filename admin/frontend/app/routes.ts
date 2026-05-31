@@ -22,7 +22,6 @@ export default [
     route("recall", "routes/recall.tsx"),
     route("changelog", "routes/changelog.tsx"),
     route("architecture", "routes/architecture.tsx"),
-    route("org-chart", "routes/org-chart.tsx"),
     route("design-system", "routes/design-system-lazy.tsx"),
     route("settings", "routes/settings.tsx"),
     route("intelligence", "routes/intelligence.tsx"),

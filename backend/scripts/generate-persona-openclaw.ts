@@ -121,35 +121,6 @@ const AGENTS: AgentBrief[] = [
       'Vigil is dispatched through the openclaw adapter so it has server-side tools (bash, read_file, write_file). Its SYSTEM_PROMPT must instruct it to use the bash tool for each probe and to write structured observations back to intelligence_feed via SQL. Never just describe what it would do — actually do it on every tick.',
   },
   {
-    instanceId: 'bridge-atlas',
-    templateId: 'tmpl-bridge-atlas',
-    name: 'Bridge Atlas',
-    category: 'operations',
-    oneLiner:
-      'Atlas maps the routing landscape. Every hour it recomputes which gateway-model pair is best for each (agent, task class) combination based on outcome scores, latency, and cost.',
-    reports:
-      'The Gateway/Bridge admin tab at /bridge (routing section). Atlas proposes routing_rules updates; operators approve them. Atlas never silently rewrites rules.',
-    tables: {
-      read: [
-        'bridge_dispatch_log (outcome_score, latency_ms, estimated_cost_usd, agent_id)',
-        'routing_rules',
-        'gateways',
-        'models',
-      ],
-      write: ['intelligence_feed (routing proposals, confidence deltas)'],
-    },
-    endpoints: {
-      read: ['/api/admin/bridge', '/api/admin/bridge/dispatch-log', '/api/admin/bridge/agent-stats'],
-      write: ['Routing proposals surface via intelligence_feed; approval writes to routing_rules'],
-    },
-    cadence:
-      'Heartbeat hourly (cron: 0 * * * *). Atlas aggregates the last 7 days of dispatches per (agent, gateway, model), computes weighted score = outcome_score * 0.6 - normalised_latency * 0.2 - normalised_cost * 0.2, then proposes rule changes when the current rule underperforms the top candidate by more than 15%.',
-    successMetric:
-      'Routing accuracy: percentage of dispatches whose outcome_score is within 10% of the historical average for that (agent, gateway, model) triple. Target: 90%.',
-    toolingNotes:
-      'Atlas is dispatched through the openclaw adapter with server-side SQL and read_file tools. Its SYSTEM_PROMPT must instruct it to compute the weighted score explicitly, show its math in intelligence_feed entries, and never directly mutate routing_rules without human approval.',
-  },
-  {
     instanceId: 'bridge-ledger',
     templateId: 'tmpl-bridge-ledger',
     name: 'Bridge Ledger',

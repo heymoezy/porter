@@ -702,3 +702,9 @@
   - Smoke 2 (forceGatewayType=claude_cli, same prompt): decision.gateway=claude_cli, model=claude-opus-4-7[1m], latencyMs=3307, response="pong". No regression.
 - Note for Moe: `/home/lobster/.npm-global/bin/codex` is 0.130.0 but `/home/lobster/node_modules/.bin/codex` (0.128.0) wins on porter-fastify's PATH. To prefer 0.130.0 set `PORTER_CODEX_PATH=/home/lobster/.npm-global/bin/codex` in the service env.
 - Status: **DONE** 2026-05-18T09:00Z — orchestrator commits.
+
+## strip-atlas-orgchart (Opus 4.8 1M) — 2026-05-31T (SGT)
+- Workstream: Remove Atlas autonomous project-folder agent + admin Org Chart feature (lean trim per Moe). Safety A PASSED (zero bridge-atlas routing refs). No stale-project-sweep exists (only scheduleAtlasRuns).
+- Files claimed (edit/delete): backend/src/services/atlas-agent.ts (DELETE), backend/src/services/scheduler.ts (EDIT remove atlas import+const+tick block), personas/bridge-atlas/ (DELETE), backend/scripts/seed-autonomy-agents.ts (EDIT remove atlas seed block), backend/scripts/generate-persona-openclaw.ts (EDIT remove atlas brief), admin/frontend/app/routes/org-chart.tsx (DELETE), admin/frontend/app/routes.ts + components/layout/{sidebar,top-bar}.tsx (EDIT remove org-chart nav + unused Network icon import), admin/frontend/app/lib/agent-registry.ts (TRIMMED "org-chart" from all surfaces[]; NOT deleted — still consumed by agent-detail/recall/system/agent-presence; 11 agents now surfaces:[]).
+- Safety A: PASSED (zero bridge-atlas routing refs in backend/src). Safety B: no stale-project-sweep feature exists — only scheduleAtlasRuns(), removed with Atlas.
+- Status: **DONE** 2026-05-31 — backend tsc clean (TSC_EXIT=0, 0 errors); admin react-router build green (BUILD_EXIT=0); org-chart build artifact gone; zero atlas refs in backend code; zero org-chart/Network refs in admin/frontend/app. Ship (version bump/commit/restart) deferred to orchestrator.

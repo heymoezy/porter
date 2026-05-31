@@ -3,10 +3,33 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.26.0
-updated: 2026-05-29
-updated_by: claude-opus-4.8-1m (stripped dead client-app SaaS + people/costs admin tabs)
+version: v6.27.0
+updated: 2026-05-31
+updated_by: claude-opus-4.8-1m (stripped Atlas + admin org chart; locked lean-backbone direction with Moe)
 milestone_status: v7.0 IN PROGRESS — backbone identity locked, active_project pin live, directives GET enables silo-coherent agent injection
+
+## Strip Atlas + org chart (2026-05-31 v6.27.0) — SHIPPED
+
+Moe went OG on Porter: it's a lean backbone powering YMC + BYD, not a product.
+Continues the v6.26.0 "backbone not product" strip.
+
+Atlas (structural-health agent auto-scanning/repairing the projects/ tree):
+- deleted backend/src/services/atlas-agent.ts; scheduler.ts drops scheduleAtlasRuns
+  import + ATLAS_CHECK_INTERVAL + tick block; personas/bridge-atlas/ removed
+  (cosmetic seed only — verified no live Bridge routing referenced it);
+  seed-autonomy-agents.ts + generate-persona-openclaw.ts drop bridge-atlas.
+
+Org chart (admin): deleted routes/org-chart.tsx + route; sidebar/top-bar nav;
+trimmed "org-chart" from agent-registry surfaces[] (file still used elsewhere).
+
+Version bumped in all 3 surfaces (package.json + hardcoded index.ts + health.ts).
+tsc clean, react-router build green, restarted, /health = 6.27.0.
+
+NOTE: live DB has only 2 templates + 2 personas (Bridge Vigil = gateway health,
+Bridge Ledger = cost rollup) + 0 pending jobs — the "107 templates / 9 personas"
+claim below is STALE FICTION. The agent hub is hollow. Next: full strip of the
+Forge/templates/decisions/workflows layer; demote Vigil+Ledger to plain services;
+keep a thin persona runtime; elevate Tom from ymc -> Porter level (delicate, live).
 
 ## Strip client app + people/costs tabs (2026-05-29 v6.26.0) — SHIPPED
 

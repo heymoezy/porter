@@ -38,7 +38,7 @@ const porterCore: AgentDef = {
   role: "Master Orchestrator",
   team: "product",
   description: "Routes all requests, manages all agents, owns the dispatch loop",
-  surfaces: ["dashboard", "forge", "org-chart"],
+  surfaces: ["dashboard", "forge"],
   status: "active",
   avatar: { skin: "#f1c27d", hair: "#1e293b", eyes: "#0f172a", shirt: "#1e3a5f", hairStyle: "short" },
   plannedCapabilities: [
@@ -130,7 +130,7 @@ const projectMgr: AgentDef = {
   role: "Project Tracker",
   team: "product",
   description: "Tracks progress, assigns agents to projects, reports blockers",
-  surfaces: ["dashboard", "org-chart"],
+  surfaces: ["dashboard"],
   status: "planned",
   avatar: { skin: "#f1c27d", hair: "#292524", eyes: "#1a1a2e", shirt: "#1d4ed8", hairStyle: "short" },
   plannedCapabilities: [
@@ -147,7 +147,7 @@ const strategy: AgentDef = {
   role: "Market Analyst",
   team: "product",
   description: "Analyzes market trends, monitors competitors, identifies opportunities",
-  surfaces: ["org-chart"],
+  surfaces: [],
   status: "planned",
   avatar: { skin: "#d2946b", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#1e40af", hairStyle: "parted" },
   plannedCapabilities: [
@@ -164,7 +164,7 @@ const crm: AgentDef = {
   role: "Relationship Manager",
   team: "product",
   description: "Manages customer relationships, tracks interactions, maintains contact profiles",
-  surfaces: ["users", "org-chart"],
+  surfaces: ["users"],
   status: "planned",
   avatar: { skin: "#c68642", hair: "#44403c", eyes: "#1a1a2e", shirt: "#1e3a8a", hairStyle: "long" },
   plannedCapabilities: [
@@ -181,7 +181,7 @@ const growth: AgentDef = {
   role: "Conversion Specialist",
   team: "product",
   description: "Identifies upgrade candidates, trial conversion signals, upsell opportunities",
-  surfaces: ["users", "billing", "org-chart"],
+  surfaces: ["users", "billing"],
   status: "planned",
   avatar: { skin: "#8d5524", hair: "#292524", eyes: "#0f172a", shirt: "#1e40af", hairStyle: "short" },
   plannedCapabilities: [
@@ -199,7 +199,7 @@ const revenue: AgentDef = {
   role: "Money Ops",
   team: "product",
   description: "Dunning automation, payment recovery, MRR tracking, cost optimization",
-  surfaces: ["billing", "org-chart"],
+  surfaces: ["billing"],
   status: "planned",
   avatar: { skin: "#f1c27d", hair: "#1c1917", eyes: "#0f172a", shirt: "#1e3a5f", hairStyle: "buzz" },
   plannedCapabilities: [
@@ -217,7 +217,7 @@ const ops: AgentDef = {
   role: "Activity Monitor",
   team: "product",
   description: "Monitors platform activity, detects suspicious patterns, daily summaries",
-  surfaces: ["dashboard", "activity", "org-chart"],
+  surfaces: ["dashboard", "activity"],
   status: "planned",
   avatar: { skin: "#d2946b", hair: "#57534e", eyes: "#1a1a2e", shirt: "#1d4ed8", hairStyle: "curly" },
   plannedCapabilities: [
@@ -235,7 +235,7 @@ const aiRouter: AgentDef = {
   role: "Model Router",
   team: "product",
   description: "Selects optimal model per request, manages budgets, routes fallbacks",
-  surfaces: ["models", "org-chart"],
+  surfaces: ["models"],
   status: "planned",
   avatar: { skin: "#f1c27d", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#2563eb", hairStyle: "mohawk" },
   plannedCapabilities: [
@@ -252,7 +252,7 @@ const productContent: AgentDef = {
   role: "Docs Writer",
   team: "product",
   description: "Writes documentation, release notes, and help content",
-  surfaces: ["org-chart"],
+  surfaces: [],
   status: "planned",
   avatar: { skin: "#c68642", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#1e3a8a", hairStyle: "parted" },
   plannedCapabilities: [
@@ -269,7 +269,7 @@ const productQa: AgentDef = {
   role: "Quality Assurance",
   team: "product",
   description: "Tests product quality, catches regressions, validates deployments",
-  surfaces: ["org-chart"],
+  surfaces: [],
   status: "planned",
   avatar: { skin: "#f1c27d", hair: "#292524", eyes: "#0f172a", shirt: "#1d4ed8", hairStyle: "short" },
   plannedCapabilities: [
@@ -286,7 +286,7 @@ const productSupport: AgentDef = {
   role: "Help Desk",
   team: "product",
   description: "Handles diagnostics, troubleshoots issues, assists users",
-  surfaces: ["org-chart"],
+  surfaces: [],
   status: "planned",
   avatar: { skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#2563eb", hairStyle: "buzz" },
   plannedCapabilities: [
@@ -340,7 +340,7 @@ const forgeMaster: AgentDef = {
   role: "Pipeline Orchestrator",
   team: "forge",
   description: "Auto-queues templates, schedules waves, pauses on errors, manages quality gate",
-  surfaces: ["forge", "org-chart"],
+  surfaces: ["forge"],
   status: "planned",
   avatar: { skin: "#d2946b", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#b45309", hairStyle: "buzz" },
   plannedCapabilities: [
@@ -375,7 +375,7 @@ const forgeScribe: AgentDef = {
   role: "Writer Station",
   team: "forge",
   description: "Station 1 — Writes .md files for each agent (SOUL, IDENTITY, ROLE_CARD, etc.)",
-  surfaces: ["forge", "org-chart"],
+  surfaces: ["forge"],
   status: "planned",
   avatar: { skin: "#f1c27d", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#c2410c", hairStyle: "parted" },
   plannedCapabilities: [
@@ -392,7 +392,7 @@ const forgeMentor: AgentDef = {
   role: "Trainer Station",
   team: "forge",
   description: "Station 2 — Assigns skills based on role requirements and capability gaps",
-  surfaces: ["forge", "org-chart"],
+  surfaces: ["forge"],
   status: "planned",
   avatar: { skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#a16207", hairStyle: "short" },
   plannedCapabilities: [
@@ -409,7 +409,7 @@ const forgeArmorer: AgentDef = {
   role: "Outfitter Station",
   team: "forge",
   description: "Station 3 — Equips tools and connections needed for the agent's role",
-  surfaces: ["forge", "org-chart"],
+  surfaces: ["forge"],
   status: "planned",
   avatar: { skin: "#c68642", hair: "#292524", eyes: "#1a1a2e", shirt: "#92400e", hairStyle: "mohawk" },
   plannedCapabilities: [
@@ -426,7 +426,7 @@ const forgeInspector: AgentDef = {
   role: "QA Inspector",
   team: "forge",
   description: "Cross-model QA grading — validates agent quality before deployment",
-  surfaces: ["forge", "org-chart"],
+  surfaces: ["forge"],
   status: "planned",
   avatar: { skin: "#f1c27d", hair: "#57534e", eyes: "#0f172a", shirt: "#7c2d12", hairStyle: "curly" },
   plannedCapabilities: [
@@ -463,7 +463,7 @@ const skillsCurator: AgentDef = {
   role: "Skill Manager",
   team: "admin",
   description: "Auto-provisions skills, monitors usage, recommends gaps",
-  surfaces: ["skills", "org-chart"],
+  surfaces: ["skills"],
   status: "planned",
   avatar: { skin: "#f1c27d", hair: "#292524", eyes: "#0f172a", shirt: "#047857", hairStyle: "short" },
   plannedCapabilities: [
@@ -481,7 +481,7 @@ const toolsmith: AgentDef = {
   role: "Tool Manager",
   team: "admin",
   description: "Monitors tool connections, auto-reconnects, detects new tools",
-  surfaces: ["tools", "org-chart"],
+  surfaces: ["tools"],
   status: "planned",
   avatar: { skin: "#d2946b", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#065f46", hairStyle: "parted" },
   plannedCapabilities: [
@@ -499,7 +499,7 @@ const adminDesign: AgentDef = {
   role: "Visual Consistency",
   team: "admin",
   description: "Maintains visual consistency across all surfaces, enforces design system",
-  surfaces: ["design-system", "org-chart"],
+  surfaces: ["design-system"],
   status: "planned",
   avatar: { skin: "#c68642", hair: "#57534e", eyes: "#1a1a2e", shirt: "#059669", hairStyle: "curly" },
   plannedCapabilities: [
@@ -536,7 +536,7 @@ const marketingGrowth: AgentDef = {
   role: "Viral Loops",
   team: "marketing",
   description: "Designs viral loops, referral incentives, K-factor optimization",
-  surfaces: ["org-chart"],
+  surfaces: [],
   status: "planned",
   avatar: { skin: "#f1c27d", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#7c3aed", hairStyle: "mohawk" },
   plannedCapabilities: [
@@ -553,7 +553,7 @@ const comms: AgentDef = {
   role: "Email Automation",
   team: "marketing",
   description: "Sends campaigns, manages sequences, personalizes messages, tracks deliverability",
-  surfaces: ["email", "org-chart"],
+  surfaces: ["email"],
   status: "planned",
   avatar: { skin: "#d2946b", hair: "#44403c", eyes: "#1a1a2e", shirt: "#6d28d9", hairStyle: "parted" },
   plannedCapabilities: [
@@ -571,7 +571,7 @@ const marketingSocial: AgentDef = {
   role: "Community Manager",
   team: "marketing",
   description: "Manages X presence, community engagement, social listening",
-  surfaces: ["org-chart"],
+  surfaces: [],
   status: "planned",
   avatar: { skin: "#8d5524", hair: "#292524", eyes: "#0f172a", shirt: "#5b21b6", hairStyle: "curly" },
   plannedCapabilities: [
@@ -588,7 +588,7 @@ const marketingCopy: AgentDef = {
   role: "SEO Writer",
   team: "marketing",
   description: "Writes blog posts, landing page copy, SEO-optimized content",
-  surfaces: ["org-chart"],
+  surfaces: [],
   status: "planned",
   avatar: { skin: "#c68642", hair: "#1c1917", eyes: "#1a1a2e", shirt: "#7e22ce", hairStyle: "long" },
   plannedCapabilities: [
@@ -607,7 +607,7 @@ const memoryCurator: AgentDef = {
   role: "Knowledge Manager",
   team: "memory",
   description: "Distills durable directives, promotes signals to concepts, prunes stale memories",
-  surfaces: ["brain", "recall", "org-chart"],
+  surfaces: ["brain", "recall"],
   status: "planned",
   avatar: { skin: "#f1c27d", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#d97706", hairStyle: "parted" },
   plannedCapabilities: [
@@ -625,7 +625,7 @@ const directiveLibrarian: AgentDef = {
   role: "Rules Manager",
   team: "memory",
   description: "Manages rules, resolves disputes, maintains directive integrity",
-  surfaces: ["org-chart"],
+  surfaces: [],
   status: "planned",
   avatar: { skin: "#d2946b", hair: "#44403c", eyes: "#1a1a2e", shirt: "#b45309", hairStyle: "short" },
   plannedCapabilities: [

@@ -14,7 +14,6 @@ import { extractIntelligencePatterns } from './intelligence-loop.js';
 import { analyzeSkillEvolution } from './evolution-analyzer.js';
 import { assignJob } from './job-assignment.js';
 import { executeWatcher, scheduleWatcherRuns } from './watcher-service.js';
-import { scheduleAtlasRuns } from './atlas-agent.js';
 import { runDigestCycle } from './mail/newsletter-service.js';
 import { runMemoryValidation } from './intellect/memory-validator.js';
 import { runScheduledWorkflows } from './intellect/workflow-engine.js';
@@ -32,7 +31,6 @@ const RPG_RECALC_INTERVAL = 150; // 150 ticks × 2s = 300s = 5 minutes
 const INTEL_EXTRACTION_INTERVAL = 10800; // 10800 ticks × 2s = 6h
 const EVO_ANALYSIS_INTERVAL = 10800; // 10800 ticks x 2s = 6h
 const WATCHER_SCHEDULE_INTERVAL = 30; // 30 ticks x 2s = 60s — check for due watchers every minute
-const ATLAS_CHECK_INTERVAL = 900;     // 900 ticks x 2s = 30 min — check project structure every 30 minutes
 const NEWSLETTER_DIGEST_INTERVAL = 10800; // 10800 ticks x 2s = 6h — run newsletter digest cycle
 const MEMORY_VALIDATION_INTERVAL = 900;  // 900 ticks x 2s = 30 min — validate memory references
 const DISPATCH_SCORING_INTERVAL = 10800; // 10800 ticks x 2s = 6h — auto-score recent dispatches
@@ -418,12 +416,6 @@ async function tick() {
     if (tickCount > 0 && tickCount % WATCHER_SCHEDULE_INTERVAL === 0) {
       scheduleWatcherRuns().catch(err =>
         console.error('[scheduler:watcher] schedule error', err));
-    }
-
-    // PSB: Atlas structural health check every 30 min
-    if (tickCount > 0 && tickCount % ATLAS_CHECK_INTERVAL === 0) {
-      scheduleAtlasRuns().catch(err =>
-        console.error('[scheduler:atlas] check error', err));
     }
 
     // Newsletter digest cycle — every 6h

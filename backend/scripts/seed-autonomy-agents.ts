@@ -2,7 +2,7 @@
 /**
  * seed-autonomy-agents.ts
  *
- * Phase B of the autonomy launch. Reads the 4 persona .md files that Phase A
+ * Phase B of the autonomy launch. Reads the persona .md files that Phase A
  * wrote via OpenClaw and inserts rows into agent_templates + personas so the
  * Forge and Gateway tabs have real dispatchable owners.
  *
@@ -68,24 +68,6 @@ const AGENTS: SeedAgent[] = [
       skin: 'watchman',
       palette: { primary: '#2E7AC9', secondary: '#0F1E38', accent: '#7ACCF5' },
       tool: 'lantern',
-    },
-    agentGroup: 'operations',
-  },
-  {
-    instanceId: 'bridge-atlas',
-    templateId: 'tmpl-bridge-atlas',
-    name: 'Bridge Atlas',
-    category: 'operations',
-    description: 'Recomputes routing confidence hourly from outcome scores, latency, and cost. Proposes routing_rules updates for operator approval.',
-    heartbeatCron: '0 * * * *',
-    heartbeatIntervalSec: 3600,
-    preferredBackend: 'openclaw',
-    tags: ['bridge', 'routing', 'optimization'],
-    appearanceSpec: {
-      style: 'minecraft',
-      skin: 'cartographer',
-      palette: { primary: '#7B3FBF', secondary: '#2A1747', accent: '#C299F0' },
-      tool: 'compass',
     },
     agentGroup: 'operations',
   },
@@ -224,7 +206,7 @@ async function seed(): Promise<void> {
     }
 
     await client.query('COMMIT');
-    console.log('\n[seed-autonomy-agents] all 4 templates + 4 instances committed.');
+    console.log(`\n[seed-autonomy-agents] all ${AGENTS.length} templates + ${AGENTS.length} instances committed.`);
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

@@ -8,7 +8,7 @@ import {
   Mail, LayoutDashboard,
   ChevronLeft, ChevronRight, Settings, LogOut,
   FolderOpen, Route, BookOpen,
-  Code2, Palette, Network, Flame,
+  Code2, Palette, Flame,
   Wrench, GraduationCap, MessageCircle, Brain, Moon,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
@@ -30,7 +30,6 @@ const groups = [
   ]},
   { label: "Agents", items: [
     { icon: Flame, label: "Forge", path: "/forge" },
-    { icon: Network, label: "Org Chart", path: "/org-chart" },
     { icon: Mail, label: "Email", path: "/email" },
     { icon: MessageCircle, label: "Skill Feedback", path: "/skill-feedback" },
   ]},
