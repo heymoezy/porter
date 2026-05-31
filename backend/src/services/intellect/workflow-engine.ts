@@ -32,7 +32,6 @@ import { runMemoryPruning } from './memory-pruner.js';
 import { runSelfMonitor } from './self-monitor.js';
 import { runPatternMining } from './pattern-miner.js';
 import { runToolDetection } from './tool-detector.js';
-import { runSkillEvolution } from './skill-evolver.js';
 import { runSubscriptionCheck } from './subscription-manager.js';
 import { runTranscriptRetention } from './transcript-retention.js';
 import { runDreamWorker } from './dream-worker.js';
@@ -50,7 +49,6 @@ export type WorkflowActionType =
   | 'self_monitor'
   | 'pattern_mine'
   | 'tool_detect'
-  | 'skill_evolve'
   | 'subscription_check'
   | 'transcript_retain'
   | 'dream_run'                 // Phase 48.3 — wired in 48.3-04 (runDreamWorker)
@@ -102,7 +100,6 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
   self_monitor: async () => runSelfMonitor(),
   pattern_mine: async () => runPatternMining(),
   tool_detect: async () => runToolDetection(),
-  skill_evolve: async () => runSkillEvolution(),
   subscription_check: async () => runSubscriptionCheck(),
   transcript_retain: async () => runTranscriptRetention(pool),
   dream_run: async (_ctx, config) => {
@@ -329,12 +326,6 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_type: 'schedule',
     trigger_value: 'every_6h',
     action_type: 'tool_detect',
-  },
-  {
-    name: 'Evolve skill quality from telemetry',
-    trigger_type: 'schedule',
-    trigger_value: 'every_24h',
-    action_type: 'skill_evolve',
   },
   {
     name: 'Check agent subscriptions for new content',

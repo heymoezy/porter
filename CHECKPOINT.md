@@ -3,10 +3,50 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.27.0
+version: v6.28.0
 updated: 2026-05-31
-updated_by: claude-opus-4.8-1m (stripped Atlas + admin org chart; locked lean-backbone direction with Moe)
+updated_by: claude-opus-4.8-1m (stripped agent-hub theater to lean backbone; kept Bridge/Recall/Memory/Intellect/Dreams)
 milestone_status: v7.0 IN PROGRESS — backbone identity locked, active_project pin live, directives GET enables silo-coherent agent injection
+
+## Strip agent-hub theater (2026-05-31 v6.28.0) — SHIPPED
+
+Decision (Moe, going OG): Porter is a LEAN BACKBONE powering YMC + BYD, not an
+agent factory/hub. Real value = memory, dreams, intellect. Investigated the whole
+surface first (keep/kill map) — the hub was hollow (DB: 2 templates, 2 personas,
+0 pending jobs vs the "107 templates" fiction). Code-only — NO DB drops.
+
+KEPT (the value, untouched): Bridge agent-message, chat/stream, Recall docs
+ingest/query/summarize, Intellect /api/v1/intellect/*, Dreams (worker/sampler/
+parser + memory_proposals), Memory V2. Sacred surfaces smoke-tested post-strip
+(intellect 200; bridge/recall 401 auth-gated = alive, not 404/500).
+
+KILLED (theater): services rpg-engine, forge, admin/forge, evolution-analyzer,
+intelligence-loop, contact-analyzer, learner, watcher-service, skill-evolver (9);
+admin routes agents/forge/templates/decisions/evolution/calendar + dead battles/
+forge-runs (8); rpg-engine test.
+
+Surgery before deletion in hot paths:
+- routing-engine.ts: drop awardXP, KEEP persona_skills times_selected write
+- workflow-engine.ts: drop skill_evolve action + seeded workflow
+- scheduler.ts: 910->591 lines; drop RPG recalc + contact_analysis/learning_session/
+  watcher_run handlers + bootstrap helpers; KEEP health/usage/context-pressure/
+  gateway/memory-validation/scheduled-workflows/dispatch-scoring/silo-cadence(dreams)/
+  invite_drip
+
+DB tables kept as shells (consumer paths read gracefully when empty): personas,
+agent_templates, persona_skills, template_skills, template_tools, skills,
+skill_feedback_events. Table drops deferred (only irreversible step; no cost to wait).
+
+DEFERRED: admin SPA theater tabs (components/forge/ imported by kept pages skills/
+tools/architecture/system — needs frontend detangling, not blind delete; reverted
+admin/frontend to HEAD, builds green). Also untouched (ambiguous): decomposition,
+approvals, mail. Vigil+Ledger still seeded as personas — demote to cron services next.
+
+NOTE: service runs `npx tsx src/index.ts` (from SOURCE, not dist) — restart picks up
+src edits directly; npm run build is type-check/dist only.
+
+Verified: tsc 0 errors, build clean, restarted, /health = 6.28.0. All 3 version
+surfaces bumped.
 
 ## Strip Atlas + org chart (2026-05-31 v6.27.0) — SHIPPED
 

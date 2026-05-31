@@ -8,12 +8,8 @@ import { runHealthProbe } from './bridge/health-probe.js';
 import { refreshAllGateways } from './bridge/model-catalog.js';
 import { computeEmpiricalRates } from './bridge/rate-limit-tracker.js';
 import { collectLocalUsage } from './bridge/usage-collector.js';
-import { recalculateStats } from './rpg-engine.js';
 import { getActiveSessions, rotateSession } from './session-registry.js';
-import { extractIntelligencePatterns } from './intelligence-loop.js';
-import { analyzeSkillEvolution } from './evolution-analyzer.js';
 import { assignJob } from './job-assignment.js';
-import { executeWatcher, scheduleWatcherRuns } from './watcher-service.js';
 import { runDigestCycle } from './mail/newsletter-service.js';
 import { runMemoryValidation } from './intellect/memory-validator.js';
 import { runScheduledWorkflows } from './intellect/workflow-engine.js';
@@ -27,10 +23,6 @@ const DEADLINE_CHECK_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const CALENDAR_SYNC_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const HEALTH_PROBE_INTERVAL = 15; // 15 × 2000ms = 30s
 const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
-const RPG_RECALC_INTERVAL = 150; // 150 ticks × 2s = 300s = 5 minutes
-const INTEL_EXTRACTION_INTERVAL = 10800; // 10800 ticks × 2s = 6h
-const EVO_ANALYSIS_INTERVAL = 10800; // 10800 ticks x 2s = 6h
-const WATCHER_SCHEDULE_INTERVAL = 30; // 30 ticks x 2s = 60s — check for due watchers every minute
 const NEWSLETTER_DIGEST_INTERVAL = 10800; // 10800 ticks x 2s = 6h — run newsletter digest cycle
 const MEMORY_VALIDATION_INTERVAL = 900;  // 900 ticks x 2s = 30 min — validate memory references
 const DISPATCH_SCORING_INTERVAL = 10800; // 10800 ticks x 2s = 6h — auto-score recent dispatches
@@ -65,144 +57,6 @@ export async function scheduleDripReminder(collaboratorId: string, dripCount: nu
   ]);
 }
 
-/**
- * Schedule the next autonomous contact analysis sweep for a contact.
- * Self-adjusting frequency based on engagement_score:
- *   - High engagement (70-100): re-analyze every 4 hours (active relationships change fast)
- *   - Medium engagement (30-69): re-analyze every 12 hours
- *   - Low engagement (0-29): re-analyze every 24 hours
- *   - Error/unknown (-1): retry in 6 hours
- */
-export async function scheduleNextContactAnalysis(contactId: string, engagementScore: number): Promise<void> {
-  let intervalSec: number;
-  if (engagementScore < 0) {
-    intervalSec = 6 * 3600;       // 6 hours (error backoff)
-  } else if (engagementScore >= 70) {
-    intervalSec = 4 * 3600;       // 4 hours (high engagement)
-  } else if (engagementScore >= 30) {
-    intervalSec = 12 * 3600;      // 12 hours (medium engagement)
-  } else {
-    intervalSec = 24 * 3600;      // 24 hours (low engagement)
-  }
-
-  const scheduledFor = Date.now() / 1000 + intervalSec;
-  await pool.query(`
-    INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
-    VALUES ($1, 'system', 'contact_analysis', $2, 'pending', $3, EXTRACT(EPOCH FROM NOW()))
-  `, [
-    crypto.randomUUID(),
-    JSON.stringify({ contact_id: contactId }),
-    scheduledFor,
-  ]);
-}
-
-/**
- * Schedule the next autonomous learning session for an agent template.
- * Self-adjusting cadence based on domain_activity score:
- *   - Error/unknown (-1): retry in 12 hours
- *   - High activity (70-100): re-learn every 24 hours (fast-moving domains: AI, JS frameworks)
- *   - Medium activity (30-69): re-learn every 48 hours
- *   - Low activity (0-29): re-learn every 7 days (stable domains: accounting, law basics)
- */
-export async function scheduleNextLearningSession(templateId: string, domainActivity: number): Promise<void> {
-  let intervalSec: number;
-  if (domainActivity < 0) {
-    intervalSec = 12 * 3600;       // 12 hours (error backoff)
-  } else if (domainActivity >= 70) {
-    intervalSec = 24 * 3600;       // 24 hours (fast-moving domain: AI, JS frameworks)
-  } else if (domainActivity >= 30) {
-    intervalSec = 48 * 3600;       // 48 hours (medium-velocity domain)
-  } else {
-    intervalSec = 7 * 24 * 3600;   // 7 days (stable domain: accounting, law basics)
-  }
-
-  const scheduledFor = Date.now() / 1000 + intervalSec;
-  await pool.query(`
-    INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
-    VALUES ($1, 'system', 'learning_session', $2, 'pending', $3, EXTRACT(EPOCH FROM NOW()))
-  `, [
-    crypto.randomUUID(),
-    JSON.stringify({ template_id: templateId }),
-    scheduledFor,
-  ]);
-}
-
-// ── Bootstrap helpers ─────────────────────────────────────────────────────────
-
-/**
- * On scheduler startup, seed a pending contact_analysis job for every contact
- * that has at least one linked conversation but no existing pending analysis job.
- * This ensures the 24/7 autonomous sweep starts without manual intervention.
- */
-async function bootstrapContactAnalysis(): Promise<void> {
-  const contactsNeedingJobs = (await pool.query(`
-    SELECT DISTINCT cc.contact_id
-    FROM contact_conversations cc
-    JOIN contacts c ON c.id = cc.contact_id
-    WHERE NOT EXISTS (
-      SELECT 1 FROM agent_jobs
-      WHERE trigger_type = 'contact_analysis'
-        AND status = 'pending'
-        AND trigger_data->>'contact_id' = cc.contact_id
-    )
-  `)).rows as { contact_id: string }[];
-
-  if (contactsNeedingJobs.length > 0) {
-    console.log('[scheduler] bootstrapping contact analysis for %d contacts', contactsNeedingJobs.length);
-    // Stagger jobs so they don't all fire at once — spread over first 5 minutes
-    const staggerSec = contactsNeedingJobs.length > 1
-      ? 300 / contactsNeedingJobs.length   // 300 seconds / N contacts
-      : 0;
-    for (let i = 0; i < contactsNeedingJobs.length; i++) {
-      const scheduledFor = Date.now() / 1000 + (i * staggerSec);
-      await pool.query(`
-        INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
-        VALUES ($1, 'system', 'contact_analysis', $2, 'pending', $3, EXTRACT(EPOCH FROM NOW()))
-      `, [
-        crypto.randomUUID(),
-        JSON.stringify({ contact_id: contactsNeedingJobs[i].contact_id }),
-        scheduledFor,
-      ]);
-    }
-  }
-}
-
-/**
- * On scheduler startup, seed one pending learning_session job per non-internal
- * agent template that doesn't already have a pending job.
- * Staggered over 10 minutes to prevent thundering herd on startup.
- */
-async function bootstrapLearning(): Promise<void> {
-  const templatesNeedingJobs = (await pool.query(`
-    SELECT id FROM agent_templates
-    WHERE is_internal = 0
-    AND NOT EXISTS (
-      SELECT 1 FROM agent_jobs
-      WHERE trigger_type = 'learning_session'
-        AND status = 'pending'
-        AND trigger_data->>'template_id' = agent_templates.id
-    )
-  `)).rows as { id: string }[];
-
-  if (templatesNeedingJobs.length > 0) {
-    console.log('[scheduler] bootstrapping learning sessions for %d templates', templatesNeedingJobs.length);
-    const staggerSec = templatesNeedingJobs.length > 1
-      ? 600 / templatesNeedingJobs.length
-      : 0;
-    for (let i = 0; i < templatesNeedingJobs.length; i++) {
-      const scheduledFor = Date.now() / 1000 + (i * staggerSec);
-      await pool.query(`
-        INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, status, scheduled_for, created_at)
-        VALUES ($1, 'system', 'learning_session', $2, 'pending', $3, EXTRACT(EPOCH FROM NOW()))
-      `, [
-        crypto.randomUUID(),
-        JSON.stringify({ template_id: templatesNeedingJobs[i].id }),
-        scheduledFor,
-      ]);
-    }
-  }
-}
-
 interface JobRow {
   id: string;
   agent_id: string;
@@ -229,32 +83,6 @@ interface JobRow {
 function logFeatureFlagState() {
   console.log('[scheduler] Feature flags: scheduling=%s, triggers=%s, ephemeral=%s',
     featureFlags.agentScheduling, featureFlags.eventTriggers, featureFlags.ephemeralAgents);
-}
-
-// ── RPG Stats Background Refresh ──────────────────────────────────────────────
-
-/**
- * Recalculate RPG stats for all rpg-enabled agent templates.
- * Runs every 5 minutes. Sequential to avoid DB overload.
- */
-async function runRpgRecalculation(): Promise<void> {
-  try {
-    const { rows } = await pool.query<{ id: string }>(
-      `SELECT id FROM agent_templates WHERE rpg_enabled = 1`
-    );
-    for (const row of rows) {
-      try {
-        await recalculateStats(row.id);
-      } catch (e) {
-        console.error('[scheduler:rpg] failed for', row.id, e instanceof Error ? e.message : e);
-      }
-    }
-    if (rows.length > 0) {
-      console.log(`[scheduler:rpg] recalculated stats for ${rows.length} agents`);
-    }
-  } catch (e) {
-    console.error('[scheduler:rpg] batch error:', e instanceof Error ? e.message : e);
-  }
 }
 
 // ── Context pressure check — SES-02 ──────────────────────────────────────────
@@ -369,8 +197,6 @@ export async function start() {
   if (intervalId) return;
   console.log('[scheduler] started — polling every %dms, worker=%s', POLL_INTERVAL_MS, WORKER_ID.slice(0, 8));
   logFeatureFlagState();
-  await bootstrapContactAnalysis();
-  await bootstrapLearning();
   intervalId = setInterval(tick, POLL_INTERVAL_MS);
 }
 
@@ -395,27 +221,6 @@ async function tick() {
     // Model catalog refresh -- every 24h
     if (tickCount > 0 && tickCount % MODEL_REFRESH_INTERVAL === 0) {
       refreshAllGateways(pool).catch(err => console.error('[scheduler] model refresh error', err));
-    }
-
-    // RPG stats background refresh — every 5 minutes
-    if (tickCount > 0 && tickCount % RPG_RECALC_INTERVAL === 0) {
-      runRpgRecalculation().catch(err => console.error('[scheduler:rpg] batch error:', err));
-    }
-
-    // Intelligence pattern extraction — every 6h
-    if (tickCount > 0 && tickCount % INTEL_EXTRACTION_INTERVAL === 0) {
-      extractIntelligencePatterns().catch(err => console.error('[scheduler:intel] extraction error:', err));
-    }
-
-    // Skill evolution analysis — every 6h
-    if (tickCount > 0 && tickCount % EVO_ANALYSIS_INTERVAL === 0) {
-      analyzeSkillEvolution().catch(err => console.error('[scheduler:evo] analysis error:', err));
-    }
-
-    // PMN: Schedule due watcher runs every 60s
-    if (tickCount > 0 && tickCount % WATCHER_SCHEDULE_INTERVAL === 0) {
-      scheduleWatcherRuns().catch(err =>
-        console.error('[scheduler:watcher] schedule error', err));
     }
 
     // Newsletter digest cycle — every 6h
@@ -641,109 +446,6 @@ async function executeJob(job: JobRow): Promise<void> {
     return;
   }
 
-  // ── Contact analysis (CRM-03) ──────────────────────────────────────────────
-  if (job.trigger_type === 'contact_analysis') {
-    const data = (typeof job.trigger_data === 'string' ? JSON.parse(job.trigger_data) : job.trigger_data) as { contact_id?: string };
-    const contactId = data.contact_id;
-    if (!contactId) {
-      await markJobFailed(job.id, 'Missing contact_id in contact_analysis trigger_data');
-      return;
-    }
-
-    // Verify contact still exists
-    const contact = (await pool.query('SELECT id FROM contacts WHERE id = $1', [contactId])).rows[0];
-    if (!contact) {
-      await markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'contact_deleted' }));
-      // Contact deleted — do NOT re-enqueue
-      return;
-    }
-
-    try {
-      const { analyzeContact } = await import('./contact-analyzer.js');
-      const analysis = await analyzeContact(contactId);
-
-      // Write to contact_analyses table
-      const analysisId = crypto.randomUUID();
-      await pool.query(`
-        INSERT INTO contact_analyses (id, contact_id, sentiment, engagement_score, churn_risk, relationship_stage, key_topics, last_interaction_summary, communication_style, raw_json, job_id, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, EXTRACT(EPOCH FROM NOW()))
-      `, [
-        analysisId,
-        contactId,
-        analysis.sentiment,
-        analysis.engagement_score,
-        analysis.churn_risk,
-        analysis.relationship_stage,
-        JSON.stringify(analysis.key_topics),
-        analysis.last_interaction_summary,
-        analysis.communication_style,
-        JSON.stringify(analysis),
-        job.id,
-      ]);
-
-      await markJobComplete(job.id, JSON.stringify({ analysis_id: analysisId, contact_id: contactId }));
-      await logActivity('system', job.id, null, 'contact_analysis_complete',
-        `Analyzed contact ${contactId}`, JSON.stringify({ analysis_id: analysisId }));
-
-      // ── Re-enqueue: autonomous 24/7 sweep with self-adjusting frequency ──
-      await scheduleNextContactAnalysis(contactId, analysis.engagement_score);
-    } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e);
-      await markJobFailed(job.id, errMsg);
-      await logActivity('system', job.id, null, 'contact_analysis_failed',
-        `Analysis failed for contact ${contactId}: ${errMsg}`, '{}');
-
-      // Re-enqueue even on failure — use a longer backoff (6 hours)
-      // so the sweep doesn't stop permanently on transient errors.
-      await scheduleNextContactAnalysis(contactId, -1);
-    }
-    return;
-  }
-
-  // ── Autonomous learning session (LEARN-01/02/03) ──────────────────────────
-  if (job.trigger_type === 'learning_session') {
-    const data = (typeof job.trigger_data === 'string' ? JSON.parse(job.trigger_data) : job.trigger_data) as { template_id?: string };
-    const templateId = data.template_id;
-    if (!templateId) {
-      await markJobFailed(job.id, 'Missing template_id in learning_session trigger_data');
-      return;
-    }
-
-    // Verify template still exists
-    const template = (await pool.query('SELECT id FROM agent_templates WHERE id = $1', [templateId])).rows[0];
-    if (!template) {
-      await markJobComplete(job.id, JSON.stringify({ skipped: true, reason: 'template_deleted' }));
-      // Template deleted — do NOT re-enqueue
-      return;
-    }
-
-    try {
-      const { runLearningSession } = await import('./learner.js');
-      const result = await runLearningSession(templateId);
-
-      await markJobComplete(job.id, JSON.stringify({
-        session_id: result.session_id,
-        concepts_retained: result.concepts_retained,
-        capped: result.capped,
-      }));
-      await logActivity('system', job.id, null, 'learning_session_complete',
-        `Learning session for template ${templateId}: ${result.concepts_retained} concepts`,
-        JSON.stringify({ session_id: result.session_id, template_id: templateId }));
-
-      // Re-enqueue: autonomous 24/7 sweep with self-adjusting cadence
-      await scheduleNextLearningSession(templateId, result.domain_activity);
-    } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e);
-      await markJobFailed(job.id, errMsg);
-      await logActivity('system', job.id, null, 'learning_session_failed',
-        `Learning session failed for template ${templateId}: ${errMsg}`, '{}');
-
-      // Re-enqueue even on failure — 12h error backoff
-      await scheduleNextLearningSession(templateId, -1);
-    }
-    return;
-  }
-
   // CONN-05 locked decision: external_call jobs bypass the AI router and go
   // directly to the appropriate service module. Jobs targeting broken connections
   // get 'blocked' status — they are not failed and are auto-unblocked when the
@@ -796,27 +498,6 @@ async function executeJob(job: JobRow): Promise<void> {
         await logActivity(job.agent_id, job.id, job.project_id, 'job_failed',
           `External call failed after ${MAX_ATTEMPTS} attempts: ${errMsg}`, '{}');
       }
-    }
-    return;
-  }
-
-  // PMN: Watcher run execution
-  if (job.trigger_type === 'watcher_run') {
-    const data = (typeof job.trigger_data === 'string' ? JSON.parse(job.trigger_data) : job.trigger_data) as { watcher_id?: string };
-    if (!data.watcher_id) {
-      await markJobFailed(job.id, 'Missing watcher_id in watcher_run trigger_data');
-      return;
-    }
-    try {
-      await executeWatcher(data.watcher_id, job.id);
-      await markJobComplete(job.id, JSON.stringify({ watcher_id: data.watcher_id, status: 'ok' }));
-      await logActivity('system', job.id, job.project_id, 'watcher_complete',
-        `Watcher ${data.watcher_id.slice(0, 8)} completed`, '{}');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      await markJobFailed(job.id, msg);
-      await logActivity('system', job.id, job.project_id, 'watcher_failed',
-        `Watcher ${data.watcher_id.slice(0, 8)} failed: ${msg.slice(0, 200)}`, '{}');
     }
     return;
   }

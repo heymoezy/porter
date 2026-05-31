@@ -16,7 +16,6 @@ import { withRetry } from './retry.js';
 import { emitSSE } from '../scheduler.js';
 import { parseRateLimitHeaders, record429 } from './rate-limit-tracker.js';
 import { v4 as uuidv4 } from 'uuid';
-import { awardXP } from '../rpg-engine.js';
 import { compressToolOutput, estimateTokens } from '../context-compressor.js';
 import { getLegacyTags, normalizeCapabilities } from './capability-registry.js';
 import { upsertSession } from '../session-registry.js';
@@ -226,11 +225,6 @@ export class RoutingEngine {
             ctx.dispatchStrategy ?? null,
           ],
         );
-
-        // RPG: award XP for this dispatch
-        if (ctx.agentId) {
-          awardXP(ctx.agentId, 'dispatch').catch(() => {});
-        }
 
         // Increment times_selected counter on persona_skills
         if (ctx.skillsUsed?.selected?.length && ctx.agentId) {
