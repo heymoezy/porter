@@ -14,6 +14,8 @@ export interface StreamBackend {
 export interface StreamOptions {
   /** See BridgeDispatchRequest.tools — passes through to the adapter. */
   tools?: 'none' | 'default';
+  /** Optional model id — passed to the adapter as req.model (e.g. claude-sonnet-4-6). */
+  model?: string;
 }
 
 export async function streamFromBridge(
@@ -27,6 +29,7 @@ export async function streamFromBridge(
     messages: [{ role: 'user', content: prompt }],
     systemPrompt,
     ...(options?.tools ? { tools: options.tools } : {}),
+    ...(options?.model ? { model: options.model } : {}),
   };
   const { stream } = await routingEngine.selectStreamWithFallback(ctx, req, signal);
   return stream;
@@ -42,12 +45,13 @@ export async function selectStreamBackend(
   ctxOverride?: Partial<RoutingContext> & StreamOptions,
 ): Promise<StreamBackend> {
   const tools = ctxOverride?.tools;
+  const model = ctxOverride?.model;
   return {
     name: 'claude_cli',
     async *stream(prompt: string, signal: AbortSignal, systemPrompt?: string): AsyncIterable<string> {
-      const { tools: _drop, ...routingCtxRest } = ctxOverride ?? {};
+      const { tools: _drop, model: _dropModel, ...routingCtxRest } = ctxOverride ?? {};
       const ctx: RoutingContext = { message, ...routingCtxRest };
-      const iterable = await streamFromBridge(prompt, signal, ctx, systemPrompt, { tools });
+      const iterable = await streamFromBridge(prompt, signal, ctx, systemPrompt, { tools, model });
       for await (const token of iterable) {
         yield token;
       }

@@ -128,6 +128,10 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       '--verbose',
       '--include-partial-messages',
       '--no-session-persistence',
+      // Model override: callers (e.g. YMC Tom) can request a specific tier via
+      // req.model — without it the CLI uses its account default (Opus). Agnostic
+      // passthrough; Porter never hardcodes a model here.
+      ...(req.model ? ['--model', req.model] : []),
       ...(req.systemPrompt ? ['--system-prompt', req.systemPrompt] : []),
       ...(noTools
         ? ['--tools', '']
@@ -280,6 +284,10 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       '--verbose',
       '--include-partial-messages',
       '--no-session-persistence',
+      // Model override: callers (e.g. YMC Tom) can request a specific tier via
+      // req.model — without it the CLI uses its account default (Opus). Agnostic
+      // passthrough; Porter never hardcodes a model here.
+      ...(req.model ? ['--model', req.model] : []),
       ...(req.systemPrompt ? ['--system-prompt', req.systemPrompt] : []),
       ...(noTools
         ? ['--tools', '']

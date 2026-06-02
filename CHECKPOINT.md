@@ -3,10 +3,22 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.28.0
-updated: 2026-05-31
-updated_by: claude-opus-4.8-1m (stripped agent-hub theater to lean backbone; kept Bridge/Recall/Memory/Intellect/Dreams)
+version: v6.28.1
+updated: 2026-06-02
+updated_by: claude-opus-4.8-1m (claude_cli adapter --model passthrough so cross-app consumers can pick a tier)
 milestone_status: v7.0 IN PROGRESS — backbone identity locked, active_project pin live, directives GET enables silo-coherent agent injection
+
+## claude_cli --model passthrough (2026-06-02 v6.28.1) — SHIPPED
+
+The claude_cli adapter never passed `--model`, so every consumer got the CLI's
+account default (Opus). req.model was accepted but ignored at the spawn — a
+latent gap. Added agnostic passthrough: `chat/stream` reads `body.model` →
+`selectStreamBackend`/`streamFromBridge` opts → `BridgeDispatchRequest.model` →
+adapter adds `--model <id>` to BOTH spawn arg arrays (stream + dispatch). No
+hardcoded model; omitted → unchanged Opus default. First consumer: YMC Tom now
+requests `claude-sonnet-4-6`. Files: routes/v1/chat.ts, services/stream-service.ts,
+services/bridge/adapters/claude-cli.ts. tsc clean, /health 6.28.1, verified live
+(`--model claude-sonnet-4-6` present on Tom's spawned process).
 
 ## Strip agent-hub theater (2026-05-31 v6.28.0) — SHIPPED
 

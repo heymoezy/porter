@@ -218,6 +218,9 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
                       // Read, etc.) on a prompt that lists upstream MCP tools.
                       // raw:true defaults tools to 'none' automatically — direct
                       // Porter admin chat (raw:false) keeps the historic 'default'.
+      model?: string;  // optional model id for the claude_cli adapter (--model).
+                      // Caller-specified; omitted → CLI account default (Opus).
+                      // e.g. YMC Tom passes claude-sonnet-4-6 for faster turns.
     } | null;
 
     const message = body?.message?.trim();
@@ -232,6 +235,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     const raw = body?.raw === true;
     // Explicit tools override > raw default. raw=true → tools='none' unless caller overrides.
     const tools: 'none' | 'default' = body?.tools ?? (raw ? 'none' : 'default');
+    const model = typeof body?.model === 'string' && body.model.trim() ? body.model.trim() : undefined;
 
     // COLLAB-03: If a project context is provided, verify project access (chat role minimum)
     if (projectId) {
@@ -467,6 +471,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       directiveStats,  // Phase 38: directive selection stats for context_stats logging
       dispatchStrategy,  // Phase 45: strategy logged in bridge_dispatch_log
       tools,  // Tom-bug fix 2026-05-18: pass through tool surface knob
+      model,  // 2026-06-02: caller model override → claude_cli --model (Tom on Sonnet)
     });
     let fullResponse = '';
     // Phase 34: capture dispatch_id yielded by routing-engine as __DISPATCH_META__ token
