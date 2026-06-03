@@ -1,6 +1,10 @@
-## 2026-05-17 (discovered during 50-02 execution)
+## 2026-05-17 (discovered during 50-02 execution) — RESOLVED in 50-04
 
-**BUILTIN_WORKFLOWS re-seeds the legacy "Software dream — weekly consolidation" workflow row on every Porter startup.**
+**RESOLVED 2026-05-17 by Plan 50-04 commit `bb421d0` (auto-fix Rule 3 — blocking).** The BUILTIN_WORKFLOWS entry was removed because it directly blocked smoke-50 SC-18 (Plan 50-04's own deliverable). Production DB row also cleared in same deploy. Post-fix psql confirms count=0 across restarts. smoke-48.3 DRW-08 also rebased (commit `fa54b9d`) to assert per-silo cadence wiring instead of the legacy `every_week` workflow row — same stale-invariant rebase pattern Plan 50-03 used for smoke-48.1 SC-4.
+
+---
+
+**BUILTIN_WORKFLOWS re-seeds the legacy "Software dream — weekly consolidation" workflow row on every Porter startup.** (original entry, retained for context)
 
 - Found during: 50-02 live verification (post-restart psql query showed `count=1` for the legacy row even though Plan 50-01's migration DELETEd it)
 - Source: `backend/src/services/intellect/workflow-engine.ts:352` — `BUILTIN_WORKFLOWS` array still contains the row with `trigger_value='every_week'` and `action_type='dream_run'`

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: The Living Memory
 status: unknown
-stopped_at: Completed 50-03-PLAN.md — data-room silo live (5 directives, 7d cadence), 3-silo set coexisting (admin 3d + data-room 7d + software 7d), markers across ymc.capital + ymc.capital-private + Funds (1 committed, 3 disk-only), all 5 prior smokes green. Wave 3 (50-04 smoke harness) is next.
-last_updated: "2026-05-17T05:02:18.686Z"
+stopped_at: Phase 50 Multi-Silo Foundation complete — 50-04 smoke harness shipped, smoke-50 phase gate green, legacy weekly-software workflow reseed resolved. Next action: plan Phase 51 Dreams Review UX.
+last_updated: "2026-06-03T05:58:46.000Z"
 progress:
   total_phases: 4
-  completed_phases: 1
-  total_plans: 9
-  completed_plans: 8
+  completed_phases: 2
+  total_plans: 16
+  completed_plans: 9
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-15)
 
 **Core value:** Porter is the orchestration platform — you tell Porter what you want, Porter figures out how to get it done across multiple AI models.
-**Current focus:** Phase 50 — multi-silo-foundation
+**Current focus:** Phase 51 — dreams-review-ux
 
 ## Current Position
 
-Phase: 50 (multi-silo-foundation) — EXECUTING
-Plan: 4 of 4
+Phase: 51 (dreams-review-ux) — READY TO PLAN
+Plan: not created yet
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Plan: 4 of 4
 | Phase 50 P01 | 48 min | 4 tasks | 6 files |
 | Phase 50 P02 | 53 min | 4 tasks | 4 files |
 | Phase 50 P03 | 50 min | 3 tasks | 7 files |
+| Phase 50 P04 | 38 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -280,6 +281,10 @@ Plan: 4 of 4
 - [Phase 50]: [Phase 50-03]: Force-add (-f) for silo markers past wholesale gitignore — storage/ is wholesale gitignored in ymc.capital (PDFs), but .data-room-silo is silo-detection infrastructure, not data. Correct posture; gitignore intent is excluding raw PDFs, not blocking intentional small markers
 - [Phase 50]: [Phase 50-03]: Data-room silo framing = document handling, citation discipline, regulatory filings, investor communications, entity investigation, confidentiality posture, KYC review, deal-flow analysis, workout-file work. NOT code (software silo), NOT admin/RBAC/SSE (admin silo). Three-way disjoint silo set
 - [Phase 50]: [Phase 50-03]: Stale-invariant test rebase pattern — when planned expansion changes the input space a test was anchored to, rebase the test input to one still satisfying the original invariant. NOT weaken the assertion. NOT add a skip. smoke-48.1 SC-4: Funds → /tmp (same 'no marker → 0 silos' invariant, different cwd)
+- [Phase 50]: [Phase 50-04]: Synthetic-silo smoke proof is the canonical MSF-03 add-a-silo checklist — INSERT a silos row, add a prompt file, POST /dream-run with the new silo_id, and verify dispatch completes without code changes
+- [Phase 50]: [Phase 50-04]: BUILTIN_WORKFLOWS legacy weekly-software row removal became blocking because smoke-50 SC-18 asserts per-silo cadence is the only source of truth; removed in commit bb421d0 and production row cleared
+- [Phase 50]: [Phase 50-04]: Poll loops accept completed OR skipped as terminal for cadence-floor cases; skipped still proves the worker entered the silo-specific path and honored per-silo cadence
+- [Phase 50]: [Phase 50-04]: Phase gate chain extended to 48.1 -> 48.2 -> 48.3 -> 48.4 -> 49 -> 50, all green across 3 consecutive runs per 50-04-SUMMARY.md
 
 ### Pending Todos
 
@@ -292,6 +297,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-17T05:02:18.679Z
-Stopped at: Completed 50-03-PLAN.md — data-room silo live (5 directives, 7d cadence), 3-silo set coexisting (admin 3d + data-room 7d + software 7d), markers across ymc.capital + ymc.capital-private + Funds (1 committed, 3 disk-only), all 5 prior smokes green. Wave 3 (50-04 smoke harness) is next.
+Last session: 2026-06-03T05:58:46.000Z
+Stopped at: Phase 50 complete. 50-04-SUMMARY.md and 50-RESEARCH.md are present; deferred-items.md records the 50-02 BUILTIN_WORKFLOWS issue as resolved in 50-04. Next action is `/gsd:plan-phase 51`.
 Resume file: None

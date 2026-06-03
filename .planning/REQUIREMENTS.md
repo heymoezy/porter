@@ -1,8 +1,8 @@
 # Porter Requirements — Active
 
 **Milestone:** v7.0 Living Memory
-**Last updated:** 2026-05-16
-**Status:** Phase 49 Pattern Detection COMPLETE (2026-05-16) — 5/5 plans shipped + verified (LRN-01..05). Phase 50 Multi-Silo Foundation planned 2026-05-17 (4 plans + VALIDATION); ready for `/gsd:execute-phase 50`.
+**Last updated:** 2026-06-03
+**Status:** Phase 49 Pattern Detection COMPLETE (2026-05-16) — 5/5 plans shipped + verified (LRN-01..05). Phase 50 Multi-Silo Foundation COMPLETE (2026-05-17) — 4/4 plans shipped + smoke-50 phase gate green (MSF-01..04). Phase 51 Dreams Review UX is next; ready for `/gsd:plan-phase 51`.
 
 For shipped v6.0 requirements + traceability, see `.planning/milestones/v6.0-REQUIREMENTS.md`.
 

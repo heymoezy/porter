@@ -10,7 +10,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 
 ## Current Milestone: v7.0 The Living Memory
 
-**Status (2026-05-16):** Phase 49 Pattern Detection complete 2026-05-16. Phase 50 Multi-Silo Foundation is next. 4 phases (49-52), ~17 requirements. Trigger: 2026-05-16 YMC logo freehand incident exposed that the Dream Silos system was capturing the recurring-failure signal in transcripts but the dream worker was extracting generic structural patterns instead. v7.0 fixes that, scales memory beyond software silo, and activates the dormant Phase 43 inter-agent delegation loop.
+**Status (2026-06-03):** Phase 49 Pattern Detection complete 2026-05-16. Phase 50 Multi-Silo Foundation complete 2026-05-17. Phase 51 Dreams Review UX is next. 4 phases (49-52), ~17 requirements. Trigger: 2026-05-16 YMC logo freehand incident exposed that the Dream Silos system was capturing the recurring-failure signal in transcripts but the dream worker was extracting generic structural patterns instead. v7.0 fixes that, scales memory beyond software silo, and activates the dormant Phase 43 inter-agent delegation loop.
 
 **Phases:**
 - **Phase 49 Pattern Detection (LRN-*):** Frustration-marker boost in sampler, dream prompt rewrite to extract recurring-failure patterns, project-level directive scoping (`scope='project'`).
@@ -20,7 +20,7 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 
 **Deferred to v8.0:** SIM-01..03 (Self-Improvement), BIL-01..03 (SaaS Billing).
 
-**Run `/gsd:plan-phase 49` to start execution.**
+**Run `/gsd:plan-phase 51` to continue execution.**
 
 **Completed milestones:**
 - v1.0 Foundation + Core Platform (2026-03-21) — 7 phases, 30/30 reqs
@@ -87,10 +87,10 @@ Creating a project should trigger an intelligent flow that assigns agents, build
 - ✓ Software dream worker (weekly Sonnet 4.6 raw-passthrough consolidation, refine-don't-append doctrine, memory_proposals) — v6.0 Phase 48.3
 - ✓ Dream review surface (admin /dreams page, transactional 4-kind accept matrix, auto-expiry, SSE-driven UI) — v6.0 Phase 48.4
 - ✓ Pattern detection — frustration-marker sampling boost (Pass A0 + recency-first force-include), dream prompt rewrite for recurring-failure extraction (failure_patterns), project-level directive scoping (`scope='project'` + partial index), cwd→project derivation (detectProject + detectContext), smoke harness — v7.0 Phase 49 (LRN-01..05)
+- ✓ Multi-silo foundation — admin + data-room silos, SQL+prompt-file enrollment proof, per-silo cadence, smoke-50 phase gate — v7.0 Phase 50 (MSF-01..04)
 
-### Active (v7.0 Living Memory — 12 requirements remaining)
+### Active (v7.0 Living Memory — 7 requirements remaining)
 
-- [ ] **MSF-01..04:** Multi-silo foundation — admin + data-room silos, enrollment workflow, per-silo cadence (Phase 50)
 - [ ] **DRX-01..04:** Dreams review UX — bulk actions, edit-in-place, search, silos endpoint (Phase 51)
 - [ ] **CLA-01..03:** Closed loop activation — task-planner agent-selection, PCP-02 tool-restrictions, Bridge deeper cleanup (Phase 52)
 
@@ -157,4 +157,4 @@ Porter has been in development since Feb 18, 2026. Current version is v6.12.0. S
 | Hooks live outside Porter repo | `porter-user-prompt.js` + `porter-stop.js` are global Claude Code hooks at `/home/lobster/.claude/hooks/`. Deliberately uncommitted; full contents reproduced in plan SUMMARYs for re-deployment. | ✓ Shipped v6.0 Phase 48.1-48.2 |
 
 ---
-*Last updated: 2026-05-16 — Phase 49 Pattern Detection complete; Phase 50 Multi-Silo Foundation is next.*
+*Last updated: 2026-06-03 — Phase 50 Multi-Silo Foundation metadata reconciled; Phase 51 Dreams Review UX is next.*
