@@ -495,6 +495,127 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     return reply.send(ok({ scope, scope_id: scopeId, count: rows.length, directives: rows }));
   });
 
+  // ── Agent memory surface (v6.29.0) — lets non-CLI agents (Tom, Money Bags,
+  // any future persona) READ and WRITE the shared brain. Agnostic: `agent` is
+  // a scope_id, never a hardcoded name. 127.0.0.1-only (server bind), same
+  // auth posture as the rest of this file.
+  //
+  // WRITE:  POST /agent-memory
+  //   {agent, kind:'episode',   content}                  → episodes (scope='agent')
+  //   {agent, kind:'concept',   content}                  → concepts (scope='agent', FTS-indexed)
+  //   {agent, kind:'directive', content, priority?, tags?} → directives ACTIVE immediately
+  //       (auto-learn, per Moe 2026-06-10: agents learn without a review queue,
+  //        announce in their own channel; corrections happen in chat via archive)
+  //   {agent, kind:'directive', action:'archive', query}  → archive matching
+  //       agent-learned directives ONLY (source_type='agent_learned' — the
+  //       protect_moe_direct trigger + this filter keep human rules untouchable)
+  //
+  // READ:   GET /agent-memory/recall?agent=X&q=...&project=Y&limit=N
+  //   Unified ranked recall: concepts via search_vector FTS + episodes via
+  //   on-the-fly tsvector (971 rows — trivial), across the agent's own scope
+  //   AND the named project scope. Also returns the agent's latest episodes
+  //   (`recent`) for conversational continuity regardless of q matches.
+  fastify.post('/agent-memory', async (request, reply) => {
+    const body = (request.body || {}) as {
+      agent?: string; kind?: string; content?: string; action?: string;
+      query?: string; priority?: number; tags?: string[]; session_id?: string;
+    };
+    const agent = String(body.agent || '').trim().toLowerCase();
+    const kind = String(body.kind || '').trim();
+    if (!agent || !/^[a-z0-9_-]{2,40}$/.test(agent)) return reply.code(400).send(err('INVALID_INPUT', 'agent required (slug)'));
+    if (!['episode', 'concept', 'directive'].includes(kind)) return reply.code(400).send(err('INVALID_INPUT', 'kind must be episode|concept|directive'));
+
+    if (kind === 'directive' && body.action === 'archive') {
+      const query = String(body.query || '').trim();
+      if (!query) return reply.code(400).send(err('INVALID_INPUT', 'query required for archive'));
+      const res = await pool.query(
+        `UPDATE directives SET status='archived', updated_at=EXTRACT(epoch FROM now())
+          WHERE scope='agent' AND scope_id=$1 AND source_type='agent_learned'
+            AND status='active' AND content ILIKE '%' || $2 || '%'
+          RETURNING id, content`,
+        [agent, query],
+      );
+      return reply.send(ok({ archived: res.rowCount, directives: res.rows }));
+    }
+
+    const content = String(body.content || '').trim();
+    if (!content || content.length > 4000) return reply.code(400).send(err('INVALID_INPUT', 'content required (≤4000 chars)'));
+    const id = randomUUID();
+    if (kind === 'episode') {
+      await pool.query(
+        `INSERT INTO episodes (id, scope, scope_id, session_id, gateway, summary)
+         VALUES ($1, 'agent', $2, $3, 'agent-memory', $4)`,
+        [id, agent, body.session_id ?? null, content],
+      );
+    } else if (kind === 'concept') {
+      await pool.query(
+        `INSERT INTO concepts (id, memory_kind, trust_tier, scope, scope_id, content, source_type, review_state)
+         VALUES ($1, 'concept', 'medium', 'agent', $2, $3, 'agent', 'accepted')`,
+        [id, agent, content],
+      );
+    } else {
+      const priority = Math.min(Math.max(Number(body.priority) || 70, 1), 89); // < 90: never outrank moe-direct
+      await pool.query(
+        `INSERT INTO directives (id, scope, scope_id, content, priority, source_type, status, created_by, tags)
+         VALUES ($1, 'agent', $2, $3, $4, 'agent_learned', 'active', $2, $5)`,
+        [id, agent, content, priority, body.tags ?? null],
+      );
+    }
+    return reply.send(ok({ id, kind, agent }));
+  });
+
+  fastify.get('/agent-memory/recall', async (request, reply) => {
+    const q = request.query as { agent?: string; q?: string; project?: string; limit?: string; recent?: string };
+    const agent = String(q?.agent || '').trim().toLowerCase();
+    if (!agent) return reply.code(400).send(err('INVALID_INPUT', 'agent required'));
+    const query = String(q?.q || '').trim();
+    const project = q?.project ? String(q.project).trim() : null;
+    const limit = Math.min(parseInt(String(q?.limit || '6'), 10) || 6, 20);
+    const recentN = Math.min(parseInt(String(q?.recent || '3'), 10) || 3, 10);
+
+    const hits: Array<{ kind: string; content: string; created_at: number; rank: number }> = [];
+    if (query) {
+      const scopeWhere = project
+        ? `((scope='agent' AND scope_id=$2) OR (scope='project' AND scope_id=$3))`
+        : `(scope='agent' AND scope_id=$2)`;
+      const baseArgs: any[] = project ? [query, agent, project] : [query, agent];
+      const conceptRows = (await pool.query(
+        `SELECT content, created_at, ts_rank(search_vector, websearch_to_tsquery('english', $1)) AS rank
+           FROM concepts
+          WHERE status='active' AND search_vector @@ websearch_to_tsquery('english', $1) AND ${scopeWhere}
+          ORDER BY rank DESC LIMIT $${baseArgs.length + 1}`,
+        [...baseArgs, limit],
+      )).rows;
+      for (const r of conceptRows) hits.push({ kind: 'concept', content: r.content, created_at: Number(r.created_at), rank: Number(r.rank) });
+      const episodeRows = (await pool.query(
+        `SELECT summary AS content, created_at,
+                ts_rank(to_tsvector('english', summary), websearch_to_tsquery('english', $1)) AS rank
+           FROM episodes
+          WHERE to_tsvector('english', summary) @@ websearch_to_tsquery('english', $1) AND ${scopeWhere}
+          ORDER BY rank DESC, created_at DESC LIMIT $${baseArgs.length + 1}`,
+        [...baseArgs, limit],
+      )).rows;
+      for (const r of episodeRows) hits.push({ kind: 'episode', content: r.content, created_at: Number(r.created_at), rank: Number(r.rank) });
+      const directiveRows = (await pool.query(
+        `SELECT content, created_at,
+                ts_rank(to_tsvector('english', content), websearch_to_tsquery('english', $1)) AS rank
+           FROM directives
+          WHERE status='active' AND to_tsvector('english', content) @@ websearch_to_tsquery('english', $1) AND ${scopeWhere}
+          ORDER BY rank DESC LIMIT $${baseArgs.length + 1}`,
+        [...baseArgs, limit],
+      )).rows;
+      for (const r of directiveRows) hits.push({ kind: 'rule', content: r.content, created_at: Number(r.created_at), rank: Number(r.rank) });
+      hits.sort((a, b) => b.rank - a.rank);
+      hits.splice(limit);
+    }
+    const recent = (await pool.query(
+      `SELECT summary AS content, created_at FROM episodes
+        WHERE scope='agent' AND scope_id=$1 ORDER BY created_at DESC LIMIT $2`,
+      [agent, recentN],
+    )).rows.map((r) => ({ kind: 'episode', content: r.content, created_at: Number(r.created_at) }));
+    return reply.send(ok({ agent, query: query || null, hits, recent }));
+  });
+
   fastify.get('/active-project', async (request, reply) => {
     const q = request.query as { cwd?: string; session_id?: string };
     const result = await resolveActiveProject(pool, {

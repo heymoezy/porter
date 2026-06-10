@@ -3,10 +3,28 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.28.1
-updated: 2026-06-02
-updated_by: claude-opus-4.8-1m (claude_cli adapter --model passthrough so cross-app consumers can pick a tier)
-milestone_status: v7.0 IN PROGRESS — backbone identity locked, active_project pin live, directives GET enables silo-coherent agent injection
+version: v6.29.0
+updated: 2026-06-10
+updated_by: claude-fable-5 (agent-memory surface — non-CLI agents read/write the brain)
+milestone_status: v7.0 IN PROGRESS — backbone identity locked, active_project pin live, agent-memory gives personas (Tom first) a full read/write/learn loop
+
+## Agent-memory surface (2026-06-10 v6.29.0) — SHIPPED
+
+Non-CLI agents (Tom, Money Bags, any persona) can now READ and WRITE the brain.
+Two routes in routes/v1/intellect.ts (loopback, agnostic — `agent` is a scope_id):
+- POST /api/v1/intellect/agent-memory — write episode/concept (scope='agent'),
+  or directive (source_type='agent_learned', ACTIVE immediately — auto-learn per
+  Moe 2026-06-10; priority capped at 89 so moe-direct always outranks; archive
+  action only touches agent_learned rows, the protect_moe_direct trigger guards
+  the rest).
+- GET /api/v1/intellect/agent-memory/recall?agent&q&project — unified ranked FTS
+  across concepts (search_vector) + episodes + directives (on-the-fly tsvector),
+  agent scope + project scope, plus latest agent episodes for continuity.
+First consumer: YMC Tom (tom-llm injects recall per turn, writes an episode after
+every completed tool-task, ymc_remember_rule/ymc_forget_rule/ymc_recall tools).
+Verified live: rule learned via WhatsApp turn → active directive + episode row.
+tsc clean, /health 6.29.0. Also archived junk directive "use porter agents be
+better" (correction-detector misfire, was priority-80 noise in every Tom turn).
 
 ## claude_cli --model passthrough (2026-06-02 v6.28.1) — SHIPPED
 
