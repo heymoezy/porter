@@ -7,7 +7,7 @@ import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
 import {
   Brain, Search, Filter, ChevronDown, ChevronRight,
-  Lightbulb, BookOpen, Clock, Zap, Shield,
+  Lightbulb, BookOpen, Clock, Shield,
   RefreshCw, Archive, Star, Eye, MessageSquare,
 } from "lucide-react"
 import { getAgentsByTeam } from "~/lib/agent-registry"
@@ -16,7 +16,7 @@ import { getAgentsByTeam } from "~/lib/agent-registry"
 
 interface Concept {
   id: string
-  memory_kind: string      // "concept" | "directive" | "episode" | "signal"
+  memory_kind: string      // "concept" | "directive" | "episode"
   trust_tier: string       // "high" | "medium" | "low"
   scope: string            // "global" | "agent" | "project" | "session"
   scope_id?: string
@@ -37,7 +37,6 @@ const KIND_CONFIG: Record<string, { icon: React.ElementType; label: string; colo
   directive: { icon: Shield, label: "Directive", color: "text-danger", bg: "bg-danger/10" },
   concept:   { icon: Lightbulb, label: "Concept", color: "text-accent-porter", bg: "bg-accent-porter/10" },
   episode:   { icon: BookOpen, label: "Episode", color: "text-warning", bg: "bg-warning/10" },
-  signal:    { icon: Zap, label: "Signal", color: "text-text3", bg: "bg-text3/10" },
 }
 
 const TRUST_CONFIG: Record<string, { label: string; color: string }> = {
@@ -221,7 +220,7 @@ function RecallContent() {
   const total = concepts.data?.count ?? 0
 
   // Count by kind
-  const kindCounts: Record<string, number> = { directive: 0, concept: 0, episode: 0, signal: 0 }
+  const kindCounts: Record<string, number> = { directive: 0, concept: 0, episode: 0 }
   for (const c of items) {
     if (c.memory_kind in kindCounts) kindCounts[c.memory_kind]++
   }
@@ -235,7 +234,7 @@ function RecallContent() {
         <div className="flex-1">
           <p className="text-sm font-semibold text-accent-porter">Memory V2 — Recall</p>
           <p className="text-2xs text-text3">
-            {total} memories · 4 layers: directives, concepts, episodes, signals
+            {total} memories · 3 layers: directives, concepts, episodes
           </p>
         </div>
         <Button variant="ghost" size="icon-xs" onClick={() => concepts.refetch()} className={concepts.isFetching ? "animate-spin" : ""}>
@@ -252,8 +251,8 @@ function RecallContent() {
         </div>
 
         {/* Layer cards */}
-        <div className="col-span-8 grid grid-cols-4 gap-2">
-          {(["directive", "concept", "episode", "signal"] as const).map(kind => {
+        <div className="col-span-8 grid grid-cols-3 gap-2">
+          {(["directive", "concept", "episode"] as const).map(kind => {
             const cfg = KIND_CONFIG[kind]
             const Icon = cfg.icon
             const count = kindCounts[kind]

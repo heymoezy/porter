@@ -12,14 +12,23 @@
  * Episodes are the medium-trust "diary" tier of memory — they get injected
  * into the next session's context so Porter remembers what was worked on.
  *
- * This module is intentionally lightweight — it reads from existing tables
- * (bridge_dispatch_log, intellect_events) and writes a single episode row.
- * No LLM calls. The summary is synthesized from structured data.
+ * Summary synthesis (v6.29.0): episodes used to be tool-count stats
+ * ("Session (570 dispatches) — tools: Bash×358") — zero meaning, useless for
+ * recall, and they poisoned every consumer of the episode tier (Moe
+ * 2026-06-10: "the brain is a mess and nothing is helping"). Now, when the
+ * session has captured transcript turns, we make ONE raw Bridge call
+ * (claude_cli — Max OAuth, zero token cost; same raw-by-omission contract as
+ * dream-worker) to write a 2-3 sentence summary of what was actually done and
+ * decided. The structural stats line remains as suffix + the fallback when
+ * there's no transcript or the dispatch fails — episode creation NEVER blocks
+ * on the LLM.
  */
 
 import { randomUUID } from 'node:crypto';
 import { pool } from '../../db/client.js';
 import { logIntellectEvent } from './file-watcher.js';
+import { routingEngine } from '../bridge/routing-engine.js';
+import type { BridgeDispatchRequest, RoutingContext } from '../bridge/types.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -69,6 +78,68 @@ function extractFilePathFromIntent(intent: string | null): string | null {
   return null;
 }
 
+// ── Transcript-based meaning synthesis ──────────────────────────────────
+
+const SUMMARY_MODEL = 'claude-haiku-4-5-20251001'; // fast tier — a 3-sentence digest needs no more
+const SUMMARY_TIMEOUT_MS = 60_000;
+const SUMMARY_TURN_CAP = 30;       // turns fed to the digest
+const SUMMARY_USER_CHAR_CAP = 300; // per user turn
+const SUMMARY_ASST_CHAR_CAP = 200; // per assistant turn
+
+async function synthesizeMeaningfulSummary(sessionId: string, project: string | null): Promise<string | null> {
+  try {
+    const { rows: turns } = await pool.query<{ role: string; content: string }>(
+      `SELECT role, content FROM session_transcript_turns
+        WHERE session_id = $1 ORDER BY turn_index ASC`,
+      [sessionId],
+    );
+    const userTurns = turns.filter((t) => t.role === 'user');
+    if (userTurns.length === 0) return null;
+
+    // Compact digest: every user turn (the asks/corrections), thin assistant
+    // slices for outcome context. Newest-biased when over the cap.
+    const slice = turns.length > SUMMARY_TURN_CAP ? turns.slice(-SUMMARY_TURN_CAP) : turns;
+    const digest = slice
+      .map((t) => {
+        const cap = t.role === 'user' ? SUMMARY_USER_CHAR_CAP : SUMMARY_ASST_CHAR_CAP;
+        const body = String(t.content || '').replace(/\s+/g, ' ').trim().slice(0, cap);
+        return body ? `${t.role === 'user' ? 'USER' : 'ASSISTANT'}: ${body}` : null;
+      })
+      .filter(Boolean)
+      .join('\n');
+    if (digest.length < 80) return null;
+
+    const promptBody = [
+      `Summarize this work session${project ? ` on project "${project}"` : ''} in 2-3 plain sentences.`,
+      'State WHAT was done/decided/fixed and any explicit user corrections or open threads.',
+      'No preamble, no markdown, no "the session" framing — just the facts, past tense.',
+      '',
+      digest,
+    ].join('\n');
+
+    const ctx: RoutingContext = {
+      message: promptBody,
+      forceGatewayType: 'claude_cli',
+      forceModelName: SUMMARY_MODEL,
+    };
+    const req: BridgeDispatchRequest = {
+      messages: [{ role: 'user', content: promptBody }],
+      model: SUMMARY_MODEL,
+      temperature: 0.2,
+      maxTokens: 400,
+    };
+    const timer = new Promise<null>((resolve) => setTimeout(() => resolve(null), SUMMARY_TIMEOUT_MS));
+    const dispatch = (async () => {
+      const { result } = await routingEngine.selectWithFallback(ctx, req);
+      const text = result?.response?.replace(/\s+/g, ' ').trim();
+      return text && text.length > 20 ? text.slice(0, 700) : null;
+    })();
+    return await Promise.race([dispatch, timer]);
+  } catch {
+    return null; // fallback to structural summary — never block the episode
+  }
+}
+
 // ── Main ────────────────────────────────────────────────────────────────
 
 /**
@@ -88,8 +159,21 @@ export async function analyzeAndStoreSession(input: SessionEndInput): Promise<Ep
     [sessionId]
   );
 
-  // Don't bother creating an episode for sessions with zero activity.
-  if (dispatches.length === 0) {
+  // Transcript turns are a SEPARATE activity signal from dispatches — CLI
+  // sessions write transcripts (Phase 48.2) but their session ids never match
+  // bridge_dispatch_log.chat_id (verified 2026-06-10: zero overlap). The old
+  // `dispatches.length === 0 → null` early-return meant NO transcript-bearing
+  // session ever got an episode — the meaningful tier was structurally empty.
+  // Now: bail only when there's neither dispatch activity NOR a transcript.
+  const { rows: turnStats } = await pool.query<{ n: string; started: number | null; ended: number | null }>(
+    `SELECT count(*) AS n,
+            EXTRACT(epoch FROM min(captured_at)) AS started,
+            EXTRACT(epoch FROM max(captured_at)) AS ended
+       FROM session_transcript_turns WHERE session_id = $1`,
+    [sessionId],
+  );
+  const turnCount = Number(turnStats[0]?.n ?? 0);
+  if (dispatches.length === 0 && turnCount === 0) {
     return null;
   }
 
@@ -104,9 +188,16 @@ export async function analyzeAndStoreSession(input: SessionEndInput): Promise<Ep
     }
   }
 
-  // ── Duration ─────────────────────────────────────────────────────────
-  const startedAt = input.startedAt ?? dispatches[0].created_at;
-  const endedAt = input.endedAt ?? dispatches[dispatches.length - 1].created_at;
+  // ── Duration ── dispatch timestamps when present, else transcript span ──
+  const nowEpoch = Date.now() / 1000;
+  const startedAt = input.startedAt
+    ?? dispatches[0]?.created_at
+    ?? turnStats[0]?.started
+    ?? nowEpoch;
+  const endedAt = input.endedAt
+    ?? dispatches[dispatches.length - 1]?.created_at
+    ?? turnStats[0]?.ended
+    ?? nowEpoch;
   const durationSeconds = Math.max(0, Math.round(endedAt - startedAt));
 
   // ── Intellect events during this session ────────────────────────────
@@ -146,11 +237,17 @@ export async function analyzeAndStoreSession(input: SessionEndInput): Promise<Ep
   const parts: string[] = [];
   if (input.project) parts.push(`Worked on **${input.project}**`);
   else parts.push('Session');
-  parts.push(`(${dispatches.length} dispatches, ${Math.round(durationSeconds / 60)}m)`);
+  parts.push(dispatches.length > 0
+    ? `(${dispatches.length} dispatches, ${Math.round(durationSeconds / 60)}m)`
+    : `(${turnCount} transcript turns, ${Math.round(durationSeconds / 60)}m)`);
   if (topTools) parts.push(`— tools: ${topTools}`);
   if (correctionIds.length > 0) parts.push(`— ${correctionIds.length} correction(s) captured`);
   if (filesChanged.size > 0) parts.push(`— ${filesChanged.size} file(s) touched`);
-  const summary = parts.join(' ');
+  const structural = parts.join(' ');
+
+  // Meaning first, stats as suffix; structural-only when no transcript/LLM.
+  const meaningful = await synthesizeMeaningfulSummary(sessionId, input.project ?? null);
+  const summary = meaningful ? `${meaningful} [${structural}]` : structural;
 
   // ── Persist episode ──────────────────────────────────────────────────
   const episodeId = randomUUID();

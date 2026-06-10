@@ -3,10 +3,35 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.29.0
+version: v6.30.0
 updated: 2026-06-10
-updated_by: claude-fable-5 (agent-memory surface — non-CLI agents read/write the brain)
-milestone_status: v7.0 IN PROGRESS — backbone identity locked, active_project pin live, agent-memory gives personas (Tom first) a full read/write/learn loop
+updated_by: claude-fable-5 (brain cleanup — meaningful episodes, telemetry purge, dead signals UI removed)
+milestone_status: v7.0 IN PROGRESS — backbone identity locked, agent-memory live (Tom), episode tier now captures MEANING not tool counts
+
+## Brain cleanup (2026-06-10 v6.30.0) — SHIPPED
+
+Moe: "porter intellect and dreams, it's just all a mess and nothing is helping."
+Three fixes, all verified live:
+1. **Meaningful episodes.** session-analyzer episodes were tool-count stats
+   ("Session (570 dispatches) — tools: Bash×358"). Now: one raw Bridge call
+   (claude_cli haiku, Max OAuth = free, 60s budget, dream-worker's raw-by-
+   omission contract) summarizes the session TRANSCRIPT into 2-3 factual
+   sentences; structural stats stay as suffix + fallback. ROOT CAUSE also
+   fixed: transcript session ids NEVER match bridge_dispatch_log.chat_id
+   (zero overlap), so the old `dispatches===0 → null` early-return meant no
+   transcript-bearing session ever produced an episode at all. Verified:
+   session 9b233b16 → "Deployed three releases: admin v0.10.0 added a proper
+   Enquiries table…".
+2. **Telemetry purge.** Archived all 60 active `intelligence_loop` concepts
+   ("claude_cli avg latency …") — orphans of the v6.28.0-stripped service,
+   they dominated every concept injection incl. CLI session hooks.
+3. **Signals layer retired from UI.** No signals table exists (Memory V2 docs
+   were stale); Recall screen dropped the dead 4th layer card/filter (now
+   3 layers: directives/concepts/episodes), admin rebuilt.
+Architecture decision (Moe asked "legacy or better way?"): KEEP Postgres+FTS —
+no embedding stack on a 2-vCPU/8GB box; ranked websearch_to_tsquery recall is
+proven good (Tom agent-memory). The broken part was the WRITERS (episode
+quality, telemetry noise), not the storage/retrieval design.
 
 ## Agent-memory surface (2026-06-10 v6.29.0) — SHIPPED
 
