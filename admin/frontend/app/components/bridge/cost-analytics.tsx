@@ -198,7 +198,7 @@ export function CostAnalytics() {
 
       {/* ── Summary metrics row ── */}
       <div className="flex items-center gap-2 flex-wrap">
-        <MiniMetric label="Total Cost" value={fmtCost(totals.total_cost_usd)} colorClass="text-warning" />
+        <MiniMetric label="Est. API-equiv cost" value={fmtCost(totals.total_cost_usd)} colorClass="text-warning" />
         <MiniMetric label="Dispatches" value={totals.total_dispatches} />
         <MiniMetric label="Tokens In" value={fmtTokens(totals.total_input_tokens)} colorClass="text-accent-porter" />
         <MiniMetric label="Tokens Out" value={fmtTokens(totals.total_output_tokens)} colorClass="text-accent-porter" />

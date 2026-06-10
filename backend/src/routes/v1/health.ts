@@ -68,7 +68,7 @@ export default async function healthV1Routes(fastify: FastifyInstance) {
     }
 
     return reply.send(ok({
-      porter_version: '6.30.0',
+      porter_version: '6.30.1',
       db_engine: 'postgresql',
       db_connected: dbStatus === 'up',
       backends,

@@ -105,7 +105,7 @@ function StatusHeader() {
           <div className="mt-1 text-lg font-semibold text-text">{metrics?.dispatches_7d ?? "—"}</div>
         </CardContent></Card>
         <Card><CardContent className="p-3">
-          <div className="text-2xs uppercase tracking-wider text-text3">Cost 7d</div>
+          <div className="text-2xs uppercase tracking-wider text-text3" title="API-equivalent estimate — CLI backends run on subscription OAuth (actual marginal cost $0)">Est. API-equiv 7d</div>
           <div className="mt-1 text-lg font-semibold text-text">{metrics ? fmtUsd(metrics.total_cost_usd_7d) : "—"}</div>
         </CardContent></Card>
         <Card><CardContent className="p-3">

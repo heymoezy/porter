@@ -382,13 +382,13 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
 
   async listModels(): Promise<string[]> {
     // Static — no programmatic endpoint available in claude CLI.
-    // Anthropic public model lineup as of 2026-05.
+    // Anthropic public model lineup as of 2026-06 (Fable 5 + the 4.x family).
     return [
+      'claude-fable-5',
+      'claude-opus-4-8',
       'claude-opus-4-7',
       'claude-sonnet-4-6',
       'claude-haiku-4-5',
-      'claude-opus-4-6',
-      'claude-haiku-3-5',
     ];
   }
 }

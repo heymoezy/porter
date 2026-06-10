@@ -8,6 +8,18 @@ updated: 2026-06-10
 updated_by: claude-fable-5 (brain cleanup — meaningful episodes, telemetry purge, dead signals UI removed)
 milestone_status: v7.0 IN PROGRESS — backbone identity locked, agent-memory live (Tom), episode tier now captures MEANING not tool counts
 
+## Bridge screen audit pass 1 (2026-06-10 v6.30.1) — SHIPPED
+
+Data fixes from the live audit: claude_cli model catalog refreshed (was the
+2026-05 lineup with opus-4-6/haiku-3-5 and no Fable 5/Opus 4.8 — adapter
+listModels is static); "Cost 7d" relabelled "Est. API-equiv 7d" + tooltip (CLI
+backends are subscription OAuth, marginal cost $0 — the estimate was presented
+as real spend). Codex gateway status verified CORRECT (active, dispatching).
+PROPOSED (pending Moe): per-consumer dispatch view (Tom / doc-intel / dreams /
+Money Bags / CLI) — the screen shows gateways+models but never WHO is using the
+bridge; gateway cards should carry last-dispatch age + 24h failure rate, not
+just a status dot. Density/layout pass needs Moe's specifics.
+
 ## Brain cleanup (2026-06-10 v6.30.0) — SHIPPED
 
 Moe: "porter intellect and dreams, it's just all a mess and nothing is helping."
