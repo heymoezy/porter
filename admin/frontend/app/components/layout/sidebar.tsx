@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query"
 import { Link, useLocation } from "react-router"
 import { VERSION } from "~/lib/constants"
 import { PorterLogo } from "~/components/porter-logo"
@@ -7,9 +8,9 @@ import { Separator } from "~/components/ui/separator"
 import {
   Mail, LayoutDashboard,
   ChevronLeft, ChevronRight, Settings, LogOut,
-  FolderOpen, Route, BookOpen,
+  FolderOpen, Route,
   Code2, Palette, Flame,
-  Wrench, GraduationCap, MessageCircle, Brain, Moon,
+  Wrench, MessageCircle, Brain,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -19,6 +20,20 @@ interface SidebarProps {
   onToggle: () => void
   notificationCount?: number
   bridgeUpdateCount?: number
+}
+
+// Live backend version for the sidebar chip — the baked frontend package
+// version drifts (showed 6.3.0 while the backend ran 6.30.x).
+function useLiveVersion(): string | undefined {
+  const { data } = useQuery({
+    queryKey: ["health", "version"],
+    queryFn: async () => {
+      const res = await fetch("/health")
+      return (await res.json()) as { version?: string }
+    },
+    staleTime: 300_000,
+  })
+  return data?.version
 }
 
 const groups = [
@@ -34,20 +49,18 @@ const groups = [
     { icon: MessageCircle, label: "Skill Feedback", path: "/skill-feedback" },
   ]},
   { label: "Ops", items: [
-    { icon: Brain, label: "Intellect", path: "/intelligence" },
-    { icon: Moon, label: "Dreams", path: "/dreams" },
     { icon: Route, label: "Bridge", path: "/bridge" },
-    { icon: BookOpen, label: "Recall", path: "/recall" },
+    { icon: Brain, label: "Brain", path: "/brain" },
+    { icon: Wrench, label: "Env Tools", path: "/env-tools" },
   ]},
   { label: "Dev", items: [
-    { icon: Wrench, label: "Env Tools", path: "/env-tools" },
-    { icon: GraduationCap, label: "Learnings", path: "/learnings" },
     { icon: Palette, label: "Design System", path: "/design-system" },
     { icon: Code2, label: "Architecture", path: "/architecture" },
   ]},
 ]
 
 export function Sidebar({ collapsed, onToggle, notificationCount = 0, bridgeUpdateCount = 0 }: SidebarProps) {
+  const liveVersion = useLiveVersion()
   const location = useLocation()
   const user = useCurrentUser()
   const logout = useLogout()
@@ -130,7 +143,7 @@ export function Sidebar({ collapsed, onToggle, notificationCount = 0, bridgeUpda
         </div>
         {!collapsed && (
           <Link to="/changelog" className="mt-2 block text-center uppercase tracking-widest text-text3 hover:text-accent-porter transition-colors" style={{ fontSize: '10px' }}>
-            Porter v{VERSION}
+            Porter v{liveVersion ?? VERSION}
           </Link>
         )}
       </div>

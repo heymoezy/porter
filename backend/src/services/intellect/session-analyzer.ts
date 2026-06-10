@@ -121,6 +121,7 @@ async function synthesizeMeaningfulSummary(sessionId: string, project: string | 
       message: promptBody,
       forceGatewayType: 'claude_cli',
       forceModelName: SUMMARY_MODEL,
+      sourceAgent: 'episode-summarizer',
     };
     const req: BridgeDispatchRequest = {
       messages: [{ role: 'user', content: promptBody }],

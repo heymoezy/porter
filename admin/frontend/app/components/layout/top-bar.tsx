@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router"
 import {
-  Bell, Moon, Sun, ArrowLeft, X,
+  Bell, ArrowLeft, X,
   LayoutDashboard,
   Sparkles, Wrench, Activity, Bug, Monitor, Mail, FileText, Settings, Flame, Route,
 } from "lucide-react"
@@ -15,8 +15,6 @@ export interface AdminNotification {
 }
 
 interface TopBarProps {
-  onToggleTheme: () => void
-  theme: "dark" | "light"
   notifications: AdminNotification[]
   onDismissNotification: (id: number) => void
 }
@@ -55,7 +53,7 @@ const colorDot: Record<string, string> = {
   success: "bg-success",
 }
 
-export function TopBar({ onToggleTheme, theme, notifications, onDismissNotification }: TopBarProps) {
+export function TopBar({ notifications, onDismissNotification }: TopBarProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
@@ -156,12 +154,6 @@ export function TopBar({ onToggleTheme, theme, notifications, onDismissNotificat
           )}
         </div>
 
-        <button
-          onClick={onToggleTheme}
-          className="flex h-7 w-7 items-center justify-center rounded text-text3 hover:bg-raised hover:text-text2"
-        >
-          {theme === "dark" ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
-        </button>
       </div>
     </div>
   )

@@ -3,10 +3,56 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.30.0
+version: v6.31.0
 updated: 2026-06-10
-updated_by: claude-fable-5 (brain cleanup — meaningful episodes, telemetry purge, dead signals UI removed)
-milestone_status: v7.0 IN PROGRESS — backbone identity locked, agent-memory live (Tom), episode tier now captures MEANING not tool counts
+updated_by: claude-fable-5 (Ops revamp — light-only design system, Bridge console, merged Brain screen)
+milestone_status: v7.0 IN PROGRESS — Ops = Bridge/Brain/Env Tools; light professional theme (ymc-admin formula); brain feeds agents (Tom live)
+
+## Ops revamp + light-only design system (2026-06-10 v6.31.0) — SHIPPED
+
+Per Moe: "completely revamp the Porter Ops section… Bridge, Brain and whatever
+else… also Env Tools"; "scrap the dark mode and focus on light mode"; "ymc
+admin site is great. it should be on par with that." Built on a history-mine of
+6 months of his directives/proposals/transcripts (alive, no-fake-zeros, no
+page-scroll, tables>cards, preserve-features, verify-in-browser).
+
+DESIGN SYSTEM: light-only theme on the ymc-admin formula — white cards on cool
+off-white, indigo-tinted text scale, navy-tinted quiet shadows, Geist (already
+present). Dark mode + toggle DELETED (root.tsx bootstrap, admin-shell state,
+top-bar button). ONE deliberate dark element: `.terminal-surface` deep-navy
+live strips with scoped bright-on-navy palette. Sidebar version chip now reads
+live /health (was baked 6.3.0).
+
+NAV: Ops = Bridge / Brain / Env Tools. Intelligence, Dreams, Recall, Learnings
+DELETED as screens (routes 301 → /brain); Learnings/Env Tools left Dev.
+
+BRIDGE (rebuilt, 153→329 LOC): composite 6-level gateway status (resurrected
+from pre-v6.9.0 rich bridge @95abb6ca) + usage bars w/ live reset countdowns +
+per-gateway 24h stats; CONSUMERS panel (who drives the bridge — from new
+source_agent attribution); Dispatches/Costs/Models/CLI tabs preserved; dark
+navy OPERATOR LOG terminal fed by SSE (dispatches w/ consumer tags, health,
+circuit trips, CLI activity). Viewport-locked.
+
+BRAIN (new, replaces 4 junk screens): flow metrics strip (rules/knowledge/
+episodes/to-review/recalls/writes — all real queries); SYNAPSE FEED dark rail
+(live intellect_events: agent recalls/writes/corrections/sessions, 5s);
+memory browser (Rules/Knowledge/Episodes tabs, FTS search, scope filter);
+LEARNING QUEUE merging dream proposals + correction candidates with duplicate
+GROUPING (the 57-pending rot was ~30 copies of one rule), accept/reject-all/
+dedupe actions + Run-dream button.
+
+BACKEND: routes/admin/brain.ts (summary/memory/feed); bridge /consumers;
+RoutingContext.sourceAgent → bridge_dispatch_log.source_agent (chat.ts accepts
+body.source; dreams + episode-summarizer tagged); agent-memory recall/write now
+emit intellect_events (the synapse feed's fuel).
+
+Verified in browser (Playwright, authed): dashboard/bridge/brain/forge/system/
+env-tools all render on light; bridge shows live gateway bars + consumers +
+operator log; brain shows feed/browser/queue. FLAGGED follow-up: System screen
+still renders agent-factory theater ("planned" brain agents, fleet overview) —
+candidate for the next strip.
+
+## Bridge screen audit pass 1 (2026-06-10 v6.30.1) — SHIPPED
 
 ## Bridge screen audit pass 1 (2026-06-10 v6.30.1) — SHIPPED
 

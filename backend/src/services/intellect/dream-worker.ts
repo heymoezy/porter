@@ -126,6 +126,7 @@ async function dispatchDream(
     message: promptBody,
     forceGatewayType: 'claude_cli',
     forceModelName: modelName,
+    sourceAgent: 'dreams',
   };
   const req: BridgeDispatchRequest = {
     messages: [{ role: 'user', content: promptBody }],

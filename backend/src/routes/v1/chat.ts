@@ -236,6 +236,11 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     // Explicit tools override > raw default. raw=true → tools='none' unless caller overrides.
     const tools: 'none' | 'default' = body?.tools ?? (raw ? 'none' : 'default');
     const model = typeof body?.model === 'string' && body.model.trim() ? body.model.trim() : undefined;
+    // v6.31.0: consumer attribution slug (e.g. 'tom') — flows to
+    // bridge_dispatch_log.source_agent for the Bridge consumers view.
+    const sourceAgent = typeof (body as { source?: string })?.source === 'string'
+      ? (body as { source?: string }).source!.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40) || undefined
+      : undefined;
 
     // COLLAB-03: If a project context is provided, verify project access (chat role minimum)
     if (projectId) {
@@ -472,6 +477,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       dispatchStrategy,  // Phase 45: strategy logged in bridge_dispatch_log
       tools,  // Tom-bug fix 2026-05-18: pass through tool surface knob
       model,  // 2026-06-02: caller model override → claude_cli --model (Tom on Sonnet)
+      sourceAgent,  // v6.31.0: consumer attribution → dispatch log
     });
     let fullResponse = '';
     // Phase 34: capture dispatch_id yielded by routing-engine as __DISPATCH_META__ token

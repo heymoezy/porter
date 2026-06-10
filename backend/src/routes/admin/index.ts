@@ -13,6 +13,7 @@ import chatRoutes from './chat.js';
 import intelligenceRoutes from './intelligence.js';
 import sessionsAdminRoutes from './sessions-admin.js';
 import dreamsRoutes from './dreams.js';
+import brainRoutes from './brain.js';
 import msgBusRoutes from './msg-bus.js';
 import envToolsRoutes from './env-tools.js';
 import learningsRoutes from './learnings.js';
@@ -34,6 +35,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(intelligenceRoutes, { prefix: '/intelligence' });
   fastify.register(sessionsAdminRoutes, { prefix: '/sessions' });
   fastify.register(dreamsRoutes, { prefix: '/dreams' });
+  fastify.register(brainRoutes, { prefix: '/brain' });
   fastify.register(msgBusRoutes, { prefix: '/msg-bus' });
   fastify.register(envToolsRoutes, { prefix: '/env-tools' });
   fastify.register(learningsRoutes, { prefix: '/learnings' });

@@ -45,16 +45,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){
-              var t = localStorage.getItem('porter_theme');
-              if (t === 'light') {
-                document.documentElement.classList.add('light');
-              }
-            })()`,
-          }}
-        />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){
               function reportError(source, message, stack, url) {
                 try {
                   fetch('/api/admin/diagnostics/report', {

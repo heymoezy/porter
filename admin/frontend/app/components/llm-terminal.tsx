@@ -47,7 +47,7 @@ export function LLMTerminal({ lines, title = "LLM Activity", pulse = false, clas
       </div>
 
       {/* Terminal body — fills container */}
-      <div className="bg-background p-2.5 font-mono text-2xs leading-[1.8] flex-1 overflow-y-auto">
+      <div className="terminal-surface p-2.5 font-mono text-2xs leading-[1.8] flex-1 overflow-y-auto">
         {lines.map((l, i) => (
           <p
             key={l._key}

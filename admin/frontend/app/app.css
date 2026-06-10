@@ -4,7 +4,6 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 
-@custom-variant dark (&:is(.dark *));
 
 
 /* ── 2. THEME BRIDGE ── */
@@ -77,105 +76,109 @@
 }
 
 
-/* ── 3. DARK MODE TOKENS (default) ── */
+/* ── 3. TOKENS — light, professional (the only theme; Moe 2026-06-10:
+   "scrap the dark mode and focus on light mode and make it better").
+   Formula matches the ymc.capital admin (Geist, soft blue-tinted neutrals,
+   white cards on cool off-white, quiet navy-tinted shadows) with Porter's
+   indigo as the brand accent. ── */
 :root {
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
   /* Surfaces */
-  --background: #111827;
-  --surface:    #1E2736;
-  --raised:     #28344A;
+  --background: #F6F7FA;
+  --surface:    #FFFFFF;
+  --raised:     #EEF1F6;
 
   /* Borders */
-  --border:  #374259;
-  --border2: #4A5770;
+  --border:  #E2E7EF;
+  --border2: #C9D2E0;
 
-  /* Text */
-  --text:  #F1F5F9;
-  --text2: #94A3B8;
-  --text3: #64748B;
+  /* Text — indigo-tinted, never generic gray */
+  --text:  #1C2440;
+  --text2: #5A6786;
+  --text3: #93A0B8;
 
   /* Accent */
-  --accent-porter: #6366F1;
-  --accent-hover:  #4F46E5;
+  --accent-porter: #4F46E5;
+  --accent-hover:  #4338CA;
 
   /* Semantic */
-  --success: #22C55E;
-  --warning: #F59E0B;
-  --danger:  #EF4444;
+  --success: #15803D;
+  --warning: #B45309;
+  --danger:  #DC2626;
 
   /* shadcn mappings */
-  --foreground:           #F1F5F9;
-  --card:                 #1E2736;
-  --card-foreground:      #F1F5F9;
-  --popover:              #1E2736;
-  --popover-foreground:   #F1F5F9;
-  --primary:              #6366F1;
+  --foreground:           #1C2440;
+  --card:                 #FFFFFF;
+  --card-foreground:      #1C2440;
+  --popover:              #FFFFFF;
+  --popover-foreground:   #1C2440;
+  --primary:              #4F46E5;
   --primary-foreground:   #FFFFFF;
-  --secondary:            #28344A;
-  --secondary-foreground: #F1F5F9;
-  --muted:                #28344A;
-  --muted-foreground:     #94A3B8;
-  --accent:               #28344A;
-  --accent-foreground:    #F1F5F9;
-  --destructive:          #EF4444;
-  --input:                #374259;
-  --ring:                 #6366F1;
+  --secondary:            #EEF1F6;
+  --secondary-foreground: #1C2440;
+  --muted:                #EEF1F6;
+  --muted-foreground:     #5A6786;
+  --accent:               #EEF1F6;
+  --accent-foreground:    #1C2440;
+  --destructive:          #DC2626;
+  --input:                #D8DEE9;
+  --ring:                 #4F46E5;
 
   /* Charts */
-  --chart-1: #6366F1;
-  --chart-2: #818CF8;
-  --chart-3: #A5B4FC;
-  --chart-4: #4F46E5;
-  --chart-5: #3730A3;
+  --chart-1: #4F46E5;
+  --chart-2: #6366F1;
+  --chart-3: #818CF8;
+  --chart-4: #3730A3;
+  --chart-5: #A5B4FC;
 
   /* Sidebar */
-  --sidebar:                     #1E2736;
-  --sidebar-foreground:          #F1F5F9;
-  --sidebar-primary:             #6366F1;
+  --sidebar:                     #FBFCFE;
+  --sidebar-foreground:          #1C2440;
+  --sidebar-primary:             #4F46E5;
   --sidebar-primary-foreground:  #FFFFFF;
-  --sidebar-accent:              #28344A;
-  --sidebar-accent-foreground:   #F1F5F9;
-  --sidebar-border:              #374259;
-  --sidebar-ring:                #6366F1;
+  --sidebar-accent:              #EEF2FF;
+  --sidebar-accent-foreground:   #312E81;
+  --sidebar-border:              #E2E7EF;
+  --sidebar-ring:                #4F46E5;
 
-  /* Shadows */
-  --shadow-xs:         0 1px 4px rgba(0,0,0,.18);
-  --shadow-sm:         0 2px 8px rgba(0,0,0,.20);
-  --shadow-md:         0 4px 16px rgba(0,0,0,.12);
-  --shadow-lg:         0 12px 30px rgba(0,0,0,.22);
-  --shadow-xl:         0 20px 60px rgba(0,0,0,.24);
-  --shadow-2xl:        0 24px 64px rgba(0,0,0,.28);
-  --shadow-glow:       0 0 20px rgba(99,102,241,.25);
-  --shadow-card:       0 4px 16px rgba(0,0,0,.10);
-  --shadow-card-hover: 0 8px 24px rgba(0,0,0,.14);
-  --shadow-card-crm-hover: 0 10px 24px rgba(0,0,0,.14);
-  --shadow-send:       0 10px 24px rgba(0,0,0,.16);
-  --shadow-send-hover: 0 14px 28px rgba(0,0,0,.20);
-  --shadow-dropdown:   0 18px 44px rgba(0,0,0,.24);
-  --shadow-auth:       0 20px 60px rgba(0,0,0,.24);
-  --shadow-proposal:   0 8px 24px rgba(0,0,0,.12);
-  --inset-highlight:   rgba(255,255,255,.04);
+  /* Shadows — navy-tinted, quiet (ymc formula) */
+  --shadow-xs:         0 1px 2px rgba(28,36,64,.05);
+  --shadow-sm:         0 1px 3px rgba(28,36,64,.07);
+  --shadow-md:         0 4px 12px rgba(28,36,64,.07);
+  --shadow-lg:         0 12px 28px rgba(28,36,64,.09);
+  --shadow-xl:         0 20px 48px rgba(28,36,64,.11);
+  --shadow-2xl:        0 24px 60px rgba(28,36,64,.13);
+  --shadow-glow:       0 0 18px rgba(79,70,229,.16);
+  --shadow-card:       0 1px 3px rgba(28,36,64,.06);
+  --shadow-card-hover: 0 6px 18px rgba(28,36,64,.09);
+  --shadow-card-crm-hover: 0 8px 20px rgba(28,36,64,.09);
+  --shadow-send:       0 8px 20px rgba(28,36,64,.10);
+  --shadow-send-hover: 0 12px 24px rgba(28,36,64,.12);
+  --shadow-dropdown:   0 14px 38px rgba(28,36,64,.13);
+  --shadow-auth:       0 20px 56px rgba(28,36,64,.12);
+  --shadow-proposal:   0 6px 18px rgba(28,36,64,.07);
+  --inset-highlight:   rgba(255,255,255,.85);
 
   /* Semantic glow shadows — derived from palette */
-  --shadow-accent-glow:  0 4px 12px color-mix(in srgb, var(--accent-porter) 40%, transparent);
-  --shadow-accent-pulse: 0 0 20px color-mix(in srgb, var(--accent-porter) 12%, transparent);
-  --shadow-success-glow: 0 0 15px color-mix(in srgb, var(--success) 12%, transparent);
-  --shadow-warning-glow: 0 0 15px color-mix(in srgb, var(--warning) 12%, transparent);
-  --shadow-danger-glow:  0 0 15px color-mix(in srgb, var(--danger) 12%, transparent);
+  --shadow-accent-glow:  0 3px 10px color-mix(in srgb, var(--accent-porter) 24%, transparent);
+  --shadow-accent-pulse: 0 0 18px color-mix(in srgb, var(--accent-porter) 10%, transparent);
+  --shadow-success-glow: 0 0 14px color-mix(in srgb, var(--success) 12%, transparent);
+  --shadow-warning-glow: 0 0 14px color-mix(in srgb, var(--warning) 12%, transparent);
+  --shadow-danger-glow:  0 0 14px color-mix(in srgb, var(--danger) 12%, transparent);
 
   /* Shimmer (skeleton loading) */
-  --shimmer-from:     var(--surface);
-  --shimmer-via:      var(--raised);
-  --shimmer-bar-from: var(--raised);
-  --shimmer-bar-via:  var(--border);
+  --shimmer-from:     #EEF1F6;
+  --shimmer-via:      #E2E7EF;
+  --shimmer-bar-from: #E2E7EF;
+  --shimmer-bar-via:  #D3DAE6;
 
   /* Send button text */
-  --send-btn-text: #e8e8ff;
+  --send-btn-text: #FFFFFF;
 
   /* Banner opacity */
-  --banner-accent-opacity:  0.15;
-  --banner-warning-opacity: 0.15;
+  --banner-accent-opacity:  0.10;
+  --banner-warning-opacity: 0.12;
   --banner-success-opacity: 0.10;
 
   /* Layout */
@@ -185,13 +188,14 @@
   --chat-panel-width: 340px;
   --bottom-bar-height: 200px;
 
-  /* Derived surfaces */
-  --terminal-bg: color-mix(in srgb, var(--background) 90%, black);
+  /* Derived surfaces — the deep-navy live terminal is the ONE deliberate
+     dark element (mission-control contrast strip on Bridge/Brain). */
+  --terminal-bg: #151B2E;
 
   /* Scrollbar */
   --scrollbar-size: 3px;
-  --scrollbar-thumb: rgba(255, 255, 255, 0.15);
-  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+  --scrollbar-thumb: rgba(28, 36, 64, 0.18);
+  --scrollbar-thumb-hover: rgba(28, 36, 64, 0.32);
 
   /* Motion */
   --duration-instant: 100ms;
@@ -209,106 +213,19 @@
 }
 
 
-/* ── 4. LIGHT MODE TOKENS ── */
-.light {
-  /* Surfaces */
-  --background: #FFFFFF;
-  --surface:    #F3F4F8;
-  --raised:     #E8EBF2;
-
-  /* Borders */
-  --border:  #D1D5DF;
-  --border2: #B8BFD0;
-
-  /* Text */
-  --text:  #0F172A;
-  --text2: #475569;
-  --text3: #94A3B8;
-
-  /* Accent */
-  --accent-porter: #4F46E5;
-  --accent-hover:  #4338CA;
-
-  /* Semantic */
-  --success: #16A34A;
-  --warning: #D97706;
-  --danger:  #DC2626;
-
-  /* shadcn mappings */
-  --foreground:           #0F172A;
-  --card:                 #F3F4F8;
-  --card-foreground:      #0F172A;
-  --popover:              #FFFFFF;
-  --popover-foreground:   #0F172A;
-  --primary:              #4F46E5;
-  --primary-foreground:   #FFFFFF;
-  --secondary:            #E8EBF2;
-  --secondary-foreground: #0F172A;
-  --muted:                #E8EBF2;
-  --muted-foreground:     #475569;
-  --accent:               #E8EBF2;
-  --accent-foreground:    #0F172A;
-  --destructive:          #DC2626;
-  --input:                #D1D5DF;
-  --ring:                 #4F46E5;
-
-  /* Charts */
-  --chart-1: #4F46E5;
-  --chart-2: #6366F1;
-  --chart-3: #818CF8;
-  --chart-4: #3730A3;
-  --chart-5: #312E81;
-
-  /* Sidebar */
-  --sidebar:                     #F3F4F8;
-  --sidebar-foreground:          #0F172A;
-  --sidebar-primary:             #4F46E5;
-  --sidebar-primary-foreground:  #FFFFFF;
-  --sidebar-accent:              #E8EBF2;
-  --sidebar-accent-foreground:   #0F172A;
-  --sidebar-border:              #D1D5DF;
-  --sidebar-ring:                #4F46E5;
-
-  /* Shadows */
-  --shadow-xs:         0 1px 4px rgba(0,0,0,.06);
-  --shadow-sm:         0 2px 8px rgba(0,0,0,.06);
-  --shadow-md:         0 4px 16px rgba(0,0,0,.06);
-  --shadow-lg:         0 12px 30px rgba(0,0,0,.08);
-  --shadow-xl:         0 20px 60px rgba(0,0,0,.10);
-  --shadow-2xl:        0 24px 64px rgba(0,0,0,.12);
-  --shadow-glow:       0 0 20px rgba(79,70,229,.20);
-  --shadow-card:       0 4px 16px rgba(0,0,0,.06);
-  --shadow-card-hover: 0 8px 24px rgba(0,0,0,.08);
-  --shadow-card-crm-hover: 0 10px 24px rgba(0,0,0,.08);
-  --shadow-send:       0 10px 24px rgba(0,0,0,.08);
-  --shadow-send-hover: 0 14px 28px rgba(0,0,0,.10);
-  --shadow-dropdown:   0 18px 44px rgba(0,0,0,.10);
-  --shadow-auth:       0 20px 60px rgba(0,0,0,.10);
-  --shadow-proposal:   0 8px 24px rgba(0,0,0,.06);
-  --inset-highlight:   rgba(255,255,255,.70);
-
-  /* Shimmer */
-  --shimmer-from:     #EBEEF4;
-  --shimmer-via:      #DDE1EA;
-  --shimmer-bar-from: #DDE1EA;
-  --shimmer-bar-via:  #CDD2DE;
-
-  /* Send button text */
-  --send-btn-text: #FFFFFF;
-
-  /* Derived surfaces */
-  --terminal-bg: color-mix(in srgb, var(--background) 90%, black);
-
-  /* Scrollbar */
-  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
-  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.30);
-
-  /* Banner opacity */
-  --banner-accent-opacity:  0.20;
-  --banner-warning-opacity: 0.20;
-  --banner-success-opacity: 0.15;
-}
-
+/* ── Terminal surface — the ONE deliberate dark element. A deep-navy window
+   into the live machine, sitting inside the light professional shell
+   (mission-control contrast). Token colors are remapped to bright-on-navy
+   inside it so callers keep using semantic classes. ── */
+.terminal-surface { background: var(--terminal-bg); color: #C7CFE6; }
+.terminal-surface .text-success      { color: #4ADE80; }
+.terminal-surface .text-warning      { color: #FBBF24; }
+.terminal-surface .text-danger       { color: #F87171; }
+.terminal-surface .text-accent-porter{ color: #A5B4FC; }
+.terminal-surface .text-chart-2      { color: #93C5FD; }
+.terminal-surface .text-text2        { color: #9AA6C4; }
+.terminal-surface .text-text3        { color: #66718E; }
+.terminal-surface .text-text         { color: #E3E8F4; }
 
 /* ── 5. BASE STYLES ── */
 @layer base {

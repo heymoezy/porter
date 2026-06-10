@@ -561,6 +561,11 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
         [id, agent, content, priority, body.tags ?? null],
       );
     }
+    // Flow telemetry for the Brain screen (fire-and-forget).
+    pool.query(
+      `INSERT INTO intellect_events (id, event_type, source_type, details_json) VALUES ($1,$2,$3,$4::jsonb)`,
+      [randomUUID(), 'agent_memory_write', 'agent-memory', JSON.stringify({ agent, kind, preview: content.slice(0, 140) })],
+    ).catch(() => undefined);
     return reply.send(ok({ id, kind, agent }));
   });
 
@@ -613,6 +618,11 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
         WHERE scope='agent' AND scope_id=$1 ORDER BY created_at DESC LIMIT $2`,
       [agent, recentN],
     )).rows.map((r) => ({ kind: 'episode', content: r.content, created_at: Number(r.created_at) }));
+    // Flow telemetry for the Brain screen (fire-and-forget).
+    pool.query(
+      `INSERT INTO intellect_events (id, event_type, source_type, details_json) VALUES ($1,$2,$3,$4::jsonb)`,
+      [randomUUID(), 'agent_memory_recall', 'agent-memory', JSON.stringify({ agent, q: query.slice(0, 140) || null, hits: hits.length })],
+    ).catch(() => undefined);
     return reply.send(ok({ agent, query: query || null, hits, recent }));
   });
 

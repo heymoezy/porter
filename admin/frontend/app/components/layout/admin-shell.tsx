@@ -21,12 +21,6 @@ export function AdminShell({ children }: AdminShellProps) {
   )
 }
 
-function getInitialTheme(): "dark" | "light" {
-  if (typeof window === "undefined") return "dark"
-  const saved = localStorage.getItem("porter_theme")
-  return saved === "light" ? "light" : "dark"
-}
-
 function AdminShellInner({ children }: { children: ReactNode }) {
   const { data: session } = useSession()
   useAdminSSE()
@@ -42,19 +36,7 @@ function AdminShellInner({ children }: { children: ReactNode }) {
   const bridgeUpdateCount = (versionData?.versions ?? []).filter(
     v => v.is_latest === false || (!v.version && v.update_cmd)
   ).length
-  const [theme, setTheme] = useState<"dark" | "light">(getInitialTheme)
   const [notifications, setNotifications] = useState<AdminNotification[]>([])
-
-  // Sync DOM class on mount and theme change
-  useEffect(() => {
-    document.documentElement.classList.toggle("light", theme === "light")
-  }, [theme])
-
-  function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark"
-    setTheme(next)
-    localStorage.setItem("porter_theme", next)
-  }
 
   function dismissNotification(id: number) {
     setNotifications(prev => prev.filter(n => n.id !== id))
@@ -82,8 +64,6 @@ function AdminShellInner({ children }: { children: ReactNode }) {
         <div className="flex flex-1 flex-col overflow-hidden min-w-0">
           <ErrorBoundary module="TopBar">
             <TopBar
-              onToggleTheme={toggleTheme}
-              theme={theme}
               notifications={notifications}
               onDismissNotification={dismissNotification}
             />

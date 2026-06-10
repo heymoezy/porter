@@ -213,7 +213,7 @@ export class RoutingEngine {
             decision.matchedRuleId,
             ctx.username ?? null,
             agentMsgCtx?.correlationId ?? null,
-            agentMsgCtx?.sourceAgent ?? null,
+            agentMsgCtx?.sourceAgent ?? ctx.sourceAgent ?? null,
             agentMsgCtx?.sourceGateway ?? null,
             agentMsgCtx?.targetAgent ?? null,
             agentMsgCtx?.targetGateway ?? null,

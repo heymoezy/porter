@@ -156,6 +156,38 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
     return reply.send(ok({ gateways, summary }));
   });
 
+  // GET /api/admin/bridge/consumers — WHO is using the bridge (v6.31.0).
+  // Per-consumer dispatch stats from bridge_dispatch_log.source_agent.
+  // Untagged rows are bucketed honestly as 'untagged' (legacy dispatches +
+  // writers not yet passing a source slug) — never invented attribution.
+  fastify.get('/consumers', async (_req, reply) => {
+    const rows = await queryAll<{
+      consumer: string; n_24h: number; n_7d: number;
+      avg_latency_ms: number | null; last_at: number | null;
+    }>(`
+      SELECT COALESCE(source_agent, 'untagged') AS consumer,
+             count(*) FILTER (WHERE created_at > extract(epoch from now()) - 86400)::int AS n_24h,
+             count(*)::int AS n_7d,
+             round(avg(NULLIF(latency_ms, 0)) FILTER (WHERE created_at > extract(epoch from now()) - 86400))::int AS avg_latency_ms,
+             max(created_at)::float8 AS last_at
+        FROM bridge_dispatch_log
+       WHERE created_at > extract(epoch from now()) - 86400*7
+       GROUP BY 1
+       ORDER BY n_7d DESC`);
+    // Per-gateway 24h stats for the gateway cards (latency + last dispatch age).
+    const gateways = await queryAll<{
+      gateway_type: string; n_24h: number; avg_latency_ms: number | null; last_at: number | null;
+    }>(`
+      SELECT gateway_type,
+             count(*) FILTER (WHERE created_at > extract(epoch from now()) - 86400)::int AS n_24h,
+             round(avg(NULLIF(latency_ms, 0)) FILTER (WHERE created_at > extract(epoch from now()) - 86400))::int AS avg_latency_ms,
+             max(created_at)::float8 AS last_at
+        FROM bridge_dispatch_log
+       WHERE created_at > extract(epoch from now()) - 86400*7
+       GROUP BY 1`);
+    return reply.send(ok({ consumers: rows, gateways }));
+  });
+
   // GET /api/admin/bridge/summary — top-line metrics for Bridge status page
   fastify.get('/summary', async (_req, reply) => {
     const [d24, d7, l24, models, cli24] = await Promise.all([
