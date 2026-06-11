@@ -1,3 +1,43 @@
+## v6.31.1 (2026-06-11)
+
+- feat(admin): Ops revamp — light-only design system, Bridge console, merged Brain screen (v6.31.0)
+- fix(bridge): refresh stale model lineup + honest cost labels (v6.30.1)
+- feat(intellect): brain cleanup — meaningful episodes, telemetry purge, dead signals UI (v6.30.0)
+- feat(intellect): agent-memory surface — non-CLI agents read/write the brain (v6.29.0)
+- chore(gsd): reconcile phase 50 planning metadata
+- feat(bridge): claude_cli --model passthrough (v6.28.1)
+- Strip agent-hub theater to lean backbone (v6.28.0)
+- Strip Atlas autonomous agent + admin org chart (v6.27.0)
+
+
+## v6.31.0 (2026-06-10)
+
+- feat(admin): Ops revamp — light-only design system (ymc-admin formula), nav Ops = Bridge/Brain/Env Tools
+- feat(bridge): console rebuilt — composite gateway status, usage bars w/ reset countdowns, consumers panel, navy Operator Log terminal (SSE)
+- feat(brain): NEW screen replacing Intelligence/Dreams/Recall/Learnings — flow metrics, live synapse feed, memory browser, learning queue w/ duplicate grouping
+- feat(bridge): source_agent consumer attribution (chat body.source; dreams + episode-summarizer tagged)
+
+## v6.30.1 (2026-06-10)
+
+- fix(bridge): refresh stale model lineup (Fable 5 / Opus 4.8) + honest "Est. API-equiv" cost labels
+
+## v6.30.0 (2026-06-10)
+
+- feat(intellect): meaningful episodes — transcript-based LLM summaries; fixed zero-overlap early-return that starved transcript sessions of episodes
+- chore(intellect): archived 60 telemetry-noise concepts; removed dead signals layer from Recall UI
+
+## v6.29.0 (2026-06-10)
+
+- feat(intellect): agent-memory surface — non-CLI agents (Tom) read/write/learn against the brain; unified ranked recall (concepts+episodes+rules)
+
+## v6.28.1 (2026-06-02)
+
+- feat(bridge): claude_cli --model passthrough — cross-app consumers pick a tier
+
+## v6.28.0 (2026-05-31)
+
+- refactor: strip agent-hub theater (Forge runs/RPG/evolution/intelligence-loop/watchers) — Porter is a lean backbone
+
 ## v6.1.0 (2026-05-29)
 
 - bridge(claude-cli): --strict-mcp-config (v6.25.0) — fix Tom "wrong surface" noise

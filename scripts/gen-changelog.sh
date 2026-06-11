@@ -18,7 +18,10 @@ set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-PKG_VERSION=$(node -p "require('./package.json').version")
+# Version source of truth is backend/package.json — the ROOT package.json is
+# stuck at 6.1.0 and gave every generated entry a wrong "v6.1.0" header, after
+# which the head-1 dedupe check exited early forever (no entries since v6.26.0).
+PKG_VERSION=$(node -p "require('./backend/package.json').version")
 TODAY=$(date +%Y-%m-%d)
 CHANGELOG="$ROOT/CHANGELOG.md"
 

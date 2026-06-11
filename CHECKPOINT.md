@@ -3,10 +3,22 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.31.0
+version: v6.31.1
 updated: 2026-06-10
 updated_by: claude-fable-5 (Ops revamp — light-only design system, Bridge console, merged Brain screen)
 milestone_status: v7.0 IN PROGRESS — Ops = Bridge/Brain/Env Tools; light professional theme (ymc-admin formula); brain feeds agents (Tom live)
+
+## System theater strip + changelog repair (2026-06-11 v6.31.1) — SHIPPED
+
+Moe: "i don't want to see fake anything" + "changelog in porter hasn't been
+updating properly breaking the release rules."
+1. System screen: removed the Brain Agents registry ghosts ("planned" agents),
+   Agent Recommendations panel, Fleet Overview, and the agents/planned header
+   chips — real services/resources/intellect stats only.
+2. CHANGELOG ROOT CAUSE: gen-changelog.sh read the ROOT package.json (stuck at
+   6.1.0) → every entry got a wrong v6.1.0 header → the head-1 dedupe check
+   then exited early forever (nothing recorded since v6.26.0). Now reads
+   backend/package.json. Backfilled v6.28.0–v6.31.0 entries.
 
 ## Ops revamp + light-only design system (2026-06-10 v6.31.0) — SHIPPED
 

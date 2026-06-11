@@ -297,13 +297,6 @@ function MonitorTab() {
           {s && <p className="text-2xs text-text3">{s.platform.hostname} · up {fmtUptime(s.uptime)} · {s.sessions.active} sessions</p>}
         </div>
 
-        {/* Agent fleet summary */}
-        <div className="flex items-center gap-3 text-2xs">
-          <span className="flex items-center gap-1"><Bot className="size-3 text-text3" /><strong className="text-text">{AGENT_REGISTRY.length}</strong> agents</span>
-          <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-text3/40" />{counts.planned} planned</span>
-          {counts.active > 0 && <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-success" />{counts.active} active</span>}
-        </div>
-
         {d && <Badge variant="outline" className="text-2xs text-text3">v{d.version}</Badge>}
         <Button variant="ghost" size="icon-xs" onClick={() => { system.refetch(); diag.refetch(); dashboard.refetch(); logs.refetch() }} className={system.isFetching ? "animate-spin" : ""}>
           <RefreshCw className="size-3" />
@@ -374,98 +367,6 @@ function MonitorTab() {
           </div>
         )
       })()}
-
-      {/* ── Brain Agents + Actions ── */}
-      <div className="grid grid-cols-12 gap-3">
-
-        {/* Brain Team */}
-        <div className="col-span-7 rounded-xl border border-border bg-surface p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <Shield className="size-3 text-accent-porter" />
-              <p className="text-2xs font-semibold uppercase tracking-wide text-text3">Brain Agents</p>
-            </div>
-            <Link to="/forge" className="flex items-center gap-1 text-2xs text-warning hover:text-warning/80 transition-colors">
-              <Flame className="size-3" /> Forge All
-            </Link>
-          </div>
-          <div className="space-y-1.5">
-            {allBrainAgents.map(a => {
-              // Generate dynamic detail from current system state
-              let detail: string | undefined
-              if (a.id === "sentinel" && s) {
-                const up = s.runtimes.filter(r => r.status === "healthy").length
-                detail = `${up}/${s.runtimes.length} services healthy · avg ${Math.round(s.runtimes.reduce((sum, r) => sum + r.latencyMs, 0) / (s.runtimes.length || 1))}ms latency`
-              } else if (a.id === "hygienist" && s) {
-                detail = `DB ${fmtBytes(s.db.size)} · disk ${s.disk.pct}% used · ${s.sessions.active} active sessions`
-              } else if (a.id === "diagnostician" && diagStats) {
-                detail = diagOpen > 0 ? `${diagOpen} open errors (${diagStats.bySeverity.critical} critical)` : "No open errors"
-              } else if (a.id === "pulse" && s) {
-                detail = `RAM ${s.memory.pct}% · CPU ${Math.round(s.cpu.load1m / s.cpu.cores * 100)}% · disk ${s.disk.pct}%`
-              } else if (a.id === "memory-curator" && d) {
-                detail = `${d.learnings} learnings · ${d.skills} skills active`
-              }
-              return <BrainAgentCard key={a.id} agent={a} detail={a.status !== "planned" ? detail : undefined} />
-            })}
-          </div>
-        </div>
-
-        {/* Agent-Attributed Actions */}
-        <div className="col-span-5 space-y-3">
-          <div className="rounded-xl border border-border bg-surface p-3">
-            <p className="text-2xs font-semibold uppercase tracking-wide text-text3 mb-2">
-              {actions[0]?.severity === "info" ? "Agent Status" : "Agent Recommendations"}
-            </p>
-            <div className="space-y-1.5">
-              {actions.map((a, i) => (
-                <div key={i} className={`flex items-center gap-2 rounded-md px-2.5 py-2 ${
-                  a.severity === "critical" ? "bg-danger/8 border border-danger/20" :
-                  a.severity === "warning" ? "bg-warning/8 border border-warning/20" :
-                  "bg-success/8 border border-success/20"
-                }`}>
-                  {a.severity === "critical" ? <AlertTriangle className="size-3 text-danger shrink-0" /> :
-                   a.severity === "warning" ? <AlertTriangle className="size-3 text-warning shrink-0" /> :
-                   <CheckCircle className="size-3 text-success shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <Link to={`/agents/${a.agent.toLowerCase()}`} className={`text-2xs font-bold hover:underline ${
-                      a.severity === "critical" ? "text-danger" : a.severity === "warning" ? "text-warning" : "text-success"
-                    }`}>{a.agent}:</Link>
-                    <span className={`text-xs ml-1 ${
-                      a.severity === "critical" ? "text-danger" : a.severity === "warning" ? "text-warning" : "text-success"
-                    }`}>{a.text}</span>
-                  </div>
-                  {a.link && <Link to={a.link}><ChevronRight className="size-3 text-text3" /></Link>}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Fleet Overview — all teams */}
-          <div className="rounded-xl border border-border bg-surface p-3">
-            <p className="text-2xs font-semibold uppercase tracking-wide text-text3 mb-2">Fleet Overview</p>
-            <div className="space-y-1">
-              {(["product", "forge", "admin", "marketing"] as const).map(team => {
-                const agents = getAgentsByTeam(team)
-                const active = agents.filter(a => a.status === "active").length
-                return (
-                  <div key={team} className="flex items-center gap-2 rounded-md px-2 py-1.5 bg-background/50">
-                    <span className="text-2xs font-bold text-text2 capitalize w-16">{team}</span>
-                    <div className="flex -space-x-1 flex-1">
-                      {agents.slice(0, 5).map(a => (
-                        <Link key={a.id} to={`/agents/${a.id}`} className={`hover:opacity-80 transition-opacity ${a.status === "planned" ? "grayscale opacity-30" : ""}`}>
-                          <PixelPortrait {...a.avatar} size="xs" />
-                        </Link>
-                      ))}
-                      {agents.length > 5 && <span className="flex size-5 items-center justify-center rounded-full bg-raised text-2xs font-bold text-text3">+{agents.length - 5}</span>}
-                    </div>
-                    <span className="text-2xs text-text3 font-mono tabular-nums">{active}/{agents.length}</span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* ── Services + Resources ── */}
       <div className="grid grid-cols-12 gap-3">
