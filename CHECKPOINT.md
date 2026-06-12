@@ -8,6 +8,22 @@ updated: 2026-06-10
 updated_by: claude-fable-5 (Ops revamp — light-only design system, Bridge console, merged Brain screen)
 milestone_status: v7.0 IN PROGRESS — Ops = Bridge/Brain/Env Tools; light professional theme (ymc-admin formula); brain feeds agents (Tom live)
 
+## Memory distiller — episodes → durable concepts (2026-06-12) — SHIPPED
+
+Closes the "remembers but doesn't learn" gap. Agents write EPISODES; recall read
+them back; but nothing distilled raw events into LESSONS (consolidation.ts only
+deduped). New `backend/src/services/intellect/distiller.ts` reads an agent's recent
+episodes, asks the model (raw claude_cli dispatch, mirrors dream-worker) to extract
+a few durable generalizable lessons NOT already on file, writes them as agent-scoped
+concepts (source_type='distiller', review_state='accepted', confidence floor 60,
+≤5/run), then dedups via consolidateAgentMemory. Wired into scheduler.ts INTELLECT_DAILY
+(24h) — no new timer. PROVEN: ran live against Tom's 13 episodes → 7 quality concepts
+(e.g. "Moe is in Singapore SGT; offer his-evening/their-morning slots for cross-tz
+calls"; "Moe acts as a deal intermediary who clips a commission — keep deal notes
+warm"); recall API now returns distilled concepts (rank 0.33). search_vector
+auto-populated by concepts_search_trig. tsc clean, porter-fastify restarted, /health
+6.31.1. Part of the YMC "make Tom wiser" program (Tom recall now compounds into wisdom).
+
 ## System theater strip + changelog repair (2026-06-11 v6.31.1) — SHIPPED
 
 Moe: "i don't want to see fake anything" + "changelog in porter hasn't been

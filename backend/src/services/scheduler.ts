@@ -15,6 +15,7 @@ import { runMemoryValidation } from './intellect/memory-validator.js';
 import { runScheduledWorkflows } from './intellect/workflow-engine.js';
 import { runDispatchScoring } from './intellect/dispatch-scorer.js';
 import { runDreamWorker } from './intellect/dream-worker.js';
+import { runDistiller } from './intellect/distiller.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -251,6 +252,11 @@ async function tick() {
     if (tickCount > 0 && tickCount % INTELLECT_DAILY_INTERVAL === 0) {
       runScheduledWorkflows('every_24h').catch(err =>
         console.error('[scheduler:intellect] every_24h workflows error', err));
+      // Memory distiller — turn the agent's raw episodes into durable concepts
+      // so recall compounds into lessons instead of just accumulating events.
+      runDistiller({ agent: 'tom' })
+        .then(r => console.log('[scheduler:distiller] tom →', JSON.stringify(r)))
+        .catch(err => console.error('[scheduler:distiller] error', err));
     }
 
     // Intellect weekly maintenance — every 7 days (dream workers)
