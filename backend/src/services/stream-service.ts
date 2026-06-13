@@ -13,7 +13,7 @@ export interface StreamBackend {
 
 export interface StreamOptions {
   /** See BridgeDispatchRequest.tools — passes through to the adapter. */
-  tools?: 'none' | 'default';
+  tools?: 'none' | 'default' | string[];
   /** Optional model id — passed to the adapter as req.model (e.g. claude-sonnet-4-6). */
   model?: string;
 }

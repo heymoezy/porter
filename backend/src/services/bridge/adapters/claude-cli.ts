@@ -122,6 +122,9 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     // Cross-app consumers (Tom on openclaw, Recall summarize/query)
     // manage tools UPSTREAM of this adapter — claude just emits text.
     const noTools = req.tools === 'none';
+    // Bounded worker sandbox: an explicit string[] allow-list restricts claude
+    // to EXACTLY those tools (read-only research set for delegated workers).
+    const toolAllowList = Array.isArray(req.tools) && req.tools.length > 0 ? req.tools.join(',') : null;
     const args = [
       '-p',
       '--output-format', 'stream-json',
@@ -136,7 +139,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       ...(noTools
         ? ['--tools', '']
         : ['--permission-mode', 'auto',
-           '--allowedTools', 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
+           '--allowedTools', toolAllowList ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
       // Isolation: skip user-level settings (hooks like porter-session-start
       // that inject Porter Memory/directives). Combined with cwd=SANDBOX_CWD
       // (no CLAUDE.md ancestors), this keeps cross-app consumers (e.g. YMC
@@ -278,6 +281,9 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     // Cross-app consumers (Tom on openclaw, Recall summarize/query)
     // manage tools UPSTREAM of this adapter — claude just emits text.
     const noTools = req.tools === 'none';
+    // Bounded worker sandbox: an explicit string[] allow-list restricts claude
+    // to EXACTLY those tools (read-only research set for delegated workers).
+    const toolAllowList = Array.isArray(req.tools) && req.tools.length > 0 ? req.tools.join(',') : null;
     const args = [
       '-p',
       '--output-format', 'stream-json',
@@ -292,7 +298,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       ...(noTools
         ? ['--tools', '']
         : ['--permission-mode', 'auto',
-           '--allowedTools', 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
+           '--allowedTools', toolAllowList ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
       // Isolation: skip user-level settings (hooks like porter-session-start
       // that inject Porter Memory/directives). Combined with cwd=SANDBOX_CWD
       // (no CLAUDE.md ancestors), this keeps cross-app consumers (e.g. YMC

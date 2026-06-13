@@ -50,9 +50,13 @@ export interface BridgeDispatchRequest {
    *               "I don't have ymc-tom__* tools" — see Tom-bug 2026-05-18.
    *   'default' — keep the historic agentic tool set. Used for direct Porter
    *               admin chat where the user expects Claude Code behaviour.
+   *   string[] — explicit allow-list (e.g. ['WebSearch','WebFetch','Read'])
+   *               passed straight to claude_cli's --allowedTools. This is how a
+   *               bounded WORKER agent is sandboxed to read-only research tools;
+   *               anything not in the list is unavailable at the dispatch layer.
    * Adapters that don't expose tools (codex_cli) ignore this field.
    */
-  tools?: 'none' | 'default';
+  tools?: 'none' | 'default' | string[];
 }
 
 export interface BridgeDispatchResult {

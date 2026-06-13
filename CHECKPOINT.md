@@ -8,6 +8,23 @@ updated: 2026-06-10
 updated_by: claude-fable-5 (Ops revamp — light-only design system, Bridge console, merged Brain screen)
 milestone_status: v7.0 IN PROGRESS — Ops = Bridge/Brain/Env Tools; light professional theme (ymc-admin formula); brain feeds agents (Tom live)
 
+## Phase 2 worker delegation — "Tom is the boss" (2026-06-13) — SHIPPED
+
+Tom (ymc-tom-service) can now hand read/research/synthesise tasks to bounded
+worker agents that run async in Porter and report back.
+- NEW backend/src/routes/v1/agents.ts: POST/GET /api/v1/agents (+ /:id),
+  POST /:id/jobs (enqueue delegation job), GET /:id/jobs/:jobId (poll). requireAuth.
+- Bridge per-worker tool ENFORCEMENT: BridgeDispatchRequest.tools now accepts a
+  string[] allow-list → claude_cli --allowedTools (types.ts, stream-service.ts,
+  chat.ts, adapters/claude-cli.ts). Existing none/default unchanged (smoke-tom green).
+- job-executor.ts: claims source IN (job-executor,delegation); delegation jobs run
+  with the worker's read-only allow-list, full (untruncated) result, and POST a
+  completion callback. scheduler.ts claimNextJob excludes delegation (executor owns it).
+- Roster: born "Researcher" template (tpl_researcher, read-only tools) + Scout
+  instance (agent_scout).
+- PROVEN end-to-end: Scout WebFetched ymc.capital in a read-only sandbox; delegation
+  job → executor → callback → Tom reported to the group. tsc clean, porter restarted.
+
 ## Memory distiller — episodes → durable concepts (2026-06-12) — SHIPPED
 
 Closes the "remembers but doesn't learn" gap. Agents write EPISODES; recall read

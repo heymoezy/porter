@@ -16,6 +16,7 @@ import mailV1Routes from './mail.js';
 import mailAdminV1Routes from './mail-admin.js';
 import intellectV1Routes from './intellect.js';
 import recallV1Routes from './recall.js';
+import agentsV1Routes from './agents.js';
 
 export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(authV1Routes, { prefix: '/auth' });
@@ -35,4 +36,5 @@ export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(mailAdminV1Routes, { prefix: '/mail-admin' });
   fastify.register(intellectV1Routes, { prefix: '/intellect' });
   fastify.register(recallV1Routes, { prefix: '/recall' });
+  fastify.register(agentsV1Routes, { prefix: '/agents' });
 }

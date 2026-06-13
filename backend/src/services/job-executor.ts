@@ -140,13 +140,15 @@ async function runDueJobs(): Promise<void> {
       attempt_count: number;
       assigned_gateway: string | null;
       prompt: string | null;
+      source: string | null;
+      trigger_data: Record<string, unknown> | null;
     }>(`
       WITH next_jobs AS (
         SELECT id
         FROM agent_jobs
         WHERE status = 'pending'
           AND scheduled_for <= EXTRACT(EPOCH FROM NOW())
-          AND source = 'job-executor'
+          AND source IN ('job-executor', 'delegation')
         ORDER BY scheduled_for ASC
         LIMIT 4
         FOR UPDATE SKIP LOCKED
@@ -157,12 +159,16 @@ async function runDueJobs(): Promise<void> {
           worker_id = $1,
           attempt_count = attempt_count + 1
       WHERE id IN (SELECT id FROM next_jobs)
-      RETURNING id, agent_id, attempt_count, assigned_gateway, prompt
+      RETURNING id, agent_id, attempt_count, assigned_gateway, prompt, source, trigger_data
     `, [`job-executor:${process.pid}`]);
 
     for (const job of claimed) {
       try {
-        const tickMessage = job.prompt ?? 'tick';
+        // Delegation jobs (Tom → worker) carry a bounded tool allow-list + a
+        // callback URL in trigger_data; heartbeat jobs carry neither.
+        const td = (job.trigger_data ?? {}) as { allowed_tools?: string[]; callback_url?: string; task?: string };
+        const isDelegation = job.source === 'delegation';
+        const tickMessage = job.prompt ?? td.task ?? 'tick';
         const dispatchResp = await fetch(`http://${config.host}:${config.port}/api/v1/chat/stream`, {
           method: 'POST',
           headers: {
@@ -172,10 +178,12 @@ async function runDueJobs(): Promise<void> {
           body: JSON.stringify({
             message: tickMessage,
             agent_id: job.agent_id,
-            chat_id: `heartbeat-${job.id}`,
+            chat_id: `${isDelegation ? 'delegation' : 'heartbeat'}-${job.id}`,
             ...(job.assigned_gateway ? { backend: job.assigned_gateway } : {}),
+            // Enforced read-only worker sandbox → claude_cli --allowedTools.
+            ...(Array.isArray(td.allowed_tools) && td.allowed_tools.length ? { tools: td.allowed_tools } : {}),
           }),
-          signal: AbortSignal.timeout(120_000),
+          signal: AbortSignal.timeout(isDelegation ? 240_000 : 120_000),
         });
 
         if (!dispatchResp.ok) {
@@ -206,19 +214,37 @@ async function runDueJobs(): Promise<void> {
           }
         }
 
+        // Delegated synthesis output is the whole point — don't truncate it to
+        // 500 chars like a heartbeat tick. Keep a generous cap for a WhatsApp-
+        // bound summary.
+        const resultText = lastFull.slice(0, isDelegation ? 16_000 : 500);
         await pool.query(
           `UPDATE agent_jobs
            SET status = 'completed',
                completed_at = EXTRACT(EPOCH FROM NOW()),
                result = $2
            WHERE id = $1`,
-          [job.id, lastFull.slice(0, 500)],
+          [job.id, resultText],
         );
 
         await pool.query(
           `UPDATE personas SET last_heartbeat = EXTRACT(EPOCH FROM NOW())::text WHERE id = $1`,
           [job.agent_id],
         );
+
+        // Completion callback — lets the delegator (Tom) report back to chat
+        // without polling. Fire-and-forget; a dead callback never fails the job.
+        if (isDelegation && typeof td.callback_url === 'string' && td.callback_url) {
+          fetch(td.callback_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              job_id: job.id, agent_id: job.agent_id, status: 'completed',
+              task: td.task ?? tickMessage, result: resultText,
+            }),
+            signal: AbortSignal.timeout(15_000),
+          }).catch(err => console.warn(`[job-executor] callback failed for ${job.id}:`, err instanceof Error ? err.message : err));
+        }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         const final = job.attempt_count >= MAX_ATTEMPTS;
@@ -232,6 +258,15 @@ async function runDueJobs(): Promise<void> {
             [job.id, errMsg.slice(0, 500)],
           );
           console.error(`[job-executor] ${job.agent_id} job ${job.id} failed permanently: ${errMsg}`);
+          // Tell the delegator (Tom) it failed so it doesn't wait forever.
+          const ftd = (job.trigger_data ?? {}) as { callback_url?: string; task?: string };
+          if (job.source === 'delegation' && typeof ftd.callback_url === 'string' && ftd.callback_url) {
+            fetch(ftd.callback_url, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ job_id: job.id, agent_id: job.agent_id, status: 'failed', task: ftd.task ?? null, error: errMsg.slice(0, 500) }),
+              signal: AbortSignal.timeout(15_000),
+            }).catch(() => undefined);
+          }
         } else {
           // Exponential backoff in seconds: 30, 90, 270
           const backoffSec = 30 * Math.pow(3, job.attempt_count - 1);

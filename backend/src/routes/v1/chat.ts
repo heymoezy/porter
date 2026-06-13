@@ -211,7 +211,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
                       // --system-prompt flag — NOT flattened into the user
                       // message. claude_cli 2.1.x rejects fake "System:" text
                       // in the user turn as a prompt-injection attempt.
-      tools?: 'none' | 'default';  // v6.21.0 (Tom-bug fix 2026-05-18): tool surface
+      tools?: 'none' | 'default' | string[];  // v6.21.0 (Tom-bug fix 2026-05-18): tool surface; string[] = bounded worker allow-list
                       // on the underlying adapter. Cross-app callers (Tom on
                       // openclaw, Recall summarize/query) MUST pass 'none' so
                       // claude doesn't try to use its agentic tools (WebSearch,
@@ -234,7 +234,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     const backend = body?.backend;
     const raw = body?.raw === true;
     // Explicit tools override > raw default. raw=true → tools='none' unless caller overrides.
-    const tools: 'none' | 'default' = body?.tools ?? (raw ? 'none' : 'default');
+    const tools: 'none' | 'default' | string[] = body?.tools ?? (raw ? 'none' : 'default');
     const model = typeof body?.model === 'string' && body.model.trim() ? body.model.trim() : undefined;
     // v6.31.0: consumer attribution slug (e.g. 'tom') — flows to
     // bridge_dispatch_log.source_agent for the Bridge consumers view.
