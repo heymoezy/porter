@@ -375,6 +375,11 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
           const text = event.event.delta?.text as string | undefined;
           if (text) {
             yield text;
+            // Advance the shared cursor so the final `type: assistant` event
+            // (which carries the FULL accumulated text) reconciles to the tail
+            // instead of re-yielding everything → exact-doubled output. Both
+            // event families fire under --include-partial-messages.
+            lastYieldedLength += text.length;
           }
         }
       }

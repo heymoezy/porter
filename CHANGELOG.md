@@ -1,3 +1,9 @@
+## v6.31.2 (2026-06-13)
+
+- feat(forge): Phase 2 — bounded async worker delegation (Tom is the boss)
+- feat(intellect): memory distiller — episodes → durable concepts
+
+
 ## v6.31.1 (2026-06-11)
 
 - feat(admin): Ops revamp — light-only design system, Bridge console, merged Brain screen (v6.31.0)

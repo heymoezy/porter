@@ -3,9 +3,22 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.31.1
-updated: 2026-06-10
-updated_by: claude-fable-5 (Ops revamp — light-only design system, Bridge console, merged Brain screen)
+version: v6.31.2
+updated: 2026-06-13
+updated_by: claude-opus-4-8 (claude_cli stream-doubling fix + Model Scout→Gateway Keeper rename)
+
+## v6.31.2 (2026-06-13) — claude_cli stream no longer double-yields
+- bridge/adapters/claude-cli.ts: under --include-partial-messages the generator yielded
+  every char TWICE (content_block_delta deltas THEN the full `type:assistant` accumulator,
+  which re-emitted everything because lastYieldedLength was only advanced by the assistant
+  branch). Result: every full_response + agent_jobs.result was exact-doubled ("Scout.Scout.").
+  Masked on Tom's WhatsApp path (he re-synthesises); surfaced by YMC's new direct-brief admin
+  surface which renders raw worker results. Fix: partial path advances lastYieldedLength so
+  the assistant event reconciles to the tail. Verified: Scout brief → single "Scout."; YMC
+  smoke-tom PASS (Tom's own text de-doubled too).
+- Renamed infra agent "Model Scout" (model-scout) → "Gateway Keeper" (gateway-keeper) —
+  collided with YMC worker Scout. agent-registry.ts + seed-brain-agents.sh; no DB rows existed.
+
 milestone_status: v7.0 IN PROGRESS — Ops = Bridge/Brain/Env Tools; light professional theme (ymc-admin formula); brain feeds agents (Tom live)
 
 ## Phase 2 worker delegation — "Tom is the boss" (2026-06-13) — SHIPPED

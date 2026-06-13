@@ -439,9 +439,9 @@ const forgeInspector: AgentDef = {
 
 // ── Admin Team — platform infrastructure ───────────────
 
-const modelScout: AgentDef = {
-  id: "model-scout",
-  name: "Model Scout",
+const gatewayKeeper: AgentDef = {
+  id: "gateway-keeper",
+  name: "Gateway Keeper",
   role: "AI Gateway Manager",
   team: "admin",
   description: "Monitors AI backends, manages fallback routing, tracks token costs",
@@ -649,7 +649,7 @@ export const AGENT_REGISTRY: AgentDef[] = [
   // Forge
   forgeMaster, forgeQueueMaster, forgeScribe, forgeMentor, forgeArmorer, forgeInspector,
   // Admin
-  modelScout, skillsCurator, toolsmith, adminDesign, librarian,
+  gatewayKeeper, skillsCurator, toolsmith, adminDesign, librarian,
   // Marketing
   marketingGrowth, comms, marketingSocial, marketingCopy,
   // Memory
