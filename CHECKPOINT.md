@@ -3,9 +3,17 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.31.2
-updated: 2026-06-13
-updated_by: claude-opus-4-8 (claude_cli stream-doubling fix + Model Scout→Gateway Keeper rename)
+version: v6.31.3
+updated: 2026-06-14
+updated_by: claude-opus-4-8 (agent detail returns persona text; admin rebuilt for Gateway Keeper)
+
+## v6.31.3 (2026-06-14) — agent detail exposes persona text
+- routes/v1/agents.ts GET /:id now also returns the template text fields
+  (system_prompt, soul_text, role_card_text, identity_text, skills_text) so consumers
+  can render a worker's persona/config. Used by YMC's dashboard worker-carousel slides
+  (view a worker's SOUL/IDENTITY/role card/system prompt/tools, read-through, like Tom's).
+- Rebuilt admin/frontend → "Model Scout"→"Gateway Keeper" rename (v6.31.2 source) now live.
+
 
 ## v6.31.2 (2026-06-13) — claude_cli stream no longer double-yields
 - bridge/adapters/claude-cli.ts: under --include-partial-messages the generator yielded

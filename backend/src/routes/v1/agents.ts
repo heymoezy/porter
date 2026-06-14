@@ -41,7 +41,8 @@ export default async function agentsV1Routes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const row = (await pool.query(
       `SELECT p.id, p.name, p.role, p.status, p.template_id, p.preferred_backend, p.config,
-              t.name AS template_name, t.description AS template_description, t.tools AS template_tools
+              t.name AS template_name, t.description AS template_description, t.tools AS template_tools,
+              t.system_prompt, t.soul_text, t.role_card_text, t.identity_text, t.skills_text
          FROM personas p
          LEFT JOIN agent_templates t ON t.id = p.template_id
         WHERE p.id = $1`,
