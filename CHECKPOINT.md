@@ -3,9 +3,26 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.31.3
-updated: 2026-06-14
-updated_by: claude-opus-4-8 (agent detail returns persona text; admin rebuilt for Gateway Keeper)
+version: v6.32.0
+updated: 2026-06-24
+updated_by: claude-opus-4-8 (Tom-memory audit: fix recall relevance + restart-durable distiller)
+
+## v6.32.0 (2026-06-24) — agent-memory recall relevance + restart-durable distiller
+Part of the Tom memory audit (ymc.capital/planning/tom-memory/AUDIT.md). Two HIGH bugs that
+silently broke Tom's long-term memory — both Porter-side, benefit ALL agent consumers:
+- **B1 — recall FTS relevance was dead.** `/agent-memory/recall` built every FTS predicate with
+  `websearch_to_tsquery` (ANDs every term), so a multiword ask matched ~0 rows — 99.4% of Tom
+  turns returned zero hits and fell back to recent-only. Now OR-joins salient tokens into
+  `to_tsquery` (ts_rank discriminates); empty → skip FTS. routes/v1/intellect.ts:581-612. Verified
+  live: `q=Frank Phuan KPN solar power` 0 hits → 4 hits (the real KPN/solar episodes).
+- **B3 — distiller (Tom's learning loop) silently froze 2026-06-20.** It was gated on
+  `tickCount % 24h`, which resets on every Porter restart (3×/7d) so the daily boundary stopped
+  landing. New `runDistillerIfDue()` gates on the last PERSISTED memory_distilled event (restart-
+  proof), driven from the every_30m cadence. distiller.ts + scheduler.ts. Also B13: distiller now
+  emits memory_distilled on EVERY exit path (run/skip/no-lessons) for observability. Catch-up run
+  executed (72 eps → 0 new concepts: "no new lessons" — input quality limited by polluted episodes,
+  see ymc B4/B5 follow-up).
+- Version strings synced (package.json + index.ts + health.ts were drifting: 6.31.3/6.31.1).
 
 ## v6.31.3 (2026-06-14) — agent detail exposes persona text
 - routes/v1/agents.ts GET /:id now also returns the template text fields

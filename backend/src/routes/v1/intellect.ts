@@ -579,33 +579,39 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     const recentN = Math.min(parseInt(String(q?.recent || '3'), 10) || 3, 10);
 
     const hits: Array<{ kind: string; content: string; created_at: number; rank: number }> = [];
-    if (query) {
+    // websearch_to_tsquery ANDs every term, so a multiword natural-language ask
+    // (e.g. a whole WhatsApp message) almost never matched any single memory row
+    // — recall returned 0 FTS hits on ~99% of real turns and silently fell back
+    // to recent-only. OR-join the salient tokens into to_tsquery and let ts_rank
+    // discriminate. English config strips stopwords; empty -> skip FTS entirely.
+    const orQuery = [...new Set((query.toLowerCase().match(/[a-z0-9]{2,}/g) || []))].slice(0, 24).join(' | ');
+    if (query && orQuery) {
       const scopeWhere = project
         ? `((scope='agent' AND scope_id=$2) OR (scope='project' AND scope_id=$3))`
         : `(scope='agent' AND scope_id=$2)`;
-      const baseArgs: any[] = project ? [query, agent, project] : [query, agent];
+      const baseArgs: any[] = project ? [orQuery, agent, project] : [orQuery, agent];
       const conceptRows = (await pool.query(
-        `SELECT content, created_at, ts_rank(search_vector, websearch_to_tsquery('english', $1)) AS rank
+        `SELECT content, created_at, ts_rank(search_vector, to_tsquery('english', $1)) AS rank
            FROM concepts
-          WHERE status='active' AND search_vector @@ websearch_to_tsquery('english', $1) AND ${scopeWhere}
+          WHERE status='active' AND search_vector @@ to_tsquery('english', $1) AND ${scopeWhere}
           ORDER BY rank DESC LIMIT $${baseArgs.length + 1}`,
         [...baseArgs, limit],
       )).rows;
       for (const r of conceptRows) hits.push({ kind: 'concept', content: r.content, created_at: Number(r.created_at), rank: Number(r.rank) });
       const episodeRows = (await pool.query(
         `SELECT summary AS content, created_at,
-                ts_rank(to_tsvector('english', summary), websearch_to_tsquery('english', $1)) AS rank
+                ts_rank(to_tsvector('english', summary), to_tsquery('english', $1)) AS rank
            FROM episodes
-          WHERE to_tsvector('english', summary) @@ websearch_to_tsquery('english', $1) AND ${scopeWhere}
+          WHERE to_tsvector('english', summary) @@ to_tsquery('english', $1) AND ${scopeWhere}
           ORDER BY rank DESC, created_at DESC LIMIT $${baseArgs.length + 1}`,
         [...baseArgs, limit],
       )).rows;
       for (const r of episodeRows) hits.push({ kind: 'episode', content: r.content, created_at: Number(r.created_at), rank: Number(r.rank) });
       const directiveRows = (await pool.query(
         `SELECT content, created_at,
-                ts_rank(to_tsvector('english', content), websearch_to_tsquery('english', $1)) AS rank
+                ts_rank(to_tsvector('english', content), to_tsquery('english', $1)) AS rank
            FROM directives
-          WHERE status='active' AND to_tsvector('english', content) @@ websearch_to_tsquery('english', $1) AND ${scopeWhere}
+          WHERE status='active' AND to_tsvector('english', content) @@ to_tsquery('english', $1) AND ${scopeWhere}
           ORDER BY rank DESC LIMIT $${baseArgs.length + 1}`,
         [...baseArgs, limit],
       )).rows;

@@ -1,3 +1,8 @@
+## v6.32.0 (2026-06-24)
+
+- feat(agents): GET /agents/:id returns persona text (v6.31.3)
+
+
 ## v6.31.2 (2026-06-13)
 
 - feat(forge): Phase 2 — bounded async worker delegation (Tom is the boss)

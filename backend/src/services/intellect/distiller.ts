@@ -126,6 +126,7 @@ export async function runDistiller(opts: { agent?: string } = {}): Promise<Disti
     [agent, LOOKBACK_DAYS, MAX_EPISODES],
   )).rows as { summary: string }[];
   if (eps.length < MIN_EPISODES) {
+    logDistillRun(agent, eps.length, 0, 'too few episodes');
     return { agent, episodes: eps.length, created: 0, skipped: 'too few episodes' };
   }
 
@@ -136,7 +137,10 @@ export async function runDistiller(opts: { agent?: string } = {}): Promise<Disti
 
   const response = await dispatch(buildPrompt(agent, eps.map((e) => e.summary), existing.map((c) => c.content)));
   const lessons = parseLessons(response);
-  if (!lessons.length) return { agent, episodes: eps.length, created: 0, skipped: 'no new lessons' };
+  if (!lessons.length) {
+    logDistillRun(agent, eps.length, 0, 'no new lessons');
+    return { agent, episodes: eps.length, created: 0, skipped: 'no new lessons' };
+  }
 
   let created = 0;
   for (const l of lessons.slice(0, MAX_NEW_CONCEPTS)) {
@@ -159,10 +163,40 @@ export async function runDistiller(opts: { agent?: string } = {}): Promise<Disti
   }
 
   // Brain-screen telemetry (fire-and-forget).
-  pool.query(
-    `INSERT INTO intellect_events (id, event_type, source_type, details_json) VALUES ($1,$2,$3,$4::jsonb)`,
-    [randomUUID(), 'memory_distilled', 'distiller', JSON.stringify({ agent, episodes: eps.length, created })],
-  ).catch(() => undefined);
+  logDistillRun(agent, eps.length, created, null);
 
   return { agent, episodes: eps.length, created };
+}
+
+// Emit a memory_distilled event on EVERY exit path (run, skip, no-lessons) so an
+// audit can tell "ran, nothing to do" from "never scheduled" — and so the
+// restart-durable cadence gate below has a persisted last-run marker to read.
+function logDistillRun(agent: string, episodes: number, created: number, skipped: string | null): void {
+  pool.query(
+    `INSERT INTO intellect_events (id, event_type, source_type, details_json) VALUES ($1,$2,$3,$4::jsonb)`,
+    [randomUUID(), 'memory_distilled', 'distiller', JSON.stringify({ agent, episodes, created, skipped })],
+  ).catch(() => undefined);
+}
+
+const DISTILL_MIN_GAP_HOURS = 20;
+
+/**
+ * Restart-durable distiller cadence. The old scheduler gated runDistiller on
+ * `tickCount % 24h`, which resets to 0 on every Porter restart — so the daily
+ * boundary stopped landing and Tom's learning loop silently froze (2026-06-20).
+ * This gates on the last PERSISTED memory_distilled event instead, so cadence
+ * survives restarts. Call it from a frequent, restart-proof cadence (every_30m).
+ */
+export async function runDistillerIfDue(opts: { agent?: string; minGapHours?: number } = {}): Promise<DistillResult | { agent: string; skipped: string }> {
+  const agent = opts.agent ?? 'tom';
+  const minGap = opts.minGapHours ?? DISTILL_MIN_GAP_HOURS;
+  const last = (await pool.query(
+    `SELECT created_at FROM intellect_events
+      WHERE event_type='memory_distilled' AND details_json->>'agent'=$1
+        AND created_at > EXTRACT(EPOCH FROM NOW()) - ($2::int * 3600)
+      ORDER BY created_at DESC LIMIT 1`,
+    [agent, minGap],
+  )).rows[0];
+  if (last) return { agent, skipped: 'within cadence gap' };
+  return runDistiller({ agent });
 }
