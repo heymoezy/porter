@@ -174,7 +174,7 @@ fastify.get('/health', async () => {
   return {
     status: 'ok',
     engine: 'fastify',
-    version: '6.34.0',
+    version: '6.35.0',
     mail: {
       provider: config.mail.provider,
       domain: config.mail.defaultDomain,

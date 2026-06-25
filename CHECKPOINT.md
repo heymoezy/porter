@@ -3,9 +3,18 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.34.0
+version: v6.35.0
 updated: 2026-06-25
-updated_by: claude-opus-4-8 (Tom-memory R3: surprise-salience write-gate)
+updated_by: claude-opus-4-8 (Tom-memory R4: directive supersede-on-conflict)
+
+## v6.35.0 (2026-06-25) — directive supersede-on-conflict (Tom memory R4)
+POST /agent-memory (kind=directive): before insert, trigram-match the most-similar active agent_learned
+directive; if similarity ≥ DIRECTIVE_SUPERSEDE_SIM (0.5), archive it (status flip + supersedes_id on the
+new one — reversible, never deleted). So a new correction/rule REPLACES a near-dup/contradicted one
+instead of stacking. Benefits both ymc_remember_rule and the new ymc_log_feedback→directive path (R4
+ymc side). Verified live: 2 near-dup corrections → first archived, second active with supersedes set.
+
+## v6.34.0 (2026-06-25) — surprise-salience write-gate (Tom memory R3)
 
 ## v6.34.0 (2026-06-25) — surprise-salience write-gate (Tom memory R3)
 The cheap Karpathy idea: remember what's surprising, not every routine turn.

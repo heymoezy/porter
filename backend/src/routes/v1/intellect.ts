@@ -36,6 +36,12 @@ import { resolveActiveProject, setActiveProject, clearActiveProject, recentProje
 // tune up from logged `agent_memory_write[_skipped]` salience scores.
 const EPISODE_SURPRISE_MIN = 0.3;
 
+// Supersede-on-conflict threshold (R4). A new agent rule/correction archives the
+// most-similar existing active rule when trigram-similarity is at least this —
+// replacing a near-dup or contradicted rule rather than stacking. Conservative so
+// genuinely distinct rules coexist.
+const DIRECTIVE_SUPERSEDE_SIM = 0.5;
+
 interface DirectiveRow {
   id: string;
   scope: string;
@@ -593,10 +599,25 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       );
     } else {
       const priority = Math.min(Math.max(Number(body.priority) || 70, 1), 89); // < 90: never outrank moe-direct
+      // Supersede-on-conflict (R4): a new correction/rule archives the most-similar
+      // existing active agent rule instead of stacking a near-duplicate or leaving a
+      // now-contradicted one live. Reversible — status flip + supersedes_id, never a
+      // delete. Keeps "## Learned Directives" lean and non-contradictory.
+      const dup = (await pool.query<{ id: string; sim: number }>(
+        `SELECT id, similarity(content, $2) AS sim FROM directives
+          WHERE scope='agent' AND scope_id=$1 AND status='active' AND source_type='agent_learned'
+          ORDER BY sim DESC LIMIT 1`,
+        [agent, content],
+      )).rows[0];
+      let supersedesId: string | null = null;
+      if (dup && Number(dup.sim) >= DIRECTIVE_SUPERSEDE_SIM) {
+        await pool.query(`UPDATE directives SET status='archived', updated_at=EXTRACT(epoch FROM now()) WHERE id=$1`, [dup.id]);
+        supersedesId = dup.id;
+      }
       await pool.query(
-        `INSERT INTO directives (id, scope, scope_id, content, priority, source_type, status, created_by, tags)
-         VALUES ($1, 'agent', $2, $3, $4, 'agent_learned', 'active', $2, $5)`,
-        [id, agent, content, priority, body.tags ?? null],
+        `INSERT INTO directives (id, scope, scope_id, content, priority, source_type, status, created_by, tags, supersedes_id)
+         VALUES ($1, 'agent', $2, $3, $4, 'agent_learned', 'active', $2, $5, $6)`,
+        [id, agent, content, priority, body.tags ?? null, supersedesId],
       );
     }
     // Flow telemetry for the Brain screen (fire-and-forget).
