@@ -1,3 +1,8 @@
+## v6.36.0 (2026-06-25)
+
+- feat(memory): directive supersede-on-conflict — v6.35.0 (Tom R4)
+
+
 ## v6.34.0 (2026-06-25)
 
 - feat(memory): session-scoped recall for "where we left off" — v6.33.0

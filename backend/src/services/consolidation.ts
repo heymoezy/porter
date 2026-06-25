@@ -87,6 +87,10 @@ export async function consolidateAgentMemory(agentId: string): Promise<Consolida
        WHERE a.scope = 'agent' AND a.scope_id = $1
          AND b.scope = 'agent' AND b.scope_id = $1
          AND a.status = 'active' AND b.status = 'active'
+         -- Never dedup the singleton self_summary / decaying curiosity concepts
+         -- (R5): they are replace-on-write artifacts, not durable lessons.
+         AND a.source_type NOT IN ('self_summary','curiosity')
+         AND b.source_type NOT IN ('self_summary','curiosity')
          AND similarity(a.content, b.content) > 0.6
        ORDER BY sim DESC`,
       [agentId]

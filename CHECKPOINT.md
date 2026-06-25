@@ -3,9 +3,22 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.35.0
+version: v6.36.0
 updated: 2026-06-25
-updated_by: claude-opus-4-8 (Tom-memory R4: directive supersede-on-conflict)
+updated_by: claude-opus-4-8 (Tom-memory R5: nightly dream — self_summary + curiosities)
+
+## v6.36.0 (2026-06-25) — distiller becomes Tom's nightly dream (R5)
+The distiller (restart-durable since v6.32.0) now consolidates in ONE Bridge dispatch over
+salience-ordered, [session]-tagged episodes → THREE artifacts: (1) durable concepts (as before),
+(2) ONE dated `self_summary` concept ("where I am right now", replace-on-write — exactly one active),
+(3) ≤3 decaying `curiosity` concepts (pull-only open questions). `replaceConcepts` archives prior
+active rows (reversible) before insert. `consolidation.ts` now EXCLUDES self_summary/curiosity from
+dedup so the singletons aren't clobbered. Recall always returns the active `self_summary` (not
+FTS-gated) for every-turn injection. distiller.ts + consolidation.ts + intellect.ts recall.
+Verified live: catch-up run over 72 eps → 4 concepts + 1 self_summary + 3 curiosities; recall serves
+self_summary. Runs ~daily via the existing 20h-gated every_30m cadence (no new timer).
+
+## v6.35.0 (2026-06-25) — directive supersede-on-conflict (Tom memory R4)
 
 ## v6.35.0 (2026-06-25) — directive supersede-on-conflict (Tom memory R4)
 POST /agent-memory (kind=directive): before insert, trigram-match the most-similar active agent_learned

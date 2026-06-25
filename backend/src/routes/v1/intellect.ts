@@ -696,12 +696,20 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
           [agent, session, recentN],
         )).rows.map((r) => ({ kind: 'episode', content: r.content, created_at: Number(r.created_at) }))
       : [];
+    // The agent's single active "where I am right now" self-summary (R5) — always
+    // returned (not FTS-gated) so the consumer can inject it every turn.
+    const selfSummary = (await pool.query(
+      `SELECT content FROM concepts
+        WHERE scope='agent' AND scope_id=$1 AND source_type='self_summary' AND status='active'
+        ORDER BY created_at DESC LIMIT 1`,
+      [agent],
+    )).rows[0]?.content ?? null;
     // Flow telemetry for the Brain screen (fire-and-forget).
     pool.query(
       `INSERT INTO intellect_events (id, event_type, source_type, details_json) VALUES ($1,$2,$3,$4::jsonb)`,
       [randomUUID(), 'agent_memory_recall', 'agent-memory', JSON.stringify({ agent, q: query.slice(0, 140) || null, hits: hits.length, session: session || null })],
     ).catch(() => undefined);
-    return reply.send(ok({ agent, query: query || null, hits, recent, recent_session: recentSession }));
+    return reply.send(ok({ agent, query: query || null, hits, recent, recent_session: recentSession, self_summary: selfSummary }));
   });
 
   fastify.get('/active-project', async (request, reply) => {
