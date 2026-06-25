@@ -3,9 +3,19 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.32.0
-updated: 2026-06-24
-updated_by: claude-opus-4-8 (Tom-memory audit: fix recall relevance + restart-durable distiller)
+version: v6.33.0
+updated: 2026-06-25
+updated_by: claude-opus-4-8 (Tom-memory R2: session-scoped recall)
+
+## v6.33.0 (2026-06-25) — session-scoped recall ("where we left off")
+Tom memory R2 (RELEASE-SCHEDULE.md). `/agent-memory/recall` now accepts an optional `session`
+param and returns `recent_session` = that thread's last N episodes (scope=agent, scope_id, session_id).
+Lets a consumer resume one conversation across tool-turn gaps without re-explaining. episodes.session_id
+column + index already existed and the POST handler already binds it — this is the read side. Verified
+live: wrote a session-tagged episode, recall with session=... returned it in recent_session.
+routes/v1/intellect.ts. Backward-compatible (no session → recent_session: []).
+
+## v6.32.0 (2026-06-24) — agent-memory recall relevance + restart-durable distiller
 
 ## v6.32.0 (2026-06-24) — agent-memory recall relevance + restart-durable distiller
 Part of the Tom memory audit (ymc.capital/planning/tom-memory/AUDIT.md). Two HIGH bugs that

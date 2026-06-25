@@ -570,13 +570,14 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get('/agent-memory/recall', async (request, reply) => {
-    const q = request.query as { agent?: string; q?: string; project?: string; limit?: string; recent?: string };
+    const q = request.query as { agent?: string; q?: string; project?: string; limit?: string; recent?: string; session?: string };
     const agent = String(q?.agent || '').trim().toLowerCase();
     if (!agent) return reply.code(400).send(err('INVALID_INPUT', 'agent required'));
     const query = String(q?.q || '').trim();
     const project = q?.project ? String(q.project).trim() : null;
     const limit = Math.min(parseInt(String(q?.limit || '6'), 10) || 6, 20);
     const recentN = Math.min(parseInt(String(q?.recent || '3'), 10) || 3, 10);
+    const session = q?.session ? String(q.session).trim().slice(0, 200) : null;
 
     const hits: Array<{ kind: string; content: string; created_at: number; rank: number }> = [];
     // websearch_to_tsquery ANDs every term, so a multiword natural-language ask
@@ -624,12 +625,23 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
         WHERE scope='agent' AND scope_id=$1 ORDER BY created_at DESC LIMIT $2`,
       [agent, recentN],
     )).rows.map((r) => ({ kind: 'episode', content: r.content, created_at: Number(r.created_at) }));
+    // Session-scoped "where we left off" — the current thread's last N episodes
+    // (R2). Lets a consumer resume one conversation across tool-turn gaps without
+    // re-explaining. Empty when no session_id is passed or the thread is new.
+    const recentSession = session
+      ? (await pool.query(
+          `SELECT summary AS content, created_at FROM episodes
+            WHERE scope='agent' AND scope_id=$1 AND session_id=$2
+            ORDER BY created_at DESC LIMIT $3`,
+          [agent, session, recentN],
+        )).rows.map((r) => ({ kind: 'episode', content: r.content, created_at: Number(r.created_at) }))
+      : [];
     // Flow telemetry for the Brain screen (fire-and-forget).
     pool.query(
       `INSERT INTO intellect_events (id, event_type, source_type, details_json) VALUES ($1,$2,$3,$4::jsonb)`,
-      [randomUUID(), 'agent_memory_recall', 'agent-memory', JSON.stringify({ agent, q: query.slice(0, 140) || null, hits: hits.length })],
+      [randomUUID(), 'agent_memory_recall', 'agent-memory', JSON.stringify({ agent, q: query.slice(0, 140) || null, hits: hits.length, session: session || null })],
     ).catch(() => undefined);
-    return reply.send(ok({ agent, query: query || null, hits, recent }));
+    return reply.send(ok({ agent, query: query || null, hits, recent, recent_session: recentSession }));
   });
 
   fastify.get('/active-project', async (request, reply) => {
