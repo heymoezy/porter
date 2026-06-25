@@ -3,9 +3,22 @@
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
 project: porter
-version: v6.33.0
+version: v6.34.0
 updated: 2026-06-25
-updated_by: claude-opus-4-8 (Tom-memory R2: session-scoped recall)
+updated_by: claude-opus-4-8 (Tom-memory R3: surprise-salience write-gate)
+
+## v6.34.0 (2026-06-25) — surprise-salience write-gate (Tom memory R3)
+The cheap Karpathy idea: remember what's surprising, not every routine turn.
+- `episodes.salience` column added (migrate-intellect-v1.ts, idempotent + pg_trgm ensured).
+- POST /agent-memory (kind=episode): salience = 1 − max trigram-similarity(summary vs agent's last 30
+  episodes + active concepts). If salience < EPISODE_SURPRISE_MIN (0.3) AND not `force` → SKIP the
+  insert (logs `agent_memory_write_skipped`); else insert with salience. Caller passes `force:true` for
+  corrections/new-entity turns. Verified live: new fact salience=1.0 written; near-dup salience=0.09
+  SKIPPED; forced near-dup written; distinct fact 0.918.
+- Recall episode ranking now `ts_rank × (0.5 + salience)` so surprising memories surface first.
+  Regression-checked: recall still returns hits.
+
+## v6.33.0 (2026-06-25) — session-scoped recall ("where we left off")
 
 ## v6.33.0 (2026-06-25) — session-scoped recall ("where we left off")
 Tom memory R2 (RELEASE-SCHEDULE.md). `/agent-memory/recall` now accepts an optional `session`

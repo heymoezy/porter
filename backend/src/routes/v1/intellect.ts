@@ -29,6 +29,13 @@ import { runDreamWorker } from '../../services/intellect/dream-worker.js';
 import { randomUUID } from 'node:crypto';
 import { resolveActiveProject, setActiveProject, clearActiveProject, recentProjects } from '../../services/intellect/active-project.js';
 
+// Surprise-salience write-gate (R3). An agent episode is skipped when its
+// salience (1 − max trigram-similarity vs recent episodes + active concepts)
+// falls below this — i.e. it's a near-duplicate of something already known —
+// unless the caller forces it. Conservative to start (kills only close dups);
+// tune up from logged `agent_memory_write[_skipped]` salience scores.
+const EPISODE_SURPRISE_MIN = 0.3;
+
 interface DirectiveRow {
   id: string;
   scope: string;
@@ -518,7 +525,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
   fastify.post('/agent-memory', async (request, reply) => {
     const body = (request.body || {}) as {
       agent?: string; kind?: string; content?: string; action?: string;
-      query?: string; priority?: number; tags?: string[]; session_id?: string;
+      query?: string; priority?: number; tags?: string[]; session_id?: string; force?: boolean;
     };
     const agent = String(body.agent || '').trim().toLowerCase();
     const kind = String(body.kind || '').trim();
@@ -542,11 +549,42 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     if (!content || content.length > 4000) return reply.code(400).send(err('INVALID_INPUT', 'content required (≤4000 chars)'));
     const id = randomUUID();
     if (kind === 'episode') {
+      // Surprise-salience write-gate (R3): salience = 1 − max trigram-similarity
+      // of this summary vs the agent's recent episodes + active concepts. Skip a
+      // low-surprise (near-dup/routine) episode unless the caller forces it
+      // (corrections / new-entity turns are always memory-worthy). Keeps the
+      // episode stream high-signal and feeds salience-weighted recall + the dream.
+      const force = body.force === true;
+      const sim = (await pool.query<{ maxsim: number }>(
+        `SELECT GREATEST(
+                  COALESCE((SELECT MAX(similarity(e.summary, $2))
+                              FROM (SELECT summary FROM episodes
+                                     WHERE scope='agent' AND scope_id=$1
+                                     ORDER BY created_at DESC LIMIT 30) e), 0),
+                  COALESCE((SELECT MAX(similarity(c.content, $2))
+                              FROM concepts c
+                             WHERE c.scope='agent' AND c.scope_id=$1 AND c.status='active'), 0)
+                ) AS maxsim`,
+        [agent, content],
+      )).rows[0];
+      const salience = Math.max(0, Math.min(1, 1 - Number(sim?.maxsim ?? 0)));
+      if (!force && salience < EPISODE_SURPRISE_MIN) {
+        pool.query(
+          `INSERT INTO intellect_events (id, event_type, source_type, details_json) VALUES ($1,$2,$3,$4::jsonb)`,
+          [randomUUID(), 'agent_memory_write_skipped', 'agent-memory', JSON.stringify({ agent, salience: Number(salience.toFixed(3)), preview: content.slice(0, 100) })],
+        ).catch(() => undefined);
+        return reply.send(ok({ id: null, kind, agent, skipped: 'low_surprise', salience: Number(salience.toFixed(3)) }));
+      }
       await pool.query(
-        `INSERT INTO episodes (id, scope, scope_id, session_id, gateway, summary)
-         VALUES ($1, 'agent', $2, $3, 'agent-memory', $4)`,
-        [id, agent, body.session_id ?? null, content],
+        `INSERT INTO episodes (id, scope, scope_id, session_id, gateway, summary, salience)
+         VALUES ($1, 'agent', $2, $3, 'agent-memory', $4, $5)`,
+        [id, agent, body.session_id ?? null, content, salience],
       );
+      pool.query(
+        `INSERT INTO intellect_events (id, event_type, source_type, details_json) VALUES ($1,$2,$3,$4::jsonb)`,
+        [randomUUID(), 'agent_memory_write', 'agent-memory', JSON.stringify({ agent, kind, salience: Number(salience.toFixed(3)), forced: force, preview: content.slice(0, 140) })],
+      ).catch(() => undefined);
+      return reply.send(ok({ id, kind, agent, salience: Number(salience.toFixed(3)) }));
     } else if (kind === 'concept') {
       await pool.query(
         `INSERT INTO concepts (id, memory_kind, trust_tier, scope, scope_id, content, source_type, review_state)
@@ -601,7 +639,8 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       for (const r of conceptRows) hits.push({ kind: 'concept', content: r.content, created_at: Number(r.created_at), rank: Number(r.rank) });
       const episodeRows = (await pool.query(
         `SELECT summary AS content, created_at,
-                ts_rank(to_tsvector('english', summary), to_tsquery('english', $1)) AS rank
+                ts_rank(to_tsvector('english', summary), to_tsquery('english', $1))
+                  * (0.5 + COALESCE(salience, 0.5)) AS rank
            FROM episodes
           WHERE to_tsvector('english', summary) @@ to_tsquery('english', $1) AND ${scopeWhere}
           ORDER BY rank DESC, created_at DESC LIMIT $${baseArgs.length + 1}`,

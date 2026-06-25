@@ -1,3 +1,8 @@
+## v6.34.0 (2026-06-25)
+
+- feat(memory): session-scoped recall for "where we left off" — v6.33.0
+
+
 ## v6.32.0 (2026-06-24)
 
 - feat(agents): GET /agents/:id returns persona text (v6.31.3)

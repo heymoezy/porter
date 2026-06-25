@@ -50,6 +50,11 @@ export async function migrateIntellectV1(pool: pg.Pool): Promise<void> {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_episodes_scope ON episodes(scope, scope_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_episodes_session ON episodes(session_id)`);
+    // Surprise-salience (R3): 1 − max trigram-similarity vs recent episodes + active
+    // concepts at write time. Weights recall ranking; the write-gate skips low-surprise
+    // (near-dup/routine) episodes unless forced (correction/new-entity).
+    await client.query(`ALTER TABLE episodes ADD COLUMN IF NOT EXISTS salience DOUBLE PRECISION DEFAULT 0.5`);
+    await client.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
 
     // ── Memory references (for validation tracking) ──────────────────────────
 
