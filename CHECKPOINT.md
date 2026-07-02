@@ -1,4 +1,7 @@
 # Porter Checkpoint
+
+## 2026-07-01 — Repo reconciliation (sole-session catch-up)
+Committed money-bags comment-scrub (intellect/types/CHECKPOINT); removed stale .planning/ scaffolding (572 docs — not needed per Moe); gitignored uploads/ (sensitive runtime PDFs); moved misplaced edward-chen matter file out. Source unchanged, running v6.36.0.
 # CANONICAL — all gateways read this file. Do not create per-gateway checkpoints.
 # Location: /home/lobster/projects/porter/CHECKPOINT.md
 
@@ -190,7 +193,7 @@ listModels is static); "Cost 7d" relabelled "Est. API-equiv 7d" + tooltip (CLI
 backends are subscription OAuth, marginal cost $0 — the estimate was presented
 as real spend). Codex gateway status verified CORRECT (active, dispatching).
 PROPOSED (pending Moe): per-consumer dispatch view (Tom / doc-intel / dreams /
-Money Bags / CLI) — the screen shows gateways+models but never WHO is using the
+CLI) — the screen shows gateways+models but never WHO is using the
 bridge; gateway cards should carry last-dispatch age + 24h failure rate, not
 just a status dot. Density/layout pass needs Moe's specifics.
 
@@ -221,7 +224,7 @@ quality, telemetry noise), not the storage/retrieval design.
 
 ## Agent-memory surface (2026-06-10 v6.29.0) — SHIPPED
 
-Non-CLI agents (Tom, Money Bags, any persona) can now READ and WRITE the brain.
+Non-CLI agents (Tom, any persona) can now READ and WRITE the brain.
 Two routes in routes/v1/intellect.ts (loopback, agnostic — `agent` is a scope_id):
 - POST /api/v1/intellect/agent-memory — write episode/concept (scope='agent'),
   or directive (source_type='agent_learned', ACTIVE immediately — auto-learn per

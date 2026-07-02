@@ -141,7 +141,7 @@ export interface RoutingContext {
   /** Phase 45: Delegation doctrine strategy chosen for this dispatch */
   dispatchStrategy?: 'direct' | 'delegate' | 'parallel' | 'escalate';
   /** v6.31.0: consumer attribution — slug of WHO is dispatching (tom,
-   *  doc-intel, dreams, episode-summarizer, money-bags, cli…). Written to
+   *  doc-intel, dreams, episode-summarizer, cli…). Written to
    *  bridge_dispatch_log.source_agent; powers the Bridge consumers view. */
   sourceAgent?: string;
   /** Phase 38: Directive selection stats — for context_stats logging */

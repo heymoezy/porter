@@ -508,7 +508,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     return reply.send(ok({ scope, scope_id: scopeId, count: rows.length, directives: rows }));
   });
 
-  // ── Agent memory surface (v6.29.0) — lets non-CLI agents (Tom, Money Bags,
+  // ── Agent memory surface (v6.29.0) — lets non-CLI agents (Tom,
   // any future persona) READ and WRITE the shared brain. Agnostic: `agent` is
   // a scope_id, never a hardcoded name. 127.0.0.1-only (server bind), same
   // auth posture as the rest of this file.
