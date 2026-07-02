@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { PORTER_VERSION } from './version.js';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
@@ -174,7 +175,7 @@ fastify.get('/health', async () => {
   return {
     status: 'ok',
     engine: 'fastify',
-    version: '6.36.0',
+    version: PORTER_VERSION,
     mail: {
       provider: config.mail.provider,
       domain: config.mail.defaultDomain,

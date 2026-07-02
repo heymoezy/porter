@@ -1,3 +1,13 @@
+## v6.36.1 (2026-07-02)
+
+- chore(porter): sole-session repo reconcile — scrub money-bags refs, drop stale .planning/, gitignore uploads/
+- docs(porter): add brand ascii banner + memory-unification research note
+
+
+## 6.36.1 — /context active-project pin fallback + version single-source (2026-07-02)
+- R8: detectContext falls back to the active_project pin (session→global) when cwd does not resolve a project, so pinned sessions inject the correct project memory (memory-restructure keystone).
+- Bug fix: version was hardcoded + duplicated in index.ts and routes/v1/health.ts — now single-sourced from backend/package.json via src/version.ts.
+
 ## v6.36.0 (2026-06-25)
 
 - feat(memory): directive supersede-on-conflict — v6.35.0 (Tom R4)

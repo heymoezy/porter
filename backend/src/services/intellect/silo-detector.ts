@@ -27,6 +27,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type pg from 'pg';
+import { resolveActiveProject } from './active-project.js';
 
 export interface DetectedSilo {
   id: string;
@@ -197,6 +198,16 @@ export async function detectContext(
   pool: pg.Pool,
 ): Promise<DetectedContext> {
   const silos = await detectSilos(args, pool);
-  const projectId = detectProject(args.cwd);
+  let projectId = detectProject(args.cwd);
+  // R8: when cwd doesn't resolve a project (e.g. a session pinned from /home/lobster),
+  // fall back to the active-project pin (session-row → _global-row). cwd stays authoritative.
+  if (!projectId) {
+    try {
+      const active = await resolveActiveProject(pool, { cwd: args.cwd, sessionId: args.sessionId });
+      if (active && active.source !== 'none') projectId = active.project;
+    } catch {
+      /* fail-open: never break context detection on a pin-resolution error */
+    }
+  }
   return { silos, projectId };
 }

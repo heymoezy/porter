@@ -1,5 +1,8 @@
 # Porter Checkpoint
 
+## 2026-07-02 — v6.36.1: /context pin fallback (R8) + version single-source fix
+R8 keystone: detectContext falls back to the active_project pin when cwd unresolved (verified: /home/lobster → effectiveProject=ymc.capital; Porter cwd → Porter). Fixed hardcoded/duplicated version bug (index.ts+health.ts → src/version.ts reads package.json). tsc+build clean; /health @ 6.36.1; R8 verified live.
+
 ## 2026-07-01 — Repo reconciliation (sole-session catch-up)
 Committed money-bags comment-scrub (intellect/types/CHECKPOINT); removed stale .planning/ scaffolding (572 docs — not needed per Moe); gitignored uploads/ (sensitive runtime PDFs); moved misplaced edward-chen matter file out. Source unchanged, running v6.36.0.
 # CANONICAL — all gateways read this file. Do not create per-gateway checkpoints.

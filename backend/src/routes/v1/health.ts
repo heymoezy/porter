@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { pool } from '../../db/client.js';
 import { config } from '../../config.js';
 import { ok } from '../../lib/envelope.js';
+import { PORTER_VERSION } from '../../version.js';
 
 interface BackendStatus {
   name: string;
@@ -68,7 +69,7 @@ export default async function healthV1Routes(fastify: FastifyInstance) {
     }
 
     return reply.send(ok({
-      porter_version: '6.36.0',
+      porter_version: PORTER_VERSION,
       db_engine: 'postgresql',
       db_connected: dbStatus === 'up',
       backends,
