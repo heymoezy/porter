@@ -45,3 +45,5 @@ admin/backend/dist/
 admin/frontend/node_modules/
 admin/frontend/build/
 uploads/
+backend/dist.*bak*
+backend/dist.ship-bak
