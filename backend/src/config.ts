@@ -50,19 +50,6 @@ export const config = {
   // Persona file storage (admin agents/templates routes)
   personasDir: process.env.PORTER_PERSONAS_DIR || path.join(process.env.PORTER_DATA_DIR || path.join(process.env.HOME || os.homedir(), '.porter'), 'personas'),
 
-  // Mail system configuration
-  // Primary: Stalwart self-hosted mail for @askporter.app
-  // Set STALWART_URL and STALWART_API_KEY to enable provider integration
-  // Without these, mail subsystem works in local-only mode (DB records, no real send/receive)
-  // Gmail connector: configure via Google OAuth in admin, import-only
-  mail: {
-    provider: process.env.MAIL_PROVIDER || 'stalwart',
-    stalwartUrl: process.env.STALWART_URL || 'http://127.0.0.1:443',
-    stalwartApiKey: process.env.STALWART_API_KEY || '',
-    defaultDomain: process.env.MAIL_DEFAULT_DOMAIN || 'askporter.app',
-    webhookSecret: process.env.MAIL_WEBHOOK_SECRET || '',
-  },
-
   // SMTP config (admin email routes) — all optional, email features disabled when absent.
   smtp: {
     host: process.env.SMTP_HOST ?? '',

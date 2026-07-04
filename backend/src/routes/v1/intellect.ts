@@ -12,7 +12,6 @@ import { pool } from '../../db/client.js';
 import { config } from '../../config.js';
 import { ok, err } from '../../lib/envelope.js';
 import { runMemoryValidation } from '../../services/intellect/memory-validator.js';
-import { processCorrection } from '../../services/intellect/correction-detector.js';
 import { analyzeAndStoreSession } from '../../services/intellect/session-analyzer.js';
 import { runMemoryPromotion } from '../../services/intellect/memory-promoter.js';
 import { runDispatchScoring } from '../../services/intellect/dispatch-scorer.js';
@@ -434,41 +433,6 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       return reply.status(500).send(err('VALIDATION_FAILED', message));
-    }
-  });
-
-  // ── POST /correction — submit user message for correction detection ──
-
-  fastify.post('/correction', async (request, reply) => {
-    const body = request.body as {
-      sessionId?: string;
-      project?: string | null;
-      userMessage?: string;
-      gateway?: string | null;
-    };
-    if (!body?.sessionId || !body?.userMessage) {
-      return reply.status(400).send(err('BAD_REQUEST', 'sessionId and userMessage required'));
-    }
-    try {
-      const result = await processCorrection({
-        sessionId: body.sessionId,
-        project: body.project ?? null,
-        userMessage: body.userMessage,
-        gateway: body.gateway ?? null,
-      });
-      if (result.detected) {
-        // Fire the correction.detected event so the workflow engine can
-        // immediately run the promoter (which catches reinforcement bursts).
-        emitEvent('correction.detected', {
-          sessionId: body.sessionId,
-          project: body.project ?? null,
-          gateway: body.gateway ?? null,
-        }).catch(e => console.error('[intellect:correction] event emit failed:', e));
-      }
-      return reply.send(ok(result));
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      return reply.status(500).send(err('CORRECTION_FAILED', message));
     }
   });
 
@@ -1031,59 +995,6 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       const message = e instanceof Error ? e.message : String(e);
       return reply.status(500).send(err('SCORE_FAILED', message));
     }
-  });
-
-  // ── GET /candidates — list pending directive candidates ─────────────
-
-  fastify.get('/candidates', async (_request, reply) => {
-    const { rows } = await pool.query<{
-      id: string;
-      scope: string;
-      scope_id: string | null;
-      content: string;
-      priority: number;
-      source_session_id: string | null;
-      created_at: number;
-      updated_at: number;
-    }>(
-      `SELECT id, scope, scope_id, content, priority, source_session_id, created_at, updated_at
-       FROM directives
-       WHERE status = 'candidate'
-       ORDER BY priority DESC, updated_at DESC
-       LIMIT 50`
-    );
-    return reply.send(ok({ candidates: rows, count: rows.length }));
-  });
-
-  // ── POST /candidates/:id/accept ─ manual promotion override ─────────
-
-  fastify.post('/candidates/:id/accept', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { rowCount } = await pool.query(
-      `UPDATE directives
-       SET status = 'active',
-           priority = GREATEST(priority, 90),
-           verified_at = EXTRACT(EPOCH FROM NOW()),
-           updated_at = EXTRACT(EPOCH FROM NOW())
-       WHERE id = $1 AND status = 'candidate'`,
-      [id]
-    );
-    if (!rowCount) return reply.status(404).send(err('NOT_FOUND', 'candidate not found'));
-    return reply.send(ok({ promoted: true, id }));
-  });
-
-  // ── POST /candidates/:id/reject ─ dismiss a candidate ──────────────
-
-  fastify.post('/candidates/:id/reject', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { rowCount } = await pool.query(
-      `UPDATE directives
-       SET status = 'archived', updated_at = EXTRACT(EPOCH FROM NOW())
-       WHERE id = $1 AND status = 'candidate'`,
-      [id]
-    );
-    if (!rowCount) return reply.status(404).send(err('NOT_FOUND', 'candidate not found'));
-    return reply.send(ok({ rejected: true, id }));
   });
 
   // ── POST /prune — run memory pruner ─────────────────────────────────

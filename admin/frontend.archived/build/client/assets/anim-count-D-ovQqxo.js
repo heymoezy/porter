@@ -1,0 +1,1 @@
+import{a,p as s}from"./chunk-LFPYN7LY-BE_YIfuT.js";function o(t){a.useEffect(t,[])}function f({to:t,duration:c=1200}){const[l,n]=a.useState(0);return o(()=>{let e=0;const u=Math.ceil(t/(c/30)),r=setInterval(()=>{e+=u,e>=t?(n(t),clearInterval(r)):n(e)},30);return()=>clearInterval(r)}),s.jsx(s.Fragment,{children:l})}export{f as A};

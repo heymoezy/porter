@@ -298,12 +298,6 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     action_type: 'dispatch_score',
   },
   {
-    name: 'Promote corrections on new directive',
-    trigger_type: 'event',
-    trigger_value: 'correction.detected',
-    action_type: 'memory_promote',
-  },
-  {
     name: 'Prune stale memory daily',
     trigger_type: 'schedule',
     trigger_value: 'every_24h',

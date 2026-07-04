@@ -1,5 +1,24 @@
 # Porter Checkpoint
 
+## 2026-07-04 — v6.38.0: PR-2 dead-code batch (−6,306 lines; mail ports CLOSED)
+Bypass-hunt PR-2, agent-executed with per-item re-verification:
+- **Mail pillar DELETED**: stalwart docker container stopped+removed — ports 25/465/587/993/4190/8443
+  were 0.0.0.0-EXPOSED, now CLOSED (ss verified). routes mail/mail-admin + services/mail (19 files) +
+  infra/stalwart gone; scheduler newsletter tick + config mail block removed; /health mail block
+  removed (verified zero ymc consumers assert on it). Tables kept as shells.
+- **Correction funnel DELETED** (superseded by ymc R4 direct-directive path): /correction + /candidates
+  routes, correction-detector.ts, the 'Promote corrections' workflow (row + seed); 12 stale p60
+  candidates archived; the ~/.claude hooks/porter-user-prompt.js /correction POST removed (transcript
+  capture + silo interception KEPT; repo-external edit).
+- **Skill-feedback scaffold DELETED** (0 rows, handler stripped since v6.28.0). **Approvals +
+  decomposition ROUTES deleted** (0 rows ever) — but services/task-decomposition KEPT: re-verify found
+  LIVE callers (chat.ts delegation path + delegation-doctrine) — audit claim wrong, third such catch.
+- **Admin SPA headless**: index.ts no longer serves adminFrontendDist; admin/frontend → .archived
+  (restorable). brain-ui (:5176 inline) verified unaffected.
+- Verified: tsc 0, build clean, restart, /health 200, Bridge smoke (codex_cli "OK"), directives GET,
+  deleted endpoints 404, hook node --check OK.
+- Follow-up → PR-4 docs pass: CLAUDE.md ship step still references admin/frontend build.
+
 ## 2026-07-04 — v6.37.0: PR-1 memory pruner unjammed (nightly failure since 05-09)
 Bypass-hunt audit (plan: ymc.capital/planning/BYPASS-REMEDIATION-PLAN.md): the nightly memory prune
 had been aborting since 2026-05-09 — dedup UPDATEs hit SEALED moe-direct test rows (66 smoke-silo

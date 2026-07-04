@@ -3,10 +3,6 @@ import { PORTER_VERSION } from './version.js';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
-import staticFiles from '@fastify/static';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
 import crypto from 'crypto';
 import { config } from './config.js';
 import eventRoutes from './routes/events.js';
@@ -72,9 +68,6 @@ import { probeAllGateways } from './services/admin/gateway-versions.js';
 
 
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const adminFrontendDist = path.resolve(__dirname, '../../admin/frontend/build/client');
-
 const fastify = Fastify({
   logger: {
     level: config.logLevel,
@@ -123,18 +116,6 @@ fastify.register(openapiPlugin);
 // Auth plugin (session resolution)
 fastify.register(authPlugin);
 
-// Landing page: intercept root request before @fastify/static serves the SPA
-fastify.addHook('onRequest', async (request, reply) => {
-  if (request.url !== '/' || request.method !== 'GET') return;
-  const cookies = request.cookies as Record<string, string> | undefined;
-  const hasSession = cookies?.porter_session || cookies?.porter_admin_session;
-  if (hasSession) return; // let SPA handle authenticated users
-  const landingPath = path.join(adminFrontendDist, 'landing.html');
-  if (fs.existsSync(landingPath)) {
-    reply.type('text/html').send(fs.readFileSync(landingPath, 'utf8'));
-  }
-});
-
 // V1 routes (Fastify-native, with response envelope)
 fastify.register(v1Routes, { prefix: '/api/v1' });
 
@@ -165,23 +146,10 @@ startBrainUI().catch(err => console.error('[brain-ui] Failed to start:', err));
 
 // Health check
 fastify.get('/health', async () => {
-  // Mail system status — lightweight count query
-  let mailboxCount = 0;
-  try {
-    const { rows } = await pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM mailboxes WHERE status = \'active\'');
-    mailboxCount = parseInt(rows[0]?.count ?? '0', 10);
-  } catch { /* table may not exist yet */ }
-
   return {
     status: 'ok',
     engine: 'fastify',
     version: PORTER_VERSION,
-    mail: {
-      provider: config.mail.provider,
-      domain: config.mail.defaultDomain,
-      mailboxes: mailboxCount,
-      stalwartConfigured: !!config.mail.stalwartApiKey,
-    },
   };
 });
 
@@ -190,39 +158,9 @@ fastify.get('/api/v1/openapi.json', async () => {
   return fastify.swagger();
 });
 
-// Serve admin frontend static files at root
-if (fs.existsSync(adminFrontendDist)) {
-  fastify.register(staticFiles, {
-    root: adminFrontendDist,
-    prefix: '/',
-    wildcard: false,
-  });
-
-  // SPA catch-all — serve index.html for client-side routing
-  // API routes and /health are registered above and take priority
-  fastify.setNotFoundHandler(async (request, reply) => {
-    // Only serve SPA for non-API, non-asset GET requests
-    if (request.method === 'GET' && !request.url.startsWith('/api/')) {
-      // Landing page: serve landing.html for unauthenticated visitors at root
-      if (request.url === '/' || request.url === '') {
-        const cookies = request.cookies as Record<string, string> | undefined;
-        const hasSession = cookies?.porter_session || cookies?.porter_admin_session;
-        if (!hasSession) {
-          const landingPath = path.join(adminFrontendDist, 'landing.html');
-          if (fs.existsSync(landingPath)) {
-            return reply.type('text/html').send(fs.readFileSync(landingPath, 'utf8'));
-          }
-        }
-      }
-      const indexPath = path.join(adminFrontendDist, 'index.html');
-      if (fs.existsSync(indexPath)) {
-        const html = fs.readFileSync(indexPath, 'utf8');
-        return reply.type('text/html').send(html);
-      }
-    }
-    return reply.code(404).send({ error: 'Not found' });
-  });
-}
+// Admin SPA retired 2026-07-04 (PR-2): Porter is headless. The old React SPA
+// lives at admin/frontend.archived; the live dashboard is the inline brain-ui
+// on :5176 (routes/brain-ui.ts).
 
 // DEPRECATED: IMAP IDLE shutdown hook removed in Tranche 12 (no longer auto-started)
 

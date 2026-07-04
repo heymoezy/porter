@@ -10,7 +10,6 @@ import { computeEmpiricalRates } from './bridge/rate-limit-tracker.js';
 import { collectLocalUsage } from './bridge/usage-collector.js';
 import { getActiveSessions, rotateSession } from './session-registry.js';
 import { assignJob } from './job-assignment.js';
-import { runDigestCycle } from './mail/newsletter-service.js';
 import { runMemoryValidation } from './intellect/memory-validator.js';
 import { runScheduledWorkflows } from './intellect/workflow-engine.js';
 import { runDispatchScoring } from './intellect/dispatch-scorer.js';
@@ -24,7 +23,6 @@ const DEADLINE_CHECK_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const CALENDAR_SYNC_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const HEALTH_PROBE_INTERVAL = 15; // 15 × 2000ms = 30s
 const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
-const NEWSLETTER_DIGEST_INTERVAL = 10800; // 10800 ticks x 2s = 6h — run newsletter digest cycle
 const MEMORY_VALIDATION_INTERVAL = 900;  // 900 ticks x 2s = 30 min — validate memory references
 const DISPATCH_SCORING_INTERVAL = 10800; // 10800 ticks x 2s = 6h — auto-score recent dispatches
 const INTELLECT_DAILY_INTERVAL = 43200;  // 43200 ticks x 2s = 24h — daily intellect maintenance (prune, mine)
@@ -222,12 +220,6 @@ async function tick() {
     // Model catalog refresh -- every 24h
     if (tickCount > 0 && tickCount % MODEL_REFRESH_INTERVAL === 0) {
       refreshAllGateways(pool).catch(err => console.error('[scheduler] model refresh error', err));
-    }
-
-    // Newsletter digest cycle — every 6h
-    if (tickCount > 0 && tickCount % NEWSLETTER_DIGEST_INTERVAL === 0) {
-      runDigestCycle().catch(err =>
-        console.error('[scheduler:digest] cycle error', err));
     }
 
     // Intellect memory validation — every 30 min
