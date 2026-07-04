@@ -15,7 +15,7 @@ import { runMemoryValidation } from '../../services/intellect/memory-validator.j
 import { analyzeAndStoreSession } from '../../services/intellect/session-analyzer.js';
 import { runMemoryPromotion } from '../../services/intellect/memory-promoter.js';
 import { runDispatchScoring } from '../../services/intellect/dispatch-scorer.js';
-import { emitEvent } from '../../services/intellect/workflow-engine.js';
+import { emitEvent, runDreamProposalsReviewDigest } from '../../services/intellect/workflow-engine.js';
 import { runMemoryPruning } from '../../services/intellect/memory-pruner.js';
 import { runSelfMonitor } from '../../services/intellect/self-monitor.js';
 import { runPatternMining } from '../../services/intellect/pattern-miner.js';
@@ -940,6 +940,49 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ ok: false, code: 'NOT_FOUND', message: 'Dream run not found' });
     }
     return reply.send({ ok: true, dream_run: row });
+  });
+
+  // ── PR-3 (2026-07-04) — GET /dream-proposals — pending review queue ──
+  // Headless review surface for dream-worker output. The admin SPA (the old
+  // reviewer UI) was archived in PR-2; this is the pull path for Tom/ymc.
+  // Returns pending proposals WITH content (live HTTP response, not a log —
+  // the no-model-text rule applies to intellect_events, not to this endpoint).
+  // Accept/reject stay on the existing admin API:
+  //   POST /api/admin/dreams/proposals/:id/{accept,reject} (platform-admin session).
+  // 127.0.0.1-only; relies on server bind for protection (same posture as
+  // /dream-run above).
+  fastify.get('/dream-proposals', async (req, reply) => {
+    const q = req.query as { silo_id?: string; limit?: string };
+    const lim = Math.min(parseInt(q.limit ?? '50', 10) || 50, 200);
+    const params: unknown[] = [];
+    let where = `status = 'pending'`;
+    if (q.silo_id) { params.push(q.silo_id); where += ` AND silo_id = $${params.length}`; }
+    params.push(lim);
+    const { rows } = await pool.query(
+      `SELECT id, dream_run_id, silo_id, proposal_kind, target_directive_ids,
+              proposed_content, proposed_metadata, sort_order, created_at, expires_at
+         FROM memory_proposals
+        WHERE ${where}
+        ORDER BY expires_at ASC NULLS LAST, sort_order ASC
+        LIMIT $${params.length}`,
+      params,
+    );
+    return reply.send(ok({ proposals: rows, count: rows.length }));
+  });
+
+  // ── PR-3 — POST /dream-review-digest — run the daily digest manually ─
+  // Same manual-trigger pattern as POST /prune. Writes ONE
+  // 'dream_proposals_pending' intellect_events row (when pending > 0) and
+  // returns the summary. The scheduled path is the 'Daily dream-proposal
+  // review digest' every_24h workflow.
+  fastify.post('/dream-review-digest', async (_request, reply) => {
+    try {
+      const result = await runDreamProposalsReviewDigest();
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('DREAM_REVIEW_DIGEST_FAILED', message));
+    }
   });
 
   // ── POST /session-end — session finished, create episode ────────────

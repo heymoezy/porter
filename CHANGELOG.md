@@ -1,3 +1,8 @@
+## v6.39.0 (2026-07-04)
+
+- chore(cleanup): PR-2 — dead-code batch, mail ports closed (v6.38.0)
+
+
 ## v6.37.0 (2026-07-04)
 
 - chore(porter): gitignore build-backup dirs (dist.*bak)

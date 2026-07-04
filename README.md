@@ -7,8 +7,10 @@ Canonical Bridge contract: `BRIDGE.md` at repo root.
 
 | Component | Port | Path |
 |-----------|------|------|
-| Brain + Admin (single Fastify process) | :3001 | `backend/` + `admin/` |
+| Brain (headless Fastify API) | :3001 | `backend/` |
+| Brain UI (inline dashboard) | :5176 | `backend/src/routes/brain-ui.ts` |
 
+Headless since 2026-07-04 — the old admin SPA is archived at `admin/frontend.archived`.
 Business model: API metering. Any future UI/frontend is an API customer.
 
 ## Architecture
@@ -17,9 +19,9 @@ API Consumers -> Porter (:3001) -> PostgreSQL
                       |
                  Bridge Layer
                       |
-        +-------------+-------------+
-        |    |    |    |    |
-   OpenClaw Ollama Claude Codex Gemini
+              +-------+-------+
+              |               |
+         Claude CLI       Codex CLI
 ```
 
 ## Development

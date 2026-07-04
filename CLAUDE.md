@@ -6,9 +6,9 @@ Business model: API metering. Any UI is just an API customer.
 
 ## Pillars
 
-- **Bridge** — routes AI requests across backends (OpenClaw/GPT-5.4, Ollama, Claude CLI, Codex CLI, Gemini CLI). One bridge, many backends. Hub/spoke contract: `BRIDGE.md`. Adapters: `backend/src/services/bridge/adapters/`.
+- **Bridge** — routes AI requests across backends. Two registered gateways: Claude CLI (`claude_cli`, priority 10) and Codex CLI (`codex_cli`, priority 20). One bridge, many backends. Hub/spoke contract: `BRIDGE.md`. Adapters: `backend/src/services/bridge/adapters/`.
 - **Intelligence** — signal extraction from CLI activity, classification, surfacing. Consumers subscribe.
-- **Memory V2 — 4 layers:** Directives (operating rules, high trust) → Concepts (durable truths, high trust, FTS) → Episodes (time-bound, medium) → Signals (low trust, awaiting promotion). Tiered injection with token cap. Pipeline: `backend/src/services/memory-injection.ts`.
+- **Memory — 3 layers:** Directives (operating rules, high trust) → Concepts (durable truths, high trust, FTS) → Episodes (time-bound, medium). Tiered injection with token cap. Pipeline: `backend/src/services/memory-injection.ts`.
 
 ## Stack
 
@@ -41,14 +41,13 @@ psql -d porter
 
 ## Ship Process — Atomic
 
-1. `cd admin/frontend && npx react-router build` (if frontend touched)
-2. `cd backend && npm run build`
-3. `pkill -9 -f "porter/backend"; sleep 4`
-4. `systemctl --user start porter-fastify; sleep 8`
-5. `curl -s http://127.0.0.1:3001/health` → expect current version
-6. Update `CHECKPOINT.md`
+1. `cd backend && npm run build`
+2. `pkill -9 -f "porter/backend"; sleep 4`
+3. `systemctl --user start porter-fastify; sleep 8`
+4. `curl -s http://127.0.0.1:3001/health` → expect current version
+5. Update `CHECKPOINT.md`
 
-Backend serves frontend statics. Rebuild without restart = blank screen. Always restart.
+Porter is headless (admin SPA archived 2026-07-04, PR-2 — `admin/frontend.archived`). The live dashboard is the inline brain-ui on :5176 (`backend/src/routes/brain-ui.ts`), served by the same process. Always restart after a rebuild.
 
 ## Verification — Before Claiming Done
 

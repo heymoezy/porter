@@ -1,5 +1,53 @@
 # Porter Checkpoint
 
+## 2026-07-04 — v6.39.0: PR-3 dream reviewer + PR-4 docs-match-reality
+- **PR-3:** dream worker ALIVE (cadence runs over 3 silos) but output ORPHANED since the SPA archive —
+  7 pending / 54 expired proposals, last human review 2026-05-16. Wired WITHOUT new timers/UI:
+  `dream_proposals_review_digest` workflow on the existing every_24h tag → one `dream_proposals_pending`
+  intellect_event daily (ids/kinds/expiry only; silent at zero); GET /api/v1/intellect/dream-proposals
+  (pull queue w/ content) + POST /dream-review-digest (manual). Accept/reject stays at the existing
+  /api/admin/dreams/proposals. ⚠️ 3 pending EXPIRE 2026-07-08 — review:
+  `curl http://127.0.0.1:3001/api/v1/intellect/dream-proposals`.
+- **PR-4:** CLAUDE.md (ship steps — SPA build step removed, headless statics note, memory 4→3 layers,
+  2 real gateways), BRIDGE.md (real gateway list + dispatch-log/costs endpoints), README/PROJECT
+  (headless, Forge removed, phantom admin/backend path), admin/CLAUDE.md → archived stub.
+- Flagged for next REMOVE batch: `imapflow` dep (zero importers — mail debris).
+- NOTE: PR-1's true end-to-end proof = tonight's every_24h prune tick (last_run_at only updates on
+  scheduled success; manual run already verified clean).
+- Verified: tsc 0, build clean, restart, /health 200, both new endpoints smoked (pending=7), brain-ui 200.
+
+## 2026-07-04 — PR-3 + PR-4: dream proposals get a reviewer; docs match reality (awaiting operator version bump)
+**PR-3 — dream-proposal review loop (headless).** Re-verified first: dream worker is ALIVE (scheduled
+run today via runSiloCadenceCheck; silos software/admin/data-room enabled), but its output was orphaned —
+memory_proposals: 7 pending, 54 expired-unreviewed vs only 3 ever reviewed (last 2026-05-16; the SPA
+reviewer was archived in PR-2, brain-ui shows only a count). Wired, no new timers, no UI:
+- New `dream_proposals_review_digest` workflow action (workflow-engine.ts) seeded as
+  'Daily dream-proposal review digest' on the EXISTING every_24h tick — appends ONE
+  `dream_proposals_pending` row to intellect_events (ids/kinds/silo/expiry only — model text is never
+  logged to intellect_events per dream-worker posture). Zero pending = silent.
+- `GET /api/v1/intellect/dream-proposals` — live pending queue WITH content (127.0.0.1, same posture
+  as /dream-run). **This is the pull surface for Tom/ymc.**
+- `POST /api/v1/intellect/dream-review-digest` — manual trigger (same pattern as POST /prune).
+- Accept/reject remain on the existing admin API:
+  `GET/POST /api/admin/dreams/proposals[/:id/accept|/:id/reject]` (platform-admin session).
+- DEADLINE NOTE: 3 of the 7 pending expire 07-08, 2 on 07-15, 2 on 07-28 — review before then.
+**PR-4 — docs match reality.** CLAUDE.md: ship step 1 (admin/frontend react-router build) removed,
+"backend serves frontend statics" → headless + brain-ui :5176; memory pillar 4-layers→3 (Signals tier
+gone — zero refs in memory-injection.ts/schema); Bridge pillar → the 2 real gateways (claude_cli,
+codex_cli — gateways table verified). BRIDGE.md: backend list ollama/openclaw/gemini → claude_cli|codex_cli,
+added dispatch-log/costs observability APIs, fixed casing of canonical path. README: components table +
+architecture diagram → headless + 2 backends. PROJECT.md: Forge pillar removed (deleted 2026-05-31),
+signals dropped, admin/frontend.archived, key-paths fixed (admin/backend/ never existed). admin/CLAUDE.md
+replaced with archived-status stub (old file instructed building/serving the archived SPA).
+backend/package.json scripts verified clean (dev/build/start/db:push/db:studio — no dead refs).
+LEFTOVER for next batch: `imapflow` dep has zero importers (mail-pillar debris; nodemailer still live via
+transactional-email.ts). Plan-file PR-4 items (b) zombie agent_jobs, (d) PORTER_PROJECTS_ROOT, (e) distiller
+decay were NOT in this pass's scope. Also: 'Prune stale memory daily' last_run_at still 2026-05-09 — it only
+updates on scheduled success; next every_24h fire ≈ 24h after last restart will confirm PR-1 end-to-end.
+Verified: tsc 0, build clean, restart, /health 200 v6.38.0, both new endpoints curl-smoked (digest wrote
+1 intellect_events row, visible via GET /api/v1/intellect/events), workflow row seeded+enabled,
+brain-ui :5176 → 200, journal clean. NOT committed; version bump = operator ceremony.
+
 ## 2026-07-04 — v6.38.0: PR-2 dead-code batch (−6,306 lines; mail ports CLOSED)
 Bypass-hunt PR-2, agent-executed with per-item re-verification:
 - **Mail pillar DELETED**: stalwart docker container stopped+removed — ports 25/465/587/993/4190/8443

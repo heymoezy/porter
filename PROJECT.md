@@ -6,21 +6,19 @@ AI orchestration platform. Self-hosted SaaS that manages workers, projects, mode
 
 Porter is the AI orchestrator that runs on your machine -- routing requests across multiple AI models, injecting persistent memory into every call, managing failovers, and coordinating agents. You install it once, connect your API keys, and every AI tool on your machine becomes part of one intelligent system.
 
-The web interface is the window into what Porter is doing. Gateway health, dispatch logs, costs, memory, agent activity -- all visible in real-time at `/admin`.
+Porter is headless (admin SPA archived 2026-07-04). The inline brain-ui dashboard on `:5176` shows memory, learning flow, and recent intellect events; everything else is API-first (`/api/v1/*`, `/api/admin/*`).
 
-## The 3 Pillars
+## The Pillars
 
-- **Bridge** -- The hub. Every AI model plugs into Porter through a smart router that decides which model handles each request based on capability, cost, and health.
-- **Forge** -- The factory. Create AI agents from templates, train them on your domain, and evolve them over time based on feedback and real dispatch data.
-- **Recall** -- The shared brain. Directives, concepts, episodes, and signals -- a tiered memory system that ensures no model starts cold.
+- **Bridge** -- The hub. AI requests route through a smart router across the registered gateways (Claude CLI, Codex CLI) based on capability, cost, and health.
+- **Recall** -- The shared brain. Directives, concepts, and episodes -- a tiered memory system that ensures no model starts cold.
 
 ## Stack
 
 - **Backend:** Fastify 5, TypeScript, Drizzle ORM, PostgreSQL 16
-- **Admin UI:** React 19, React Router 7, Tailwind CSS 4, shadcn/ui
-- **Legacy:** `porter.py` — DELETED (was ~900KB Python monolith, fully replaced by Fastify)
+- **Legacy:** `porter.py` — DELETED (was ~900KB Python monolith, fully replaced by Fastify); admin React SPA — ARCHIVED (`admin/frontend.archived`, 2026-07-04)
 - **Repo:** `heymoezy/porter` (single monorepo)
-- **Port:** `:3001` (single Fastify process serves API + Admin UI)
+- **Port:** `:3001` (headless Fastify API) + `:5176` (inline brain-ui)
 
 ## Revenue Model
 
@@ -39,9 +37,8 @@ Usage-based. Bring your own API keys. Porter charges for the orchestration layer
 
 ```
 porter/
-  backend/           Brain Fastify API (:3001) — sole running process, serves Admin UI
-  admin/backend/     Admin routes (merged into Brain :3001)
-  admin/frontend/    Admin React frontend (Vite, shadcn/ui) — built to backend/public/
+  backend/           Brain Fastify API (:3001) — sole running process (admin routes at backend/src/routes/admin/)
+  admin/frontend.archived/  Old admin React SPA — archived 2026-07-04, not served
   drizzle/           Drizzle migrations
   skills/            207 skill packs across 20 categories
   personas/          Agent persona definitions

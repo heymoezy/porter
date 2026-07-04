@@ -54,6 +54,7 @@ export type WorkflowActionType =
   | 'dream_run'                 // Phase 48.3 — wired in 48.3-04 (runDreamWorker)
   | 'dream_runs_stuck_sweep'    // Phase 48.3 — fully wired here
   | 'memory_proposals_expire'   // Phase 48.4 — auto-expire pending proposals past expires_at
+  | 'dream_proposals_review_digest' // PR-3 2026-07-04 — daily pending-proposals summary → intellect_events
   | 'noop';
 
 export interface WorkflowRow {
@@ -74,6 +75,73 @@ export interface EventContext {
   project?: string | null;
   gateway?: string | null;
   [key: string]: unknown;
+}
+
+// ── Dream-proposal review digest (PR-3, 2026-07-04) ─────────────────────
+//
+// The dream worker writes memory_proposals rows that had NO reviewer once the
+// admin SPA was archived (PR-2): 54 rows expired unreviewed vs 3 ever reviewed
+// as of 2026-07-04. This digest closes the loop headlessly: once a day (on the
+// existing every_24h workflow tick — no new timer) it appends ONE
+// 'dream_proposals_pending' row to intellect_events summarizing what awaits
+// review. Consumers poll GET /api/v1/intellect/events (Tom/ymc) and act via
+// the existing review API: GET/POST /api/admin/dreams/proposals[/:id/accept|reject].
+//
+// Posture: the event payload carries ids/kinds/expiry ONLY — never
+// proposed_content (dream-worker.ts: model response text must not be logged
+// to intellect_events). Full content is one GET away. Zero pending = silent
+// (no event), matching memory_proposals_expire.
+export async function runDreamProposalsReviewDigest(): Promise<{
+  pending: number;
+  by_silo?: Record<string, number>;
+  soonest_expires_at?: number | null;
+  expiring_within_7d?: number;
+}> {
+  const { rows } = await pool.query<{
+    id: string;
+    silo_id: string;
+    proposal_kind: string;
+    conceptual_area: string | null;
+    created_at: number;
+    expires_at: number | null;
+  }>(
+    `SELECT id, silo_id, proposal_kind,
+            proposed_metadata->>'conceptual_area' AS conceptual_area,
+            created_at, expires_at
+       FROM memory_proposals
+      WHERE status = 'pending'
+      ORDER BY expires_at ASC NULLS LAST, created_at ASC`,
+  );
+  if (rows.length === 0) return { pending: 0 };
+
+  const bySilo: Record<string, number> = {};
+  const byKind: Record<string, number> = {};
+  for (const r of rows) {
+    bySilo[r.silo_id] = (bySilo[r.silo_id] ?? 0) + 1;
+    byKind[r.proposal_kind] = (byKind[r.proposal_kind] ?? 0) + 1;
+  }
+  const nowEpoch = Date.now() / 1000;
+  const expiries = rows.map(r => r.expires_at).filter((e): e is number => e != null);
+  const soonest = expiries.length ? Math.min(...expiries) : null;
+  const expiring7d = expiries.filter(e => e < nowEpoch + 7 * 86400).length;
+
+  const summary = {
+    pending: rows.length,
+    by_silo: bySilo,
+    by_kind: byKind,
+    soonest_expires_at: soonest,
+    expiring_within_7d: expiring7d,
+    proposals: rows.slice(0, 20).map(r => ({
+      id: r.id,
+      silo_id: r.silo_id,
+      kind: r.proposal_kind,
+      conceptual_area: r.conceptual_area,
+      expires_at: r.expires_at,
+    })),
+    review_api: 'GET /api/admin/dreams/proposals?status=pending · POST /api/admin/dreams/proposals/:id/{accept,reject} · GET /api/v1/intellect/dream-proposals',
+  };
+  await logIntellectEvent('dream_proposals_pending', 'dream_review_digest', summary);
+  return summary;
 }
 
 // ── Action registry ─────────────────────────────────────────────────────
@@ -150,6 +218,7 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
     }
     return { expired };
   },
+  dream_proposals_review_digest: async () => runDreamProposalsReviewDigest(),
   noop: async () => null,
 };
 
@@ -351,6 +420,13 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_type: 'schedule',
     trigger_value: 'every_24h',
     action_type: 'memory_proposals_expire',
+    action_config: {},
+  },
+  {
+    name: 'Daily dream-proposal review digest',
+    trigger_type: 'schedule',
+    trigger_value: 'every_24h',
+    action_type: 'dream_proposals_review_digest',
     action_config: {},
   },
 ];

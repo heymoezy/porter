@@ -1,54 +1,28 @@
 # Porter Admin — CLAUDE.md
 
-## Identity
-Porter Admin is the **SaaS control plane** — platform management + dev tools. This is NOT the user-facing product.
+## Status: SPA ARCHIVED (2026-07-04, PR-2)
 
-## Stack
-- **Backend:** Fastify 5, TypeScript, raw PostgreSQL (pg pool)
-- **Frontend:** React 19, React Router 7 (SPA), Tailwind CSS 4, shadcn/ui
+The admin React SPA that lived here is archived at `admin/frontend.archived/`
+and is NOT built or served. Do not build it, do not extend it, do not follow
+old instructions that say "Brain serves Admin static files" — Porter is
+headless.
 
-## Ports
-- **:3001** — Single Fastify process (Brain + Admin merged). All traffic here.
-- Connects to PostgreSQL at `postgresql://lobster:porter@127.0.0.1:5432/porter`
+## What replaced it
+
+- **Admin API routes:** `../backend/src/routes/admin/` — still live on `:3001`
+  (cookie auth, platform_admin only).
+- **Dashboard:** inline brain-ui on `:5176` (`../backend/src/routes/brain-ui.ts`),
+  started by the same porter-fastify process.
 
 ## Commands
+
 ```bash
-# Production (default) — Brain serves Admin static files
-systemctl --user restart porter-fastify
-
-# Development (when editing frontend)
-cd frontend && npm run dev           # Vite dev server (standalone, proxies to :3001)
-
-# Build frontend
-cd frontend && npx react-router build  # Output to build/client/ (served by Brain at :3001)
+systemctl --user restart porter-fastify   # backend + brain-ui
+curl -s http://127.0.0.1:3001/health      # expect current version
 ```
 
-## Pages
-### Dashboard
-Command Center (standalone)
-
-### Business
-Customers, Revenue
-
-### Agents
-Forge, Skills, Tools, Org Chart, Email
-
-### Ops
-Brain, Bridge, Recall, Activity, Diagnostics
-
-### Dev
-Design System, Files, Architecture, Changelog
-
-### Settings
-Account, system info
-
-## Rules
-- Admin reuses product UI patterns — same shell, logo, nav style, theme toggle
-- Never reinvent shared UI — import from product design system
-- All admin API routes require auth (cookie-based, platform_admin only)
-- No polling — use SSE for real-time updates, fetch once otherwise
-
 ## Monorepo Layout
-This is part of the Porter monorepo (`heymoezy/porter`). Working dir: `/home/lobster/projects/porter/admin/`.
-- **Brain:** `../backend/` — Fastify API, :3001, owns PostgreSQL, also serves Admin static files
-- **Admin:** this directory (`admin/backend/` + `admin/frontend/`) — merged into Brain's :3001 process
+
+Part of the Porter monorepo (`heymoezy/porter`), repo root
+`/home/lobster/projects/Porter/`. The Brain (`../backend/`) is the sole
+running process and owns PostgreSQL (`porter` db).
