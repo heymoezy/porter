@@ -104,8 +104,9 @@ async function dedupeActiveDirectives(): Promise<number> {
     content: string;
     created_at: number;
     priority: number;
+    source_type: string;
   }>(
-    `SELECT id, scope, scope_id, content, created_at, priority
+    `SELECT id, scope, scope_id, content, created_at, priority, source_type
      FROM directives
      WHERE status = 'active'
      ORDER BY scope, scope_id NULLS FIRST, created_at ASC`
@@ -128,11 +129,18 @@ async function dedupeActiveDirectives(): Promise<number> {
       const a = bucket[i];
       // Skip if a was already retired in this pass
       if ((a as any)._retired) continue;
+      // PR-1 (2026-07-04): moe-direct rows are SEALED by trigger — a dedup
+      // UPDATE against one aborts the whole nightly run (failing since 05-09
+      // on test debris). Never auto-dedup Moe's own rules; only agent/dream
+      // output is fair game.
+      if (a.source_type === 'moe-direct') continue;
       for (let j = i + 1; j < bucket.length; j++) {
         const b = bucket[j];
         if ((b as any)._retired) continue;
+        if (b.source_type === 'moe-direct') continue;
         const sim = similarity(a.content, b.content);
         if (sim >= DIRECTIVE_DUP_SIMILARITY) {
+          try { // PR-1: one sealed/failed pair must never abort the run
           // Newer wins. Mark the older one superseded.
           const older = a.created_at < b.created_at ? a : b;
           const newer = older === a ? b : a;
@@ -163,6 +171,11 @@ async function dedupeActiveDirectives(): Promise<number> {
           (older as any)._retired = true;
           deduped++;
           if (older === a) break; // a is gone, move to next i
+          } catch (e) {
+            // PR-1: log and keep pruning — a single bad pair (sealed row,
+            // trigger, constraint) must not kill the nightly run.
+            console.warn('[memory-pruner] dedup pair failed, continuing:', e instanceof Error ? e.message : e);
+          }
         }
       }
     }

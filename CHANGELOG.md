@@ -1,3 +1,8 @@
+## v6.37.0 (2026-07-04)
+
+- chore(porter): gitignore build-backup dirs (dist.*bak)
+
+
 ## v6.36.1 (2026-07-02)
 
 - chore(porter): sole-session repo reconcile — scrub money-bags refs, drop stale .planning/, gitignore uploads/

@@ -1,5 +1,16 @@
 # Porter Checkpoint
 
+## 2026-07-04 — v6.37.0: PR-1 memory pruner unjammed (nightly failure since 05-09)
+Bypass-hunt audit (plan: ymc.capital/planning/BYPASS-REMEDIATION-PLAN.md): the nightly memory prune
+had been aborting since 2026-05-09 — dedup UPDATEs hit SEALED moe-direct test rows (66 smoke-silo
+directives from phases 48.3/48.4 left in live memory). Fixes:
+- Deleted all 66 `software-smoke-*` directives (backed up to session scratchpad CSV; used the
+  trigger's own `SET LOCAL porter.allow_moe_direct_mutation=true` escape hatch).
+- memory-pruner.ts: dedup now SKIPS source_type='moe-direct' (never auto-dedup Moe's own rules) +
+  per-pair try/catch so one bad row can never abort the sweep again. SELECT now includes source_type.
+- VERIFIED LIVE: full sweep completed clean (1 concept archived, 5 episodes compacted, 0 errors) —
+  first successful prune in ~8 weeks.
+
 ## 2026-07-02 — v6.36.1: /context pin fallback (R8) + version single-source fix
 R8 keystone: detectContext falls back to the active_project pin when cwd unresolved (verified: /home/lobster → effectiveProject=ymc.capital; Porter cwd → Porter). Fixed hardcoded/duplicated version bug (index.ts+health.ts → src/version.ts reads package.json). tsc+build clean; /health @ 6.36.1; R8 verified live.
 
