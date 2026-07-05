@@ -100,6 +100,12 @@ Return EXACTLY ONE JSON object. No markdown fence. No prose before or after. The
 
 {{TRANSCRIPT_BLOCK}}
 
+### Latest cross-system failure digest (deterministic evidence from the ymc runtime — Tom feedback, worker journal errors/refusals, send-gate rejections, release-ceremony bypasses):
+
+{{FAILURE_DIGEST_BLOCK}}
+
+Use these digest lines as CORROBORATING evidence: when a digest failure matches a pattern you also see in the transcripts, cite the digest line in `phrasing_examples` and strengthen the proposal (turn-ID evidence rules are unchanged — you still need ≥2 turn IDs). A recurring digest-only failure with no transcript echo may be reported as a `failure_patterns` entry using the digest lines as `description` evidence, with `evidence_turn_ids` from the nearest related transcript turns if any exist — never fabricate turn IDs.
+
 ---
 
 ## Self-check before responding

@@ -64,6 +64,15 @@ export const config = {
   // Self-reference URL for admin system health probe
   get fastifyUrl() { return `http://${this.host}:${this.port}`; },
 
+  // Rule-distillation loop (vault/concepts/rule-distillation-loop.md) —
+  // the distill_failure_digest workflow action calls ymc's read-only
+  // failure-digest endpoint server-to-server. ymc accepts X-Service-Token
+  // against its YMC_SERVICE_TOKEN (fallback PORTER_SERVICE_TOKEN) env — the
+  // same shared local service secret ymc already presents to Porter as
+  // X-Porter-Service-Token, so no new secret distribution is needed.
+  ymcApiUrl: process.env.YMC_API_URL || 'http://127.0.0.1:5182',
+  ymcServiceToken: process.env.YMC_SERVICE_TOKEN || process.env.PORTER_SERVICE_TOKEN || '',
+
   // Phase 48.2 — transcript capture global kill switch (TRC-07 belt-and-braces).
   // Default true: capture is on. Per-session override via `/silo none` remains
   // the primary privacy kill switch; this flag is the admin-side global gate.

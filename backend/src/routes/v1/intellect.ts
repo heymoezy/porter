@@ -27,6 +27,7 @@ import { runTranscriptRetention } from '../../services/intellect/transcript-rete
 import { runDreamWorker } from '../../services/intellect/dream-worker.js';
 import { scheduleDirectivesMirror } from '../../services/intellect/vault-mirror.js';
 import { runVaultIndexing, VAULT_CONFIDENCE_BOOST } from '../../services/intellect/vault-indexer.js';
+import { runFailureDigestDistill } from '../../services/intellect/failure-digest.js';
 import { randomUUID } from 'node:crypto';
 import { resolveActiveProject, setActiveProject, clearActiveProject, recentProjects } from '../../services/intellect/active-project.js';
 
@@ -1079,6 +1080,26 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       return reply.status(500).send(err('VAULT_INDEX_FAILED', message));
+    }
+  });
+
+  // ── POST /failure-digest — run the ymc failure-digest collector manually ─
+  //
+  // Rule-distillation loop (vault/concepts/rule-distillation-loop.md); same
+  // manual-trigger pattern as /prune and /vault-index. Fetches ymc's
+  // GET /api/v1/admin/tom/failure-digest, appends ONE failure_digest
+  // intellect_event (counts + ≤20 snippets). Scheduled path: 'Distill ymc
+  // failure digest' every_24h workflow. body: { hours?: number } (default 24).
+  fastify.post('/failure-digest', async (request, reply) => {
+    try {
+      const hours = Number((request.body as { hours?: number } | null)?.hours ?? 24);
+      const result = await runFailureDigestDistill(
+        Number.isFinite(hours) && hours > 0 ? hours : 24,
+      );
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('FAILURE_DIGEST_FAILED', message));
     }
   });
 

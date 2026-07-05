@@ -1,3 +1,7 @@
+## v6.42.0 (2026-07-05)
+
+- feat(intellect): rule-distillation loop (#21) — `distill_failure_digest` on the existing every_24h tick pulls ymc's new failure-digest endpoint (counts + ≤20 snippets → ONE intellect_event, silent at zero), and the dream worker's software silo now reads the latest digest via {{FAILURE_DIGEST_BLOCK}} so nightly dreaming proposes rules FROM real failures into the existing review queue; POST /api/v1/intellect/failure-digest manual trigger; fails soft (404 workflow_failed event) until ymc ships its endpoint
+
 ## v6.41.0 (2026-07-05)
 
 - feat(intellect): memory unification U3+U4 — injection prefers vault-sourced concepts (additive +80 in /context, ×1.25 in tier-6 FTS; boosts not filters, constants documented in vault-indexer.ts) with source cites; accepted dream proposals write DRAFT nodes to vault/drafts/ (vault-draft.ts, fire-and-forget post-commit, never indexed until promoted)

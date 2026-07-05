@@ -1,5 +1,20 @@
 # Porter Checkpoint
 
+## 2026-07-05 — v6.42.0: rule-distillation loop (#21 — failures → proposed rules, existing plumbing only)
+- Design: vault/concepts/rule-distillation-loop.md. NO new engine, NO new timers.
+- `services/intellect/failure-digest.ts`: runFailureDigestDistill() calls ymc
+  GET /api/v1/admin/tom/failure-digest (X-Service-Token, config.ymcApiUrl default :5182), reduces to
+  counts + ≤20 prioritized snippets → exactly ONE `failure_digest` intellect_event; zero-signal = silent.
+- workflow-engine.ts: `distill_failure_digest` action + every_24h builtin (vault-mirror pattern);
+  POST /api/v1/intellect/failure-digest manual trigger.
+- dream-worker.ts: software-silo prompt gains {{FAILURE_DIGEST_BLOCK}} (latest digest ≤48h, .catch(null)
+  — digest failure can never break a dream run); accepted proposals already flow to vault via U4.
+- SHIP ORDER: ymc endpoint (tom-failure-digest.ts, in ymc tree awaiting the dashboard-R3 batch) must
+  restart before the nightly action succeeds; until then it fails soft (verified: clean 404
+  workflow_failed event). End-to-end proven against a scratch instance of the real ymc route:
+  {failures: 38, snippets: 20} → one event; all test debris removed.
+- Verified: tsc 0, build clean, restart, /health 200 v6.42.0, workflow row seeded+enabled.
+
 ## 2026-07-05 — v6.41.0: memory unification U3+U4 (vault preferred at injection; dreams draft into vault)
 - **U3:** /context concept slot orders by `confidence + (source_type='vault' ? 80 : 0)` with
   `_(vault: …)_` cites; tier-6 FTS in memory-injection.ts multiplies ts_rank ×1.25 for vault rows.

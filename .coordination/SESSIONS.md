@@ -747,3 +747,24 @@
   backend/src/services/intellect/vault-indexer.ts (boost constants),
   NEW backend/src/services/intellect/vault-draft.ts, backend/src/routes/admin/dreams.ts (accept hook).
 - Status: **DONE** 2026-07-05 — tsc 0, build clean, restart, /health 200 v6.40.0. U3 proven (vault iri-rmi outranks agent row on q='rmi'; /context now cites vault nodes). U4 proven end-to-end (test proposal accepted → drafts/ node + vault commit); ALL test debris deleted (directive, proposal, session, events, draft file+commit). drafts/ verified NOT indexed.
+
+## Rule-distillation loop — distill_failure_digest action (Fable 5, subagent) — 2026-07-05 — **DONE** (verified live; uncommitted — operator ships)
+- Workstream: vault/concepts/rule-distillation-loop.md distill-side. NEW distill_failure_digest
+  workflow action on the EXISTING every_24h tick (same seeding pattern as vault_directives_mirror);
+  calls ymc GET /api/v1/admin/tom/failure-digest, appends ONE failure_digest intellect_event
+  (counts + ≤20 snippets, no full dumps); dream worker gains the latest failure_digest event as a
+  software-silo source. Manual trigger POST /api/v1/intellect/failure-digest. NO commit, NO version
+  bump (operator ships). MAY restart porter-fastify to test (verify /health v6.41.0 after).
+- **Files claimed:** backend/src/services/intellect/workflow-engine.ts, NEW
+  backend/src/services/intellect/failure-digest.ts, backend/src/routes/v1/intellect.ts (manual
+  trigger), backend/src/services/intellect/dream-worker.ts (+ dream-prompts/software.md placeholder),
+  backend/src/config.ts (ymc base URL + token).
+- Status: **DONE** 2026-07-05 — tsc 0, build clean, restart, /health 200 v6.41.0. Workflow row
+  seeded+enabled ('Distill ymc failure digest', every_24h, hours:24). Manual POST
+  /api/v1/intellect/failure-digest proven end-to-end against a scratch server running the REAL
+  ymc route (live :5182 lacks it until the ymc side ships): exactly ONE failure_digest
+  intellect_event (counts + 20 snippets, real 24h data). Dream-source functions
+  (latestFailureDigest/formatFailureDigestBlock) demoed against the real event. ALL test debris
+  deleted (event row, scratch server, harness files, YMC_API_URL manager-env override).
+  INTERIM: until the operator restarts ymc-backend with the new endpoint, the daily action
+  fails soft (workflow_failed logged, isolated) — ship the ymc side first.

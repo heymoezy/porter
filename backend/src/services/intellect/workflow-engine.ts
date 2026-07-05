@@ -37,6 +37,7 @@ import { runTranscriptRetention } from './transcript-retention.js';
 import { runDreamWorker } from './dream-worker.js';
 import { runDirectivesMirror } from './vault-mirror.js';
 import { runVaultIndexing } from './vault-indexer.js';
+import { runFailureDigestDistill } from './failure-digest.js';
 import { broadcast } from '../sse-hub.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -59,6 +60,7 @@ export type WorkflowActionType =
   | 'dream_proposals_review_digest' // PR-3 2026-07-04 — daily pending-proposals summary → intellect_events
   | 'vault_directives_mirror'   // U1 2026-07-05 — render active directives → vault mirrors/porter-directives.md
   | 'vault_concept_index'       // U2 2026-07-05 — index vault concepts/+entities/ → concepts (source_type='vault')
+  | 'distill_failure_digest'    // rule-distillation loop 2026-07-05 — ymc failure evidence → ONE failure_digest intellect_event
   | 'noop';
 
 export interface WorkflowRow {
@@ -225,6 +227,11 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
   dream_proposals_review_digest: async () => runDreamProposalsReviewDigest(),
   vault_directives_mirror: async () => runDirectivesMirror(),
   vault_concept_index: async () => runVaultIndexing(),
+  // Rule-distillation loop (vault/concepts/rule-distillation-loop.md):
+  // deterministic collect step — ymc failure evidence → one failure_digest
+  // intellect_event. The dream worker mines it nightly (software silo).
+  distill_failure_digest: async (_ctx, config) =>
+    runFailureDigestDistill((config?.hours as number) ?? 24),
   noop: async () => null,
 };
 
@@ -450,6 +457,15 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_value: 'every_24h',
     action_type: 'vault_concept_index',
     action_config: {},
+  },
+  // Rule-distillation loop (2026-07-05): collect ymc failure evidence daily
+  // on the same every_24h tick — no new timer (design doc "no patchwork").
+  {
+    name: 'Distill ymc failure digest',
+    trigger_type: 'schedule',
+    trigger_value: 'every_24h',
+    action_type: 'distill_failure_digest',
+    action_config: { hours: 24 },
   },
 ];
 

@@ -44,6 +44,7 @@ import type { BridgeDispatchRequest, RoutingContext } from '../bridge/types.js';
 import { logIntellectEvent } from './file-watcher.js';
 import { broadcast } from '../sse-hub.js';
 import { sampleSoftwareTurns, type SampledTurn } from './dream-sampler.js';
+import { latestFailureDigest, formatFailureDigestBlock } from './failure-digest.js';
 import {
   parseDreamResponse,
   validateRefinementDoctrine,
@@ -511,6 +512,14 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
     }
 
     // ── 6. Render prompt body ──────────────────────────────
+    // Rule-distillation loop (vault/concepts/rule-distillation-loop.md):
+    // the latest failure_digest intellect_event (written by the
+    // distill_failure_digest every_24h workflow from ymc's failure-digest
+    // endpoint) is an additional silo input, so nightly dreaming proposes
+    // rules FROM failures, not just from concept drift. Templates without a
+    // {{FAILURE_DIGEST_BLOCK}} placeholder are unaffected (substitution is a
+    // no-op); a quiet window renders "(none …)".
+    const failureDigest = await latestFailureDigest().catch(() => null);
     const sessionsSampled = new Set(sampledTurns.map(t => t.session_id)).size;
     const promptBody = renderTemplate(promptTemplate, {
       ACTIVE_DIRECTIVE_COUNT: directiveRows.length,
@@ -518,6 +527,7 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
       TRANSCRIPT_BLOCK: formatTurnsBlock(sampledTurns),
       TURNS_SAMPLED: sampledTurns.length,
       SESSIONS_SAMPLED: sessionsSampled,
+      FAILURE_DIGEST_BLOCK: formatFailureDigestBlock(failureDigest),
     });
 
     // ── 7. Dispatch (explicit logDispatch happens inside dispatchDream) ──
