@@ -1,5 +1,20 @@
 # Porter Checkpoint
 
+## 2026-07-05 — v6.41.0: memory unification U3+U4 (vault preferred at injection; dreams draft into vault)
+- **U3:** /context concept slot orders by `confidence + (source_type='vault' ? 80 : 0)` with
+  `_(vault: …)_` cites; tier-6 FTS in memory-injection.ts multiplies ts_rank ×1.25 for vault rows.
+  Boosts NOT filters — proven live: q='rmi' puts vault:entities/iri-rmi first (0.0950) with the agent
+  row still second (0.0865). Constants + rationale exported from vault-indexer.ts (one truth).
+  /agent-memory/recall and the browse API deliberately untouched (scope-filtered / not injection).
+- **U4:** dreams accept handler fires writeProposalDraft post-COMMIT (can never fail an accept) →
+  vault/drafts/<date>-<slug>-<id>.md (frontmatter: status DRAFT, source_proposal, silo, reviewer),
+  self-committing with explicit identity, `vault_draft_written` event. Drafts are NOT indexed
+  (VAULT_FOLDERS unchanged) — promotion to concepts/ is the human step.
+- Proven end-to-end with a test proposal through the real accept route; all test debris removed;
+  the 7 real pending proposals untouched (3 EXPIRE 2026-07-08 — Moe should review).
+- U5 (concept migration) + U6 (claude-memory → workspace directive) remain [MOE].
+- Verified: tsc 0, build clean, restart, /health 200 v6.41.0.
+
 ## 2026-07-05 — v6.40.0: memory unification U1+U2 (vault ↔ Recall live)
 - **U1 directives→vault mirror:** `services/intellect/vault-mirror.ts` renders ALL active directives
   (grouped scope→scope_id, [pNN]+source+SGT date) to `vault/mirrors/porter-directives.md`, self-committing

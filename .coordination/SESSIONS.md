@@ -738,3 +738,12 @@
   backend/src/routes/v1/intellect.ts (mirror hook + POST /vault-index),
   backend/src/services/intellect/workflow-engine.ts (2 every_24h actions),
   backend/src/services/intellect/memory-pruner.ts (vault exemption guard).
+
+## Memory unification U3+U4 (Fable 5, subagent) — 2026-07-05 — **DONE** (verified live; uncommitted — operator ships)
+- U3 injection prefers vault-sourced concepts (ranking boost, not filter) + U4 dream-accept → vault draft node,
+  per vault/concepts/memory-unification-design.md. NO commit, NO version bump (operator ships). U5/U6 untouched (Moe-gated).
+- **Files claimed:** backend/src/services/memory-injection.ts (Tier 6 boost),
+  backend/src/routes/v1/intellect.ts (/context concept ordering),
+  backend/src/services/intellect/vault-indexer.ts (boost constants),
+  NEW backend/src/services/intellect/vault-draft.ts, backend/src/routes/admin/dreams.ts (accept hook).
+- Status: **DONE** 2026-07-05 — tsc 0, build clean, restart, /health 200 v6.40.0. U3 proven (vault iri-rmi outranks agent row on q='rmi'; /context now cites vault nodes). U4 proven end-to-end (test proposal accepted → drafts/ node + vault commit); ALL test debris deleted (directive, proposal, session, events, draft file+commit). drafts/ verified NOT indexed.

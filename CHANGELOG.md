@@ -1,3 +1,7 @@
+## v6.41.0 (2026-07-05)
+
+- feat(intellect): memory unification U3+U4 — injection prefers vault-sourced concepts (additive +80 in /context, ×1.25 in tier-6 FTS; boosts not filters, constants documented in vault-indexer.ts) with source cites; accepted dream proposals write DRAFT nodes to vault/drafts/ (vault-draft.ts, fire-and-forget post-commit, never indexed until promoted)
+
 ## v6.40.0 (2026-07-05)
 
 - feat(intellect): memory unification U1+U2 — directives mirror to vault (`vault-mirror.ts`, debounced post-write + nightly workflow) and vault concepts/entities indexed into Recall (`vault-indexer.ts`, source_type='vault', pruner-exempt, vanish→archive)

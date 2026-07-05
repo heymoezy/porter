@@ -15,6 +15,7 @@ import { ok, err } from '../../lib/admin-envelope.js';
 import { queryAll, queryOne } from '../../db/pg-helpers.js';
 import { pool } from '../../db/client.js';
 import { broadcast } from '../../services/sse-hub.js';
+import { writeProposalDraft } from '../../services/intellect/vault-draft.js';
 
 // Raw row shapes — pg returns snake_case column names (Drizzle's $inferSelect
 // camelCase mapping only applies when using the Drizzle ORM query builder).
@@ -286,6 +287,20 @@ export default async function dreamsRoutes(fastify: FastifyInstance) {
         silo_id: proposal.silo_id,
         dream_run_id: proposal.dream_run_id,
       });
+
+      // 7. U4 memory-unification: accepted proposals also materialize as a
+      // vault DRAFT node for human promotion into concepts/ (drafts/ is not
+      // indexed). Post-commit + fire-and-forget like the broadcast — vault
+      // git problems must never fail an accept.
+      writeProposalDraft({
+        proposalId,
+        siloId: proposal.silo_id,
+        proposalKind: proposal.proposal_kind,
+        content: proposal.proposed_content,
+        reviewer,
+      }).catch((e: unknown) =>
+        console.warn('[admin/dreams accept] vault draft write failed:', e instanceof Error ? e.message : e),
+      );
 
       return ok({
         proposal_id: proposalId,

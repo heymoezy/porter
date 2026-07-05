@@ -34,6 +34,27 @@ const VAULT_ROOT = '/home/lobster/vault';
 const VAULT_FOLDERS = ['concepts', 'entities'] as const;
 const BODY_CAP = 1500;
 
+// ── U3 — injection ranking boosts for vault-sourced concepts ─────────────
+//
+// Vault rows are curated truth (Moe-edited markdown, trust_tier='high') but
+// carry no earned confidence_score (0) and no use history, so under the
+// pre-U3 orderings they sorted dead last. These constants make injection
+// PREFER them over harvested/session rows of similar relevance — a ranking
+// boost, never a filter: non-vault knowledge still wins when it is clearly
+// more relevant (or the only match).
+//
+// VAULT_CONFIDENCE_BOOST — additive, for the confidence-ordered slot
+//   (GET /api/v1/intellect/context). confidence_score is an integer 0–100;
+//   live distribution: distiller avg 78 / max 95, subscription 30, vault 0.
+//   +80 lifts a vault row above the average harvested concept while a
+//   genuinely high-confidence distilled row (>80) can still outrank it.
+//
+// VAULT_RANK_BOOST — multiplicative, for FTS ts_rank slots
+//   (buildMemoryContext Tier 6). ×1.25 flips ties and near-ties toward the
+//   vault row; a non-vault row >25% more relevant to the query still wins.
+export const VAULT_CONFIDENCE_BOOST = 80;
+export const VAULT_RANK_BOOST = 1.25;
+
 export interface VaultIndexResult {
   scanned: number;
   inserted: number;

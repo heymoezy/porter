@@ -1,6 +1,7 @@
 import { pool } from '../db/client.js';
 import { selectDirectives, tokenizeTaskText } from './directive-scorer.js';
 import type { DirectiveSelectionStats } from './directive-scorer.js';
+import { VAULT_RANK_BOOST } from './intellect/vault-indexer.js';
 
 // ── Token estimation helper ───────────────────────────────────────────────────
 // Approximate: 4 chars ≈ 1 token (common rule of thumb for English text)
@@ -271,13 +272,19 @@ export async function buildMemoryContext(opts: {
     }
 
     // ── Tier 6: Archival FTS Search (Remaining) ───────────────────────────────
+    // U3: vault-sourced concepts (curated truth from ~/vault, indexed by
+    // vault-indexer.ts) get a multiplicative ts_rank boost so they win slots
+    // against harvested rows of similar relevance — a ranking boost, not a
+    // filter: a clearly more relevant non-vault row still outranks (see
+    // VAULT_RANK_BOOST). Vault rows also cite their source node.
     if (searchQuery && totalRemaining > 50) {
-      const res = await pool.query<{ content: string; confidence_score: number | null }>(
-        `SELECT content, confidence_score
+      const res = await pool.query<{ content: string; confidence_score: number | null; source_type: string; source_url: string | null }>(
+        `SELECT content, confidence_score, source_type, source_url
          FROM concepts
          WHERE search_vector @@ websearch_to_tsquery('english', $1)
            AND status = 'active'
-         ORDER BY ts_rank(search_vector, websearch_to_tsquery('english', $1)) DESC
+         ORDER BY ts_rank(search_vector, websearch_to_tsquery('english', $1))
+                  * CASE WHEN source_type = 'vault' THEN ${VAULT_RANK_BOOST} ELSE 1.0 END DESC
          LIMIT 10`,
         [searchQuery]
       );
@@ -285,7 +292,10 @@ export async function buildMemoryContext(opts: {
         const header = '## Related Knowledge\n';
         let body = '';
         for (const row of res.rows) {
-          const line = row.content + '\n';
+          const cite = row.source_type === 'vault' && row.source_url
+            ? ` _(vault: ${row.source_url.replace('/home/lobster/vault/', '')})_`
+            : '';
+          const line = row.content + cite + '\n';
           if (estimateTokens(header + body + line) > totalRemaining) break;
           body += line;
         }

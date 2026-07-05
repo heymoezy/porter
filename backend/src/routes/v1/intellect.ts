@@ -26,7 +26,7 @@ import { insertTurn } from '../../services/intellect/transcript-capture.js';
 import { runTranscriptRetention } from '../../services/intellect/transcript-retention.js';
 import { runDreamWorker } from '../../services/intellect/dream-worker.js';
 import { scheduleDirectivesMirror } from '../../services/intellect/vault-mirror.js';
-import { runVaultIndexing } from '../../services/intellect/vault-indexer.js';
+import { runVaultIndexing, VAULT_CONFIDENCE_BOOST } from '../../services/intellect/vault-indexer.js';
 import { randomUUID } from 'node:crypto';
 import { resolveActiveProject, setActiveProject, clearActiveProject, recentProjects } from '../../services/intellect/active-project.js';
 
@@ -59,6 +59,8 @@ interface ConceptRow {
   content: string;
   trust_tier: string;
   confidence_score: number;
+  source_type: string;
+  source_url: string | null;
 }
 
 interface EpisodeRow {
@@ -141,16 +143,20 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
 
     // Fetch relevant concepts (global + project-scoped) — symmetric with
     // project directives: cwd-only callers now also see project-scope concepts.
+    // U3: vault-sourced rows (curated truth, indexed by vault-indexer.ts) get
+    // an additive confidence boost so they win slots against harvested rows of
+    // similar standing — a ranking boost, not a filter (see VAULT_CONFIDENCE_BOOST).
+    const conceptRank = `(confidence_score + CASE WHEN source_type = 'vault' THEN ${VAULT_CONFIDENCE_BOOST} ELSE 0 END)`;
     const conceptQuery = effectiveProject
-      ? `SELECT id, scope, scope_id, content, trust_tier, confidence_score
+      ? `SELECT id, scope, scope_id, content, trust_tier, confidence_score, source_type, source_url
          FROM concepts
          WHERE status = 'active' AND (scope = 'global' OR (scope = 'project' AND scope_id = $1))
-         ORDER BY confidence_score DESC, last_used_at DESC NULLS LAST
+         ORDER BY ${conceptRank} DESC, last_used_at DESC NULLS LAST
          LIMIT 20`
-      : `SELECT id, scope, scope_id, content, trust_tier, confidence_score
+      : `SELECT id, scope, scope_id, content, trust_tier, confidence_score, source_type, source_url
          FROM concepts
          WHERE status = 'active' AND scope = 'global'
-         ORDER BY confidence_score DESC, last_used_at DESC NULLS LAST
+         ORDER BY ${conceptRank} DESC, last_used_at DESC NULLS LAST
          LIMIT 10`;
     const { rows: concepts } = await pool.query<ConceptRow>(
       conceptQuery,
@@ -319,7 +325,12 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     if (concepts.length > 0) {
       sections.push('### Relevant Concepts');
       for (const c of concepts.slice(0, 8)) {
-        sections.push(`- ${c.content.substring(0, 200)}${c.content.length > 200 ? '...' : ''}`);
+        // U3: vault-sourced concepts cite their vault node so the reader can
+        // follow the truth to its source (source_url = absolute vault path).
+        const cite = c.source_type === 'vault' && c.source_url
+          ? ` _(vault: ${c.source_url.replace('/home/lobster/vault/', '')})_`
+          : '';
+        sections.push(`- ${c.content.substring(0, 200)}${c.content.length > 200 ? '...' : ''}${cite}`);
       }
     }
 
