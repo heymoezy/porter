@@ -76,12 +76,16 @@ function similarity(a: string, b: string): number {
 
 async function archiveUnusedConcepts(): Promise<number> {
   const cutoff = Date.now() / 1000 - UNUSED_CONCEPT_AGE_DAYS * 86400;
+  // Memory-unification U2 (2026-07-05): vault-sourced concepts are EXEMPT from
+  // unused/use_count pruning — their truth lives in the vault, not in use_count.
+  // The vault-indexer archives them when the vault node is deleted.
   const { rows } = await pool.query<{ id: string; content: string }>(
     `UPDATE concepts
      SET status = 'archived', updated_at = EXTRACT(EPOCH FROM NOW())
      WHERE status = 'active'
        AND use_count = 0
        AND created_at < $1
+       AND source_type <> 'vault'
      RETURNING id, content`,
     [cutoff]
   );

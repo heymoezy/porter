@@ -25,6 +25,8 @@ import { detectContext } from '../../services/intellect/silo-detector.js';
 import { insertTurn } from '../../services/intellect/transcript-capture.js';
 import { runTranscriptRetention } from '../../services/intellect/transcript-retention.js';
 import { runDreamWorker } from '../../services/intellect/dream-worker.js';
+import { scheduleDirectivesMirror } from '../../services/intellect/vault-mirror.js';
+import { runVaultIndexing } from '../../services/intellect/vault-indexer.js';
 import { randomUUID } from 'node:crypto';
 import { resolveActiveProject, setActiveProject, clearActiveProject, recentProjects } from '../../services/intellect/active-project.js';
 
@@ -512,6 +514,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
           RETURNING id, content`,
         [agent, query],
       );
+      if ((res.rowCount ?? 0) > 0) scheduleDirectivesMirror(); // U1: keep vault mirror current (debounced, fire-and-forget)
       return reply.send(ok({ archived: res.rowCount, directives: res.rows }));
     }
 
@@ -583,6 +586,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
          VALUES ($1, 'agent', $2, $3, $4, 'agent_learned', 'active', $2, $5, $6)`,
         [id, agent, content, priority, body.tags ?? null, supersedesId],
       );
+      scheduleDirectivesMirror(); // U1: keep vault mirror current (debounced, fire-and-forget)
     }
     // Flow telemetry for the Brain screen (fire-and-forget).
     pool.query(
@@ -1049,6 +1053,21 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       return reply.status(500).send(err('PRUNE_FAILED', message));
+    }
+  });
+
+  // ── POST /vault-index — run the vault→concepts indexer manually ─────
+  //
+  // Memory-unification U2 (same manual-trigger pattern as /prune). Scans
+  // vault concepts/+entities/ into `concepts` rows (source_type='vault').
+  // Scheduled path: 'Index vault concepts daily' every_24h workflow.
+  fastify.post('/vault-index', async (_request, reply) => {
+    try {
+      const result = await runVaultIndexing();
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('VAULT_INDEX_FAILED', message));
     }
   });
 

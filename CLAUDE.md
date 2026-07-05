@@ -42,10 +42,10 @@ psql -d porter
 ## Ship Process — Atomic
 
 1. `cd backend && npm run build`
-2. `pkill -9 -f "porter/backend"; sleep 4`
-3. `systemctl --user start porter-fastify; sleep 8`
-4. `curl -s http://127.0.0.1:3001/health` → expect current version
-5. Update `CHECKPOINT.md`
+2. `systemctl --user restart porter-fastify; sleep 8`
+   (never `pkill -f "porter/backend"` — the path is capital-P `Porter/`, the pattern never matches)
+3. `curl -s http://127.0.0.1:3001/health` → expect current version
+4. Update `CHECKPOINT.md`
 
 Porter is headless (admin SPA archived 2026-07-04, PR-2 — `admin/frontend.archived`). The live dashboard is the inline brain-ui on :5176 (`backend/src/routes/brain-ui.ts`), served by the same process. Always restart after a rebuild.
 

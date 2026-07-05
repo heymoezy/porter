@@ -1,3 +1,8 @@
+## v6.40.0 (2026-07-05)
+
+- feat(intellect): memory unification U1+U2 — directives mirror to vault (`vault-mirror.ts`, debounced post-write + nightly workflow) and vault concepts/entities indexed into Recall (`vault-indexer.ts`, source_type='vault', pruner-exempt, vanish→archive)
+- docs: CLAUDE.md ship step fixed — `systemctl restart porter-fastify` (old `pkill -f "porter/backend"` never matched the capital-P path)
+
 ## v6.39.0 (2026-07-04)
 
 - chore(cleanup): PR-2 — dead-code batch, mail ports closed (v6.38.0)

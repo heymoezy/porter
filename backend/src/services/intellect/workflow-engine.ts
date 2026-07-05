@@ -35,6 +35,8 @@ import { runToolDetection } from './tool-detector.js';
 import { runSubscriptionCheck } from './subscription-manager.js';
 import { runTranscriptRetention } from './transcript-retention.js';
 import { runDreamWorker } from './dream-worker.js';
+import { runDirectivesMirror } from './vault-mirror.js';
+import { runVaultIndexing } from './vault-indexer.js';
 import { broadcast } from '../sse-hub.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -55,6 +57,8 @@ export type WorkflowActionType =
   | 'dream_runs_stuck_sweep'    // Phase 48.3 — fully wired here
   | 'memory_proposals_expire'   // Phase 48.4 — auto-expire pending proposals past expires_at
   | 'dream_proposals_review_digest' // PR-3 2026-07-04 — daily pending-proposals summary → intellect_events
+  | 'vault_directives_mirror'   // U1 2026-07-05 — render active directives → vault mirrors/porter-directives.md
+  | 'vault_concept_index'       // U2 2026-07-05 — index vault concepts/+entities/ → concepts (source_type='vault')
   | 'noop';
 
 export interface WorkflowRow {
@@ -219,6 +223,8 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
     return { expired };
   },
   dream_proposals_review_digest: async () => runDreamProposalsReviewDigest(),
+  vault_directives_mirror: async () => runDirectivesMirror(),
+  vault_concept_index: async () => runVaultIndexing(),
   noop: async () => null,
 };
 
@@ -427,6 +433,22 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_type: 'schedule',
     trigger_value: 'every_24h',
     action_type: 'dream_proposals_review_digest',
+    action_config: {},
+  },
+  // Memory unification (2026-07-05): U1 mirror + U2 indexer ride the same
+  // every_24h tick as the pruner/digest — no new timer.
+  {
+    name: 'Mirror directives to vault',
+    trigger_type: 'schedule',
+    trigger_value: 'every_24h',
+    action_type: 'vault_directives_mirror',
+    action_config: {},
+  },
+  {
+    name: 'Index vault concepts daily',
+    trigger_type: 'schedule',
+    trigger_value: 'every_24h',
+    action_type: 'vault_concept_index',
     action_config: {},
   },
 ];

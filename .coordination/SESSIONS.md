@@ -730,3 +730,11 @@
 - Workstream: BYPASS-REMEDIATION-PLAN PR-3 (dream proposals reviewer) + PR-4 (docs match reality).
 - Files touched: backend/src/services/intellect/workflow-engine.ts (new dream_proposals_review_digest action + every_24h builtin row), backend/src/routes/v1/intellect.ts (GET /dream-proposals + POST /dream-review-digest), CLAUDE.md, BRIDGE.md, README.md, PROJECT.md, admin/CLAUDE.md (archived-status stub), CHECKPOINT.md. scheduler.ts NOT touched (piggybacked on existing every_24h workflow tag). memory-pruner.ts + package.json untouched per instruction.
 - Status: **DONE** 2026-07-04 — tsc 0, build clean, restart, /health 200 v6.38.0, endpoints smoke-tested, digest event row in intellect_events, workflow seeded+enabled, brain-ui 200, journal clean. NOT committed (operator ceremony).
+
+## Memory unification U1+U2 (Fable 5, subagent) — 2026-07-05 — **DONE** (verified live; uncommitted — operator ships)
+- U1 directives→vault mirror + U2 vault→concepts indexer per vault/concepts/memory-unification-design.md.
+  NO commit, NO version bump (operator ships). U3-U6 untouched.
+- **Files claimed:** NEW backend/src/services/intellect/{vault-mirror,vault-indexer}.ts,
+  backend/src/routes/v1/intellect.ts (mirror hook + POST /vault-index),
+  backend/src/services/intellect/workflow-engine.ts (2 every_24h actions),
+  backend/src/services/intellect/memory-pruner.ts (vault exemption guard).

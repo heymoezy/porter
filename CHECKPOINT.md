@@ -1,5 +1,21 @@
 # Porter Checkpoint
 
+## 2026-07-05 — v6.40.0: memory unification U1+U2 (vault ↔ Recall live)
+- **U1 directives→vault mirror:** `services/intellect/vault-mirror.ts` renders ALL active directives
+  (grouped scope→scope_id, [pNN]+source+SGT date) to `vault/mirrors/porter-directives.md`, self-committing
+  with explicit git identity. Hooked: 30s-debounced after directive insert/archive in routes/v1/intellect.ts
+  + nightly `vault_directives_mirror` every_24h workflow. Idempotent via sha256-over-rows HTML comment
+  (no no-op commits). Proven end-to-end: test directive write → mirrored+committed; archive → dropped.
+- **U2 vault→Recall indexer:** `services/intellect/vault-indexer.ts` scans vault concepts/+entities/ →
+  concepts rows id `vault:<folder>/<slug>`, trust_tier=high, source_type='vault', hash in references_json
+  (verified zero other consumers). First run 12 inserted; re-run unchanged (idempotent); vanished files →
+  archived. `memory-pruner.ts` exempts source_type='vault' (proven with backdated row + control).
+  Nightly `vault_concept_index` workflow seeded. Manual: POST /api/v1/intellect/vault-index.
+- ymc-side scanner change (vault.ts: 'mirrors' folder, read-only) rides the next ymc ship.
+- CLAUDE.md ship-step fix: restart via systemctl (pkill pattern never matched capital-P Porter/ path).
+- U3 (injection prefers vault-sourced) + U4 (dream-accepted → vault drafts) next; U5/U6 remain [MOE].
+- Verified: tsc 0, build clean, porter-fastify restarted, /health 200 v6.40.0, vault-index idempotent re-run.
+
 ## 2026-07-04 — v6.39.0: PR-3 dream reviewer + PR-4 docs-match-reality
 - **PR-3:** dream worker ALIVE (cadence runs over 3 silos) but output ORPHANED since the SPA archive —
   7 pending / 54 expired proposals, last human review 2026-05-16. Wired WITHOUT new timers/UI:
