@@ -768,3 +768,40 @@
   deleted (event row, scratch server, harness files, YMC_API_URL manager-env override).
   INTERIM: until the operator restarts ymc-backend with the new endpoint, the daily action
   fails soft (workflow_failed logged, isolated) — ship the ymc side first.
+
+## Memory unification U5+U6 + rules rationalization (Fable 5) — 2026-07-05 (SGT)
+- Workstream: U5 concept migration (RMI pack → vault, archive originals; archive stale subscription release rows) · U6 claude-rules-mirror.ts (new service + workflow action + POST route) · rules-file rationalization (vault/concepts/rules-architecture.md).
+- Files claimed: backend/src/services/intellect/claude-rules-mirror.ts (NEW), backend/src/services/intellect/workflow-engine.ts (EDIT — action + seed), backend/src/routes/v1/intellect.ts (EDIT — POST trigger), CHECKPOINT.md/CHANGELOG.md, personas/<14 orphaned hash dirs> (DELETE). Vault: concepts/rmi-*.md (NEW), INDEX.md, entities/iri-rmi.md, concepts/rules-architecture.md (NEW).
+- Status: done (2026-07-06)
+
+## Bridge antigravity gateway (Fable 5, subagent) — 2026-07-06
+- FIX: register the antigravity CLI as a Bridge gateway alongside claude_cli/codex_cli;
+  verify with a real /api/v1/bridge/agent-message round-trip. Restart allowed (build + /health).
+- **Files claimed:** backend/src/services/bridge/adapters/antigravity-cli.ts (NEW),
+  backend/src/services/bridge/adapters/index.ts, possibly bridge/types.ts + startup-detector.ts.
+- NOT touching backend/src/services/intellect/* or dream-prompts (U5/U6 session owns them).
+- NO commit / NO version bump — operator ships (v6.43.0 pending with U5/U6 set).
+- Status: active
+
+## Worker knowledge-evolution loop (Fable 5, subagent) — 2026-07-06 (SGT)
+- Workstream: Moe's /loop order — per-worker knowledge nodes evolve via proposals. NEW
+  `worker_knowledge_refresh` (round-robin, ONE worker per every_24h tick, per-node refresh_days
+  gate) + NEW `github_scan` (weekly via state-file day-check on the same tick) workflow actions.
+  Research dispatch rides Bridge FORCED to the CHEAP gateway (codex_cli — never claude_cli
+  premium); output = memory_proposals rows (kind new_directive, silo_id='workers',
+  metadata.source discriminator) — human review only, NOTHING auto-applies.
+- **Files claimed:** NEW backend/src/services/intellect/worker-knowledge.ts, NEW
+  backend/src/services/intellect/github-scan.ts, NEW ops/github-watchlist.txt.
+  workflow-engine.ts MINIMAL hunks ONLY (U5/U6 session also edits this file):
+  (a) 2 import lines after the runClaudeRulesMirror import, (b) 2 union members after
+  'claude_rules_mirror', (c) 2 actionHandlers entries after claude_rules_mirror, (d) 2
+  BUILTIN_WORKFLOWS rows appended at array end. routes/v1/intellect.ts MINIMAL: 2 POST
+  routes (/worker-knowledge-refresh, /github-scan) inserted after /failure-digest + 2 imports.
+- Runtime state (not repo): ~/.porter/worker-knowledge-state.json, ~/.porter/github-scan-state.json.
+- Vault (self-commits): NEW entities/worker-{rolo,archie,postie,quill,gaffer,marshall,sentinel}.md,
+  NEW concepts/worker-knowledge-loop.md, INDEX.md (append-only lines — U5/U6 also claims INDEX.md;
+  keeping the hunk tiny + committing immediately).
+- NOT touching: bridge/** (antigravity session), dream-worker.ts, dream-prompts/, vault-indexer.ts,
+  claude-rules-mirror.ts, memory-injection.ts. ZERO ymc code changes (marshall-facts.json read-only).
+- NO commit / NO version bump — operator ships. MAY restart porter-fastify (verify /health after).
+- Status: active

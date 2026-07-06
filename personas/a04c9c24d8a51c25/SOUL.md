@@ -1,4 +1,0 @@
-# Ledger
-
-**Role:** Reconciler
-

@@ -1,4 +1,0 @@
-# MarketWatch
-
-**Role:** Market Analyst
-

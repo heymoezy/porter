@@ -27,6 +27,7 @@ import { runTranscriptRetention } from '../../services/intellect/transcript-rete
 import { runDreamWorker } from '../../services/intellect/dream-worker.js';
 import { scheduleDirectivesMirror } from '../../services/intellect/vault-mirror.js';
 import { runVaultIndexing, VAULT_CONFIDENCE_BOOST } from '../../services/intellect/vault-indexer.js';
+import { runClaudeRulesMirror } from '../../services/intellect/claude-rules-mirror.js';
 import { runFailureDigestDistill } from '../../services/intellect/failure-digest.js';
 import { randomUUID } from 'node:crypto';
 import { resolveActiveProject, setActiveProject, clearActiveProject, recentProjects } from '../../services/intellect/active-project.js';
@@ -1080,6 +1081,23 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       return reply.status(500).send(err('VAULT_INDEX_FAILED', message));
+    }
+  });
+
+  // ── POST /claude-rules-mirror — mirror Claude session rules manually ─
+  //
+  // Memory-unification U6 (same manual-trigger pattern as /vault-index).
+  // Parses /home/lobster/CLAUDE.md hard rules + project CLAUDE.md
+  // non-negotiables into ONE workspace directive (supersedes its prior row,
+  // hash-idempotent). Scheduled path: 'Mirror Claude session rules'
+  // every_24h workflow.
+  fastify.post('/claude-rules-mirror', async (_request, reply) => {
+    try {
+      const result = await runClaudeRulesMirror();
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('CLAUDE_RULES_MIRROR_FAILED', message));
     }
   });
 

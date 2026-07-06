@@ -1,3 +1,9 @@
+## Unreleased (2026-07-06) — memory unification U5+U6 (operator to bump version on ship)
+
+- feat(intellect): U6 claude-rules mirror — `claude-rules-mirror.ts` renders ~/CLAUDE.md Hard Rules + per-project CLAUDE.md non-negotiables into ONE workspace directive (source_type='claude_rules_mirror', p60), sha256 hash-idempotent, supersedes its own prior row (never accumulates), refreshes the U1 vault mirror; 'Mirror Claude session rules' on the existing every_24h tick + POST /api/v1/intellect/claude-rules-mirror
+- data(intellect): U5 migration — 30-row RMI agent concept pack rewritten as 4 vault nodes (concepts/rmi-*.md) and indexed back as source_type='vault'; originals archived (reversible); 11 superseded Ollama/Node release subscription rows archived (feeds, not knowledge)
+- chore(personas): delete 14 orphaned hash-dir persona slots (0 refs in personas/agent_templates tables, porter_config.json, or code; superseded by the named dirs); the 3 hash dirs matching live porter_config.json agents kept
+
 ## v6.42.0 (2026-07-05)
 
 - feat(intellect): rule-distillation loop (#21) — `distill_failure_digest` on the existing every_24h tick pulls ymc's new failure-digest endpoint (counts + ≤20 snippets → ONE intellect_event, silent at zero), and the dream worker's software silo now reads the latest digest via {{FAILURE_DIGEST_BLOCK}} so nightly dreaming proposes rules FROM real failures into the existing review queue; POST /api/v1/intellect/failure-digest manual trigger; fails soft (404 workflow_failed event) until ymc ships its endpoint

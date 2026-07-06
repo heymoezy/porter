@@ -1,5 +1,24 @@
 # Porter Checkpoint
 
+## 2026-07-06 — memory unification U5+U6 complete (built on v6.42.0; operator bumps version on ship)
+- **U5 (migration):** the 30 '[Marshall Islands]' agent-scope concept rows → 4 vault nodes
+  (vault/concepts/rmi-{corporate-program,tax-and-substance,compliance-gotchas,redomiciliation}.md,
+  wired into INDEX.md + entities/iri-rmi.md), indexed back via POST /vault-index (source_type='vault');
+  the 30 originals archived (status='archived', reversible). 11 stale subscription release rows
+  (Ollama/Node, superseded by newer releases) archived; latest-per-line kept (4). Injection proven:
+  /context shows rmi-* with vault cites; tier-6 FTS 'Marshall Islands redomiciliation' → vault rows first.
+- **U6 (claude-rules mirror):** services/intellect/claude-rules-mirror.ts (vault-mirror.ts pattern) —
+  parses ~/CLAUDE.md '## Hard Rules' + every ~/projects/*/CLAUDE.md /non-negotiable/i section into ONE
+  workspace directive, hash in references_json, supersede chain (prior → 'superseded'; proven: 3-row
+  chain, exactly 1 active), scheduleDirectivesMirror() after change; 'Mirror Claude session rules'
+  every_24h builtin + POST /api/v1/intellect/claude-rules-mirror. Idempotence proven (2nd run written:false).
+- **Rules rationalization:** map at vault/concepts/rules-architecture.md (7 classes, sync paths,
+  findability rule). Deleted 14 orphaned personas/<hash>/ slots (evidence in CHANGELOG). Report-only:
+  ~/documents/porter/ legacy tree (88 line-named debris files + portal.db — predates repo move,
+  skills-manifest.ts + prompt-pipeline.ts still point there), Tom IDENTITY/SOUL drift, empty
+  ~/.openclaw/workspace-tom stubs.
+- Verified: tsc 0, build clean, restart, /health 200 v6.42.0, workflow row seeded+enabled.
+
 ## 2026-07-05 — v6.42.0: rule-distillation loop (#21 — failures → proposed rules, existing plumbing only)
 - Design: vault/concepts/rule-distillation-loop.md. NO new engine, NO new timers.
 - `services/intellect/failure-digest.ts`: runFailureDigestDistill() calls ymc
