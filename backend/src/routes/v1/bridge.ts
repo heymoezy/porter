@@ -6,6 +6,7 @@ import { detectAndUpsertGateways, type DetectionReport } from '../../services/br
 import { createAdapter } from '../../services/bridge/adapters/index.js';
 import { encryptCredential, validatePorterSecret } from '../../lib/credential-crypto.js';
 import { routingEngine } from '../../services/bridge/routing-engine.js';
+import { sanitizeSimulateFailure, type FailoverRecord } from '../../services/bridge/failover.js';
 import type {
   GatewayRow,
   AgentMessageRequest,
@@ -555,11 +556,28 @@ export default async function bridgeV1Routes(
         : {}),
     };
 
+    // ── Failover controls ──────────────────────────────────────────────────
+    // fallback:false ⇒ single-gateway hard-fail (caller must not model-switch).
+    // simulateFailure ⇒ LOOPBACK-ONLY proof hook (forces a gateway to fail so
+    // failover can be demonstrated without burning real quota); ignored for
+    // non-loopback callers so it can never be weaponized in production.
+    const isLoopback = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.ip);
+    const fallbackEnabled = (message as { fallback?: boolean }).fallback !== false;
+    const simulateFailure = isLoopback
+      ? sanitizeSimulateFailure((message as { simulateFailure?: unknown }).simulateFailure)
+      : [];
+
     let decision;
     let result;
+    let failoverRecord: FailoverRecord | null = null;
     try {
-      decision = await routingEngine.select(ctx);
-      result = await routingEngine.dispatchWithQueue(decision, dispatchReq);
+      const out = await routingEngine.dispatchWithFailover(ctx, dispatchReq, {
+        fallback: fallbackEnabled,
+        simulateFailure,
+      });
+      decision = out.decision;
+      result = out.result;
+      failoverRecord = out.failover;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (agentMessageId != null) {
@@ -586,7 +604,7 @@ export default async function bridgeV1Routes(
       targetGateway: message.targetGateway,
       intent: message.intent,
       replyTo: message.replyTo,
-    });
+    }, null, failoverRecord);
 
     // MSG-01: Backfill dispatch log id + mark delivered
     if (msgBusId) {
@@ -610,6 +628,20 @@ export default async function bridgeV1Routes(
       latencyMs: result.latencyMs,
       hopCount: hopCount + 1,
       createdAt: Date.now(),
+      ...(failoverRecord && failoverRecord.attempts.length > 1
+        ? {
+            failover: {
+              switched: failoverRecord.answeredBy !== failoverRecord.chain[0],
+              answeredBy: failoverRecord.answeredBy,
+              chain: failoverRecord.chain,
+              attempts: failoverRecord.attempts.map(a => ({
+                gatewayType: a.gatewayType,
+                outcome: a.outcome,
+                ...(a.reason ? { reason: a.reason } : {}),
+              })),
+            },
+          }
+        : {}),
     };
 
     if (agentMessageId != null) {

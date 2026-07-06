@@ -290,6 +290,18 @@ export interface AgentMessageResponse {
   latencyMs: number;
   hopCount: number;
   createdAt: number;
+  /**
+   * Failover summary when a fallback chain ran (Moe 2026-07-06). Present so
+   * callers can SEE that Bridge switched models — e.g. gatewaySwitched=true
+   * with answeredBy='codex_cli' means claude_cli was down/quota'd and codex
+   * carried the task. Absent/undefined when the lead gateway answered first.
+   */
+  failover?: {
+    switched: boolean;
+    answeredBy: string | null;
+    chain: string[];
+    attempts: Array<{ gatewayType: string; outcome: string; reason?: string }>;
+  };
 }
 
 /** Optional agent-message fields passed to logDispatch() for observability. */

@@ -19,9 +19,20 @@ import { v4 as uuidv4 } from 'uuid';
 import { compressToolOutput, estimateTokens } from '../context-compressor.js';
 import { getLegacyTags, normalizeCapabilities } from './capability-registry.js';
 import { upsertSession } from '../session-registry.js';
+import {
+  orderChain,
+  classifyFailure,
+  raceBudget,
+  DEFAULT_CHAIN_BUDGET_MS,
+  MIN_ATTEMPT_MS,
+  BUDGET_TIMEOUT_MARKER,
+  type FailoverAttempt,
+  type FailoverRecord,
+} from './failover.js';
 import type {
   GatewayRow,
   GatewayAdapter,
+  GatewayType,
   RoutingContext,
   RoutingDecision,
   BridgeDispatchRequest,
@@ -146,6 +157,7 @@ export class RoutingEngine {
     result: BridgeDispatchResult,
     agentMsgCtx?: AgentMessageLogContext,
     compressionStats?: { tool_outputs_compressed: number; tokens_saved: number; compression_model: string } | null,
+    failover?: FailoverRecord | null,
   ): Promise<string> {
     const id = uuidv4();
 
@@ -187,12 +199,14 @@ export class RoutingEngine {
               skills_used,
               compression_stats,
               dispatch_strategy,
+              failover,
               created_at)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
                    $18,$19,$20,$21,$22,$23,$24,$25,
                    $26,
                    $27,
                    $28,
+                   $29,
                    EXTRACT(EPOCH FROM NOW()))`,
           [
             id,
@@ -223,6 +237,7 @@ export class RoutingEngine {
             ctx.skillsUsed ? JSON.stringify(ctx.skillsUsed) : null,
             compressionStats ? JSON.stringify(compressionStats) : null,
             ctx.dispatchStrategy ?? null,
+            failover ? JSON.stringify(failover) : null,
           ],
         );
 
@@ -436,6 +451,121 @@ export class RoutingEngine {
 
       throw new Error(`Gateway ${decision.gatewayRow.type} failed: ${msg}`);
     }
+  }
+
+  /**
+   * Build a RoutingDecision from a candidate. Model override from ctx is
+   * applied ONLY to the lead/forced gateway — fallback gateways run on their
+   * own default model (a Claude model name is meaningless to codex/agy).
+   */
+  private buildDecision(cand: GatewayCandidate, ctx: RoutingContext, isLead: boolean, reason: string): RoutingDecision {
+    let row = cand.row;
+    if (isLead && ctx.forceModelName) {
+      row = { ...row, metadata: { ...row.metadata, default_model: ctx.forceModelName } };
+    }
+    return {
+      gatewayRow: row,
+      adapter: cand.adapter,
+      modelName: resolveModelName(row),
+      reason,
+      alternatives: [],
+      matchedRuleId: null,
+    };
+  }
+
+  /**
+   * Dispatch with a MODEL-FAILOVER CHAIN (Moe 2026-07-06: "bridge should be
+   * switching tom into other models via porter bridge as backup if claude
+   * fails or quota is reached"). When the lead gateway errors — process
+   * failure, timeout, or a quota/usage-limit signature — the SAME task is
+   * retried on the next gateway in the configured chain
+   * (claude_cli → codex_cli → antigravity_cli by default) so every Bridge
+   * consumer (Tom's workers, digests, ops-chat, vault-chat, evolution loop)
+   * survives Claude quota exhaustion instead of hard-failing until reset.
+   *
+   * @param opts.fallback   false ⇒ single-gateway hard-fail (no switching)
+   * @param opts.simulateFailure gateway types to force-fail — LOOPBACK-GATED by
+   *                        the caller; a proof hook that never burns real quota
+   * @param opts.budgetMs   total wall-clock shared across the chain (default 300s)
+   */
+  async dispatchWithFailover(
+    ctx: RoutingContext,
+    req: BridgeDispatchRequest,
+    opts?: { fallback?: boolean; simulateFailure?: GatewayType[]; budgetMs?: number },
+  ): Promise<{ decision: RoutingDecision; result: BridgeDispatchResult; failover: FailoverRecord }> {
+    const candidates = await this.selectAllCandidates();
+    if (candidates.length === 0) throw new Error('No active gateways available');
+
+    const fallbackEnabled = opts?.fallback !== false;
+    const budgetMs = opts?.budgetMs ?? DEFAULT_CHAIN_BUDGET_MS;
+    const simulate = opts?.simulateFailure ?? [];
+
+    const candidateTypes: string[] = candidates.map(c => c.row.type);
+    const lead = ctx.forceGatewayType;
+    if (lead && !candidateTypes.includes(lead)) {
+      throw new Error(
+        `Forced gateway type '${lead}' not available (active candidates: ${candidateTypes.join(', ') || 'none'})`,
+      );
+    }
+
+    let chain = orderChain(candidateTypes, lead);
+    if (!fallbackEnabled) chain = chain.slice(0, 1); // hard-fail: lead only
+
+    const attempts: FailoverAttempt[] = [];
+    const startTs = Date.now();
+    let lastErr: Error | null = null;
+
+    for (let i = 0; i < chain.length; i++) {
+      const type = chain[i];
+      const cand = candidates.find(c => c.row.type === type);
+      if (!cand) continue;
+      const isLead = i === 0;
+      const decision = this.buildDecision(
+        cand, ctx, isLead,
+        isLead ? `${cand.row.name} (lead)` : `failover → ${cand.row.name} (chain pos ${i})`,
+      );
+      const modelName = decision.modelName;
+
+      const remaining = budgetMs - (Date.now() - startTs);
+      if (remaining < MIN_ATTEMPT_MS) {
+        attempts.push({ gatewayType: type, modelName, outcome: 'budget_exhausted', latencyMs: 0 });
+        continue;
+      }
+
+      const breaker = getBreaker(cand.row.id, cand.row.type);
+      const attemptStart = Date.now();
+      try {
+        if (simulate.includes(type as GatewayType)) {
+          throw new Error(`[simulateFailure] forced failure for ${type}`);
+        }
+        const result = await raceBudget(
+          withRetry(() =>
+            getQueue(cand.row.type).add(() =>
+              breaker.fire(async () => cand.adapter.dispatch(req)),
+            ) as Promise<BridgeDispatchResult>,
+          ),
+          remaining,
+        );
+        attempts.push({ gatewayType: type, modelName, outcome: 'ok', latencyMs: Date.now() - attemptStart });
+        return { decision, result, failover: { chain, attempts, answeredBy: type, fallbackEnabled, budgetMs } };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const outcome = msg.includes('[simulateFailure]') ? 'simulated'
+          : msg.includes(BUDGET_TIMEOUT_MARKER) ? 'timeout'
+          : classifyFailure(msg);
+        if (/429|rate.?limit|too.?many/i.test(msg)) record429(cand.row.id);
+        attempts.push({ gatewayType: type, modelName, outcome, reason: msg.slice(0, 300), latencyMs: Date.now() - attemptStart });
+        lastErr = e instanceof Error ? e : new Error(msg);
+        // fall through to the next gateway in the chain
+      }
+    }
+
+    const record: FailoverRecord = { chain, attempts, answeredBy: null, fallbackEnabled, budgetMs };
+    const finalErr = new Error(
+      `Failover chain exhausted (${chain.join(' → ')}): ${lastErr ? lastErr.message : 'all gateways failed'}`,
+    ) as Error & { failoverRecord?: FailoverRecord };
+    finalErr.failoverRecord = record;
+    throw finalErr;
   }
 
   /**

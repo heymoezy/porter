@@ -860,3 +860,16 @@
   portal.db LIVE (portal.py DB_PATH) -> stop-branch: not moved; backup copy storage/backups/portal.db.pre-move-archive.
   skills-manifest.ts deleted (+3 call sites in routes/admin/skills.ts); prompt-pipeline.ts 2 dead entries dropped.
   Re-grep of deleted symbols clean. CHANGELOG v6.46.0-pending + CHECKPOINT entries written. NO commits made.
+
+## bridge model-failover chain (Fable 5) — 2026-07-06 (SGT)
+- Workstream: Moe's order — Bridge must fail over claude_cli → codex_cli → antigravity_cli on
+  quota/failure instead of hard-failing. Chain lives in the dispatch layer (routing-engine), gateway
+  order from gateways.priority (env override PORTER_BRIDGE_FALLBACK_CHAIN). Per-request `fallback:false`
+  opt-out; loopback-gated `simulateFailure` test hook; bridge_dispatch_log gains `failover` JSONB.
+- Files claimed (edit): backend/src/services/bridge/{routing-engine.ts,types.ts,agent-delegation.ts,
+  circuit-breaker-registry.ts,adapters/claude-cli.ts,adapters/codex-cli.ts,adapters/antigravity-cli.ts},
+  backend/src/services/bridge/failover.ts (NEW), backend/src/db/migrate-bridge-v9.ts (NEW),
+  backend/src/db/schema.ts (one column), backend/src/index.ts (one migration call),
+  backend/src/routes/v1/bridge.ts, backend/src/routes/admin/bridge.ts, BRIDGE.md.
+- NOT touching: intellect/**, recall*, task-decomposition/**, CHANGELOG (operator ships v6.47.0). NO commits.
+- Status: in progress

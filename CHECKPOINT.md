@@ -1,5 +1,19 @@
 # Porter Checkpoint
 
+## 2026-07-06 — v6.47.0: Bridge model failover (Tom survives Claude quota)
+- services/bridge/failover.ts (pure: quota-signature regex vs claude 2.1.201 strings, orderChain,
+  classifyFailure, raceBudget) + RoutingEngine.dispatchWithFailover (orchestrates the chain w/ breaker
+  + queue + retry per attempt; buildDecision applies model override only to the lead gateway — codex/agy
+  run their own default model). routes/v1/bridge.ts agent-message calls it; reads message.fallback
+  (opt-out) + message.simulateFailure (LOOPBACK-gated proof hook). Record → bridge_dispatch_log.failover
+  (jsonb, ALTER TABLE applied) + response.failover {switched, answeredBy, chain, attempts}.
+- PROVEN live: simulate claude_cli → codex_cli answered "FAILOVER OK" (switched:true); fallback:false →
+  DISPATCH_FAILED chain=[claude_cli] only; dispatch log row answeredBy=codex_cli attempts=2.
+- Scope: ALL Bridge consumers protected. Tom's WhatsApp CHAT surface is openclaw-gateway-managed (not
+  Bridge) → its failover lands with the openclaw upgrade (2026.6.11 native fallback config or the pipeline).
+- tsc 0, build clean, restart, /health 200 v6.47.0.
+
+
 ## 2026-07-06 — v6.46.0 pending: documents/porter dead-tree cleanup (U5/U6 follow-up)
 - **portal.db is LIVE — stop-branch invoked.** portal.service (running) executes
   /home/websites/porter/portal.py with `DB_PATH = "/home/lobster/documents/porter/portal.db"`,

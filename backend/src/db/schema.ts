@@ -980,6 +980,9 @@ export const bridgeDispatchLog = pgTable('bridge_dispatch_log', {
   isAgentMessage: integer('is_agent_message'),
   // skills_used: runtime skill selection telemetry (added rts_v1)
   skillsUsed: jsonb('skills_used'),
+  // Failover chain record (Moe 2026-07-06): gateway chain tried, per-attempt
+  // outcome/reason, which gateway answered — null when no failover ran.
+  failover: jsonb('failover'),
   // SIN-01: outcome rating + note (Phase 41)
   outcomeScore: integer('outcome_score'),
   outcomeNote: text('outcome_note'),
