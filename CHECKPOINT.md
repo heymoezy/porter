@@ -1,5 +1,15 @@
 # Porter Checkpoint
 
+## 2026-07-06 — INCIDENT + rule: portal.py (old Python SaaS) DELETED; Porter = the Fastify brain
+- A session misrouted askporter.app → the OLD portal.py (:8080) when Moe couldn't log in, sending him
+  into the dead legacy SaaS. CORRECTED: portal.py + __pycache__ hard-deleted (backup
+  _ops/archive/old-porter-py-*.tar.gz), portal.service stopped+disabled, askporter.app re-routed to
+  the NEW Porter brain-ui (:5176). Rule now in global CLAUDE.md + Claude memory + Porter directives.
+- Porter = Fastify brain (~/projects/Porter, :3001 + :5176), PostgreSQL. portal.py/portal.db are NOT
+  Porter. NEXT (program #26): build the authed Porter admin UI (projects/ops/vault/agents tabs) —
+  brain-ui :5176 today is only a monitoring dashboard and is currently unauthed (add auth first).
+
+
 ## 2026-07-06 — v6.47.0: Bridge model failover (Tom survives Claude quota)
 - services/bridge/failover.ts (pure: quota-signature regex vs claude 2.1.201 strings, orderChain,
   classifyFailure, raceBudget) + RoutingEngine.dispatchWithFailover (orchestrates the chain w/ breaker
