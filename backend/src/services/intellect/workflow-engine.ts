@@ -39,6 +39,8 @@ import { runDirectivesMirror } from './vault-mirror.js';
 import { runVaultIndexing } from './vault-indexer.js';
 import { runFailureDigestDistill } from './failure-digest.js';
 import { runClaudeRulesMirror } from './claude-rules-mirror.js';
+import { runWorkerKnowledgeRefresh } from './worker-knowledge.js';
+import { runGithubScan } from './github-scan.js';
 import { broadcast } from '../sse-hub.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -63,6 +65,8 @@ export type WorkflowActionType =
   | 'vault_concept_index'       // U2 2026-07-05 — index vault concepts/+entities/ → concepts (source_type='vault')
   | 'distill_failure_digest'    // rule-distillation loop 2026-07-05 — ymc failure evidence → ONE failure_digest intellect_event
   | 'claude_rules_mirror'       // U6 2026-07-06 — CLAUDE.md hard rules + project non-negotiables → ONE workspace directive
+  | 'worker_knowledge_refresh'  // worker-knowledge loop 2026-07-06 — ONE due worker/day researched via CHEAP gateway → proposal
+  | 'github_scan'               // worker-knowledge loop 2026-07-06 — weekly (state-gated) gh watchlist scan → digest proposal
   | 'noop';
 
 export interface WorkflowRow {
@@ -235,6 +239,12 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
   // intellect_event. The dream worker mines it nightly (software silo).
   distill_failure_digest: async (_ctx, config) =>
     runFailureDigestDistill((config?.hours as number) ?? 24),
+  // Worker knowledge-evolution loop (vault/concepts/worker-knowledge-loop.md):
+  // both ride the every_24h tick; internal state files gate the real cadence
+  // (per-node refresh_days round-robin / weekly scan floor). All model calls
+  // are FORCED to the cheap gateway — never premium (see worker-knowledge.ts).
+  worker_knowledge_refresh: async () => runWorkerKnowledgeRefresh({ triggeredBy: 'schedule' }),
+  github_scan: async () => runGithubScan({ triggeredBy: 'schedule' }),
   noop: async () => null,
 };
 
@@ -479,6 +489,23 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_value: 'every_24h',
     action_type: 'distill_failure_digest',
     action_config: { hours: 24 },
+  },
+  // Worker knowledge-evolution loop (2026-07-06): refresh + github scan ride
+  // the same every_24h tick — no new timers; cadence state lives in
+  // <PORTER_DATA_DIR>/runtime/{worker-knowledge,github-scan}-state.json.
+  {
+    name: 'Refresh worker knowledge (round-robin, cheap gateway)',
+    trigger_type: 'schedule',
+    trigger_value: 'every_24h',
+    action_type: 'worker_knowledge_refresh',
+    action_config: {},
+  },
+  {
+    name: 'Scan GitHub watchlist (weekly, zero-LLM diff)',
+    trigger_type: 'schedule',
+    trigger_value: 'every_24h',
+    action_type: 'github_scan',
+    action_config: {},
   },
 ];
 

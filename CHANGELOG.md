@@ -1,3 +1,7 @@
+## v6.45.0 (2026-07-06)
+
+- feat(intellect): worker knowledge-evolution loop — `worker_knowledge_refresh` (round-robin one due worker per every_24h tick, policy from the worker's vault node, cheap-gateway web research, ONE proposal into the review queue) + `github_scan` (weekly, zero-LLM gh api over ops/github-watchlist.txt, cheap-LLM triage only on change). Nothing auto-applies — Moe accepts. Manual triggers POST /intellect/worker-knowledge-refresh + /github-scan. Pilot proposals pending: Marshall RMI updates (OFAC 2026-06-05 designations, IRI digital-signature regs) + repo digest (fastify 5.10.0 etc.).
+
 ## v6.44.0 (2026-07-06)
 
 - feat(bridge): antigravity CLI registered as gateway `antigravity_cli` — adapter mirrors codex (positional prompt, plain stdout), startup detection (PORTER_ANTIGRAVITY_PATH or PATH scan incl. ~/.local/bin via unit PATH extension), capability record, VALID_TYPES; real round-trip proven (22s, Gemini-backed). Bridge now routes to 3 gateways: claude_cli, codex_cli, antigravity_cli.

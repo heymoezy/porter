@@ -810,4 +810,17 @@
 - NOT touching: bridge/** (antigravity session), dream-worker.ts, dream-prompts/, vault-indexer.ts,
   claude-rules-mirror.ts, memory-injection.ts. ZERO ymc code changes (marshall-facts.json read-only).
 - NO commit / NO version bump — operator ships. MAY restart porter-fastify (verify /health after).
-- Status: active
+- Status: **DONE** 2026-07-06 — tsc 0, build clean, restarts verified (/health 200, now v6.44.0 after
+  the antigravity session's ship; tsx runs from source so my files are live). Workflow rows seeded +
+  enabled ('Refresh worker knowledge…', 'Scan GitHub watchlist…', both every_24h). REAL Marshall
+  refresh proven via POST /worker-knowledge-refresh {worker:marshall}: codex_cli 63.6s, 2 sourced
+  findings (OFAC 2026-06-05 RMI dark-fleet designations; IRI Digital Signature Regulations 2024) →
+  proposal mp_7f50a6a6… PENDING (left for Moe). REAL github_scan proven: baseline run (6 repos, 0 LLM,
+  9s) then diff run → digest proposal mp_3652ffc7… PENDING (claude-code v2.1.201, codex 0.143-alpha,
+  fastify v5.10.0 + cheap-LLM summary). Schedule gates proven zero-cost: github skip 'within weekly
+  cadence floor'; round-robin next due = sentinel (fires tonight's tick, by design); refresh_days:0
+  workers never picked. Test debris removed (~/.porter/runtime baseline file). Vault nodes committed
+  + pushed (0b24d65, 0a7b8eb), lintVault clean. Known gap (bridge/**, not mine): codex adapter token
+  parse expects 'tokens used\n<n>' but codex 0.128 prints 'tokens used: n' → output_tokens null in
+  dispatch log; cost telemetry = latency + prompt_chars until fixed. CHECKPOINT.md deliberately NOT
+  touched (claimed by U5/U6 session) — this row is the record.

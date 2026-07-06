@@ -29,6 +29,8 @@ import { scheduleDirectivesMirror } from '../../services/intellect/vault-mirror.
 import { runVaultIndexing, VAULT_CONFIDENCE_BOOST } from '../../services/intellect/vault-indexer.js';
 import { runClaudeRulesMirror } from '../../services/intellect/claude-rules-mirror.js';
 import { runFailureDigestDistill } from '../../services/intellect/failure-digest.js';
+import { runWorkerKnowledgeRefresh } from '../../services/intellect/worker-knowledge.js';
+import { runGithubScan } from '../../services/intellect/github-scan.js';
 import { randomUUID } from 'node:crypto';
 import { resolveActiveProject, setActiveProject, clearActiveProject, recentProjects } from '../../services/intellect/active-project.js';
 
@@ -1118,6 +1120,42 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       return reply.status(500).send(err('FAILURE_DIGEST_FAILED', message));
+    }
+  });
+
+  // ── POST /worker-knowledge-refresh — run the worker researcher manually ─
+  //
+  // Worker knowledge-evolution loop (vault/concepts/worker-knowledge-loop.md);
+  // same manual-trigger pattern as /failure-digest. body: { worker?: string }
+  // pins a worker (e.g. "marshall"); omitted = round-robin next due. Dispatch
+  // is FORCED to the cheap gateway. Scheduled path: 'Refresh worker knowledge'
+  // every_24h workflow.
+  fastify.post('/worker-knowledge-refresh', async (request, reply) => {
+    try {
+      const worker = (request.body as { worker?: string } | null)?.worker;
+      const result = await runWorkerKnowledgeRefresh({
+        triggeredBy: 'manual',
+        worker: typeof worker === 'string' && worker.trim() ? worker.trim() : undefined,
+      });
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('WORKER_KNOWLEDGE_REFRESH_FAILED', message));
+    }
+  });
+
+  // ── POST /github-scan — run the watchlist scanner manually ──────────
+  //
+  // Same loop; zero-LLM gh diff + cheap-gateway summary only on change.
+  // Manual runs bypass the weekly state-file floor. Scheduled path:
+  // 'Scan GitHub watchlist' every_24h workflow.
+  fastify.post('/github-scan', async (_request, reply) => {
+    try {
+      const result = await runGithubScan({ triggeredBy: 'manual' });
+      return reply.send(ok(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('GITHUB_SCAN_FAILED', message));
     }
   });
 

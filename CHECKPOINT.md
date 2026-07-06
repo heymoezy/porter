@@ -1,5 +1,17 @@
 # Porter Checkpoint
 
+## 2026-07-06 — v6.45.0: worker knowledge-evolution loop (Moe's directive, proposals-only)
+- worker-knowledge.ts: one due worker per every_24h tick (policy fields refresh_days/data_file/
+  research_focus parsed from vault/entities/worker-*.md — 7 nodes committed), CHEAP_GATEWAY=codex_cli
+  (antigravity flip = one constant once its web research is proven), diff-aware prompt, ONE
+  memory_proposal (silo workers). github-scan.ts: weekly state-floor, gh api releases+advisories over
+  Porter/ops/github-watchlist.txt (6 repos incl. openclaw — watching our PR #100500), zero-LLM scan,
+  cheap triage on change only. State: runtime/*.json. Manual POST triggers added.
+- PENDING for Moe: mp_7f50a6a6 (Marshall: OFAC RMI-vessel designations 2026-06-05 + IRI digital-sig
+  regs) and mp_3652ffc7 (repo digest). Accept via existing dreams API; U4 writes vault drafts.
+- Cost: ~6 cheap calls/fortnight + ~12 gh calls/week. Follow-ups: apply-to-data-file admin action
+  (ymc, never automatic), codex adapter token-parse one-liner, prove agy web research.
+
 ## 2026-07-06 — v6.44.0: antigravity joins Bridge (3 gateways)
 - adapters/antigravity-cli.ts (mirrors codex: positional prompt, plain stdout, 300s); registered in
   ADAPTER_MAP/types/capability-registry/startup-detector (env override or PATH scan; porter-fastify

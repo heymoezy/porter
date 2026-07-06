@@ -1,0 +1,13 @@
+# github-watchlist.txt — repos the `github_scan` workflow action watches weekly.
+# One owner/repo per line; '#' starts a comment. Read by
+# backend/src/services/intellect/github-scan.ts (GITHUB_WATCHLIST_PATH env
+# overrides this location). Scan = gh api releases + security advisories,
+# ZERO LLM; a cheap-gateway summary fires only when something changed.
+#
+# Why each repo:
+openclaw/openclaw          # hosts Tom's WhatsApp gateway; we carry PR #100500 + local patches to retire
+anthropics/claude-code     # the Claude CLI — Porter's claude_cli gateway binary
+openai/codex               # the Codex CLI — Porter's cheap codex_cli gateway binary
+fastify/fastify            # backend framework (Porter + ymc)
+drizzle-team/drizzle-orm   # ORM (standard stack)
+remix-run/react-router     # ymc site framework
