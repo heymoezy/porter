@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router"
 import {
   Bell, ArrowLeft, X,
   LayoutDashboard,
-  Sparkles, Wrench, Activity, Bug, Monitor, Mail, FileText, Settings, Flame, Route,
+  Sparkles, Wrench, Activity, Bug, Monitor, FileText, Settings, Route,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -25,14 +25,12 @@ const detailPrefixes = ["/agents/"]
 const pageTitles: Array<{ path: string; exact?: boolean; label: string; icon: LucideIcon }> = [
   { path: "/", exact: true, label: "Dashboard", icon: LayoutDashboard },
   { path: "/dashboard", exact: true, label: "Dashboard", icon: LayoutDashboard },
-  { path: "/forge", label: "Agent Forge", icon: Flame },
   { path: "/skills", label: "Skills", icon: Sparkles },
   { path: "/tools", label: "Tools", icon: Wrench },
   { path: "/activity", label: "Activity", icon: Activity },
   { path: "/bridge", label: "Bridge", icon: Route },
   { path: "/diagnostics", label: "Diagnostics", icon: Bug },
   { path: "/system", label: "System", icon: Monitor },
-  { path: "/email", label: "Email", icon: Mail },
   { path: "/changelog", label: "Changelog", icon: FileText },
   { path: "/settings", label: "Settings", icon: Settings },
   { path: "/brain", label: "Brain", icon: LayoutDashboard },

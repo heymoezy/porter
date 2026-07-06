@@ -1,5 +1,17 @@
 # Porter Checkpoint
 
+## 2026-07-06 — v6.48.0: admin revamp — Forge/Email/skill-feedback removed
+- Removed dead admin screens (Forge backend gone since v6.28.0; Email /api/v1/mail dead since
+  2026-07-04; skill-feedback dead both sides): app/routes/{forge,email,skill-feedback}.tsx,
+  hooks/use-forge.ts, backend/src/routes/admin/email.ts; nav/routes/prefetch + admin index dereg.
+  tsc 0, backend build 0, react-router build clean. −2067 lines.
+- Design for replacements in vault/concepts/porter-admin-revamp.md: MCP mgmt, tools consolidation,
+  CLI config view (Porter visualises ~/.claude). Follow-up small releases.
+- FOLLOW-UPS flagged: CLAUDE.md + admin/CLAUDE.md still say SPA "archived" (STALE — it's restored/live);
+  components/forge/ shared lib kept (imported by architecture/skills/tools pages); settings.ts orphan
+  email-test write; agent-presence/agent-registry dangling forge refs.
+
+
 ## 2026-07-06 — INCIDENT + rule: portal.py (old Python SaaS) DELETED; Porter = the Fastify brain
 - A session misrouted askporter.app → the OLD portal.py (:8080) when Moe couldn't log in, sending him
   into the dead legacy SaaS. CORRECTED: portal.py + __pycache__ hard-deleted (backup

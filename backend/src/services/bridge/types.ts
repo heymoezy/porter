@@ -151,6 +151,16 @@ export interface RoutingContext {
     skipped: number;
     scoring_mode: 'task_aware' | 'all';
   };
+  /**
+   * v6.47.0 — model failover controls.
+   *   fallback: false disables the chain (single-gateway hard-fail) for
+   *     callers that MUST NOT switch models. Default true.
+   *   simulateFailure: gateway types to force-fail (quota outcome) BEFORE
+   *     dispatch — a test-only hook. The route gates it to loopback so it
+   *     can never be triggered by a remote caller.
+   */
+  fallback?: boolean;
+  simulateFailure?: GatewayType[];
 }
 
 export interface RoutingDecision {
@@ -275,6 +285,17 @@ export interface AgentMessageRequest {
    * The endpoint rejects requests where hopCount >= MAX_AGENT_HOPS.
    */
   hopCount?: number;
+  /**
+   * v6.47.0 — model failover. Default true (chain claude_cli → codex_cli →
+   * antigravity_cli on quota/failure). Set false to hard-fail on the target
+   * gateway for callers that must not switch models.
+   */
+  fallback?: boolean;
+  /**
+   * Test-only: gateway types to force-fail before dispatch. The route accepts
+   * this ONLY from a loopback caller; remote callers have it stripped.
+   */
+  simulateFailure?: GatewayType[];
 }
 
 /** Response envelope returned by POST /api/v1/bridge/agent-message. */

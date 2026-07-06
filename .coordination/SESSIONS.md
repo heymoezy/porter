@@ -873,3 +873,44 @@
   backend/src/routes/v1/bridge.ts, backend/src/routes/admin/bridge.ts, BRIDGE.md.
 - NOT touching: intellect/**, recall*, task-decomposition/**, CHANGELOG (operator ships v6.47.0). NO commits.
 - Status: in progress
+
+## Admin revamp evidence+design+safe-removal (Opus 4.8 1M, subagent) — 2026-07-06 (SGT)
+- Workstream: Moe's direct order — revamp porter-admin-ui: delete Forge/Email/skill-feedback admin
+  tabs, expose MCP management + tool management + a Claude-Code-CLI config view. Matches
+  vault/concepts/program-2026-07-headless-and-vaults.md "Porter admin revamp" section (found mid-task —
+  confirms admin SPA was RESTORED from archived; frontend.archived build was freshly rsynced to
+  /home/websites/porter/admin ~20:18 by another actor, ahead of this session). Design doc:
+  vault/concepts/porter-admin-revamp.md (NEW, self-committed).
+- **IMPORTANT precedent found:** the 2026-05-31 strip session (STRIP-PLAN Step 4) tried to delete
+  forge.tsx + components/forge/ wholesale and REVERTED — components/forge/{org-connector,
+  skills-studio,tools-studio}.tsx are imported by KEPT pages (architecture.tsx, skills.tsx, tools.tsx).
+  This session's removal is scoped narrower to avoid that trap: ONLY the route files + nav entries +
+  backend email.ts, NOT the components/forge/ shared library.
+- **Files claimed (edit/delete):**
+  - admin/frontend.archived/app/routes/{forge,email,skill-feedback}.tsx (DELETE)
+  - admin/frontend.archived/app/hooks/use-forge.ts (DELETE)
+  - admin/frontend.archived/app/routes.ts (EDIT — remove 3 route entries)
+  - admin/frontend.archived/app/components/layout/{sidebar,top-bar}.tsx (EDIT — remove nav entries)
+  - admin/frontend.archived/app/routes/layout.tsx (EDIT — remove forge/email prefetches)
+  - backend/src/routes/admin/email.ts (DELETE) + admin/index.ts (EDIT — deregister)
+- **NOT touching (flagged for a follow-up small release instead):** components/forge/** (shared lib,
+  KEEP), app/components/agent-presence.tsx ("Awaiting forge" links → will 404, cosmetic),
+  app/lib/agent-registry.ts (ghost forge-team agent defs), app/routes/design-system.tsx (Forge palette
+  showcase tab), app/routes/skill-pack-explorer.tsx (breadcrumb links to /forge), backend/src/routes/
+  admin/settings.ts:173-180 (writes into email_messages — will be orphaned, Moe's call whether to touch).
+  ZERO changes to bridge/**, intellect/**, CHANGELOG/CHECKPOINT version bump (operator ships).
+- NO commit in Porter (operator ships). Vault self-commit only. NO restart of porter-fastify (backend
+  change verified via tsc+build only — a different session has bridge/** in progress on the same tree;
+  restart deferred to operator to avoid entangling unrelated in-flight work).
+- Status: **DONE** 2026-07-06 — vault/concepts/porter-admin-revamp.md written + self-committed
+  (0e96b12). Removed (staged, NOT committed to Porter): frontend forge.tsx/email.tsx/skill-feedback.tsx/
+  use-forge.ts (deleted) + routes.ts/sidebar.tsx/top-bar.tsx/routes/layout.tsx (edited — nav + route +
+  prefetch entries removed); backend admin/email.ts (deleted) + admin/index.ts (deregistered). Net
+  diff: 10 files, +4/-2067 lines. Verified: `npx tsc --noEmit` 0 errors, `npm run build` (backend) 0
+  errors, `npx react-router build` (admin frontend) succeeds — SPA build clean, no forge/email/
+  skill-feedback chunks in output. NOT touched (flagged for follow-up, see design doc): components/
+  forge/** shared lib (KEEP — used by architecture.tsx/skills.tsx/tools.tsx, per the 2026-05-31
+  precedent), agent-presence.tsx dangling "Awaiting forge" links, agent-registry.ts ghost forge-team
+  defs, design-system.tsx Forge showcase tab, skill-pack-explorer.tsx forge breadcrumbs, settings.ts
+  test-email write into now-orphaned email_messages table. NOT restarted (operator ships / decides
+  when to rsync+redeploy to /home/websites/porter/admin). NO commit made in Porter.

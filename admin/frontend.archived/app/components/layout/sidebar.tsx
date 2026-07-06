@@ -6,11 +6,11 @@ import { PixelPortrait } from "~/components/pixel-portrait"
 import { Badge } from "~/components/ui/badge"
 import { Separator } from "~/components/ui/separator"
 import {
-  Mail, LayoutDashboard,
+  LayoutDashboard,
   ChevronLeft, ChevronRight, Settings, LogOut,
   FolderOpen, Route,
-  Code2, Palette, Flame,
-  Wrench, MessageCircle, Brain,
+  Code2, Palette,
+  Wrench, Brain,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -42,11 +42,6 @@ const groups = [
   ]},
   { label: "Projects", items: [
     { icon: FolderOpen, label: "Projects", path: "/files" },
-  ]},
-  { label: "Agents", items: [
-    { icon: Flame, label: "Forge", path: "/forge" },
-    { icon: Mail, label: "Email", path: "/email" },
-    { icon: MessageCircle, label: "Skill Feedback", path: "/skill-feedback" },
   ]},
   { label: "Ops", items: [
     { icon: Route, label: "Bridge", path: "/bridge" },

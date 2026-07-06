@@ -1,6 +1,5 @@
 import { FastifyInstance } from 'fastify';
 import healthRoutes from './health.js';
-import emailRoutes from './email.js';
 import bridgeRoutes from './bridge.js';
 import diagnosticsRoutes from './diagnostics.js';
 import modelsRoutes from './models.js';
@@ -21,7 +20,6 @@ import routingRoutes from './routing.js';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(healthRoutes, { prefix: '/health' });
-  fastify.register(emailRoutes, { prefix: '/email' });
   fastify.register(diagnosticsRoutes, { prefix: '/diagnostics' });
   fastify.register(modelsRoutes, { prefix: '/models' });
   fastify.register(bridgeRoutes, { prefix: '/bridge' });

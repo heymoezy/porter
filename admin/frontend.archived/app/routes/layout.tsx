@@ -49,12 +49,8 @@ function usePreloader() {
           queryClient.prefetchQuery({ queryKey: ["admin", "tools"], queryFn: () => api("/api/admin/tools").catch(() => []) }),
           queryClient.prefetchQuery({ queryKey: ["admin", "tools", "connections"], queryFn: () => api("/api/admin/tools/connections").catch(() => []) }),
           queryClient.prefetchQuery({ queryKey: ["admin", "diagnostics"], queryFn: () => api("/api/admin/diagnostics").catch(() => ({ errors: [], stats: {} })) }),
-          // Email
-          queryClient.prefetchQuery({ queryKey: ["admin", "email", "config"], queryFn: () => api("/api/admin/email/config").catch(() => ({})) }),
           // Recall
           queryClient.prefetchQuery({ queryKey: ["recall", "concepts", "all", "all", ""], queryFn: () => api("/api/v1/memory/concepts?limit=100").catch(() => ({ concepts: [], count: 0 })) }),
-          // Forge
-          queryClient.prefetchQuery({ queryKey: ["forge", "state"], queryFn: () => api("/api/admin/forge").catch(() => ({})) }),
         ]
 
         await Promise.all(prefetches)

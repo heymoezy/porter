@@ -7,8 +7,6 @@ export default [
   // All authenticated routes share one AdminShell instance (no remount on navigation)
   layout("routes/layout.tsx", [
     route("dashboard", "routes/home.tsx"),
-    route("email", "routes/email.tsx"),
-    route("forge", "routes/forge.tsx"),
     route("agents/:id", "routes/agent-detail.tsx"),
     route("system", "routes/system.tsx"),
     route("brain", "routes/brain.tsx"),
@@ -35,7 +33,6 @@ export default [
     route("msg-bus", "routes/msg-bus.tsx"),
     route("env-tools", "routes/env-tools.tsx"),
     route("learnings", "routes/learnings-redirect.tsx"),
-    route("skill-feedback", "routes/skill-feedback.tsx"),
     route("routing", "routes/routing.tsx"),
   ]),
 ] satisfies RouteConfig
