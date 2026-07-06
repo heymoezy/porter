@@ -5,21 +5,26 @@
  * Spawns: codex exec --skip-git-repo-check "<prompt>"
  *
  * Prompt is passed as a positional argument (NOT stdin like Claude CLI).
- * Output structure:
- *   OpenAI Codex v0.130.0
- *   --------
- *   workdir: ...
- *   model: gpt-5.5
- *   ...
- *   --------
- *   user
- *   <prompt>
- *   codex
- *   <response>
- *   tokens used
- *   <N>
+ * Output structure (verified against codex 0.136, 2026-07-06 — the transcript
+ * moved to STDERR; stdout carries ONLY the final message):
+ *   stdout:  <response>
+ *   stderr:  OpenAI Codex v0.136.0
+ *            --------
+ *            workdir: ...
+ *            model: gpt-5.5
+ *            ...
+ *            --------
+ *            user
+ *            <prompt>
+ *            codex
+ *            <response>
+ *            tokens used        ← older builds: "tokens used: <n>" one-liner;
+ *            3,007                count may be comma-grouped
  *
- * Parser extracts the body between the `codex\n` line and `tokens used\n`.
+ * Parser: response = the block between the `codex` line and the `tokens used`
+ * marker when transcript markers are present (old builds put it all on
+ * stdout), else stdout verbatim. model/tokens are parsed from stdout+stderr
+ * combined so both layouts work.
  *
  * One-shot. No tool surface. Not streaming-native — stream() yields the full
  * response as a single chunk after dispatch completes.
@@ -61,27 +66,32 @@ interface ParsedCodexOutput {
 }
 
 /**
- * Parse codex exec stdout. Extracts the response body between the `codex\n`
- * line (after the divider block) and `tokens used\n`. Also pulls `model:`
- * from the header and the token count after `tokens used`.
+ * Parse codex exec output. Response comes from stdout: the body between the
+ * `codex\n` line and the `tokens used` marker when transcript markers are
+ * present (pre-0.136 layout), else stdout verbatim (0.136+ puts the bare
+ * response on stdout). model/tokens are matched against stdout+stderr
+ * combined — codex 0.136 emits the transcript (incl. `model:` and
+ * `tokens used\n3,007`) on stderr, and some builds print the one-liner
+ * `tokens used: <n>`. Count may be comma-grouped.
  *
- * Fallback: if no clean `codex\n` / `tokens used\n` markers, returns the
+ * Fallback: if no clean `codex\n` / `tokens used` markers, returns the
  * everything-after-last-divider slice as the response so we never silently
  * drop content.
  */
-function parseCodexOutput(raw: string): ParsedCodexOutput {
+function parseCodexOutput(raw: string, stderrRaw = ''): ParsedCodexOutput {
   const result: ParsedCodexOutput = { response: '' };
+  const meta = `${raw}\n${stderrRaw}`;
 
   // Header model: e.g. "model: gpt-5.5"
-  const modelMatch = raw.match(/^model:\s*(\S+)/m);
+  const modelMatch = meta.match(/^model:\s*(\S+)/m);
   if (modelMatch) {
     result.model = `codex/${modelMatch[1]}`;
   }
 
-  // Trailing token count: "tokens used\n<digits>"
-  const tokensMatch = raw.match(/tokens used\s*\n\s*(\d+)/);
+  // Trailing token count: "tokens used\n3,007" or "tokens used: 3007"
+  const tokensMatch = meta.match(/tokens used:?\s*([\d,]+)/);
   if (tokensMatch) {
-    result.outputTokens = parseInt(tokensMatch[1], 10);
+    result.outputTokens = parseInt(tokensMatch[1].replace(/,/g, ''), 10);
   }
 
   // Primary parse: find the last standalone `codex` line and slice until
@@ -98,7 +108,7 @@ function parseCodexOutput(raw: string): ParsedCodexOutput {
   if (codexIdx >= 0) {
     let endIdx = lines.length;
     for (let i = codexIdx + 1; i < lines.length; i++) {
-      if (lines[i].trim() === 'tokens used') {
+      if (lines[i].trim().startsWith('tokens used')) {
         endIdx = i;
         break;
       }
@@ -236,7 +246,7 @@ export class CodexCLIAdapter implements GatewayAdapter {
       throw new Error(`Codex CLI exited with code ${exitCode}: ${detail}`);
     }
 
-    const parsed = parseCodexOutput(stdout);
+    const parsed = parseCodexOutput(stdout, Buffer.concat(stderrChunks).toString('utf8'));
 
     return {
       response: parsed.response,

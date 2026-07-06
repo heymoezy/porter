@@ -1,3 +1,10 @@
+## v6.46.0 (2026-07-06)
+
+- chore(cleanup): pre-move `~/documents/porter/` tree cleared — 88 line-named persona debris entries (bad split of a persona markdown; dirs literally named `**Authority:** …` etc.) + empty `skills/_research` deleted. `portal.db` NOT moved: it is the LIVE auth DB of the running portal.service (`/home/websites/porter/portal.py` DB_PATH) — backup copy at `storage/backups/portal.db.pre-move-archive`.
+- chore(cleanup): dead write-only SKILLS.md manifest path deleted — `services/skills-manifest.ts` removed with its 3 fire-and-forget call sites in `routes/admin/skills.ts` (SOT-06 regen wrote into the dead tree; nothing anywhere reads SKILLS.md). `services/admin/prompt-pipeline.ts` dropped its 2 nonexistent config-file entries (`~/documents/porter/CLAUDE.md`, `~/documents/porter-admin/CLAUDE.md`).
+- fix(bridge): codex adapter token telemetry — codex 0.136 moved the transcript to stderr and comma-groups counts; parser now reads both streams, both `tokens used` shapes, strips commas (proven: output_tokens 12,303 in dispatch log; all prior rows were NULL)
+- docs: transactional-email.ts carries a dated do-not-consolidate verdict (coherence slice 2 — client mail stays product-owned)
+
 ## v6.45.0 (2026-07-06)
 
 - feat(intellect): worker knowledge-evolution loop — `worker_knowledge_refresh` (round-robin one due worker per every_24h tick, policy from the worker's vault node, cheap-gateway web research, ONE proposal into the review queue) + `github_scan` (weekly, zero-LLM gh api over ops/github-watchlist.txt, cheap-LLM triage only on change). Nothing auto-applies — Moe accepts. Manual triggers POST /intellect/worker-knowledge-refresh + /github-scan. Pilot proposals pending: Marshall RMI updates (OFAC 2026-06-05 designations, IRI digital-signature regs) + repo digest (fastify 5.10.0 etc.).

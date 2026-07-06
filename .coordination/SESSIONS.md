@@ -824,3 +824,39 @@
   parse expects 'tokens used\n<n>' but codex 0.128 prints 'tokens used: n' → output_tokens null in
   dispatch log; cost telemetry = latency + prompt_chars until fixed. CHECKPOINT.md deliberately NOT
   touched (claimed by U5/U6 session) — this row is the record.
+
+## Coherence slice 2: email consolidation verdict + codex token telemetry (Fable 5, subagent) — 2026-07-06 — **DONE**
+- DESIGN-FIRST slice: classify ymc email.ts ↔ Porter transactional-email.ts duplicate (verdict recorded
+  in _ops/mirrors.tsv); fix codex-cli adapter token parse ("tokens used: n" format, codex >= 0.128).
+- **Files claimed:** backend/src/services/bridge/adapters/codex-cli.ts (EDIT — token parse),
+  backend/src/services/transactional-email.ts (EDIT — dated header note ONLY, no logic).
+- NO commit / NO version bump — operator ships (version pending on top of v6.45.0). MAY restart
+  porter-fastify for verification (build + /health after).
+- Status: **DONE** 2026-07-06 — VERDICT (c): NOT a consolidation, NOT a mirror pair; full evidence
+  recorded in _ops/mirrors.tsv comment block + dated header note in transactional-email.ts (ymc side
+  untouched, zero ymc code changes). Utility-mirror sweep: NONE of countries/password/signed-url/
+  envelope byte-identical; enrolled countries.ts (ymc↔tmz, Nicaragua drift flagged for triage) +
+  envelope.ts (ymc↔Porter) as fork rows; password/signed-url/envelope(tmz) documented NOT-mirrors.
+  mirror-check: 0 flags / 8 pairs. CODEX FIX bigger than reported: codex 0.136 moved the transcript
+  (model: + "tokens used\n3,007") to STDERR and comma-groups the count — old regex was wrong stream
+  AND would truncate "12,303"→"12". Parser now reads meta from stdout+stderr, accepts colon/newline
+  forms, strips commas. PROVEN: tsc 0, build, restart, /health 200 v6.45.0; real Bridge round-trip
+  (dispatchLogId 6d06e582-412e-4edc-95db-95f2819172c8) → bridge_dispatch_log.output_tokens = 12303
+  (all prior codex_cli rows NULL). Version bump pending — operator ships (CHANGELOG.md claimed by the
+  documents/porter cleanup session; this row is the record). NOTE: my 22:5x restart compiled the tree
+  including that session's in-flight (tsc-clean) edits.
+
+## documents/porter dead-tree cleanup (Fable 5) — 2026-07-06 (SGT)
+- Workstream: Remove pre-move ~/documents/porter debris + dead code refs (U5/U6 report follow-up).
+  Delete write-only SKILLS.md manifest path (skills-manifest.ts + 3 call sites in routes/admin/skills.ts),
+  drop dead CLAUDE.md config-file entries in services/admin/prompt-pipeline.ts, delete personas/skills
+  debris dirs. portal.db is LIVE (portal.service → /home/websites/porter/portal.py DB_PATH) — NOT moved.
+- Files claimed (edit/delete): backend/src/services/skills-manifest.ts (DELETE), backend/dist/services/skills-manifest.js (DELETE),
+  backend/src/routes/admin/skills.ts (EDIT — remove manifest call sites), backend/src/services/admin/prompt-pipeline.ts (EDIT — 2 dead entries),
+  CHANGELOG.md + CHECKPOINT.md (entries only, version bump left to operator), ~/documents/porter/{personas,skills} (DELETE).
+- NOT touching: bridge/** (incl. adapters + routes/admin/bridge.ts), _ops/**, portal.db, systemd units. NO commits.
+- Status: **DONE** 2026-07-06 — tsc 0, build clean, porter-fastify restarted, /health 200 (v6.45.0;
+  v6.46.0 bump left to operator). 88 personas debris entries + empty skills/ deleted; tree = portal.db only.
+  portal.db LIVE (portal.py DB_PATH) -> stop-branch: not moved; backup copy storage/backups/portal.db.pre-move-archive.
+  skills-manifest.ts deleted (+3 call sites in routes/admin/skills.ts); prompt-pipeline.ts 2 dead entries dropped.
+  Re-grep of deleted symbols clean. CHANGELOG v6.46.0-pending + CHECKPOINT entries written. NO commits made.

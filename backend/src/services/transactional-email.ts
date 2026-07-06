@@ -1,3 +1,18 @@
+/**
+ * Porter's OWN product mail (signup verification, password reset, project
+ * collaboration invites + drip) over Porter's own SMTP identity
+ * (workspace_settings → env fallback).
+ *
+ * DO NOT CONSOLIDATE with ymc.capital backend/src/services/email.ts
+ * (coherence slice 2 verdict, 2026-07-06). Same-lineage boilerplate only
+ * (nodemailer lazy transport + 6-digit token helpers, stable on both sides
+ * since inception). Everything that matters is product-owned and must stay
+ * that way: ymc's client-emails hold gate reads ymc's users table (2026-05-31
+ * incident control), templates/branding live in each product's DB, SMTP
+ * identities differ, and routing ymc client mail through Porter would make
+ * every Porter restart an outage window for ymc auth/client mail. Rationale
+ * recorded in /home/lobster/projects/_ops/mirrors.tsv.
+ */
 import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import { pool } from '../db/client.js';

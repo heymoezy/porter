@@ -1,5 +1,26 @@
 # Porter Checkpoint
 
+## 2026-07-06 — v6.46.0 pending: documents/porter dead-tree cleanup (U5/U6 follow-up)
+- **portal.db is LIVE — stop-branch invoked.** portal.service (running) executes
+  /home/websites/porter/portal.py with `DB_PATH = "/home/lobster/documents/porter/portal.db"`,
+  sqlite3.connect per request (WAL sidecars touched today). NOT moved; tree kept as its home.
+  Contents: admin_credentials 1 row (portal admin password hash), users/sessions/admin_sessions 0 rows.
+  Backup copy: storage/backups/portal.db.pre-move-archive (36,864 bytes). Moe's disposition options:
+  leave as-is, or repoint portal.py DB_PATH + restart portal.service, then retire the tree.
+- Deleted: 88 debris entries under personas/ (10 SOUL.md files + dirs named after markdown lines —
+  a persona doc split by lines and mkdir'd per line) + empty skills/_research. Tree now portal.db only.
+- Dead code removed: services/skills-manifest.ts (write-only SKILLS.md manifest into the dead tree;
+  zero readers of SKILLS.md or config.personasDir anywhere) + its 3 call sites/import in
+  routes/admin/skills.ts; prompt-pipeline.ts GATEWAY_CONFIG_FILES dropped the 2 nonexistent
+  documents/porter{,-admin}/CLAUDE.md entries (global ~/CLAUDE.md kept). bridge/** untouched.
+- Report-only (outside scope, still pointing at the dead path): .claude/settings.json hook commands
+  reference /home/lobster/documents/porter/.claude/hooks/*.sh (scripts actually live in
+  projects/Porter/.claude/hooks/ — hooks silently no-op); pre-compact.sh/session-end.sh CWD defaults;
+  ~/.config/systemd/user/porter-admin.service (disabled+dead, WorkingDirectory=documents/porter/admin/backend);
+  tests/test_p0_p1.py runtime/leases paths; seed scripts (one-time, historical).
+- Verified: tsc 0, build clean, porter-fastify restarted, /health 200 v6.45.0; /api/admin/skills +
+  /api/admin/bridge/prompts respond 401 (auth-gated, modules load). Version bump to v6.46.0 left to operator.
+
 ## 2026-07-06 — v6.45.0: worker knowledge-evolution loop (Moe's directive, proposals-only)
 - worker-knowledge.ts: one due worker per every_24h tick (policy fields refresh_days/data_file/
   research_focus parsed from vault/entities/worker-*.md — 7 nodes committed), CHEAP_GATEWAY=codex_cli

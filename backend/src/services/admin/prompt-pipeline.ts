@@ -53,8 +53,6 @@ function readFileSafe(path: string): string | null {
 const GATEWAY_CONFIG_FILES: Record<string, Array<{ name: string; path: string }>> = {
   claude_cli: [
     { name: 'CLAUDE.md (global)', path: join(homedir(), 'CLAUDE.md') },
-    { name: 'CLAUDE.md (porter)', path: join(homedir(), 'documents', 'porter', 'CLAUDE.md') },
-    { name: 'CLAUDE.md (admin)', path: join(homedir(), 'documents', 'porter-admin', 'CLAUDE.md') },
   ],
 };
 

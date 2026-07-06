@@ -6,7 +6,6 @@ import { FastifyInstance } from 'fastify';
 import { ok, err } from '../../lib/admin-envelope.js';
 import { queryAll, queryOne, execute } from '../../db/pg-helpers.js';
 import { proxyToAdmin } from '../../lib/admin-proxy.js';
-import { writeSkillsManifest } from '../../services/skills-manifest.js';
 
 // ── Quality scoring (ported from admin/backend/src/services/skill-library.ts) ──
 
@@ -365,24 +364,9 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
     const exists = await queryOne('SELECT id FROM skills WHERE id = $1', [id]);
     if (!exists) { reply.status(404); return err('NOT_FOUND', `Skill ${id} not found`); }
 
-    // Find affected personas before deletion for SKILLS.md regeneration (SOT-06)
-    const affectedPersonas = await queryAll<{ persona_id: string; name: string }>(
-      `SELECT DISTINCT ps.persona_id, p.name FROM persona_skills ps
-       JOIN personas p ON p.id = ps.persona_id
-       WHERE ps.skill_id = $1 OR ps.skill_name = $1`,
-      [id]
-    );
-
     await execute('DELETE FROM persona_skills WHERE skill_id = $1 OR skill_name = $1', [id]);
     await execute('DELETE FROM template_skills WHERE skill_id = $1', [id]);
     await execute('DELETE FROM skills WHERE id = $1', [id]);
-
-    // Regenerate SKILLS.md for affected personas (SOT-06)
-    for (const p of affectedPersonas) {
-      try { await writeSkillsManifest(p.persona_id, p.name); } catch (e) {
-        console.error(`Failed to regenerate SKILLS.md for ${p.persona_id}:`, e);
-      }
-    }
 
     return ok({ id, deleted: true });
   });
@@ -513,14 +497,6 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
       );
     }
     // rewrite_prompt and enrich_examples are flagged for manual follow-up — no persona_skills mutation
-
-    // Regenerate SKILLS.md for this persona
-    const personaRow = await queryOne<{ name: string }>('SELECT name FROM personas WHERE id = $1', [proposal.persona_id]);
-    if (personaRow) {
-      try { await writeSkillsManifest(proposal.persona_id, personaRow.name); } catch (e) {
-        console.error('Failed to regenerate SKILLS.md after proposal approve:', e);
-      }
-    }
 
     // Log evolution event
     const eventId = crypto.randomUUID();
@@ -752,13 +728,6 @@ export default async function skillsRoutes(fastify: FastifyInstance) {
       'UPDATE persona_skills SET enabled = $1 WHERE persona_id = $2 AND (skill_id = $3 OR skill_name = $3)',
       [newEnabled, personaId, skillId]
     );
-    // Regenerate SKILLS.md (SOT-06)
-    const persona = await queryOne<{ name: string }>('SELECT name FROM personas WHERE id = $1', [personaId]);
-    if (persona) {
-      try { await writeSkillsManifest(personaId, persona.name); } catch (e) {
-        console.error('Failed to regenerate SKILLS.md:', e);
-      }
-    }
     return ok({ personaId, skillId, enabled: !!newEnabled });
   });
 
