@@ -1,4 +1,4 @@
-## Unreleased (2026-07-06) — memory unification U5+U6 (operator to bump version on ship)
+## v6.43.0 (2026-07-06) — memory unification U5+U6 complete
 
 - feat(intellect): U6 claude-rules mirror — `claude-rules-mirror.ts` renders ~/CLAUDE.md Hard Rules + per-project CLAUDE.md non-negotiables into ONE workspace directive (source_type='claude_rules_mirror', p60), sha256 hash-idempotent, supersedes its own prior row (never accumulates), refreshes the U1 vault mirror; 'Mirror Claude session rules' on the existing every_24h tick + POST /api/v1/intellect/claude-rules-mirror
 - data(intellect): U5 migration — 30-row RMI agent concept pack rewritten as 4 vault nodes (concepts/rmi-*.md) and indexed back as source_type='vault'; originals archived (reversible); 11 superseded Ollama/Node release subscription rows archived (feeds, not knowledge)
