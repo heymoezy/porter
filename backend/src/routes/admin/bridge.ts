@@ -588,7 +588,7 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
 
     // ── add ───────────────────────────────────────────────────────────────
     if (action === 'add') {
-      const VALID_TYPES = new Set(['ollama', 'openclaw', 'codex_cli', 'claude_cli', 'gemini_cli', 'openai_compat']);
+      const VALID_TYPES = new Set(['ollama', 'openclaw', 'codex_cli', 'claude_cli', 'antigravity_cli', 'gemini_cli', 'openai_compat']);
       const type = data.type as string | undefined;
       const name = data.name as string | undefined;
       if (!type || !name) return reply.send(err('MISSING_FIELDS', 'type and name are required'));

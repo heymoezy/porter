@@ -36,6 +36,17 @@ export const GATEWAY_CAPABILITY_REGISTRY: Record<GatewayType, GatewayCapabilityR
     tool_support: 'none',
     agentic: false,
   },
+  // Google Antigravity CLI (`agy --print`) — one-shot from Bridge's view: no
+  // tool injection surface (the CLI runs its own internal tools), so
+  // tool_support/agentic mirror codex_cli. Serves Gemini 3.x / Claude / GPT-OSS.
+  antigravity_cli: {
+    legacy_tags: ['chat', 'one_shot', 'no_tools'],
+    strengths: ['reasoning', 'coding', 'analysis', 'writing'],
+    cost_tier: 'standard',
+    context_window: 1_000_000,
+    tool_support: 'none',
+    agentic: false,
+  },
 };
 
 // ── Helper functions ──────────────────────────────────────────────────────────

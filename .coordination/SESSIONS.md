@@ -774,14 +774,20 @@
 - Files claimed: backend/src/services/intellect/claude-rules-mirror.ts (NEW), backend/src/services/intellect/workflow-engine.ts (EDIT — action + seed), backend/src/routes/v1/intellect.ts (EDIT — POST trigger), CHECKPOINT.md/CHANGELOG.md, personas/<14 orphaned hash dirs> (DELETE). Vault: concepts/rmi-*.md (NEW), INDEX.md, entities/iri-rmi.md, concepts/rules-architecture.md (NEW).
 - Status: done (2026-07-06)
 
-## Bridge antigravity gateway (Fable 5, subagent) — 2026-07-06
+## Bridge antigravity gateway (Fable 5, subagent) — 2026-07-06 — **DONE** (live; uncommitted — operator ships)
 - FIX: register the antigravity CLI as a Bridge gateway alongside claude_cli/codex_cli;
   verify with a real /api/v1/bridge/agent-message round-trip. Restart allowed (build + /health).
 - **Files claimed:** backend/src/services/bridge/adapters/antigravity-cli.ts (NEW),
   backend/src/services/bridge/adapters/index.ts, possibly bridge/types.ts + startup-detector.ts.
 - NOT touching backend/src/services/intellect/* or dream-prompts (U5/U6 session owns them).
 - NO commit / NO version bump — operator ships (v6.43.0 pending with U5/U6 set).
-- Status: active
+- Also touched: backend/src/routes/v1/bridge.ts + routes/admin/bridge.ts (VALID_TYPES sets),
+  ~/.config/systemd/user/porter-fastify.service (PATH += ~/.local/bin so which('agy') resolves).
+- Status: **DONE** 2026-07-06 — exec contract: `agy --print "<prompt>"` (positional prompt,
+  plain-text stdout, exit 0; `--model` by display name; `agy models` lists; --version bare).
+  tsc 0, build clean, restart, /health 200 v6.43.0; boot log detects claude+codex+antigravity.
+  REAL round-trip proven: POST /agent-message targetGateway=antigravity_cli → coherent reply
+  ("The capital of the Marshall Islands is Majuro."), gatewayType antigravity_cli, 22s.
 
 ## Worker knowledge-evolution loop (Fable 5, subagent) — 2026-07-06 (SGT)
 - Workstream: Moe's /loop order — per-worker knowledge nodes evolve via proposals. NEW
@@ -797,7 +803,7 @@
   'claude_rules_mirror', (c) 2 actionHandlers entries after claude_rules_mirror, (d) 2
   BUILTIN_WORKFLOWS rows appended at array end. routes/v1/intellect.ts MINIMAL: 2 POST
   routes (/worker-knowledge-refresh, /github-scan) inserted after /failure-digest + 2 imports.
-- Runtime state (not repo): ~/.porter/worker-knowledge-state.json, ~/.porter/github-scan-state.json.
+- Runtime state (not repo): Porter/runtime/worker-knowledge-state.json, Porter/runtime/github-scan-state.json (PORTER_DATA_DIR/runtime).
 - Vault (self-commits): NEW entities/worker-{rolo,archie,postie,quill,gaffer,marshall,sentinel}.md,
   NEW concepts/worker-knowledge-loop.md, INDEX.md (append-only lines — U5/U6 also claims INDEX.md;
   keeping the hunk tiny + committing immediately).

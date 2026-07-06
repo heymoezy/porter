@@ -1,6 +1,14 @@
 # Porter Checkpoint
 
-## 2026-07-06 — memory unification U5+U6 complete (built on v6.42.0; operator bumps version on ship)
+## 2026-07-06 — v6.44.0: antigravity joins Bridge (3 gateways)
+- adapters/antigravity-cli.ts (mirrors codex: positional prompt, plain stdout, 300s); registered in
+  ADAPTER_MAP/types/capability-registry/startup-detector (env override or PATH scan; porter-fastify
+  unit PATH += ~/.local/bin — service couldn't see `agy` otherwise); VALID_TYPES both bridge routes.
+- Proven: boot log detection + real agent-message round-trip via targetGateway antigravity_cli
+  (22,029ms, correct answer). agy applies Moe's ~/.gemini/antigravity global config (documented).
+- Cheap-tier council/worker routing now has codex_cli AND antigravity_cli.
+
+## 2026-07-06 — v6.43.0: memory unification U5+U6 complete
 - **U5 (migration):** the 30 '[Marshall Islands]' agent-scope concept rows → 4 vault nodes
   (vault/concepts/rmi-{corporate-program,tax-and-substance,compliance-gotchas,redomiciliation}.md,
   wired into INDEX.md + entities/iri-rmi.md), indexed back via POST /vault-index (source_type='vault');

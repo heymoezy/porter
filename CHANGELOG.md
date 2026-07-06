@@ -1,3 +1,7 @@
+## v6.44.0 (2026-07-06)
+
+- feat(bridge): antigravity CLI registered as gateway `antigravity_cli` — adapter mirrors codex (positional prompt, plain stdout), startup detection (PORTER_ANTIGRAVITY_PATH or PATH scan incl. ~/.local/bin via unit PATH extension), capability record, VALID_TYPES; real round-trip proven (22s, Gemini-backed). Bridge now routes to 3 gateways: claude_cli, codex_cli, antigravity_cli.
+
 ## v6.43.0 (2026-07-06) — memory unification U5+U6 complete
 
 - feat(intellect): U6 claude-rules mirror — `claude-rules-mirror.ts` renders ~/CLAUDE.md Hard Rules + per-project CLAUDE.md non-negotiables into ONE workspace directive (source_type='claude_rules_mirror', p60), sha256 hash-idempotent, supersedes its own prior row (never accumulates), refreshes the U1 vault mirror; 'Mirror Claude session rules' on the existing every_24h tick + POST /api/v1/intellect/claude-rules-mirror

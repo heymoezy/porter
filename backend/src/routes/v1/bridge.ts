@@ -59,7 +59,7 @@ function maskCredentialRow(row: any) {
 
 /** Valid gateway types — used for input validation in setup routes. */
 const VALID_GATEWAY_TYPES = new Set([
-  'ollama', 'openclaw', 'codex_cli', 'claude_cli', 'gemini_cli', 'openai_compat',
+  'ollama', 'openclaw', 'codex_cli', 'claude_cli', 'antigravity_cli', 'gemini_cli', 'openai_compat',
 ]);
 
 /**

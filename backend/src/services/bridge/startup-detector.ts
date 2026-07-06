@@ -176,6 +176,47 @@ export async function detectAndUpsertGateways(pool: pg.Pool): Promise<DetectionR
       console.log('[bridge] ✗ codex not found on PATH');
     }
 
+    // Detect Antigravity CLI binary `agy` (env override or PATH scan)
+    const agyBinaryPath = process.env.PORTER_ANTIGRAVITY_PATH ?? await which('agy').catch(() => null);
+
+    if (agyBinaryPath) {
+      const agyId = crypto.randomUUID();
+      await pool.query(
+        `INSERT INTO gateways (id, type, name, url, auth_method, status, source, priority, capabilities, metadata, enabled, created_at, updated_at)
+         VALUES ($1, 'antigravity_cli', 'Antigravity CLI', NULL, 'none', 'active', 'auto_detected', 30, $2, $3, 1, EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+         ON CONFLICT (type, source) WHERE source IN ('auto_detected', 'env_bootstrap')
+         DO UPDATE SET
+           status       = 'active',
+           capabilities = EXCLUDED.capabilities,
+           metadata     = EXCLUDED.metadata,
+           updated_at   = EXTRACT(EPOCH FROM NOW())`,
+        [
+          agyId,
+          JSON.stringify(GATEWAY_CAPABILITY_REGISTRY.antigravity_cli),
+          JSON.stringify({ binary_path: agyBinaryPath }),
+        ],
+      );
+      console.log(`[bridge] ✓ antigravity (agy) detected at ${agyBinaryPath}`);
+
+      // Probe the freshly upserted gateway
+      const { rows } = await pool.query(
+        `SELECT * FROM gateways WHERE type = 'antigravity_cli' AND source = 'auto_detected'`,
+      );
+      if (rows.length > 0) {
+        results.push(await probeGateway(mapRawToGatewayRow(rows[0])));
+      } else {
+        results.push({ type: 'antigravity_cli', name: 'Antigravity CLI', found: true, healthy: false, models: [] });
+      }
+    } else {
+      // Mark stale if binary not found
+      await pool.query(
+        `UPDATE gateways SET status = 'stale', updated_at = EXTRACT(EPOCH FROM NOW())
+         WHERE type = 'antigravity_cli' AND source = 'auto_detected' AND status != 'stale'`,
+      );
+      results.push({ type: 'antigravity_cli', name: 'Antigravity CLI', found: false, healthy: false, models: [] });
+      console.log('[bridge] ✗ antigravity (agy) not found on PATH');
+    }
+
     console.log('[bridge] Gateway detection complete');
 
     const zeroConfigReady = results.some(g => g.found && g.healthy);
