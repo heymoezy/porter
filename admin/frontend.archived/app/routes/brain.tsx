@@ -176,7 +176,7 @@ export default function BrainPage() {
     },
   })
   const runDream = useMutation({
-    mutationFn: () => api("/api/v1/intellect/dream-run", { method: "POST", body: JSON.stringify({ triggered_by: "admin-brain" }) }),
+    mutationFn: () => api("/api/v1/intellect/dream-run", { method: "POST", json: { triggered_by: "admin-brain" } }),
   })
 
   const reviewTotal = (s?.proposals_pending ?? 0) + (s?.candidates_pending ?? 0)

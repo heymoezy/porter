@@ -1,5 +1,14 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.57.0: admin hygiene — typecheck 0, untrack build/, dream-run fix
+- Cleared the 2 pre-existing admin typecheck errors: skills-studio.tsx Skill.packStatus widened
+  `string`→`"ready"|"partial"|"missing"` (was clashing with skill-edit-sheet's Skill, TS2719);
+  brain.tsx dream-run POST used `body:` (dropped by ApiOptions which omits body) → `json:` — real
+  fix, the admin dream-run trigger was sending an EMPTY body. admin typecheck now 0 errors.
+- Untracked admin/frontend.archived/build/ (137 stale build artifacts) + gitignored it — deploy.sh
+  is the ship path; the in-repo build was churn.
+- Clears the follow-ups flagged in v6.55.0.
+
 ## 2026-07-07 — v6.56.0: Vault v2 R1f — edge ingestion
 - POST /api/v1/vault/edges {app_scope, edges:[{fromExternalId,toExternalId,kind,metadata?}]} — bulk
   create NON-hierarchical relationships between existing nodes (person↔deal, doc↔person,

@@ -48,3 +48,4 @@ admin/frontend/build/
 uploads/
 backend/dist.*bak*
 backend/dist.ship-bak
+admin/frontend.archived/build/

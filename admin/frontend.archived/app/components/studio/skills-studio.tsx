@@ -23,7 +23,7 @@ interface Skill {
   enabled: boolean; visible: boolean; featured: boolean
   icon: string; color: string; short_label: string
   sort_order: number; featured_order: number
-  packStatus: string
+  packStatus: "ready" | "partial" | "missing"
   qualityScore: number
   qualityTier: QualityTier
   tags: string[]
