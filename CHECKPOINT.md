@@ -1,5 +1,10 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.58.0: vault graph returns placementId (review-queue support)
+- GET /api/v1/vault/graph now returns each node's current placement id (pl.id AS placement_id →
+  placementId) alongside parent_id/state. The accept/refile review-queue ops key off the PLACEMENT
+  row id, not the node id — the ymc review-queue UI (R3) needs it to act. Additive, from the R3 build.
+
 ## 2026-07-07 — v6.57.0: admin hygiene — typecheck 0, untrack build/, dream-run fix
 - Cleared the 2 pre-existing admin typecheck errors: skills-studio.tsx Skill.packStatus widened
   `string`→`"ready"|"partial"|"missing"` (was clashing with skill-edit-sheet's Skill, TS2719);

@@ -1,3 +1,8 @@
+## v6.58.0 (2026-07-07)
+
+- Admin hygiene: typecheck 0, untrack build/, dream-run json fix (v6.57.0)
+
+
 ## v6.56.0 (2026-07-07)
 
 - Porter admin: MCP management page + forge dead-code cleanup (v6.55.0)

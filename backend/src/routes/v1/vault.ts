@@ -437,10 +437,10 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
 
       const nodeRows = (await pool.query(
         `SELECT n.id, n.external_id, n.layer, n.type, n.title, n.status,
-                pl.parent_id, pl.state AS placement_state, pl.confidence
+                pl.id AS placement_id, pl.parent_id, pl.state AS placement_state, pl.confidence
          FROM vault_nodes n
          LEFT JOIN LATERAL (
-           SELECT parent_id, state, confidence FROM vault_placements p
+           SELECT id, parent_id, state, confidence FROM vault_placements p
            WHERE p.app_scope = n.app_scope AND p.node_id = n.id AND p.layer = n.layer
              AND p.state IN ('active','proposed')
            ORDER BY CASE p.state WHEN 'active' THEN 0 ELSE 1 END, p.created_at DESC
@@ -451,9 +451,12 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
         params
       )).rows as Array<{
         id: string; external_id: string; layer: string; type: string; title: string;
-        status: string; parent_id: string | null; placement_state: string | null; confidence: number | null;
+        status: string; placement_id: string | null; parent_id: string | null; placement_state: string | null; confidence: number | null;
       }>;
 
+      // placementId is the vault_placements row id — the accept/refile review-queue
+      // ops below key off THIS, not the node id (a node can be re-reviewed many
+      // times; each review targets the current active-or-proposed placement row).
       const nodes = nodeRows.map((r) => ({
         id: r.id,
         externalId: r.external_id,
@@ -461,6 +464,7 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
         type: r.type,
         title: r.title,
         status: r.status,
+        placementId: r.placement_id,
         parentId: r.parent_id,
         placementState: r.placement_state,
         confidence: r.confidence,
