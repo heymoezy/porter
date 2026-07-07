@@ -1,5 +1,20 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.51.0: Vault v2 R1c — ingest API
+- POST /api/v1/vault/ingest {app_scope, items:[{externalId,type,title,source?,proposedParentExternalId?}]}.
+  Apps PUSH data (Porter never pulls). Each item type-checked against the registered schema
+  (UNKNOWN_TYPE rejected; NO_SCHEMA 409 if scope never registered). Materializes
+  node(active) + artifact + placement(state='proposed'). Transactional, batch ≤2000.
+- AI auto-association = a marked STUB (resolveProposedParentId): honours proposedParentExternalId
+  today, swaps to a Bridge classifier later — contract unchanged. Everything lands as PROPOSED so
+  it flows through the review queue; an existing ACTIVE placement is never disturbed.
+- Hierarchy enforced: a parent's type must be in the child type's declared parentTypes, else the
+  node is rooted with a placementNote. Idempotent per (app_scope, externalId): re-ingest updates
+  node + source artifact (dedup by node/kind/source_id|path), no duplicates.
+- Verified: NO_SCHEMA gate, 3-level tree (Deals→Epic→Term Sheet) in one batch, artifact create,
+  idempotent re-ingest (counts stable), unknown-type reject, hierarchy-violation rooting. Test data purged.
+- NEXT R1d: GET /vault/graph?scope=&layer=&focus= (scoped read, active placements, subtree focus).
+
 ## 2026-07-07 — v6.50.0: Vault v2 R1b — register-schema API
 - backend/src/routes/v1/vault.ts (NEW, registered under /api/v1/vault): apps DECLARE
   their node-types via POST /register-schema {app_scope, node_types:[{type,layer,parentTypes[]}]};
