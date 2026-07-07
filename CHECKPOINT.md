@@ -1,5 +1,29 @@
 # Porter Checkpoint
 
+## 2026-07-07 — Porter MCP server alpha (still v6.58.0 — no version bump, build+verify only)
+- backend/src/mcp/{porter-mcp,server,vault-lookup,context-pack,registry}.ts — the FIRST headless MCP
+  server: exposes Porter to Claude Code over stdio (StdioServerTransport, @modelcontextprotocol/sdk
+  ^1.29.0, new standard dep). 6 tools: porter_select_product, porter_search_vault,
+  porter_get_context_pack (THE token-reduction tool — capped ~2k-token Markdown brief per topic),
+  porter_list_files, porter_list_services, porter_list_tools. Plus one optional resource
+  (porter-vault://{scope} node/edge-count summary).
+- Reads DIRECTLY via the same in-process pg pool as the HTTP vault routes (db/client.ts) — no HTTP
+  hop, no service token needed for this process. Read-only: nothing here writes to the vault.
+- list_files/list_services/list_tools wire the new `products` table (landed mid-session from a
+  parallel workstream — services/backend/frontend jsonb) where available, and degrade gracefully
+  (vault fallback / Porter's global tools table / honest empty+note) where it isn't yet.
+- Verified: backend tsc 0. Full stdio handshake (initialize → tools/list → 6x tools/call) against the
+  live porter-fastify Postgres — porter_get_context_pack('Edward Chen workout', 'ymc') returns a real
+  ~800-char/~200-token pack from the live ymc vault (3,026 nodes/573 edges). porter_select_product
+  correctly surfaces the real `products` row (YMC Capital, repo_path, tenant); porter_list_services
+  derives ymc-backend (:5182) / ymc-frontend (:5180) from products.backend/frontend.
+- Install note (not applied — operator's ~/.claude.json to edit):
+  `{"porter": {"command": "npx", "args": ["tsx", "/home/lobster/projects/Porter/backend/src/mcp/server.ts"]}}`
+  (or `node dist/mcp/server.js` after `npm run build`), needs DATABASE_URL in env or relies on
+  db/client.ts's matching local-dev default.
+- NEXT: write-capable tools (once a write contract is agreed), Recall FTS backing search_vault
+  alongside the vault ILIKE, ancestor-chain resolution once products gets a parent-scope column.
+
 ## 2026-07-07 — v6.58.0: vault graph returns placementId (review-queue support)
 - GET /api/v1/vault/graph now returns each node's current placement id (pl.id AS placement_id →
   placementId) alongside parent_id/state. The accept/refile review-queue ops key off the PLACEMENT
