@@ -1,6 +1,14 @@
 # Porter Checkpoint
 
-## 2026-07-07 — Porter MCP server alpha (still v6.58.0 — no version bump, build+verify only)
+## 2026-07-07 — v6.59.0: MCP server alpha + vault review-queue engine ops
+- Review-queue engine (backend/src/routes/v1/vault.ts, additive — R3/R4 support): POST /placements/:id/reject
+  (state='rejected'), PATCH /nodes/:id {title,type,metadata} (type validated vs schema; cross-layer change
+  refused), POST /placements/:id/refine (Bridge cheap-gateway suggests a better parent/type — never
+  auto-applies), GET /nodes/:id (detail: node+parent+1-hop edges+artifacts), GET /graph gains a `source`
+  field. Powers the ymc review TABLE (approve/reject/edit/refine/discuss).
+- MCP server alpha (below) shipped in the same release; @modelcontextprotocol/sdk installed.
+
+## 2026-07-07 — Porter MCP server alpha (folded into v6.59.0)
 - backend/src/mcp/{porter-mcp,server,vault-lookup,context-pack,registry}.ts — the FIRST headless MCP
   server: exposes Porter to Claude Code over stdio (StdioServerTransport, @modelcontextprotocol/sdk
   ^1.29.0, new standard dep). 6 tools: porter_select_product, porter_search_vault,

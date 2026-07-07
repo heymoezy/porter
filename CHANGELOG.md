@@ -1,3 +1,8 @@
+## v6.59.0 (2026-07-07)
+
+- R6: Porter MCP server alpha (headless knowledge for Claude)
+
+
 ## v6.58.0 (2026-07-07)
 
 - Admin hygiene: typecheck 0, untrack build/, dream-run json fix (v6.57.0)

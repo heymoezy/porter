@@ -3,6 +3,9 @@ import crypto from 'crypto';
 import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
 import { runVaultDerivativeSweep, getDerivativeCoverage } from '../../services/vault-derivatives.js';
+import { routingEngine } from '../../services/bridge/routing-engine.js';
+import type { BridgeDispatchRequest, RoutingContext } from '../../services/bridge/types.js';
+import { CHEAP_GATEWAY, CHEAP_MODEL } from '../../services/intellect/worker-knowledge.js';
 
 /**
  * Vault v2 — the generic knowledge-graph engine.
@@ -437,7 +440,8 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
 
       const nodeRows = (await pool.query(
         `SELECT n.id, n.external_id, n.layer, n.type, n.title, n.status,
-                pl.id AS placement_id, pl.parent_id, pl.state AS placement_state, pl.confidence
+                pl.id AS placement_id, pl.parent_id, pl.state AS placement_state, pl.confidence,
+                src.kind AS source_kind, src.source_system, src.source_id, src.path AS source_path
          FROM vault_nodes n
          LEFT JOIN LATERAL (
            SELECT id, parent_id, state, confidence FROM vault_placements p
@@ -446,17 +450,26 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
            ORDER BY CASE p.state WHEN 'active' THEN 0 ELSE 1 END, p.created_at DESC
            LIMIT 1
          ) pl ON true
+         LEFT JOIN LATERAL (
+           SELECT kind, source_system, source_id, path FROM vault_artifacts a
+           WHERE a.app_scope = n.app_scope AND a.node_id = n.id
+           ORDER BY a.created_at DESC LIMIT 1
+         ) src ON true
          WHERE ${where}
          ORDER BY n.type, n.title`,
         params
       )).rows as Array<{
         id: string; external_id: string; layer: string; type: string; title: string;
         status: string; placement_id: string | null; parent_id: string | null; placement_state: string | null; confidence: number | null;
+        source_kind: string | null; source_system: string | null; source_id: string | null; source_path: string | null;
       }>;
 
-      // placementId is the vault_placements row id — the accept/refile review-queue
-      // ops below key off THIS, not the node id (a node can be re-reviewed many
-      // times; each review targets the current active-or-proposed placement row).
+      // placementId is the vault_placements row id — the accept/refile/reject
+      // review-queue ops below key off THIS, not the node id (a node can be
+      // re-reviewed many times; each review targets the current
+      // active-or-proposed placement row). `source` is the node's most recent
+      // ingest artifact (kind + originating system/path) — the review table's
+      // "Source" column, so a reviewer sees WHERE a proposed node came from.
       const nodes = nodeRows.map((r) => ({
         id: r.id,
         externalId: r.external_id,
@@ -468,6 +481,9 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
         parentId: r.parent_id,
         placementState: r.placement_state,
         confidence: r.confidence,
+        source: r.source_kind
+          ? { kind: r.source_kind, sourceSystem: r.source_system, sourceId: r.source_id, path: r.source_path }
+          : null,
       }));
 
       // Non-hierarchical edges, restricted to the returned node set.
@@ -486,9 +502,164 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
     }
   );
 
+  // GET /api/v1/vault/nodes/:id — single-node detail: the node itself, its
+  // resolved parent (active-or-latest-proposed placement, same precedence as
+  // GET /graph), its 1-hop edges (both directions, with the other endpoint's
+  // title/type resolved), and its ingest artifacts. Built for the review
+  // table's Discuss/Edit surfaces, which need one node's full context without
+  // paying for a whole-scope graph fetch.
+  fastify.get(
+    '/nodes/:id',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const id = (request.params as Record<string, string>).id;
+      const node = (await pool.query(
+        `SELECT id, app_scope, external_id, layer, type, title, status, metadata, created_at, updated_at
+         FROM vault_nodes WHERE id = $1`,
+        [id]
+      )).rows[0] as
+        | { id: string; app_scope: string; external_id: string; layer: string; type: string; title: string; status: string; metadata: Record<string, unknown>; created_at: number; updated_at: number }
+        | undefined;
+      if (!node) return reply.code(404).send(err('NODE_NOT_FOUND', `node "${id}" not found`, request.id));
+
+      const placement = (await pool.query(
+        `SELECT id, parent_id, state, confidence, proposed_by, reviewed_by, reviewed_at, created_at
+         FROM vault_placements p
+         WHERE p.app_scope = $1 AND p.node_id = $2 AND p.layer = $3 AND p.state IN ('active','proposed')
+         ORDER BY CASE p.state WHEN 'active' THEN 0 ELSE 1 END, p.created_at DESC
+         LIMIT 1`,
+        [node.app_scope, node.id, node.layer]
+      )).rows[0] as
+        | { id: string; parent_id: string | null; state: string; confidence: number | null; proposed_by: string; reviewed_by: string | null; reviewed_at: number | null; created_at: number }
+        | undefined;
+
+      const parent = placement?.parent_id
+        ? (await pool.query(`SELECT id, title, type FROM vault_nodes WHERE id = $1`, [placement.parent_id])).rows[0] as
+            | { id: string; title: string; type: string }
+            | undefined
+        : undefined;
+
+      const edgeRows = (await pool.query(
+        `SELECT e.id, e.from_node_id, e.to_node_id, e.kind, e.metadata,
+                fn.title AS from_title, fn.type AS from_type, tn.title AS to_title, tn.type AS to_type
+         FROM vault_edges e
+         JOIN vault_nodes fn ON fn.id = e.from_node_id
+         JOIN vault_nodes tn ON tn.id = e.to_node_id
+         WHERE e.app_scope = $1 AND (e.from_node_id = $2 OR e.to_node_id = $2)
+         ORDER BY e.created_at DESC LIMIT 50`,
+        [node.app_scope, node.id]
+      )).rows as Array<{
+        id: string; from_node_id: string; to_node_id: string; kind: string; metadata: Record<string, unknown>;
+        from_title: string; from_type: string; to_title: string; to_type: string;
+      }>;
+
+      const artifactRows = (await pool.query(
+        `SELECT id, kind, source_system, source_id, path, content_hash, metadata, created_at
+         FROM vault_artifacts WHERE app_scope = $1 AND node_id = $2 ORDER BY created_at DESC LIMIT 20`,
+        [node.app_scope, node.id]
+      )).rows as Array<{
+        id: string; kind: string; source_system: string | null; source_id: string | null; path: string | null;
+        content_hash: string | null; metadata: Record<string, unknown>; created_at: number;
+      }>;
+
+      return reply.send(
+        ok(
+          {
+            node: {
+              id: node.id, appScope: node.app_scope, externalId: node.external_id, layer: node.layer,
+              type: node.type, title: node.title, status: node.status, metadata: node.metadata,
+              createdAt: node.created_at, updatedAt: node.updated_at,
+            },
+            placement: placement
+              ? {
+                  id: placement.id, parentId: placement.parent_id, state: placement.state, confidence: placement.confidence,
+                  proposedBy: placement.proposed_by, reviewedBy: placement.reviewed_by, reviewedAt: placement.reviewed_at,
+                  createdAt: placement.created_at,
+                }
+              : null,
+            parent: parent ? { id: parent.id, title: parent.title, type: parent.type } : null,
+            edges: edgeRows.map((e) => ({
+              id: e.id, kind: e.kind, metadata: e.metadata,
+              from: { id: e.from_node_id, title: e.from_title, type: e.from_type },
+              to: { id: e.to_node_id, title: e.to_title, type: e.to_type },
+            })),
+            artifacts: artifactRows.map((a) => ({
+              id: a.id, kind: a.kind, sourceSystem: a.source_system, sourceId: a.source_id, path: a.path,
+              contentHash: a.content_hash, metadata: a.metadata, createdAt: a.created_at,
+            })),
+          },
+          request.id
+        )
+      );
+    }
+  );
+
+  // PATCH /api/v1/vault/nodes/:id { title?, type?, metadata? } — edit a node's
+  // own fields (NOT its placement/parent — use /placements/:id/refile for
+  // that). `type`, when given, must be declared in the node's scope schema;
+  // changing to a type in a DIFFERENT layer is rejected (would silently
+  // desync the node's placement.layer invariant enforced elsewhere) — refile
+  // after registering a same-layer type instead. `metadata`, when given,
+  // REPLACES the stored object (callers should read-modify-write via GET
+  // /nodes/:id if they need a partial merge).
+  fastify.patch(
+    '/nodes/:id',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const id = (request.params as Record<string, string>).id;
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      const node = (await pool.query(
+        `SELECT id, app_scope, layer, type, title, metadata FROM vault_nodes WHERE id = $1`,
+        [id]
+      )).rows[0] as { id: string; app_scope: string; layer: string; type: string; title: string; metadata: Record<string, unknown> } | undefined;
+      if (!node) return reply.code(404).send(err('NODE_NOT_FOUND', `node "${id}" not found`, request.id));
+
+      let title = node.title;
+      let type = node.type;
+      let metadata = node.metadata;
+
+      if ('title' in body) {
+        if (typeof body.title !== 'string' || !body.title.trim()) {
+          return reply.code(400).send(err('INVALID_TITLE', 'title must be a non-empty string', request.id));
+        }
+        title = body.title.trim();
+      }
+      if ('type' in body) {
+        if (typeof body.type !== 'string' || !body.type.trim()) {
+          return reply.code(400).send(err('INVALID_TYPE', 'type must be a non-empty string', request.id));
+        }
+        const newType = body.type.trim();
+        const schema = await loadSchema(node.app_scope);
+        const decl = schema.get(newType);
+        if (!decl) return reply.code(400).send(err('UNKNOWN_TYPE', `type "${newType}" not in scope "${node.app_scope}" schema`, request.id));
+        if (decl.layer !== node.layer) {
+          return reply.code(400).send(err('LAYER_CHANGE_NOT_SUPPORTED', `type "${newType}" is in layer "${decl.layer}", node is in "${node.layer}" — layer changes are not supported via edit`, request.id));
+        }
+        type = newType;
+      }
+      if ('metadata' in body) {
+        if (!body.metadata || typeof body.metadata !== 'object' || Array.isArray(body.metadata)) {
+          return reply.code(400).send(err('INVALID_METADATA', 'metadata must be an object', request.id));
+        }
+        metadata = body.metadata as Record<string, unknown>;
+      }
+
+      const now = Date.now() / 1000;
+      await pool.query(
+        `UPDATE vault_nodes SET title = $1, type = $2, metadata = $3::jsonb, updated_at = $4 WHERE id = $5`,
+        [title, type, JSON.stringify(metadata), now, id]
+      );
+
+      return reply.send(ok({ id, title, type, metadata, layer: node.layer, updatedAt: now }, request.id));
+    }
+  );
+
   // ── Review-queue ops ──────────────────────────────────────────────────────
-  // Both make a placement ACTIVE (demoting any prior active for the same
-  // node+layer to 'archived') — nothing that is live is ever deleted, only refiled.
+  // accept/refile make a placement ACTIVE (demoting any prior active for the
+  // same node+layer to 'archived'); reject marks it 'rejected' (node stays,
+  // simply not placed) — nothing that is live is ever deleted, only refiled
+  // or rejected.
 
   // POST /api/v1/vault/placements/:id/accept — approve the proposed placement as-is.
   fastify.post(
@@ -516,6 +687,36 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
       if (parentId === '') return reply.code(400).send(err('INVALID_PARENT', 'parentId must be a node id or null', request.id));
       const reviewer = request.sessionUser?.username ?? 'system';
       return activatePlacement(request, reply, id, parentId, reviewer);
+    }
+  );
+
+  // POST /api/v1/vault/placements/:id/reject — mark a proposed placement
+  // 'rejected'. The node row is untouched (never deleted) — it simply has no
+  // active/proposed placement afterwards, so it drops out of both the graph's
+  // default view and the review queue. Mirrors accept's closed-state guard.
+  fastify.post(
+    '/placements/:id/reject',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const id = (request.params as Record<string, string>).id;
+      const reviewer = request.sessionUser?.username ?? 'system';
+      return rejectPlacement(request, reply, id, reviewer);
+    }
+  );
+
+  // POST /api/v1/vault/placements/:id/refine — ask the Bridge (cheap gateway,
+  // full failover chain — same dispatchWithFailover path as the derivative
+  // loop below) to SUGGEST a better type/parent for a proposed placement,
+  // given the node + the scope's declared schema + the scope's existing
+  // "major" nodes (anything already used as a parent, same layer). This
+  // NEVER applies the suggestion — the reviewer applies it via PATCH
+  // /nodes/:id (type) and/or /placements/:id/refile (parent).
+  fastify.post(
+    '/placements/:id/refine',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const id = (request.params as Record<string, string>).id;
+      return refinePlacement(request, reply, id);
     }
   );
 
@@ -735,5 +936,189 @@ async function activatePlacement(
     throw e;
   } finally {
     client.release();
+  }
+}
+
+/**
+ * Reject a proposed placement: state='rejected'. No parent change, no
+ * activation — the node keeps existing (and can be re-ingested/re-proposed
+ * later; a fresh ingest of the same externalId creates a NEW proposed
+ * placement since the rejected one no longer matches the "existing active
+ * or proposed" lookup in POST /ingest).
+ */
+async function rejectPlacement(
+  request: FastifyRequest,
+  reply: import('fastify').FastifyReply,
+  placementId: string,
+  reviewer: string
+) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const pl = (await client.query(
+      `SELECT id, app_scope, node_id, layer, state FROM vault_placements WHERE id = $1 FOR UPDATE`,
+      [placementId]
+    )).rows[0] as { id: string; app_scope: string; node_id: string; layer: string; state: string } | undefined;
+    if (!pl) {
+      await client.query('ROLLBACK');
+      return reply.code(404).send(err('PLACEMENT_NOT_FOUND', `placement "${placementId}" not found`, request.id));
+    }
+    if (pl.state === 'archived' || pl.state === 'rejected') {
+      await client.query('ROLLBACK');
+      return reply.code(409).send(err('PLACEMENT_CLOSED', `placement is ${pl.state}; cannot reject`, request.id));
+    }
+    const now = Date.now() / 1000;
+    await client.query(
+      `UPDATE vault_placements SET state = 'rejected', reviewed_by = $1, reviewed_at = $2 WHERE id = $3`,
+      [reviewer, now, placementId]
+    );
+    await client.query('COMMIT');
+    return reply.send(
+      ok({ placementId, nodeId: pl.node_id, layer: pl.layer, state: 'rejected', reviewedBy: reviewer }, request.id)
+    );
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Ask the Bridge for a suggested type/parent for a proposed (or any
+ * not-yet-closed) placement. Read-only — returns the suggestion; the
+ * reviewer applies it explicitly via PATCH /nodes/:id + /placements/:id/refile.
+ * Never throws to the caller: Bridge/parse failures come back as a 502 with
+ * a message, same posture as the derivative loop's per-job failure handling
+ * (just not silently swallowed here, since this IS the response body).
+ */
+async function refinePlacement(
+  request: FastifyRequest,
+  reply: import('fastify').FastifyReply,
+  placementId: string
+) {
+  const pl = (await pool.query(
+    `SELECT id, app_scope, node_id, parent_id, layer, state FROM vault_placements WHERE id = $1`,
+    [placementId]
+  )).rows[0] as { id: string; app_scope: string; node_id: string; parent_id: string | null; layer: string; state: string } | undefined;
+  if (!pl) return reply.code(404).send(err('PLACEMENT_NOT_FOUND', `placement "${placementId}" not found`, request.id));
+  if (pl.state === 'archived' || pl.state === 'rejected') {
+    return reply.code(409).send(err('PLACEMENT_CLOSED', `placement is ${pl.state}; cannot refine`, request.id));
+  }
+
+  const node = (await pool.query(
+    `SELECT title, type, metadata FROM vault_nodes WHERE id = $1`,
+    [pl.node_id]
+  )).rows[0] as { title: string; type: string; metadata: Record<string, unknown> } | undefined;
+  if (!node) return reply.code(404).send(err('NODE_NOT_FOUND', `node "${pl.node_id}" not found`, request.id));
+
+  const schema = await loadSchema(pl.app_scope);
+  const schemaList = Array.from(schema.values());
+
+  const currentParent = pl.parent_id
+    ? (await pool.query(`SELECT id, title, type FROM vault_nodes WHERE id = $1`, [pl.parent_id])).rows[0] as
+        | { id: string; title: string; type: string }
+        | undefined
+    : undefined;
+
+  // Candidate parents = every node already used as a parent (an "active" or
+  // "proposed" placement points at it) in the same scope+layer — the same
+  // "majors" concept the review UI's own hierarchy picker uses. Keeps the
+  // prompt small regardless of how many thousands of LEAF nodes exist.
+  const candidates = (await pool.query(
+    `SELECT DISTINCT n.id, n.title, n.type
+     FROM vault_nodes n
+     JOIN vault_placements p ON p.parent_id = n.id AND p.app_scope = n.app_scope AND p.state IN ('active','proposed')
+     WHERE n.app_scope = $1 AND n.layer = $2 AND n.id <> $3
+     ORDER BY n.title LIMIT 200`,
+    [pl.app_scope, pl.layer, pl.node_id]
+  )).rows as Array<{ id: string; title: string; type: string }>;
+
+  const prompt = [
+    `You are curating a knowledge-graph review queue for app_scope "${pl.app_scope}" (layer: ${pl.layer}).`,
+    '',
+    `Declared node types (type — allowed parent types): ${schemaList.map((t) => `${t.type} [${t.parentTypes.join(', ') || 'any/root'}]`).join('; ')}`,
+    '',
+    'Node under review:',
+    `  title: ${node.title}`,
+    `  current type: ${node.type}`,
+    `  metadata: ${JSON.stringify(node.metadata ?? {}).slice(0, 500)}`,
+    `  currently proposed parent: ${currentParent ? `${currentParent.title} (${currentParent.type}, id ${currentParent.id})` : '(root — no parent)'}`,
+    '',
+    'Candidate parent nodes (id — title — type), pick one of these ids or null for root:',
+    candidates.map((c) => `  ${c.id} — ${c.title} — ${c.type}`).join('\n') || '  (no candidate parents exist yet in this scope/layer)',
+    '',
+    'Respond with ONLY one JSON object, no prose, no code fence:',
+    '{"suggestedType":"<a declared type, or the current type if unchanged>","suggestedParentId":"<one of the candidate ids above, or null>","confidence":<0.0-1.0>,"reasoning":"<one sentence, plain register>"}',
+    'Only use a suggestedParentId from the candidate list above (or null) — never invent an id.',
+  ].join('\n');
+
+  try {
+    const ctx: RoutingContext = {
+      message: prompt,
+      forceGatewayType: CHEAP_GATEWAY,
+      forceModelName: CHEAP_MODEL,
+      sourceAgent: 'vault-refine',
+    };
+    const req: BridgeDispatchRequest = {
+      messages: [{ role: 'user', content: prompt }],
+      model: CHEAP_MODEL,
+      temperature: 0.2,
+      maxTokens: 500,
+    };
+    const { decision, result, failover } = await routingEngine.dispatchWithFailover(ctx, req);
+    await routingEngine.logDispatch(decision, ctx, result, undefined, null, failover);
+
+    const raw = (result.response ?? '').trim();
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Bridge reply had no JSON object');
+    const parsed = JSON.parse(jsonMatch[0]) as {
+      suggestedType?: unknown; suggestedParentId?: unknown; confidence?: unknown; reasoning?: unknown;
+    };
+
+    let reasoning = typeof parsed.reasoning === 'string' ? parsed.reasoning.trim() : '';
+
+    let suggestedType = typeof parsed.suggestedType === 'string' ? parsed.suggestedType.trim() : node.type;
+    if (!schema.has(suggestedType)) {
+      reasoning += (reasoning ? ' ' : '') + `(model suggested unknown type "${suggestedType}" — defaulted to current type)`;
+      suggestedType = node.type;
+    }
+
+    const candidateIds = new Set(candidates.map((c) => c.id));
+    let suggestedParentId: string | null;
+    if (parsed.suggestedParentId === null || parsed.suggestedParentId === undefined) {
+      suggestedParentId = null;
+    } else if (typeof parsed.suggestedParentId === 'string' && candidateIds.has(parsed.suggestedParentId)) {
+      suggestedParentId = parsed.suggestedParentId;
+    } else {
+      reasoning += (reasoning ? ' ' : '') + `(model suggested an unknown parent id — defaulted to root)`;
+      suggestedParentId = null;
+    }
+    const suggestedParent = suggestedParentId ? candidates.find((c) => c.id === suggestedParentId) ?? null : null;
+    const confidence = typeof parsed.confidence === 'number' && parsed.confidence >= 0 && parsed.confidence <= 1 ? parsed.confidence : null;
+
+    return reply.send(
+      ok(
+        {
+          placementId,
+          nodeId: pl.node_id,
+          currentType: node.type,
+          currentParentId: pl.parent_id,
+          suggestion: {
+            type: suggestedType,
+            parentId: suggestedParentId,
+            parentTitle: suggestedParent?.title ?? null,
+            confidence,
+            reasoning: reasoning || null,
+          },
+          model: decision.modelName,
+          gateway: decision.gatewayRow.type,
+        },
+        request.id
+      )
+    );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return reply.code(502).send(err('REFINE_FAILED', `Bridge refine call failed: ${message}`, request.id));
   }
 }
