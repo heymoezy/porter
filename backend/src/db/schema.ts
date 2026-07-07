@@ -1496,3 +1496,116 @@ export const memoryProposals = pgTable('memory_proposals', {
 
 export type DreamRunRow = typeof dreamRuns.$inferSelect;
 export type MemoryProposalRow = typeof memoryProposals.$inferSelect;
+
+// ── Vault v2 — the generic knowledge-graph engine ──────────────────────────
+// Porter owns the ENGINE; apps DECLARE their own node-types and PUSH their data.
+// No app-specific concepts live here — a fresh install is an empty registry that
+// fills entirely from the new user's own apps. Tenant isolation via `app_scope`.
+
+// App-declared registry: each scope registers the node-types it will use, which
+// layer each belongs to, and the parent-types the hierarchy permits. The ingest
+// API rejects anything violating a scope's registered types.
+export const vaultSchemas = pgTable('vault_schemas', {
+  appScope: text('app_scope').primaryKey(),
+  nodeTypes: jsonb('node_types').notNull().default(sql`'[]'::jsonb`), // [{type, layer, parentTypes[]}]
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+});
+
+// Identity only — NOT hierarchy, source, or derivatives (those are separate tables).
+// externalId is the app's own stable key, making ingest idempotent per scope.
+export const vaultNodes = pgTable('vault_nodes', {
+  id: text('id').primaryKey(),
+  appScope: text('app_scope').notNull(),
+  externalId: text('external_id').notNull(),
+  layer: text('layer').notNull(), // 'data' | 'learning'
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  status: text('status').notNull().default('active'), // 'active' | 'queued' | 'archived'
+  metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+}, (table) => ({
+  scopeLayerType: index('vault_nodes_scope_layer_type_idx').on(table.appScope, table.layer, table.type),
+  scopeExternal: uniqueIndex('vault_nodes_scope_external_idx').on(table.appScope, table.externalId),
+}));
+
+// Hierarchy — proposed vs active. AI auto-associates FIRST (proposed); a per-app
+// review queue accepts/refiles. Live views read ONLY active placements, so nothing
+// currently active ever breaks. ONE active parent per (app_scope, node_id, layer).
+export const vaultPlacements = pgTable('vault_placements', {
+  id: text('id').primaryKey(),
+  appScope: text('app_scope').notNull(),
+  nodeId: text('node_id').notNull(),
+  parentId: text('parent_id'), // null = root of its layer
+  layer: text('layer').notNull(),
+  state: text('state').notNull().default('proposed'), // 'active' | 'proposed' | 'rejected' | 'archived'
+  confidence: doublePrecision('confidence'),
+  proposedBy: text('proposed_by').notNull().default('ai'),
+  reviewedBy: text('reviewed_by'),
+  reviewedAt: doublePrecision('reviewed_at'),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+}, (table) => ({
+  scopeParentState: index('vault_placements_scope_parent_state_idx').on(table.appScope, table.parentId, table.state),
+  scopeNode: index('vault_placements_scope_node_idx').on(table.appScope, table.nodeId),
+  oneActiveParent: uniqueIndex('vault_placements_one_active_idx')
+    .on(table.appScope, table.nodeId, table.layer)
+    .where(sql`state = 'active'`),
+}));
+
+// NON-hierarchical relationships only (hierarchy lives in placements).
+export const vaultEdges = pgTable('vault_edges', {
+  id: text('id').primaryKey(),
+  appScope: text('app_scope').notNull(),
+  fromNodeId: text('from_node_id').notNull(),
+  toNodeId: text('to_node_id').notNull(),
+  kind: text('kind').notNull(), // references | derived_from | explains | contradicts | related_to | mentions
+  metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+}, (table) => ({
+  scopeFrom: index('vault_edges_scope_from_idx').on(table.appScope, table.fromNodeId),
+  scopeTo: index('vault_edges_scope_to_idx').on(table.appScope, table.toNodeId),
+}));
+
+// Representations of a node — a node can be BOTH a db_entity AND have a markdown
+// derivative. content_hash drives stale detection for the derivative loop.
+export const vaultArtifacts = pgTable('vault_artifacts', {
+  id: text('id').primaryKey(),
+  appScope: text('app_scope').notNull(),
+  nodeId: text('node_id').notNull(),
+  kind: text('kind').notNull(), // db_entity | raw_file | markdown_derivative | external_url
+  sourceSystem: text('source_system'),
+  sourceId: text('source_id'),
+  path: text('path'),
+  contentHash: text('content_hash'),
+  metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+}, (table) => ({
+  scopeNode: index('vault_artifacts_scope_node_idx').on(table.appScope, table.nodeId),
+}));
+
+// Stale-aware derivative tracking (replaces a `has_derivative` bool). The loop
+// finds missing/stale jobs, generates a markdown derivative from the raw source,
+// and records the result; the raw artifact is never altered.
+export const vaultDerivativeJobs = pgTable('vault_derivative_jobs', {
+  id: text('id').primaryKey(),
+  appScope: text('app_scope').notNull(),
+  sourceArtifactId: text('source_artifact_id').notNull(),
+  derivativeArtifactId: text('derivative_artifact_id'),
+  status: text('status').notNull().default('missing'), // missing | queued | generated | failed | stale
+  sourceHash: text('source_hash'),
+  generatedHash: text('generated_hash'),
+  error: text('error'),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  generatedAt: doublePrecision('generated_at'),
+}, (table) => ({
+  scopeStatus: index('vault_derivative_jobs_scope_status_idx').on(table.appScope, table.status),
+  sourceArtifact: index('vault_derivative_jobs_source_idx').on(table.sourceArtifactId),
+}));
+
+export type VaultSchemaRow = typeof vaultSchemas.$inferSelect;
+export type VaultNodeRow = typeof vaultNodes.$inferSelect;
+export type VaultPlacementRow = typeof vaultPlacements.$inferSelect;
+export type VaultEdgeRow = typeof vaultEdges.$inferSelect;
+export type VaultArtifactRow = typeof vaultArtifacts.$inferSelect;
+export type VaultDerivativeJobRow = typeof vaultDerivativeJobs.$inferSelect;

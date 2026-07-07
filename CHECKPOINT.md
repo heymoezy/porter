@@ -1,5 +1,18 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.49.0: Vault v2 R1a — generic schema (6 tables)
+- First micro-release of the council-ratified Vault v2 engine (plan:
+  ~/.claude/plans/cheeky-coalescing-pudding.md). Schema only — no API yet, no app data.
+- 6 tables in backend/src/db/schema.ts + drizzle/0100_vault_v2.sql (applied to porter DB):
+  vault_schemas (app-declared node-type registry — the generic core), vault_nodes (identity),
+  vault_placements (proposed|active hierarchy; partial-unique one active parent per
+  scope+node+layer), vault_edges (non-hierarchical), vault_artifacts (db_entity|raw_file|
+  markdown_derivative|external_url), vault_derivative_jobs (stale-aware).
+- Tenant isolation via app_scope; ZERO ymc/app concepts — fresh install = empty registry.
+- Micro-release cadence (Moe 2026-07-07): ship each vault slice separately so he steers.
+- NEXT R1b: POST /vault/register-schema (apps declare node_types). Then R1c ingest,
+  R1d graph read, R1e placement accept/refile.
+
 ## 2026-07-06 — v6.48.0: admin revamp — Forge/Email/skill-feedback removed
 - Removed dead admin screens (Forge backend gone since v6.28.0; Email /api/v1/mail dead since
   2026-07-04; skill-feedback dead both sides): app/routes/{forge,email,skill-feedback}.tsx,
