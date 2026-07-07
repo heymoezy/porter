@@ -6,7 +6,6 @@ import multipart from '@fastify/multipart';
 import crypto from 'crypto';
 import { config } from './config.js';
 import eventRoutes from './routes/events.js';
-import { startBrainUI } from './routes/brain-ui.js';
 import authPlugin from './plugins/auth.js';
 import openapiPlugin from './plugins/openapi.js';
 import v1Routes from './routes/v1/index.js';
@@ -39,7 +38,6 @@ import { migratePcpV1 } from './db/migrate-pcp-v1.js';
 import { migratePcpV2 } from './db/migrate-pcp-v2.js';
 import { migratePmnV1 } from './db/migrate-pmn-v1.js';
 import { migratePsbV1 } from './db/migrate-psb-v1.js';
-import { migrateMailV1 } from './db/migrate-mail-v1.js';
 import { migrateIntellectV1 } from './db/migrate-intellect-v1.js';
 import { migrateBornCheckV1 } from './db/migrate-born-check-v1.js';
 import { migrateSilosV1 } from './db/migrate-silos-v1.js';
@@ -141,9 +139,6 @@ fastify.get('/api/admin/events', async (request, reply) => {
 // SSE events proxy (still used by frontends)
 fastify.register(eventRoutes);
 
-// Brain dashboard UI — separate server on :5176
-startBrainUI().catch(err => console.error('[brain-ui] Failed to start:', err));
-
 // Health check
 fastify.get('/health', async () => {
   return {
@@ -158,9 +153,8 @@ fastify.get('/api/v1/openapi.json', async () => {
   return fastify.swagger();
 });
 
-// Admin SPA retired 2026-07-04 (PR-2): Porter is headless. The old React SPA
-// lives at admin/frontend.archived; the live dashboard is the inline brain-ui
-// on :5176 (routes/brain-ui.ts).
+// Admin SPA: un-archived and live at askporter.app (admin/frontend.archived
+// is the source tree name only — the app itself is served in production).
 
 // DEPRECATED: IMAP IDLE shutdown hook removed in Tranche 12 (no longer auto-started)
 
@@ -195,7 +189,6 @@ const start = async () => {
     await migratePcpV2(pool);
     await migratePmnV1(pool);
     await migratePsbV1(pool);
-    await migrateMailV1(pool);
     await migrateIntellectV1(pool);
     await migrateBornCheckV1(pool);
     await migrateSilosV1(pool);

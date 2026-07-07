@@ -16,7 +16,7 @@ export const config = {
   // gateway. These keys are still consumed by direct (non-Bridge) callers:
   //   - learner.ts          → calls ollama directly for concept extraction (live, ~2100 sessions)
   //   - contact-analyzer.ts → calls ollama directly for CRM sentiment (dead-pathed, 0 jobs queued)
-  //   - routes/v1/health.ts + routes/admin/{settings,models}.ts + routes/brain-ui.ts +
+  //   - routes/v1/health.ts + routes/admin/{settings,models}.ts +
   //     routes/v1/templates.ts + routes/v1/chat.ts + routes/v1/admin/{settings,models}.ts
   //     → all expose these URLs in diagnostic/settings endpoints (no-op gracefully when
   //       the underlying daemon is offline — the ollama and openclaw daemons happen to be

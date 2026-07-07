@@ -1,3 +1,8 @@
+## v6.61.0 (2026-07-07)
+
+- Scope ladder + product registry — identity spine (v6.60.0)
+
+
 ## v6.59.0 (2026-07-07)
 
 - R6: Porter MCP server alpha (headless knowledge for Claude)

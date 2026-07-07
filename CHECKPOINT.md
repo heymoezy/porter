@@ -1,5 +1,14 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.61.0: dead-code cleanup (audit-driven)
+- Deleted: routes/brain-ui.ts + startBrainUI (duplicate :5176 process); migrate-mail-v1.ts + 10
+  mail_*/mailbox/newsletter table defs (email dead since Tranche 12); forge_* (3) + rpg/battles (5)
+  table defs. index.ts/config.ts stale init+comments removed; SPA "retired vs live" contradiction fixed.
+- KEPT (audit was wrong): services/email.ts + transactional-email.ts — a LIVE Gmail connector, not the
+  dead mail stack. tsc 0 confirms no broken imports.
+- Drop migration STAGED not applied: drizzle/0102_drop_dead_mail_forge_rpg.sql; dead tables left in
+  Postgres, dropped deliberately later. Brain boots clean without the removed init.
+
 ## 2026-07-07 — v6.60.0: scope ladder + product registry (identity spine)
 - vault_scopes (id/scope_kind[global|tenant|app|project]/parent_scope_id/tenant_id/label) + products
   (generic: repo/frontend/backend/services/ports/bridge_profile/tools jsonb). Seeded porter(global)→
