@@ -1,5 +1,16 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.50.0: Vault v2 R1b — register-schema API
+- backend/src/routes/v1/vault.ts (NEW, registered under /api/v1/vault): apps DECLARE
+  their node-types via POST /register-schema {app_scope, node_types:[{type,layer,parentTypes[]}]};
+  GET /schema?scope= reads back (registered:false for a never-seen scope = fresh-install).
+- Validation: layer ∈ data|learning, no dup types, parentTypes must reference declared types.
+  Idempotent upsert per scope. Auth = requireAuth (platform_admin OR X-Porter-Service-Token).
+- Verified: fresh scope→registered:false; valid 4-type register; read-back; invalid-layer +
+  unknown-parentType rejected; no-token→401. Test scope deleted (registry back to 0 rows).
+- NEXT R1c: POST /vault/ingest (apps push nodes+artifacts+proposed placements, type-checked
+  against the registered schema). Then R1d graph read, R1e placement accept/refile.
+
 ## 2026-07-07 — v6.49.0: Vault v2 R1a — generic schema (6 tables)
 - First micro-release of the council-ratified Vault v2 engine (plan:
   ~/.claude/plans/cheeky-coalescing-pudding.md). Schema only — no API yet, no app data.
