@@ -41,6 +41,7 @@ import { runFailureDigestDistill } from './failure-digest.js';
 import { runClaudeRulesMirror } from './claude-rules-mirror.js';
 import { runWorkerKnowledgeRefresh } from './worker-knowledge.js';
 import { runGithubScan } from './github-scan.js';
+import { runVaultDerivativeSweep } from '../vault-derivatives.js';
 import { broadcast } from '../sse-hub.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -67,6 +68,7 @@ export type WorkflowActionType =
   | 'claude_rules_mirror'       // U6 2026-07-06 — CLAUDE.md hard rules + project non-negotiables → ONE workspace directive
   | 'worker_knowledge_refresh'  // worker-knowledge loop 2026-07-06 — ONE due worker/day researched via CHEAP gateway → proposal
   | 'github_scan'               // worker-knowledge loop 2026-07-06 — weekly (state-gated) gh watchlist scan → digest proposal
+  | 'vault_derivative_sweep'    // Vault v2 R4 2026-07-07 — raw_file artifacts w/o markdown_derivative → generate via Bridge failover; stale detection
   | 'noop';
 
 export interface WorkflowRow {
@@ -245,6 +247,9 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
   // are FORCED to the cheap gateway — never premium (see worker-knowledge.ts).
   worker_knowledge_refresh: async () => runWorkerKnowledgeRefresh({ triggeredBy: 'schedule' }),
   github_scan: async () => runGithubScan({ triggeredBy: 'schedule' }),
+  // Vault v2 R4 (2026-07-07): derivative loop rides the same every_24h tick —
+  // no new timer. Generic across every app_scope (no scope filter here).
+  vault_derivative_sweep: async () => runVaultDerivativeSweep({ triggeredBy: 'schedule' }),
   noop: async () => null,
 };
 
@@ -505,6 +510,17 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     trigger_type: 'schedule',
     trigger_value: 'every_24h',
     action_type: 'github_scan',
+    action_config: {},
+  },
+  // Vault v2 R4 (2026-07-07): raw→markdown derivative loop — same every_24h
+  // tick, no new timer. Finds vault_artifacts(kind='raw_file') with no/stale
+  // markdown_derivative, generates one via Bridge (dispatchWithFailover, cheap
+  // gateway preferred). Raw artifacts are never altered.
+  {
+    name: 'Vault derivative sweep (raw → markdown, stale-aware)',
+    trigger_type: 'schedule',
+    trigger_value: 'every_24h',
+    action_type: 'vault_derivative_sweep',
     action_config: {},
   },
 ];

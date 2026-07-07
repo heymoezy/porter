@@ -1,5 +1,20 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.54.0: Vault v2 R4 — derivative loop
+- backend/src/services/vault-derivatives.ts: seedMissingJobs (raw_file artifacts with no job →
+  status='missing') · flagStaleJobs (raw content_hash ≠ job.source_hash → 'stale') · processJobs
+  (missing/stale → generate markdown derivative via Bridge dispatchWithFailover on the cheap gateway;
+  never throws — per-job failures land status='failed'+error). Raw content resolved from
+  metadata.content, else path on disk (2MB cap), else placeholder (model told not to invent).
+- Derivative = a NEW vault_artifacts(kind='markdown_derivative') row; RAW never altered; old
+  derivatives preserved (regeneration accumulates history). Rides the every_24h workflow tick
+  (workflow-engine.ts vault_derivative_sweep action) — no new timer. Also on-demand.
+- vault.ts: GET /derivatives?scope= (coverage counts by status) + POST /derivatives/sweep.
+  Empty/zero-raw scope → all-zero counts (fresh-install safe).
+- Verified (throwaway scope, real Bridge): missing→generated, raw byte-unchanged, stale→regenerated,
+  coverage counts, rode failover chain (bridge_dispatch_log source_agent=vault-derivatives). Purged.
+- NEXT: R2 real ingest (awaiting Moe's hierarchy nod), R3 review-queue UI, R5 graph UI v2.
+
 ## 2026-07-07 — v6.53.0: Vault v2 R1e — placement accept/refile (R1 engine COMPLETE)
 - POST /api/v1/vault/placements/:id/accept (approve as-is) + /refile {parentId} (approve under a
   corrected parent; null=root). Both make the placement ACTIVE and demote any prior active for the

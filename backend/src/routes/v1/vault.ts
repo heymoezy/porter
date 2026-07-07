@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 import crypto from 'crypto';
 import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
+import { runVaultDerivativeSweep, getDerivativeCoverage } from '../../services/vault-derivatives.js';
 
 /**
  * Vault v2 — the generic knowledge-graph engine.
@@ -14,7 +15,9 @@ import { ok, err } from '../../lib/envelope.js';
  * (apps calling server-to-server). Both resolve to request.sessionUser.
  *
  * Built incrementally as micro-releases:
- *   R1b — register-schema (this).   R1c — ingest.   R1d — graph read.   R1e — placement review.
+ *   R1b — register-schema.   R1c — ingest.   R1d — graph read.   R1e — placement review.
+ *   R4  — derivative loop (coverage read + on-demand sweep; nightly sweep on
+ *         the every_24h workflow tick — see services/vault-derivatives.ts).
  */
 
 const LAYERS = new Set(['data', 'learning']);
@@ -509,6 +512,43 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
       if (parentId === '') return reply.code(400).send(err('INVALID_PARENT', 'parentId must be a node id or null', request.id));
       const reviewer = request.sessionUser?.username ?? 'system';
       return activatePlacement(request, reply, id, parentId, reviewer);
+    }
+  );
+
+  // ── Derivative loop (R4) ──────────────────────────────────────────────────
+  // Markdown = DERIVATIVES: loop-generated from a raw source, raw never
+  // altered. vault-derivatives.ts owns the sweep logic; this file only wires
+  // the read + the on-demand trigger. The nightly run rides the existing
+  // every_24h workflow tick (workflow-engine.ts) — no new timer here.
+
+  // GET /api/v1/vault/derivatives?scope= — coverage: counts by status
+  // (missing|queued|generated|failed|stale) + the job list, so it's visible
+  // which raw artifacts still lack a derivative.
+  fastify.get(
+    '/derivatives',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const query = (request.query ?? {}) as Record<string, unknown>;
+      const scope = scopeOf({}, query);
+      if (!scope) return reply.code(400).send(err('MISSING_SCOPE', 'scope is required', request.id));
+
+      const coverage = await getDerivativeCoverage(scope);
+      return reply.send(ok(coverage, request.id));
+    }
+  );
+
+  // POST /api/v1/vault/derivatives/sweep { app_scope? } — run the derivative
+  // sweep on demand (in addition to the nightly every_24h tick). Omitting
+  // app_scope sweeps every scope. Never throws — per-job failures land on the
+  // job row (status='failed'), not on this response.
+  fastify.post(
+    '/derivatives/sweep',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const scope = scopeOf(body, {});
+      const result = await runVaultDerivativeSweep({ scope: scope || undefined, triggeredBy: 'manual' });
+      return reply.send(ok(result, request.id));
     }
   );
 }
