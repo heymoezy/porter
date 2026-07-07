@@ -1609,3 +1609,57 @@ export type VaultPlacementRow = typeof vaultPlacements.$inferSelect;
 export type VaultEdgeRow = typeof vaultEdges.$inferSelect;
 export type VaultArtifactRow = typeof vaultArtifacts.$inferSelect;
 export type VaultDerivativeJobRow = typeof vaultDerivativeJobs.$inferSelect;
+
+// ── Scope ladder + product registry — the identity spine ──────────────────
+// Porter's vault engine keys everything on a single `app_scope` text column,
+// but tenant / product(app) / project / global are 4 different concepts.
+// This registry gives that column a real backing hierarchy so knowledge
+// injection can resolve "global ∪ current scope" without risking cross-tenant
+// or cross-app leakage. `vault_scopes.id` IS the value apps already pass as
+// `app_scope` — this does not touch any existing vault_* row.
+
+// The scope registry — a DAG of global → tenant → app → project scopes.
+// parentScopeId walks toward 'porter' (the root, parent_scope_id = null).
+export const vaultScopes = pgTable('vault_scopes', {
+  id: text('id').primaryKey(), // e.g. 'porter', 'moe', 'ymc' — same value used as app_scope
+  scopeKind: text('scope_kind').notNull(), // 'global' | 'tenant' | 'app' | 'project'
+  parentScopeId: text('parent_scope_id'), // null only for the global root
+  tenantId: text('tenant_id'), // denormalized owning tenant, for fast tenant-scoped queries
+  label: text('label').notNull(),
+  metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+}, (table) => ({
+  scopeKindIdx: index('vault_scopes_scope_kind_idx').on(table.scopeKind),
+  parentScopeIdx: index('vault_scopes_parent_scope_idx').on(table.parentScopeId),
+}));
+
+// The product/matter registry — minimal and generic. App-specific detail
+// (ports, service names, deploy config) lives entirely in the jsonb columns;
+// no ymc-specific (or any-app-specific) columns are added here.
+export const products = pgTable('products', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull(),
+  scopeId: text('scope_id').notNull(), // → vault_scopes.id
+  name: text('name').notNull(),
+  slug: text('slug').notNull(),
+  kind: text('kind').notNull().default('product'), // 'product' | 'matter'
+  repoPath: text('repo_path'),
+  frontend: jsonb('frontend').notNull().default(sql`'{}'::jsonb`), // {port, dir}
+  backend: jsonb('backend').notNull().default(sql`'{}'::jsonb`), // {port, dir, service}
+  services: jsonb('services').notNull().default(sql`'{}'::jsonb`),
+  ports: jsonb('ports').notNull().default(sql`'{}'::jsonb`),
+  bridgeProfile: jsonb('bridge_profile').notNull().default(sql`'{}'::jsonb`),
+  tools: jsonb('tools').notNull().default(sql`'[]'::jsonb`),
+  metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+}, (table) => ({
+  tenantIdx: index('products_tenant_idx').on(table.tenantId),
+  scopeIdx: index('products_scope_idx').on(table.scopeId),
+  slugIdx: uniqueIndex('products_slug_idx').on(table.slug),
+}));
+
+export type VaultScopeRow = typeof vaultScopes.$inferSelect;
+export type ProductRow = typeof products.$inferSelect;
+

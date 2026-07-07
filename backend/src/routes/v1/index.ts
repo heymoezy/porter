@@ -13,6 +13,7 @@ import intellectV1Routes from './intellect.js';
 import recallV1Routes from './recall.js';
 import agentsV1Routes from './agents.js';
 import vaultV1Routes from './vault.js';
+import registryV1Routes from './registry.js';
 
 export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(authV1Routes, { prefix: '/auth' });
@@ -29,4 +30,5 @@ export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(recallV1Routes, { prefix: '/recall' });
   fastify.register(agentsV1Routes, { prefix: '/agents' });
   fastify.register(vaultV1Routes, { prefix: '/vault' });
+  fastify.register(registryV1Routes, { prefix: '/registry' });
 }

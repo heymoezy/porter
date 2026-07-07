@@ -1,5 +1,14 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.60.0: scope ladder + product registry (identity spine)
+- vault_scopes (id/scope_kind[global|tenant|app|project]/parent_scope_id/tenant_id/label) + products
+  (generic: repo/frontend/backend/services/ports/bridge_profile/tools jsonb). Seeded porter(global)→
+  moe(tenant)→ymc(app) + a ymc product row. backend/src/routes/v1/registry.ts: /scopes, /products,
+  and /scopes/:id/chain (the injection chain — ymc→[ymc,moe,porter], cycle-guarded).
+- The tenancy spine for the headless/product rework + the knowledge-unification scope model (fixes the
+  overloaded app_scope). Leakage test (scripts/verify-scope-leakage.ts): a scope resolves ONLY its own
+  ancestors, never a sibling. Migration 0101_scope_registry.sql applied.
+
 ## 2026-07-07 — v6.59.0: MCP server alpha + vault review-queue engine ops
 - Review-queue engine (backend/src/routes/v1/vault.ts, additive — R3/R4 support): POST /placements/:id/reject
   (state='rejected'), PATCH /nodes/:id {title,type,metadata} (type validated vs schema; cross-layer change
