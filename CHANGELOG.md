@@ -1,3 +1,8 @@
+## v6.52.0 (2026-07-07)
+
+- Vault v2 R1c: ingest API — type-checked push + proposed placements (v6.51.0)
+
+
 ## v6.50.0 (2026-07-07)
 
 - Vault v2 R1a: generic schema — 6 tables (v6.49.0)

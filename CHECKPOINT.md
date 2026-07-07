@@ -1,5 +1,16 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.52.0: Vault v2 R1d — scoped graph read
+- GET /api/v1/vault/graph?scope=&layer=&focus=. Returns {nodes, edges} for a scope.
+  Each node resolves to its best placement (ACTIVE preferred, else latest PROPOSED, with
+  placementState flag) so a freshly-ingested tree renders before review. layer=data|learning
+  filters. focus=<nodeId> returns that node + full subtree (recursive CTE over placements) +
+  1-hop non-hierarchical edges. Empty/nonexistent scope → {nodes:[],edges:[]} (fresh-install proof).
+- Verified: empty-scope valid graph; 5-node tree with parents; layer split (data vs learning);
+  focus subtree (branch only, sibling learning node excluded); unknown focus→404. Test data purged.
+- Vault engine READ path complete — apps can now register→ingest→render. NEXT R1e: placement
+  accept/refile (review-queue ops: proposed→active, re-parent; never delete). Then R2 ymc onboards.
+
 ## 2026-07-07 — v6.51.0: Vault v2 R1c — ingest API
 - POST /api/v1/vault/ingest {app_scope, items:[{externalId,type,title,source?,proposedParentExternalId?}]}.
   Apps PUSH data (Porter never pulls). Each item type-checked against the registered schema

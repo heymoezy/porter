@@ -371,4 +371,98 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
       return reply.send(ok({ appScope: scope, ingested: results.length, items: results }, request.id));
     }
   );
+
+  // GET /api/v1/vault/graph?scope=&layer=&focus= — the scoped, navigable graph.
+  //   scope   (required) — tenant isolation; a scope with no data returns { nodes:[], edges:[] }.
+  //   layer   (optional) — 'data' | 'learning' to view one layer at a time.
+  //   focus   (optional) — a node id; returns that node + its whole subtree + 1-hop edges.
+  // Each node carries its resolved parent: the ACTIVE placement when one exists, else the
+  // latest PROPOSED one (so a freshly-ingested, not-yet-reviewed tree still renders), with a
+  // placementState flag so the UI can distinguish reviewed vs pending hierarchy.
+  fastify.get(
+    '/graph',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const query = (request.query ?? {}) as Record<string, unknown>;
+      const scope = scopeOf({}, query);
+      if (!scope) return reply.code(400).send(err('MISSING_SCOPE', 'scope is required', request.id));
+
+      const layer = typeof query.layer === 'string' ? query.layer.trim() : '';
+      if (layer && !LAYERS.has(layer)) {
+        return reply.code(400).send(err('INVALID_LAYER', `layer must be data|learning`, request.id));
+      }
+      const focus = typeof query.focus === 'string' ? query.focus.trim() : '';
+
+      // Restrict to a focus subtree (recursive walk down placements) when asked.
+      let focusIds: string[] | null = null;
+      if (focus) {
+        const rows = (await pool.query(
+          `WITH RECURSIVE sub AS (
+             SELECT id FROM vault_nodes WHERE id = $2 AND app_scope = $1
+             UNION
+             SELECT p.node_id FROM vault_placements p
+             JOIN sub ON p.parent_id = sub.id
+             WHERE p.app_scope = $1 AND p.state IN ('active','proposed')
+           )
+           SELECT id FROM sub`,
+          [scope, focus]
+        )).rows as Array<{ id: string }>;
+        focusIds = rows.map((r) => r.id);
+        if (focusIds.length === 0) {
+          return reply.code(404).send(err('NODE_NOT_FOUND', `focus node "${focus}" not in scope "${scope}"`, request.id));
+        }
+      }
+
+      // Nodes + their best placement (active preferred, else latest proposed).
+      const params: unknown[] = [scope];
+      let where = `n.app_scope = $1`;
+      if (layer) { params.push(layer); where += ` AND n.layer = $${params.length}`; }
+      if (focusIds) { params.push(focusIds); where += ` AND n.id = ANY($${params.length})`; }
+
+      const nodeRows = (await pool.query(
+        `SELECT n.id, n.external_id, n.layer, n.type, n.title, n.status,
+                pl.parent_id, pl.state AS placement_state, pl.confidence
+         FROM vault_nodes n
+         LEFT JOIN LATERAL (
+           SELECT parent_id, state, confidence FROM vault_placements p
+           WHERE p.app_scope = n.app_scope AND p.node_id = n.id AND p.layer = n.layer
+             AND p.state IN ('active','proposed')
+           ORDER BY CASE p.state WHEN 'active' THEN 0 ELSE 1 END, p.created_at DESC
+           LIMIT 1
+         ) pl ON true
+         WHERE ${where}
+         ORDER BY n.type, n.title`,
+        params
+      )).rows as Array<{
+        id: string; external_id: string; layer: string; type: string; title: string;
+        status: string; parent_id: string | null; placement_state: string | null; confidence: number | null;
+      }>;
+
+      const nodes = nodeRows.map((r) => ({
+        id: r.id,
+        externalId: r.external_id,
+        layer: r.layer,
+        type: r.type,
+        title: r.title,
+        status: r.status,
+        parentId: r.parent_id,
+        placementState: r.placement_state,
+        confidence: r.confidence,
+      }));
+
+      // Non-hierarchical edges, restricted to the returned node set.
+      const nodeIds = new Set(nodes.map((n) => n.id));
+      const edgeRows = (await pool.query(
+        `SELECT id, from_node_id, to_node_id, kind FROM vault_edges WHERE app_scope = $1`,
+        [scope]
+      )).rows as Array<{ id: string; from_node_id: string; to_node_id: string; kind: string }>;
+      const edges = edgeRows
+        .filter((e) => nodeIds.has(e.from_node_id) && nodeIds.has(e.to_node_id))
+        .map((e) => ({ id: e.id, from: e.from_node_id, to: e.to_node_id, kind: e.kind }));
+
+      return reply.send(
+        ok({ appScope: scope, layer: layer || null, focus: focus || null, nodes, edges }, request.id)
+      );
+    }
+  );
 }
