@@ -1,5 +1,18 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.53.0: Vault v2 R1e — placement accept/refile (R1 engine COMPLETE)
+- POST /api/v1/vault/placements/:id/accept (approve as-is) + /refile {parentId} (approve under a
+  corrected parent; null=root). Both make the placement ACTIVE and demote any prior active for the
+  same node+layer to 'archived' — never deletes, only refiles (partial-unique keeps one active).
+- Guards: parentTypes hierarchy re-validated, layer match, and a recursive-CTE CYCLE check (can't
+  refile a node under its own descendant). reviewed_by/at stamped.
+- Also: vault-scoped content-type parser so bodyless POSTs (/accept) don't 400 on empty JSON body —
+  DX fix for any inheriting app. Verified: accept→active, refile re-parent (1 active row), root-null,
+  hierarchy-violation, cycle, 404. Test data purged.
+- ✅ R1 (generic engine) DONE: register-schema → ingest → graph → review, all generic, fresh-install
+  proven empty-valid at every step. NEXT R2: ymc registers its schema + ingests real data
+  (workouts/data_rooms/investments + files + ~/vault learnings); dry-run prints the real-name tree first.
+
 ## 2026-07-07 — v6.52.0: Vault v2 R1d — scoped graph read
 - GET /api/v1/vault/graph?scope=&layer=&focus=. Returns {nodes, edges} for a scope.
   Each node resolves to its best placement (ACTIVE preferred, else latest PROPOSED, with

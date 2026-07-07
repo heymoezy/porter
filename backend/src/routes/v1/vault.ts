@@ -93,6 +93,19 @@ function resolveProposedParentId(proposedParentNodeId: string | null): string | 
 }
 
 export default async function vaultRoutes(fastify: FastifyInstance) {
+  // Bodyless POSTs (notably /accept) must not 400 just because a client sent
+  // `Content-Type: application/json` with an empty body. Scoped to this plugin only.
+  fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    const raw = typeof body === 'string' ? body.trim() : '';
+    if (!raw) return done(null, {});
+    try {
+      done(null, JSON.parse(raw));
+    } catch (e) {
+      (e as { statusCode?: number }).statusCode = 400;
+      done(e as Error, undefined);
+    }
+  });
+
   // POST /api/v1/vault/register-schema — an app declares its node-types/layers/hierarchy.
   // Idempotent upsert per scope; re-registering replaces the scope's declaration.
   fastify.post(
@@ -465,4 +478,135 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
       );
     }
   );
+
+  // ── Review-queue ops ──────────────────────────────────────────────────────
+  // Both make a placement ACTIVE (demoting any prior active for the same
+  // node+layer to 'archived') — nothing that is live is ever deleted, only refiled.
+
+  // POST /api/v1/vault/placements/:id/accept — approve the proposed placement as-is.
+  fastify.post(
+    '/placements/:id/accept',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const id = (request.params as Record<string, string>).id;
+      const reviewer = request.sessionUser?.username ?? 'system';
+      return activatePlacement(request, reply, id, undefined, reviewer);
+    }
+  );
+
+  // POST /api/v1/vault/placements/:id/refile { parentId } — approve, but under a
+  // corrected parent (parentId null = root). Enforces declared parentTypes + no cycles.
+  fastify.post(
+    '/placements/:id/refile',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const id = (request.params as Record<string, string>).id;
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      if (!('parentId' in body)) {
+        return reply.code(400).send(err('MISSING_PARENT', 'parentId is required (null for root)', request.id));
+      }
+      const parentId = body.parentId === null ? null : typeof body.parentId === 'string' ? body.parentId.trim() : '';
+      if (parentId === '') return reply.code(400).send(err('INVALID_PARENT', 'parentId must be a node id or null', request.id));
+      const reviewer = request.sessionUser?.username ?? 'system';
+      return activatePlacement(request, reply, id, parentId, reviewer);
+    }
+  );
+}
+
+/**
+ * Activate a placement (accept, or refile under a new parent). `newParentId`:
+ * undefined = keep the placement's current parent (accept); null = root; string = re-parent.
+ * Demotes any existing active placement for the same (scope, node, layer) to 'archived'.
+ * Enforces the scope's declared parentTypes and rejects cycles.
+ */
+async function activatePlacement(
+  request: FastifyRequest,
+  reply: import('fastify').FastifyReply,
+  placementId: string,
+  newParentId: string | null | undefined,
+  reviewer: string
+) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const pl = (await client.query(
+      `SELECT id, app_scope, node_id, parent_id, layer, state FROM vault_placements WHERE id = $1 FOR UPDATE`,
+      [placementId]
+    )).rows[0] as
+      | { id: string; app_scope: string; node_id: string; parent_id: string | null; layer: string; state: string }
+      | undefined;
+    if (!pl) {
+      await client.query('ROLLBACK');
+      return reply.code(404).send(err('PLACEMENT_NOT_FOUND', `placement "${placementId}" not found`, request.id));
+    }
+    if (pl.state === 'archived' || pl.state === 'rejected') {
+      await client.query('ROLLBACK');
+      return reply.code(409).send(err('PLACEMENT_CLOSED', `placement is ${pl.state}; cannot activate`, request.id));
+    }
+
+    const scope = pl.app_scope;
+    const targetParent = newParentId === undefined ? pl.parent_id : newParentId;
+
+    // Validate the target parent against the scope schema + guard cycles.
+    if (targetParent !== null) {
+      const parent = (await client.query(
+        `SELECT id, type, layer FROM vault_nodes WHERE id = $1 AND app_scope = $2`,
+        [targetParent, scope]
+      )).rows[0] as { id: string; type: string; layer: string } | undefined;
+      if (!parent) {
+        await client.query('ROLLBACK');
+        return reply.code(400).send(err('INVALID_PARENT', `parent "${targetParent}" not in scope "${scope}"`, request.id));
+      }
+      if (parent.layer !== pl.layer) {
+        await client.query('ROLLBACK');
+        return reply.code(400).send(err('LAYER_MISMATCH', `parent is in layer "${parent.layer}", node is "${pl.layer}"`, request.id));
+      }
+      const child = (await client.query(`SELECT type FROM vault_nodes WHERE id = $1`, [pl.node_id])).rows[0] as { type: string } | undefined;
+      const schema = await loadSchema(scope);
+      const decl = child ? schema.get(child.type) : undefined;
+      if (decl && !decl.parentTypes.includes(parent.type)) {
+        await client.query('ROLLBACK');
+        return reply.code(400).send(err('HIERARCHY_VIOLATION', `parent type "${parent.type}" not allowed under "${child!.type}"`, request.id));
+      }
+      // Cycle guard: the target parent must not be the node itself or one of its descendants.
+      const desc = (await client.query(
+        `WITH RECURSIVE sub AS (
+           SELECT $2::text AS id
+           UNION
+           SELECT p.node_id FROM vault_placements p JOIN sub ON p.parent_id = sub.id
+           WHERE p.app_scope = $1 AND p.state IN ('active','proposed')
+         )
+         SELECT 1 FROM sub WHERE id = $3 LIMIT 1`,
+        [scope, pl.node_id, targetParent]
+      )).rows.length > 0;
+      if (desc) {
+        await client.query('ROLLBACK');
+        return reply.code(400).send(err('CYCLE', `parent "${targetParent}" is within the node's own subtree`, request.id));
+      }
+    }
+
+    const now = Date.now() / 1000;
+    // Demote any current active placement for this node+layer.
+    await client.query(
+      `UPDATE vault_placements SET state = 'archived', reviewed_by = $1, reviewed_at = $2
+       WHERE app_scope = $3 AND node_id = $4 AND layer = $5 AND state = 'active' AND id <> $6`,
+      [reviewer, now, scope, pl.node_id, pl.layer, placementId]
+    );
+    // Activate this one (with the corrected parent when refiling).
+    await client.query(
+      `UPDATE vault_placements SET state = 'active', parent_id = $1, reviewed_by = $2, reviewed_at = $3 WHERE id = $4`,
+      [targetParent, reviewer, now, placementId]
+    );
+
+    await client.query('COMMIT');
+    return reply.send(
+      ok({ placementId, nodeId: pl.node_id, layer: pl.layer, parentId: targetParent, state: 'active', reviewedBy: reviewer }, request.id)
+    );
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
