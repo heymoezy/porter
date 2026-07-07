@@ -20,23 +20,6 @@ type Pages = {
   "/dashboard": {
     params: {};
   };
-  "/users": {
-    params: {};
-  };
-  "/users/:username": {
-    params: {
-      "username": string;
-    };
-  };
-  "/email": {
-    params: {};
-  };
-  "/costs": {
-    params: {};
-  };
-  "/forge": {
-    params: {};
-  };
   "/agents/:id": {
     params: {
       "id": string;
@@ -82,9 +65,6 @@ type Pages = {
   "/architecture": {
     params: {};
   };
-  "/org-chart": {
-    params: {};
-  };
   "/design-system": {
     params: {};
   };
@@ -98,6 +78,9 @@ type Pages = {
     params: {};
   };
   "/approvals": {
+    params: {};
+  };
+  "/dreams": {
     params: {};
   };
   "/decomposition": {
@@ -118,10 +101,10 @@ type Pages = {
   "/env-tools": {
     params: {};
   };
-  "/learnings": {
+  "/mcp": {
     params: {};
   };
-  "/skill-feedback": {
+  "/learnings": {
     params: {};
   };
   "/routing": {
@@ -132,7 +115,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/login" | "/dashboard" | "/users" | "/users/:username" | "/email" | "/costs" | "/forge" | "/agents/:id" | "/system" | "/brain" | "/activity" | "/diagnostics" | "/templates/:id" | "/tools" | "/skills" | "/skills/:id/pack" | "/bridge" | "/recall" | "/changelog" | "/architecture" | "/org-chart" | "/design-system" | "/settings" | "/intelligence" | "/files" | "/approvals" | "/decomposition" | "/decisions" | "/sessions" | "/evolution" | "/msg-bus" | "/env-tools" | "/learnings" | "/skill-feedback" | "/routing";
+    page: "/" | "/login" | "/dashboard" | "/agents/:id" | "/system" | "/brain" | "/activity" | "/diagnostics" | "/templates/:id" | "/tools" | "/skills" | "/skills/:id/pack" | "/bridge" | "/recall" | "/changelog" | "/architecture" | "/design-system" | "/settings" | "/intelligence" | "/files" | "/approvals" | "/dreams" | "/decomposition" | "/decisions" | "/sessions" | "/evolution" | "/msg-bus" | "/env-tools" | "/mcp" | "/learnings" | "/routing";
   };
   "routes/home-redirect.tsx": {
     id: "routes/home-redirect";
@@ -144,31 +127,11 @@ type RouteFiles = {
   };
   "routes/layout.tsx": {
     id: "routes/layout";
-    page: "/dashboard" | "/users" | "/users/:username" | "/email" | "/costs" | "/forge" | "/agents/:id" | "/system" | "/brain" | "/activity" | "/diagnostics" | "/templates/:id" | "/tools" | "/skills" | "/skills/:id/pack" | "/bridge" | "/recall" | "/changelog" | "/architecture" | "/org-chart" | "/design-system" | "/settings" | "/intelligence" | "/files" | "/approvals" | "/decomposition" | "/decisions" | "/sessions" | "/evolution" | "/msg-bus" | "/env-tools" | "/learnings" | "/skill-feedback" | "/routing";
+    page: "/dashboard" | "/agents/:id" | "/system" | "/brain" | "/activity" | "/diagnostics" | "/templates/:id" | "/tools" | "/skills" | "/skills/:id/pack" | "/bridge" | "/recall" | "/changelog" | "/architecture" | "/design-system" | "/settings" | "/intelligence" | "/files" | "/approvals" | "/dreams" | "/decomposition" | "/decisions" | "/sessions" | "/evolution" | "/msg-bus" | "/env-tools" | "/mcp" | "/learnings" | "/routing";
   };
   "routes/home.tsx": {
     id: "routes/home";
     page: "/dashboard";
-  };
-  "routes/users.tsx": {
-    id: "routes/users";
-    page: "/users";
-  };
-  "routes/user-detail.tsx": {
-    id: "routes/user-detail";
-    page: "/users/:username";
-  };
-  "routes/email.tsx": {
-    id: "routes/email";
-    page: "/email";
-  };
-  "routes/costs.tsx": {
-    id: "routes/costs";
-    page: "/costs";
-  };
-  "routes/forge.tsx": {
-    id: "routes/forge";
-    page: "/forge";
   };
   "routes/agent-detail.tsx": {
     id: "routes/agent-detail";
@@ -178,8 +141,8 @@ type RouteFiles = {
     id: "routes/system";
     page: "/system";
   };
-  "routes/brain-redirect.tsx": {
-    id: "routes/brain-redirect";
+  "routes/brain.tsx": {
+    id: "routes/brain";
     page: "/brain";
   };
   "routes/activity-redirect.tsx": {
@@ -210,8 +173,8 @@ type RouteFiles = {
     id: "routes/bridge";
     page: "/bridge";
   };
-  "routes/recall.tsx": {
-    id: "routes/recall";
+  "routes/recall-redirect.tsx": {
+    id: "routes/recall-redirect";
     page: "/recall";
   };
   "routes/changelog.tsx": {
@@ -222,10 +185,6 @@ type RouteFiles = {
     id: "routes/architecture";
     page: "/architecture";
   };
-  "routes/org-chart.tsx": {
-    id: "routes/org-chart";
-    page: "/org-chart";
-  };
   "routes/design-system-lazy.tsx": {
     id: "routes/design-system-lazy";
     page: "/design-system";
@@ -234,8 +193,8 @@ type RouteFiles = {
     id: "routes/settings";
     page: "/settings";
   };
-  "routes/intelligence.tsx": {
-    id: "routes/intelligence";
+  "routes/intelligence-redirect.tsx": {
+    id: "routes/intelligence-redirect";
     page: "/intelligence";
   };
   "routes/files.tsx": {
@@ -245,6 +204,10 @@ type RouteFiles = {
   "routes/approvals.tsx": {
     id: "routes/approvals";
     page: "/approvals";
+  };
+  "routes/dreams-redirect.tsx": {
+    id: "routes/dreams-redirect";
+    page: "/dreams";
   };
   "routes/decomposition.tsx": {
     id: "routes/decomposition";
@@ -270,13 +233,13 @@ type RouteFiles = {
     id: "routes/env-tools";
     page: "/env-tools";
   };
-  "routes/learnings.tsx": {
-    id: "routes/learnings";
-    page: "/learnings";
+  "routes/mcp.tsx": {
+    id: "routes/mcp";
+    page: "/mcp";
   };
-  "routes/skill-feedback.tsx": {
-    id: "routes/skill-feedback";
-    page: "/skill-feedback";
+  "routes/learnings-redirect.tsx": {
+    id: "routes/learnings-redirect";
+    page: "/learnings";
   };
   "routes/routing.tsx": {
     id: "routes/routing";
@@ -290,14 +253,9 @@ type RouteModules = {
   "routes/login": typeof import("./app/routes/login.tsx");
   "routes/layout": typeof import("./app/routes/layout.tsx");
   "routes/home": typeof import("./app/routes/home.tsx");
-  "routes/users": typeof import("./app/routes/users.tsx");
-  "routes/user-detail": typeof import("./app/routes/user-detail.tsx");
-  "routes/email": typeof import("./app/routes/email.tsx");
-  "routes/costs": typeof import("./app/routes/costs.tsx");
-  "routes/forge": typeof import("./app/routes/forge.tsx");
   "routes/agent-detail": typeof import("./app/routes/agent-detail.tsx");
   "routes/system": typeof import("./app/routes/system.tsx");
-  "routes/brain-redirect": typeof import("./app/routes/brain-redirect.tsx");
+  "routes/brain": typeof import("./app/routes/brain.tsx");
   "routes/activity-redirect": typeof import("./app/routes/activity-redirect.tsx");
   "routes/diagnostics-redirect": typeof import("./app/routes/diagnostics-redirect.tsx");
   "routes/template-detail": typeof import("./app/routes/template-detail.tsx");
@@ -305,22 +263,22 @@ type RouteModules = {
   "routes/skills": typeof import("./app/routes/skills.tsx");
   "routes/skill-pack-explorer": typeof import("./app/routes/skill-pack-explorer.tsx");
   "routes/bridge": typeof import("./app/routes/bridge.tsx");
-  "routes/recall": typeof import("./app/routes/recall.tsx");
+  "routes/recall-redirect": typeof import("./app/routes/recall-redirect.tsx");
   "routes/changelog": typeof import("./app/routes/changelog.tsx");
   "routes/architecture": typeof import("./app/routes/architecture.tsx");
-  "routes/org-chart": typeof import("./app/routes/org-chart.tsx");
   "routes/design-system-lazy": typeof import("./app/routes/design-system-lazy.tsx");
   "routes/settings": typeof import("./app/routes/settings.tsx");
-  "routes/intelligence": typeof import("./app/routes/intelligence.tsx");
+  "routes/intelligence-redirect": typeof import("./app/routes/intelligence-redirect.tsx");
   "routes/files": typeof import("./app/routes/files.tsx");
   "routes/approvals": typeof import("./app/routes/approvals.tsx");
+  "routes/dreams-redirect": typeof import("./app/routes/dreams-redirect.tsx");
   "routes/decomposition": typeof import("./app/routes/decomposition.tsx");
   "routes/decisions": typeof import("./app/routes/decisions.tsx");
   "routes/sessions-admin": typeof import("./app/routes/sessions-admin.tsx");
   "routes/evolution": typeof import("./app/routes/evolution.tsx");
   "routes/msg-bus": typeof import("./app/routes/msg-bus.tsx");
   "routes/env-tools": typeof import("./app/routes/env-tools.tsx");
-  "routes/learnings": typeof import("./app/routes/learnings.tsx");
-  "routes/skill-feedback": typeof import("./app/routes/skill-feedback.tsx");
+  "routes/mcp": typeof import("./app/routes/mcp.tsx");
+  "routes/learnings-redirect": typeof import("./app/routes/learnings-redirect.tsx");
   "routes/routing": typeof import("./app/routes/routing.tsx");
 };

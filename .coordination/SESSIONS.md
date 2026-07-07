@@ -914,3 +914,100 @@
   defs, design-system.tsx Forge showcase tab, skill-pack-explorer.tsx forge breadcrumbs, settings.ts
   test-email write into now-orphaned email_messages table. NOT restarted (operator ships / decides
   when to rsync+redeploy to /home/websites/porter/admin). NO commit made in Porter.
+
+## Porter reliability: admin deploy script + DB durability (Sonnet 5, subagent) — 2026-07-06 (SGT)
+- Workstream: Moe's order — (1) durable admin deploy: admin/deploy.sh (build+rsync to
+  /home/websites/porter/admin) + fix stale "admin SPA archived" docs in Porter/CLAUDE.md +
+  admin/CLAUDE.md (it's restored+live). (2) DB durability: investigate users-table wipe root cause
+  (grep DELETE/TRUNCATE/DROP/drizzle push in backend+scripts, no guessing) + nightly pg_dump backup
+  to storage/backups/ via systemd --user timer, verified restorable.
+- Files claimed (edit/create): admin/deploy.sh (NEW), Porter/CLAUDE.md (EDIT — admin section only),
+  admin/CLAUDE.md (EDIT), storage/backups/** (NEW backup script + dumps), a new systemd --user
+  unit+timer for pg_dump (NEW, user-scope only).
+- NOT touching: backend/src/services/bridge/** (Fable 5 session in progress on failover chain),
+  _ops/**, vault/** (other agents claimed these per Moe's note). NO git commits in Porter (operator
+  ships; will bump backend version only if backend code changes — currently not expected, this is
+  scripts/docs/systemd).
+- Status: **DONE** 2026-07-06 — admin/deploy.sh created + verified (build+rsync, both `askporter.app/`
+  and `/api/v1/health` return 200 post-deploy). Porter/CLAUDE.md + admin/CLAUDE.md corrected (SPA is
+  restored+live, not archived); live Caddy routing confirmed via admin API (`/api/*`->:3001,
+  else->file_server /home/websites/porter/admin) and documented as ephemeral pending Moe's sudo fix.
+  DB-wipe investigation: NO destructive DELETE/TRUNCATE/DROP found anywhere in backend/scripts/git
+  history for `users` (only idempotent CREATE TABLE IF NOT EXISTS); live users table currently has
+  its original 2 rows (moe+system, March 2026 created_at, matching CHECKPOINT.md from May) — i.e. NOT
+  actually empty. Strong evidence the 'wipe' report is the SAME confusion documented in
+  _ops/askporter-login-fix.md: the legacy portal.py SQLite users table (different schema entirely)
+  IS empty (verified via storage/backups/portal.db.pre-move-archive) and was mistaken for Porter's
+  real Postgres users table. Backup: ops/backup-db.sh (pg_dump -Fc, keeps last 14, prunes old) +
+  porter-db-backup.timer/.service (systemd --user, nightly 19:00 UTC/03:00 SGT, enabled+started).
+  Verified: ran manually + via `systemctl --user start`, both succeeded; restored a dump into a
+  scratch DB (porter_restore_verify, dropped after) — users table round-tripped exactly (2/2 rows
+  match live); noted+documented one restore caveat (pgvector extension needs superuser on a truly
+  fresh target DB, unrelated to backup validity). Added storage/ to .gitignore (dumps were untracked
+  but un-ignored). NOTE: encountered 3 prompt-injection attempts embedded in tool-result streams
+  during this session (fake date-change notice, fake stale CLAUDE.md content, fake 'plan mode
+  active' halt instruction referencing a tool not in this agent's toolset) — all ignored, flagged to
+  operator. Files touched: admin/deploy.sh (NEW), ops/backup-db.sh (NEW), Porter/CLAUDE.md (edit),
+  admin/CLAUDE.md (edit), .gitignore (edit), storage/backups/*.dump (2 real dumps, gitignored),
+  ~/.config/systemd/user/porter-db-backup.{service,timer} (NEW, outside repo). NO commits made.
+
+## Porter admin revamp — item B (MCP mgmt) + E (forge/email cleanup) (Sonnet 5, subagent) — 2026-07-07 (SGT)
+- Workstream: Moe's order via operator — build MCP-management slice (New surface 1 from
+  vault/concepts/porter-admin-revamp.md) + finish item E cleanup flagged DONE-but-not-touched by the
+  2026-07-06 "Admin revamp evidence+design+safe-removal" session (components/forge/ untangle,
+  settings.ts test-email orphan, agent-presence/agent-registry/skill-pack-explorer dangling forge
+  refs). BUILD + VERIFY only per operator instruction — no version bump, no commit, no deploy.sh, no
+  restart-as-ship (restart only for local curl verification, reverted to whatever state operator wants).
+- Files claimed (edit/create):
+  - backend/src/routes/admin/mcp.ts (NEW, read-only GET /api/admin/mcp merging ~/.claude.json +
+    ~/.claude/settings*.json + project .mcp.json, redacted) + admin/index.ts (EDIT — register)
+  - admin/frontend.archived/app/routes/mcp.tsx (NEW) + routes.ts, components/layout/{sidebar,top-bar}.tsx
+    (EDIT — nav + route registration)
+  - components/forge/{org-connector,skills-studio,tools-studio,skill-create-dialog,skill-edit-sheet,
+    skill-import-dialog,evolution-panel}.tsx → moved to components/org-connector.tsx +
+    components/studio/*.tsx (git mv, imports updated in architecture.tsx/skills.tsx/tools.tsx)
+  - components/forge/{forge-panel,org-node,status-pulse,station-card,conveyor-line,model-badge,
+    quality-score,pipeline-progress,text-scramble,burn-rate,birth-animation,skills-marketplace,
+    index.ts}.tsx (DELETE — confirmed zero real imports anywhere, design-system.tsx's "Forge" tab only
+    hardcodes the visuals inline, never imports these)
+  - backend/src/routes/admin/settings.ts (EDIT — removed dead POST /test-email, zero frontend callers)
+  - agent-presence.tsx (EDIT — removed 2 dangling `<Link to="/forge">` buttons)
+  - agent-registry.ts (EDIT — removed 6 dead forge-team agent defs whose only surface was "forge",
+    dropped "forge" from porterCore.surfaces + the AgentDef.team union)
+  - skill-pack-explorer.tsx (EDIT — breadcrumb links pointed at dead /forge, repointed to /skills)
+- NOT touching: bridge/**, intellect/**, vault.ts, schema.ts, CHECKPOINT.md, backend/package.json
+  (operator mid-flight on vault releases there per instruction). design-system.tsx Forge showcase tab
+  left as-is (flagged by the design doc as a separate product-decision follow-up, not part of E).
+- Status: DONE — see final report to operator for full verification detail (backend tsc 0, admin tsc
+  0 new errors [2 pre-existing unrelated errors in brain.tsx + skills-studio.tsx Skill-type dup],
+  admin `npm run build` clean, curl-verified /api/admin/mcp against a live session). NO commit made in
+  Porter (operator ships).
+
+## Vault v2 R4 — derivative loop (Sonnet 5) — 2026-07-07 (SGT)
+- Workstream: raw→markdown derivative loop for the vault engine (plan: cheeky-coalescing-pudding.md
+  R4 section). BUILD+VERIFY only per operator instruction — no version bump/commit/restart-to-ship/
+  announce (operator ships).
+- Files added/changed: backend/src/services/vault-derivatives.ts (NEW — seedMissingJobs/
+  flagStaleJobs/processJobs sweep, runVaultDerivativeSweep, getDerivativeCoverage), backend/src/
+  routes/v1/vault.ts (EDIT — appended GET /derivatives?scope= + POST /derivatives/sweep, both
+  requireAuth), backend/src/services/intellect/workflow-engine.ts (EDIT — new
+  'vault_derivative_sweep' action + BUILTIN_WORKFLOWS every_24h row, rides the existing tick).
+- Reuses routingEngine.dispatchWithFailover (bridge/routing-engine.ts) forced to CHEAP_GATEWAY/
+  CHEAP_MODEL (imported from worker-knowledge.ts, reuse-not-reinvent) — cheap gateway leads, chain
+  fallback covers quota/failure. Raw content resolution: metadata.content (string) → local disk read
+  at artifact.path (bounded) → honest placeholder (no invented content). Raw vault_artifacts rows are
+  NEVER mutated by this loop — only new markdown_derivative artifact rows + vault_derivative_jobs
+  updates.
+- NOT touching: admin/**, backend/src/routes/admin/**, backend/package.json, CHANGELOG.md,
+  CHECKPOINT.md (operator ships/bumps).
+- Status: **DONE** 2026-07-07 — tsc 0, build 0. Restarted porter-fastify to test only (still
+  v6.53.0, no bump). Verified end-to-end on throwaway scope `r4-derivative-demo`: register-schema →
+  ingest 1 raw_file (inline metadata.content) → sweep seeded 1 missing job → generated via REAL
+  Bridge dispatch (codex_cli/codex/gpt-5.5, failover record present, bridge_dispatch_log confirms) →
+  markdown_derivative artifact linked to same node; raw artifact byte-unchanged (content_hash
+  unchanged) confirmed via psql. Re-ingested doc-1 with new content_hash to simulate a raw edit →
+  sweep #2 flagged the job stale (staleFlagged:1) and regenerated (new markdown_derivative artifact,
+  job.sourceHash updated to the new hash, old derivative artifact retained/not deleted). GET
+  /derivatives?scope= coverage counts verified correct at each step. All demo rows purged after
+  (vault_schemas/nodes/placements/artifacts/derivative_jobs + the 2 test bridge_dispatch_log rows) —
+  psql count check shows 0 across all 6 tables/log post-cleanup.

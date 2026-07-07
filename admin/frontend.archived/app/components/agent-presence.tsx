@@ -7,9 +7,6 @@
 
 import { PixelPortrait } from "~/components/pixel-portrait"
 import { Badge } from "~/components/ui/badge"
-import { Button } from "~/components/ui/button"
-import { Flame } from "lucide-react"
-import { Link } from "react-router"
 import type { AgentDef, AgentStatus } from "~/lib/agent-registry"
 import { getAgentsForSurface } from "~/lib/agent-registry"
 
@@ -45,13 +42,6 @@ function AgentCard({ agent, compact = false }: { agent: AgentDef; compact?: bool
           <span className={`size-1.5 rounded-full ${sc.dot}`} />
           <span className={sc.labelClass}>{sc.label}</span>
         </span>
-        {isGhost && (
-          <Link to="/forge">
-            <Button variant="ghost" size="icon-xs" className="text-text3 hover:text-warning">
-              <Flame className="size-3" />
-            </Button>
-          </Link>
-        )}
       </div>
       {!compact && agent.status === "planned" && agent.plannedCapabilities.length > 0 && (
         <div className="mt-1.5 pl-8">
@@ -129,11 +119,6 @@ export function AgentPresenceSummary({
           <span className="text-success ml-1">· {active} active</span>
         ) : null}
       </div>
-      <Link to="/forge" className="ml-auto">
-        <Button variant="ghost" size="icon-xs" className="text-text3 hover:text-warning">
-          <Flame className="size-3" />
-        </Button>
-      </Link>
     </div>
   )
 }

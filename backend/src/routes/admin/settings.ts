@@ -162,29 +162,6 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // POST /api/admin/settings/test-email — send test
-  fastify.post('/test-email', async (_req, reply) => {
-    const host = (await getSetting('smtp_host')) || config.smtp.host;
-    const user = (await getSetting('smtp_user')) || config.smtp.user;
-    if (!host || !user) {
-      reply.status(400);
-      return err('SMTP_NOT_CONFIGURED', 'SMTP host and user must be configured first');
-    }
-    // For now, record a test email in email_messages table
-    try {
-      const fromEmail = (await getSetting('smtp_from_email')) || config.smtp.fromEmail || 'porter@askporter.app';
-      const fromName = (await getSetting('smtp_from_name')) || config.smtp.fromName || 'Porter';
-      await execute(`
-        INSERT INTO email_messages (folder, from_email, from_name, to_email, to_name, subject, body, status, sent_at)
-        VALUES ('sent', $1, $2, $3, $4, 'Porter Admin Test Email', 'This is a test email sent from Porter Admin Settings.', 'sent', EXTRACT(epoch FROM now()))
-      `, [fromEmail, fromName, user, 'Admin']);
-      return ok({ sent: true, to: user });
-    } catch (e) {
-      reply.status(500);
-      return err('SEND_FAILED', (e as Error).message);
-    }
-  });
-
   // POST /api/admin/settings/force-logout — terminate all sessions except current
   fastify.post('/force-logout', async (req) => {
     const currentToken = req.cookies?.porter_admin_session;

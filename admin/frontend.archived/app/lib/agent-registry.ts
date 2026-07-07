@@ -13,7 +13,7 @@ export interface AgentDef {
   id: string
   name: string
   role: string
-  team: "brain" | "product" | "forge" | "admin" | "marketing" | "memory"
+  team: "brain" | "product" | "admin" | "marketing" | "memory"
   description: string
   surfaces: string[]  // route paths where this agent appears
   status: AgentStatus
@@ -38,7 +38,7 @@ const porterCore: AgentDef = {
   role: "Master Orchestrator",
   team: "product",
   description: "Routes all requests, manages all agents, owns the dispatch loop",
-  surfaces: ["dashboard", "forge"],
+  surfaces: ["dashboard"],
   status: "active",
   avatar: { skin: "#f1c27d", hair: "#1e293b", eyes: "#0f172a", shirt: "#1e3a5f", hairStyle: "short" },
   plannedCapabilities: [
@@ -332,111 +332,6 @@ const customerSuccess: AgentDef = {
   ],
 }
 
-// ── Forge Team — agent factory ─────────────────────────
-
-const forgeMaster: AgentDef = {
-  id: "forge-master",
-  name: "Forge Master",
-  role: "Pipeline Orchestrator",
-  team: "forge",
-  description: "Auto-queues templates, schedules waves, pauses on errors, manages quality gate",
-  surfaces: ["forge"],
-  status: "planned",
-  avatar: { skin: "#d2946b", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#b45309", hairStyle: "buzz" },
-  plannedCapabilities: [
-    "Auto-queue high-priority templates",
-    "Schedule forge waves based on resource availability",
-    "Pause pipeline if error rate >10%",
-    "Route templates to optimal specialist station",
-    "Track quality scores across waves",
-  ],
-}
-
-const forgeQueueMaster: AgentDef = {
-  id: "forge-queue-master",
-  name: "Queue Master",
-  role: "Queue Gatekeeper",
-  team: "forge",
-  description: "Triages incoming tasks, assigns priority, routes to correct worker, monitors SLA",
-  surfaces: ["forge"],
-  status: "planned",
-  avatar: { skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#dc2626", hairStyle: "ponytail" },
-  plannedCapabilities: [
-    "Triage all incoming forge requests by priority",
-    "Enforce queue ordering and SLA deadlines",
-    "Block duplicate or conflicting forge jobs",
-    "Escalate stalled queue items",
-  ],
-}
-
-const forgeScribe: AgentDef = {
-  id: "forge-scribe",
-  name: "The Scribe",
-  role: "Writer Station",
-  team: "forge",
-  description: "Station 1 — Writes .md files for each agent (SOUL, IDENTITY, ROLE_CARD, etc.)",
-  surfaces: ["forge"],
-  status: "planned",
-  avatar: { skin: "#f1c27d", hair: "#4a3728", eyes: "#1a1a2e", shirt: "#c2410c", hairStyle: "parted" },
-  plannedCapabilities: [
-    "Generate SOUL.md from template + persona",
-    "Write IDENTITY.md with unique voice and style",
-    "Create ROLE_CARD.md with responsibilities",
-    "Produce SKILLS.md and DELIVERABLES.md",
-  ],
-}
-
-const forgeMentor: AgentDef = {
-  id: "forge-mentor",
-  name: "The Mentor",
-  role: "Trainer Station",
-  team: "forge",
-  description: "Station 2 — Assigns skills based on role requirements and capability gaps",
-  surfaces: ["forge"],
-  status: "planned",
-  avatar: { skin: "#8d5524", hair: "#1a1a2e", eyes: "#0f172a", shirt: "#a16207", hairStyle: "short" },
-  plannedCapabilities: [
-    "Map role to required skill set",
-    "Assign skills from catalog",
-    "Identify capability gaps and recommend new skills",
-    "Validate skill compatibility",
-  ],
-}
-
-const forgeArmorer: AgentDef = {
-  id: "forge-armorer",
-  name: "The Armorer",
-  role: "Outfitter Station",
-  team: "forge",
-  description: "Station 3 — Equips tools and connections needed for the agent's role",
-  surfaces: ["forge"],
-  status: "planned",
-  avatar: { skin: "#c68642", hair: "#292524", eyes: "#1a1a2e", shirt: "#92400e", hairStyle: "mohawk" },
-  plannedCapabilities: [
-    "Assign tools from connection registry",
-    "Configure OAuth scopes per agent",
-    "Validate tool access permissions",
-    "Test tool connectivity before deployment",
-  ],
-}
-
-const forgeInspector: AgentDef = {
-  id: "forge-inspector",
-  name: "The Inspector",
-  role: "QA Inspector",
-  team: "forge",
-  description: "Cross-model QA grading — validates agent quality before deployment",
-  surfaces: ["forge"],
-  status: "planned",
-  avatar: { skin: "#f1c27d", hair: "#57534e", eyes: "#0f172a", shirt: "#7c2d12", hairStyle: "curly" },
-  plannedCapabilities: [
-    "Grade agent files across multiple models",
-    "Validate consistency between SOUL and ROLE_CARD",
-    "Check skill-to-role alignment",
-    "Block deployment if quality score below threshold",
-  ],
-}
-
 // ── Admin Team — platform infrastructure ───────────────
 
 const gatewayKeeper: AgentDef = {
@@ -646,8 +541,6 @@ export const AGENT_REGISTRY: AgentDef[] = [
   // Product
   projectMgr, strategy, crm, growth, revenue, ops, aiRouter,
   productContent, productQa, productSupport, retention, customerSuccess,
-  // Forge
-  forgeMaster, forgeQueueMaster, forgeScribe, forgeMentor, forgeArmorer, forgeInspector,
   // Admin
   gatewayKeeper, skillsCurator, toolsmith, adminDesign, librarian,
   // Marketing

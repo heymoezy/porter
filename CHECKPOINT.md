@@ -1,5 +1,23 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.55.0: admin MCP management + forge dead-code cleanup
+- MCP management (read-only): backend/src/routes/admin/mcp.ts → GET /api/admin/mcp reads the REAL
+  Claude Code CLI config (~/.claude.json mcpServers + projects[*], settings.json, settings.local.json,
+  project .mcp.json), redacts token/key/secret env, returns {servers,count,byScope,sources}. Admin SPA
+  page admin/frontend.archived/app/routes/mcp.tsx (card grid, design-system Badges) + nav (sidebar
+  "MCP Servers"/Plug icon, top-bar title). Porter as a config view for the CLI. Write path deferred.
+- E cleanup: components/forge/ untangled — 7 real components git-mv'd to components/studio/ +
+  org-connector.tsx to components/; 12 dead deleted + the barrel. settings.ts dead POST /test-email
+  removed. agent-presence.tsx forge links + agent-registry.ts 6 ghost "Forge Team" agents +
+  forge surface removed. skill-pack-explorer.tsx /forge breadcrumbs → /skills. CLAUDE.md +
+  admin/CLAUDE.md SPA-"archived"→live confirmed.
+- Verified: backend tsc 0; /api/admin/mcp returns 4 real servers (secrets redacted), 401 unauth;
+  admin build clean, zero /forge in output. Two PRE-EXISTING admin typecheck errors remain
+  (brain.tsx:179, duplicate interface Skill) — unrelated, flagged as follow-up.
+- NOTE: v6.54.0 accidentally committed the studio/* moves (git mv pre-staged); this release commits
+  the coherent remainder (forge deletions + import updates + mcp). Follow-up: gitignore
+  admin/frontend.archived/build/ (tracked build artifacts churn on every build).
+
 ## 2026-07-07 — v6.54.0: Vault v2 R4 — derivative loop
 - backend/src/services/vault-derivatives.ts: seedMissingJobs (raw_file artifacts with no job →
   status='missing') · flagStaleJobs (raw content_hash ≠ job.source_hash → 'stale') · processJobs

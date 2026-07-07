@@ -32,6 +32,7 @@ export default [
     route("evolution", "routes/evolution.tsx"),
     route("msg-bus", "routes/msg-bus.tsx"),
     route("env-tools", "routes/env-tools.tsx"),
+    route("mcp", "routes/mcp.tsx"),
     route("learnings", "routes/learnings-redirect.tsx"),
     route("routing", "routes/routing.tsx"),
   ]),

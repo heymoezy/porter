@@ -4,7 +4,7 @@ import { ChatPanel } from "~/components/chat-panel"
 import { PixelPortrait } from "~/components/pixel-portrait"
 import { useChatPanel } from "~/hooks/use-chat-panel"
 import { Badge } from "~/components/ui/badge"
-import { OrgConnector } from "~/components/forge"
+import { OrgConnector } from "~/components/org-connector"
 import {
   Database, Server, Globe,
   Brain, Zap, Route, Flame, BookOpen,

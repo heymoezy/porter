@@ -17,6 +17,7 @@ import msgBusRoutes from './msg-bus.js';
 import envToolsRoutes from './env-tools.js';
 import learningsRoutes from './learnings.js';
 import routingRoutes from './routing.js';
+import mcpRoutes from './mcp.js';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(healthRoutes, { prefix: '/health' });
@@ -37,4 +38,5 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(envToolsRoutes, { prefix: '/env-tools' });
   fastify.register(learningsRoutes, { prefix: '/learnings' });
   fastify.register(routingRoutes, { prefix: '/routing' });
+  fastify.register(mcpRoutes, { prefix: '/mcp' });
 }

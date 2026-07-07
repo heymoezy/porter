@@ -1,5 +1,5 @@
 import { AgentPresenceSummary } from "~/components/agent-presence"
-import { ToolsStudio } from "~/components/forge/tools-studio"
+import { ToolsStudio } from "~/components/studio/tools-studio"
 
 export default function ToolsPage() {
   return (

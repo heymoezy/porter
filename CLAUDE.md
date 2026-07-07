@@ -47,7 +47,17 @@ psql -d porter
 3. `curl -s http://127.0.0.1:3001/health` → expect current version
 4. Update `CHECKPOINT.md`
 
-Porter is headless (admin SPA archived 2026-07-04, PR-2 — `admin/frontend.archived`). The live dashboard is the inline brain-ui on :5176 (`backend/src/routes/brain-ui.ts`), served by the same process. Always restart after a rebuild.
+The admin SPA (`admin/frontend.archived/`, name is a historical artifact — it was
+un-archived and is LIVE) is a static React Router build served by Caddy at
+**askporter.app**, with `/api/*` reverse-proxied to this Fastify brain on :3001.
+Ship it with `bash admin/deploy.sh` (build → rsync to `/home/websites/porter/admin`;
+Caddy picks up new files immediately, no restart needed). The lightweight inline
+brain-ui on :5176 (`backend/src/routes/brain-ui.ts`) still exists as a secondary
+monitoring dashboard served by the same backend process — restart porter-fastify
+after a backend rebuild for that one. See `admin/CLAUDE.md` for the full admin
+ship story, including the caveat that Caddy's askporter.app routing is currently
+an ephemeral admin-API reload (see `_ops/askporter-login-fix.md` for the durable
+fix, which needs one sudo line from Moe).
 
 ## Verification — Before Claiming Done
 

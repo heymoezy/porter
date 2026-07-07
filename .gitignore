@@ -5,6 +5,7 @@ porter_avatar.*
 # Runtime data
 runtime/
 memory/projects/test-*
+storage/
 
 # Python
 __pycache__/

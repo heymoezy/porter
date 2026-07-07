@@ -10,7 +10,7 @@ import {
   ChevronLeft, ChevronRight, Settings, LogOut,
   FolderOpen, Route,
   Code2, Palette,
-  Wrench, Brain,
+  Wrench, Brain, Plug,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -47,6 +47,7 @@ const groups = [
     { icon: Route, label: "Bridge", path: "/bridge" },
     { icon: Brain, label: "Brain", path: "/brain" },
     { icon: Wrench, label: "Env Tools", path: "/env-tools" },
+    { icon: Plug, label: "MCP Servers", path: "/mcp" },
   ]},
   { label: "Dev", items: [
     { icon: Palette, label: "Design System", path: "/design-system" },
