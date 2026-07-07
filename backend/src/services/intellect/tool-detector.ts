@@ -1,26 +1,38 @@
 /**
  * Intellect Tool Detector
  *
- * Periodic scan of available tools on the system. Updates environment_tools
- * table with detection status, version, and health. Runs as a scheduled
- * Intellect workflow.
+ * Periodic scan of available tools on the system. Updates the canonical
+ * environment_tools registry with detection status, version, health, and —
+ * as of R8 — the REAL absolute path(s), kind, how-detected, install recipe,
+ * and a richer status (present|missing|drift). Runs as a scheduled Intellect
+ * workflow.
  *
- * Design: each tool has a detect command (usually `which` + `--version`).
- * If the binary exists and returns a version string, it's detected + healthy.
- * If missing, it's detected=false + health='missing'.
+ * WHY: tools like libreoffice/playwright/puppeteer were being reinstalled
+ * repeatedly because sessions `which` their own PATH, miss the tool, and
+ * install it somewhere new. Porter now OWNS the canonical location so every
+ * session/agent asks Porter (porter_which_tool / GET /api/admin/tools/registry)
+ * instead of reinstalling.
  *
- * This replaces the stub POST /api/admin/env-tools/refresh endpoint.
+ * Design: binaries are detected via `which` + `--version`. Browser bundles
+ * (playwright chromium cache, puppeteer chrome cache) are detected by scanning
+ * their known cache directories — and version DRIFT (more than one build
+ * present) is flagged so we can prune. Missing tools carry an install_recipe.
  */
 
 import { pool } from '../../db/client.js';
 import { logIntellectEvent } from './file-watcher.js';
 import { execSync } from 'node:child_process';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 interface ToolSpec {
   key: string;
   binary: string;
   versionCmd?: string;
   source?: 'local' | 'npm-global' | 'service';
+  kind?: 'binary' | 'npm' | 'browser' | 'service';
+  installRecipe?: string;
 }
 
 const TOOL_SPECS: ToolSpec[] = [
@@ -33,41 +45,198 @@ const TOOL_SPECS: ToolSpec[] = [
   { key: 'psql', binary: 'psql', versionCmd: 'psql --version' },
   { key: 'docker', binary: 'docker', versionCmd: 'docker --version' },
   { key: 'ollama', binary: 'ollama', versionCmd: 'ollama --version' },
-  { key: 'claude', binary: 'claude', versionCmd: 'claude --version', source: 'npm-global' },
-  { key: 'codex', binary: 'codex', versionCmd: 'codex --version', source: 'npm-global' },
-  { key: 'gemini', binary: 'gemini', versionCmd: 'gemini --version', source: 'npm-global' },
-  { key: 'tmux', binary: 'tmux' },
-  { key: 'jq', binary: 'jq', versionCmd: 'jq --version' },
+  { key: 'claude', binary: 'claude', versionCmd: 'claude --version', source: 'npm-global', kind: 'npm', installRecipe: 'npm i -g @anthropic-ai/claude-code' },
+  { key: 'codex', binary: 'codex', versionCmd: 'codex --version', source: 'npm-global', kind: 'npm', installRecipe: 'npm i -g @openai/codex' },
+  { key: 'gemini', binary: 'gemini', versionCmd: 'gemini --version', source: 'npm-global', kind: 'npm', installRecipe: 'npm i -g @google/gemini-cli' },
+  { key: 'tmux', binary: 'tmux', installRecipe: 'apt-get install -y tmux (needs sudo — ask Moe)' },
+  { key: 'jq', binary: 'jq', versionCmd: 'jq --version', installRecipe: 'apt-get install -y jq (needs sudo — ask Moe)' },
   { key: 'rsync', binary: 'rsync', versionCmd: 'rsync --version' },
   { key: 'htop', binary: 'htop', versionCmd: 'htop --version' },
-  { key: 'tsx', binary: 'tsx', versionCmd: 'tsx --version', source: 'npm-global' },
+  { key: 'tsx', binary: 'tsx', versionCmd: 'tsx --version', source: 'npm-global', kind: 'npm', installRecipe: 'npm i -g tsx' },
   { key: 'systemctl', binary: 'systemctl', versionCmd: 'systemctl --version' },
   { key: 'journalctl', binary: 'journalctl', versionCmd: 'journalctl --version' },
-  { key: 'ffmpeg', binary: 'ffmpeg', versionCmd: 'ffmpeg -version' },
-  { key: 'sqlite3', binary: 'sqlite3', versionCmd: 'sqlite3 --version' },
-  { key: 'playwright', binary: 'npx', versionCmd: 'npx playwright --version' },
+  { key: 'ffmpeg', binary: 'ffmpeg', versionCmd: 'ffmpeg -version', installRecipe: 'apt-get install -y ffmpeg (needs sudo — ask Moe)' },
+  { key: 'sqlite3', binary: 'sqlite3', versionCmd: 'sqlite3 --version', installRecipe: 'apt-get install -y sqlite3 (needs sudo — ask Moe)' },
+  // NOTE: playwright + puppeteer browser bundles are handled by
+  // detectBrowsersAndDocs() below (cache-scan with drift detection), not here.
 ];
 
-function detect(spec: ToolSpec): { found: boolean; version: string } {
+interface DetectResult {
+  found: boolean;
+  version: string;
+  path: string;
+}
+
+function which(binary: string): string {
   try {
-    // Check if binary exists
-    execSync(`which ${spec.binary}`, { timeout: 5000, stdio: 'pipe' });
-    // Get version
-    let version = '';
-    if (spec.versionCmd) {
-      try {
-        version = execSync(spec.versionCmd, { timeout: 5000, stdio: 'pipe', encoding: 'utf8' })
-          .trim()
-          .split('\n')[0]
-          .slice(0, 100);
-      } catch {
-        version = 'detected (version unknown)';
-      }
-    }
-    return { found: true, version };
+    return execSync(`which ${binary}`, { timeout: 5000, stdio: 'pipe', encoding: 'utf8' })
+      .trim()
+      .split('\n')[0];
   } catch {
-    return { found: false, version: '' };
+    return '';
   }
+}
+
+function detect(spec: ToolSpec): DetectResult {
+  const path = which(spec.binary);
+  if (!path) return { found: false, version: '', path: '' };
+  let version = '';
+  if (spec.versionCmd) {
+    try {
+      version = execSync(spec.versionCmd, { timeout: 5000, stdio: 'pipe', encoding: 'utf8' })
+        .trim()
+        .split('\n')[0]
+        .slice(0, 100);
+    } catch {
+      version = 'detected (version unknown)';
+    }
+  }
+  return { found: true, version, path };
+}
+
+/** Upsert a fully-described registry row. */
+async function upsertTool(row: {
+  key: string;
+  detected: number;
+  health: string;
+  status: string;
+  version: string;
+  source: string;
+  kind: string;
+  canonicalPath: string;
+  altPaths: string[];
+  howDetected: string;
+  installRecipe: string;
+  now: number;
+}): Promise<boolean> {
+  const altPathsJson = row.altPaths.length ? JSON.stringify(row.altPaths) : '';
+  const { rows: existing } = await pool.query<{ detected: number; version: string; canonical_path: string; status: string }>(
+    `SELECT detected, version, canonical_path, status FROM environment_tools WHERE tool_key = $1`,
+    [row.key]
+  );
+  const changed =
+    existing.length === 0 ||
+    existing[0].detected !== row.detected ||
+    (row.version && existing[0].version !== row.version) ||
+    existing[0].canonical_path !== row.canonicalPath ||
+    existing[0].status !== row.status;
+
+  await pool.query(
+    `INSERT INTO environment_tools
+       (tool_key, detected, health, status, version, source, kind, canonical_path, alt_paths, how_detected, install_recipe, last_checked_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+     ON CONFLICT (tool_key) DO UPDATE SET
+       detected = $2, health = $3, status = $4, version = $5, source = $6, kind = $7,
+       canonical_path = $8, alt_paths = $9, how_detected = $10, install_recipe = $11, last_checked_at = $12`,
+    [row.key, row.detected, row.health, row.status, row.version, row.source, row.kind,
+     row.canonicalPath, altPathsJson, row.howDetected, row.installRecipe, row.now]
+  );
+  return changed;
+}
+
+/**
+ * Detect browser bundles (playwright/puppeteer) by scanning their cache dirs,
+ * plus document tooling (libreoffice/soffice). Flags version DRIFT when more
+ * than one build of the same browser is present — that's the reinstall smell.
+ */
+async function detectBrowsersAndDocs(now: number): Promise<{ detected: number; missing: number; changed: number; drift: number }> {
+  let detected = 0, missing = 0, changed = 0, drift = 0;
+  const home = homedir();
+
+  // ── Playwright chromium cache ────────────────────────────────────────────
+  const pwRoot = join(home, '.cache', 'ms-playwright');
+  {
+    let chromiumBuilds: string[] = [];
+    const execPaths: string[] = [];
+    if (existsSync(pwRoot)) {
+      try {
+        chromiumBuilds = readdirSync(pwRoot)
+          .filter((d) => /^chromium-\d+$/.test(d))
+          .sort();
+        for (const b of chromiumBuilds) {
+          const exec = join(pwRoot, b, 'chrome-linux64', 'chrome');
+          if (existsSync(exec)) execPaths.push(exec);
+        }
+      } catch { /* ignore */ }
+    }
+    const found = execPaths.length > 0;
+    const isDrift = chromiumBuilds.length > 1;
+    if (found) detected++; else missing++;
+    if (isDrift) drift++;
+    const canonical = execPaths.length ? execPaths[execPaths.length - 1] : '';
+    const status = !found ? 'missing' : isDrift ? 'drift' : 'present';
+    const health = !found ? 'missing' : isDrift ? 'drift' : 'ok';
+    const c = await upsertTool({
+      key: 'playwright', detected: found ? 1 : 0, health, status,
+      version: found ? `chromium builds: ${chromiumBuilds.join(', ')}` : '',
+      source: 'browser', kind: 'browser',
+      canonicalPath: canonical, altPaths: execPaths,
+      howDetected: 'cache-scan',
+      installRecipe: `PLAYWRIGHT_BROWSERS_PATH=${pwRoot} npx playwright install chromium  (browsers live in ${pwRoot}; set PLAYWRIGHT_BROWSERS_PATH so sessions reuse them; prune older chromium-* builds to fix drift)`,
+      now,
+    });
+    if (c) changed++;
+  }
+
+  // ── Puppeteer chrome cache ───────────────────────────────────────────────
+  const ppRoot = join(home, '.cache', 'puppeteer');
+  {
+    const chromeDir = join(ppRoot, 'chrome');
+    let versions: string[] = [];
+    const execPaths: string[] = [];
+    if (existsSync(chromeDir)) {
+      try {
+        versions = readdirSync(chromeDir).filter((d) => /^linux-/.test(d)).sort();
+        for (const v of versions) {
+          const exec = join(chromeDir, v, 'chrome-linux64', 'chrome');
+          if (existsSync(exec)) execPaths.push(exec);
+        }
+      } catch { /* ignore */ }
+    }
+    const found = execPaths.length > 0;
+    const isDrift = versions.length > 1;
+    if (found) detected++; else missing++;
+    if (isDrift) drift++;
+    const canonical = execPaths.length ? execPaths[execPaths.length - 1] : '';
+    const status = !found ? 'missing' : isDrift ? 'drift' : 'present';
+    const health = !found ? 'missing' : isDrift ? 'drift' : 'ok';
+    const c = await upsertTool({
+      key: 'puppeteer', detected: found ? 1 : 0, health, status,
+      version: found ? `chrome builds: ${versions.join(', ')}` : '',
+      source: 'browser', kind: 'browser',
+      canonicalPath: canonical, altPaths: execPaths,
+      howDetected: 'cache-scan',
+      installRecipe: `PUPPETEER_CACHE_DIR=${ppRoot} npx puppeteer browsers install chrome  (browsers live in ${ppRoot}; prune older linux-* builds to fix drift)`,
+      now,
+    });
+    if (c) changed++;
+  }
+
+  // ── LibreOffice / soffice (document conversion) ──────────────────────────
+  {
+    const path = which('libreoffice') || which('soffice');
+    const found = !!path;
+    let version = '';
+    if (found) {
+      try {
+        version = execSync(`${path} --version`, { timeout: 8000, stdio: 'pipe', encoding: 'utf8' }).trim().split('\n')[0].slice(0, 100);
+      } catch { version = 'detected (version unknown)'; }
+    }
+    if (found) detected++; else missing++;
+    const status = found ? 'present' : 'missing';
+    const health = found ? 'ok' : 'missing';
+    const c = await upsertTool({
+      key: 'libreoffice', detected: found ? 1 : 0, health, status,
+      version, source: 'local', kind: 'binary',
+      canonicalPath: path, altPaths: [],
+      howDetected: 'which',
+      installRecipe: 'MISSING — needs a persistent user-local install (no sudo). Options for Moe: (a) portable AppImage from https://www.libreoffice.org/download/appimage/ into ~/apps/libreoffice, symlink soffice into ~/.npm-global/bin; (b) `snap install libreoffice` (needs snapd/sudo); (c) apt `apt-get install -y libreoffice-core --no-install-recommends` (needs sudo). Register canonical_path here once installed.',
+      now,
+    });
+    if (c) changed++;
+  }
+
+  return { detected, missing, changed, drift };
 }
 
 export interface ToolDetectionResult {
@@ -75,6 +244,7 @@ export interface ToolDetectionResult {
   detected: number;
   missing: number;
   changed: number;
+  drift: number;
 }
 
 export async function runToolDetection(): Promise<ToolDetectionResult> {
@@ -86,40 +256,29 @@ export async function runToolDetection(): Promise<ToolDetectionResult> {
   for (const spec of TOOL_SPECS) {
     const result = detect(spec);
     const source = spec.source ?? 'local';
+    const kind = spec.kind ?? 'binary';
     const health = result.found ? 'ok' : 'missing';
-    const detectedInt = result.found ? 1 : 0;
+    const status = result.found ? 'present' : 'missing';
 
     if (result.found) detected++;
     else missing++;
 
-    // Upsert with change detection
-    const { rows: existing } = await pool.query<{ detected: number; version: string }>(
-      `SELECT detected, version FROM environment_tools WHERE tool_key = $1`,
-      [spec.key]
-    );
-
-    if (existing.length > 0) {
-      const prev = existing[0];
-      const stateChanged = prev.detected !== detectedInt ||
-        (result.version && prev.version !== result.version);
-      if (stateChanged) changed++;
-
-      await pool.query(
-        `UPDATE environment_tools SET detected = $1, health = $2, version = $3,
-                source = $4, last_checked_at = $5 WHERE tool_key = $6`,
-        [detectedInt, health, result.version, source, now, spec.key]
-      );
-    } else {
-      await pool.query(
-        `INSERT INTO environment_tools (tool_key, detected, health, version, source, last_checked_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (tool_key) DO UPDATE SET detected = $2, health = $3, version = $4,
-           source = $5, last_checked_at = $6`,
-        [spec.key, detectedInt, health, result.version, source, now]
-      );
-      changed++;
-    }
+    const c = await upsertTool({
+      key: spec.key, detected: result.found ? 1 : 0, health, status,
+      version: result.version, source, kind,
+      canonicalPath: result.path, altPaths: [],
+      howDetected: 'which',
+      installRecipe: !result.found ? (spec.installRecipe ?? '') : (spec.installRecipe ?? ''),
+      now,
+    });
+    if (c) changed++;
   }
+
+  // Browser bundles + document tooling (drift-aware).
+  const bd = await detectBrowsersAndDocs(now);
+  detected += bd.detected;
+  missing += bd.missing;
+  changed += bd.changed;
 
   // Also probe Stalwart mail service
   try {
@@ -127,32 +286,33 @@ export async function runToolDetection(): Promise<ToolDetectionResult> {
       timeout: 3000, encoding: 'utf8'
     });
     await pool.query(
-      `INSERT INTO environment_tools (tool_key, detected, health, version, source, last_checked_at)
-       VALUES ('stalwart', 1, 'ok', 'JMAP mail server', 'service', $1)
-       ON CONFLICT (tool_key) DO UPDATE SET detected = 1, health = 'ok', last_checked_at = $1`,
+      `INSERT INTO environment_tools (tool_key, detected, health, status, version, source, kind, last_checked_at)
+       VALUES ('stalwart', 1, 'ok', 'present', 'JMAP mail server', 'service', 'service', $1)
+       ON CONFLICT (tool_key) DO UPDATE SET detected = 1, health = 'ok', status = 'present', last_checked_at = $1`,
       [now]
     );
     detected++;
   } catch {
     await pool.query(
-      `INSERT INTO environment_tools (tool_key, detected, health, version, source, last_checked_at)
-       VALUES ('stalwart', 0, 'unavailable', '', 'service', $1)
-       ON CONFLICT (tool_key) DO UPDATE SET detected = 0, health = 'unavailable', last_checked_at = $1`,
+      `INSERT INTO environment_tools (tool_key, detected, health, status, version, source, kind, last_checked_at)
+       VALUES ('stalwart', 0, 'unavailable', 'missing', '', 'service', 'service', $1)
+       ON CONFLICT (tool_key) DO UPDATE SET detected = 0, health = 'unavailable', status = 'missing', last_checked_at = $1`,
       [now]
     );
     missing++;
   }
 
   const result: ToolDetectionResult = {
-    total: TOOL_SPECS.length + 1,
+    total: TOOL_SPECS.length + 4, // + playwright, puppeteer, libreoffice, stalwart
     detected,
     missing,
     changed,
+    drift: bd.drift,
   };
 
   if (changed > 0) {
     await logIntellectEvent('tools_detected', 'tool_detector', { ...result });
-    console.log(`[intellect:tool-detector] scan complete: ${detected}/${result.total} detected, ${changed} changed`);
+    console.log(`[intellect:tool-detector] scan complete: ${detected}/${result.total} detected, ${changed} changed, ${bd.drift} drift`);
   }
 
   return result;

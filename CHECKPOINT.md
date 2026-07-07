@@ -1,5 +1,16 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.62.0: canonical tools registry + discoverability (R8 first slice)
+- environment_tools extended (kind/canonical_path/alt_paths/how_detected/install_recipe/status;
+  migrate-trg-v1.ts, additive, columns live, boot no-op). tool-detector.ts enriched: real `which`
+  paths + ~/.cache/ms-playwright & ~/.cache/puppeteer scan (flags DRIFT >1 build) + libreoffice check.
+- tools-env.ts generates ~/porter/tools.env (PLAYWRIGHT_BROWSERS_PATH, PUPPETEER_CACHE_DIR, PATH,
+  PORTER_TOOL_*) — the shared discoverability file every session sources (opt-in one-liner, not auto-applied).
+- porter_which_tool(name) MCP tool (aliases soffice/chromium/chrome) + GET /api/admin/tools/registry.
+- Detected live: libreoffice MISSING (needs persistent install — Moe's call, no-sudo: AppImage recommended),
+  playwright DRIFT (1208+1217), puppeteer DRIFT (4 builds), ffmpeg present (old detector was wrong), sqlite3 missing.
+- Fixes the "installed many times but sessions can't find it" problem: Porter is now the canonical source.
+
 ## 2026-07-07 — v6.61.0: dead-code cleanup (audit-driven)
 - Deleted: routes/brain-ui.ts + startBrainUI (duplicate :5176 process); migrate-mail-v1.ts + 10
   mail_*/mailbox/newsletter table defs (email dead since Tranche 12); forge_* (3) + rpg/battles (5)

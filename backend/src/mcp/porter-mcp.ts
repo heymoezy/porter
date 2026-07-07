@@ -165,6 +165,76 @@ export function createPorterMcpServer(): McpServer {
     }
   );
 
+  // ── porter_which_tool: the anti-reinstall lookup (R8) ─────────────────────
+  // Ask Porter "where is tool X / is it installed?" and get the canonical
+  // absolute path + version + status from the tools registry, instead of
+  // `which`-ing your own PATH, missing it, and reinstalling somewhere new.
+  const TOOL_ALIASES: Record<string, string> = {
+    soffice: 'libreoffice',
+    'libre-office': 'libreoffice',
+    chromium: 'playwright',
+    chrome: 'puppeteer',
+    'ms-playwright': 'playwright',
+  };
+  server.registerTool(
+    'porter_which_tool',
+    {
+      title: 'Locate a tool (registry lookup)',
+      description:
+        'Answer "where is tool X / is it installed?" from Porter\'s canonical tools registry. ' +
+        'Returns the real absolute canonical_path, version, kind (binary|npm|browser), status ' +
+        '(present|missing|drift), and — if missing or drifted — an install_recipe. ' +
+        'ALWAYS call this before installing playwright/puppeteer/libreoffice or any dev tool: ' +
+        'Porter already owns the canonical location, so you reuse it instead of reinstalling elsewhere.',
+      inputSchema: {
+        name: z.string().trim().min(1).describe('Tool name/key, e.g. "playwright", "libreoffice", "node", "puppeteer".'),
+      },
+    },
+    async ({ name }) => {
+      const raw = name.toLowerCase().trim();
+      const key = TOOL_ALIASES[raw] ?? raw;
+      const { rows } = await pool.query<{
+        tool_key: string; detected: number; version: string; kind: string;
+        canonical_path: string; alt_paths: string; how_detected: string;
+        install_recipe: string; status: string; health: string; source: string;
+      }>(
+        `SELECT tool_key, detected, version, kind, canonical_path, alt_paths,
+                how_detected, install_recipe, status, health, source
+           FROM environment_tools WHERE tool_key = $1`,
+        [key]
+      );
+      if (rows.length === 0) {
+        return textResult({
+          found: false, query: name, resolvedKey: key,
+          note: `No registry entry for "${key}". Porter does not track this tool yet — do NOT assume it is absent from the system. Ask an admin to add it, or check GET /api/admin/tools/registry.`,
+        });
+      }
+      const r = rows[0];
+      let altPaths: string[] = [];
+      if (r.alt_paths) { try { altPaths = JSON.parse(r.alt_paths); } catch { altPaths = []; } }
+      const status = r.status || (r.detected ? 'present' : 'missing');
+      return textResult({
+        found: true,
+        key: r.tool_key,
+        installed: !!r.detected,
+        status,
+        kind: r.kind || 'binary',
+        version: r.version,
+        canonicalPath: r.canonical_path || null,
+        altPaths,
+        howDetected: r.how_detected,
+        source: r.source,
+        installRecipe: status === 'present' ? null : (r.install_recipe || null),
+        guidance:
+          status === 'present'
+            ? `Use it at: ${r.canonical_path}. Do NOT reinstall.`
+            : status === 'drift'
+              ? `Multiple builds present (drift): ${altPaths.join(', ')}. Use canonical ${r.canonical_path}; prune the rest per install_recipe.`
+              : `Not installed. Follow install_recipe — install to the canonical location, do NOT scatter a new copy.`,
+      });
+    }
+  );
+
   // ── Optional MCP resource: a compact per-scope vault summary ──────────────
   // porter-vault://{scope} — node/edge counts by type+layer. Cheap, cacheable
   // orientation read a client can pull without spending a tool call.

@@ -1,9 +1,80 @@
 import { FastifyInstance } from 'fastify';
 import { ok } from '../../lib/admin-envelope.js';
 import { queryAll, queryOne, execute } from '../../db/pg-helpers.js';
+import { generateToolsEnvFile, defaultToolsEnvPath } from '../../services/intellect/tools-env.js';
 
 export default async function toolsRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', fastify.requirePlatformAdmin);
+
+  // GET /api/admin/tools/registry — the canonical tools registry (R8).
+  // Full detail: kind, canonical_path, alt_paths, how_detected, install_recipe,
+  // status (present|missing|drift). This is the source-of-truth sessions/agents
+  // consult instead of `which`-ing their PATH and reinstalling elsewhere.
+  // ?regenerateEnv=1 also (re)writes the shared ~/porter/tools.env discovery file.
+  fastify.get('/registry', async (req) => {
+    const q = (req.query ?? {}) as { regenerateEnv?: string };
+    let envFile: { path: string; bytes: number } | null = null;
+    if (q.regenerateEnv === '1' || q.regenerateEnv === 'true') {
+      try { envFile = await generateToolsEnvFile(); } catch { envFile = null; }
+    }
+    try {
+      const rows = await queryAll<{
+        tool_key: string;
+        detected: number;
+        version: string;
+        source: string;
+        health: string;
+        kind: string;
+        canonical_path: string;
+        alt_paths: string;
+        how_detected: string;
+        install_recipe: string;
+        status: string;
+        last_checked_at: number;
+      }>(
+        `SELECT tool_key, detected, version, source, health, kind, canonical_path,
+                alt_paths, how_detected, install_recipe, status, last_checked_at
+           FROM environment_tools ORDER BY tool_key`
+      );
+
+      const tools = rows.map(r => {
+        let altPaths: string[] = [];
+        if (r.alt_paths) { try { altPaths = JSON.parse(r.alt_paths); } catch { altPaths = []; } }
+        return {
+          key: r.tool_key,
+          detected: !!r.detected,
+          status: r.status || (r.detected ? 'present' : 'missing'),
+          kind: r.kind || 'binary',
+          version: r.version,
+          canonicalPath: r.canonical_path,
+          altPaths,
+          howDetected: r.how_detected,
+          installRecipe: r.install_recipe,
+          source: r.source,
+          health: r.health,
+          lastChecked: r.last_checked_at,
+        };
+      });
+
+      return ok({
+        tools,
+        count: tools.length,
+        summary: {
+          present: tools.filter(t => t.status === 'present').length,
+          missing: tools.filter(t => t.status === 'missing').length,
+          drift: tools.filter(t => t.status === 'drift').length,
+        },
+        envFile: {
+          path: defaultToolsEnvPath(),
+          regenerated: !!envFile,
+          bytes: envFile?.bytes ?? null,
+          optInLine: '[ -f "$HOME/porter/tools.env" ] && source "$HOME/porter/tools.env"',
+        },
+      });
+    } catch {
+      return ok({ tools: [], count: 0 });
+    }
+  });
 
   // GET /api/admin/tools — environment_tools table
   fastify.get('/', async () => {
