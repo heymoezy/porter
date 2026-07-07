@@ -1,5 +1,16 @@
 # Porter Checkpoint
 
+## 2026-07-07 — v6.56.0: Vault v2 R1f — edge ingestion
+- POST /api/v1/vault/edges {app_scope, edges:[{fromExternalId,toExternalId,kind,metadata?}]} — bulk
+  create NON-hierarchical relationships between existing nodes (person↔deal, doc↔person,
+  knowledge↔agent, proposal↔target…). Resolves externalIds→node ids in scope; unresolved endpoints
+  skipped (not fatal); idempotent per (scope,from,to,kind); transactional; ≤10000/call.
+- Completes the engine for the council-ratified 10/10 ymc schema, whose cross-layer + peer links are
+  ALL edges (13 kinds). GET /graph already returns edges for the node set. Verified: create/skip/
+  idempotent + graph returns edge. Test data purged.
+- NEXT: ymc R2 — extend vault-ingest.ts to emit edges, then real proposed-ingest (nodes+edges) so the
+  graph is connected, not flat piles (637 docs + 1,689 outreach targets need their person/mandate edges).
+
 ## 2026-07-07 — v6.55.0: admin MCP management + forge dead-code cleanup
 - MCP management (read-only): backend/src/routes/admin/mcp.ts → GET /api/admin/mcp reads the REAL
   Claude Code CLI config (~/.claude.json mcpServers + projects[*], settings.json, settings.local.json,

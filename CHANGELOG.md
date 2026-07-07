@@ -1,3 +1,8 @@
+## v6.56.0 (2026-07-07)
+
+- Porter admin: MCP management page + forge dead-code cleanup (v6.55.0)
+
+
 ## v6.54.0 (2026-07-07)
 
 - Vault v2 R1e: placement accept/refile — review-queue ops (v6.53.0)

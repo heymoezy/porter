@@ -551,6 +551,89 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
       return reply.send(ok(result, request.id));
     }
   );
+
+  // POST /api/v1/vault/edges — bulk create NON-hierarchical relationships between
+  // existing nodes (hierarchy lives in placements; this is everything else:
+  // person↔deal, doc↔person, knowledge↔agent, proposal↔target, …). Apps push edges
+  // AFTER ingest (nodes must already exist). Endpoints resolve app-supplied
+  // externalIds to node ids within the scope. Idempotent per (scope, from, to, kind).
+  //
+  // Body: { app_scope, edges: [{ fromExternalId, toExternalId, kind, metadata? }] }
+  fastify.post(
+    '/edges',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const scope = scopeOf(body, {});
+      if (!scope) return reply.code(400).send(err('MISSING_SCOPE', 'app_scope is required', request.id));
+      const edges = body.edges;
+      if (!Array.isArray(edges) || edges.length === 0) {
+        return reply.code(400).send(err('MISSING_EDGES', 'edges must be a non-empty array', request.id));
+      }
+      if (edges.length > 10000) {
+        return reply.code(400).send(err('TOO_MANY_EDGES', 'max 10000 edges per call', request.id));
+      }
+
+      // Resolve all externalIds in the scope up front.
+      const rows = (await pool.query(
+        `SELECT external_id, id FROM vault_nodes WHERE app_scope = $1`,
+        [scope]
+      )).rows as Array<{ external_id: string; id: string }>;
+      const idByExternal = new Map(rows.map((r) => [r.external_id, r.id]));
+
+      const now = Date.now() / 1000;
+      const results: Array<Record<string, unknown>> = [];
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (let i = 0; i < edges.length; i++) {
+          const e = edges[i] as Record<string, unknown>;
+          const fromExt = typeof e.fromExternalId === 'string' ? e.fromExternalId.trim() : '';
+          const toExt = typeof e.toExternalId === 'string' ? e.toExternalId.trim() : '';
+          const kind = typeof e.kind === 'string' ? e.kind.trim() : '';
+          if (!fromExt || !toExt || !kind) {
+            await client.query('ROLLBACK');
+            return reply.code(400).send(err('INVALID_EDGE', `edge ${i} needs fromExternalId, toExternalId, kind`, request.id));
+          }
+          const fromId = idByExternal.get(fromExt);
+          const toId = idByExternal.get(toExt);
+          if (!fromId || !toId) {
+            results.push({ index: i, skipped: true, reason: `unresolved ${!fromId ? fromExt : toExt}` });
+            continue;
+          }
+          const meta = (e.metadata && typeof e.metadata === 'object' ? e.metadata : {}) as Record<string, unknown>;
+          // Idempotent: skip if the same (scope, from, to, kind) edge already exists.
+          const dupe = (await client.query(
+            `SELECT id FROM vault_edges WHERE app_scope=$1 AND from_node_id=$2 AND to_node_id=$3 AND kind=$4`,
+            [scope, fromId, toId, kind]
+          )).rows[0] as { id: string } | undefined;
+          if (dupe) {
+            await client.query(`UPDATE vault_edges SET metadata=$1::jsonb WHERE id=$2`, [JSON.stringify(meta), dupe.id]);
+            results.push({ index: i, id: dupe.id, action: 'updated' });
+          } else {
+            const id = crypto.randomUUID();
+            await client.query(
+              `INSERT INTO vault_edges (id, app_scope, from_node_id, to_node_id, kind, metadata, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)`,
+              [id, scope, fromId, toId, kind, JSON.stringify(meta), now]
+            );
+            results.push({ index: i, id, action: 'created' });
+          }
+        }
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+
+      const created = results.filter((r) => r.action === 'created').length;
+      const updated = results.filter((r) => r.action === 'updated').length;
+      const skipped = results.filter((r) => r.skipped).length;
+      return reply.send(ok({ appScope: scope, created, updated, skipped, total: edges.length, results }, request.id));
+    }
+  );
 }
 
 /**
