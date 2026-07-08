@@ -33,6 +33,7 @@ import { runWorkerKnowledgeRefresh } from '../../services/intellect/worker-knowl
 import { runGithubScan } from '../../services/intellect/github-scan.js';
 import { randomUUID } from 'node:crypto';
 import { resolveActiveProject, setActiveProject, clearActiveProject, recentProjects } from '../../services/intellect/active-project.js';
+import { observeShadow, shadowFlagOn, canaryScopes } from '../../services/memory-injection-v2.js';
 
 // Surprise-salience write-gate (R3). An agent episode is skipped when its
 // salience (1 − max trigram-similarity vs recent episodes + active concepts)
@@ -122,6 +123,17 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     const projectIdSource: 'query' | 'cwd' | 'none' =
       project ? 'query' : detectedContext.projectId ? 'cwd' : 'none';
     const projectIsServerDerived = projectIdSource === 'cwd';
+
+    // ─── R4.1 SHADOW CANARY (SessionStart hot path) ─────────────────────────
+    // Guarded, fire-and-forget, side-effect-ONLY. When both injection flags are
+    // OFF (default) this block is inert — no V2 work, no DB calls — and the
+    // /context response below is byte-identical to before. When SHADOW=1 (or a
+    // canary scope is configured) it shadow-computes the legacy-vs-vault 6-tier
+    // builder and logs a structured comparison. It NEVER awaits into, or
+    // changes, the injected /context bytes, and never throws.
+    if (shadowFlagOn() || canaryScopes().size > 0) {
+      void observeShadow({ projectId: effectiveProject ?? undefined }).catch(() => {});
+    }
 
     // Fetch system directives (always apply)
     const { rows: systemDirectives } = await pool.query<DirectiveRow>(

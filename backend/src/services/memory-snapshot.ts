@@ -13,7 +13,7 @@
  */
 
 import { pool } from '../db/client.js';
-import { buildMemoryContext } from './memory-injection.js';
+import { resolveInjectedMemoryContext } from './memory-injection-v2.js';
 
 // ── LRU In-Memory Cache ───────────────────────────────────────────────────────
 
@@ -87,8 +87,10 @@ export async function getOrBuildSnapshot(
     console.error('[memory-snapshot] DB lookup failed, building fresh:', err instanceof Error ? err.message : err);
   }
 
-  // Layer 3: cache miss — build once and freeze
-  const fresh = await buildMemoryContext({
+  // Layer 3: cache miss — build once and freeze.
+  // R4.1: drop-in wrapper; both injection flags OFF (default) → byte-identical
+  // to buildMemoryContext(...). Shadow/canary only activate when flagged.
+  const fresh = await resolveInjectedMemoryContext({
     agentId: opts.agentId,
     projectId: opts.projectId,
     searchQuery: opts.searchQuery,

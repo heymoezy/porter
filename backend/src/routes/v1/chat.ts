@@ -6,7 +6,7 @@ import { ok, err } from '../../lib/envelope.js';
 import { config } from '../../config.js';
 import { z } from 'zod';
 import { selectStreamBackend } from '../../services/stream-service.js';
-import { buildMemoryContext } from '../../services/memory-injection.js';
+import { resolveInjectedMemoryContext } from '../../services/memory-injection-v2.js';
 import { selectSkills } from '../../services/skill-selector.js';
 import type { RoutingContext } from '../../services/bridge/types.js';
 import type { ProjectRole } from '../../lib/roles.js';
@@ -339,7 +339,10 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
 
     if (!raw) {
       // Phase 38: use returnMeta to capture directive_selection stats for dispatch logging
-      const memoryResult = await buildMemoryContext({
+      // R4.1: drop-in wrapper around buildMemoryContext. Both injection flags
+      // OFF (default) → returns buildMemoryContext(...) byte-identically, zero
+      // overhead. Shadow/canary only activate when explicitly flagged.
+      const memoryResult = await resolveInjectedMemoryContext({
         agentId: agentId,
         projectId: projectId,
         searchQuery: message,

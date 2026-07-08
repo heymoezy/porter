@@ -1,3 +1,8 @@
+## v6.63.0 (2026-07-08)
+
+- Canonical tools registry + discoverability (R8 first slice) (v6.62.0)
+
+
 ## v6.61.0 (2026-07-07)
 
 - Scope ladder + product registry — identity spine (v6.60.0)

@@ -1,5 +1,17 @@
 # Porter Checkpoint
 
+## 2026-07-08 — v6.63.0: vault-reader SHADOW canary (R4.1) — flags OFF, zero risk
+- The memory-injection projection: memory-projection.ts (legacy tables → vault-shaped read model, stable
+  ids legacy:<kind>:<id>, no data migration) + memory-injection-v2.ts (buildMemoryContextV2, line-for-line
+  V1 port over the projection; preserves 6-tier order/caps/VAULT_RANK_BOOST/reserved-slots/env-tools).
+- resolveInjectedMemoryContext wrapper wired at the REAL injection sites (chat.ts, memory-snapshot.ts) +
+  observeShadow on /context (intellect.ts). TWO flags, BOTH DEFAULT OFF: MEMORY_INJECTION_SHADOW (build
+  both, inject V1, log diff) + MEMORY_INJECTION_VAULT_SCOPES (csv; inject V2 for listed scopes w/ MANDATORY
+  auto-fallback to V1 on exception/timeout/empty/missing-directive). Flags off = byte-identical to legacy.
+- Verified: flags-off identical to V1; shadow injects V1; forced-timeout → fallback to V1. V2===V1 today
+  (faithful projection); value comes when vault-native learning nodes join the same contract. Ship dark;
+  enable SHADOW later to observe, then canary one scope. NEVER breaks the silent SessionStart injection.
+
 ## 2026-07-07 — v6.62.0: canonical tools registry + discoverability (R8 first slice)
 - environment_tools extended (kind/canonical_path/alt_paths/how_detected/install_recipe/status;
   migrate-trg-v1.ts, additive, columns live, boot no-op). tool-detector.ts enriched: real `which`
