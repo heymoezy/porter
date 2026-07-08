@@ -1,3 +1,24 @@
+## 2026-07-08 — v6.66.0: R1 vault_artifact_locations (Porter Files directory foundation)
+- Additive schema for Moe's Files directive ("all docs visible in porter files, graph-organized, perfect sync,
+  completely deduped"). New vault_artifact_locations table = physical locations of a CONTENT-deduped document:
+  ONE vault_nodes(document) per (app_scope, content_hash), N filesystem paths = N rows here. present/missing_since
+  drive reconcile-sync; canonical = shallowest active path. Source of truth for locations. Idempotent migration
+  (schema_migrations vault_artifact_locations_v1), wired into index.ts boot, additive-only (touches nothing).
+  tsc 0, migration applied, table verified, health 200. Design: planning/porter-files-directory.md (council).
+- NEXT (Files build plan R2..R6): R2 content-hash ingest compat (dedupe by sha256, legacy alias); R3 backfill+dedupe
+  the 2901 ymc per-path nodes; R4 reconcile/sync job (24h tick + admin sync-now); R5 Files API; R6 Files UI (admin SPA).
+
+## 2026-07-08 — R7: promoted ymc.capital to V2 vault-sourced memory injection (Moe-approved)
+- Set MEMORY_INJECTION_VAULT_SCOPES=ymc.capital in backend/.env + restarted porter-fastify. ymc.capital
+  chat-dispatch injection now comes from buildMemoryContextV2 (memory-projection over the vault) instead of
+  legacy V1, with MANDATORY auto-fallback to V1 on any exception/timeout/empty/missing-directive. Verified:
+  Porter healthy 200; /context ymc.capital 10304 bytes valid; canary path active (observeShadow firing).
+  Canary proven byte-identical (parity 4/4, v1==v2 tokens) so ZERO behaviour change. HONEST CAVEAT: byte-
+  identical means ZERO token savings today + a small inline V2-compute cost per ymc chat — this is the
+  prod-fidelity pilot/milestone toward headless vault-native injection, NOT a savings win. Savings require a
+  LEANER V2 projection (next design step). Revert = remove the .env line + restart (.env.r7bak2 backup kept).
+- Other scopes (Porter/themozaic/baanyindee) remain V1. MEMORY_INJECTION_SHADOW stays OFF.
+
 # Porter Checkpoint
 
 ## 2026-07-08 — v6.65.0: reorg tooling (config-gen + move/dedup runbooks) — #28, dry-run only

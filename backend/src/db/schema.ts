@@ -1334,7 +1334,43 @@ export const vaultRecordLinks = pgTable('vault_record_links', {
   uniqueLink: uniqueIndex('vault_record_links_unique_idx').on(table.appScope, table.sourceTable, table.sourceId, table.toNodeId, table.kind),
 }));
 
+// Physical locations of a deduped document (Files directory, Moe 2026-07-08:
+// "completely deduped ... in perfect sync"). ONE vault_nodes(type=document) per
+// (app_scope, content_hash) — the same file content living in N filesystem
+// places is N rows HERE, one node. Canonical path = shallowest active location.
+// `present`/`missingSince` drive sync: a reconcile pass flips vanished paths to
+// present=false (placements deactivate) without deleting the content node.
+// Source of truth for locations; vault_artifacts.metadata.locations_preview is
+// a derived cache. Idempotent per (app_scope, absolute_path).
+export const vaultArtifactLocations = pgTable('vault_artifact_locations', {
+  id: text('id').primaryKey(),
+  appScope: text('app_scope').notNull(),
+  documentNodeId: text('document_node_id').notNull(), // → vault_nodes.id (content node)
+  artifactId: text('artifact_id'),                    // → vault_artifacts.id (may be null pre-link)
+  contentHash: text('content_hash').notNull(),        // sha256 of file content (the dedup key)
+  absolutePath: text('absolute_path').notNull(),
+  relativePath: text('relative_path'),
+  basename: text('basename'),
+  projectNodeId: text('project_node_id'),             // containing project container
+  documentsRootNodeId: text('documents_root_node_id'),
+  folderNodeId: text('folder_node_id'),               // deepest folder container (nullable)
+  sizeBytes: doublePrecision('size_bytes'),
+  mtimeNs: text('mtime_ns'),                           // text to avoid bigint precision loss
+  dev: text('dev'),
+  inode: text('inode'),
+  present: boolean('present').notNull().default(true),
+  missingSince: doublePrecision('missing_since'),
+  scanId: text('scan_id'),
+  firstSeenAt: doublePrecision('first_seen_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  lastSeenAt: doublePrecision('last_seen_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+}, (table) => ({
+  scopeHash: index('vault_artifact_locations_scope_hash_idx').on(table.appScope, table.contentHash),
+  scopeNode: index('vault_artifact_locations_scope_node_idx').on(table.appScope, table.documentNodeId),
+  uniquePath: uniqueIndex('vault_artifact_locations_unique_path_idx').on(table.appScope, table.absolutePath),
+}));
+
 export type VaultSchemaRow = typeof vaultSchemas.$inferSelect;
+export type VaultArtifactLocationRow = typeof vaultArtifactLocations.$inferSelect;
 export type VaultRecordLinkRow = typeof vaultRecordLinks.$inferSelect;
 export type VaultNodeRow = typeof vaultNodes.$inferSelect;
 export type VaultPlacementRow = typeof vaultPlacements.$inferSelect;
