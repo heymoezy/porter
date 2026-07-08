@@ -1,6 +1,7 @@
 import { pool } from '../db/client.js';
 import { config, featureFlags } from '../config.js';
 import { dispatch as aiRouterDispatch } from './ai-router.js';
+import { reconcileReleases } from './release-reconciler.js';
 import { checkDeadlineTriggers } from './event-triggers.js';
 import { syncCalendarEvents, checkCalendarDeadlines } from './calendar.js';
 import { dispatchExternalCall, checkConnectionHealth } from './external-dispatcher.js';
@@ -28,6 +29,7 @@ const DISPATCH_SCORING_INTERVAL = 10800; // 10800 ticks x 2s = 6h — auto-score
 const INTELLECT_DAILY_INTERVAL = 43200;  // 43200 ticks x 2s = 24h — daily intellect maintenance (prune, mine)
 const INTELLECT_WEEKLY_INTERVAL = 302400; // 302400 ticks x 2s = 7d — weekly intellect maintenance (dream workers)
 const SILO_CADENCE_CHECK_INTERVAL = 1800; // 1800 ticks × 2s = 1h. Per-silo cadence is day-scale; hourly granularity is plenty.
+const RELEASE_RECONCILE_INTERVAL = 300;   // 300 ticks × 2s = 10 min — re-assert announce for every project's current version (self-heals a skipped announce ceremony, session-independent).
 const CONTEXT_PRESSURE_THRESHOLD = 0.8;
 const CONTEXT_ROTATION_THRESHOLD = 0.95;
 const WORKER_ID = crypto.randomUUID();
@@ -251,6 +253,17 @@ async function tick() {
     if (tickCount > 0 && tickCount % INTELLECT_DAILY_INTERVAL === 0) {
       runScheduledWorkflows('every_24h').catch(err =>
         console.error('[scheduler:intellect] every_24h workflows error', err));
+    }
+
+    // Release ceremony enforcement — every 10 min. Re-asserts the group announce
+    // for every project's CURRENT shipped version (idempotent: no-op if already
+    // announced). Makes the announce ceremony STRUCTURAL/session-independent — a
+    // release shipped without running the announce self-heals here. (Moe: "hard
+    // code it into the process, it keeps getting skipped".)
+    if (tickCount > 0 && tickCount % RELEASE_RECONCILE_INTERVAL === 0) {
+      reconcileReleases()
+        .then(rs => { const filled = rs.filter(r => r.announced); if (filled.length) console.log('[scheduler:release] announce gaps filled:', JSON.stringify(filled)); })
+        .catch(err => console.error('[scheduler:release] reconcile error', err));
     }
 
     // Intellect weekly maintenance — every 7 days (dream workers)

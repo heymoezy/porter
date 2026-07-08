@@ -1,3 +1,13 @@
+## 2026-07-08 — v6.74.0: release-announce ENFORCEMENT (structural, session-independent)
+- Moe (repeatedly): announce keeps getting skipped because it depends on whichever session runs the post-commit
+  hook — a session shipped a Porter update without ceremony. FIX: backend/src/services/release-reconciler.ts —
+  reconcileReleases() reads each registered project's current version (Porter via PORTER_RELEASES import; ymc via
+  on-disk version.ts+site-releases.ts regex) and RE-ASSERTS the group announce via the ONE ymc announcer,
+  IDEMPOTENTLY (no-op if marker exists; announces if skipped). Wired into scheduler tick every 10 min
+  (RELEASE_RECONCILE_INTERVAL=300) + manual POST /api/admin/releases/reconcile. A skipped announce now self-heals
+  within one cycle regardless of session. Announce delivery unchanged (ymc release-announce.ts stays the sender).
+- NOTE: R3 (ymc kit delegate migration) + admin version/changelog bake are separate in-flight workstreams, uncommitted.
+
 ## 2026-07-08 — v6.73.0: release-kit R2 (registry API + drift audit)
 - backend/src/release-kit/audit.ts (auditProject/auditAll — read-only drift: manifest valid? hooks wired to
   kit (bespoke=unwired, the fork that broke prod)? kitVersion current? versionFile present?) + routes/admin/

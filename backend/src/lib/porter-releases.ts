@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.74.0',
+    date: '2026-07-08',
+    title: 'Release announces are now enforced, not optional',
+    bullets: [
+      'The group release announcement is no longer something a session has to remember to run — Porter now re-asserts the announce for every project\'s current shipped version every 10 minutes, idempotently. If a release ever ships without its announce (any session, or none), Porter fills the gap automatically within minutes. The ceremony is structural now, not manual.',
+    ],
+  },
+  {
     version: '6.73.0',
     date: '2026-07-08',
     title: 'Release-kit R2 — Porter now audits release consistency',
