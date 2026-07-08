@@ -19,6 +19,7 @@ import learningsRoutes from './learnings.js';
 import routingRoutes from './routing.js';
 import mcpRoutes from './mcp.js';
 import reorgRoutes from './reorg.js';
+import filesRoutes from './files.js';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(healthRoutes, { prefix: '/health' });
@@ -41,4 +42,5 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(routingRoutes, { prefix: '/routing' });
   fastify.register(mcpRoutes, { prefix: '/mcp' });
   fastify.register(reorgRoutes, { prefix: '/reorg' });
+  fastify.register(filesRoutes, { prefix: '/files' });
 }

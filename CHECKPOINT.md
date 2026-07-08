@@ -1,3 +1,15 @@
+## 2026-07-08 — v6.69.0: R5 Files API + R6 Files UI (Porter Files directory COMPLETE)
+- R5: backend/src/routes/admin/files.ts (registered /files in admin/index.ts) — GET /files/apps, /files/tree?app_scope=,
+  /files/document/:nodeId, POST /files/sync (honest — returns the ymc sync command, executes nothing). Tree grouped by
+  vault_artifact_locations.documents_root_node_id (NOT vault_placements — polluted by #30 assoc, 130 parent types).
+  parseMtime() dual-format (schema says ns, ingest writes ISO). requirePlatformAdmin (service token satisfies).
+- R6: admin/frontend.archived Document Library (route vault-files + sidebar nav above old browser, relabeled 'Raw Files';
+  old route untouched) — apps grid -> projects -> docs ('N locations' badge) -> detail (hash/canonical/locations/projects).
+- Files directory delivers Moe's directive: all app docs visible, graph-organized (per-project), content-deduped
+  (one node/N locations), in-sync (reconcile). Verified live :3001: apps=[ymc 6 proj/2062 docs/2901 locs]. Agent-built.
+- NAMING for Moe: two surfaces now — new deduped "Document Library" (canonical) + old raw "Raw Files" browser. Merge = Moe's call.
+- FOLLOW-UPS: physical hardlink dedup 1.06GB (approved, dry-run); every_24h sync cadence; cross-app ingest (themozaic/baanyindee).
+
 ## 2026-07-08 — v6.68.0: R4 POST /vault/reconcile (Files perfect-sync)
 - New POST /vault/reconcile {app_scope, scan_id, scanned_roots[]}: locations UNDER a scanned root whose
   scan_id != the current scan → present=false + missing_since (vanished/moved files); content nodes with
