@@ -1,3 +1,15 @@
+## 2026-07-08 — v6.67.0: R2 content-hash ingest dedup (Porter Files)
+- /vault/ingest raw_file items carrying source.contentHash now key their NODE by content:sha256:<hash>
+  (not path) — identical bytes at N paths collapse to ONE vault document node; original path-based
+  externalId preserved in metadata.aliases[]. Each path upserts a vault_artifact_locations row (idempotent
+  per app_scope+absolute_path; present/last_seen refresh for reconcile). SCOPED to raw_file+contentHash —
+  db_entity ingest (other apps) byte-unchanged. Kept ONE placement per node (vault one-active-parent
+  invariant intact); multi-project display comes from locations, not extra placements (deviation from
+  council's N-placements, documented). Verified live on throwaway scope: 2 paths same hash -> 1 node + 2
+  locations. tsc 0, health 200.
+- NEXT: R3 backfill (dedupe the 2901 shipped ymc per-path nodes by content_hash + populate locations,
+  supersede old nodes); R4 reconcile/sync; R5 Files API; R6 Files UI.
+
 ## 2026-07-08 — v6.66.0: R1 vault_artifact_locations (Porter Files directory foundation)
 - Additive schema for Moe's Files directive ("all docs visible in porter files, graph-organized, perfect sync,
   completely deduped"). New vault_artifact_locations table = physical locations of a CONTENT-deduped document:

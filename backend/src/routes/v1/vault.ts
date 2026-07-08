@@ -213,6 +213,19 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
         metadata: Record<string, unknown>;
         source: Record<string, unknown> | null;
         proposedParentExternalId: string | null;
+        // R2 (Files dedup): when a raw_file item carries a contentHash, its NODE
+        // identity becomes content:sha256:<hash> so identical content in N paths
+        // collapses to ONE node; the per-path physical location is recorded in
+        // vault_artifact_locations. `location` holds that row's fields; the
+        // original path-based externalId is preserved as an alias in metadata.
+        location: {
+          absolutePath: string;
+          relativePath: string | null;
+          basename: string | null;
+          contentHash: string;
+          sizeBytes: number | null;
+          mtimeNs: string | null;
+        } | null;
       }
       const prepared: Prepared[] = [];
       for (let i = 0; i < items.length; i++) {
@@ -243,14 +256,41 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
           source = s;
         }
         const ppe = typeof o.proposedParentExternalId === 'string' ? o.proposedParentExternalId.trim() : '';
+        const metaObj = (o.metadata && typeof o.metadata === 'object' ? o.metadata : {}) as Record<string, unknown>;
+
+        // R2 Files dedup: a raw_file with a contentHash is keyed by content, not
+        // path — identical bytes anywhere = one node. The path becomes a location.
+        let effectiveExternalId = externalId;
+        let location: Prepared['location'] = null;
+        if (source && source.kind === 'raw_file' && typeof source.contentHash === 'string' && source.contentHash) {
+          const absolutePath = typeof source.path === 'string' ? source.path : '';
+          if (absolutePath) {
+            effectiveExternalId = `content:sha256:${source.contentHash}`;
+            const sm = (source.metadata && typeof source.metadata === 'object' ? source.metadata : {}) as Record<string, unknown>;
+            location = {
+              absolutePath,
+              relativePath: typeof sm.relPath === 'string' ? sm.relPath : (typeof sm.relativePath === 'string' ? sm.relativePath : null),
+              basename: absolutePath.split('/').pop() || null,
+              contentHash: source.contentHash,
+              sizeBytes: typeof sm.sizeBytes === 'number' ? sm.sizeBytes : (typeof sm.size === 'number' ? sm.size : null),
+              mtimeNs: sm.mtimeNs != null ? String(sm.mtimeNs) : (sm.mtime != null ? String(sm.mtime) : null),
+            };
+            // Preserve the original path-based externalId as an alias for traceability.
+            const aliases = Array.isArray(metaObj.aliases) ? (metaObj.aliases as unknown[]) : [];
+            if (!aliases.includes(externalId)) aliases.push(externalId);
+            metaObj.aliases = aliases;
+          }
+        }
+
         prepared.push({
-          externalId,
+          externalId: effectiveExternalId,
           type,
           layer: decl.layer,
           title,
-          metadata: (o.metadata && typeof o.metadata === 'object' ? o.metadata : {}) as Record<string, unknown>,
+          metadata: metaObj,
           source,
           proposedParentExternalId: ppe || null,
+          location,
         });
       }
 
@@ -376,6 +416,38 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
             }
           }
           if (placementNote) itemResult.placementNote = placementNote;
+
+          // R2 Files dedup: record this file's physical location for the content
+          // node. Idempotent per (app_scope, absolute_path); re-ingest refreshes
+          // present/last_seen so a reconcile pass can flip vanished paths.
+          if (p.location) {
+            const loc = p.location;
+            const artId = (itemResult.artifact as { id?: string } | undefined)?.id ?? null;
+            const scanId = typeof body.scanId === 'string' ? body.scanId : null;
+            await client.query(
+              `INSERT INTO vault_artifact_locations
+                 (id, app_scope, document_node_id, artifact_id, content_hash, absolute_path, relative_path, basename,
+                  project_node_id, documents_root_node_id, folder_node_id, size_bytes, mtime_ns, present, scan_id, first_seen_at, last_seen_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,NULL,$10,$11,true,$12,$13,$13)
+               ON CONFLICT (app_scope, absolute_path) DO UPDATE SET
+                 document_node_id = EXCLUDED.document_node_id,
+                 artifact_id      = EXCLUDED.artifact_id,
+                 content_hash     = EXCLUDED.content_hash,
+                 relative_path    = EXCLUDED.relative_path,
+                 basename         = EXCLUDED.basename,
+                 project_node_id  = EXCLUDED.project_node_id,
+                 documents_root_node_id = EXCLUDED.documents_root_node_id,
+                 size_bytes       = EXCLUDED.size_bytes,
+                 mtime_ns         = EXCLUDED.mtime_ns,
+                 present          = true,
+                 missing_since    = NULL,
+                 scan_id          = EXCLUDED.scan_id,
+                 last_seen_at     = EXCLUDED.last_seen_at`,
+              [crypto.randomUUID(), scope, nodeId, artId, loc.contentHash, loc.absolutePath, loc.relativePath, loc.basename,
+               parentNodeId, loc.sizeBytes, loc.mtimeNs, scanId, now]
+            );
+            itemResult.location = { path: loc.absolutePath };
+          }
           results.push(itemResult);
         }
 
