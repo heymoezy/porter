@@ -8,7 +8,7 @@ import { Separator } from "~/components/ui/separator"
 import {
   LayoutDashboard,
   ChevronLeft, ChevronRight, Settings, LogOut,
-  FolderOpen, Route,
+  FolderOpen, Route, Library,
   Code2, Palette,
   Wrench, Brain, Plug,
 } from "lucide-react"
@@ -41,7 +41,8 @@ const groups = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   ]},
   { label: "Projects", items: [
-    { icon: FolderOpen, label: "Projects", path: "/files" },
+    { icon: Library, label: "Document Library", path: "/vault-files" },
+    { icon: FolderOpen, label: "Raw Files", path: "/files" },
   ]},
   { label: "Ops", items: [
     { icon: Route, label: "Bridge", path: "/bridge" },
