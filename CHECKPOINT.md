@@ -1,3 +1,12 @@
+## 2026-07-08 — v6.72.0: release-kit R1 (unified release system, skeleton)
+- backend/src/release-kit/: manifest-schema.ts (zod release.manifest.json), project-registry.ts (4 canonical
+  projects + roots), announce-adapter.ts (announceViaYmc → the shared ymc release-announce), gate.ts (pre-commit
+  contract: REFUSE unless version+changelog[+releaseFeed] staged — mirrors ymc gate), run.ts (post-commit:
+  smoke->push->announce->register, halt-on-red), cli.ts (porter-release gate|run|check). Standalone module, NOT
+  wired into any repo hooks yet (R3+). Verified: tsc 0; gate REFUSE exit=1 / PASS exit=0; check rejects unknown
+  project; announce dry renders. Design: planning/release-system.md. Agent-built (a8f1ffcc).
+- NEXT: R2 Porter registry API + release:audit drift detection; R3 migrate ymc (HIGH CARE, live); R4 Porter; R5 themozaic+baanyindee; R6 admin consistency view.
+
 ## 2026-07-08 — v6.71.0: Porter auto-announces releases (unified with ymc; no separate system)
 - Moe: "ymc and porter releases need to announce the same way — don't have separate systems, it will break
   again." ROOT CAUSE: ymc auto-announces via its post-commit hook; Porter had NO hook + NO auto-announce, so

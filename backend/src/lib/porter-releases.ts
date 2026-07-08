@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.72.0',
+    date: '2026-07-08',
+    title: 'Release-kit R1 — the shared release engine',
+    bullets: [
+      'First piece of the unified release system: a shared release-kit in Porter (manifest schema + project registry + a porter-release CLI with a pre-commit gate and post-commit run sequence + the shared announce adapter). Groundwork so every project releases the exact same way and Porter can enforce it — not wired into any repo yet.',
+    ],
+  },
+  {
     version: '6.71.0',
     date: '2026-07-08',
     title: 'Porter now announces its own releases',
