@@ -463,6 +463,68 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
     }
   );
 
+  // POST /api/v1/vault/reconcile — Files "perfect sync". After an app finishes a
+  // full scan (every present file re-ingested with the same scan_id), it calls
+  // this: any location UNDER a scanned root whose scan_id != the current scan is
+  // a file that vanished/moved → present=false + missing_since. A content node
+  // whose locations are ALL absent has its placements archived (tombstone kept,
+  // hidden from Files) — the node itself is never deleted. Idempotent.
+  fastify.post(
+    '/reconcile',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const scope = scopeOf(body, {});
+      if (!scope) return reply.code(400).send(err('MISSING_SCOPE', 'app_scope is required', request.id));
+      const scanId = typeof body.scan_id === 'string' ? body.scan_id : (typeof body.scanId === 'string' ? body.scanId : '');
+      if (!scanId) return reply.code(400).send(err('MISSING_SCAN', 'scan_id is required', request.id));
+      const rootsRaw = Array.isArray(body.scanned_roots) ? body.scanned_roots : (Array.isArray(body.scannedRoots) ? body.scannedRoots : []);
+      const roots = rootsRaw.filter((r): r is string => typeof r === 'string' && r.length > 0);
+      if (roots.length === 0) return reply.code(400).send(err('MISSING_ROOTS', 'scanned_roots[] is required', request.id));
+
+      const now = Date.now() / 1000;
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        // Mark vanished: present locations under a scanned root not touched by this scan.
+        const likeClauses = roots.map((_, i) => `absolute_path LIKE $${i + 3}`).join(' OR ');
+        const params = [scope, scanId, ...roots.map((r) => `${r}%`)];
+        const gone = await client.query(
+          `UPDATE vault_artifact_locations
+             SET present = false, missing_since = ${now}
+           WHERE app_scope = $1 AND present = true
+             AND (scan_id IS DISTINCT FROM $2)
+             AND (${likeClauses})
+           RETURNING document_node_id`,
+          params
+        );
+        const affectedNodes = Array.from(new Set(gone.rows.map((r) => (r as { document_node_id: string }).document_node_id)));
+        // Archive placements for content nodes whose locations are now ALL absent.
+        let tombstoned = 0;
+        for (const nodeId of affectedNodes) {
+          const stillPresent = (await client.query(
+            `SELECT 1 FROM vault_artifact_locations WHERE app_scope=$1 AND document_node_id=$2 AND present=true LIMIT 1`,
+            [scope, nodeId]
+          )).rowCount ?? 0;
+          if (stillPresent === 0) {
+            await client.query(
+              `UPDATE vault_placements SET state='archived' WHERE app_scope=$1 AND node_id=$2 AND state IN ('active','proposed')`,
+              [scope, nodeId]
+            );
+            tombstoned++;
+          }
+        }
+        await client.query('COMMIT');
+        return reply.send(ok({ appScope: scope, scanId, scannedRoots: roots, locationsMarkedAbsent: gone.rowCount ?? 0, nodesTombstoned: tombstoned }, request.id));
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+    }
+  );
+
   // GET /api/v1/vault/graph?scope=&layer=&focus= — the scoped, navigable graph.
   //   scope   (required) — tenant isolation; a scope with no data returns { nodes:[], edges:[] }.
   //   layer   (optional) — 'data' | 'learning' to view one layer at a time.

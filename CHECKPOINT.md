@@ -1,3 +1,15 @@
+## 2026-07-08 — v6.68.0: R4 POST /vault/reconcile (Files perfect-sync)
+- New POST /vault/reconcile {app_scope, scan_id, scanned_roots[]}: locations UNDER a scanned root whose
+  scan_id != the current scan → present=false + missing_since (vanished/moved files); content nodes with
+  ZERO present locations → placements archived (tombstone, node never deleted). Idempotent. Client stamps
+  one scan_id per full scan; present files re-upsert with it, so only genuinely-absent paths flip. Verified:
+  injected stale location flipped present=false+missing_since; real ymc sync (matching scan_id) marks 0 absent.
+  ymc vault-ingest-files.ts now generates scan-<ts>, sends it on every /ingest, and POSTs /reconcile after.
+  (NOTE: a test with a deliberately-wrong scan_id flipped 691 real Deals rows — expected per contract — then
+  restored; lesson: reconcile must always use the ingest's OWN scan_id.)
+- NEXT: R5 Files API + R6 Files UI (agent). Periodic sync cadence (Porter every_24h tick) = follow-up;
+  today sync = on-demand `npx tsx scripts/vault-ingest-files.ts --commit` (ingest+reconcile in one run).
+
 ## 2026-07-08 — v6.67.0: R2 content-hash ingest dedup (Porter Files)
 - /vault/ingest raw_file items carrying source.contentHash now key their NODE by content:sha256:<hash>
   (not path) — identical bytes at N paths collapse to ONE vault document node; original path-based
