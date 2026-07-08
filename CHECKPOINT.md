@@ -1,3 +1,11 @@
+## 2026-07-08 — v6.73.0: release-kit R2 (registry API + drift audit)
+- backend/src/release-kit/audit.ts (auditProject/auditAll — read-only drift: manifest valid? hooks wired to
+  kit (bespoke=unwired, the fork that broke prod)? kitVersion current? versionFile present?) + routes/admin/
+  releases.ts (GET /releases/projects|audit|project/:id, requirePlatformAdmin) + registered in admin index.
+  Verified: tsc 0; auditAll()=drift 0/4 wired (correct pre-R3 — no repo has a manifest yet); routes proven via
+  fastify.inject. Reuses R1 manifest-schema+registry.
+- NEXT: R3 migrate ymc to kit (HIGH CARE, live — AFTER the 2 in-flight ymc agents land + ship so the tree is clean); R4 Porter; R5 themozaic+BYD; R6 admin view.
+
 ## 2026-07-08 — v6.72.0: release-kit R1 (unified release system, skeleton)
 - backend/src/release-kit/: manifest-schema.ts (zod release.manifest.json), project-registry.ts (4 canonical
   projects + roots), announce-adapter.ts (announceViaYmc → the shared ymc release-announce), gate.ts (pre-commit

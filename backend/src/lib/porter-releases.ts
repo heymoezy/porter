@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.73.0',
+    date: '2026-07-08',
+    title: 'Release-kit R2 — Porter now audits release consistency',
+    bullets: [
+      'Porter can now see, and flag drift in, how every project releases: a registry API (/api/admin/releases/*) reports each repo\'s release wiring — manifest present, hooks calling the shared kit, kit version current, version file present — and a drift audit gives one consistent|drift verdict across all projects. This is how Porter enforces one release standard everywhere.',
+    ],
+  },
+  {
     version: '6.72.0',
     date: '2026-07-08',
     title: 'Release-kit R1 — the shared release engine',
