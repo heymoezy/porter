@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Porter post-commit — announce a release on a version bump, the SAME way ymc
+# does (Moe 2026-07-08: "announce the same way, don't have separate systems").
+# Fires the ONE shared announcer via scripts/announce-porter-update.ts, which
+# POSTs to ymc's /api/v1/admin/announce-release (kind=porter). Idempotent (the
+# endpoint skips already-announced versions), non-fatal, group-guarded on the
+# ymc side. Wire with: git config core.hooksPath deploy/git-hooks
+set -uo pipefail
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+CHANGED="$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)"
+if printf '%s\n' "$CHANGED" | grep -q '^backend/package.json$'; then
+  echo "[post-commit] backend/package.json changed — announcing Porter release (idempotent)..."
+  ( cd "$REPO_ROOT/backend" && npx tsx scripts/announce-porter-update.ts ) \
+    || echo "[post-commit] announce failed (non-fatal) — re-run: cd backend && npx tsx scripts/announce-porter-update.ts"
+fi
+exit 0

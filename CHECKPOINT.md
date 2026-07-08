@@ -1,3 +1,15 @@
+## 2026-07-08 — v6.71.0: Porter auto-announces releases (unified with ymc; no separate system)
+- Moe: "ymc and porter releases need to announce the same way — don't have separate systems, it will break
+  again." ROOT CAUSE: ymc auto-announces via its post-commit hook; Porter had NO hook + NO auto-announce, so
+  I forgot to announce v6.66-6.70 (Files + grok). FIX (mirrors ymc, ONE shared announcer): backend/src/lib/
+  porter-releases.ts (PORTER_RELEASES, like ymc SITE_RELEASES) + backend/scripts/announce-porter-update.ts
+  (POSTs to ymc /api/v1/admin/announce-release kind=porter, header X-Service-Token, → the ONE release-announce.ts)
+  + deploy/git-hooks/post-commit (fires on backend/package.json version bump; core.hooksPath set). Idempotent +
+  group-guarded on ymc side. Backfilled: v6.69 Files + v6.70 grok announced to group. No server behavior change
+  → build only, no restart. NOTE: this is the STOPGAP; the unified cross-project release system (Moe's broader
+  directive: test→bump→changelog→commit→push→announce, Porter-enforced) is the next council-designed build.
+- tsc 0. Post-commit hook auto-announces this v6.71.0 on commit (dogfood).
+
 ## 2026-07-08 — v6.70.0: Grok CLI added to Bridge (4th gateway; council rotation)
 - Moe installed grok (~/.local/bin/grok, xAI, grok-4.5). New GrokCLIAdapter (adapters/grok-cli.ts) modeled on
   codex — `grok -p <prompt> --output-format plain`, headless single-turn, clean stdout=response (no transcript
