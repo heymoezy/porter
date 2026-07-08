@@ -1,3 +1,8 @@
+## v6.70.0 (2026-07-08)
+
+- R6: Files UI — Document Library in Porter admin (deduped graph tree)
+
+
 ## v6.69.0 (2026-07-08)
 
 - v6.68.0: R4 POST /vault/reconcile — Files perfect-sync

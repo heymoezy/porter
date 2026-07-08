@@ -47,6 +47,17 @@ export const GATEWAY_CAPABILITY_REGISTRY: Record<GatewayType, GatewayCapabilityR
     tool_support: 'none',
     agentic: false,
   },
+  // xAI Grok CLI (`grok -p <prompt>`) — headless single-turn from Bridge's
+  // view: no tool-injection surface (the CLI runs its own tools). Serves
+  // grok-4.5. One-shot, clean stdout response.
+  grok_cli: {
+    legacy_tags: ['chat', 'one_shot', 'no_tools'],
+    strengths: ['reasoning', 'coding', 'analysis', 'writing'],
+    cost_tier: 'standard',
+    context_window: 256_000,
+    tool_support: 'none',
+    agentic: false,
+  },
 };
 
 // ── Helper functions ──────────────────────────────────────────────────────────

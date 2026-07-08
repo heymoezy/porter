@@ -1,3 +1,12 @@
+## 2026-07-08 — v6.70.0: Grok CLI added to Bridge (4th gateway; council rotation)
+- Moe installed grok (~/.local/bin/grok, xAI, grok-4.5). New GrokCLIAdapter (adapters/grok-cli.ts) modeled on
+  codex — `grok -p <prompt> --output-format plain`, headless single-turn, clean stdout=response (no transcript
+  parsing). Registered: types GatewayType += grok_cli; capability-registry.grok_cli (one_shot/no_tools,
+  256k ctx, standard); adapters/index ADAPTER_MAP.grok_cli; startup-detector auto-detect+upsert (priority 40,
+  PORTER_GROK_PATH env override). Gateway row active. Verified end-to-end: POST /bridge/agent-message
+  targetGateway=grok_cli → grok-4.5 clean response. COUNCIL now = codex + agy + grok (grok_cli) going forward.
+- tsc 0, health 200. Failover chain unchanged (claude→codex→antigravity); grok is opt-in per targetGateway.
+
 ## 2026-07-08 — v6.69.0: R5 Files API + R6 Files UI (Porter Files directory COMPLETE)
 - R5: backend/src/routes/admin/files.ts (registered /files in admin/index.ts) — GET /files/apps, /files/tree?app_scope=,
   /files/document/:nodeId, POST /files/sync (honest — returns the ymc sync command, executes nothing). Tree grouped by
