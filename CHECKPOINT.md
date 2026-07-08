@@ -1,5 +1,14 @@
 # Porter Checkpoint
 
+## 2026-07-08 — v6.65.0: reorg tooling (config-gen + move/dedup runbooks) — #28, dry-run only
+- services/reorg/: mcp-registry.ts (canonical MCP registry, seeded live off ~/.claude.json) +
+  buildConfigGenPlan() (generates the ~/.claude.json mcpServers block with canonical ~/porter/mcp/<product>
+  paths + a diff; wouldWrite:false, NEVER writes); layout-plan.ts buildMovePlan() (per-server ordered mv +
+  paired config/unit edit + rollback); dedup-plan.ts buildDedupReport() (971 dup sets, 1.06GB reclaimable;
+  excludes storage/datarooms/personal; applyDedupHardlinks execute defaults OFF, unreachable from API).
+- GET /api/admin/reorg/plan (admin-gated) returns config-gen diff + move runbook + ?dedup=1 report. ADDITIVE;
+  NOTHING moved/deleted/written-live. Foundation for #28 — operator reviews runbooks before ANY live move.
+
 ## 2026-07-08 — v6.64.0: vault association engine (record-links + edge-expanded focus) — R30 support
 - vault_record_links table (migrate-vault-record-links-v1.ts, boot no-op) — task↔node associations (a task
   CONCERNS/ASSIGNED_TO a vault node without the task being a node). POST /api/v1/vault/record-links.
