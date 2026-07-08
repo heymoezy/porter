@@ -1310,7 +1310,32 @@ export const vaultDerivativeJobs = pgTable('vault_derivative_jobs', {
   sourceArtifact: index('vault_derivative_jobs_source_idx').on(table.sourceArtifactId),
 }));
 
+// Association layer for NON-node app records (e.g. transient tom_tasks that
+// should not become first-class vault_nodes but still "concern" a node). An
+// app pushes (source_table, source_id) → to_node_id links; completing/dropping
+// the source record updates `status` here, never the vault fact graph. Kept
+// separate from vault_edges (which is node↔node only). Idempotent per
+// (app_scope, source_table, source_id, to_node_id, kind).
+export const vaultRecordLinks = pgTable('vault_record_links', {
+  id: text('id').primaryKey(),
+  appScope: text('app_scope').notNull(),
+  sourceTable: text('source_table').notNull(), // e.g. 'tom_tasks'
+  sourceId: text('source_id').notNull(),       // the app record's id (text — app-agnostic)
+  toNodeId: text('to_node_id').notNull(),       // → vault_nodes.id
+  kind: text('kind').notNull(),                 // task_concerns | task_mentions | task_assigned_to | …
+  status: text('status').notNull().default('open'), // open | completed | dismissed
+  confidence: doublePrecision('confidence'),
+  metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
+  createdAt: doublePrecision('created_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+  updatedAt: doublePrecision('updated_at').notNull().default(sql`EXTRACT(EPOCH FROM NOW())`),
+}, (table) => ({
+  scopeNode: index('vault_record_links_scope_node_idx').on(table.appScope, table.toNodeId),
+  scopeSource: index('vault_record_links_scope_source_idx').on(table.appScope, table.sourceTable, table.sourceId),
+  uniqueLink: uniqueIndex('vault_record_links_unique_idx').on(table.appScope, table.sourceTable, table.sourceId, table.toNodeId, table.kind),
+}));
+
 export type VaultSchemaRow = typeof vaultSchemas.$inferSelect;
+export type VaultRecordLinkRow = typeof vaultRecordLinks.$inferSelect;
 export type VaultNodeRow = typeof vaultNodes.$inferSelect;
 export type VaultPlacementRow = typeof vaultPlacements.$inferSelect;
 export type VaultEdgeRow = typeof vaultEdges.$inferSelect;

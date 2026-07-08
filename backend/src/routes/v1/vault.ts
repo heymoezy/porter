@@ -430,6 +430,27 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
         if (focusIds.length === 0) {
           return reply.code(404).send(err('NODE_NOT_FOUND', `focus node "${focus}" not in scope "${scope}"`, request.id));
         }
+        // Edge-expansion: pull in 1-hop edge NEIGHBOURS of the focus subtree.
+        // Placements only walk DOWN the tree, but a node's associations
+        // (vault_edges) frequently point to nodes placed elsewhere — e.g. a
+        // data_room's contents are `document --document_in_data_room--> room`
+        // edges whose documents live under deals/people, NOT under the room.
+        // Without this, focusing a room returns the room alone and the edge
+        // filter (both endpoints must be in the set) drops every content edge,
+        // so the room renders empty. Adding the neighbours makes incoming
+        // associations (a room's "Contents", an entity's documents, …)
+        // visible when a node is focused.
+        const neighbourRows = (await pool.query(
+          `SELECT DISTINCT nid FROM (
+             SELECT to_node_id   AS nid FROM vault_edges WHERE app_scope = $1 AND from_node_id = ANY($2)
+             UNION
+             SELECT from_node_id AS nid FROM vault_edges WHERE app_scope = $1 AND to_node_id   = ANY($2)
+           ) x`,
+          [scope, focusIds]
+        )).rows as Array<{ nid: string }>;
+        const set = new Set(focusIds);
+        for (const r of neighbourRows) set.add(r.nid);
+        focusIds = Array.from(set);
       }
 
       // Nodes + their best placement (active preferred, else latest proposed).
@@ -553,6 +574,18 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
         from_title: string; from_type: string; to_title: string; to_type: string;
       }>;
 
+      // Non-node app records that concern this node (e.g. tom_tasks). Open ones
+      // first so the review/detail surface can show "N open tasks concern this".
+      const recordLinkRows = (await pool.query(
+        `SELECT id, source_table, source_id, kind, status, confidence, metadata, created_at
+         FROM vault_record_links WHERE app_scope = $1 AND to_node_id = $2
+         ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, created_at DESC LIMIT 50`,
+        [node.app_scope, node.id]
+      )).rows as Array<{
+        id: string; source_table: string; source_id: string; kind: string; status: string;
+        confidence: number | null; metadata: Record<string, unknown>; created_at: number;
+      }>;
+
       const artifactRows = (await pool.query(
         `SELECT id, kind, source_system, source_id, path, content_hash, metadata, created_at
          FROM vault_artifacts WHERE app_scope = $1 AND node_id = $2 ORDER BY created_at DESC LIMIT 20`,
@@ -586,6 +619,10 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
             artifacts: artifactRows.map((a) => ({
               id: a.id, kind: a.kind, sourceSystem: a.source_system, sourceId: a.source_id, path: a.path,
               contentHash: a.content_hash, metadata: a.metadata, createdAt: a.created_at,
+            })),
+            recordLinks: recordLinkRows.map((r) => ({
+              id: r.id, sourceTable: r.source_table, sourceId: r.source_id, kind: r.kind,
+              status: r.status, confidence: r.confidence, metadata: r.metadata, createdAt: r.created_at,
             })),
           },
           request.id
@@ -837,6 +874,97 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
       const updated = results.filter((r) => r.action === 'updated').length;
       const skipped = results.filter((r) => r.skipped).length;
       return reply.send(ok({ appScope: scope, created, updated, skipped, total: edges.length, results }, request.id));
+    }
+  );
+
+  // POST /api/v1/vault/record-links — link a NON-node app record (source_table +
+  // source_id, e.g. a transient tom_tasks row) to the vault node(s) it concerns.
+  // Distinct from /edges (node↔node): the source is NOT a vault node. Apps push
+  // these AFTER ingest (the target node must already exist). Idempotent per
+  // (scope, source_table, source_id, to_node_id, kind); a re-push updates
+  // status/confidence/metadata. Completing/dropping the app record = re-push with
+  // status='completed'/'dismissed' — it NEVER mutates the vault fact graph.
+  //
+  // Body: { app_scope, links: [{ sourceTable, sourceId, toExternalId, kind,
+  //           status?, confidence?, metadata? }] }
+  fastify.post(
+    '/record-links',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const scope = scopeOf(body, {});
+      if (!scope) return reply.code(400).send(err('MISSING_SCOPE', 'app_scope is required', request.id));
+      const links = body.links;
+      if (!Array.isArray(links) || links.length === 0) {
+        return reply.code(400).send(err('MISSING_LINKS', 'links must be a non-empty array', request.id));
+      }
+      if (links.length > 10000) {
+        return reply.code(400).send(err('TOO_MANY_LINKS', 'max 10000 links per call', request.id));
+      }
+
+      const rows = (await pool.query(
+        `SELECT external_id, id FROM vault_nodes WHERE app_scope = $1`,
+        [scope]
+      )).rows as Array<{ external_id: string; id: string }>;
+      const idByExternal = new Map(rows.map((r) => [r.external_id, r.id]));
+
+      const LINK_STATUSES = new Set(['open', 'completed', 'dismissed']);
+      const now = Date.now() / 1000;
+      const results: Array<Record<string, unknown>> = [];
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (let i = 0; i < links.length; i++) {
+          const l = links[i] as Record<string, unknown>;
+          const sourceTable = typeof l.sourceTable === 'string' ? l.sourceTable.trim() : '';
+          const sourceId = typeof l.sourceId === 'string' ? l.sourceId.trim()
+            : (typeof l.sourceId === 'number' ? String(l.sourceId) : '');
+          const toExt = typeof l.toExternalId === 'string' ? l.toExternalId.trim() : '';
+          const kind = typeof l.kind === 'string' ? l.kind.trim() : '';
+          if (!sourceTable || !sourceId || !toExt || !kind) {
+            await client.query('ROLLBACK');
+            return reply.code(400).send(err('INVALID_LINK', `link ${i} needs sourceTable, sourceId, toExternalId, kind`, request.id));
+          }
+          const status = typeof l.status === 'string' && LINK_STATUSES.has(l.status.trim()) ? l.status.trim() : 'open';
+          const confidence = typeof l.confidence === 'number' ? l.confidence : null;
+          const meta = (l.metadata && typeof l.metadata === 'object' ? l.metadata : {}) as Record<string, unknown>;
+          const toId = idByExternal.get(toExt);
+          if (!toId) {
+            results.push({ index: i, skipped: true, reason: `unresolved ${toExt}` });
+            continue;
+          }
+          const dupe = (await client.query(
+            `SELECT id FROM vault_record_links WHERE app_scope=$1 AND source_table=$2 AND source_id=$3 AND to_node_id=$4 AND kind=$5`,
+            [scope, sourceTable, sourceId, toId, kind]
+          )).rows[0] as { id: string } | undefined;
+          if (dupe) {
+            await client.query(
+              `UPDATE vault_record_links SET status=$1, confidence=$2, metadata=$3::jsonb, updated_at=$4 WHERE id=$5`,
+              [status, confidence, JSON.stringify(meta), now, dupe.id]
+            );
+            results.push({ index: i, id: dupe.id, action: 'updated' });
+          } else {
+            const id = crypto.randomUUID();
+            await client.query(
+              `INSERT INTO vault_record_links (id, app_scope, source_table, source_id, to_node_id, kind, status, confidence, metadata, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$10)`,
+              [id, scope, sourceTable, sourceId, toId, kind, status, confidence, JSON.stringify(meta), now]
+            );
+            results.push({ index: i, id, action: 'created' });
+          }
+        }
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+
+      const created = results.filter((r) => r.action === 'created').length;
+      const updated = results.filter((r) => r.action === 'updated').length;
+      const skipped = results.filter((r) => r.skipped).length;
+      return reply.send(ok({ appScope: scope, created, updated, skipped, total: links.length, results }, request.id));
     }
   );
 }

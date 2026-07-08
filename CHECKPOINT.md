@@ -1,5 +1,13 @@
 # Porter Checkpoint
 
+## 2026-07-08 — v6.64.0: vault association engine (record-links + edge-expanded focus) — R30 support
+- vault_record_links table (migrate-vault-record-links-v1.ts, boot no-op) — task↔node associations (a task
+  CONCERNS/ASSIGNED_TO a vault node without the task being a node). POST /api/v1/vault/record-links.
+- GET /api/v1/vault/graph?focus= now expands to 1-hop EDGE neighbours (so focusing a data_room pulls in
+  its document_in_data_room contents). GET /nodes/:id returns recordLinks. All additive.
+- Enables the ymc association rebuild (#30): documents derive-linked to their data rooms (the data_room_files
+  junction was EMPTY — root cause of empty rooms), orphans 419→172, design-system + architecture nodes, task-links.
+
 ## 2026-07-08 — v6.63.0: vault-reader SHADOW canary (R4.1) — flags OFF, zero risk
 - The memory-injection projection: memory-projection.ts (legacy tables → vault-shaped read model, stable
   ids legacy:<kind>:<id>, no data migration) + memory-injection-v2.ts (buildMemoryContextV2, line-for-line
