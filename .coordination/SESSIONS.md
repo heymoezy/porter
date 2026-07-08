@@ -1,5 +1,50 @@
 # Porter — Active Sessions
 
+## R1 release-kit skeleton — unified release system (Opus 4.8 1M) — 2026-07-08 (SGT)
+- Workstream: build the `release-kit` skeleton + `porter-release` CLI per planning/release-system.md
+  (council-ratified). Standalone module — NO server wiring, NO hooks, NO manifests in live repos, NO
+  version bump / restart / commit. BUILD + VERIFY (throwaway /tmp fixtures) + REPORT only. The operator ships.
+- Files claimed (create only, additive):
+  - backend/src/release-kit/manifest-schema.ts (CREATE — zod schema + loadManifest)
+  - backend/src/release-kit/project-registry.ts (CREATE — SOT list of the 4 projects)
+  - backend/src/release-kit/announce-adapter.ts (CREATE — announceViaYmc, mirrors announce-porter-update.ts)
+  - backend/src/release-kit/gate.ts (CREATE — pre-commit contract check)
+  - backend/src/release-kit/run.ts (CREATE — post-commit run sequence)
+  - backend/src/release-kit/cli.ts (CREATE — porter-release entrypoint)
+- Does NOT touch index.ts, vault.ts, bridge, any route, any hook, any other repo.
+- Status: **DONE** 2026-07-08 — 6 files created under backend/src/release-kit/; `npx tsc --noEmit` = 0.
+  Verified on throwaway /tmp fixtures (now cleaned): gate REFUSES (code w/o bump; partial bump) + PASSES
+  (full bump; docs-only); check PASSES valid manifest + REJECTS bad/missing; announce --dry renders w/o
+  sending; run --dry runs smoke→(skip push)→announce-dry and HALTS on smoke failure. Left uncommitted;
+  operator ships. No server wiring, no hooks, no live manifests.
+
+## R4.1 vault-reader SHADOW CANARY for Claude-context injection (Opus 4.8 1M) — 2026-07-08 (SGT)
+- Workstream: projection-first shadow canary for memory injection. Build a vault-shaped read-model over the LEGACY memory tables (directives/concepts/project_notes/agent_notes/episodes/environment_tools) + buildMemoryContextV2 (faithful 6-tier mirror) + shadow-compare + per-scope canary with mandatory auto-fallback. Two flags, both DEFAULT OFF. Legacy stays the injected source. BUILD+VERIFY only — NO version bump, NO commit, NO restart-to-ship.
+- Files claimed (create/edit):
+  - backend/src/services/memory-projection.ts (CREATE — legacy→vault-shaped read-model, stable legacy:<kind>:<id>)
+  - backend/src/services/memory-injection-v2.ts (CREATE — buildMemoryContextV2 + shadow-compare + resolveInjectedMemoryContext wrapper + lazy memory_injection_shadow table)
+  - backend/src/routes/v1/chat.ts (EDIT — swap buildMemoryContext→resolveInjectedMemoryContext at the injection site; byte-identical when flags off)
+  - backend/src/services/memory-snapshot.ts (EDIT — same drop-in swap)
+  - backend/src/routes/v1/intellect.ts (EDIT — guarded, fire-and-forget SessionStart shadow observation; /context response NEVER changed)
+- NOT touching: buildMemoryContext body (frozen), silo/recall/bridge/scheduler. Additive only; flags default OFF = pure legacy.
+- Status: **BUILD+VERIFY DONE** 2026-07-08 — tsc 0. Verified live DB (scope ymc.capital): flags-OFF wrapper === buildMemoryContext byte-identical (string+meta); V2 byte-identical to V1 (738 tok, 12 directives, 20 tools, missing_in_v2=[]); SHADOW=1 logs real comparison + still injects V1; canary(ymc.capital) injects V2; forced timeout=1ms → auto-fallback to V1 (fallback_reason=v2_timeout_1ms, invariants_ok=false). Verification table dropped (lazy-recreated on first real shadow). UNCOMMITTED, NOT built-to-dist, NOT restarted. Ship with BOTH flags OFF (shadow-only once SHADOW=1) as first safe release.
+
+## R8 Tools-Standardization first slice (Opus 4.8 1M) — 2026-07-07 (SGT)
+- Workstream: canonical tools registry — extend environment_tools, enrich tool-detector to record real paths/kind/status/install_recipe + browser/libreoffice/puppeteer drift, generate ~/porter/tools.env, add porter_which_tool MCP tool + GET /api/admin/tools/registry. BUILD+VERIFY only — NO version bump, NO commit, NO restart-to-ship.
+- Files claimed (edit/create):
+  - backend/src/db/migrate-trg-v1.ts (CREATE) + backend/src/index.ts (EDIT — wire migration)
+  - backend/src/services/intellect/tool-detector.ts (EDIT — enrich fields + browsers)
+  - backend/src/services/intellect/tools-env.ts (CREATE — env file generator)
+  - backend/src/routes/admin/tools.ts (EDIT — add GET /registry)
+  - backend/src/mcp/porter-mcp.ts (EDIT — add porter_which_tool) — MCP not imported by index.ts, safe
+- NOT touching: bridge/recall/memory/chat/scheduler. Additive only.
+- Status: **BUILD+VERIFY DONE** 2026-07-07 — tsc 0; live environment_tools enriched (25 rows, real paths) incl. playwright/puppeteer drift flagged + libreoffice=missing w/ recipe; ~/porter/tools.env generated (1907B); porter_which_tool + GET /api/admin/tools/registry compiled & lookup verified. UNCOMMITTED, NOT restarted — operator ships (build → restart porter-fastify).
+
+## Architecture Audit — Brain/Recall/Memory/Vault consolidation (Opus 4.8 1M) — 2026-07-07 (SGT)
+- Workstream: READ-ONLY architecture audit. Map boot sequence, admin IA, concept→impl for Brain/Recall/Memory/Bridge/Vault/Dashboard; produce consolidation proposal. NO writes, NO commits, NO restarts.
+- Files claimed: NONE (read-only). Only mutation = this SESSIONS.md ledger row.
+- Status: **DONE** 2026-07-07 — read-only audit complete. No code changed (only this ledger row). Findings delivered to operator: Brain/Dashboard = views; Recall = genuine RAG (keep); Memory (directives/concepts/episodes) + ~/vault mirror = fold into Vault v2 learning layer; Bridge stays. Vault v2 engine exists but is NOT yet wired into the injection path (memory-injection.ts still reads legacy tables).
+
 ## Strip client app + people/costs tabs (Opus 4.8 1M) — 2026-05-29T (SGT)
 - Workstream: Aggressive trim per Moe. (1) Delete People + Costs admin tabs. (2) Delete dead /v2 client-app SPA serving wiring. (3) Delete 16 client-app v1 API route modules with zero live consumers. Validated: ymc.capital/BYD/Tom use only bridge/recall/intellect/chat/health; admin app uses /api/admin/* for agents/templates/decisions.
 - Files claimed (edit/delete):
@@ -1011,3 +1056,138 @@
   /derivatives?scope= coverage counts verified correct at each step. All demo rows purged after
   (vault_schemas/nodes/placements/artifacts/derivative_jobs + the 2 test bridge_dispatch_log rows) —
   psql count check shows 0 across all 6 tables/log post-cleanup.
+
+## R6 — vault review-queue ops: reject/edit/refine (Opus 4.8 1M) — 2026-07-07 — BUILD+VERIFY ONLY, NOT SHIPPED
+- Workstream: additive engine ops for ymc's vault review-queue table rebuild (operator: "0/10, I
+  have no idea what I'm accepting"). Adding to `backend/src/routes/v1/vault.ts` (MAIN tree only):
+  POST /placements/:id/reject (mirrors accept's guards, state='rejected', node stays unplaced),
+  PATCH /nodes/:id (title/type/metadata edit, type validated against scope schema + layer-stability
+  guard), POST /placements/:id/refine (Bridge dispatchWithFailover, CHEAP_GATEWAY/CHEAP_MODEL,
+  suggest-only — never auto-applies), GET /nodes/:id (single-node detail: node+parent+edges+
+  artifacts, for the review table's Discuss/Edit panels) and a `source` field added to GET /graph's
+  node payload (latest vault_artifacts row per node) for the table's Source column.
+- Files claimed (edit, additive only): `backend/src/routes/v1/vault.ts`. NOT touching
+  vault-derivatives.ts, vault_v2 migration, or any other route.
+- Testing against a THROWAWAY app_scope (register/ingest/cleanup), never the real ymc data
+  (3,026 ymc placements stay untouched, all still 'proposed' for the operator).
+- Status: **DONE** 2026-07-07 (build+verify only — not shipped). `cd backend && npx tsc --noEmit`
+  0 errors. Restarted porter-fastify to test only (still v6.58.0, no bump). Verified end-to-end on
+  throwaway scope `r7-review-table-demo`: register-schema → ingest 3 nodes (domain/deal/document,
+  one with proposedParentExternalId chaining) → GET /graph confirmed `source` on every node → GET
+  /nodes/:id returned node+placement+parent+edges+artifacts correctly → PATCH /nodes/:id renamed a
+  title (200) and rejected an unknown type (400 UNKNOWN_TYPE) → POST /placements/:id/reject flipped
+  a proposed placement to state='rejected' (200), re-reject correctly 409 PLACEMENT_CLOSED → POST
+  /placements/:id/refine made a REAL Bridge dispatch (dispatchWithFailover, codex_cli/codex/gpt-5.5,
+  ~7.5s) and returned a sane {type,parentId,parentTitle,confidence,reasoning} suggestion without
+  applying it; re-ran after that placement's only candidate parent's own placement was rejected —
+  correctly returned parentId:null with "no available parent candidates" (candidate query is
+  state IN ('active','proposed') as designed). All demo rows purged after (vault_schemas/nodes/
+  placements/artifacts + the 2 test bridge_dispatch_log rows, source_agent='vault-refine') — psql
+  count check shows 0 across all tables post-cleanup. Real ymc scope re-verified untouched: 3,026
+  vault_nodes / 3,026 vault_placements, all state='proposed'.
+- Coordinated with ymc.capital session "R7" (same day) which consumes these ops via a new proxy +
+  a rebuilt review-queue TABLE in VaultGraphSection.tsx.
+- Operator ships (when ready): `cd backend && npm run build && systemctl --user restart
+  porter-fastify` (no version bump required by this repo's process — Porter versions on its own
+  cadence per CHECKPOINT.md; this was a pure additive-route change, already restarted once here
+  for testing so the running process already has it live).
+
+---
+### Session: projects-audit (READ-ONLY) — 2026-07-08
+- Task: read-only audit of /home/lobster/projects to plan a SAFE reorg + dedup + vault-ingest.
+- Scope: NO moves/deletes/writes except this ledger row + a report handed back to the parent.
+- Files claimed: NONE (read-only). Uses find/du/sha256sum/grep only.
+- Excludes: moe-personal/Estate/tax/will contents (privacy — flagged, not read).
+- Status: IN PROGRESS.
+- Status: **DONE** 2026-07-08 — read-only audit complete, report returned to parent. No files moved/deleted; no config touched.
+
+### Session: vault-association (#30, ymc subagent) — 2026-07-08 — DONE (tsc 0; operator builds+restarts)
+- Task: ADDITIVE Porter engine support for ymc's vault ASSOCIATION rebuild (build+verify+dry-run;
+  operator ships). Files claimed: `backend/src/db/schema.ts` (+vaultRecordLinks table),
+  `backend/src/routes/v1/vault.ts` (+POST /record-links, + GET /graph focus 1-hop edge expansion).
+  Purely additive — no existing route/table altered. tsc-verify only; operator runs
+  `cd backend && npm run build && systemctl --user restart porter-fastify`.
+- Status: IN PROGRESS.
+
+## #28 Reorg TOOLING — MCP registry + config-gen + move/dedup runbooks (Opus 4.8 1M) — 2026-07-08 (SGT)
+- Workstream: BUILD+VERIFY safe/reversible/dry-run reorg mechanism. MCP-server canonical registry + ~/.claude.json mcpServers-block generator (dry-run diff, never writes), canonical-layout move runbook (per-server config/unit update + rollback + order), safe dedup reporter (execute flag OFF). NO file moves/deletes, NO writing ~/.claude.json, NO version bump/commit/restart.
+- Files claimed (CREATE only, additive):
+  - backend/src/services/reorg/mcp-registry.ts (CREATE)
+  - backend/src/services/reorg/layout-plan.ts (CREATE)
+  - backend/src/services/reorg/dedup-plan.ts (CREATE)
+  - backend/src/routes/admin/reorg.ts (CREATE)
+  - backend/src/routes/admin/index.ts (EDIT — register reorg routes only)
+- NOT touching: backend/src/routes/v1/vault.ts + schema.ts vault tables (agent #30 owns); no schema migration (registry is code+disk, no DB).
+- Status: **BUILD+VERIFY DONE** 2026-07-08 — tsc 0 (full project; 0 errors from reorg files). Config-gen dry-run verified: proposes gmail-ymc args /home/lobster/projects/gmail-mcp-ymc/index.js → ~/porter/mcp/ymc/gmail-mcp-ymc/index.js, diff shown, ~/.claude.json NEVER written (read-only). Move runbook concrete for gmail-ymc/gmail-multi/ymc-tom-mcp (per-server config/consumer edits + rollback + order; package servers gmail-themozaic/firecrawl = no move). Dedup reporter live-run: 971 safe dup sets, 1.06 GB reclaimable (excludes storage/datarooms/personal/build) — Ovada ×31, Stablekey ×6, Edward-Chen corpus confirmed. execute flag OFF; endpoint GET /api/admin/reorg/plan (admin-gated, ?dedup=1 opt-in). NOTHING moved/deleted/written-live. UNCOMMITTED, NOT restarted — operator ships.
+
+### Session: files-directory-R5-R6 — 2026-07-08 (SGT) — BUILD+VERIFY DONE, operator ships
+- Task: Porter Files directory API (R5) + UI (R6) per planning/porter-files-directory.md. Build+verify
+  only — no version bump, no restart, no deploy.sh, no commit (operator ships).
+- Files claimed (all additive):
+  - backend/src/routes/admin/files.ts (CREATE) — GET /apps, GET /tree?app_scope=, GET /document/:nodeId,
+    POST /sync
+  - backend/src/routes/admin/index.ts (EDIT — register filesRoutes at /files, alongside reorg/etc.)
+  - admin/frontend.archived/app/routes/vault-files.tsx (CREATE) — Document Library UI (apps → projects →
+    documents → detail panel)
+  - admin/frontend.archived/app/routes.ts (EDIT — add /vault-files route)
+  - admin/frontend.archived/app/components/layout/sidebar.tsx (EDIT — new "Document Library" nav item
+    above the pre-existing "Files" browser, which was relabeled "Raw Files" to disambiguate; that raw
+    filesystem browser at /files is UNCHANGED functionally)
+- NOT touching: vault.ts ingest/reconcile, schema.ts, vault-ingest-files.ts (ymc) — all read-only from
+  this session's routes. Deviated from the planning doc's naive "walk vault_placements" spec: real data
+  shows document placements are polluted by the #30 association engine (docs link to deals/persons/
+  entities, not just documents_root), so the tree groups by
+  `vault_artifact_locations.documents_root_node_id` instead — verified this is the correct/stable
+  grouping (exactly 6 real documents_root containers, matches context's live counts).
+- Status: **DONE** 2026-07-08 — tsc 0 (backend + admin). Admin `npm run build` clean (vite + SPA
+  build). Verified all 4 endpoints against LIVE data on a throwaway :3099 tsx instance (never touched
+  porter-fastify:3001/systemd): /apps → ymc {projectCount:6, documentCount:2062, locationCount:2901}
+  (matches context exactly); /tree?app_scope=ymc → 6 projects (Deals 413 docs/691 locs, Dunross/Crow
+  64/71, Funds 4/4, Workouts 146/147, YMC Capital Private — Deal Docs 14/15, YMC Capital Private —
+  Workout Docs 1519/1973); /document/:nodeId → real 3-location multi-project doc with canonical path +
+  all locations; /sync → honest non-executing response (ymc: exact `npx tsx scripts/vault-ingest-
+  files.ts --commit` command + cwd; unknown app_scope: "no scanner configured"). Found + fixed a real
+  bug during verification: schema.ts documents `mtime_ns` as nanosecond text but the live ymc ingest
+  actually writes ISO-8601 strings — added a dual-format parser (not a schema/ingest change).
+- Operator ships (when ready): Porter — version bump in backend/package.json, CHANGELOG.md entry,
+  `cd backend && npm run build && systemctl --user restart porter-fastify`, verify `/health` shows new
+  version, update CHECKPOINT.md, commit+push. Admin — `bash admin/deploy.sh` (rebuilds + rsyncs to
+  /home/websites/porter/admin; Caddy picks it up, no restart needed).
+- Naming flag for Moe: the admin sidebar now has BOTH "Document Library" (new, vault-sourced, deduped —
+  this task) and "Raw Files" (pre-existing raw filesystem browser at /files, renamed from "Projects"/
+  "Files" for clarity, otherwise unchanged). Moe may want to merge or fully replace the raw browser with
+  the Document Library later — left as two distinct views per coordinator instruction, his call.
+
+## R2 release-system — Porter registry API + release:audit (Opus 4.8 1M) — 2026-07-08 (SGT)
+- Workstream: build R2 of the unified release system per planning/release-system.md — Porter as the
+  ENFORCER of release consistency. REUSES R1's manifest-schema + project-registry (import, no copy).
+  BUILD + VERIFY + REPORT only. No Porter version bump, no restart, no commit. Operator ships.
+- Files claimed (create only, additive; plus ONE additive registration line in the route index):
+  - backend/src/release-kit/audit.ts (CREATE — auditProject(repoRoot, manifest|null) + auditAll(),
+    read-only drift detection: manifest exists+valid, core.hooksPath==deploy/git-hooks + hooks exist +
+    grep for porter-release/release-kit, kitVersion==KIT_VERSION, version file present; spawns
+    `git config --get` etc read-only, never writes)
+  - backend/src/routes/admin/releases.ts (CREATE — GET /projects, /audit, /project/:id; requirePlatformAdmin)
+  - backend/src/routes/admin/index.ts (EDIT — one import + one fastify.register line for releasesRoutes)
+- NOT touching: vault.ts, bridge, any other route, any hook, any other repo, index.ts (only the admin
+  route-index registration line). Additive only.
+- Status: **DONE** 2026-07-08 — audit.ts + releases.ts created; index.ts +2 lines (import + register).
+  `npx tsc --noEmit` = 0. auditAll() on the 4 real projects = verdict:drift, wired 0/4 (expected pre-R3:
+  no repo has a manifest yet; ymc/porter hooks are bespoke/don't call the kit, themozaic/baanyindee have
+  no hooksPath). Route smoke via fastify.inject on a throwaway instance (never touched :3001): all 3
+  endpoints 200 with correct shapes, unknown id 404s. Left uncommitted, no version bump, no restart —
+  operator ships.
+
+## R3 release-system — kit DELEGATE/COMPAT support (Opus 4.8 1M) — 2026-07-08 (SGT)
+- Workstream: build R3 delegate/compat so ymc.capital adopts the kit by WRAPPING (never replacing) its
+  live pre/post-commit ceremony. BUILD + VERIFY(dry-run) + REPORT only. No version bump, no restart,
+  no commit. Operator flips live after review.
+- Porter files (additive, backwards-compatible — R1/R2 manifests unaffected):
+  - backend/src/release-kit/manifest-schema.ts (EDIT — optional run/gate/register + conditionalVersionFiles)
+  - backend/src/release-kit/gate.ts (EDIT — conditionalVersionFiles enforcement + executeGate delegate-with-shadow)
+  - backend/src/release-kit/run.ts (EDIT — delegate-mode exec + skip kit push/deploy/announce + audit register)
+  - backend/src/release-kit/audit.ts (EDIT — recognize delegate-mode wiring, don't regress kit-mode)
+  - backend/src/release-kit/register.ts (CREATE — non-fatal audit-only register client)
+  - backend/src/release-kit/cli.ts (EDIT — gate uses executeGate; add `register` subcommand)
+  - backend/src/routes/admin/releases.ts (EDIT — POST /register + GET /registrations, service-token auth)
+- Status: **DONE (uncommitted)** — see final report. tsc 0; dry-run proofs in scratchpad; live tree untouched.

@@ -15,6 +15,12 @@ ADMIN_DIR="/home/lobster/projects/Porter/admin"
 FRONTEND_DIR="$ADMIN_DIR/frontend.archived"
 WEB_DIR="/home/websites/porter/admin"
 
+# Bake the ONE release truth (backend version + PORTER_RELEASES feed) into the
+# admin build so version/footer/changelog render from a single, current source
+# — not the admin's drifting package.json or a stale baked CHANGELOG.
+echo "Baking release info from backend truth..."
+( cd "/home/lobster/projects/Porter/backend" && npx tsx scripts/gen-admin-release-info.ts )
+
 echo "Building admin SPA..."
 cd "$FRONTEND_DIR"
 npm run build

@@ -45,6 +45,8 @@ export const EXPECTED_HOOKS_PATH = 'deploy/git-hooks';
 export const REQUIRED_HOOKS = ['pre-commit', 'post-commit'] as const;
 /** A shim is considered kit-wired if it references either of these tokens. */
 const KIT_SHIM_TOKENS = ['porter-release', 'release-kit'];
+/** Delegate-mode: the post-commit must carry a `porter-release register` audit call. */
+const REGISTER_CALL_RE = /(porter-release\s+register|release-kit[/\\]cli\.ts\s+register)\b/;
 
 export interface HookDetail {
   name: string;
@@ -52,6 +54,8 @@ export interface HookDetail {
   present: boolean;
   /** file content references the kit (porter-release / release-kit). */
   callsKit: boolean;
+  /** file content contains a `porter-release register` audit call (delegate-mode signal). */
+  callsRegister: boolean;
 }
 
 export interface ProjectAudit {
@@ -99,15 +103,16 @@ function isGitRepo(repoRoot: string): boolean {
 function inspectHooks(repoRoot: string): HookDetail[] {
   return REQUIRED_HOOKS.map((name) => {
     const path = join(repoRoot, EXPECTED_HOOKS_PATH, name);
-    if (!existsSync(path)) return { name, present: false, callsKit: false };
+    if (!existsSync(path)) return { name, present: false, callsKit: false, callsRegister: false };
     let body = '';
     try {
       body = readFileSync(path, 'utf8');
     } catch {
-      return { name, present: true, callsKit: false };
+      return { name, present: true, callsKit: false, callsRegister: false };
     }
     const callsKit = KIT_SHIM_TOKENS.some((t) => body.includes(t));
-    return { name, present: true, callsKit };
+    const callsRegister = REGISTER_CALL_RE.test(body);
+    return { name, present: true, callsKit, callsRegister };
   });
 }
 
@@ -155,12 +160,21 @@ export function auditProject(
   }
 
   // --- hooks ---
+  // A manifest is DELEGATE-mode when it declares delegate on run or gate. In that
+  // mode the kit WRAPS the repo's existing bespoke hooks (which legitimately do
+  // NOT call the kit) — the wired signal is instead a `porter-release register`
+  // audit call in the post-commit. Kit-mode wiring (both hooks are thin shims) is
+  // unchanged, so R1/R2 kit repos never regress.
+  const isDelegateManifest =
+    manifest !== null &&
+    (manifest.run?.mode === 'delegate' || manifest.gate?.mode === 'delegate-with-shadow');
+
   const hooksPath = gitConfig(repoRoot, 'core.hooksPath');
   const hooks = inspectHooks(repoRoot);
   const hooksPathOk = hooksPath === EXPECTED_HOOKS_PATH;
   const allHooksPresent = hooks.every((h) => h.present);
-  const allHooksCallKit = hooks.every((h) => h.callsKit);
-  const hooksWired = hooksPathOk && allHooksPresent && allHooksCallKit;
+  const postCommit = hooks.find((h) => h.name === 'post-commit');
+
   if (!hooksPathOk) {
     driftReasons.push(
       `core.hooksPath is '${hooksPath || '(unset)'}', expected '${EXPECTED_HOOKS_PATH}'`,
@@ -168,11 +182,30 @@ export function auditProject(
   }
   const missing = hooks.filter((h) => !h.present).map((h) => h.name);
   if (missing.length) driftReasons.push(`missing hook(s): ${missing.join(', ')}`);
-  const bespoke = hooks.filter((h) => h.present && !h.callsKit).map((h) => h.name);
-  if (bespoke.length) {
-    driftReasons.push(
-      `hook(s) do not call the kit (bespoke/forked, bypassing porter-release): ${bespoke.join(', ')}`,
-    );
+
+  let hooksWired: boolean;
+  if (isDelegateManifest) {
+    // Delegate-mode: hooks exist under the tracked path + the post-commit carries
+    // the audit-only register call. The repo's bespoke gate logic is EXPECTED and
+    // is NOT flagged as drift.
+    const registerCallPresent = Boolean(postCommit?.callsRegister);
+    hooksWired = hooksPathOk && allHooksPresent && registerCallPresent;
+    if (allHooksPresent && !registerCallPresent) {
+      driftReasons.push(
+        "delegate-mode manifest but post-commit has no `porter-release register` audit call — " +
+          'Porter cannot learn when the repo ships. Append the non-fatal register line.',
+      );
+    }
+  } else {
+    // Kit-mode (R1/R2): both hooks must be thin shims that call the kit.
+    const allHooksCallKit = hooks.every((h) => h.callsKit);
+    hooksWired = hooksPathOk && allHooksPresent && allHooksCallKit;
+    const bespoke = hooks.filter((h) => h.present && !h.callsKit).map((h) => h.name);
+    if (bespoke.length) {
+      driftReasons.push(
+        `hook(s) do not call the kit (bespoke/forked, bypassing porter-release): ${bespoke.join(', ')}`,
+      );
+    }
   }
 
   // --- kitVersion pin ---

@@ -1,3 +1,13 @@
+## 2026-07-08 — v6.75.0: admin coherence — version/changelog from ONE source + preview zoom
+- Moe: askporter showed stale v6.3.0 (baked admin package.json) + incomplete/frozen changelog + preview
+  filled the window but document couldn\'t zoom = disjoint systems. FIX (tie together): backend/scripts/
+  gen-admin-release-info.ts bakes backend version + PORTER_RELEASES into admin app/lib/release-info.generated.ts
+  at deploy (admin/deploy.sh runs it pre-build); constants.ts VERSION := PORTER_VERSION (not admin pkg 6.3.0);
+  changelog.tsx renders PORTER_RELEASES (same feed as the announce — no more stale CHANGELOG.md?raw); files.tsx
+  preview gained zoom in/out/reset (scales image width + pdf iframe in the scroll container). One source: version
+  + changelog + announce all trace to backend/package.json + PORTER_RELEASES.
+- NOTE: R3 (ymc kit delegate) still uncommitted separately.
+
 ## 2026-07-08 — v6.74.0: release-announce ENFORCEMENT (structural, session-independent)
 - Moe (repeatedly): announce keeps getting skipped because it depends on whichever session runs the post-commit
   hook — a session shipped a Porter update without ceremony. FIX: backend/src/services/release-reconciler.ts —

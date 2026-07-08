@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   FolderOpen, Upload, ChevronRight, FileText,
   Folder, FolderPlus, Loader2, X, Download, Search,
-  MoreVertical, Pencil, Trash2, Check, Maximize2, Minimize2, Rows3,
+  MoreVertical, Pencil, Trash2, Check, Maximize2, Minimize2, Rows3, ZoomIn, ZoomOut, RotateCcw,
   Home, AlertTriangle,
 } from "lucide-react"
 import { Link } from "react-router"
@@ -95,6 +95,12 @@ function FilePreviewPanel({
   const previewType = getPreviewType(fileName)
   const contentUrl = `/api/v1/files/content?root=${encodeURIComponent(root)}&path=${encodeURIComponent(filePath)}`
 
+  // Zoom for the rendered document (image/pdf). Expand fills the pane; zoom
+  // scales the document within the scroll container so it can be read in/out.
+  const [zoom, setZoom] = useState(1)
+  useEffect(() => { setZoom(1) }, [filePath])
+  const zoomable = previewType === "image" || previewType === "pdf"
+
   const { data: textContent, isLoading } = useQuery({
     queryKey: ["file-content", root, filePath],
     queryFn: async () => {
@@ -118,6 +124,20 @@ function FilePreviewPanel({
         >
           <Download className="size-3" />
         </a>
+        {zoomable && (
+          <>
+            <button onClick={() => setZoom(z => Math.max(0.5, +(z - 0.25).toFixed(2)))} className="flex items-center justify-center size-6 rounded text-text3 hover:text-text2 hover:bg-raised transition-colors" title="Zoom out">
+              <ZoomOut className="size-3" />
+            </button>
+            <span className="text-[10px] tabular-nums text-text3 w-8 text-center select-none">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom(z => Math.min(4, +(z + 0.25).toFixed(2)))} className="flex items-center justify-center size-6 rounded text-text3 hover:text-text2 hover:bg-raised transition-colors" title="Zoom in">
+              <ZoomIn className="size-3" />
+            </button>
+            <button onClick={() => setZoom(1)} className="flex items-center justify-center size-6 rounded text-text3 hover:text-text2 hover:bg-raised transition-colors" title="Reset zoom">
+              <RotateCcw className="size-3" />
+            </button>
+          </>
+        )}
         {onExpand && (
           <button onClick={onExpand} className="flex items-center justify-center size-6 rounded text-text3 hover:text-text2 hover:bg-raised transition-colors" title={expanded ? "Shrink" : "Expand"}>
             {expanded ? <Minimize2 className="size-3" /> : <Maximize2 className="size-3" />}
@@ -142,11 +162,16 @@ function FilePreviewPanel({
         )}
         {previewType === "image" && (
           <div className="flex items-center justify-center p-4">
-            <img src={contentUrl} alt={fileName} className="max-w-full max-h-[70vh] rounded-lg object-contain" />
+            <img
+              src={contentUrl}
+              alt={fileName}
+              className="rounded-lg object-contain"
+              style={{ width: `${zoom * 100}%`, maxWidth: zoom <= 1 ? "100%" : "none", maxHeight: zoom <= 1 ? "70vh" : "none" }}
+            />
           </div>
         )}
         {previewType === "pdf" && (
-          <iframe src={contentUrl} className="w-full h-full border-0" title={fileName} />
+          <iframe src={contentUrl} className="border-0" style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }} title={fileName} />
         )}
         {previewType === "none" && (
           <div className="flex flex-col items-center justify-center h-full text-text3 p-6">
@@ -935,7 +960,7 @@ export default function FilesPage() {
 
         {/* Preview panel */}
         {previewFile && activeRoot && (
-          <div className={previewExpanded ? "flex-1" : "w-[380px] shrink-0"}>
+          <div className={previewExpanded ? "fixed inset-0 z-50 bg-surface" : "w-[380px] shrink-0"}>
             <FilePreviewPanel
               root={activeRoot}
               filePath={previewFile.path}

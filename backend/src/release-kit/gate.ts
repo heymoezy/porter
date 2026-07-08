@@ -19,6 +19,7 @@
  * REFUSE = { ok: false } with clear messages. The shim maps !ok → exit 1.
  * This gate does NOT bump, write, test, push, or announce.
  */
+import { spawnSync } from 'node:child_process';
 import type { ReleaseManifest } from './manifest-schema.js';
 
 export interface GateInput {
@@ -100,10 +101,101 @@ export function runGate(input: GateInput): GateResult {
     }
   }
 
+  // Rule 3: conditional version files (generalized tom-version rule). If any
+  // staged path matches a declared prefix, the paired versionFile MUST be staged.
+  for (const cvf of manifest.conditionalVersionFiles ?? []) {
+    const prefixes = Array.isArray(cvf.pathPrefix) ? cvf.pathPrefix : [cvf.pathPrefix];
+    const matched = stagedFiles.filter((f) => prefixes.some((p) => f.startsWith(p)));
+    if (matched.length > 0 && !stagedFiles.includes(cvf.versionFile)) {
+      refusals.push(
+        cvf.message ??
+          `${matched.length} staged file(s) match [${prefixes.join(', ')}] but required version file ` +
+            `'${cvf.versionFile}' is not staged${cvf.id ? ` (rule ${cvf.id})` : ''}.`,
+      );
+    }
+  }
+
   if (refusals.length === 0) {
     if (!codeTouched && !versionStaged) notes.push('docs/metadata-only commit — no version bump required');
     else if (versionStaged) notes.push('release commit — version + changelog' + (manifest.releaseFeed ? ' + feed' : '') + ' present');
   }
 
   return { ok: refusals.length === 0, refusals, notes };
+}
+
+// ─── R3: mode-aware gate execution (kit | delegate-with-shadow) ──────────────
+
+export interface GateExecInput {
+  repoRoot: string;
+  /** output of `git diff --cached --name-only`, repo-relative paths. */
+  stagedFiles: string[];
+  manifest: ReleaseManifest;
+  /** logger sink; defaults to console.log. */
+  log?: (line: string) => void;
+}
+
+export interface GateExecResult {
+  /** AUTHORITATIVE verdict. In kit mode this is the kit gate; in
+   *  delegate-with-shadow it is the delegate's exit code. */
+  ok: boolean;
+  mode: 'kit' | 'delegate-with-shadow';
+  /** the kit contract result (authoritative in kit mode; SHADOW otherwise). */
+  kit: GateResult;
+  /** present only in delegate-with-shadow mode. */
+  delegate?: { exitCode: number; ok: boolean };
+  /** shadow vs authority agreement (delegate mode only). */
+  agreement?: 'agree' | 'diverge';
+}
+
+/**
+ * Run the gate honoring manifest.gate.mode.
+ *
+ * kit (default): the pure contract check (runGate) is authoritative.
+ *
+ * delegate-with-shadow: spawn manifest.gate.delegateCommand (the repo's EXISTING
+ * pre-commit) as the AUTHORITY — its exit code decides. The kit's own gate still
+ * runs as a non-authoritative SHADOW: agreement/divergence is logged so drift is
+ * visible before anyone flips authority to the kit, but the shadow NEVER blocks.
+ * The delegate inherits stdio so the repo's own gate messages surface verbatim.
+ */
+export function executeGate(input: GateExecInput): GateExecResult {
+  const { repoRoot, stagedFiles, manifest } = input;
+  const log = input.log ?? ((l: string) => console.log(l));
+  const mode = manifest.gate?.mode ?? 'kit';
+
+  // Always compute the kit contract result (authoritative or shadow).
+  const kit = runGate({ repoRoot, stagedFiles, manifest });
+
+  if (mode !== 'delegate-with-shadow') {
+    return { ok: kit.ok, mode: 'kit', kit };
+  }
+
+  const cmd = manifest.gate?.delegateCommand;
+  if (!cmd || cmd.length === 0) {
+    // Schema superRefine should prevent this; fail closed if it ever slips through.
+    log('[gate] ✗ gate.mode=delegate-with-shadow but no gate.delegateCommand — refusing (fail closed).');
+    return { ok: false, mode, kit };
+  }
+
+  log(`[gate] delegate-with-shadow → authority: ${cmd.join(' ')}`);
+  const res = spawnSync(cmd[0], cmd.slice(1), {
+    cwd: repoRoot,
+    stdio: 'inherit',
+    timeout: 10 * 60_000,
+  });
+  const exitCode = res.status ?? (res.error ? 1 : 0);
+  const delegateOk = exitCode === 0;
+  const agreement: 'agree' | 'diverge' = delegateOk === kit.ok ? 'agree' : 'diverge';
+
+  // SHADOW telemetry — non-authoritative, never blocks.
+  log(
+    `[gate:shadow] kit(non-authoritative)=${kit.ok ? 'PASS' : 'FAIL'} vs ` +
+      `delegate(AUTHORITY)=${delegateOk ? 'PASS' : `FAIL(${exitCode})`} → ${agreement.toUpperCase()}`,
+  );
+  for (const r of kit.refusals) log(`[gate:shadow]   kit-would-refuse: ${r}`);
+  if (agreement === 'diverge') {
+    log('[gate:shadow] ⚠ DIVERGENCE — kit contract disagrees with the repo gate. Investigate before flipping authority. (non-fatal)');
+  }
+
+  return { ok: delegateOk, mode, kit, delegate: { exitCode, ok: delegateOk }, agreement };
 }

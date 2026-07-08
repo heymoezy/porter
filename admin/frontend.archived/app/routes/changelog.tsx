@@ -1,60 +1,31 @@
 import { useMemo } from "react"
 import { useNavigate } from "react-router"
 import { ArrowLeft } from "lucide-react"
-// Single monorepo changelog — root CHANGELOG.md covers both Brain + Admin
-import changelogRaw from "../../../../CHANGELOG.md?raw"
+// Changelog renders the ONE curated release feed (PORTER_RELEASES), baked from
+// the backend at deploy by gen-admin-release-info.ts — the SAME feed the group
+// announce uses. So the changelog always matches what we actually shipped +
+// announced (no separate/stale source).
+import { PORTER_RELEASES } from "../lib/release-info.generated"
 
 interface Release {
   version: string
   date: string
-  rawDate: string
   highlight: string
   items: string[]
 }
 
-/** Parse CHANGELOG.md into structured releases */
-function parseChangelog(raw: string): Release[] {
-  const releases: Release[] = []
-  const sections = raw.split(/^## /m).filter(Boolean)
-
-  for (const section of sections) {
-    const lines = section.trim().split("\n")
-    const header = lines[0] || ""
-
-    const match = header.match(/^(?:(Admin|Brain)\s+)?(v[\d.]+)\s*\((\d{4}-\d{2}-\d{2})\)/)
-    if (!match) continue
-
-    const prefix = match[1] ? `${match[1]} ` : ""
-    const version = prefix + match[2]
-    const rawDate = match[3]
-    const d = new Date(rawDate + "T00:00:00")
-    const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })
-
-    let highlight = ""
-    const items: string[] = []
-
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
-      if (line.startsWith("**") && line.endsWith("**")) {
-        highlight = line.replace(/\*\*/g, "")
-        continue
-      }
-      if (line.startsWith("- ")) {
-        items.push(line.slice(2))
-        continue
-      }
-    }
-
-    releases.push({ version, date, rawDate, highlight, items })
-  }
-
-  return releases
+function feedToReleases(): Release[] {
+  return PORTER_RELEASES.map((r) => ({
+    version: `v${r.version}`,
+    date: new Date(r.date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }),
+    highlight: r.title,
+    items: r.bullets,
+  }))
 }
 
 export default function ChangelogPage() {
   const navigate = useNavigate()
-  const releases = useMemo(() => parseChangelog(changelogRaw), [])
+  const releases = useMemo(() => feedToReleases(), [])
 
   return (
       <div className="flex-1 overflow-y-auto scrollbar-thin p-4">

@@ -21,6 +21,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ReleaseManifest } from './manifest-schema.js';
 import { announceViaYmc, type AnnounceResult } from './announce-adapter.js';
+import { registerRelease } from './register.js';
 
 export interface RunOptions {
   repoRoot: string;
@@ -116,6 +117,12 @@ function gitPush(repoRoot: string, remote: string, branch: string): { ok: boolea
 export async function run(opts: RunOptions): Promise<RunResult> {
   const { repoRoot, manifest, dry = false } = opts;
   const log = opts.log ?? ((l: string) => console.log(l));
+
+  // R3: delegate mode — the kit is a thin shim over the repo's OWN post-commit.
+  if ((manifest.run?.mode ?? 'kit') === 'delegate') {
+    return runDelegate(opts);
+  }
+
   const steps: RunStep[] = [];
   const version = extractVersion(repoRoot, manifest) ?? 'unknown';
 
@@ -181,4 +188,73 @@ export async function run(opts: RunOptions): Promise<RunResult> {
   const ok = steps.every((s) => s.ok);
   log(`[run] ${ok ? 'DONE' : 'COMPLETED WITH ERRORS'} — v${version}`);
   return { ok, halted: false, version, steps, announce };
+}
+
+/**
+ * R3 DELEGATE run: the repo owns the ENTIRE ceremony. The kit does NOT reorder,
+ * replace, or retire anything — it execs the repo's EXISTING post-commit
+ * (manifest.run.delegateCommand), whose exit code is authoritative, and then
+ * SKIPS every kit-native side effect (push/deploy/announce) so nothing is done
+ * twice. Announce stays with the repo (announce.mode should be 'none' here — no
+ * double-announce). When register.mode==='audit-only' the kit records the
+ * release with Porter as pure, non-fatal telemetry.
+ */
+async function runDelegate(opts: RunOptions): Promise<RunResult> {
+  const { repoRoot, manifest, dry = false } = opts;
+  const log = opts.log ?? ((l: string) => console.log(l));
+  const steps: RunStep[] = [];
+  const version = extractVersion(repoRoot, manifest) ?? 'unknown';
+
+  const push = (s: RunStep) => {
+    steps.push(s);
+    const tag = s.skipped ? 'SKIP' : s.ok ? 'OK' : 'FAIL';
+    log(`[run] ${tag} ${s.step}${s.detail ? ` — ${s.detail.split('\n')[0]}` : ''}`);
+  };
+
+  const cmd = manifest.run?.delegateCommand;
+  if (!cmd || cmd.length === 0) {
+    push({ step: 'delegate', ok: false, detail: "run.mode='delegate' but run.delegateCommand not declared" });
+    return { ok: false, halted: true, version, steps };
+  }
+
+  if (dry) {
+    push({
+      step: 'delegate',
+      ok: true,
+      skipped: true,
+      detail: `dry — would exec repo ceremony: ${cmd.join(' ')} (build/rsync/restart/verify/announce owned by repo)`,
+    });
+  } else {
+    log(`[run] delegate → ${cmd.join(' ')}`);
+    const res = spawnSync(cmd[0], cmd.slice(1), {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      timeout: 30 * 60_000,
+    });
+    const exitCode = res.status ?? (res.error ? 1 : 0);
+    push({ step: `delegate (${cmd.join(' ')})`, ok: exitCode === 0, detail: `exit=${exitCode}` });
+    if (exitCode !== 0) {
+      log('[run] HALT — delegated ceremony failed.');
+      return { ok: false, halted: true, version, steps };
+    }
+  }
+
+  // Kit-native side effects are the repo's job in delegate mode — never doubled.
+  push({ step: 'push', ok: true, skipped: true, detail: 'delegate — repo owns push' });
+  push({ step: 'deploy', ok: true, skipped: true, detail: 'delegate — repo deploy owns deploy' });
+  push({
+    step: 'announce',
+    ok: true,
+    skipped: true,
+    detail: `announce.mode=${manifest.announce.mode} — repo owns announce (no double-announce)`,
+  });
+
+  // audit-only register — pure, non-fatal telemetry.
+  if ((manifest.register?.mode ?? 'full') === 'audit-only') {
+    const reg = await registerRelease(repoRoot, manifest, { dry });
+    push({ step: 'register (audit-only)', ok: true, skipped: !reg.sent, detail: reg.detail });
+  }
+
+  log(`[run] DONE (delegate) — v${version}`);
+  return { ok: true, halted: false, version, steps };
 }

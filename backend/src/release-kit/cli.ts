@@ -16,9 +16,10 @@
  */
 import { spawnSync } from 'node:child_process';
 import { loadManifest, ManifestError } from './manifest-schema.js';
-import { runGate } from './gate.js';
+import { executeGate } from './gate.js';
 import { run, readLatestReleaseNote } from './run.js';
 import { announceViaYmc } from './announce-adapter.js';
+import { registerRelease } from './register.js';
 import { getProject, expectedManifestPath } from './project-registry.js';
 
 function arg(flag: string): string | undefined {
@@ -59,14 +60,22 @@ async function main() {
         console.error(`[porter-release gate] ✗ ${e instanceof ManifestError ? e.message : e}`);
         process.exit(1);
       }
-      const result = runGate({ repoRoot, stagedFiles: stagedFiles(repoRoot), manifest });
-      for (const n of result.notes) console.log(`[porter-release gate] · ${n}`);
+      const result = executeGate({ repoRoot, stagedFiles: stagedFiles(repoRoot), manifest });
+      for (const n of result.kit.notes) console.log(`[porter-release gate] · ${n}`);
       if (!result.ok) {
-        for (const r of result.refusals) console.error(`[porter-release gate] ✗ ${r}`);
+        // Kit-mode: surface the kit refusals. Delegate-mode: the authoritative
+        // repo gate already printed its own reasons via inherited stdio.
+        if (result.mode === 'kit') {
+          for (const r of result.kit.refusals) console.error(`[porter-release gate] ✗ ${r}`);
+        }
         console.error('[porter-release gate] REFUSED — commit blocked.');
         process.exit(1);
       }
-      console.log('[porter-release gate] ✓ contract satisfied.');
+      console.log(
+        result.mode === 'delegate-with-shadow'
+          ? '[porter-release gate] ✓ repo gate (authority) satisfied; kit shadow logged.'
+          : '[porter-release gate] ✓ contract satisfied.',
+      );
       process.exit(0);
       break;
     }
@@ -148,8 +157,29 @@ async function main() {
       break;
     }
 
+    case 'register': {
+      // Audit-only telemetry — ALWAYS non-fatal (exit 0). Records the repo's last
+      // release with Porter so the audit knows it is wired + when it last shipped.
+      // Appended to a delegate-mode repo's post-commit; must never fail the hook.
+      const repoRoot = resolveRepoRoot();
+      const dry = has('--dry');
+      let manifest;
+      try {
+        manifest = loadManifest(repoRoot);
+      } catch (e) {
+        console.error(`[porter-release register] · skipped (non-fatal): ${e instanceof ManifestError ? e.message : e}`);
+        process.exit(0);
+      }
+      const res = await registerRelease(repoRoot, manifest, { dry });
+      console.log(
+        `[porter-release register] ${res.sent ? '✓ recorded' : '·'} ${manifest.project} v${res.version} — ${res.detail}`,
+      );
+      process.exit(0); // never fatal
+      break;
+    }
+
     default:
-      console.error('usage: porter-release <gate|run|check <project>|announce> [--dry] [--repo <path>]');
+      console.error('usage: porter-release <gate|run|check <project>|announce|register> [--dry] [--repo <path>]');
       process.exit(2);
   }
 }

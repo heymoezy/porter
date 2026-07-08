@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.75.0',
+    date: '2026-07-08',
+    title: 'Admin version + changelog now tell the truth (and previews zoom)',
+    bullets: [
+      'The Porter admin was showing a stale v6.3.0 in the sidebar/footer and a frozen changelog. Both now bake from the ONE backend release truth at deploy — the version matches what is actually running, and the changelog shows the same release notes the group announce uses. Also: the document preview now has zoom in/out/reset controls so an expanded PDF or image can be read at any size.',
+    ],
+  },
+  {
     version: '6.74.0',
     date: '2026-07-08',
     title: 'Release announces are now enforced, not optional',
