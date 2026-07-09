@@ -1,3 +1,11 @@
+## 2026-07-09 — v6.78.0: full changelog history restored (v6.0.0→v6.68.0)
+- Moe: "why did porter lose the changelog before 6.69? where is all the history?" ROOT CAUSE: PORTER_RELEASES
+  (the typed feed the admin changelog renders) was CREATED at 6.69 and never backfilled — nothing lost, the
+  history lives in git. Reconstructed 74 entries (v6.68.0 down to v6.0.0 "The Orchestration Platform"),
+  newest-first, human/benefit-led bullets from git subjects + CHANGELOG.md (via Bridge agent). Never-released
+  gaps kept out: 6.6.0/6.19.0/6.20.0. Stops at 6.0.0 (below = old openclaw SaaS, admin/CHANGELOG.md). tsc 0.
+  Admin changelog now shows the complete platform history.
+
 ## 2026-07-09 — v6.77.0: Porter adopts its own release-kit (R4)
 - Added release.manifest.json (kind=porter, run.mode=delegate → Porter's own post-commit owns deploy+announce,
   register.mode=audit-only) + deploy/git-hooks/pre-commit (NON-BLOCKING release-kit shadow gate — surfaces

@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.78.0',
+    date: '2026-07-09',
+    title: 'Full changelog history restored',
+    bullets: [
+      'The in-app changelog was only showing releases back to v6.69 — everything before it was missing. Nothing was lost; the feed the changelog reads was simply created at 6.69 and never backfilled. Restored the complete platform history from v6.0.0 (the Orchestration Platform, 4 Apr) up to today, so the changelog now shows every release Porter has shipped.',
+    ],
+  },
+  {
     version: '6.77.0',
     date: '2026-07-09',
     title: 'Porter now follows its own release rules',
@@ -91,6 +99,598 @@ export const PORTER_RELEASES: PorterRelease[] = [
     title: 'Document Library — every app’s files, deduped and in sync',
     bullets: [
       'New Document Library in the Porter admin: all of an app’s documents, organised the way the knowledge graph sees them (app → project → document), completely de-duplicated (one entry per unique file with every location tracked) and kept in sync so moved or deleted files drop off automatically. Personal material (passports, tax, personal financials) is never indexed. First app live: YMC with ~2,900 documents across 6 projects.',
+    ],
+  },
+  {
+    version: '6.68.0',
+    date: '2026-07-08',
+    title: 'Files perfect-sync',
+    bullets: [
+      'Added a reconcile pass (POST /vault/reconcile) so the document index exactly matches what is on disk — moved or deleted files are corrected automatically, no drift.',
+    ],
+  },
+  {
+    version: '6.67.0',
+    date: '2026-07-08',
+    title: 'One entry per unique file',
+    bullets: [
+      'Documents are now de-duplicated by content: the same file appearing in several places collapses to a single indexed entry with every location tracked, instead of many near-duplicate rows.',
+    ],
+  },
+  {
+    version: '6.66.0',
+    date: '2026-07-08',
+    title: 'Document Library foundation',
+    bullets: [
+      'Laid the groundwork for the Porter Files directory — a table that records every place a given document lives across an app, so the library can show one file with all its locations.',
+    ],
+  },
+  {
+    version: '6.65.0',
+    date: '2026-07-08',
+    title: 'Reorg tooling (dry-run)',
+    bullets: [
+      'Added config-generation plus move/de-dup runbooks that preview every change before anything is touched — safe planning for large file reorganisations.',
+    ],
+  },
+  {
+    version: '6.64.0',
+    date: '2026-07-08',
+    title: 'Knowledge graph associations',
+    bullets: [
+      'Vault association engine: records can now link to each other and a focused view expands along those edges, so related knowledge surfaces together instead of in isolation.',
+    ],
+  },
+  {
+    version: '6.63.0',
+    date: '2026-07-08',
+    title: 'Vault-reader shadow canary',
+    bullets: [
+      'Internal safety step: ran the new vault reader in shadow mode with all flags off to prove zero risk before it goes live.',
+    ],
+  },
+  {
+    version: '6.62.0',
+    date: '2026-07-07',
+    title: 'Tools registry',
+    bullets: [
+      'First slice of a canonical tools registry so every tool Porter can call is discoverable in one place rather than scattered.',
+    ],
+  },
+  {
+    version: '6.61.0',
+    date: '2026-07-07',
+    title: 'Dead-code cleanup',
+    bullets: [
+      'Removed the retired brain-ui :5176 surface and unused mail/forge/rpg tables — less dead weight, clearer system.',
+    ],
+  },
+  {
+    version: '6.60.0',
+    date: '2026-07-07',
+    title: 'Identity spine — scope ladder + product registry',
+    bullets: [
+      'Introduced a scope ladder and product registry so every piece of knowledge and every service knows which app/project/product it belongs to — the backbone for clean multi-app separation.',
+    ],
+  },
+  {
+    version: '6.59.0',
+    date: '2026-07-07',
+    title: 'Porter MCP server (alpha)',
+    bullets: [
+      'First alpha of the Porter MCP server — lets Claude pull Porter knowledge directly (headless), plus vault review-queue engine operations.',
+    ],
+  },
+  {
+    version: '6.58.0',
+    date: '2026-07-07',
+    title: 'Review-queue placement IDs',
+    bullets: [
+      'The knowledge-graph read now returns a placement ID for each proposed item so the review queue can accept or refile it precisely.',
+    ],
+  },
+  {
+    version: '6.57.0',
+    date: '2026-07-07',
+    title: 'Admin hygiene',
+    bullets: [
+      'Housekeeping: zero type-check errors, stopped tracking build artefacts in git, and fixed a dream-run JSON bug.',
+    ],
+  },
+  {
+    version: '6.56.0',
+    date: '2026-07-07',
+    title: 'Graph edges API',
+    bullets: [
+      'Added edge ingestion (POST /vault/edges) so apps can declare relationships between knowledge nodes, not just the nodes themselves.',
+    ],
+  },
+  {
+    version: '6.55.0',
+    date: '2026-07-07',
+    title: 'MCP management page',
+    bullets: [
+      'New MCP management screen in the Porter admin, plus removal of dead Forge code.',
+    ],
+  },
+  {
+    version: '6.54.0',
+    date: '2026-07-07',
+    title: 'Derivative loop — raw to markdown',
+    bullets: [
+      'Vault now derives clean markdown from raw source documents and keeps it fresh, re-generating when the source changes (stale-aware).',
+    ],
+  },
+  {
+    version: '6.53.0',
+    date: '2026-07-07',
+    title: 'Placement accept/refile',
+    bullets: [
+      'Review-queue operations: a proposed knowledge placement can now be accepted or refiled to a better spot.',
+    ],
+  },
+  {
+    version: '6.52.0',
+    date: '2026-07-07',
+    title: 'Scoped graph reads',
+    bullets: [
+      'Knowledge-graph reads can now be filtered by layer and focused on a subtree, so an app sees just its slice instead of the whole graph.',
+    ],
+  },
+  {
+    version: '6.51.0',
+    date: '2026-07-07',
+    title: 'Type-checked ingest',
+    bullets: [
+      'New ingest API accepts type-checked knowledge pushes and returns proposed placements for review before anything is committed.',
+    ],
+  },
+  {
+    version: '6.50.0',
+    date: '2026-07-07',
+    title: 'Apps declare their node types',
+    bullets: [
+      'Added a register-schema API so each app can declare the kinds of knowledge nodes it produces — the graph adapts per app instead of a fixed shape.',
+    ],
+  },
+  {
+    version: '6.49.0',
+    date: '2026-07-07',
+    title: 'Vault v2 — generic schema',
+    bullets: [
+      'Foundation of the v2 knowledge graph: a generic six-table schema that can hold any app’s knowledge, replacing the old fixed layout.',
+    ],
+  },
+  {
+    version: '6.48.0',
+    date: '2026-07-06',
+    title: 'Admin revamp — dead screens removed',
+    bullets: [
+      'Removed the Forge, Email and Skill-Feedback screens from the admin (their backends were already gone, so these were dead frontends) — trimming ~2,000 lines and clearing the way for the MCP, tools and CLI-config views that follow.',
+    ],
+  },
+  {
+    version: '6.47.0',
+    date: '2026-07-06',
+    title: 'Bridge model failover',
+    bullets: [
+      'Tom no longer breaks when Claude hits a quota or error: every Bridge dispatch now automatically retries the same task on the next model in the chain (Claude → Codex → Antigravity), with the whole failover recorded. Callers can opt out for hard-fail behaviour.',
+    ],
+  },
+  {
+    version: '6.46.0',
+    date: '2026-07-06',
+    title: 'Cleanup + telemetry fix',
+    bullets: [
+      'Removed the dead documents-tree code, fixed Codex cost/telemetry reporting, and shipped the second slice of the email verdict work.',
+    ],
+  },
+  {
+    version: '6.45.0',
+    date: '2026-07-06',
+    title: 'Knowledge-evolution loop',
+    bullets: [
+      'A background worker now researches on the cheap model tier and scans GitHub for improvements, filing proposals only — Porter suggests, a human still approves.',
+    ],
+  },
+  {
+    version: '6.44.0',
+    date: '2026-07-06',
+    title: 'Antigravity gateway',
+    bullets: [
+      'Registered and proved the Antigravity CLI (agy) as a Bridge gateway — another model backend Porter can route to.',
+    ],
+  },
+  {
+    version: '6.43.0',
+    date: '2026-07-06',
+    title: 'Memory unification (U5+U6)',
+    bullets: [
+      'Shipped the final slices of the memory-unification work that brings Porter memory and the vault into one consistent store.',
+    ],
+  },
+  {
+    version: '6.42.0',
+    date: '2026-07-05',
+    title: 'Rules learned from failures',
+    bullets: [
+      'New rule-distillation loop: repeated failures now turn into proposed operating rules for review, so Porter learns from what went wrong.',
+    ],
+  },
+  {
+    version: '6.41.0',
+    date: '2026-07-05',
+    title: 'Memory unification (U3+U4)',
+    bullets: [
+      'Memory injection now prefers the vault as its source, and nightly dream drafts write back into the vault — one knowledge home, not two.',
+    ],
+  },
+  {
+    version: '6.40.0',
+    date: '2026-07-05',
+    title: 'Memory unification (U1+U2)',
+    bullets: [
+      'Began unifying memory with the vault: a live mirror of memory into the vault plus a concept indexer, so structured knowledge and freeform memory stop drifting apart.',
+    ],
+  },
+  {
+    version: '6.39.0',
+    date: '2026-07-04',
+    title: 'Dream reviewer + docs-match-reality',
+    bullets: [
+      'Added a reviewer for the nightly dream proposals and a check that flags when documentation no longer matches the running system.',
+    ],
+  },
+  {
+    version: '6.38.0',
+    date: '2026-07-04',
+    title: 'Dead-code batch + mail shutdown',
+    bullets: [
+      'Cleared a batch of dead code and closed the old mail ports Porter no longer uses.',
+    ],
+  },
+  {
+    version: '6.37.0',
+    date: '2026-07-04',
+    title: 'Unjammed the memory pruner',
+    bullets: [
+      'Fixed the nightly memory pruner that had stalled, so old low-value memory is cleaned up again.',
+    ],
+  },
+  {
+    version: '6.36.1',
+    date: '2026-07-02',
+    title: 'Active-project fallback + version fix',
+    bullets: [
+      'The /context endpoint now falls back to the pinned active project when it can’t infer one, and a hardcoded version that had drifted out of sync was fixed.',
+    ],
+  },
+  {
+    version: '6.36.0',
+    date: '2026-06-25',
+    title: 'Nightly memory dream',
+    bullets: [
+      'The memory distiller became Tom’s nightly “dream” — each night Porter turns the day’s episodes into durable, reviewed knowledge.',
+    ],
+  },
+  {
+    version: '6.35.0',
+    date: '2026-06-25',
+    title: 'Rules supersede on conflict',
+    bullets: [
+      'When a new operating rule conflicts with an old one, the newer rule now supersedes it cleanly instead of both lingering.',
+    ],
+  },
+  {
+    version: '6.34.0',
+    date: '2026-06-25',
+    title: 'Surprise-salience write-gate',
+    bullets: [
+      'Memory now only saves what’s genuinely new or surprising, keeping the brain focused instead of hoarding routine noise.',
+    ],
+  },
+  {
+    version: '6.33.0',
+    date: '2026-06-25',
+    title: '“Where we left off” recall',
+    bullets: [
+      'Added session-scoped recall so Porter can pick up exactly where a previous session left off.',
+    ],
+  },
+  {
+    version: '6.32.0',
+    date: '2026-06-24',
+    title: 'Better recall + durable distiller',
+    bullets: [
+      'Recall now matches on any of the query terms (broader, more relevant results) and the memory distiller survives restarts.',
+    ],
+  },
+  {
+    version: '6.31.3',
+    date: '2026-06-14',
+    title: 'Agent persona text',
+    bullets: [
+      'GET /agents/:id now returns the agent’s full persona text.',
+    ],
+  },
+  {
+    version: '6.31.2',
+    date: '2026-06-13',
+    title: 'Bridge stream fix',
+    bullets: [
+      'Fixed the Claude CLI gateway double-emitting stream chunks.',
+    ],
+  },
+  {
+    version: '6.31.1',
+    date: '2026-06-11',
+    title: 'System screen cleanup',
+    bullets: [
+      'Stripped the fake “theater” out of the admin System screen and repaired the changelog generator.',
+    ],
+  },
+  {
+    version: '6.31.0',
+    date: '2026-06-10',
+    title: 'Ops revamp',
+    bullets: [
+      'Rebuilt the admin Ops area on a clean light-only design system, added a Bridge console, and merged the Brain views into one screen.',
+    ],
+  },
+  {
+    version: '6.30.1',
+    date: '2026-06-10',
+    title: 'Honest model lineup',
+    bullets: [
+      'Refreshed the stale model list and corrected the cost labels so the numbers shown are honest.',
+    ],
+  },
+  {
+    version: '6.30.0',
+    date: '2026-06-10',
+    title: 'Brain cleanup',
+    bullets: [
+      'Cleaned up the brain: only meaningful episodes are kept, old telemetry is purged, and dead signals were removed from the UI.',
+    ],
+  },
+  {
+    version: '6.29.0',
+    date: '2026-06-10',
+    title: 'Agents read/write the brain',
+    bullets: [
+      'Non-CLI agents can now read from and write to Porter’s memory directly through a dedicated agent-memory surface.',
+    ],
+  },
+  {
+    version: '6.28.1',
+    date: '2026-06-02',
+    title: 'Per-request model choice',
+    bullets: [
+      'The Claude CLI gateway now honours a --model passthrough so a specific model can be requested per dispatch.',
+    ],
+  },
+  {
+    version: '6.28.0',
+    date: '2026-05-31',
+    title: 'Leaner backbone',
+    bullets: [
+      'Stripped the agent-hub “theater” down to a lean backbone — less decoration, clearer core.',
+    ],
+  },
+  {
+    version: '6.27.0',
+    date: '2026-05-31',
+    title: 'Removed Atlas + org chart',
+    bullets: [
+      'Removed the unused Atlas autonomous agent and the admin org-chart screen.',
+    ],
+  },
+  {
+    version: '6.26.0',
+    date: '2026-05-29',
+    title: 'Dropped the old SaaS surface',
+    bullets: [
+      'Trimmed the dead client-app SaaS code and the People/Costs admin tabs, sharpening Porter as a backbone rather than a product.',
+    ],
+  },
+  {
+    version: '6.25.0',
+    date: '2026-05-23',
+    title: 'Tom “wrong surface” fix',
+    bullets: [
+      'Passed --strict-mcp-config to the Claude CLI so Tom stops picking up the wrong toolset and producing noise.',
+    ],
+  },
+  {
+    version: '6.24.0',
+    date: '2026-05-22',
+    title: 'System prompt wiring',
+    bullets: [
+      'Bridge now routes the system prompt to Claude’s dedicated --system-prompt flag, so agent instructions land correctly.',
+    ],
+  },
+  {
+    version: '6.23.0',
+    date: '2026-05-19',
+    title: 'Directives lookup',
+    bullets: [
+      'Added a /directives endpoint so agents can fetch the current promoted operating rules on demand.',
+    ],
+  },
+  {
+    version: '6.22.0',
+    date: '2026-05-18',
+    title: 'Porter identity split',
+    bullets: [
+      'Separated Porter’s own identity from the active project: an active-project pin plus a rewritten session hook, so sessions resolve the right project cleanly.',
+    ],
+  },
+  {
+    version: '6.21.0',
+    date: '2026-05-18',
+    title: 'Codex adapter + Tom fixes',
+    bullets: [
+      'Shipped the Codex CLI adapter and a batch of Tom bug fixes.',
+    ],
+  },
+  {
+    version: '6.18.0',
+    date: '2026-05-18',
+    title: 'Recall document Q&A',
+    bullets: [
+      'Recall can now answer questions over ingested documents end-to-end — schema, ingest, retrieval and Codex-synthesised answers.',
+    ],
+  },
+  {
+    version: '6.17.1',
+    date: '2026-05-15',
+    title: 'Checkpoint bump',
+    bullets: [
+      'Housekeeping release rolling up the Dream Silos work.',
+    ],
+  },
+  {
+    version: '6.17.0',
+    date: '2026-05-13',
+    title: 'Dream Silos — review surface',
+    bullets: [
+      'Completed the Dream Silos series with an admin review surface: browse, run, and accept or reject the nightly memory proposals.',
+    ],
+  },
+  {
+    version: '6.16.0',
+    date: '2026-05-13',
+    title: 'Software dream worker',
+    bullets: [
+      'Added the software-silo dream worker and a manual trigger (POST /dream-run) so improvement proposals can be generated on demand.',
+    ],
+  },
+  {
+    version: '6.15.0',
+    date: '2026-05-12',
+    title: 'Raw passthrough',
+    bullets: [
+      'Added a raw:true passthrough on /chat/stream for callers that want the model output unmodified.',
+    ],
+  },
+  {
+    version: '6.14.0',
+    date: '2026-05-12',
+    title: 'Isolated Claude subprocess',
+    bullets: [
+      'The Claude CLI backend is now spawned in an isolated working directory so it can’t accidentally inherit Porter’s own operating context.',
+    ],
+  },
+  {
+    version: '6.13.0',
+    date: '2026-05-11',
+    title: 'Transcript capture',
+    bullets: [
+      'Porter now captures session transcripts, the raw material the memory system learns from.',
+    ],
+  },
+  {
+    version: '6.12.0',
+    date: '2026-05-11',
+    title: 'Silo foundation',
+    bullets: [
+      'Laid the multi-silo foundation that lets memory and dreams be scoped per domain rather than lumped together.',
+    ],
+  },
+  {
+    version: '6.11.0',
+    date: '2026-05-10',
+    title: 'Bridge console revived',
+    bullets: [
+      'Restored the Bridge tabs, summary metrics and live activity ticker in the admin.',
+    ],
+  },
+  {
+    version: '6.10.0',
+    date: '2026-05-10',
+    title: 'Honest dispatch metrics',
+    bullets: [
+      'Separated CLI tool-observability events from real model dispatches so the Bridge numbers reflect actual work.',
+    ],
+  },
+  {
+    version: '6.9.0',
+    date: '2026-04-17',
+    title: 'Bridge simplified to Claude CLI',
+    bullets: [
+      'Simplified the Bridge down to the Claude CLI backend, cutting the tangle of half-working gateways.',
+    ],
+  },
+  {
+    version: '6.8.1',
+    date: '2026-04-15',
+    title: 'Removed direct API gateway',
+    bullets: [
+      'Removed the direct Anthropic API gateway in favour of routing through the CLI.',
+    ],
+  },
+  {
+    version: '6.8.0',
+    date: '2026-04-13',
+    title: 'Model correction + DB enforcement',
+    bullets: [
+      'Corrected the model metadata and added database-trigger enforcement so bad data can’t be written.',
+    ],
+  },
+  {
+    version: '6.7.0',
+    date: '2026-04-12',
+    title: 'Autonomy launch',
+    bullets: [
+      'Launched the first autonomy features alongside fixes to the openclaw Bridge path.',
+    ],
+  },
+  {
+    version: '6.5.0',
+    date: '2026-04-10',
+    title: 'Intellect, Forge, tools & skills',
+    bullets: [
+      'Shipped Intellect phases 1–3 plus Forge, the tools and skills registries, and subscriptions — a large capability drop.',
+    ],
+  },
+  {
+    version: '6.4.0',
+    date: '2026-04-10',
+    title: 'Operational roadmap',
+    bullets: [
+      'Rolled up the tools, skills and evolution work and set the operational Porter roadmap.',
+    ],
+  },
+  {
+    version: '6.3.0',
+    date: '2026-04-04',
+    title: 'Nothing left hidden',
+    bullets: [
+      'Exposed the remaining five hidden data surfaces as admin pages — every part of Porter’s data is now visible in the admin.',
+    ],
+  },
+  {
+    version: '6.2.0',
+    date: '2026-04-04',
+    title: 'Platform intelligence surfaces',
+    bullets: [
+      'Surfaced eight previously hidden data areas as new admin pages.',
+    ],
+  },
+  {
+    version: '6.1.0',
+    date: '2026-04-04',
+    title: 'Porter Mail Platform',
+    bullets: [
+      'Added the Porter Mail platform (later retired) as part of the v6 build-out.',
+    ],
+  },
+  {
+    version: '6.0.0',
+    date: '2026-04-04',
+    title: 'The Orchestration Platform',
+    bullets: [
+      'The v6 milestone that reframed Porter as the orchestration platform / backbone — the foundation the whole current system is built on.',
     ],
   },
 ];
