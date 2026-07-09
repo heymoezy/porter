@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.77.0',
+    date: '2026-07-09',
+    title: 'Porter now follows its own release rules',
+    bullets: [
+      'Porter adopted the same release-kit every other product uses: it carries a release manifest, its commit hooks record each ship, and the cross-project release audit now shows Porter itself as fully wired — so the one product that enforces release consistency is no longer an exception to it. No change to how Porter builds, deploys, or announces.',
+    ],
+  },
+  {
     version: '6.76.0',
     date: '2026-07-09',
     title: 'Release reconciler hardened (no more mis-announces)',

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Porter pre-commit — release-kit SHADOW gate (non-blocking).
+#
+# Porter is release-kit DELEGATE-mode (release.manifest.json run.mode=delegate):
+# its post-commit already deploys + announces via porter-releases. This pre-commit
+# runs the kit's ceremony contract as a NON-AUTHORITATIVE shadow — it surfaces a
+# missing version bump / changelog as a WARNING but NEVER blocks the commit
+# (exit 0 always). ZERO behavior change vs. having no pre-commit; it only makes
+# ceremony drift visible (and satisfies the audit's "both hooks present" wiring).
+#
+# Flipping this to authoritative (block on drift, like ymc) is a deliberate,
+# coordinated follow-up — not something to impose silently on a multi-session
+# tree. Wire with: git config core.hooksPath deploy/git-hooks
+set -uo pipefail
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+# Kit shadow gate — informative only. Failure/absence is swallowed (|| true).
+( cd "$REPO_ROOT" && npx tsx backend/src/release-kit/cli.ts gate --repo "$REPO_ROOT" ) \
+  || echo "[pre-commit] release-kit shadow gate flagged ceremony drift (non-blocking) — see above."
+exit 0

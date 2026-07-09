@@ -1,0 +1,24 @@
+{
+  "project": "porter",
+  "kind": "porter",
+  "versionFile": "backend/package.json",
+  "changelogPath": "backend/src/lib/porter-releases.ts",
+  "releaseFeed": "backend/src/lib/porter-releases.ts",
+  "test": {
+    "smoke": "curl -fsS http://127.0.0.1:3001/api/v1/health"
+  },
+  "announce": {
+    "mode": "none",
+    "kind": "porter"
+  },
+  "githubRemote": "origin",
+  "defaultBranch": "master",
+  "kitVersion": "1.0.0",
+  "run": {
+    "mode": "delegate",
+    "delegateCommand": ["bash", "deploy/git-hooks/post-commit"]
+  },
+  "register": {
+    "mode": "audit-only"
+  }
+}

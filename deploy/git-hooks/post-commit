@@ -13,4 +13,10 @@ if printf '%s\n' "$CHANGED" | grep -q '^backend/package.json$'; then
   ( cd "$REPO_ROOT/backend" && npx tsx scripts/announce-porter-update.ts ) \
     || echo "[post-commit] announce failed (non-fatal) — re-run: cd backend && npx tsx scripts/announce-porter-update.ts"
 fi
+
+# ── release-kit: audit-only register with Porter (additive; NEVER affects this hook's result) ──
+# Records Porter's last shipped version so the release-consistency audit shows
+# Porter wired + when it last shipped. Non-fatal by construction (register CLI
+# exits 0 on any failure; guarded with || true regardless).
+( cd "$REPO_ROOT" && npx tsx backend/src/release-kit/cli.ts register --repo "$REPO_ROOT" ) || true
 exit 0

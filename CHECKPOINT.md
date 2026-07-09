@@ -1,3 +1,13 @@
+## 2026-07-09 — v6.77.0: Porter adopts its own release-kit (R4)
+- Added release.manifest.json (kind=porter, run.mode=delegate → Porter's own post-commit owns deploy+announce,
+  register.mode=audit-only) + deploy/git-hooks/pre-commit (NON-BLOCKING release-kit shadow gate — surfaces
+  ceremony drift, never blocks; flip-to-authoritative is a deliberate coordinated follow-up) + a trailing
+  non-fatal `porter-release register` line in post-commit. auditProjectById('porter') → wired:true, zero
+  driftReasons; auditAll → 2/4 (porter + ymc wired; themozaic + baanyindee = R5). ZERO behavior change to how
+  Porter builds/deploys/announces. Verified: shadow gate exits 0 on no staged files.
+- NEXT: v6.78 restore full changelog history (v6.0.0→v6.68.0 were never backfilled into PORTER_RELEASES —
+  entries ready); then R5 themozaic+BYD kit adoption; Bridge usage monitoring for codex/grok.
+
 ## 2026-07-09 — v6.76.0: release-reconciler HARDENED (post-incident)
 - INCIDENT: v6.74 reconciler announced GIBBERISH for ymc v1.752 — it read the uncommitted bumped version.ts
   (1.752) while site-releases top was 1.751, FORCED 1.752 onto the 1.751 entry, and its regex feed-parser
