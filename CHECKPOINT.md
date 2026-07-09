@@ -1,3 +1,12 @@
+## 2026-07-09 — v6.80.0: Files API reports markdown-mirror status (vault R1 data foundation)
+- Part of the vault rebuild (planning/vault-from-scratch.md, ymc side) — Moe: "see all files + know if the
+  .md mirror exists." GET /api/admin/files/tree now returns per-document hasMarkdown + per-project mirrorCount
+  + app-wide mirrorCount/documentTotal; /document/:nodeId returns hasMarkdown + markdownPath. Single-DB join
+  vault_artifacts kind='markdown_derivative' by node_id. VERIFIED: ymc = 0/2863 docs have a mirror (the 44
+  existing derivatives are other scopes) — honest, stark; Synergies files all report has_md=false. This is the
+  data layer; the Grok-designed cutting-edge Files TABLE UI (squares, coverage bar) is R1b; md-mirror
+  GENERATION backfill is R3.
+
 ## 2026-07-09 — v6.79.0: Bridge usage monitoring across all gateways
 - Moe: "bridge should monitor usage on all these CLIs to avoid hitting limits... be smart about it." Reality:
   grok/codex/antigravity CLIs expose NO usage/quota command, and we call them as subprocesses so provider

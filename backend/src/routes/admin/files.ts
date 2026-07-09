@@ -105,7 +105,7 @@ export default async function filesRoutes(fastify: FastifyInstance) {
       return err('MISSING_APP_SCOPE', 'app_scope query param is required');
     }
 
-    const [projectsRes, docAggRes, membershipRes] = await Promise.all([
+    const [projectsRes, docAggRes, membershipRes, mdRes] = await Promise.all([
       pool.query(`
         SELECT val.documents_root_node_id AS node_id, vn.title,
           count(DISTINCT val.document_node_id) AS document_count,
@@ -129,7 +129,14 @@ export default async function filesRoutes(fastify: FastifyInstance) {
         JOIN vault_nodes vn ON vn.id = val.document_node_id
         WHERE val.app_scope = $1 AND val.present = true AND ${NOT_ARCHIVED_SQL}
       `, [appScope]),
+      // Which document nodes have a markdown-mirror (.md derivative) artifact —
+      // so the Files table can show, per file, whether its mirror exists yet.
+      pool.query(
+        `SELECT DISTINCT node_id FROM vault_artifacts WHERE app_scope = $1 AND kind = 'markdown_derivative'`,
+        [appScope],
+      ),
     ]);
+    const mdSet = new Set<string>((mdRes.rows as { node_id: string }[]).map((r) => r.node_id));
 
     const locsByDoc = new Map<string, LocationRow[]>();
     for (const r of docAggRes.rows as LocationRow[]) {
@@ -148,6 +155,7 @@ export default async function filesRoutes(fastify: FastifyInstance) {
         canonicalPath: canonical?.absolute_path ?? null,
         locationCount: locs.length,
         sizeBytes: canonical?.size_bytes != null ? Number(canonical.size_bytes) : null,
+        hasMarkdown: mdSet.has(documentNodeId), // .md mirror exists?
       };
     }
 
@@ -158,15 +166,23 @@ export default async function filesRoutes(fastify: FastifyInstance) {
       docsByProject.set(m.project_node_id, list);
     }
 
-    const projects = projectsRes.rows.map((p) => ({
-      nodeId: p.node_id as string,
-      title: p.title as string,
-      documentCount: Number(p.document_count),
-      locationCount: Number(p.location_count),
-      documents: (docsByProject.get(p.node_id) ?? []).sort((a, b) => a.title.localeCompare(b.title)),
-    }));
+    const projects = projectsRes.rows.map((p) => {
+      const docs = (docsByProject.get(p.node_id) ?? []).sort((a, b) => a.title.localeCompare(b.title));
+      return {
+        nodeId: p.node_id as string,
+        title: p.title as string,
+        documentCount: Number(p.document_count),
+        locationCount: Number(p.location_count),
+        mirrorCount: docs.filter((d) => d.hasMarkdown).length, // how many of this project's docs have a .md mirror
+        documents: docs,
+      };
+    });
 
-    return reply.send(ok({ appScope, projects }));
+    // App-wide mirror coverage — the completeness signal Moe asked for.
+    const allDocs = projects.flatMap((p) => p.documents);
+    const mirrorTotal = allDocs.filter((d) => d.hasMarkdown).length;
+
+    return reply.send(ok({ appScope, projects, mirrorCount: mirrorTotal, documentTotal: allDocs.length }));
   });
 
   // GET /api/admin/files/document/:nodeId — full detail panel payload.
@@ -205,9 +221,19 @@ export default async function filesRoutes(fastify: FastifyInstance) {
 
     const mtime = parseMtime(canonical?.mtime_ns ?? null);
 
+    // Markdown-mirror artifact for this document (if generated yet).
+    const mdRes = await pool.query(
+      `SELECT path, content_hash FROM vault_artifacts
+        WHERE node_id = $1 AND kind = 'markdown_derivative' ORDER BY id DESC LIMIT 1`,
+      [nodeId],
+    );
+    const md = mdRes.rows[0] as { path: string | null; content_hash: string | null } | undefined;
+
     return reply.send(ok({
       nodeId: node.id,
       title: node.title,
+      hasMarkdown: !!md,
+      markdownPath: md?.path ?? null,
       contentHash: canonical?.content_hash ?? locRes.rows[0]?.content_hash ?? null,
       canonicalPath: canonical?.absolute_path ?? null,
       locations: locRes.rows.map((r) => ({

@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.80.0',
+    date: '2026-07-09',
+    title: 'Files now report their markdown-mirror status',
+    bullets: [
+      'The Document Library API now tells you, for every file, whether its markdown (.md) mirror exists yet — plus a per-project and app-wide coverage count ("X of Y mirrored"). This is the data foundation for the new file-inventory view: you can finally see which documents are missing their mirror. (Today that answer is honest and stark — almost none of the ~2,900 files have one yet; generating them is the next step.)',
+    ],
+  },
+  {
     version: '6.79.0',
     date: '2026-07-09',
     title: 'Usage monitoring across every AI backend',
