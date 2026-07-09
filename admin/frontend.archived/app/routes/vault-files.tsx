@@ -26,6 +26,7 @@ interface TreeDocument {
   canonicalPath: string | null
   locationCount: number
   sizeBytes: number | null
+  hasMarkdown: boolean
 }
 
 interface TreeProject {
@@ -33,12 +34,15 @@ interface TreeProject {
   title: string
   documentCount: number
   locationCount: number
+  mirrorCount: number
   documents: TreeDocument[]
 }
 
 interface TreeResponse {
   appScope: string
   projects: TreeProject[]
+  mirrorCount: number
+  documentTotal: number
 }
 
 interface DocumentLocation {
@@ -57,6 +61,8 @@ interface DocumentDetail {
   locations: DocumentLocation[]
   projects: Array<{ nodeId: string; title: string }>
   sizeBytes: number | null
+  hasMarkdown?: boolean
+  markdownPath?: string | null
   mtime: string | null
 }
 
@@ -466,7 +472,12 @@ export default function VaultFilesPage() {
                       <p className="text-sm font-medium text-text truncate">{p.title}</p>
                       <p className="text-2xs text-text3">
                         {p.documentCount.toLocaleString()} documents · {p.locationCount.toLocaleString()} locations
+                        {" · "}<span className={p.mirrorCount === p.documentCount && p.documentCount > 0 ? "text-teal-600" : "text-amber-600"}>{p.mirrorCount.toLocaleString()}/{p.documentCount.toLocaleString()} mirrored</span>
                       </p>
+                      {/* Grok coverage bar: teal fill = fraction of docs with a .md mirror. */}
+                      <div className="mt-1 h-1 w-40 rounded-sm bg-border/60 overflow-hidden">
+                        <div className="h-full bg-teal-500" style={{ width: `${p.documentCount > 0 ? Math.round((p.mirrorCount / p.documentCount) * 100) : 0}%` }} />
+                      </div>
                     </div>
                     <ChevronRight className="size-4 text-text3 shrink-0" />
                   </div>
@@ -484,8 +495,9 @@ export default function VaultFilesPage() {
               </div>
             ) : (
               <>
-                <div className="shrink-0 grid grid-cols-[1fr_100px_90px] gap-2 px-4 py-2 text-[10px] font-semibold tracking-[0.06em] text-text3 border-b border-border/50">
+                <div className="shrink-0 grid grid-cols-[1fr_92px_100px_90px] gap-2 px-4 py-2 text-[10px] font-semibold tracking-[0.06em] text-text3 border-b border-border/50">
                   <span>Document</span>
+                  <span className="text-right">.md mirror</span>
                   <span className="text-right">Locations</span>
                   <span className="text-right">Size</span>
                 </div>
@@ -494,13 +506,26 @@ export default function VaultFilesPage() {
                     <div
                       key={doc.nodeId}
                       onClick={() => setSelectedDoc(doc.nodeId)}
-                      className={`grid grid-cols-[1fr_100px_90px] gap-2 items-center px-4 py-2.5 cursor-pointer transition-colors ${
+                      className={`grid grid-cols-[1fr_92px_100px_90px] gap-2 items-center px-4 py-2.5 cursor-pointer transition-colors ${
                         selectedDoc === doc.nodeId ? "bg-accent-porter/8" : "hover:bg-raised/50"
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <FileText className="size-3.5 text-text3 shrink-0" />
                         <span className="truncate text-xs text-text2">{doc.title}</span>
+                      </div>
+                      <div className="flex justify-end">
+                        {/* .md mirror status — a first-class signal (Grok design): teal chip when it
+                            exists, muted "No mirror" when missing. */}
+                        {doc.hasMarkdown ? (
+                          <Badge className="text-[10px] gap-1 h-5 border-teal-500/30 bg-teal-500/10 text-teal-700">
+                            <Check className="size-2.5" /> .md
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] h-5 text-text3 border-border/60">
+                            No mirror
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex justify-end">
                         {doc.locationCount > 1 && (

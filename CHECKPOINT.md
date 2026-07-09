@@ -1,3 +1,10 @@
+## 2026-07-09 — v6.81.0: Document Library shows .md-mirror status (vault R1b, Grok-designed)
+- Built the first slice of the Grok-designed file-inventory UI in the Document Library (vault-files.tsx):
+  per-file .md-mirror chip (teal ".md" when present, muted "No mirror" when missing) + per-project coverage
+  bar ("X/Y mirrored", teal fill, amber when <100%). Consumes the v6.80 API (hasMarkdown/mirrorCount). Moe
+  now SEES which files lack a mirror. admin SPA build 0. NEXT: R2 association (Synergies' 2 PDFs → workout);
+  R3 generate the ~2900 missing mirrors; full Grok table (square type-tiles, filters, generate button).
+
 ## 2026-07-09 — v6.80.0: Files API reports markdown-mirror status (vault R1 data foundation)
 - Part of the vault rebuild (planning/vault-from-scratch.md, ymc side) — Moe: "see all files + know if the
   .md mirror exists." GET /api/admin/files/tree now returns per-document hasMarkdown + per-project mirrorCount

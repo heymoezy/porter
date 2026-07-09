@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.81.0',
+    date: '2026-07-09',
+    title: 'Document Library shows .md-mirror status (Grok-designed)',
+    bullets: [
+      'The Document Library now shows, per file, whether its markdown (.md) mirror exists — a teal ".md" chip when it does, a muted "No mirror" when it doesn\'t — plus a per-project coverage bar ("X/Y mirrored") so gaps are obvious at a glance. First slice of the Grok-designed file-inventory view: you can finally see which of your documents are missing their mirror. Generating the missing ones is the next step.',
+    ],
+  },
+  {
     version: '6.80.0',
     date: '2026-07-09',
     title: 'Files now report their markdown-mirror status',

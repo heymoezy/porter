@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "6.80.0",
+  "version": "6.81.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
