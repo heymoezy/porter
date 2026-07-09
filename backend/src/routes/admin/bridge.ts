@@ -7,6 +7,7 @@ import { buildAllGatewayPromptProfiles } from '../../services/admin/prompt-pipel
 import { emitAdminEvent } from '../../services/admin/admin-sse.js';
 import { getCapacitySnapshot } from '../../services/bridge/rate-limit-tracker.js';
 import { collectLocalUsage } from '../../services/bridge/usage-collector.js';
+import { gatewayUsageSummary } from '../../services/bridge/usage-summary.js';
 
 type UserApiKeyRow = {
   id: string;
@@ -888,6 +889,16 @@ export default async function bridgeRoutes(fastify: FastifyInstance) {
   fastify.get('/capacity', async (_req, reply) => {
     const snapshot = await getCapacitySnapshot();
     return reply.send(ok({ gateways: snapshot }));
+  });
+
+  // GET /api/admin/bridge/usage — per-gateway CONSUMPTION across rolling windows
+  // (5h/24h/7d), from what we actually spent per CLI (bridge_dispatch_log).
+  // Reliable + provider-agnostic — every gateway, not just Claude. (Provider-side
+  // remaining quota lives on /capacity and is Claude-only; codex/grok CLIs don't
+  // expose it.) This is the "monitor usage on all the CLIs" Moe asked for.
+  fastify.get('/usage', async (_req, reply) => {
+    const windows = await gatewayUsageSummary();
+    return reply.send(ok({ windows }));
   });
 
   // POST /api/admin/bridge/capacity/refresh — force fresh usage collection

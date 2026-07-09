@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.79.0',
+    date: '2026-07-09',
+    title: 'Usage monitoring across every AI backend',
+    bullets: [
+      'Bridge now reports how much each model backend is actually being used — calls, tokens, cost and latency per gateway (Claude, Codex, Grok, Antigravity) over rolling 5-hour / 24-hour / 7-day windows, from real dispatch data. It is honest consumption tracking rather than a fake quota scraper: the CLIs do not expose provider quotas, so this shows what we actually spent per backend, the early-warning signal for leaning too hard on one model. (Claude also has real provider rate-limit data via the capacity view.)',
+    ],
+  },
+  {
     version: '6.78.0',
     date: '2026-07-09',
     title: 'Full changelog history restored',

@@ -1,3 +1,12 @@
+## 2026-07-09 — v6.79.0: Bridge usage monitoring across all gateways
+- Moe: "bridge should monitor usage on all these CLIs to avoid hitting limits... be smart about it." Reality:
+  grok/codex/antigravity CLIs expose NO usage/quota command, and we call them as subprocesses so provider
+  rate-limit headers aren't visible (that path is Claude-only via usage-collector). Built the HONEST, reliable
+  version: backend/src/services/bridge/usage-summary.ts + GET /api/admin/bridge/usage — per-gateway CONSUMPTION
+  (calls/in+out tokens/cost/avg latency) over 5h/24h/7d windows from bridge_dispatch_log (data we already log).
+  Verified: returns real data for claude(318)/codex(25)/agy(10)/grok(4) calls. NOT a fake quota scraper (the old
+  one that never worked). Follow-up: codex OpenAI-key header probe for real provider quota; threshold alerting.
+
 ## 2026-07-09 — v6.78.0: full changelog history restored (v6.0.0→v6.68.0)
 - Moe: "why did porter lose the changelog before 6.69? where is all the history?" ROOT CAUSE: PORTER_RELEASES
   (the typed feed the admin changelog renders) was CREATED at 6.69 and never backfilled — nothing lost, the
