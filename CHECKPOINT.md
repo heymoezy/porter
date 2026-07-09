@@ -1,3 +1,13 @@
+## 2026-07-09 — v6.76.0: release-reconciler HARDENED (post-incident)
+- INCIDENT: v6.74 reconciler announced GIBBERISH for ymc v1.752 — it read the uncommitted bumped version.ts
+  (1.752) while site-releases top was 1.751, FORCED 1.752 onto the 1.751 entry, and its regex feed-parser
+  mangled bullets on quotes/escapes. FIX: reconciler is now Porter-ONLY (clean PORTER_RELEASES import, no
+  regex, no cross-repo file reads) + EXACT-MATCH-OR-SKIP (only announces when a feed entry === shipped version;
+  never top-entry fallback, never version forcing). ymc announces via its OWN post-commit; ymc gaps surface via
+  the audit (drift), a future clean ymc reconcile endpoint can re-add auto-heal. Verified: reconcile now returns
+  only {porter 6.75 already-announced}, no ymc, no gibberish.
+- FOLLOWUP: correct the ymc v1.752 announce (force clean re-announce over the gibberish marker).
+
 ## 2026-07-08 — v6.75.0: admin coherence — version/changelog from ONE source + preview zoom
 - Moe: askporter showed stale v6.3.0 (baked admin package.json) + incomplete/frozen changelog + preview
   filled the window but document couldn\'t zoom = disjoint systems. FIX (tie together): backend/scripts/

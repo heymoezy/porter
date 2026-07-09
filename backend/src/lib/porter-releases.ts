@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.76.0',
+    date: '2026-07-09',
+    title: 'Release reconciler hardened (no more mis-announces)',
+    bullets: [
+      'Fixed the announce reconciler after it posted a garbled update: it now only announces a version when the release notes for that EXACT version exist (never forces a version onto stale notes), reads notes from the typed feed only (no fragile text parsing), and auto-announces Porter only — other apps announce through their own release flow. Safe by construction.',
+    ],
+  },
+  {
     version: '6.75.0',
     date: '2026-07-08',
     title: 'Admin version + changelog now tell the truth (and previews zoom)',
