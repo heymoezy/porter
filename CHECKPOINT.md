@@ -1,3 +1,12 @@
+## 2026-07-10 — v6.84.0: PRIVACY — vault graph no longer renders ghost/pruned document nodes
+- Moe spotted personal K-1 tax filings (Mohammad Ibrahim, Green Patches) rendering in the ymc vault graph.
+  ROOT CAUSE: those files were correctly pruned from ingest (locations present=false) BUT the graph query
+  returned document nodes regardless of location presence, so tombstoned personal-tax docs leaked as ghost
+  nodes. DURABLE FIX: graph query now excludes type='document' nodes with no present location (matches the
+  Files view); any moved/deleted/privacy-pruned file stops rendering. Also DELETED the lingering PII
+  tombstone node rows: 28 K-1 + 34 broader (passport/ssn/tax-return/1040/estate/will/medical patterns),
+  0 present-location, hard-removed with edges/artifacts/placements. Verified: graph API PII-title hits 0/4406.
+
 ## 2026-07-10 — v6.83.0: extraction hardening (argument-injection guard)
 - Automated security review of v6.82 flagged flag-smuggling: a file path segment starting with '-' could be
   parsed as a tool FLAG. FIX: reject any path segment starting with '-'; pdftotext gets '--' end-of-options;

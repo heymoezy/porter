@@ -592,6 +592,16 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
       let where = `n.app_scope = $1`;
       if (layer) { params.push(layer); where += ` AND n.layer = $${params.length}`; }
       if (focusIds) { params.push(focusIds); where += ` AND n.id = ANY($${params.length})`; }
+      // TOMBSTONE FILTER: a document node whose file locations are ALL absent
+      // (moved/deleted, or PRUNED-AFTER-INGEST for privacy — e.g. a K-1 that was
+      // ingested before the tax-PII rule existed) must NOT render. The admin
+      // Files view already filters present=true; the graph did not, so pruned
+      // personal-tax docs leaked as ghost nodes (Moe 2026-07-10). Non-document
+      // nodes (domains/deals/people/entities) have no file locations, so the
+      // filter only applies to type='document'.
+      where += ` AND (n.type <> 'document' OR EXISTS (
+        SELECT 1 FROM vault_artifact_locations val
+         WHERE val.app_scope = n.app_scope AND val.document_node_id = n.id AND val.present = true))`;
 
       const nodeRows = (await pool.query(
         `SELECT n.id, n.external_id, n.layer, n.type, n.title, n.status,

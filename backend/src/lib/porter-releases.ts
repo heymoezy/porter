@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.84.0',
+    date: '2026-07-10',
+    title: 'Vault graph no longer shows ghost (removed) documents',
+    bullets: [
+      'The knowledge graph was still drawing document nodes whose files are no longer present — including personal tax documents (K-1s) that were pruned for privacy after an earlier index. The graph now hides any document with no present file location, matching the Files view, so removed/moved/privacy-pruned files can\'t linger as ghost nodes. The lingering K-1 nodes were also deleted outright.',
+    ],
+  },
+  {
     version: '6.83.0',
     date: '2026-07-10',
     title: 'Extraction hardening (security review)',
