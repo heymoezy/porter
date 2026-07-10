@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.82.0',
+    date: '2026-07-10',
+    title: 'Markdown mirrors now read real PDFs',
+    bullets: [
+      'The markdown-mirror generator can finally read binary documents: PDFs are extracted with pdftotext and Office files (docx/xlsx/ppt…) via LibreOffice before the mirror is written — so a mirror now contains the document\'s actual text instead of a placeholder. This unblocks generating the ~2,900 missing mirrors; the nightly sweep and the on-demand sweep both use it.',
+    ],
+  },
+  {
     version: '6.81.0',
     date: '2026-07-09',
     title: 'Document Library shows .md-mirror status (Grok-designed)',

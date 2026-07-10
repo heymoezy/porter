@@ -1,3 +1,12 @@
+## 2026-07-10 — v6.82.0: markdown mirrors read real PDFs (extraction pipeline live)
+- vault-derivatives resolveRawContent now EXTRACTS binary docs before generating: PDFs via pdftotext
+  (-layout), office files via soffice --convert-to txt (bounded, temp-dir, never mutates the source);
+  binary noise never reaches the model (extraction failure → honest placeholder). PROVEN: on-demand sweep
+  POST /vault/derivatives/sweep generated 25/25 jobs 0 failed (ymc coverage 44→69); pdftotext verified on a
+  real Synergies litigation PDF (extracted actual correspondence text). 3,035 jobs seeded.
+- DECISION FOR MOE: full backfill = ~2,900 more model calls (nightly tick does 25/sweep → months). Options:
+  run repeated on-demand sweeps (burst cost) or raise DEFAULT_BATCH_LIMIT. Cost call, not made silently.
+
 ## 2026-07-09 — v6.81.0: Document Library shows .md-mirror status (vault R1b, Grok-designed)
 - Built the first slice of the Grok-designed file-inventory UI in the Document Library (vault-files.tsx):
   per-file .md-mirror chip (teal ".md" when present, muted "No mirror" when missing) + per-project coverage

@@ -44,7 +44,46 @@
 import { createHash } from 'node:crypto';
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { pool } from '../db/client.js';
+
+const execFileP = promisify(execFile);
+
+/** Extract text from a binary document (PDF / office) using local tools so the
+ *  derivative is built from REAL content, not garbage. Most vault files are PDFs
+ *  (legal docs, statements) — reading them as utf8 yields binary noise, which is
+ *  why coverage was ~0. Returns null if extraction isn't possible (falls back to
+ *  the honest placeholder path). Read-only on the source; bounded runtime. */
+async function extractBinaryText(path: string, maxChars: number): Promise<string | null> {
+  const ext = (path.split('.').pop() || '').toLowerCase();
+  try {
+    if (ext === 'pdf') {
+      // pdftotext -q -eol unix <path> -  → text on stdout. -layout keeps tables readable.
+      const { stdout } = await execFileP('pdftotext', ['-q', '-layout', '-eol', 'unix', path, '-'],
+        { maxBuffer: 24 * 1024 * 1024, timeout: 60_000 });
+      const t = stdout.trim();
+      return t ? t.slice(0, maxChars) : null;
+    }
+    if (['docx', 'doc', 'odt', 'rtf', 'pptx', 'ppt', 'xlsx', 'xls', 'ods'].includes(ext)) {
+      // soffice → plain text into a temp dir, then read it back.
+      const outDir = `/tmp/vault-deriv-${randomUUID()}`;
+      await fs.mkdir(outDir, { recursive: true });
+      try {
+        await execFileP('soffice', ['--headless', '--convert-to', 'txt:Text', '--outdir', outDir, path],
+          { timeout: 120_000 });
+        const base = (path.split('/').pop() || '').replace(/\.[^.]+$/, '') + '.txt';
+        const t = (await fs.readFile(`${outDir}/${base}`, 'utf8')).trim();
+        return t ? t.slice(0, maxChars) : null;
+      } finally {
+        await fs.rm(outDir, { recursive: true, force: true }).catch(() => {});
+      }
+    }
+  } catch {
+    // extraction failed (encrypted PDF, scanned image, tool error) — placeholder.
+  }
+  return null;
+}
 import { routingEngine } from './bridge/routing-engine.js';
 import type { BridgeDispatchRequest, RoutingContext } from './bridge/types.js';
 import { CHEAP_GATEWAY, CHEAP_MODEL } from './intellect/worker-knowledge.js';
@@ -166,6 +205,14 @@ async function resolveRawContent(
     try {
       const stat = await fs.stat(row.path);
       if (stat.isFile() && stat.size <= MAX_RAW_FILE_BYTES) {
+        const ext = (row.path.split('.').pop() || '').toLowerCase();
+        // Binary docs (PDF / office) → extract real text first (pdftotext / soffice).
+        if (['pdf', 'docx', 'doc', 'odt', 'rtf', 'pptx', 'ppt', 'xlsx', 'xls', 'ods'].includes(ext)) {
+          const extracted = await extractBinaryText(row.path, MAX_RAW_CHARS);
+          if (extracted) return { content: extracted, truncated: false };
+          // extraction failed → placeholder (do NOT feed binary noise to the model).
+          return { content: null, truncated: false };
+        }
         const raw = await fs.readFile(row.path, 'utf8');
         return { content: raw.slice(0, MAX_RAW_CHARS), truncated: raw.length > MAX_RAW_CHARS };
       }
