@@ -57,23 +57,29 @@ const execFileP = promisify(execFile);
  *  the honest placeholder path). Read-only on the source; bounded runtime. */
 async function extractBinaryText(path: string, maxChars: number): Promise<string | null> {
   const ext = (path.split('.').pop() || '').toLowerCase();
+  // Argument-injection guard: a path segment starting with '-' could be parsed
+  // as a FLAG by the tool (flag smuggling via a maliciously named file). '--'
+  // covers pdftotext; soffice has no clean '--', so binary sources are copied
+  // into the temp dir under a CONTROLLED name before conversion.
+  if (path.split('/').some((seg) => seg.startsWith('-'))) return null;
   try {
     if (ext === 'pdf') {
-      // pdftotext -q -eol unix <path> -  → text on stdout. -layout keeps tables readable.
-      const { stdout } = await execFileP('pdftotext', ['-q', '-layout', '-eol', 'unix', path, '-'],
+      // pdftotext -q -eol unix -- <path> -  → text on stdout. -layout keeps tables readable.
+      const { stdout } = await execFileP('pdftotext', ['-q', '-layout', '-eol', 'unix', '--', path, '-'],
         { maxBuffer: 24 * 1024 * 1024, timeout: 60_000 });
       const t = stdout.trim();
       return t ? t.slice(0, maxChars) : null;
     }
     if (['docx', 'doc', 'odt', 'rtf', 'pptx', 'ppt', 'xlsx', 'xls', 'ods'].includes(ext)) {
-      // soffice → plain text into a temp dir, then read it back.
+      // soffice → plain text into a temp dir, source copied to a controlled name.
       const outDir = `/tmp/vault-deriv-${randomUUID()}`;
       await fs.mkdir(outDir, { recursive: true });
       try {
-        await execFileP('soffice', ['--headless', '--convert-to', 'txt:Text', '--outdir', outDir, path],
+        const safeSrc = `${outDir}/input.${ext}`;
+        await fs.copyFile(path, safeSrc);
+        await execFileP('soffice', ['--headless', '--convert-to', 'txt:Text', '--outdir', outDir, safeSrc],
           { timeout: 120_000 });
-        const base = (path.split('/').pop() || '').replace(/\.[^.]+$/, '') + '.txt';
-        const t = (await fs.readFile(`${outDir}/${base}`, 'utf8')).trim();
+        const t = (await fs.readFile(`${outDir}/input.txt`, 'utf8')).trim();
         return t ? t.slice(0, maxChars) : null;
       } finally {
         await fs.rm(outDir, { recursive: true, force: true }).catch(() => {});

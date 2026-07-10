@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.83.0',
+    date: '2026-07-10',
+    title: 'Extraction hardening (security review)',
+    bullets: [
+      'Hardened the new document-text extraction against argument injection: a file named to start with a dash could have been parsed as a tool flag. Paths are now guarded, pdftotext gets an end-of-options marker, and office files are copied to a controlled name before conversion. Flagged by the automated security review of the previous release.',
+    ],
+  },
+  {
     version: '6.82.0',
     date: '2026-07-10',
     title: 'Markdown mirrors now read real PDFs',

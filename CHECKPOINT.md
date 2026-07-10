@@ -1,3 +1,8 @@
+## 2026-07-10 — v6.83.0: extraction hardening (argument-injection guard)
+- Automated security review of v6.82 flagged flag-smuggling: a file path segment starting with '-' could be
+  parsed as a tool FLAG. FIX: reject any path segment starting with '-'; pdftotext gets '--' end-of-options;
+  soffice sources are copied into the temp dir under a controlled name (input.<ext>) before conversion.
+
 ## 2026-07-10 — v6.82.0: markdown mirrors read real PDFs (extraction pipeline live)
 - vault-derivatives resolveRawContent now EXTRACTS binary docs before generating: PDFs via pdftotext
   (-layout), office files via soffice --convert-to txt (bounded, temp-dir, never mutates the source);
