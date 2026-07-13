@@ -1,3 +1,19 @@
+## 2026-07-13 — v6.85.0: Universal memory R1 — hot context (#37)
+- Implements R1 of the council-ratified design (planning/porter-universal-memory-37.md, codex+grok).
+- hot_contexts table (0103, ONE row per scope+project; Porter DB = source of truth, vault file would be a
+  generated mirror). services/intellect/hot-context.ts: composeHotBody (hard cap ~900 tok = 3600 chars) —
+  "where we got to" from CHECKPOINT.md head + recent episodes + POINTERS ONLY (names CHECKPOINT.md/CLAUDE.md
+  and porter_context_pack, never inlines them). recomputeHot() + getHot().
+- Routes: GET /api/v1/intellect/hot?project=&scope= (fail-open: no row → status 'cold' + honest hints, never
+  fabricates history; DB down → cold, never blocks a CLI). POST /api/v1/intellect/hot/recompute.
+- THE DE-RISKING HOOK (council's #1 risk = divergent memory across CLIs): POST /session-end — already
+  gateway-aware — now recomputes hot as the ONE default write path. Any gateway ending a session warms the
+  cache for whichever CLI opens next; no ad-hoc per-CLI writes to pollute memory. Non-fatal on failure.
+- VERIFIED live: cold→warm; packet = 192 tokens (cap 900); a codex_cli session-end warmed the context a
+  claude_cli read (cross-CLI memory proven). porter tsc 0; restarted porter-fastify (ledger clear).
+- NEXT (R2/R3 per the design): porter_write_memory + signals/skills, then expose as MCP tools registered in
+  every Bridge CLI (that step touches each CLI's config — do it deliberately, not at context-end).
+
 ## 2026-07-10 — v6.84.0: PRIVACY — vault graph no longer renders ghost/pruned document nodes
 - Moe spotted personal K-1 tax filings (Mohammad Ibrahim, Green Patches) rendering in the ymc vault graph.
   ROOT CAUSE: those files were correctly pruned from ingest (locations present=false) BUT the graph query

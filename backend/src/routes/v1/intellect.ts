@@ -1040,10 +1040,57 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
         project: body.project ?? null,
         gateway: body.gateway ?? null,
       }).catch(e => console.error('[intellect:session-end] event emit failed:', e));
-      return reply.send(ok({ episode }));
+
+      // Universal memory R1: session-end is the ONE default write path for hot
+      // context (council design — keeps memory from being polluted by ad-hoc
+      // writes from every CLI). Every gateway that ends a session warms the
+      // cache for the next one, whichever CLI that turns out to be.
+      // Non-fatal: never fail a session-end because the cache didn't recompute.
+      let hot: unknown = null;
+      if (body.project) {
+        try {
+          const { recomputeHot } = await import('../../services/intellect/hot-context.js');
+          hot = await recomputeHot({
+            project: body.project,
+            sessionId: body.sessionId,
+            gateway: body.gateway ?? null,
+          });
+        } catch (e) {
+          console.error('[intellect:session-end] hot recompute failed:', e);
+        }
+      }
+      return reply.send(ok({ episode, hot }));
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       return reply.status(500).send(err('SESSION_END_FAILED', message));
+    }
+  });
+
+  // ── Universal memory R1: HOT CONTEXT (warm session bootstrap) ────────
+  // The cheap packet a session opens with, so it doesn't re-derive the project
+  // from zero. See planning/porter-universal-memory-37.md. Read path is
+  // fail-open: a fresh Porter returns COLD and the CLI still boots fine.
+
+  // GET /hot?project=&scope= — the warm packet (or an honest cold response).
+  fastify.get('/hot', async (request, reply) => {
+    const q = request.query as { project?: string; scope?: string };
+    if (!q?.project) return reply.status(400).send(err('BAD_REQUEST', 'project required'));
+    const { getHot } = await import('../../services/intellect/hot-context.js');
+    return reply.send(ok(await getHot(q.project, q.scope ?? 'default')));
+  });
+
+  // POST /hot/recompute — force a rebuild (session-end does this automatically).
+  fastify.post('/hot/recompute', async (request, reply) => {
+    const body = (request.body ?? {}) as { project?: string; scope?: string; gateway?: string | null };
+    if (!body?.project) return reply.status(400).send(err('BAD_REQUEST', 'project required'));
+    try {
+      const { recomputeHot } = await import('../../services/intellect/hot-context.js');
+      return reply.send(ok(await recomputeHot({
+        project: body.project, scope: body.scope, gateway: body.gateway ?? null,
+      })));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('HOT_RECOMPUTE_FAILED', message));
     }
   });
 

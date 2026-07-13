@@ -1,3 +1,23 @@
+## v6.85.0 (2026-07-13)
+
+- **Universal memory R1 — hot context (the warm session bootstrap).** Implements the
+  council-ratified design in `planning/porter-universal-memory-37.md` (codex + grok).
+  Every session (claude, codex, grok, antigravity) currently re-derives the same project
+  state from zero, burning tokens to rediscover what the last session already knew.
+  - `hot_contexts` table (0103): ONE row per (scope, project) — Porter DB is the source of
+    truth; any vault file is a generated mirror.
+  - `services/intellect/hot-context.ts`: composes a hard-capped (~900 token) warm packet —
+    where we got to (CHECKPOINT.md latest), recent sessions, and POINTERS to drill into.
+    Pointers, not payloads.
+  - `GET /api/v1/intellect/hot?project=` — warm packet, or an honest COLD response on a
+    fresh install (never fabricates history; the CLI still boots fine).
+  - `POST /api/v1/intellect/hot/recompute` — force a rebuild.
+  - **The de-risking hook:** `POST /session-end` (already gateway-aware) now recomputes hot
+    as the ONE default write path — so any CLI ending a session warms the cache for
+    whichever CLI opens next, and memory can't be polluted by ad-hoc writes.
+  - Verified: cold→warm transition; 192-token packet; a `codex_cli` session-end warmed the
+    context that a `claude_cli` session reads. Fail-open throughout.
+
 ## v6.70.0 (2026-07-08)
 
 - R6: Files UI — Document Library in Porter admin (deduped graph tree)
