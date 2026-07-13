@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.104.0',
+    date: '2026-07-14',
+    title: 'The vault stops asking you to review documents you already approved',
+    bullets: [
+      '426 documents were sitting in the vault\'s review queue that had already been approved in ymc — by you, personally. The two queues did not know about each other, so the same documents were waiting for a second decision from the same person. Those decisions are now imported, and they are recorded under your name, because you are who made them.',
+      'The match is exact rather than by filename: each vault record carries the ymc document id it came from. Nothing is guessed.',
+      'Across the last three changes the review queue has gone from 4,900 items to 2,772 — and you have not had to review anything.',
+    ],
+  },
+  {
     version: '6.103.0',
     date: '2026-07-14',
     title: 'The vault stops storing the same document twice',

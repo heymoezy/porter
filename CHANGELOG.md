@@ -1,3 +1,20 @@
+## v6.104.0 (2026-07-14) — R3: stop asking Moe to review what he already reviewed
+
+- **426 documents were queued for review that Moe had already approved — in ymc — himself.**
+  `ymc_capital.document_reviews` holds 462 decisions across 460 documents, every one `approved`,
+  every one reviewed by **Moe Ibrahim**. Those same documents were sitting in the vault's queue as
+  `proposed`, waiting to be reviewed a second time, by the same person, for the same documents.
+- **Imported, with the real reviewer attributed.** Not "system", not the AI — the placements now
+  record **Moe Ibrahim** as reviewer, because he is who decided.
+  - The join is **exact, not fuzzy**: `vault_artifacts.source_id` (`kind='db_entity'`,
+    `source_system='ymc_capital'`) *is* `ymc_capital.documents.id`. No name matching, no guessing.
+  - Refuses to create a second active placement for a node that already has one (the
+    one-active-per-node invariant holds).
+- Shipped as a **repeatable, idempotent script** (`backend/scripts/import-ymc-review-decisions.ts`),
+  not a one-shot migration — so it reproduces on a fresh box and can be re-run safely. Proven: a
+  second run finds **0 left to do**.
+- **Review queue: 4,900 → 2,772** across R1–R3, and Moe has reviewed nothing.
+
 ## v6.103.0 (2026-07-14) — R2: the vault stops storing the same document twice
 
 - **840 redundant artifact rows removed.** The vault held 3,010 hashed artifacts for only 2,170

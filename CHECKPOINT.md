@@ -1,3 +1,23 @@
+## 2026-07-14 — v6.104.0: R3 — import the 426 decisions Moe ALREADY made
+
+Moe: don't make him redo the review queues; ymc's has handled a lot of this already. He was right.
+
+- ymc_capital.document_reviews = 462 decisions / 460 documents, ALL 'approved', ALL reviewed by
+  Moe Ibrahim. 426 of those same documents were sitting in the VAULT queue as `proposed` — waiting
+  for a second decision, from the same person, on the same documents.
+- IMPORTED with the REAL reviewer attributed ("Moe Ibrahim"), never "system" and never the AI.
+- Join is EXACT: vault_artifacts.source_id (kind=db_entity, source_system=ymc_capital) IS
+  ymc_capital.documents.id. No filename matching.
+- Refuses to create a 2nd active placement for a node that already has one (invariant holds;
+  verified 0 such nodes before running).
+- Shipped as a REPEATABLE IDEMPOTENT SCRIPT (backend/scripts/import-ymc-review-decisions.ts), not a
+  one-shot migration that could not reproduce on a fresh box. Proven: 2nd run finds 0 to do.
+  Reads ymc's DSN from ymc's own .env (architecture rule 2 — no hardcoded connection strings).
+- Staging table dropped; no debris left in the DB.
+
+QUEUE ACROSS R1–R3: 4,900 → 2,772. Moe has reviewed NOTHING.
+  R1 Phoenix out: −1,740 (archived)   R2 dedup: artifacts 3,010→2,170   R3 decisions: −426
+
 ## 2026-07-14 — v6.103.0: R2 — vault artifact dedup (and the bug that would have undone it)
 
 - 486 duplicate groups / 840 redundant artifact rows: one node carrying several artifact rows with
