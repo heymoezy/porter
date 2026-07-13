@@ -7,6 +7,19 @@
 # ymc side. Wire with: git config core.hooksPath deploy/git-hooks
 set -uo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+
+# The announcer and the register CLI authenticate to Porter with the service token.
+# A git hook does not inherit the systemd unit's EnvironmentFile, so load the secrets
+# here. Before the 2026-07-13 rotation this "worked" only because the token had a
+# hardcoded fallback — i.e. it was authenticating with a value published on GitHub.
+# Now the fallback is gone, an unset token 401s, and this is the correct wiring.
+PORTER_ENV="${PORTER_ENV_FILE:-$HOME/.config/porter/porter.env}"
+if [ -f "$PORTER_ENV" ]; then
+  set -a; . "$PORTER_ENV"; set +a
+else
+  echo "[post-commit] WARNING: $PORTER_ENV not found — announce/register will 401 (no service token)."
+fi
+
 CHANGED="$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)"
 if printf '%s\n' "$CHANGED" | grep -q '^backend/package.json$'; then
   echo "[post-commit] backend/package.json changed — announcing Porter release (idempotent)..."

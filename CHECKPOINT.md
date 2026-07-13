@@ -1,3 +1,15 @@
+## 2026-07-13 — v6.95.0: fail-closed found its first straggler (the release hook)
+
+Fail-closing the service token in 6.94.0 immediately surfaced a consumer that had been
+silently depending on the LEAKED default: the post-commit hook. Git hooks don't inherit the
+systemd unit's EnvironmentFile, so announce-porter-update + release-kit register had no
+token — they had only ever worked via the hardcoded fallback published on GitHub.
+
+- deploy/git-hooks/post-commit now sources ~/.config/porter/porter.env (and WARNS if absent).
+- VERIFIED: release-kit register 401 → "✓ recorded porter v6.94.0".
+- Announce still fails 502 openclaw_failed — that is the UNLINKED WhatsApp channel (Tom is
+  mute, needs Moe's QR scan), NOT auth. Different failure, correctly distinguished.
+
 ## 2026-07-13 — v6.94.0: SECURITY — rotated the leaked admin token; fail-closed
 
 `porter-local-service-2026` — hardcoded fallback in backend/src/plugins/auth.ts, granting

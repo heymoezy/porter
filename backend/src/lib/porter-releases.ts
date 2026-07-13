@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.95.0',
+    date: '2026-07-13',
+    title: 'The release hook was quietly using the leaked token — fixed',
+    bullets: [
+      'Removing the hardcoded token immediately exposed its first hidden user: the git hook that announces releases had no token of its own and had only ever worked by falling back to the public one. It now reads the real secret, and says so loudly if it cannot find it.',
+    ],
+  },
+  {
     version: '6.94.0',
     date: '2026-07-13',
     title: 'Security: the admin token for the brain was published on GitHub — rotated',

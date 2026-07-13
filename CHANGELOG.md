@@ -1,3 +1,15 @@
+## v6.95.0 (2026-07-13)
+
+- **The release hook was authenticating with the public token.** Fail-closing the service
+  token (6.94.0) immediately surfaced its first real consumer: the post-commit hook 401'd.
+  A git hook doesn't inherit the systemd unit's `EnvironmentFile`, so `announce-porter-update`
+  and the release-kit register had no token — they had only ever "worked" by falling back to
+  the value published on GitHub. The hook now loads `~/.config/porter/porter.env` explicitly,
+  and warns loudly if it is missing.
+  - This is the fail-closed design doing its job: a silent dependency on a leaked secret
+    became a visible 401 the moment the secret stopped being a default.
+  - Verified: release-kit register went 401 → `✓ recorded porter v6.94.0`.
+
 ## v6.94.0 (2026-07-13) — SECURITY
 
 - **The admin token for this brain was published on GitHub.** `porter-local-service-2026`
