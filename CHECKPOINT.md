@@ -1,3 +1,16 @@
+## 2026-07-13 — v6.91.0: #27 R3 — first product-native Overview (scope ladder + hot context)
+- components/product-overview.tsx mounted on the dashboard. Reads the product picked in the R1 top-bar
+  switcher (localStorage porter.activeProduct; re-reads on focus/storage so the surfaces cannot disagree).
+- SCOPE LADDER: "porter → <product>" badge — the admin always states which product the page means.
+- HOT CONTEXT: fetches GET /api/v1/intellect/hot?project=<product> and shows warm/cold, approx tokens, which
+  CLI last warmed it, "where we got to" (checkpoint line) and the handoff left for the next session. The admin
+  now shows the SAME memory the CLI sessions open with — one brain, two windows.
+- Fail-open: no product / Porter down → quiet empty state, never breaks the dashboard.
+- VERIFIED: admin tsc 0; build clean; deployed; live askporter.app no JS errors.
+- REMAINING on #27: R4 (promote Vault: schemas/nodes/placements/edges/artifacts/scopes/search tabs) — ADDITIVE.
+  R5/R6/R7/R10 FOLD then DELETE Brain/Recall/Bridge — DESTRUCTIVE to the backbone every CLI now depends on;
+  require Moe's explicit approval per the design's own instruction.
+
 ## 2026-07-13 — v6.90.0: #27 R2 — product-first IA nav (additive)
 - Nav restructured to the council IA: Product (Overview→/dashboard · Vault→/vault-files · Services→/bridge ·
   Files→/files · Open Items→/approvals · Releases→/changelog), Porter (System), Legacy (Brain · Env Tools ·

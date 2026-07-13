@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
+import { ProductOverview } from "~/components/product-overview"
 import { api } from "~/lib/api"
 import { Link } from "react-router"
 import { Badge } from "~/components/ui/badge"
@@ -105,8 +106,13 @@ export default function DashboardPage() {
         <DispatchFeed />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        {/* #27 R3 — first product-native surface: scope ladder + the SAME hot
+            context (#37) your CLI sessions open with. One brain, two windows. */}
+        <ProductOverview />
         <IntelPanel />
         <OpsPanel />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <ProjectsCompact />
       </div>
     </div>

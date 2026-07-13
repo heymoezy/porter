@@ -1,3 +1,19 @@
+## v6.91.0 (2026-07-13)
+
+- **#27 R3 — first product-native surface (Overview).**
+  - **Scope ladder** on the Overview: the admin now always says which product you are
+    looking at (`porter → <product>`). Porter is multi-app; a page that doesn't say which
+    app it means is lying by omission.
+  - **Hot context on the dashboard**: the Overview shows the SAME warm packet (#37) your
+    claude/codex/grok sessions open with — "where we got to", the handoff left for the
+    next session, whether memory is warm/cold, and which CLI last warmed it. One brain,
+    two windows onto it.
+  - Keyed off the product chosen in the R1 top-bar switcher; re-reads on focus so the two
+    surfaces can never disagree about what we're looking at.
+  - Fail-open: no product selected, or Porter unreachable → quiet empty state, never a
+    broken dashboard.
+  - Verified: tsc 0; SPA build clean; deployed; live askporter.app loads with no JS errors.
+
 ## v6.90.0 (2026-07-13)
 
 - **#27 R2 — product-first IA in the admin nav (additive; nothing removed).**
