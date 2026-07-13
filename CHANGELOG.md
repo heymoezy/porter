@@ -1,3 +1,28 @@
+## v6.92.0 (2026-07-13)
+
+- **Porter now comes back from a clean exit — it didn't.** Porter was found DEAD. Root
+  cause: it was the ONLY critical service on `Restart=on-failure` (ymc-backend, ymc-site,
+  openclaw-gateway all use `always`). It exited *cleanly* (status 0 — scheduler stopped,
+  job-executor stopped), which does not match `on-failure`, so systemd left the backbone
+  down. Every CLI, the MCP server and the memory layer depend on it; nothing restarted it.
+  - `Restart=always` + `RestartSec=5`. **Proven**: SIGTERM to the main pid — the exact case
+    that left it dead — now brings it straight back, health green.
+- **The unit is tracked (`ops/systemd/`).** An invariant that exists on one box only is not
+  an invariant. Fresh-box install steps + a `Restart` assertion in `ops/systemd/README.md`.
+- **Secrets out of the unit.** `heymoezy/porter` is a PUBLIC repo and the unit carried
+  `DATABASE_URL`, `OPENCLAW_TOKEN`, `PORTER_SERVICE_TOKEN`, `STALWART_API_KEY` inline —
+  tracking it as-is would have published them. They now live in `~/.config/porter/porter.env`
+  (mode 600, untracked), loaded via `EnvironmentFile=`; the unit holds only non-secret config.
+  Template: `ops/systemd/porter.env.example`. Optional (`-`) so a fresh install still boots
+  and degrades gracefully (architecture rule 1).
+  - Verified: 0 secret lines in the unit; the running process still has all four (env file
+    loaded); `/health` green; Bridge gateways list; `POST /bridge/agent-message` still 401s
+    without a valid token — the token is doing the gating, from the env file.
+- **KNOWN, NOT YET FIXED (surfaced to Moe):** `porter-local-service-…(redacted)` is already in 11
+  commits of the public repo and hardcoded as a fallback in `backend/src/plugins/auth.ts`;
+  `porter-mail-admin-…(redacted)` is in 3. Rotation + fail-closed is the next release
+  (`planning/security-service-token-hardening.md`).
+
 ## v6.91.0 (2026-07-13)
 
 - **#27 R3 — first product-native surface (Overview).**

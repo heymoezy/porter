@@ -1,0 +1,48 @@
+[Unit]
+Description=Porter Fastify backend
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/npx tsx src/index.ts
+WorkingDirectory=/home/lobster/projects/Porter/backend
+
+# Secrets are NOT in this file — the repo is PUBLIC.
+# DATABASE_URL / OPENCLAW_TOKEN / PORTER_SERVICE_TOKEN / STALWART_API_KEY live in
+# ~/.config/porter/porter.env (mode 600, untracked). See porter.env.example.
+# Leading '-' = optional: a fresh install still boots and degrades gracefully
+# (architecture rule 1) — it just won't have the privileged integrations.
+EnvironmentFile=-%h/.config/porter/porter.env
+
+Environment=PORTER_DATA_DIR=/home/lobster/projects/Porter
+Environment=PORTER_BACKEND_PORT=3001
+Environment=PORTER_BACKEND_HOST=127.0.0.1
+# .local/bin added 2026-07-06 so Bridge's PATH scan finds the antigravity CLI (`agy`).
+Environment=PATH=/home/lobster/.npm-global/bin:/home/lobster/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=FEATURE_AGENT_SCHEDULING=true
+Environment=FEATURE_EVENT_TRIGGERS=true
+Environment=FEATURE_EXTERNAL_CONNECTIONS=true
+Environment=FEATURE_EPHEMERAL_AGENTS=true
+Environment=NODE_TLS_REJECT_UNAUTHORIZED=0
+Environment=STALWART_URL=https://127.0.0.1:8443
+Environment=MAIL_DEFAULT_DOMAIN=askporter.app
+
+# Restart=always, NOT on-failure (2026-07-13 incident).
+# Porter exited CLEANLY (status 0) and systemd left the backbone dead — every CLI,
+# the MCP server and the memory layer depend on it. It was the only critical
+# service not on `always`. A clean SIGTERM now brings it straight back.
+Restart=always
+RestartSec=5
+
+# Resource ceilings (added 2026-05-11 after CPU saturation incident).
+# Hard memory cap: kernel OOM-kills the process if exceeded — better than
+# saturating swap and dragging the whole box down.
+MemoryMax=2G
+MemoryHigh=1500M
+# Soft CPU cap: 180% of one core (1.8 vCPUs out of 4 available). Lets Porter
+# handle bursts without monopolising the box and starving everything else.
+CPUQuota=180%
+# File-descriptor cap — defence in depth against another chokidar runaway.
+LimitNOFILE=8192
+
+[Install]
+WantedBy=default.target

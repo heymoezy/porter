@@ -1,3 +1,28 @@
+## 2026-07-13 — v6.92.0: Porter survives a clean exit + secrets out of the (public) unit
+
+INCIDENT: Porter was found DEAD. It exited cleanly (status 0) and stayed down — the backbone
+every CLI, the MCP server and the memory layer depend on. Root cause: Porter was the ONLY
+critical service on `Restart=on-failure`; ymc-backend, ymc-site and openclaw-gateway all use
+`Restart=always`. A clean exit does not match `on-failure`, so systemd never restarted it.
+
+- FIXED: `Restart=always` + `RestartSec=5`. PROVEN by SIGTERM-ing the main pid (the exact
+  case that left it dead) — it came back active, health OK.
+- The unit is now TRACKED at `ops/systemd/porter-fastify.service` (+ README with fresh-box
+  install and a `Restart` assertion). A fix that lives only on one box dies with the box.
+- SECRETS: the repo is PUBLIC and the unit carried DATABASE_URL / OPENCLAW_TOKEN /
+  PORTER_SERVICE_TOKEN / STALWART_API_KEY inline. Moved to `~/.config/porter/porter.env`
+  (600, untracked) via `EnvironmentFile=-`; unit now holds only non-secret config.
+  Template `ops/systemd/porter.env.example`. Verified: 0 secrets in the unit, process still
+  has all four, /health green, Bridge OK, `POST /bridge/agent-message` still 401s untokened.
+
+OPEN — SURFACED TO MOE (next release, #50): `porter-local-service-…(redacted)` (the token gating
+Bridge agent-message / job-executor / announce) is ALREADY in 11 commits of the public repo
+AND hardcoded as a fallback in `backend/src/plugins/auth.ts`. `porter-mail-admin-…(redacted)`
+(Stalwart admin) is in 3. `planning/security-service-token-hardening.md` flagged this and was
+never executed. Rotate both + fail-closed (no fallback, reject the literal) + update every
+consumer. Also noted: the unit sets NODE_TLS_REJECT_UNAUTHORIZED=0, which disables TLS
+verification for ALL of Porter's outbound HTTPS, not just self-signed Stalwart.
+
 ## 2026-07-13 — v6.91.0: #27 R3 — first product-native Overview (scope ladder + hot context)
 - components/product-overview.tsx mounted on the dashboard. Reads the product picked in the R1 top-bar
   switcher (localStorage porter.activeProduct; re-reads on focus/storage so the surfaces cannot disagree).
