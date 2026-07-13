@@ -1,3 +1,20 @@
+## v6.87.0 (2026-07-13)
+
+- **Porter MCP is actually runnable — and registered in Claude Code (#37).**
+  - Root cause found: `porter-mcp.ts` only EXPORTED a factory and never connected a
+    transport, so the MCP server existed but **no CLI could run it**. That is why Porter
+    was in nobody's `mcpServers`.
+  - New `src/mcp/porter-mcp-stdio.ts` — the launchable stdio entrypoint.
+  - Added the universal-memory tools to the server: **`porter_bootstrap`** (call first:
+    returns the warm packet — where we got to, the handoff left for you, and pointers;
+    honest `cold` on a fresh install) and **`porter_write_memory`** (leave a note/handoff
+    for the next session).
+  - Registered in Claude Code (`claude mcp list` → `porter: ✔ Connected`). The existing
+    SessionEnd hook already POSTs `{project, gateway}` to `/intellect/session-end`, which
+    now recomputes hot — so **every session end warms the cache for the next session**.
+  - Verified over the real MCP protocol: 9 tools listed; `porter_bootstrap` returned a
+    234-token warm packet containing a handoff written by a **grok_cli** session.
+
 ## v6.86.0 (2026-07-13)
 
 - **Universal memory R2 — write path + vault mirror (#37, collapses #48's hot.md).**

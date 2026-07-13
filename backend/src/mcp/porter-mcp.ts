@@ -51,6 +51,56 @@ export function createPorterMcpServer(): McpServer {
   // Session-local active scope (this process = one Claude session over stdio).
   let activeScope = DEFAULT_SCOPE;
 
+  // ── Universal memory (#37 R1/R2) — the reason this server exists ────────
+  // Every CLI re-derives the same project state from zero each session. These
+  // three make that unnecessary: open warm, leave a handoff, stay cheap.
+  server.registerTool(
+    'porter_bootstrap',
+    {
+      title: 'Bootstrap this session (warm context)',
+      description:
+        'CALL THIS FIRST, at the start of a session. Returns the warm "hot context" packet for a ' +
+        'project: where the last session got to (CHECKPOINT.md latest), any handoff left for you, ' +
+        'and POINTERS to drill into on demand. Hard-capped (~900 tokens) — it names files rather ' +
+        'than inlining them, so bootstrapping stays cheap. On a fresh install it honestly returns ' +
+        'status "cold" and you simply work from the repo; it never fabricates history.',
+      inputSchema: {
+        project: z.string().trim().min(1).describe('Project key, e.g. "ymc.capital" (a directory name under /home/lobster/projects).'),
+        scope: z.string().trim().optional().describe('Optional tenant scope (default "default").'),
+      },
+    },
+    async ({ project, scope }) => {
+      const { getHot } = await import('../services/intellect/hot-context.js');
+      return textResult(await getHot(project, scope ?? 'default'));
+    }
+  );
+
+  server.registerTool(
+    'porter_write_memory',
+    {
+      title: 'Leave a note/handoff for the next session',
+      description:
+        'Write runtime memory for a project. kind="handoff" passes your warm state to the NEXT ' +
+        'session mid-flight (without ending yours) — use it before a risky step, a long pause, or ' +
+        'when you have learned something the next session must not rediscover. It surfaces at the ' +
+        'top of that session\'s porter_bootstrap. This is RUNTIME memory only: durable meaning is ' +
+        'promoted into the vault separately, so you cannot pollute the knowledge graph from here.',
+      inputSchema: {
+        project: z.string().trim().min(1).describe('Project key, e.g. "ymc.capital".'),
+        body: z.string().trim().min(1).describe('What the next session needs to know. Be specific and short.'),
+        kind: z.enum(['handoff', 'note']).default('handoff').describe('handoff = state for the next session; note = an observation.'),
+        gateway: z.string().trim().optional().describe('Which CLI you are (claude_cli | codex_cli | grok_cli | antigravity_cli).'),
+        scope: z.string().trim().optional(),
+      },
+    },
+    async ({ project, body, kind, gateway, scope }) => {
+      const { appendHandoff, recomputeHot } = await import('../services/intellect/hot-context.js');
+      await appendHandoff({ project, scope, kind, body, gateway: gateway ?? null });
+      const hot = await recomputeHot({ project, scope, gateway: gateway ?? null });
+      return textResult({ written: true, hot });
+    }
+  );
+
   server.registerTool(
     'porter_select_product',
     {

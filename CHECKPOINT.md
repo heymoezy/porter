@@ -1,3 +1,19 @@
+## 2026-07-13 — v6.87.0: Porter MCP runnable + registered in Claude Code (#37)
+- ROOT CAUSE of "Porter is in no CLI": porter-mcp.ts only EXPORTED createPorterMcpServer() and never
+  connected a transport — the server existed but was not launchable. Fixed: new src/mcp/porter-mcp-stdio.ts
+  (StdioServerTransport entrypoint; stdout is the MCP channel, diagnostics to stderr; fail-open).
+- Added universal-memory tools to porter-mcp.ts: porter_bootstrap (session-start warm packet; fail-open cold)
+  and porter_write_memory (note|handoff for the next session). Server now exposes 9 tools.
+- REGISTERED in Claude Code: `claude mcp add-json porter ... --scope user` → `claude mcp list` shows
+  "porter: ✔ Connected". ~/.claude.json backed up first.
+- The write path was ALREADY there: ~/.claude/hooks/porter-session-end.js (wired in settings.json SessionEnd)
+  POSTs {sessionId, project(from cwd), gateway:'claude_cli'} to /api/v1/intellect/session-end — which now
+  recomputes hot. So every Claude session end warms the cache for the next session. Loop closed for claude_cli.
+- VERIFIED over the real MCP protocol: tools/list = 9; tools/call porter_bootstrap → warm, 234 tok, containing
+  the handoff a grok_cli session wrote. porter tsc 0.
+- REMAINING on #37: register the same stdio server in codex / grok / antigravity CLIs (each has its own MCP
+  config mechanism). The server + memory engine are done and CLI-agnostic; this is per-CLI config only.
+
 ## 2026-07-13 — v6.86.0: Universal memory R2 — write path + vault mirror (#37, collapses #48 hot.md)
 - hot_notes (0104) + POST /api/v1/intellect/memory (porter_write_memory): kinds note|handoff. A 'handoff'
   passes warm state to the NEXT session mid-flight without ending (long-running/crashed sessions). Narrow by
