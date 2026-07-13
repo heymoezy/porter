@@ -1,3 +1,24 @@
+## v6.99.0 (2026-07-13)
+
+- **#27 R4b — the review queue can actually be cleared.** R4 exposed 4,900 unreviewed
+  placements; a queue of 4,900 you can only clear one row at a time is not a queue, it's a
+  museum. Added `POST /api/v1/vault/placements/bulk-accept` and a type filter in the UI.
+  - **Deliberately NOT an "accept everything" button.** You must pick a **type** — you accept
+    one kind of thing at a time, having looked at that kind — and the UI **echoes the count back
+    to the server**. If the set moved since you looked, the server **refuses** (`COUNT_CHANGED`)
+    rather than accepting a different set than the one you saw.
+  - Non-destructive: accepting archives the incumbent placement, never deletes it, so any accept
+    can be walked back with a refile.
+  - Bulk and single accept share **one** implementation (`activateOneTx`) — schema check, layer
+    check, cycle guard. Two copies of that logic would drift, and the copy that drifted would be
+    the one that lets a cycle in. One transaction per row, so a single bad row can't roll back
+    the good ones; failures are reported, never silently dropped.
+  - Verified on a **throwaway scope** (registered, ingested, accepted, deleted — zero residue),
+    not on Moe's data: wrong count → refused; missing type → refused; correct count → accepted
+    exactly the 3 notes and left the folder alone; no rows lost.
+- **Moe's 4,900 have NOT been touched** (still 276 active / 4,900 proposed). Accepting them in
+  bulk is his call, not a default I get to take.
+
 ## v6.98.0 (2026-07-13)
 
 - **#27 R4 — the Vault, promoted from a file browser to the actual engine.** The vault engine

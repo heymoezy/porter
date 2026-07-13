@@ -163,7 +163,7 @@ export default function VaultPage() {
 
       {ov && tab === "overview" && <OverviewTab ov={ov} />}
       {ov && tab === "schema" && <SchemaTab ov={ov} />}
-      {tab === "review" && <ReviewTab />}
+      {tab === "review" && <ReviewTab types={ov ? [...new Set(ov.nodes.map((n) => n.type))].sort() : []} />}
       {ov && tab === "structure" && <StructureTab ov={ov} />}
       {ov && tab === "derivatives" && <DerivativesTab ov={ov} />}
     </div>
@@ -297,23 +297,36 @@ function SchemaTab({ ov }: { ov: Overview }) {
   )
 }
 
-/** The review queue. accept = keep the AI's parent; refile = move it somewhere else. Nothing is ever deleted. */
-function ReviewTab() {
+/** The review queue. accept = keep the AI's parent; nothing is ever deleted (the incumbent is archived). */
+function ReviewTab({ types }: { types: string[] }) {
   const qc = useQueryClient()
   const [offset, setOffset] = useState(0)
+  const [type, setType] = useState("")
+  const [confirming, setConfirming] = useState(false)
   const LIMIT = 25
 
   const { data, isLoading } = useQuery({
-    queryKey: ["v1", "vault", "placements", SCOPE, offset],
+    queryKey: ["v1", "vault", "placements", SCOPE, type, offset],
     queryFn: () =>
       api<{ total: number; placements: Placement[] }>(
-        `/api/v1/vault/placements?scope=${SCOPE}&state=proposed&limit=${LIMIT}&offset=${offset}`,
+        `/api/v1/vault/placements?scope=${SCOPE}&state=proposed&limit=${LIMIT}&offset=${offset}` +
+          (type ? `&type=${encodeURIComponent(type)}` : ""),
       ),
   })
 
   const accept = useMutation({
     mutationFn: (id: string) => api(`/api/v1/vault/placements/${id}/accept`, { method: "POST" }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["v1", "vault"] }) },
+  })
+
+  const bulk = useMutation({
+    mutationFn: (vars: { type: string; expect: number }) =>
+      api<{ accepted: number; skipped: unknown[] }>(`/api/v1/vault/placements/bulk-accept`, {
+        method: "POST",
+        json: { app_scope: SCOPE, type: vars.type, expect: vars.expect },
+      }),
     onSuccess: () => {
+      setConfirming(false)
       void qc.invalidateQueries({ queryKey: ["v1", "vault"] })
     },
   })
@@ -324,32 +337,69 @@ function ReviewTab() {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center justify-between">
+        <CardTitle className="text-sm flex items-center justify-between gap-2">
           <span>
             Proposed placements
             <span className="text-text3 font-normal ml-1.5 text-xs">
-              {num(total)} awaiting a human — accept keeps the AI's parent, nothing is ever deleted
+              {num(total)} awaiting a human — accept keeps the AI&apos;s parent, nothing is ever deleted
             </span>
           </span>
-          <span className="flex gap-1">
-            <Button
-              size="sm" variant="ghost"
-              disabled={offset === 0}
-              onClick={() => setOffset(Math.max(0, offset - LIMIT))}
+          <span className="flex items-center gap-1">
+            <select
+              value={type}
+              onChange={(e) => { setType(e.target.value); setOffset(0); setConfirming(false) }}
+              className="h-7 rounded border border-border bg-surface px-2 text-xs text-text2"
             >
-              Prev
-            </Button>
-            <Button
-              size="sm" variant="ghost"
-              disabled={offset + LIMIT >= total}
-              onClick={() => setOffset(offset + LIMIT)}
-            >
-              Next
-            </Button>
+              <option value="">All types</option>
+              {types.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <Button size="sm" variant="ghost" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - LIMIT))}>Prev</Button>
+            <Button size="sm" variant="ghost" disabled={offset + LIMIT >= total} onClick={() => setOffset(offset + LIMIT)}>Next</Button>
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent>
+        {/* Bulk accept is deliberately type-scoped: you accept one KIND of thing at a time,
+            having actually looked at that kind. "Accept everything" is how you rubber-stamp
+            thousands of AI guesses by accident. The count is echoed back to the server, which
+            refuses if the set moved since you looked. */}
+        {type && total > 0 && (
+          <div className="mb-2 flex items-center gap-2 rounded border border-border bg-raised/40 p-2">
+            {!confirming ? (
+              <>
+                <span className="text-xs text-text2 flex-1">
+                  Accept all <strong className="text-foreground">{num(total)}</strong> proposed{" "}
+                  <strong className="text-foreground">{type}</strong> placements, as the AI filed them?
+                </span>
+                <Button size="sm" variant="ghost" className="h-6" onClick={() => setConfirming(true)}>Accept all {num(total)}</Button>
+              </>
+            ) : (
+              <>
+                <span className="text-xs text-text2 flex-1">
+                  This accepts {num(total)} filings in one go. They can still be re-filed afterwards — nothing is deleted.
+                </span>
+                <Button size="sm" variant="ghost" className="h-6" onClick={() => setConfirming(false)}>Cancel</Button>
+                <Button
+                  size="sm"
+                  className="h-6"
+                  disabled={bulk.isPending}
+                  onClick={() => bulk.mutate({ type, expect: total })}
+                >
+                  {bulk.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : `Yes, accept ${num(total)}`}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+        {bulk.isError && (
+          <p className="mb-2 text-2xs text-danger">{(bulk.error as Error).message}</p>
+        )}
+        {bulk.isSuccess && (
+          <p className="mb-2 text-2xs text-emerald-400">
+            Accepted {num(bulk.data.accepted)}{bulk.data.skipped.length > 0 ? `, skipped ${num(bulk.data.skipped.length)} that failed validation` : ""}.
+          </p>
+        )}
+
         {isLoading && <p className="text-xs text-text3">Loading…</p>}
         {!isLoading && rows.length === 0 && (
           <p className="text-xs text-text3">Nothing awaiting review. The queue is clear.</p>
@@ -358,9 +408,7 @@ function ReviewTab() {
           {rows.map((p) => (
             <div key={p.id} className="flex items-center gap-2 text-xs py-1.5 border-b border-border/40">
               <Badge className="text-2xs bg-raised text-text3 shrink-0">{p.type}</Badge>
-              <span className="text-foreground truncate flex-1" title={p.title}>
-                {p.title}
-              </span>
+              <span className="text-foreground truncate flex-1" title={p.title}>{p.title}</span>
               <CornerUpRight className="h-3 w-3 text-text3 shrink-0" />
               <span className="text-text2 truncate w-40 shrink-0" title={p.parent_title ?? ""}>
                 {p.parent_title ?? <span className="text-text3">— no parent —</span>}
@@ -369,17 +417,13 @@ function ReviewTab() {
                 {p.confidence === null ? "no score" : p.confidence.toFixed(2)}
               </span>
               <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 px-2 shrink-0"
+                size="sm" variant="ghost" className="h-6 px-2 shrink-0"
                 disabled={accept.isPending}
                 onClick={() => accept.mutate(p.id)}
               >
-                {accept.isPending && accept.variables === p.id ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Check className="h-3 w-3" />
-                )}
+                {accept.isPending && accept.variables === p.id
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : <Check className="h-3 w-3" />}
               </Button>
             </div>
           ))}

@@ -1,3 +1,29 @@
+## 2026-07-13 — v6.99.0: #27 R4b — the review queue is actually clearable
+
+R4 exposed 4,900 unreviewed placements. A queue of 4,900 you can only clear one row at a time is
+not a queue. Added POST /api/v1/vault/placements/bulk-accept + a type filter.
+
+DESIGN (deliberate, not laziness):
+- NOT an "accept everything" button. Caller must pass a TYPE (accept one kind at a time, having
+  looked at that kind) AND echo back `expect` — the count the UI showed. If the set moved since
+  they looked, the server REFUSES (COUNT_CHANGED) rather than accepting a set they never saw.
+- Bulk + single accept share ONE implementation (activateOneTx): schema check, layer check,
+  cycle guard. Two copies would drift, and the drifted copy is the one that lets a cycle in.
+- One transaction PER ROW — a single bad row must not roll back the good ones. Failures are
+  returned in `skipped`, never silently dropped.
+- Non-destructive: accept ARCHIVES the incumbent placement, never deletes → walk-back via refile.
+
+VERIFIED on a THROWAWAY scope (qabulk: registered schema → ingested 1 folder + 3 notes →
+guards → accept → deleted, ZERO residue), NOT on real data:
+  · wrong expect (2 vs 3) → REFUSED (COUNT_CHANGED)
+  · missing type → REFUSED (MISSING_TYPE)
+  · correct expect → accepted exactly the 3 notes, left the folder proposed (type-scoped)
+  · 4 placements before, 4 after — nothing lost
+  · tsc 0 (backend + admin), deployed, screenshotted, 0 JS errors
+
+MOE'S DATA UNTOUCHED: ymc still 276 active / 4,900 proposed. Bulk-accepting 4,900 real filings is
+HIS call. The capability is built; the trigger is his.
+
 ## 2026-07-13 — v6.98.0: #27 R4 — the Vault promoted; two invisible truths surfaced
 
 The vault engine (5,176 nodes / 6,090 artifacts / 1,780 edges / 3 scopes) has run for weeks and

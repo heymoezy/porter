@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.99.0',
+    date: '2026-07-13',
+    title: 'You can now clear the filing queue without clicking 4,900 times',
+    bullets: [
+      'The review queue can be filtered to one kind of thing and approved in one go. It is deliberately not an "approve everything" button: you pick a type, you see the count, and the system refuses if that count has changed since you looked — so you can never approve a different set than the one in front of you.',
+      'Nothing is ever deleted. Approving a filing archives the previous one, so any decision can be walked back later.',
+      'Your 4,900 pending filings have NOT been touched. Approving them is your call.',
+    ],
+  },
+  {
     version: '6.98.0',
     date: '2026-07-13',
     title: 'The Vault will now tell you what it has been doing',
