@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.97.0',
+    date: '2026-07-13',
+    title: 'The token that was on GitHub no longer opens anything',
+    bullets: [
+      'The old admin token is now rejected outright. During the changeover it was kept working on purpose, but every use of it was logged with the caller — which is how two hidden users got caught: the release hook, and Tom\'s tool server. Both were quietly relying on a password published on the internet. Both are fixed, and the old token is now dead.',
+      'It also cannot come back: Porter refuses that specific value as a password even if someone pastes it into a config again.',
+    ],
+  },
+  {
     version: '6.96.0',
     date: '2026-07-13',
     title: 'Turned certificate checking back on, and deleted a mail server that was never there',

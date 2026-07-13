@@ -1,3 +1,30 @@
+## 2026-07-13 — v6.97.0: rotation CLOSED — the leaked token now 401s
+
+Phase C of the token rotation. `porter-local-service-2026` (public in 11 commits,
+platform_admin on the brain) is now REJECTED. Rotation scaffolding deleted from auth.ts.
+
+The rotation window did exactly what it was built for: instead of GUESSING which callers still
+held the old token, it accepted it and LOGGED every use with path + user-agent. That caught two
+stragglers I would have missed:
+  - the post-commit release hook (git hooks don't inherit the systemd EnvironmentFile — it had
+    only ever worked via the leaked hardcoded default), fixed in 6.95.0;
+  - tom-mcp, spawned by openclaw-gateway, which wasn't restarted until the ymc 1.797.0 deploy.
+Last legacy use 07:09; silent since; all services restarted after the code change.
+
+Invariants now in CODE, not convention:
+  1. No hardcoded fallback — unset token DISABLES service auth (fail-closed), never a default.
+  2. The leaked literal is REFUSED as a secret even if explicitly set — it cannot be
+     reintroduced by copying an old config.
+
+VERIFIED: tsc 0 · rotated token authenticates (400 = bad body, auth OK) · LEAKED token 401 ·
+/health green · all 5 services active.
+
+#50 REMAINING — genuinely needs Moe (2 items, both his call, neither urgent):
+- Old secrets still in the public repo's git HISTORY. Scrubbing = force-push of a public repo.
+  NOTE: both leaked values are now DEAD — the service token 401s, and the Stalwart mail key was
+  a credential to a service that does not exist. So this is hygiene, not exposure.
+- WhatsApp QR re-link (Tom is mute). Pending announces: ymc 1.794–1.797, porter 6.92–6.97.
+
 ## 2026-07-13 — v6.96.0: TLS verification back ON; the Stalwart integration was a ghost
 
 Chasing the last two "needs Moe" security items — and BOTH dissolved on investigation:

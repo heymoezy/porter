@@ -1,3 +1,21 @@
+## v6.97.0 (2026-07-13) — SECURITY: rotation closed
+
+- **The leaked token is now dead.** `porter-local-service-2026` — published in 11 commits of a
+  public repo, granting `platform_admin` on the brain — now returns **401**. The rotation
+  window is closed and its scaffolding deleted.
+- **The window earned its keep.** Rather than guess which callers still held the old token, the
+  window accepted it and LOGGED every use with its path and user-agent. That found two
+  stragglers I would otherwise have missed:
+  - the **post-commit release hook** (git hooks don't inherit the unit's `EnvironmentFile` — it
+    had only ever worked via the leaked default), and
+  - **tom-mcp**, spawned by openclaw-gateway, which wasn't restarted until the ymc deploy.
+  Both migrated; the log has been silent since 07:09.
+- Two invariants are now code, not convention: (1) no hardcoded fallback — an unset token
+  disables service auth entirely rather than falling back to a guessable default; (2) the
+  leaked literal is **refused as a secret even if explicitly set**, so it cannot be
+  reintroduced by copying an old config.
+- Verified: tsc 0; rotated token authenticates; **leaked token 401s**; /health green.
+
 ## v6.96.0 (2026-07-13) — SECURITY / dead code
 
 - **TLS verification is no longer disabled for all of Porter's outbound HTTPS.** The unit set
