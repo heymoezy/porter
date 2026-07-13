@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.100.1',
+    date: '2026-07-13',
+    title: 'Removed the last place the code still claimed an AI did the filing',
+    bullets: [
+      'The vault page\'s own header comment still repeated the claim that an AI files these documents, even after that was proven false. Corrected, so the next person reading the code is not taught the same mistake.',
+    ],
+  },
+  {
     version: '6.100.0',
     date: '2026-07-13',
     title: 'The vault was crediting an AI for work no AI did',

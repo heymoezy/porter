@@ -1,3 +1,10 @@
+## v6.100.1 (2026-07-13)
+
+- Corrected the stale docblock in `admin/.../routes/vault.tsx`. 6.100.0 fixed the UI copy and the
+  data, but the file's own header still claimed "the AI proposes a placement for every item it
+  ingests" — the exact falsehood 6.100.0 disproved. A stale comment is a lie the next reader
+  believes, and this one would have re-taught the mistake to whoever touched the file next.
+
 ## v6.100.0 (2026-07-13) — the vault was lying about who filed 5,176 things
 
 - **No AI ever proposed those placements.** Every vault placement was stamped

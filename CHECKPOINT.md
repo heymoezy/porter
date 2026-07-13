@@ -1,3 +1,13 @@
+## 2026-07-13 — v6.100.1: killed the last stale claim that an AI files the vault
+
+6.100.0 fixed the data and the UI copy, but vault.tsx's own header docblock still said "the AI
+proposes a placement for every item it ingests" — the exact falsehood 6.100.0 disproved. A stale
+comment is a lie the next reader believes; that one would have re-taught the mistake to whoever
+touched the file next. Corrected, with the reason recorded in place.
+
+VERIFIED: tsc 0 · deployed · /health 6.100.1 · all 5 services active · leaked token still 401 ·
+ymc vault UNTOUCHED (276 active / 4,900 proposed — I have not accepted Moe's filings).
+
 ## 2026-07-13 — v6.100.0: the vault was lying about who filed 5,176 things
 
 Chasing "why is confidence NULL on all 4,900?" found something worse: NO AI EVER FILED THEM.

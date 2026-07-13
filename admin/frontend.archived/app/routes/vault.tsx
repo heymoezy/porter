@@ -6,10 +6,17 @@
  * The vault engine has been running for weeks and NOTHING could see what it was doing.
  * Two facts were invisible until this page existed, and both matter:
  *
- *   1. REVIEW BACKLOG — the AI proposes a placement for every item it ingests, and a human
- *      is supposed to accept or re-file it. 4,900 proposals had accumulated and none had
- *      ever been reviewed, because accept/refile only worked BY ID and nothing could
- *      enumerate the queue. You cannot accept what you cannot list.
+ *   1. REVIEW BACKLOG — 4,900 placements had accumulated with nobody ever reviewing them,
+ *      because accept/refile only worked BY ID and nothing could enumerate the queue. You
+ *      cannot accept what you cannot list.
+ *
+ *      NOTE (corrected in 6.100.0): these are NOT AI proposals. This file originally said
+ *      "the AI proposes a placement for every item it ingests" — that was wrong, and it was
+ *      wrong because I read the `proposed_by` column instead of the code. resolveProposedParentId
+ *      is a deterministic PASS-THROUGH STUB; no classifier has ever run. Every one of these is
+ *      the calling app's OWN declared hierarchy. It is not a pile of machine guesses awaiting
+ *      judgement — it is ymc's existing structure awaiting confirmation, which is a different
+ *      decision entirely.
  *
  *   2. DERIVATIVE COVERAGE — the raw→markdown sweep is capped at 25 model calls per 24h
  *      (a deliberate cost bound). It looks healthy: it does its 25 every day. But with a
