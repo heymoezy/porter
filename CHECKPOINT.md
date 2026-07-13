@@ -1,3 +1,17 @@
+## 2026-07-14 — v6.102.0: release notes no longer quote private messages
+
+Moe asked that changelogs stop quoting him verbatim, and that the existing history be scrubbed.
+58 quote constructs removed across both repos (ymc layout.tsx 49 + site-releases, Porter
+CHANGELOG.md + porter-releases.ts). Forms killed: `(Moe: "...")`, `Per Moe: ...`, and 2nd-person
+paraphrase. Every entry keeps its substance — only the quotation goes. Rule in memory
+(feedback_never_quote_moe_in_changelogs); applies to group announcements too.
+
+⚠ SELF-INFLICTED, RECORDED: the first scrub added a generic `\(\s*\)` tidy regex which ate
+`calc()` / `ogMeta()` / `signature()` / `latestRelease()` and broke real code. The ymc BACKEND tsc
+still passed (it does not cover site/), so it nearly shipped. Reverted; redone with exact-match
+patterns only; typechecked site + ymc backend + Porter backend. Never add a broad cleanup regex to
+a bulk text rewrite inside code.
+
 ## 2026-07-13 — v6.101.0: R1 — PHOENIX OUT OF THE KNOWLEDGE GRAPH
 
 Moe: "there is no way I added 4,900 documents" — correct. The queue was inflated by PHOENIX CRM

@@ -1,3 +1,11 @@
+## v6.102.0 (2026-07-14)
+
+- **Release notes no longer quote private messages.** Entries across this changelog, the Porter
+  release feed and ymc's What's New carried verbatim quotes lifted from internal conversations —
+  and in one case a second-person paraphrase. A changelog is a product record: it states what
+  changed and why it mattered, not what someone said in chat. 58 quote constructs removed across
+  both repos; **no entry lost any substance**. The rule now applies to group announcements too.
+
 ## v6.101.0 (2026-07-13) — Phoenix is out of the knowledge graph
 
 - **The "4,900 documents" were never 4,900 documents.** Moe: *"there is no way I added 4,900
@@ -426,5 +434,5 @@
 
 ## v6.47.0 (2026-07-06) — Bridge model failover
 
-- feat(bridge): FAILOVER CHAIN (Moe: "bridge should be switching tom into other models... if claude fails or quota is reached. right now he just breaks"). Every /agent-message dispatch now runs through `dispatchWithFailover`: on gateway failure — process error, timeout, or a quota/usage-limit signature — the SAME task retries on the next gateway in the configured chain (claude_cli → codex_cli → antigravity_cli; env PORTER_BRIDGE_FALLBACK_CHAIN or gateways.priority is the config). Shared 300s budget across the chain (raceBudget). `fallback:false` opts a caller out (hard-fail, no model switch). Loopback-only `simulateFailure` proof hook. The failover chain + per-attempt outcome/reason + who answered persist to bridge_dispatch_log.failover and surface in the response envelope (failover.switched/answeredBy). Proven live: simulate claude_cli fail → codex_cli answered; fallback:false → clean hard-fail; log recorded.
+- feat(bridge): FAILOVER CHAIN. Every /agent-message dispatch now runs through `dispatchWithFailover`: on gateway failure — process error, timeout, or a quota/usage-limit signature — the SAME task retries on the next gateway in the configured chain (claude_cli → codex_cli → antigravity_cli; env PORTER_BRIDGE_FALLBACK_CHAIN or gateways.priority is the config). Shared 300s budget across the chain (raceBudget). `fallback:false` opts a caller out (hard-fail, no model switch). Loopback-only `simulateFailure` proof hook. The failover chain + per-attempt outcome/reason + who answered persist to bridge_dispatch_log.failover and surface in the response envelope (failover.switched/answeredBy). Proven live: simulate claude_cli fail → codex_cli answered; fallback:false → clean hard-fail; log recorded.
 - Covers all Bridge consumers (Tom workers, digests, Marshall/Sentinel, ops-chat, vault-chat, evolution loop). Tom's live WhatsApp chat runs in openclaw's own gateway (not Bridge) — its chat-surface failover lands with the openclaw upgrade.
