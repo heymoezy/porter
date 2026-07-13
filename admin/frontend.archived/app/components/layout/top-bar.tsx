@@ -6,6 +6,7 @@ import {
   Sparkles, Wrench, Activity, Bug, Monitor, FileText, Settings, Route, Plug,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
+import { ContextSwitcher } from "./context-switcher"
 
 export interface AdminNotification {
   id: number
@@ -108,6 +109,12 @@ export function TopBar({ notifications, onDismissNotification }: TopBarProps) {
         ) : null}
       </div>
       <div className="flex items-center gap-1.5">
+        {/* #27 R1: global product/tenant context. Additive — nothing removed.
+            Porter is multi-app; this is the first surface that admits it. The
+            selection pins the SAME active-project the CLI sessions read, so the
+            admin and every Claude/codex/grok session agree on what we're on. */}
+        <ContextSwitcher />
+
         {/* Bell + dropdown */}
         <div className="relative" ref={panelRef}>
           <button

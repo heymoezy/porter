@@ -1,3 +1,20 @@
+## v6.89.0 (2026-07-13)
+
+- **#27 R1 — global product/tenant context switcher (additive; nothing removed).**
+  Porter is multi-app (ymc.capital, themozaic, baanyindee, askporter) but the admin
+  always showed one undifferentiated blob. This is the first surface that admits the
+  real architecture: you are always looking at *some* product.
+  - New `ContextSwitcher` in the admin shell top bar. Lists products from
+    `/api/v1/projects`; persists the choice to the **same** pin the CLIs read
+    (`POST /api/v1/intellect/active-project`) — so the admin and every claude/codex/grok
+    session agree on "what are we working on". One context, not two.
+  - Strictly R1 per the council design: adds the selector + context plumbing and
+    **removes no existing nav**. The destructive folds (R5/R6/R10 delete Brain/Recall/
+    Bridge) are NOT in this release and need Moe's sign-off.
+  - Fail-open: an empty product list or an unreachable Porter must never break the shell.
+  - Verified: tsc 0, SPA build clean, deployed, and the live chunk on askporter.app
+    serves the component.
+
 ## v6.88.0 (2026-07-13)
 
 - **#49 — cost per ACCEPTED change (the only loop metric that matters).**

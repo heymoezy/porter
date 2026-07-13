@@ -1,3 +1,17 @@
+## 2026-07-13 — v6.89.0: #27 R1 — product/tenant context switcher (additive)
+- Read the council design properly this time: R1 is explicitly NON-destructive ("add global tenant/product
+  selector; persist selected context; NO OLD NAV REMOVED"). Only R5/R6/R10 delete Brain/Recall/Bridge — those
+  still need Moe's sign-off. I had wrongly written off the whole program as gated.
+- BUILT: admin/frontend.archived/app/components/layout/context-switcher.tsx, mounted in the top bar. Lists
+  products from GET /api/v1/projects; on select POSTs /api/v1/intellect/active-project (set_by=porter-admin)
+  — the SAME pin the CLI sessions resolve, so admin + claude/codex/grok share ONE context. localStorage
+  remembers the last choice. Fail-open on every fetch (empty list / Porter down must never break the shell).
+- Nothing removed: all existing nav/routes untouched.
+- VERIFIED: admin tsc 0; SPA build clean; admin/deploy.sh shipped; live chunk on askporter.app (200) contains
+  the component.
+- REMAINING on #27: R2-R4 (new IA shell, per-product Overview, promote Vault) are additive and buildable;
+  R5/R6/R10 are DESTRUCTIVE (delete Brain/Recall/Bridge) and require Moe's explicit approval per the design.
+
 ## 2026-07-13 — v6.88.0: #49 cost per ACCEPTED change (loop metric) — DONE
 - I was WRONG that the token feed didn't exist: the CLI transcript carries exact per-message usage
   (input/output/cache + model). Built on it.
