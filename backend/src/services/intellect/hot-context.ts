@@ -98,6 +98,22 @@ export async function composeHotBody(project: string, sourceGateway?: string | n
     if (lines.length) parts.push('', '## Recent sessions', ...lines.map((l) => `- ${l.slice(0, 160)}`));
   } catch { /* fail-open: no episodes table / empty install */ }
 
+  // R2 — handoffs/notes a session explicitly left for the next one. These are the
+  // highest-signal lines in the packet: a human (or agent) chose to write them.
+  try {
+    const notes = (await pool.query(
+      `SELECT kind, body, gateway FROM hot_notes
+        WHERE project_key = $1 ORDER BY created_at DESC LIMIT 3`,
+      [project],
+    )).rows as Array<{ kind: string; body: string; gateway: string | null }>;
+    if (notes.length) {
+      parts.push('', '## Handoff from the last session');
+      for (const n of notes) {
+        parts.push(`- ${n.kind === 'handoff' ? '**handoff**' : 'note'}${n.gateway ? ` (${n.gateway})` : ''}: ${n.body.slice(0, 240)}`);
+      }
+    }
+  } catch { /* fail-open */ }
+
   // POINTERS ONLY — the drill-down targets. Never inline these.
   parts.push(
     '',
@@ -112,6 +128,45 @@ export async function composeHotBody(project: string, sourceGateway?: string | n
   let body = parts.join('\n');
   if (body.length > MAX_CHARS) body = body.slice(0, MAX_CHARS) + '\n…(capped)';
   return body;
+}
+
+/**
+ * R2 — vault MIRROR. The DB is the source of truth; this is a generated,
+ * lag-tolerant, human-readable view (Obsidian). Never read back as truth, never
+ * hand-edited. Best-effort: a mirror failure must never fail a session-end.
+ * This is also #48's "hot.md" — built ONCE here, not a second time in the vault.
+ */
+const VAULT_HOT_DIR = '/home/lobster/vault/mirrors/hot';
+function writeVaultMirror(project: string, body: string): void {
+  try {
+    fs.mkdirSync(VAULT_HOT_DIR, { recursive: true });
+    const safe = safeProjectDir(project); // reuse the traversal guard for the filename
+    if (!safe) return;
+    const file = path.join(VAULT_HOT_DIR, `${project}.md`);
+    const header = `---\ngenerated: true\nsource: porter (hot_contexts)\nupdated: ${new Date().toISOString()}\n---\n\n> Generated mirror — do NOT edit. Truth lives in Porter (\`GET /api/v1/intellect/hot?project=${project}\`).\n\n`;
+    fs.writeFileSync(file, header + body + '\n', 'utf8');
+  } catch { /* mirror is best-effort; DB remains the truth */ }
+}
+
+/**
+ * R2 — porter_write_memory. A session leaves a note/handoff for the next one.
+ * Runtime memory ONLY: durable meaning still reaches the vault through the
+ * existing dream/promote path, so no CLI writes the knowledge graph directly.
+ */
+export async function appendHandoff(opts: {
+  project: string;
+  scope?: string;
+  kind: string;
+  body: string;
+  gateway?: string | null;
+  sessionId?: string | null;
+}): Promise<void> {
+  if (!safeProjectDir(opts.project)) throw new Error('invalid project');
+  await pool.query(
+    `INSERT INTO hot_notes (scope, project_key, kind, body, gateway, session_id)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [opts.scope ?? 'default', opts.project, opts.kind, opts.body, opts.gateway ?? null, opts.sessionId ?? null],
+  );
 }
 
 /** Recompute + persist. Called by session-end (the ONE default write path). */
@@ -137,6 +192,9 @@ export async function recomputeHot(opts: {
      RETURNING body, approx_tokens, updated_at, source_gateway`,
     [scope, opts.project, body, approxTokens(body), hash, opts.sessionId ?? null, opts.gateway ?? null],
   )).rows[0];
+
+  // Generated view for humans/Obsidian. DB already won; this can lag safely.
+  writeVaultMirror(opts.project, body);
 
   return {
     status: 'warm',

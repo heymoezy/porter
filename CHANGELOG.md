@@ -1,3 +1,20 @@
+## v6.86.0 (2026-07-13)
+
+- **Universal memory R2 — write path + vault mirror (#37, collapses #48's hot.md).**
+  - `hot_notes` (0104) + `POST /api/v1/intellect/memory` (porter_write_memory):
+    kinds `note` | `handoff`. A **handoff** lets a session pass its warm state to the
+    NEXT session mid-flight, without ending — what long-running or crashed sessions need.
+    Deliberately narrow: durable *meaning* still reaches the vault via the existing
+    dream/promote path, so no CLI writes the knowledge graph directly.
+  - Handoffs surface at the top of the hot packet (highest-signal lines — someone
+    chose to write them).
+  - **Vault mirror**: every recompute writes `~/vault/mirrors/hot/<project>.md` with a
+    `generated: true / do NOT edit` header. Porter DB stays the source of truth; the
+    file is a lag-tolerant human view. This IS the "hot.md" from the self-filing-vault
+    research — built ONCE, in Porter, not duplicated as a second truth.
+  - Verified cross-CLI: a `grok_cli` handoff was read back in the warm packet by a
+    different CLI; mirror written; 234-token packet (cap 900).
+
 ## v6.85.1 (2026-07-13) — SECURITY
 
 - **Path traversal in hot-context (introduced in 6.85.0, fixed before any real use).**

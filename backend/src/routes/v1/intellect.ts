@@ -1081,6 +1081,38 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     return reply.send(ok(await getHot(q.project, q.scope ?? 'default')));
   });
 
+  // POST /memory — R2 structured write path (porter_write_memory).
+  // kinds: note | handoff. A 'handoff' lets a session hand its warm state to the
+  // NEXT session mid-flight (without ending), which is what long-running or
+  // crashed sessions need. Deliberately narrow: durable *meaning* still gets
+  // promoted into the vault by the existing dream/promote path — this is runtime
+  // memory only, so no CLI can pollute the knowledge graph directly.
+  fastify.post('/memory', async (request, reply) => {
+    const b = (request.body ?? {}) as {
+      kind?: string; project?: string; scope?: string; body?: string; gateway?: string | null; sessionId?: string | null;
+    };
+    const KINDS = ['note', 'handoff'];
+    if (!b?.project) return reply.status(400).send(err('BAD_REQUEST', 'project required'));
+    if (!b?.kind || !KINDS.includes(b.kind)) return reply.status(400).send(err('BAD_REQUEST', `kind must be one of: ${KINDS.join(', ')}`));
+    if (!b?.body?.trim()) return reply.status(400).send(err('BAD_REQUEST', 'body required'));
+    try {
+      const { recomputeHot, safeProjectDir, appendHandoff } = await import('../../services/intellect/hot-context.js');
+      if (!safeProjectDir(b.project)) return reply.status(400).send(err('BAD_REQUEST', 'invalid project'));
+      await appendHandoff({
+        project: b.project, scope: b.scope, kind: b.kind,
+        body: b.body.trim(), gateway: b.gateway ?? null, sessionId: b.sessionId ?? null,
+      });
+      // Re-warm so the next session sees it immediately.
+      const hot = await recomputeHot({
+        project: b.project, scope: b.scope, gateway: b.gateway ?? null, sessionId: b.sessionId ?? null,
+      });
+      return reply.send(ok({ written: true, hot }));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('MEMORY_WRITE_FAILED', message));
+    }
+  });
+
   // POST /hot/recompute — force a rebuild (session-end does this automatically).
   fastify.post('/hot/recompute', async (request, reply) => {
     const body = (request.body ?? {}) as { project?: string; scope?: string; gateway?: string | null };

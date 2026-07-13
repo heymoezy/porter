@@ -1,3 +1,16 @@
+## 2026-07-13 — v6.86.0: Universal memory R2 — write path + vault mirror (#37, collapses #48 hot.md)
+- hot_notes (0104) + POST /api/v1/intellect/memory (porter_write_memory): kinds note|handoff. A 'handoff'
+  passes warm state to the NEXT session mid-flight without ending (long-running/crashed sessions). Narrow by
+  design: durable MEANING still reaches the vault via dream/promote — no CLI writes the knowledge graph.
+- composeHotBody surfaces the last 3 handoffs/notes at the top (highest-signal lines).
+- VAULT MIRROR: recomputeHot writes ~/vault/mirrors/hot/<project>.md (front-matter: generated:true, do NOT
+  edit, truth = Porter). DB is source of truth; file is a lag-tolerant human/Obsidian view. This IS #48's
+  "hot.md" — built ONCE in Porter, not a second truth. Traversal guard reused for the filename.
+- VERIFIED: grok_cli POST /memory handoff → a different CLI's GET /hot shows "**handoff** (grok_cli): ..." ;
+  mirror file written; 234-tok packet (cap 900). porter tsc 0.
+- REMAINING on #37: R3 (signals + get_skill), then register as an MCP server IN EACH BRIDGE CLI — that step
+  edits every CLI config and changes how all sessions boot; do it in a dedicated pass, not at context-end.
+
 ## 2026-07-13 — v6.85.1: SECURITY — path traversal in hot-context (#37)
 - The automated commit security review flagged a HIGH path traversal I introduced in 6.85.0: `project` came
   from the HTTP query/body straight into `path.join(PROJECTS_ROOT, project, 'CHECKPOINT.md')` → `project=".."`
