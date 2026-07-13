@@ -98,7 +98,78 @@ import { logIntellectEvent } from './intellect/file-watcher.js';
 const MAX_RAW_CHARS = 20_000; // bounds the prompt regardless of source size
 const MAX_RAW_FILE_BYTES = 2_000_000; // don't even attempt to read huge files
 const STUCK_QUEUED_SECONDS = 600; // a 'queued' job older than this is treated as abandoned
-const DEFAULT_BATCH_LIMIT = 25; // cap model calls per sweep invocation
+
+/**
+ * Model calls per sweep. 25 → 100 (Moe, 2026-07-14).
+ *
+ * The cap is a COST bound, not a bug — but at 25/day a 2,100-file backlog takes ~84 days, and it
+ * looked healthy the whole time because it dutifully did its 25 a day. That is the worst kind of
+ * slow: visibly fine, quietly never finishing. 100/day brings it to ~21 days.
+ *
+ * The spend here is CLI quota (the sweep dispatches through Bridge to codex_cli), NOT metered API
+ * dollars — so the real risk of raising it is starving Tom and Bridge dispatch of the same quota.
+ * That is what the headroom guard below exists to prevent.
+ */
+const DEFAULT_BATCH_LIMIT = Number(process.env.VAULT_DERIVATIVE_BATCH_LIMIT || 100);
+
+/** Refuse to spend the last of a gateway's quota on background derivative work. */
+const QUOTA_HEADROOM_FLOOR = 0.20; // keep >=20% of a known limit in reserve for Tom/Bridge
+const BACKOFF_AFTER_429_SECONDS = 3600; // a 429 in the last hour = do not pile on
+
+/**
+ * How many model calls this sweep may make without endangering interactive work.
+ *
+ * Derivatives are BACKGROUND work. Tom answering Moe, and Bridge dispatching an agent, are not.
+ * If the gateway is near a known limit — or just got 429'd — the sweep must yield, not compete.
+ * Returns 0 to skip the run entirely.
+ *
+ * Only limits with a REAL provider-supplied limit_value are enforced. Rows with limit_value NULL
+ * are 'inferred' bookkeeping, not a ceiling, and are deliberately not treated as one (architecture
+ * rule 5: never present unknown capability as known).
+ */
+async function quotaHeadroom(gatewayType: string, want: number): Promise<{ allowed: number; reason: string }> {
+  try {
+    const gw = (await pool.query(`SELECT id FROM gateways WHERE type = $1 AND status = 'active'`, [gatewayType]))
+      .rows[0] as { id: string } | undefined;
+    if (!gw) return { allowed: 0, reason: `gateway ${gatewayType} not active` };
+
+    const { rows } = await pool.query(
+      `SELECT limit_type, period, limit_value, current_value, last_429_at
+         FROM gateway_rate_limits WHERE gateway_id = $1`,
+      [gw.id],
+    );
+
+    const now = Date.now() / 1000;
+    for (const r of rows as Array<{
+      limit_type: string; period: string; limit_value: number | null;
+      current_value: number | null; last_429_at: number | null;
+    }>) {
+      if (r.last_429_at && now - Number(r.last_429_at) < BACKOFF_AFTER_429_SECONDS) {
+        return { allowed: 0, reason: `${gatewayType} was rate-limited in the last hour — backing off` };
+      }
+      if (r.limit_type !== 'requests' || r.limit_value == null) continue; // inferred rows are not a ceiling
+
+      const limit = Number(r.limit_value);
+      const used = Number(r.current_value ?? 0);
+      const reserve = Math.ceil(limit * QUOTA_HEADROOM_FLOOR);
+      const spare = limit - used - reserve;
+      if (spare <= 0) {
+        return {
+          allowed: 0,
+          reason: `${gatewayType} ${r.period} quota ${used}/${limit} — inside the ${Math.round(QUOTA_HEADROOM_FLOOR * 100)}% reserve kept for Tom/Bridge`,
+        };
+      }
+      if (spare < want) {
+        return { allowed: spare, reason: `trimmed to ${spare} to keep ${reserve} ${r.period} requests in reserve` };
+      }
+    }
+    return { allowed: want, reason: 'headroom ok' };
+  } catch {
+    // Never let a quota lookup failure block the sweep silently — but do not gamble the whole
+    // batch on it either: fall back to the old conservative cap.
+    return { allowed: Math.min(want, 25), reason: 'quota lookup failed — falling back to the conservative 25' };
+  }
+}
 
 export interface VaultDerivativeSweepResult {
   scope: string | null;
@@ -364,10 +435,24 @@ export async function runVaultDerivativeSweep(opts: {
   limit?: number;
 }): Promise<VaultDerivativeSweepResult> {
   const scope = opts.scope?.trim() || undefined;
-  const limit = opts.limit ?? DEFAULT_BATCH_LIMIT;
+  const want = opts.limit ?? DEFAULT_BATCH_LIMIT;
 
   const seeded = await seedMissingJobs(scope);
   const staleFlagged = await flagStaleJobs(scope);
+
+  // Derivatives are BACKGROUND work. Tom answering Moe, and Bridge dispatching an agent, are not.
+  // Yield the quota rather than compete for it.
+  const { allowed: limit, reason: quotaReason } = await quotaHeadroom(CHEAP_GATEWAY, want);
+  if (limit <= 0) {
+    console.warn(`[vault-derivatives] sweep SKIPPED — ${quotaReason}`);
+    await logIntellectEvent('vault_derivative_sweep', 'vault-derivatives', {
+      scope: scope ?? null, seeded, staleFlagged, attempted: 0, generated: 0, failed: 0,
+      skipped: true, quotaReason, triggeredBy: opts.triggeredBy,
+    });
+    return { scope: scope ?? null, seeded, staleFlagged, attempted: 0, generated: 0, failed: 0, triggeredBy: opts.triggeredBy };
+  }
+  if (limit < want) console.warn(`[vault-derivatives] batch ${want} → ${limit}: ${quotaReason}`);
+
   const { attempted, generated, failed } = await processJobs(scope, limit);
 
   if (seeded > 0 || staleFlagged > 0 || attempted > 0) {

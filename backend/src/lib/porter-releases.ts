@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.105.0',
+    date: '2026-07-14',
+    title: 'Document conversion runs 4x faster, and will never starve Tom to do it',
+    bullets: [
+      'The job that converts your raw files into readable summaries was capped at 25 a day, which meant the remaining backlog would have taken about 84 months-worth of patience — roughly 84 days. It now does 100 a day, so it finishes in about three weeks.',
+      'The cost here is CLI quota, not a bill — and the danger of a bigger batch is that it eats the quota Tom needs to answer you. So the job now checks first: if the gateway was rate-limited in the last hour it skips entirely, and it always keeps 20% of any known limit in reserve for Tom and for live agent work. Background work yields to you, never the other way round.',
+      'Proven by forcing each condition rather than assuming it. The check run also converted 100 real documents with no failures.',
+    ],
+  },
+  {
     version: '6.104.0',
     date: '2026-07-14',
     title: 'The vault stops asking you to review documents you already approved',

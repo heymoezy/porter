@@ -1,3 +1,22 @@
+## 2026-07-14 — v6.105.0: R6 — derivative sweep 25 → 100/run + CLI-quota guard
+
+- DEFAULT_BATCH_LIMIT 25 → 100 (env VAULT_DERIVATIVE_BATCH_LIMIT). At 25/day the backlog needed
+  ~84 days and LOOKED HEALTHY the whole time because it did its 25 every day. ~21 days now.
+- QUOTA GUARD (quotaHeadroom in services/vault-derivatives.ts). The sweep dispatches through Bridge
+  to CHEAP_GATEWAY=codex_cli, so the spend is CLI QUOTA, not metered dollars — the real risk of a
+  bigger batch is STARVING TOM AND BRIDGE. Derivatives are background; Tom answering Moe is not.
+    · 429 on that gateway in the last hour  → SKIP the run
+    · inside the 20% reserve of a known limit → SKIP (reserve held for Tom/Bridge)
+    · otherwise → TRIM the batch to remaining headroom
+    · only REAL provider limits enforced; `inferred` rows (limit_value NULL) are NOT a ceiling
+      (architecture rule 5 — never present unknown capability as known)
+    · quota-lookup failure → fall back to the conservative 25, don't gamble 100
+- ALL THREE PATHS PROVEN (not asserted): forced 429 → skipped; forced 85/100 → skipped; forced
+  30/100 → intellect_events shows attempted=50 (trimmed from 100 by the reserve). Fake quota values
+  RESTORED afterwards (limit_value NULL, used 1, no 429) — verified, no debris.
+- The verification run did REAL work: 100 derivatives generated (74 → 174), 0 failures.
+  Backlog 2,109 → 2,009 missing.
+
 ## 2026-07-14 — v6.104.0: R3 — import the 426 decisions Moe ALREADY made
 
 Moe: don't make him redo the review queues; ymc's has handled a lot of this already. He was right.

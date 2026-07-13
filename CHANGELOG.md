@@ -1,3 +1,23 @@
+## v6.105.0 (2026-07-14) — R6: derivative sweep 25 → 100/day, with a quota guard
+
+- **Batch limit 25 → 100 per run** (`VAULT_DERIVATIVE_BATCH_LIMIT`). At 25/day the remaining
+  backlog needed ~84 days — and it looked healthy the whole time, because it dutifully did its 25
+  every day. That is the worst kind of slow: visibly fine, quietly never finishing. ~21 days now.
+- **A quota guard, because the spend is CLI quota — not metered dollars.** The sweep dispatches
+  through Bridge to `codex_cli`; the real risk of a bigger batch is **starving Tom and Bridge of the
+  same quota**. Derivatives are background work; Tom answering Moe is not. So the sweep now yields:
+  - a **429 in the last hour** on that gateway → the sweep **skips** entirely;
+  - inside the **20% reserve** of a known limit → **skips** (the reserve is held for Tom/Bridge);
+  - otherwise the batch is **trimmed** to whatever headroom is left.
+  - Only **real provider-supplied limits** are enforced. `inferred` rows (limit unknown) are not
+    treated as a ceiling — architecture rule 5: never present unknown capability as known.
+  - A quota-lookup failure falls back to the old conservative 25 rather than gambling 100.
+- **All three paths proven, not asserted**: forced a 429 → skipped; forced 85/100 → skipped;
+  forced 30/100 → the event log shows `attempted: 50` (trimmed from 100 by the reserve). Test values
+  restored afterwards — no fake quota left in the table.
+- The verification run generated **100 real derivatives** (74 → 174), 0 failures. Backlog:
+  **2,109 → 2,009**.
+
 ## v6.104.0 (2026-07-14) — R3: stop asking Moe to review what he already reviewed
 
 - **426 documents were queued for review that Moe had already approved — in ymc — himself.**
