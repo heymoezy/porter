@@ -1,3 +1,16 @@
+## 2026-07-13 — v6.90.0: #27 R2 — product-first IA nav (additive)
+- Nav restructured to the council IA: Product (Overview→/dashboard · Vault→/vault-files · Services→/bridge ·
+  Files→/files · Open Items→/approvals · Releases→/changelog), Porter (System), Legacy (Brain · Env Tools ·
+  MCP · Design System · Architecture) — legacy KEPT, nothing removed.
+- Products/Tenants are in the target IA but have NO pages yet → deliberately omitted rather than shipped as
+  dead links.
+- VERIFIED: admin tsc 0; SPA build clean; automated check = 0 dead links (every nav path exists in routes.ts)
+  AND every previously-reachable legacy route still registered; deployed; live askporter.app loads with no JS
+  errors (screenshot: login gate, shell intact).
+- REMAINING on #27: R3 (per-product Overview — filter dashboard widgets by selected product), R4 (promote
+  Vault with schemas/nodes/placements/edges/artifacts/scopes tabs) — both ADDITIVE. R5/R6/R7/R10 FOLD then
+  DELETE Brain/Recall/Bridge — DESTRUCTIVE to the backbone every CLI now depends on; require Moe's approval.
+
 ## 2026-07-13 — v6.89.0: #27 R1 — product/tenant context switcher (additive)
 - Read the council design properly this time: R1 is explicitly NON-destructive ("add global tenant/product
   selector; persist selected context; NO OLD NAV REMOVED"). Only R5/R6/R10 delete Brain/Recall/Bridge — those

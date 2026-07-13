@@ -1,3 +1,21 @@
+## v6.90.0 (2026-07-13)
+
+- **#27 R2 — product-first IA in the admin nav (additive; nothing removed).**
+  Council design: "Add new primary nav: Overview, Vault, Services, Files, Open Items,
+  Releases … keep legacy links behind a secondary group. Users can enter the new IA
+  without losing old surfaces."
+  - Nav is now **Product** (Overview · Vault · Services · Files · Open Items · Releases),
+    **Porter** (System), and **Legacy** (Brain · Env Tools · MCP · Design System ·
+    Architecture) — kept, not killed.
+  - Sections map ONLY to routes that exist. `Products` and `Tenants` are in the target IA
+    but have no pages yet, so they are deliberately omitted rather than shipped as dead
+    links.
+  - The destructive folds (R5/R6/R10 DELETE Brain/Recall/Bridge) are NOT in this release
+    and require Moe's sign-off, per the design's own instruction.
+  - Verified: tsc 0; SPA build clean; **0 dead links** (every nav path exists in routes.ts);
+    every previously-reachable legacy route still registered; live askporter.app loads with
+    **no JS errors**.
+
 ## v6.89.0 (2026-07-13)
 
 - **#27 R1 — global product/tenant context switcher (additive; nothing removed).**

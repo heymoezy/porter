@@ -11,6 +11,7 @@ import {
   FolderOpen, Route, Library,
   Code2, Palette,
   Wrench, Brain, Plug,
+  ListChecks, Rocket, Monitor,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -36,21 +37,38 @@ function useLiveVersion(): string | undefined {
   return data?.version
 }
 
+// ── #27 R2 — the product-first IA ──────────────────────────────────────────
+// Council design (planning/porter-admin-reframe-27.md): "R2 — Add new primary
+// nav: Overview, Vault, Services, Files, Open Items, Releases … keep legacy
+// links behind a secondary group. Users can enter the new IA without losing old
+// surfaces."
+//
+// Porter is multi-app; the nav finally says so. Everything here is ADDITIVE:
+// every route that was reachable before is still reachable. The destructive
+// folds (R5/R6/R10 DELETE Brain/Recall/Bridge) are NOT in this release — they
+// need Moe's sign-off, per the design's own instruction.
+//
+// Sections map only to routes that EXIST. `Products` and `Tenants` are in the
+// target IA but have no pages yet, so they are deliberately omitted rather than
+// shipped as dead links.
 const groups = [
-  { label: "", items: [
-    { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+  { label: "Product", items: [
+    { icon: LayoutDashboard, label: "Overview", path: "/dashboard" },
+    { icon: Library, label: "Vault", path: "/vault-files" },
+    { icon: Route, label: "Services", path: "/bridge" },
+    { icon: FolderOpen, label: "Files", path: "/files" },
+    { icon: ListChecks, label: "Open Items", path: "/approvals" },
+    { icon: Rocket, label: "Releases", path: "/changelog" },
   ]},
-  { label: "Projects", items: [
-    { icon: Library, label: "Document Library", path: "/vault-files" },
-    { icon: FolderOpen, label: "Raw Files", path: "/files" },
+  { label: "Porter", items: [
+    { icon: Monitor, label: "System", path: "/system" },
   ]},
-  { label: "Ops", items: [
-    { icon: Route, label: "Bridge", path: "/bridge" },
+  // Kept, not killed. These fold into the sections above in R5–R7; until Moe
+  // approves that, they stay reachable exactly as before.
+  { label: "Legacy", items: [
     { icon: Brain, label: "Brain", path: "/brain" },
     { icon: Wrench, label: "Env Tools", path: "/env-tools" },
     { icon: Plug, label: "MCP Servers", path: "/mcp" },
-  ]},
-  { label: "Dev", items: [
     { icon: Palette, label: "Design System", path: "/design-system" },
     { icon: Code2, label: "Architecture", path: "/architecture" },
   ]},
