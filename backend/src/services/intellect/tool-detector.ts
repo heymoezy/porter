@@ -280,30 +280,13 @@ export async function runToolDetection(): Promise<ToolDetectionResult> {
   missing += bd.missing;
   changed += bd.changed;
 
-  // Also probe Stalwart mail service
-  try {
-    execSync('curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/ 2>&1', {
-      timeout: 3000, encoding: 'utf8'
-    });
-    await pool.query(
-      `INSERT INTO environment_tools (tool_key, detected, health, status, version, source, kind, last_checked_at)
-       VALUES ('stalwart', 1, 'ok', 'present', 'JMAP mail server', 'service', 'service', $1)
-       ON CONFLICT (tool_key) DO UPDATE SET detected = 1, health = 'ok', status = 'present', last_checked_at = $1`,
-      [now]
-    );
-    detected++;
-  } catch {
-    await pool.query(
-      `INSERT INTO environment_tools (tool_key, detected, health, status, version, source, kind, last_checked_at)
-       VALUES ('stalwart', 0, 'unavailable', 'missing', '', 'service', 'service', $1)
-       ON CONFLICT (tool_key) DO UPDATE SET detected = 0, health = 'unavailable', status = 'missing', last_checked_at = $1`,
-      [now]
-    );
-    missing++;
-  }
+  // The Stalwart mail probe used to live here. Deleted 2026-07-13: Stalwart is not
+  // installed, nothing in Porter reads STALWART_URL/STALWART_API_KEY, and the probe
+  // curl'd 127.0.0.1:8080 — the port of the DELETED portal.py, not Stalwart's 8443.
+  // It was reporting a mail server's health off a dead Python SaaS's port.
 
   const result: ToolDetectionResult = {
-    total: TOOL_SPECS.length + 4, // + playwright, puppeteer, libreoffice, stalwart
+    total: TOOL_SPECS.length + 3, // + playwright, puppeteer, libreoffice
     detected,
     missing,
     changed,

@@ -1,7 +1,8 @@
 /**
  * DEPRECATED: Gmail-specific email service.
- * Use services/mail/* for the new hosted mail system (Stalwart backend).
- * This module remains only for the Gmail connector import path.
+ * This module is the Gmail/SMTP connector path (nodemailer + IMAP).
+ * NOTE: there is no services/mail/* and no Stalwart backend — that was planned,
+ * never built, and the dead config was removed 2026-07-13.
  *
  * - sendEmail(): Gmail OAuth2 outbound — use services/mail/send-service.ts instead
  * - routeInboundEmail(): Gmail-specific routing — use services/mail/inbound-processor.ts instead
@@ -231,7 +232,8 @@ async function insertEmailJob(
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 /**
- * @deprecated IMAP IDLE is no longer auto-started. Stalwart handles inbound mail.
+ * @deprecated IMAP IDLE is no longer auto-started. (There is no Stalwart backend —
+ * that was planned and never built.)
  * Kept for connector-only use case (manual Gmail import). Not called at boot.
  */
 export async function startImapIdle(connectionId?: string): Promise<void> {

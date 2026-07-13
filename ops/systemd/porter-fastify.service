@@ -7,7 +7,7 @@ ExecStart=/usr/bin/npx tsx src/index.ts
 WorkingDirectory=/home/lobster/projects/Porter/backend
 
 # Secrets are NOT in this file — the repo is PUBLIC.
-# DATABASE_URL / OPENCLAW_TOKEN / PORTER_SERVICE_TOKEN / STALWART_API_KEY live in
+# DATABASE_URL / OPENCLAW_TOKEN / PORTER_SERVICE_TOKEN live in
 # ~/.config/porter/porter.env (mode 600, untracked). See porter.env.example.
 # Leading '-' = optional: a fresh install still boots and degrades gracefully
 # (architecture rule 1) — it just won't have the privileged integrations.
@@ -22,9 +22,6 @@ Environment=FEATURE_AGENT_SCHEDULING=true
 Environment=FEATURE_EVENT_TRIGGERS=true
 Environment=FEATURE_EXTERNAL_CONNECTIONS=true
 Environment=FEATURE_EPHEMERAL_AGENTS=true
-Environment=NODE_TLS_REJECT_UNAUTHORIZED=0
-Environment=STALWART_URL=https://127.0.0.1:8443
-Environment=MAIL_DEFAULT_DOMAIN=askporter.app
 
 # Restart=always, NOT on-failure (2026-07-13 incident).
 # Porter exited CLEANLY (status 0) and systemd left the backbone dead — every CLI,

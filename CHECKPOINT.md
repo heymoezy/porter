@@ -1,3 +1,28 @@
+## 2026-07-13 — v6.96.0: TLS verification back ON; the Stalwart integration was a ghost
+
+Chasing the last two "needs Moe" security items — and BOTH dissolved on investigation:
+
+1. NODE_TLS_REJECT_UNAUTHORIZED=0 in the unit disabled certificate verification for ALL of
+   Porter's outbound HTTPS (process-wide, MITM-able). It existed for Stalwart's self-signed
+   cert. Porter makes NO https calls at all → it protected nothing. REMOVED.
+2. STALWART_API_KEY (leaked in 3 public commits) did NOT need rotating — it is a credential to
+   NOTHING. Stalwart is not installed, nothing listens on :8443, NOTHING in src/ or scripts/
+   reads STALWART_URL / STALWART_API_KEY / MAIL_DEFAULT_DOMAIN, and `services/mail/*` — the
+   module email.ts calls "the new hosted mail system (Stalwart backend)" — DOES NOT EXIST.
+   Deleted from the unit, porter.env and the example.
+3. DELETED the fake probe: tool-detector.ts reported Stalwart's health by curl'ing
+   127.0.0.1:8080 — the port of the DELETED portal.py, not Stalwart's 8443. It has been
+   reporting a mail server's health off a dead Python SaaS's port. Count fixed (+4→+3),
+   stale environment_tools row dropped.
+
+VERIFIED: tsc 0 · unit reloaded · Porter restarts clean with no TLS bypass and no Stalwart env
+· /health green · Bridge + rotated-token auth still good.
+
+REMAINING on #50 — genuinely needs Moe (only 2 now, not 4):
+- The old secrets are still in the public repo's git HISTORY. Scrubbing = force-push. His call.
+  (Both leaked values are now dead: the service token is rotated; the mail key led nowhere.)
+- WhatsApp QR re-link — Tom is mute; announces for ymc 1.794–1.797 + porter 6.92–6.96 pending.
+
 ## 2026-07-13 — v6.95.0: fail-closed found its first straggler (the release hook)
 
 Fail-closing the service token in 6.94.0 immediately surfaced a consumer that had been

@@ -1,3 +1,27 @@
+## v6.96.0 (2026-07-13) — SECURITY / dead code
+
+- **TLS verification is no longer disabled for all of Porter's outbound HTTPS.** The unit set
+  `NODE_TLS_REJECT_UNAUTHORIZED=0` — a process-wide kill switch on certificate checking, which
+  makes every outbound HTTPS call MITM-able. It was there for Stalwart's self-signed cert.
+  Porter makes **no HTTPS calls at all**, so it was protecting nothing and costing everything.
+  Removed.
+- **The Stalwart mail integration never existed — the config did.** `STALWART_URL`,
+  `STALWART_API_KEY` and `MAIL_DEFAULT_DOMAIN` were in the unit, but:
+  - nothing in `src/` or `scripts/` reads any of them;
+  - `services/mail/*` — the module `email.ts` points at as "the new hosted mail system
+    (Stalwart backend)" — **does not exist**;
+  - Stalwart isn't installed and nothing listens on :8443.
+  - So `porter-mail-admin-…`, leaked in 3 public commits, was a credential to **nothing**. It
+    did not need rotating. It needed deleting. Gone from the unit, from `porter.env`, and from
+    the example.
+- **Deleted the fake mail-health probe.** `tool-detector.ts` reported Stalwart's health by
+  curl'ing `127.0.0.1:8080` — the port of the **deleted `portal.py`**, not Stalwart's 8443. It
+  has been reporting a mail server's status off a dead Python SaaS's port. Probe deleted, tool
+  count corrected (+4 → +3), stale `stalwart` row dropped from `environment_tools`.
+- Stale comments in `email.ts` claiming "Stalwart handles inbound mail" corrected — they
+  described a system that was planned and never built.
+- Verified: tsc 0; Porter restarts clean with no TLS bypass and no Stalwart env; /health green.
+
 ## v6.95.0 (2026-07-13)
 
 - **The release hook was authenticating with the public token.** Fail-closing the service

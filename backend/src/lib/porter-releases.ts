@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.96.0',
+    date: '2026-07-13',
+    title: 'Turned certificate checking back on, and deleted a mail server that was never there',
+    bullets: [
+      'Porter was running with HTTPS certificate verification switched off globally — meaning any outbound secure connection could have been intercepted. It was switched off for a mail server (Stalwart) that turns out not to exist: no such service is installed, nothing listens on its port, and the code module it was supposedly talking to was never built. Verification is back on.',
+      'That also means the mail admin password leaked in the public repo was a password to nothing. It did not need rotating — it needed deleting, and it is gone.',
+      'The dashboard was reporting the mail server\'s health by pinging port 8080 — which belonged to the old Python app deleted last week, not to any mail server. That fake health check is deleted.',
+    ],
+  },
+  {
     version: '6.95.0',
     date: '2026-07-13',
     title: 'The release hook was quietly using the leaked token — fixed',
