@@ -26,6 +26,26 @@ const PROJECTS_ROOT = '/home/lobster/projects';
 /** Hard cap. Bootstrap must stay cheap — that is the entire point. */
 const MAX_CHARS = 3600; // ~900 tokens
 
+/**
+ * SECURITY — `project` arrives from an HTTP query/body, and we use it to build a
+ * filesystem path. Unvalidated, `project=".."` (or any traversal) escapes
+ * PROJECTS_ROOT and turns this into an arbitrary-file-read. Two guards, both
+ * required:
+ *   1. shape — a project is a single directory name: no separators, no traversal.
+ *   2. containment — resolve the final path and prove it is still under the root.
+ * Note a shape check ALONE is insufficient: ".." matches [A-Za-z0-9._-]+.
+ * Returns the safe absolute dir, or null (caller must treat null as "reject").
+ */
+export function safeProjectDir(project: string): string | null {
+  if (typeof project !== 'string' || project.length === 0 || project.length > 128) return null;
+  if (!/^[A-Za-z0-9._-]+$/.test(project)) return null; // no '/', no '\', no NUL
+  if (project === '.' || project === '..') return null;
+  const root = path.resolve(PROJECTS_ROOT);
+  const resolved = path.resolve(root, project);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) return null;
+  return resolved;
+}
+
 export interface HotContext {
   status: 'warm' | 'cold';
   project: string | null;
@@ -40,7 +60,9 @@ const approxTokens = (s: string) => Math.ceil(s.length / 4);
 
 /** Last entry of a project's CHECKPOINT.md — the "where we got to" line. */
 function readCheckpointHead(project: string, maxLines = 12): { line: string | null; exists: boolean } {
-  const p = path.join(PROJECTS_ROOT, project, 'CHECKPOINT.md');
+  const dir = safeProjectDir(project);
+  if (!dir) return { line: null, exists: false }; // reject traversal — never read outside the root
+  const p = path.join(dir, 'CHECKPOINT.md');
   try {
     const raw = fs.readFileSync(p, 'utf8');
     const lines = raw.split('\n').filter((l) => l.trim().length > 0).slice(0, maxLines);
@@ -99,6 +121,8 @@ export async function recomputeHot(opts: {
   sessionId?: string | null;
   gateway?: string | null;
 }): Promise<HotContext> {
+  // Reject traversal/garbage BEFORE it reaches the filesystem or the DB key.
+  if (!safeProjectDir(opts.project)) throw new Error('invalid project');
   const scope = opts.scope ?? 'default';
   const body = await composeHotBody(opts.project, opts.gateway);
   const hash = crypto.createHash('sha256').update(body).digest('hex');
@@ -129,6 +153,12 @@ export async function recomputeHot(opts: {
  * Never fabricate history; the caller still boots fine and works from repo files.
  */
 export async function getHot(project: string, scope = 'default'): Promise<HotContext> {
+  if (!safeProjectDir(project)) {
+    return {
+      status: 'cold', project: null, body: null, approxTokens: 0, updatedAt: null, sourceGateway: null,
+      hints: ['Invalid project name.'],
+    };
+  }
   try {
     const row = (await pool.query(
       `SELECT body, approx_tokens, updated_at, source_gateway

@@ -1075,7 +1075,9 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
   fastify.get('/hot', async (request, reply) => {
     const q = request.query as { project?: string; scope?: string };
     if (!q?.project) return reply.status(400).send(err('BAD_REQUEST', 'project required'));
-    const { getHot } = await import('../../services/intellect/hot-context.js');
+    const { getHot, safeProjectDir } = await import('../../services/intellect/hot-context.js');
+    // `project` becomes a filesystem path — reject traversal at the boundary too.
+    if (!safeProjectDir(q.project)) return reply.status(400).send(err('BAD_REQUEST', 'invalid project'));
     return reply.send(ok(await getHot(q.project, q.scope ?? 'default')));
   });
 
@@ -1084,7 +1086,8 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     const body = (request.body ?? {}) as { project?: string; scope?: string; gateway?: string | null };
     if (!body?.project) return reply.status(400).send(err('BAD_REQUEST', 'project required'));
     try {
-      const { recomputeHot } = await import('../../services/intellect/hot-context.js');
+      const { recomputeHot, safeProjectDir } = await import('../../services/intellect/hot-context.js');
+      if (!safeProjectDir(body.project)) return reply.status(400).send(err('BAD_REQUEST', 'invalid project'));
       return reply.send(ok(await recomputeHot({
         project: body.project, scope: body.scope, gateway: body.gateway ?? null,
       })));

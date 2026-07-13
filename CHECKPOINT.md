@@ -1,3 +1,13 @@
+## 2026-07-13 — v6.85.1: SECURITY — path traversal in hot-context (#37)
+- The automated commit security review flagged a HIGH path traversal I introduced in 6.85.0: `project` came
+  from the HTTP query/body straight into `path.join(PROJECTS_ROOT, project, 'CHECKPOINT.md')` → `project=".."`
+  or `"../../.ssh"` escapes the root = arbitrary file read. Real bug, caught pre-use.
+- FIX: safeProjectDir() — shape check (single dir name, no separators/NUL, len<=128) AND containment (resolve
+  + prove still under root). Shape alone is NOT enough: ".." matches [A-Za-z0-9._-]+. Enforced at the service
+  entry points (getHot/recomputeHot throw/reject) AND at the route boundary (400 invalid project).
+- VERIFIED: 7 vectors rejected (.., ../.., ../../.ssh, ../../../etc, %2e%2e%2f, ymc.capital/../../.ssh,
+  foo/bar) + POST recompute rejected; legit project still warm (191 tok). porter tsc 0.
+
 ## 2026-07-13 — v6.85.0: Universal memory R1 — hot context (#37)
 - Implements R1 of the council-ratified design (planning/porter-universal-memory-37.md, codex+grok).
 - hot_contexts table (0103, ONE row per scope+project; Porter DB = source of truth, vault file would be a

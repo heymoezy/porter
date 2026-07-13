@@ -1,3 +1,18 @@
+## v6.85.1 (2026-07-13) — SECURITY
+
+- **Path traversal in hot-context (introduced in 6.85.0, fixed before any real use).**
+  `project` arrives from an HTTP query/body and was interpolated straight into a
+  filesystem path (`path.join(PROJECTS_ROOT, project, 'CHECKPOINT.md')`), so
+  `project=".."` / `"../../.ssh"` escaped the projects root — an arbitrary-file-read.
+  Caught by the automated commit security review.
+  - New `safeProjectDir()`: shape check (single dir name, no separators) AND path
+    containment (resolve, then prove it is still under the root). A shape check alone
+    is insufficient — `".."` matches `[A-Za-z0-9._-]+`.
+  - Enforced at BOTH the service entry points (`getHot`, `recomputeHot`) and the route
+    boundary (`GET /intellect/hot`, `POST /intellect/hot/recompute`).
+  - Verified: 7 traversal vectors (incl. URL-encoded `%2e%2e%2f` and nested
+    `ymc.capital/../../.ssh`) all rejected with 400; legitimate projects unaffected.
+
 ## v6.85.0 (2026-07-13)
 
 - **Universal memory R1 — hot context (the warm session bootstrap).** Implements the
