@@ -1,3 +1,36 @@
+## 2026-07-13 — v6.98.0: #27 R4 — the Vault promoted; two invisible truths surfaced
+
+The vault engine (5,176 nodes / 6,090 artifacts / 1,780 edges / 3 scopes) has run for weeks and
+NOTHING could see its state. R4 makes it visible, and it immediately found two things:
+
+1. 4,900 placements PROPOSED by the AI, ZERO ever reviewed. Root cause was not neglect:
+   accept/refile/reject only worked BY ID and nothing could ENUMERATE the queue. You cannot
+   accept what you cannot list. Added GET /api/v1/vault/placements + a review UI that drives
+   the existing accept endpoint. Also: all 4,900 have confidence=NULL — the association engine
+   proposes without scoring, so the queue cannot be triaged by trusting the confident ones.
+   SURFACED, not hidden.
+2. Derivative coverage = 2.4% (74/3,052), 2,977 missing, ETA 120 DAYS. The sweep is capped at
+   25 model calls / 24h (DEFAULT_BATCH_LIMIT in services/vault-derivatives.ts). That cap is a
+   deliberate COST bound, not a bug — and it is why the backlog was invisible: the sweep looks
+   healthy because it does its 25 a day while the ETA runs to a third of a year. Raising it is
+   a spend decision for Moe, not a default I get to change.
+
+CORRECTION ON RECORD: I first read "276 active / 4,900 proposed" as "95% of the vault is
+invisible". WRONG — /vault/graph does NOT filter to active placements; it returns 4,406 nodes.
+Checked before asserting further. The backlog is a governance gap, not a visibility outage.
+
+ALSO: Porter can screenshot its own admin now (backend/scripts/screenshot-admin.mjs). It earned
+its keep on its first run — this page passed tsc with 0 errors, threw 0 JS errors, and rendered
+EMPTY, because api() already unwraps the {data} envelope and the page unwrapped it twice. tsc
+cannot see that; a screenshot can. Chrome comes from PORTER'S OWN TOOL REGISTRY and puppeteer is
+SYMLINKED to the single shared install — one copy of every tool on the box (Moe, 2026-07-13).
+
+VERIFIED: tsc 0 (backend + admin) · deployed · screenshotted Overview AND Review queue with real
+data (Edward Chen workout, Dunross, Ovada Place docs under Workouts) · 0 JS errors · /health 6.98.0.
+
+REMAINING on #27: R5/R6/R7/R10 FOLD then DELETE Brain/Recall/Bridge — DESTRUCTIVE to the backbone
+every CLI + the MCP now depend on. Needs Moe's explicit approval per the design's own instruction.
+
 ## 2026-07-13 — v6.97.0: rotation CLOSED — the leaked token now 401s
 
 Phase C of the token rotation. `porter-local-service-2026` (public in 11 commits,

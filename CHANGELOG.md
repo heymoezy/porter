@@ -1,3 +1,33 @@
+## v6.98.0 (2026-07-13)
+
+- **#27 R4 — the Vault, promoted from a file browser to the actual engine.** The vault engine
+  has been running for weeks and nothing could see what it was doing. Two facts were invisible
+  until this page existed:
+  - **4,900 placements proposed by the AI, none ever reviewed.** Every item ingested gets an
+    AI-proposed parent that a human is supposed to accept or re-file. Nobody ever had. The
+    reason is not laziness: `accept`/`refile`/`reject` only worked **by id**, and nothing could
+    **enumerate** the queue. You cannot accept what you cannot list. Added
+    `GET /api/v1/vault/placements` — the missing half of the review loop — and a queue UI that
+    drives it.
+  - **Derivative coverage is 2.4% (74 of 3,052) with an ETA of 120 days.** The raw→markdown
+    sweep is capped at 25 model calls per 24h run. That cap is a deliberate cost bound, not a
+    bug — and it is exactly why the backlog was invisible: the sweep *looks* healthy because it
+    does its 25 every day, while the ETA quietly runs to a third of a year. Raising it trades
+    model spend for speed. That is a decision, and it should be made with the number in front
+    of you.
+  - Every number is a `COUNT` over a real table. The one computed value (ETA) is plain
+    arithmetic and is labelled as such.
+  - New `GET /api/v1/vault/overview` aggregate. Tabs: Overview · Schema · Review queue ·
+    Structure · Derivatives. Additive — the old file browser is still there as **Documents**.
+- **Porter can screenshot its own UI now** (`backend/scripts/screenshot-admin.mjs`). ymc has had
+  this for months; Porter did not, which is why Porter UI kept shipping on "it compiled". It
+  earned its keep immediately: this very page passed `tsc` with zero errors, threw zero JS
+  errors, and rendered **empty** — `api()` already unwraps the `{data}` envelope and the page
+  unwrapped it a second time. A typecheck cannot see that. A screenshot can.
+  - It resolves Chrome from **Porter's own tool registry**, and the puppeteer library is
+    symlinked to the single shared install — one copy of every tool on the box, per Moe. Porter
+    owns the canonical tool registry precisely so nothing re-downloads its own browser.
+
 ## v6.97.0 (2026-07-13) — SECURITY: rotation closed
 
 - **The leaked token is now dead.** `porter-local-service-2026` — published in 11 commits of a

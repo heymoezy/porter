@@ -11,7 +11,7 @@ import {
   FolderOpen, Route, Library,
   Code2, Palette,
   Wrench, Brain, Plug,
-  ListChecks, Rocket, Monitor,
+  ListChecks, Rocket, Monitor, FileStack,
 } from "lucide-react"
 import { useLogout } from "~/hooks/use-api"
 import { useCurrentUser } from "~/lib/session-context"
@@ -54,7 +54,8 @@ function useLiveVersion(): string | undefined {
 const groups = [
   { label: "Product", items: [
     { icon: LayoutDashboard, label: "Overview", path: "/dashboard" },
-    { icon: Library, label: "Vault", path: "/vault-files" },
+    { icon: Library, label: "Vault", path: "/vault" },
+    { icon: FileStack, label: "Documents", path: "/vault-files" },
     { icon: Route, label: "Services", path: "/bridge" },
     { icon: FolderOpen, label: "Files", path: "/files" },
     { icon: ListChecks, label: "Open Items", path: "/approvals" },

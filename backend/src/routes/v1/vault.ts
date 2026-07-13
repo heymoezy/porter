@@ -532,6 +532,169 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
   // Each node carries its resolved parent: the ACTIVE placement when one exists, else the
   // latest PROPOSED one (so a freshly-ingested, not-yet-reviewed tree still renders), with a
   // placementState flag so the UI can distinguish reviewed vs pending hierarchy.
+  /**
+   * #27 R4 — the vault's operational state, which was invisible.
+   *
+   * The engine has been running for weeks and nobody could see what it was doing.
+   * Two things this surfaces that no existing screen did:
+   *
+   *   - the REVIEW BACKLOG: placements the AI proposed and no human ever accepted.
+   *   - DERIVATIVE COVERAGE: raw artifacts with a generated markdown derivative. The
+   *     sweep is capped at 25 model calls per 24h run (a deliberate cost bound), so a
+   *     large backlog converges in months, not days. It looks healthy — it does its 25
+   *     a day — while the ETA quietly runs to a third of a year. Showing the ETA is the
+   *     whole point: the cap is a COST decision and it should be made with the number in
+   *     front of you, not discovered later.
+   *
+   * Aggregates only — every number is a COUNT over a real table. Nothing is derived,
+   * estimated, or invented, except `etaDays`, which is plainly labelled as arithmetic.
+   */
+  fastify.get(
+    '/overview',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const query = (request.query ?? {}) as Record<string, unknown>;
+      const scope = typeof query.scope === 'string' ? query.scope.trim() : '';
+
+      const scopeFilter = scope ? 'WHERE app_scope = $1' : '';
+      const params = scope ? [scope] : [];
+
+      const [scopes, schema, nodes, placements, edges, artifacts, derivatives] = await Promise.all([
+        pool.query(`SELECT id, scope_kind, parent_scope_id, label FROM vault_scopes ORDER BY scope_kind, id`),
+        pool.query(
+          `SELECT app_scope, jsonb_array_length(node_types) AS type_count, updated_at
+             FROM vault_schemas ${scope ? 'WHERE app_scope = $1' : ''}`,
+          params
+        ),
+        pool.query(
+          `SELECT app_scope, layer, type, count(*)::int AS count
+             FROM vault_nodes ${scopeFilter} GROUP BY 1,2,3 ORDER BY 4 DESC`,
+          params
+        ),
+        pool.query(
+          `SELECT state, count(*)::int AS count,
+                  count(*) FILTER (WHERE confidence IS NULL)::int AS no_confidence
+             FROM vault_placements ${scopeFilter} GROUP BY 1`,
+          params
+        ),
+        pool.query(
+          `SELECT kind, count(*)::int AS count FROM vault_edges ${scopeFilter} GROUP BY 1 ORDER BY 2 DESC`,
+          params
+        ),
+        pool.query(
+          `SELECT kind, count(*)::int AS count FROM vault_artifacts ${scopeFilter} GROUP BY 1 ORDER BY 2 DESC`,
+          params
+        ),
+        pool.query(
+          `SELECT status, count(*)::int AS count FROM vault_derivative_jobs ${scopeFilter} GROUP BY 1`,
+          params
+        ),
+      ]);
+
+      const derivByStatus: Record<string, number> = {};
+      for (const r of derivatives.rows as Array<{ status: string; count: number }>) {
+        derivByStatus[r.status] = r.count;
+      }
+      const derivTotal = Object.values(derivByStatus).reduce((a, b) => a + b, 0);
+      const generated = derivByStatus.generated ?? 0;
+      const missing = derivByStatus.missing ?? 0;
+
+      const placeByState: Record<string, number> = {};
+      let proposedWithoutConfidence = 0;
+      for (const r of placements.rows as Array<{ state: string; count: number; no_confidence: number }>) {
+        placeByState[r.state] = r.count;
+        if (r.state === 'proposed') proposedWithoutConfidence = r.no_confidence;
+      }
+
+      return reply.send(
+        ok(
+          {
+            scope: scope || null,
+            scopes: scopes.rows,
+            schema: (schema.rows[0] as { app_scope: string; type_count: number } | undefined) ?? null,
+            nodes: nodes.rows,
+            nodeTotal: (nodes.rows as Array<{ count: number }>).reduce((a, r) => a + r.count, 0),
+            edges: edges.rows,
+            artifacts: artifacts.rows,
+            placements: {
+              byState: placeByState,
+              // The AI proposes placements but records NO confidence — so the review
+              // queue cannot be triaged by "trust the confident ones". Surfaced, not hidden.
+              proposedWithoutConfidence,
+            },
+            derivatives: {
+              byStatus: derivByStatus,
+              total: derivTotal,
+              generated,
+              missing,
+              coveragePct: derivTotal > 0 ? Math.round((generated / derivTotal) * 1000) / 10 : 0,
+              batchLimitPerSweep: 25, // DEFAULT_BATCH_LIMIT in services/vault-derivatives.ts
+              sweepIntervalHours: 24, // rides the every_24h workflow tick
+              // Plain arithmetic, not a prediction: how long the current cap takes to drain.
+              etaDays: missing > 0 ? Math.ceil(missing / 25) : 0,
+            },
+          },
+          request.id
+        )
+      );
+    }
+  );
+
+  /**
+   * #27 R4 — LIST placements. accept/refile/reject already existed, but only by id, and
+   * nothing could enumerate the queue — so 4,900 AI-proposed placements sat unreviewable:
+   * you cannot accept what you cannot list. This is the missing half of the review loop.
+   */
+  fastify.get(
+    '/placements',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const query = (request.query ?? {}) as Record<string, unknown>;
+      const scope = scopeOf({}, query);
+      if (!scope) return reply.code(400).send(err('MISSING_SCOPE', 'scope is required', request.id));
+
+      const state = typeof query.state === 'string' ? query.state.trim() : 'proposed';
+      if (!['active', 'proposed', 'rejected', 'archived'].includes(state)) {
+        return reply.code(400).send(err('INVALID_STATE', 'state must be active|proposed|rejected|archived', request.id));
+      }
+      const type = typeof query.type === 'string' ? query.type.trim() : '';
+      const limitRaw = Number(query.limit ?? 50);
+      const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 200) : 50;
+      const offsetRaw = Number(query.offset ?? 0);
+      const offset = Number.isFinite(offsetRaw) ? Math.max(Math.trunc(offsetRaw), 0) : 0;
+
+      const params: unknown[] = [scope, state];
+      let typeClause = '';
+      if (type) {
+        params.push(type);
+        typeClause = ` AND n.type = $${params.length}`;
+      }
+
+      const total = (await pool.query(
+        `SELECT count(*)::int AS c
+           FROM vault_placements p JOIN vault_nodes n ON n.id = p.node_id
+          WHERE p.app_scope = $1 AND p.state = $2${typeClause}`,
+        params
+      )).rows[0]?.c as number;
+
+      params.push(limit, offset);
+      const rows = (await pool.query(
+        `SELECT p.id, p.node_id, p.parent_id, p.layer, p.state, p.confidence, p.proposed_by,
+                n.type, n.title,
+                parent.title AS parent_title, parent.type AS parent_type
+           FROM vault_placements p
+           JOIN vault_nodes n ON n.id = p.node_id
+           LEFT JOIN vault_nodes parent ON parent.id = p.parent_id
+          WHERE p.app_scope = $1 AND p.state = $2${typeClause}
+          ORDER BY n.type, n.title
+          LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params
+      )).rows;
+
+      return reply.send(ok({ scope, state, total, limit, offset, placements: rows }, request.id));
+    }
+  );
+
   fastify.get(
     '/graph',
     { preHandler: [fastify.requireAuth] },

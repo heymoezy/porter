@@ -23,6 +23,7 @@ export default [
     route("design-system", "routes/design-system-lazy.tsx"),
     route("settings", "routes/settings.tsx"),
     route("intelligence", "routes/intelligence-redirect.tsx"),
+    route("vault", "routes/vault.tsx"),
     route("vault-files", "routes/vault-files.tsx"),
     route("files", "routes/files.tsx"),
     route("approvals", "routes/approvals.tsx"),

@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.98.0',
+    date: '2026-07-13',
+    title: 'The Vault will now tell you what it has been doing',
+    bullets: [
+      'The vault engine has been running for weeks with nothing able to show its state. Two things were quietly true and now are visible: 4,900 filings the AI proposed that no human has ever reviewed, and a document-conversion backlog that is only 2.4% done.',
+      'Nobody had reviewed those 4,900 because it was impossible to: you could approve a filing if you knew its id, but nothing could list them. That is fixed — there is a queue now, and you can approve or re-file from it. Nothing is ever deleted.',
+      'The conversion backlog will take about 120 days to clear at its current speed limit of 25 documents a day. That limit is deliberate — it caps what we spend on the AI — and it is why the backlog stayed hidden: the job looks perfectly healthy doing its 25 a day. Speeding it up costs money, so it is your call, not a default.',
+    ],
+  },
+  {
     version: '6.97.0',
     date: '2026-07-13',
     title: 'The token that was on GitHub no longer opens anything',
