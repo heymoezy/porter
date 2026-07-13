@@ -1,3 +1,25 @@
+## v6.94.0 (2026-07-13) — SECURITY
+
+- **The admin token for this brain was published on GitHub.** `porter-local-service-2026`
+  was hardcoded as the fallback in `backend/src/plugins/auth.ts` and sits in 11 commits of
+  `heymoezy/porter`, which is a **public** repo. That token grants `platform_admin` on
+  Porter — Bridge dispatch, memory read/write, job execution. The only thing that kept it
+  from being remotely exploitable is the localhost check on the same code path.
+  `planning/security-service-token-hardening.md` flagged this and was never executed.
+  - **Rotated** to a fresh 32-byte random token, held in `~/.config/porter/porter.env` (600).
+  - **Fail-closed**: the hardcoded fallback is GONE, in Porter and in every ymc caller
+    (17 sites). No token → service auth is disabled and callers 401. Porter also refuses to
+    accept the leaked literal as a valid secret even if someone sets it explicitly.
+  - **Rotation window, with an instrument**: `PORTER_SERVICE_TOKEN_LEGACY` keeps
+    already-running consumers alive, and every use of the old token is logged with its path
+    and user-agent — so the remaining callers get FOUND, not guessed at. It gets removed
+    once that log is silent.
+- **`backend/.env` is no longer tracked.** It carried `DATABASE_URL` (with the password) and
+  had been committed to the public repo since the Postgres migration. Untracked, gitignored,
+  and replaced with `backend/.env.example`.
+- Verified: tsc 0; new token authenticates; garbage token 401s; the legacy token is accepted
+  AND logged with its caller; ymc→Porter works on the rotated token; all five services active.
+
 ## v6.93.0 (2026-07-13)
 
 - **The release gate blocks now — it used to just complain.** Eight consecutive releases

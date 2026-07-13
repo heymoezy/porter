@@ -24,7 +24,7 @@ const DEFAULT_PORTER_URL = 'http://127.0.0.1:3001';
 const REGISTER_PATH = '/api/admin/releases/register';
 
 function porterServiceToken(): string {
-  return process.env.PORTER_SERVICE_TOKEN || 'porter-local-service-2026';
+  return process.env.PORTER_SERVICE_TOKEN ?? ''; // no fallback: the old default leaked (public repo)
 }
 
 function resolveEndpoint(override?: string): string {

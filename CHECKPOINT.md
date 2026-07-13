@@ -1,3 +1,27 @@
+## 2026-07-13 — v6.94.0: SECURITY — rotated the leaked admin token; fail-closed
+
+`porter-local-service-2026` — hardcoded fallback in backend/src/plugins/auth.ts, granting
+platform_admin on the brain — is committed in 11 commits of heymoezy/porter, which is PUBLIC.
+`porter-mail-admin-2026` (Stalwart) is in 3. Only the localhost check on the auth path kept
+this from being remotely exploitable. planning/security-service-token-hardening.md flagged it
+and was never executed. Executed now:
+
+- ROTATED: fresh 32-byte token in ~/.config/porter/porter.env (600, untracked).
+- FAIL-CLOSED: hardcoded fallback removed from all 17 sites (6 Porter, 11 ymc). No token →
+  auth disabled, callers 401. Porter refuses the leaked literal as a valid secret even if set.
+- ROTATION WINDOW + INSTRUMENT: PORTER_SERVICE_TOKEN_LEGACY keeps running consumers alive and
+  LOGS every legacy use with path + user-agent. Phase C (drop legacy) once that log is silent.
+- backend/.env UNTRACKED (carried DATABASE_URL into the public repo since the PG migration);
+  .env.example added; *.env gitignored.
+- VERIFIED: tsc 0 · new token authenticates · garbage 401s · legacy accepted AND logged with
+  caller · ymc→Porter 200 on the rotated token · all 5 services active.
+
+STILL OPEN: (1) STALWART_API_KEY (`porter-mail-admin-…`) is in 3 public commits — rotating it
+means changing the Stalwart admin password, needs Moe. (2) The secrets remain in git HISTORY;
+scrubbing needs a force-push of a public repo — Moe's call. (3) The unit sets
+NODE_TLS_REJECT_UNAUTHORIZED=0, disabling TLS verification for ALL of Porter's outbound HTTPS,
+not just self-signed Stalwart.
+
 ## 2026-07-13 — v6.93.0: the release gate is a HOOK now (it was a warning, and it rolled wrong)
 
 Found while shipping 6.92.0: `backend/src/lib/porter-releases.ts` — the feed the post-commit

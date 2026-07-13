@@ -21,7 +21,7 @@ import os from 'node:os';
 import { Pool } from 'pg';
 
 const PORTER_URL = process.env.PORTER_URL ?? 'http://127.0.0.1:3001';
-const SERVICE_TOKEN = process.env.PORTER_SERVICE_TOKEN ?? 'porter-local-service-2026';
+const SERVICE_TOKEN = process.env.PORTER_SERVICE_TOKEN ?? ''; // no fallback: the old default leaked (public repo)
 const REPO_ROOT = path.resolve(path.join(import.meta.dirname, '..', '..'));
 const PERSONAS_DIR = path.join(REPO_ROOT, 'personas');
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgresql://lobster:porter@127.0.0.1:5432/porter';

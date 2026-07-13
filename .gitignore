@@ -49,3 +49,9 @@ uploads/
 backend/dist.*bak*
 backend/dist.ship-bak
 admin/frontend.archived/build/
+
+# Env files — the repo is PUBLIC. Real secrets never get committed.
+backend/.env
+.env
+*.env
+!*.env.example

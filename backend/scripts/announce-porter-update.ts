@@ -20,7 +20,7 @@ import 'dotenv/config';
 import { PORTER_RELEASES } from '../src/lib/porter-releases.js';
 
 const YMC_BACKEND_URL = (process.env.YMC_BACKEND_URL || 'http://127.0.0.1:5182').replace(/\/$/, '');
-const SERVICE_TOKEN = process.env.PORTER_SERVICE_TOKEN || process.env.YMC_SERVICE_TOKEN || 'porter-local-service-2026';
+const SERVICE_TOKEN = process.env.PORTER_SERVICE_TOKEN ?? process.env.YMC_SERVICE_TOKEN ?? ''; // no fallback: the old default leaked (public repo)
 
 async function main() {
   const args = process.argv.slice(2);

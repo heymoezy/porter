@@ -20,7 +20,7 @@ import { config } from '../config.js';
 
 const POLL_INTERVAL_MS = 5_000;
 const MAX_ATTEMPTS = 3;
-const SERVICE_TOKEN = process.env.PORTER_SERVICE_TOKEN || 'porter-local-service-2026';
+const SERVICE_TOKEN = process.env.PORTER_SERVICE_TOKEN ?? ''; // no fallback: the old default leaked (public repo)
 
 let scanIntervalId: ReturnType<typeof setInterval> | null = null;
 let runIntervalId: ReturnType<typeof setInterval> | null = null;

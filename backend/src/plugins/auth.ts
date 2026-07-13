@@ -17,7 +17,39 @@ declare module 'fastify' {
   }
 }
 
-const SERVICE_TOKEN = process.env.PORTER_SERVICE_TOKEN || 'porter-local-service-2026';
+/**
+ * Service-token auth — machine-to-machine, grants platform_admin.
+ *
+ * ROTATION (2026-07-13). The old token `porter-local-service-2026` was hardcoded here
+ * as a fallback and is committed in 11 commits of a PUBLIC repo (heymoezy/porter).
+ * Anyone reading GitHub had the admin token for this brain. The only thing limiting it
+ * is the localhost check below.
+ *
+ * The hardcoded fallback is GONE: no env token → service auth is disabled entirely
+ * (fail-closed). It is never guessable-by-default again.
+ *
+ * PORTER_SERVICE_TOKEN_LEGACY exists only for the rotation window: it lets already-running
+ * consumers keep working while they are migrated, and every use is logged with the caller
+ * and path so the stragglers can be FOUND rather than guessed at. Remove it (and the env
+ * var) once the log is silent — that is the phase-C commit.
+ */
+const LEGACY_LEAKED_TOKEN = 'porter-local-service-2026';
+
+const SERVICE_TOKEN = (process.env.PORTER_SERVICE_TOKEN || '').trim();
+const LEGACY_TOKEN = (process.env.PORTER_SERVICE_TOKEN_LEGACY || '').trim();
+
+// Refuse to treat the leaked value as a valid secret, even if someone sets it explicitly.
+const ACTIVE_TOKEN = SERVICE_TOKEN && SERVICE_TOKEN !== LEGACY_LEAKED_TOKEN ? SERVICE_TOKEN : '';
+const ROTATION_TOKEN = LEGACY_TOKEN || '';
+
+if (!ACTIVE_TOKEN) {
+  console.warn(
+    '[auth] PORTER_SERVICE_TOKEN is unset (or is the leaked 2026 literal) — ' +
+    'service-token auth is DISABLED. Machine-to-machine callers will get 401. ' +
+    'Set it in ~/.config/porter/porter.env.',
+  );
+}
+
 const LOCALHOST_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 async function authPlugin(fastify: FastifyInstance) {
@@ -30,9 +62,24 @@ async function authPlugin(fastify: FastifyInstance) {
       request.headers['x-porter-service-token'] as string | undefined
       || extractBearerServiceToken(request.headers.authorization);
 
-    if (serviceToken && serviceToken === SERVICE_TOKEN) {
-      // Only accept from localhost
-      if (LOCALHOST_IPS.has(request.ip)) {
+    if (serviceToken && LOCALHOST_IPS.has(request.ip)) {
+      const isActive = ACTIVE_TOKEN !== '' && serviceToken === ACTIVE_TOKEN;
+      const isRotation = ROTATION_TOKEN !== '' && serviceToken === ROTATION_TOKEN;
+
+      if (isRotation && !isActive) {
+        // A consumer still on the OLD token. Name it — this log is how the
+        // remaining callers get found instead of guessed at.
+        request.log.warn(
+          {
+            path: request.url,
+            method: request.method,
+            ua: request.headers['user-agent'] ?? null,
+          },
+          '[auth] LEGACY service token used — migrate this caller to the rotated token',
+        );
+      }
+
+      if (isActive || isRotation) {
         request.sessionUser = {
           username: 'system',
           role: 'platform_admin',

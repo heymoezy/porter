@@ -45,11 +45,9 @@ function resolveEndpoint(override?: string): string {
 }
 
 function serviceToken(): string {
-  return (
-    process.env.PORTER_SERVICE_TOKEN ||
-    process.env.YMC_SERVICE_TOKEN ||
-    'porter-local-service-2026'
-  );
+  // No hardcoded fallback: the old default leaked (it is committed in a PUBLIC repo).
+  // Unset → the call 401s loudly, which is the correct failure.
+  return process.env.PORTER_SERVICE_TOKEN ?? process.env.YMC_SERVICE_TOKEN ?? '';
 }
 
 function renderPreview(input: AnnounceInput): string {

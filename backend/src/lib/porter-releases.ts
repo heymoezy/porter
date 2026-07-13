@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.94.0',
+    date: '2026-07-13',
+    title: 'Security: the admin token for the brain was published on GitHub — rotated',
+    bullets: [
+      'Porter\'s service token was written into the source as a default and is sitting in 11 commits of a public GitHub repo. That token is full admin on the brain: it can dispatch through Bridge, read and write memory, and run jobs. Only the localhost-only check stopped it being usable from the internet.',
+      'Rotated to a fresh random token, kept in a permission-locked file outside the repo. The hardcoded default is gone from all 17 places it appeared, so an unset token now fails loudly instead of silently falling back to a public one.',
+      'The old token still works for a short window so nothing breaks mid-flight — but every use of it is logged with the caller, so the last stragglers get found rather than guessed at.',
+      'The database URL had also been committed to the public repo since the Postgres migration. That file is now untracked.',
+    ],
+  },
+  {
     version: '6.93.0',
     date: '2026-07-13',
     title: 'The release gate blocks now — it used to just complain',
