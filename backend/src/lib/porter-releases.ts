@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.103.0',
+    date: '2026-07-14',
+    title: 'The vault stops storing the same document twice',
+    bullets: [
+      'The vault was holding 3,010 file records for only 2,170 actual files. The same document filed in two folders — byte-for-byte identical — was being stored twice, and each copy queued its own conversion job. 840 redundant records removed, and nothing was lost: every folder location is still recorded, and no converted document was destroyed.',
+      'The cause was in the importer, which identified a file by its PATH rather than its contents — so the same document in a second folder looked like a new document. It now recognises identical content, which means the clean-up cannot quietly undo itself on the next import.',
+      'A further 28 dead conversion jobs were removed — jobs pointing at files that no longer exist, which could never have succeeded and would have sat in the queue forever. The conversion backlog drops by 29% before any change to how fast it runs.',
+    ],
+  },
+  {
     version: '6.102.0',
     date: '2026-07-14',
     title: 'Release notes no longer quote private messages',

@@ -1,3 +1,25 @@
+## v6.103.0 (2026-07-14) — R2: the vault stops storing the same document twice
+
+- **840 redundant artifact rows removed.** The vault held 3,010 hashed artifacts for only 2,170
+  distinct contents: 486 groups where one node carried several artifact rows with **identical
+  bytes** — the same document filed at two paths (`edwardchen/IDENTITY_EXHIBIT.pdf` and
+  `Working_Papers/Identity_Attribution_Inquiry.pdf` are byte-for-byte the same file).
+- **The root cause was in the ingest, and it would have undone the cleanup on the next run.**
+  Artifact identity keyed on **path**, not content — so the same document at a second path made a
+  second artifact row. Identity is now `(node, kind, source)` **OR** `(node, kind, identical
+  bytes)`. Proven: ingesting the same bytes at two paths now yields **one** artifact, where it
+  previously produced two.
+  - "One file, many locations" is what `vault_artifact_locations` is for. The artifact is the
+    *content*; the locations are where it happens to sit.
+- **Nothing was lost.** Verified before deleting: all 1,326 duplicate-group paths were already
+  preserved as locations, and all 840 duplicate derivative jobs were `missing` — **no generated
+  derivative was destroyed**. All 2,933 locations still resolve to a live artifact.
+- **28 zombie derivative jobs removed** — jobs whose source artifact no longer existed at all
+  (from an earlier re-ingest, not from this change; the arithmetic is exact). They could never
+  succeed: the sweep would pick each one up, fail to read a source that isn't there, and they would
+  sit in the backlog forever burning a model-call slot.
+- **Derivative backlog: 2,977 → 2,109 missing** (−29%), before any change to throughput.
+
 ## v6.102.0 (2026-07-14)
 
 - **Release notes no longer quote private messages.** Entries across this changelog, the Porter

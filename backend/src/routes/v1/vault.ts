@@ -367,10 +367,25 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
             const path = typeof s.path === 'string' ? s.path : null;
             const contentHash = typeof s.contentHash === 'string' ? s.contentHash : null;
             const meta = (s.metadata && typeof s.metadata === 'object' ? s.metadata : {}) as Record<string, unknown>;
+            // Identity is (node, kind, source) OR (node, kind, identical BYTES).
+            //
+            // 2026-07-14: this used to key on PATH alone. So the same document filed at two paths
+            // — e.g. edwardchen/IDENTITY_EXHIBIT.pdf and Working_Papers/Identity_Attribution_Inquiry.pdf,
+            // byte-identical — produced TWO artifact rows for one node. That is how 486 duplicate
+            // groups (840 redundant rows) accumulated, and each redundant row spawned its own
+            // derivative job, inflating that backlog too.
+            //
+            // "One file, many locations" is what vault_artifact_locations is for. The artifact is
+            // the CONTENT; the locations are where it happens to sit. Matching on content_hash makes
+            // the ingest idempotent on content, so R2's dedup cannot silently undo itself on the
+            // next run.
             const dupe = (await client.query(
               `SELECT id FROM vault_artifacts
-               WHERE app_scope=$1 AND node_id=$2 AND kind=$3 AND COALESCE(source_id,path,'')=COALESCE($4,$5,'')`,
-              [scope, nodeId, kind, sourceId, path]
+                WHERE app_scope=$1 AND node_id=$2 AND kind=$3
+                  AND ( COALESCE(source_id,path,'') = COALESCE($4,$5,'')
+                     OR ($6 <> '' AND content_hash = $6) )
+                LIMIT 1`,
+              [scope, nodeId, kind, sourceId, path, contentHash ?? '']
             )).rows[0] as { id: string } | undefined;
             if (dupe) {
               await client.query(

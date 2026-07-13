@@ -1,3 +1,20 @@
+## 2026-07-14 — v6.103.0: R2 — vault artifact dedup (and the bug that would have undone it)
+
+- 486 duplicate groups / 840 redundant artifact rows: one node carrying several artifact rows with
+  IDENTICAL content_hash — the same document filed at two paths (edwardchen/IDENTITY_EXHIBIT.pdf ==
+  Working_Papers/Identity_Attribution_Inquiry.pdf, byte-for-byte).
+- ROOT CAUSE (fixed, else the dedup self-undoes on the next ingest): artifact identity keyed on
+  PATH (COALESCE(source_id, path)), not content. Now (node,kind,source) OR (node,kind,content_hash).
+  PROVEN: same bytes ingested at 2 paths → 1 artifact row (was 2). Throwaway scope, cleaned up.
+- NOTHING LOST — verified BEFORE deleting: all 1,326 dup-group paths already present in
+  vault_artifact_locations; all 840 dup derivative jobs were status='missing' (no generated
+  derivative destroyed). After: 2,933 locations all resolve to a live artifact; 0 orphans.
+- 28 ZOMBIE jobs removed: source artifact no longer exists (pre-existing, not from this change —
+  arithmetic exact: 3,052 − 840 = 2,212). They could never succeed and would burn a model-call slot
+  forever.
+- Derivative backlog: 2,977 → 2,109 missing (−29%), before touching throughput (that is R6).
+- VERIFIED: tsc 0 · /health 6.103.0 · dedup + ingest-fix both proven · test scope cleaned.
+
 ## 2026-07-14 — v6.102.0: release notes no longer quote private messages
 
 Moe asked that changelogs stop quoting him verbatim, and that the existing history be scrubbed.
