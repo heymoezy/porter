@@ -1,3 +1,20 @@
+## 2026-07-13 — v6.93.0: the release gate is a HOOK now (it was a warning, and it rolled wrong)
+
+Found while shipping 6.92.0: `backend/src/lib/porter-releases.ts` — the feed the post-commit
+hook ANNOUNCES from — was stuck at v6.84.0. Eight releases (6.85→6.92) bumped the version and
+never wrote to it, so every announce since re-fired v6.84.0.
+
+Root cause: `deploy/git-hooks/pre-commit` was a SHADOW gate by design — it printed
+"ceremony drift (non-blocking)" and exited 0. Its own comment said flipping it to authoritative
+was "a deliberate, coordinated follow-up". Eight drifted releases is the evidence that a
+warning nobody is blocked by is a warning nobody reads. Per the CLAUDE.md hard rule
+(hooks over agent-memory), the follow-up is done:
+
+- pre-commit REFUSES a backend/package.json bump without CHANGELOG.md + porter-releases.ts.
+- Bypass is SKIP_RELEASE_GATE=1 + SKIP_REASON, appended to storage/release-audit.log.
+- Feed backfilled with the 8 missing releases (Moe-voice, benefit-led).
+- Self-test: this very commit had to pass the new blocking gate.
+
 ## 2026-07-13 — v6.92.0: Porter survives a clean exit + secrets out of the (public) unit
 
 INCIDENT: Porter was found DEAD. It exited cleanly (status 0) and stayed down — the backbone

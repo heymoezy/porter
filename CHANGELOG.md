@@ -1,3 +1,22 @@
+## v6.93.0 (2026-07-13)
+
+- **The release gate blocks now — it used to just complain.** Eight consecutive releases
+  (6.85 → 6.92) bumped `backend/package.json` without adding an entry to
+  `backend/src/lib/porter-releases.ts`. Nothing stopped them: the pre-commit gate printed
+  "ceremony drift (non-blocking)" and exited 0. A warning that never blocks is a warning
+  nobody reads. Meanwhile the post-commit announcer kept re-announcing **v6.84.0** — the
+  last version actually present in the feed — so every release since was announced as an
+  old one.
+  - This is exactly the failure CLAUDE.md names: an invariant encoded as a *reminder*
+    instead of a *hook* eventually rolls wrong. It is a hook now: `deploy/git-hooks/pre-commit`
+    REFUSES a version bump that doesn't carry its CHANGELOG + release-feed entries.
+  - Emergency bypass is `SKIP_RELEASE_GATE=1 SKIP_REASON="..."`, appended to
+    `storage/release-audit.log` — logged, never silent.
+- **Release feed backfilled (6.85.0 → 6.92.0).** Eight missing entries written in Moe-voice:
+  hot context, session-end memory writes, the MCP entry point, cost-per-accepted-change, the
+  #27 R1–R3 admin surfaces, the 6.85.1 path-traversal fix, and 6.92.0. The feed is what gets
+  announced — it was lying by eight releases.
+
 ## v6.92.0 (2026-07-13)
 
 - **Porter now comes back from a clean exit — it didn't.** Porter was found DEAD. Root

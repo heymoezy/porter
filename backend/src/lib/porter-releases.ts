@@ -22,6 +22,90 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.93.0',
+    date: '2026-07-13',
+    title: 'The release gate blocks now — it used to just complain',
+    bullets: [
+      'Eight releases in a row shipped without writing to this feed, so every one of them was announced as v6.84.0 — the last version the feed actually knew about. The check that was supposed to catch it printed a warning and let the commit through. It now refuses the commit.',
+      'The eight missing releases have been written back into the feed, so the release history is true again.',
+    ],
+  },
+  {
+    version: '6.92.0',
+    date: '2026-07-13',
+    title: 'Porter comes back from a clean exit — and its secrets left the public repo',
+    bullets: [
+      'Porter was found DEAD. It exited cleanly and systemd left it down: it was the only critical service set to restart on-failure, and a clean exit isn\'t a failure. Every CLI, the MCP server and the memory layer depend on Porter, and nothing was bringing it back. It now always restarts, proven by killing it and watching it return.',
+      'The systemd unit is now tracked in the repo, so the fix survives a rebuild — a fix that lives on one machine dies with that machine.',
+      'The unit had the database password and three API tokens written into it, and the Porter repo is public. Those moved to a private, permission-locked file outside the repo.',
+    ],
+  },
+  {
+    version: '6.91.0',
+    date: '2026-07-13',
+    title: 'The admin now shows the same memory your CLI sessions open with',
+    bullets: [
+      'The Overview page shows, for the product you have selected: where the last session got to, the handoff it left for the next one, and which CLI last touched it. One brain, two windows onto it.',
+      'Every page states which product it means, instead of showing an undifferentiated blob.',
+    ],
+  },
+  {
+    version: '6.90.0',
+    date: '2026-07-13',
+    title: 'Product-first navigation',
+    bullets: [
+      'The sidebar is organised the way Porter actually works — Overview, Vault, Services, Files, Open Items, Releases — with the old links kept, not killed. Nothing you could reach before is unreachable now.',
+    ],
+  },
+  {
+    version: '6.89.0',
+    date: '2026-07-13',
+    title: 'Product switcher — the admin and your CLI sessions agree on what you are working on',
+    bullets: [
+      'A product/tenant selector in the top bar. Picking one pins the same active-project that every Claude/codex/grok session reads, so the admin and the CLIs can never disagree about what is being worked on.',
+    ],
+  },
+  {
+    version: '6.88.0',
+    date: '2026-07-13',
+    title: 'Cost per accepted change',
+    bullets: [
+      'Porter now tracks what a shipped change actually costs. Tokens are exact (read from the session transcript, not estimated), and whether the change was ACCEPTED is observed from git — a session does not get to grade its own homework. First reading: $8.36 per accepted change, 100% acceptance.',
+    ],
+  },
+  {
+    version: '6.87.0',
+    date: '2026-07-13',
+    title: 'Porter memory is available inside every CLI',
+    bullets: [
+      'Porter\'s MCP server was never actually runnable — it defined its tools but had no entry point. Fixed, and registered in Claude, codex and grok. A handoff written by one CLI is now read back by another: proven end-to-end.',
+    ],
+  },
+  {
+    version: '6.86.0',
+    date: '2026-07-13',
+    title: 'Memory writes itself at session end',
+    bullets: [
+      'Ending a session writes what happened to Porter and mirrors it into the vault, so the next session — in any CLI — starts warm instead of re-reading the repo.',
+    ],
+  },
+  {
+    version: '6.85.1',
+    date: '2026-07-13',
+    title: 'Security fix: path traversal in the memory endpoint',
+    bullets: [
+      'A project name from the URL was used to build a file path without validation, which could have been used to read files outside the projects directory. Caught by the automated security review before any real use, and fixed with both a shape check and a containment check. Seven attack strings now rejected.',
+    ],
+  },
+  {
+    version: '6.85.0',
+    date: '2026-07-13',
+    title: 'Hot context — sessions start warm',
+    bullets: [
+      'A small, hard-capped packet per project (where we got to, what is open, what the last session handed off) that every CLI reads at startup. Pointers, not payloads — it stays under ~900 tokens so it cannot bloat your context.',
+    ],
+  },
+  {
     version: '6.84.0',
     date: '2026-07-10',
     title: 'Vault graph no longer shows ghost (removed) documents',

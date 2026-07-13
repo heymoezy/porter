@@ -1,19 +1,45 @@
 #!/usr/bin/env bash
-# Porter pre-commit — release-kit SHADOW gate (non-blocking).
+# Porter pre-commit — release-kit ceremony gate. AUTHORITATIVE (blocks).
 #
-# Porter is release-kit DELEGATE-mode (release.manifest.json run.mode=delegate):
-# its post-commit already deploys + announces via porter-releases. This pre-commit
-# runs the kit's ceremony contract as a NON-AUTHORITATIVE shadow — it surfaces a
-# missing version bump / changelog as a WARNING but NEVER blocks the commit
-# (exit 0 always). ZERO behavior change vs. having no pre-commit; it only makes
-# ceremony drift visible (and satisfies the audit's "both hooks present" wiring).
+# This gate used to be a SHADOW gate: it printed "ceremony drift" and exited 0.
+# Eight consecutive releases (6.85 → 6.92) bumped backend/package.json without
+# adding an entry to backend/src/lib/porter-releases.ts. Nobody noticed, because
+# a warning that never blocks is a warning nobody reads — and the post-commit
+# announcer kept re-announcing v6.84.0, the last version actually in the feed.
 #
-# Flipping this to authoritative (block on drift, like ymc) is a deliberate,
-# coordinated follow-up — not something to impose silently on a multi-session
-# tree. Wire with: git config core.hooksPath deploy/git-hooks
+# That is the exact failure mode CLAUDE.md names: an invariant encoded as a
+# reminder instead of a hook eventually rolls wrong. So it is a hook now.
+#
+# It blocks a commit that bumps backend/package.json without the matching
+# CHANGELOG.md + porter-releases.ts entries. Escape hatch for a genuine
+# emergency (logged, not silent):
+#
+#   SKIP_RELEASE_GATE=1 SKIP_REASON="..." git commit ...
+#
+# Wire with: git config core.hooksPath deploy/git-hooks
 set -uo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
-# Kit shadow gate — informative only. Failure/absence is swallowed (|| true).
-( cd "$REPO_ROOT" && npx tsx backend/src/release-kit/cli.ts gate --repo "$REPO_ROOT" ) \
-  || echo "[pre-commit] release-kit shadow gate flagged ceremony drift (non-blocking) — see above."
+
+if [ "${SKIP_RELEASE_GATE:-}" = "1" ]; then
+  if [ -z "${SKIP_REASON:-}" ]; then
+    echo "[porter-release gate] SKIP_RELEASE_GATE=1 requires SKIP_REASON. REFUSED."
+    exit 1
+  fi
+  mkdir -p "$REPO_ROOT/storage"
+  echo "$(date -Is) SKIP_RELEASE_GATE reason=${SKIP_REASON}" >> "$REPO_ROOT/storage/release-audit.log"
+  echo "[porter-release gate] BYPASSED (logged): ${SKIP_REASON}"
+  exit 0
+fi
+
+if ! ( cd "$REPO_ROOT" && npx tsx backend/src/release-kit/cli.ts gate --repo "$REPO_ROOT" ); then
+  echo ""
+  echo "[porter-release gate] REFUSED — ceremony drift (see above)."
+  echo "  A version bump must carry its changelog entry AND its release-feed entry:"
+  echo "    backend/package.json           (version)"
+  echo "    CHANGELOG.md                   (what changed, for us)"
+  echo "    backend/src/lib/porter-releases.ts  (what changed, for Moe — this is what gets announced)"
+  echo "    CHECKPOINT.md                  (where we got to)"
+  echo ""
+  exit 1
+fi
 exit 0
