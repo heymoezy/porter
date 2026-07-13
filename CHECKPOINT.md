@@ -1,3 +1,30 @@
+## 2026-07-14 — v6.106.0: R4 — the INSPECTOR (what Moe actually asked for)
+
+His ask was to step through the logic and fix the weird associations. What I had built was a
+governance review queue — a gate that gated nothing (every reader already treats proposed==active).
+And the graph COULD NOT have answered him anyway: 1,731 of 1,766 edges carried NO reason at all.
+A "weird association" is not wrong logic — it is INVISIBLE logic.
+
+- PROVENANCE IS NOW MANDATORY. ymc vault-ingest's edge() THROWS without {rule, sourceTable,
+  sourceId, note}. All 20 rules stamped. Coverage 35 → 1,770/1,770 (100%).
+  · the 1,435 `related_to` edges (81% of the graph!) came from vault-associate-entities.ts —
+    a FOLDER-PATH match (file under workoutdocs/<dir>/ matching an entity name). Sound rule,
+    never recorded. Backfilled in place (the edge upsert updates metadata).
+  · 2 edges whose source rows no longer exist → DELETED (unauditable by definition).
+- GET /vault/nodes/:id/explain — filed-under + who decided + every association WITH its reason +
+  the real artifacts.
+- DELETE /vault/edges/:id — cut a wrong association. PROVEN: only the edge dies; both nodes and
+  their files survive; unknown id → 404.
+- Admin: "Review queue" tab → "INSPECTOR". Pick anything → why is it like this → Cut.
+  SCREENSHOT-VERIFIED on a real node: "Edward Chen — investor fraud workout" shows
+  associated_with → Edward Chen — Creditor Workout, "forensics artifact belongs to this workout",
+  rule artifact_associated_with_workout · from dr_artifacts, with a Cut button.
+- FIXED A LYING DASHBOARD: overview still hardcoded batchLimitPerSweep=25 and etaDays=missing/25
+  AFTER R6 raised the real limit to 100 — it claimed 81 days. Both now read DEFAULT_BATCH_LIMIT.
+  Real: 2,009 missing @ 100/sweep → 21 days.
+- QA script now supports a CLICK SEQUENCE (QA_CLICK_TEXT='Inspector||<row>') so drill-in state is
+  verifiable. A row you never selected is a surface you never verified.
+
 ## 2026-07-14 — v6.105.0: R6 — derivative sweep 25 → 100/run + CLI-quota guard
 
 - DEFAULT_BATCH_LIMIT 25 → 100 (env VAULT_DERIVATIVE_BATCH_LIMIT). At 25/day the backlog needed

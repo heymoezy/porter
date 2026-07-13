@@ -1,3 +1,26 @@
+## v6.106.0 (2026-07-14) — R4: the Inspector. Step through the logic; cut a wrong association.
+
+- **The graph could not explain itself.** 1,731 of its 1,766 edges recorded **no reason at all** —
+  they asserted that two things were related and said nothing about why. That is what "weird
+  associations" looks like from the inside: not wrong logic, but *invisible* logic. You cannot step
+  through reasoning that was never written down.
+- **Every association now records WHY it exists** — the rule, the source table, and the exact row
+  that caused it. `edge()` in the ymc ingest now **throws** if provenance is missing, so an
+  unauditable association can never be created again. Coverage: **35 → 1,770 of 1,770 (100%)**.
+  - The 1,435 vague `related_to` edges — **81% of the whole graph** — came from a *folder-path match*
+    (`a file under workoutdocs/edwardchen/ matches the entity "Edward Chen"`). A sound rule that
+    never said so. It says so now.
+  - 2 edges whose source rows no longer existed were deleted: unauditable by definition.
+- **New `GET /vault/nodes/:id/explain`** — for any item: where it is filed and who decided that,
+  every association with its reason, and the real files behind it.
+- **New `DELETE /vault/edges/:id`** — cut a wrong association. Proven to remove **only** the edge:
+  both nodes and their files survive.
+- **The review queue is gone; the Inspector replaces it.** The queue was a gate that gated nothing —
+  every reader already treated `proposed` and `active` alike. This is the thing that was actually
+  asked for.
+- **Fixed a dashboard that had started lying:** it still reported a 25/sweep batch limit and an
+  81-day ETA after R6 raised the limit to 100. Both now read the real constant — **21 days**.
+
 ## v6.105.0 (2026-07-14) — R6: derivative sweep 25 → 100/day, with a quota guard
 
 - **Batch limit 25 → 100 per run** (`VAULT_DERIVATIVE_BATCH_LIMIT`). At 25/day the remaining

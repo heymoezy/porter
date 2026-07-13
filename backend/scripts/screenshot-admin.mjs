@@ -75,17 +75,22 @@ try {
 
   // Optional: click a control by its visible text before shooting, so tabbed/hidden state
   // can be QA'd too. A tab you never opened is a tab you never verified.
+  // A click SEQUENCE (separated by '||') so tabbed + drill-in state can be QA'd:
+  //   QA_CLICK_TEXT='Inspector||00-MASTER-DOSSIER'
+  // A tab you never opened, or a row you never selected, is a surface you never verified.
   const clickText = process.env.QA_CLICK_TEXT;
   if (clickText) {
-    const clicked = await page.evaluate((t) => {
-      const el = [...document.querySelectorAll('button, a')].find((n) =>
-        (n.textContent || '').trim().toLowerCase().startsWith(t.toLowerCase()),
-      );
-      if (el) { el.click(); return true; }
-      return false;
-    }, clickText);
-    if (!clicked) throw new Error(`QA_CLICK_TEXT: no control matching "${clickText}"`);
-    await new Promise((r) => setTimeout(r, 2500));
+    for (const step of clickText.split('||').map((t) => t.trim()).filter(Boolean)) {
+      const clicked = await page.evaluate((t) => {
+        const el = [...document.querySelectorAll('button, a')].find((n) =>
+          (n.textContent || '').trim().toLowerCase().includes(t.toLowerCase()),
+        );
+        if (el) { el.click(); return true; }
+        return false;
+      }, step);
+      if (!clicked) throw new Error(`QA_CLICK_TEXT: no control matching "${step}"`);
+      await new Promise((r) => setTimeout(r, 2200));
+    }
   }
 
   const text = await page.evaluate(() => document.body.innerText.trim());

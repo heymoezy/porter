@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.106.0',
+    date: '2026-07-14',
+    title: 'You can now ask the vault why — and cut a wrong association',
+    bullets: [
+      'The graph could not explain itself: 1,731 of its 1,766 connections recorded no reason at all. That is what a "weird association" really is — not wrong logic, but invisible logic. Every connection now records why it exists: the rule that made it, the table it was read from, and the exact row to blame. It is impossible to create an unexplainable connection now; the code refuses.',
+      'The biggest group — 81% of the graph — turned out to be a sensible rule that simply never said so: a file living in the folder workoutdocs/edwardchen/ was linked to Edward Chen. Now it says so, so you can judge it.',
+      'Pick any item and see where it is filed, who decided that, and every connection with its reason — then cut the wrong ones with one click. Cutting a connection removes only the connection; the documents and their filing are untouched.',
+    ],
+  },
+  {
     version: '6.105.0',
     date: '2026-07-14',
     title: 'Document conversion runs 4x faster, and will never starve Tom to do it',

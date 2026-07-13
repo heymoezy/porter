@@ -4,6 +4,7 @@ import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
 import { runVaultDerivativeSweep, getDerivativeCoverage } from '../../services/vault-derivatives.js';
 import { routingEngine } from '../../services/bridge/routing-engine.js';
+import { DEFAULT_BATCH_LIMIT } from '../../services/vault-derivatives.js';
 import type { BridgeDispatchRequest, RoutingContext } from '../../services/bridge/types.js';
 import { CHEAP_GATEWAY, CHEAP_MODEL } from '../../services/intellect/worker-knowledge.js';
 
@@ -679,10 +680,12 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
               generated,
               missing,
               coveragePct: derivTotal > 0 ? Math.round((generated / derivTotal) * 1000) / 10 : 0,
-              batchLimitPerSweep: 25, // DEFAULT_BATCH_LIMIT in services/vault-derivatives.ts
+              // Report the REAL limit. This was hardcoded to 25 and kept saying 25 after R6 raised it
+              // to 100 — a dashboard that states a number the code does not use is worse than no number.
+              batchLimitPerSweep: DEFAULT_BATCH_LIMIT,
               sweepIntervalHours: 24, // rides the every_24h workflow tick
               // Plain arithmetic, not a prediction: how long the current cap takes to drain.
-              etaDays: missing > 0 ? Math.ceil(missing / 25) : 0,
+              etaDays: missing > 0 ? Math.ceil(missing / DEFAULT_BATCH_LIMIT) : 0,
             },
           },
           request.id
@@ -829,6 +832,113 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
       request.log.info({ scope, type, accepted, skipped: skipped.length, reviewer }, '[vault] bulk-accept');
       return reply.send(ok({ scope, type, requested: ids.length, accepted, skipped }, request.id));
     }
+  );
+
+  /**
+   * #27 R4 — EXPLAIN a node: step through the logic behind everything attached to it.
+   *
+   * This is what Moe actually asked for: "a way to actually step thru your logic, because once you
+   * exposed it visually I saw lots of weird associations and I just wanted an easy way to do this."
+   *
+   * What got built instead (by me) was a governance review queue — a gate that gated nothing, since
+   * every reader already treated `proposed` and `active` alike. Worse, the graph could not have
+   * answered him anyway: 1,731 of its 1,766 edges carried NO reason at all. You cannot step through
+   * logic that was never recorded.
+   *
+   * So: every edge now records WHY it exists (rule + the source table/row that caused it), and this
+   * endpoint hands that back for a single node — its parent, its associations, its files — each
+   * with the reason and the row to blame. A wrong association can then be judged and CUT, instead
+   * of merely distrusted.
+   */
+  fastify.get(
+    '/nodes/:id/explain',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const id = (request.params as Record<string, string>).id;
+
+      const node = (await pool.query(
+        `SELECT id, app_scope, type, layer, title, status FROM vault_nodes WHERE id = $1`,
+        [id],
+      )).rows[0] as
+        | { id: string; app_scope: string; type: string; layer: string; title: string; status: string }
+        | undefined;
+      if (!node) return reply.code(404).send(err('NODE_NOT_FOUND', `node "${id}" not found`, request.id));
+
+      const [placements, edges, artifacts] = await Promise.all([
+        // WHERE it is filed, and who decided that.
+        pool.query(
+          `SELECT p.id, p.state, p.layer, p.confidence, p.proposed_by, p.reviewed_by, p.reviewed_at,
+                  p.parent_id, parent.title AS parent_title, parent.type AS parent_type
+             FROM vault_placements p
+             LEFT JOIN vault_nodes parent ON parent.id = p.parent_id
+            WHERE p.node_id = $1 AND p.state <> 'archived'
+            ORDER BY CASE p.state WHEN 'active' THEN 0 ELSE 1 END`,
+          [id],
+        ),
+        // WHAT it is associated with, and WHY — both directions.
+        pool.query(
+          `SELECT e.id, e.kind, e.metadata, 'out' AS direction,
+                  other.id AS other_id, other.title AS other_title, other.type AS other_type
+             FROM vault_edges e JOIN vault_nodes other ON other.id = e.to_node_id
+            WHERE e.from_node_id = $1
+            UNION ALL
+           SELECT e.id, e.kind, e.metadata, 'in' AS direction,
+                  other.id, other.title, other.type
+             FROM vault_edges e JOIN vault_nodes other ON other.id = e.from_node_id
+            WHERE e.to_node_id = $1
+            ORDER BY kind`,
+          [id],
+        ),
+        // WHAT it actually is on disk / in the DB.
+        pool.query(
+          `SELECT id, kind, source_system, source_id, path, content_hash FROM vault_artifacts WHERE node_id = $1`,
+          [id],
+        ),
+      ]);
+
+      return reply.send(
+        ok(
+          {
+            node,
+            placements: placements.rows,
+            edges: (edges.rows as Array<{ metadata: Record<string, unknown> | null }>).map((e) => ({
+              ...e,
+              // Surface the reason plainly. An edge with no rule cannot be audited — say so, do not
+              // paper over it (architecture rule 5).
+              why: e.metadata?.rule
+                ? {
+                    rule: e.metadata.rule,
+                    sourceTable: e.metadata.sourceTable ?? null,
+                    sourceId: e.metadata.sourceId ?? null,
+                    note: e.metadata.note ?? null,
+                  }
+                : null,
+            })),
+            artifacts: artifacts.rows,
+          },
+          request.id,
+        ),
+      );
+    },
+  );
+
+  /** Cut a wrong association. The edge is DELETED (it is a derived assertion, not a document) — the
+   *  nodes, their placements and their files are untouched. Re-running the ingest would re-create it
+   *  only if the underlying rule still fires, which is the correct behaviour: fix the data, not the
+   *  symptom. */
+  fastify.delete(
+    '/edges/:id',
+    { preHandler: [fastify.requireAuth] },
+    async (request: FastifyRequest, reply) => {
+      const id = (request.params as Record<string, string>).id;
+      const row = (await pool.query(
+        `DELETE FROM vault_edges WHERE id = $1 RETURNING id, kind, from_node_id, to_node_id, metadata`,
+        [id],
+      )).rows[0];
+      if (!row) return reply.code(404).send(err('EDGE_NOT_FOUND', `edge "${id}" not found`, request.id));
+      request.log.info({ edge: row, by: request.sessionUser?.username }, '[vault] association cut');
+      return reply.send(ok({ cut: row }, request.id));
+    },
   );
 
   fastify.get(

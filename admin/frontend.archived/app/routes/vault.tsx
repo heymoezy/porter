@@ -72,6 +72,14 @@ interface Overview {
   }
 }
 
+interface EdgeWhy { rule: string; sourceTable: string | null; sourceId: string | null; note: string | null }
+interface Explain {
+  node: { id: string; type: string; layer: string; title: string; status: string }
+  placements: Array<{ id: string; state: string; parent_title: string | null; proposed_by: string | null; reviewed_by: string | null }>
+  edges: Array<{ id: string; kind: string; direction: string; other_id: string; other_title: string; other_type: string; why: EdgeWhy | null }>
+  artifacts: Array<{ id: string; kind: string; path: string | null; source_system: string | null }>
+}
+
 interface Placement {
   id: string
   node_id: string
@@ -93,7 +101,7 @@ type Tab = "overview" | "schema" | "review" | "structure" | "derivatives"
 const TABS: Array<{ key: Tab; label: string; icon: typeof Boxes }> = [
   { key: "overview", label: "Overview", icon: Boxes },
   { key: "schema", label: "Schema", icon: Layers },
-  { key: "review", label: "Review queue", icon: Check },
+  { key: "review", label: "Inspector", icon: Check },
   { key: "structure", label: "Structure", icon: GitBranch },
   { key: "derivatives", label: "Derivatives", icon: FileStack },
 ]
@@ -306,12 +314,23 @@ function SchemaTab({ ov }: { ov: Overview }) {
   )
 }
 
-/** The review queue. accept = keep the AI's parent; nothing is ever deleted (the incumbent is archived). */
+/**
+ * THE INSPECTOR — step through the logic behind any item.
+ *
+ * This replaces the "review queue" I built, which was a governance gate that gated nothing (every
+ * reader already treated `proposed` and `active` alike) and could not have answered the real
+ * question anyway: 1,731 of the graph's 1,766 edges recorded NO reason at all.
+ *
+ * Moe's ask was to step through the logic and fix the weird associations. So: pick anything, see
+ * where it is filed and who decided that, see every association it has AND WHY — the rule, the
+ * source table, the exact row — and cut the wrong ones. Cutting an association removes only the
+ * association; the documents and their filing are untouched.
+ */
 function ReviewTab({ types }: { types: string[] }) {
   const qc = useQueryClient()
   const [offset, setOffset] = useState(0)
   const [type, setType] = useState("")
-  const [confirming, setConfirming] = useState(false)
+  const [selected, setSelected] = useState<string | null>(null)
   const LIMIT = 25
 
   const { data, isLoading } = useQuery({
@@ -323,125 +342,166 @@ function ReviewTab({ types }: { types: string[] }) {
       ),
   })
 
+  const { data: explain, isLoading: explaining } = useQuery({
+    queryKey: ["v1", "vault", "explain", selected],
+    enabled: !!selected,
+    queryFn: () => api<Explain>(`/api/v1/vault/nodes/${selected}/explain`),
+  })
+
+  const cut = useMutation({
+    mutationFn: (edgeId: string) => api(`/api/v1/vault/edges/${edgeId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["v1", "vault", "explain", selected] })
+      void qc.invalidateQueries({ queryKey: ["v1", "vault", "overview", SCOPE] })
+    },
+  })
+
   const accept = useMutation({
     mutationFn: (id: string) => api(`/api/v1/vault/placements/${id}/accept`, { method: "POST" }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["v1", "vault"] }) },
-  })
-
-  const bulk = useMutation({
-    mutationFn: (vars: { type: string; expect: number }) =>
-      api<{ accepted: number; skipped: unknown[] }>(`/api/v1/vault/placements/bulk-accept`, {
-        method: "POST",
-        json: { app_scope: SCOPE, type: vars.type, expect: vars.expect },
-      }),
-    onSuccess: () => {
-      setConfirming(false)
-      void qc.invalidateQueries({ queryKey: ["v1", "vault"] })
-    },
   })
 
   const total = data?.total ?? 0
   const rows = data?.placements ?? []
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center justify-between gap-2">
-          <span>
-            Proposed placements
-            <span className="text-text3 font-normal ml-1.5 text-xs">
-              {num(total)} awaiting confirmation — these are the app&apos;s own filings, not AI guesses. Nothing is ever deleted.
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      {/* LEFT — pick anything */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center justify-between gap-2">
+            <span>
+              Items
+              <span className="text-text3 font-normal ml-1.5 text-xs">{num(total)} unconfirmed</span>
             </span>
-          </span>
-          <span className="flex items-center gap-1">
-            <select
-              value={type}
-              onChange={(e) => { setType(e.target.value); setOffset(0); setConfirming(false) }}
-              className="h-7 rounded border border-border bg-surface px-2 text-xs text-text2"
-            >
-              <option value="">All types</option>
-              {types.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <Button size="sm" variant="ghost" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - LIMIT))}>Prev</Button>
-            <Button size="sm" variant="ghost" disabled={offset + LIMIT >= total} onClick={() => setOffset(offset + LIMIT)}>Next</Button>
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {/* Bulk accept is deliberately type-scoped: you accept one KIND of thing at a time,
-            having actually looked at that kind. "Accept everything" is how you rubber-stamp
-            thousands of AI guesses by accident. The count is echoed back to the server, which
-            refuses if the set moved since you looked. */}
-        {type && total > 0 && (
-          <div className="mb-2 flex items-center gap-2 rounded border border-border bg-raised/40 p-2">
-            {!confirming ? (
-              <>
-                <span className="text-xs text-text2 flex-1">
-                  Accept all <strong className="text-foreground">{num(total)}</strong> proposed{" "}
-                  <strong className="text-foreground">{type}</strong> placements, as the app filed them?
-                </span>
-                <Button size="sm" variant="ghost" className="h-6" onClick={() => setConfirming(true)}>Accept all {num(total)}</Button>
-              </>
-            ) : (
-              <>
-                <span className="text-xs text-text2 flex-1">
-                  This accepts {num(total)} filings in one go. They can still be re-filed afterwards — nothing is deleted.
-                </span>
-                <Button size="sm" variant="ghost" className="h-6" onClick={() => setConfirming(false)}>Cancel</Button>
-                <Button
-                  size="sm"
-                  className="h-6"
-                  disabled={bulk.isPending}
-                  onClick={() => bulk.mutate({ type, expect: total })}
-                >
-                  {bulk.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : `Yes, accept ${num(total)}`}
-                </Button>
-              </>
-            )}
-          </div>
-        )}
-        {bulk.isError && (
-          <p className="mb-2 text-2xs text-danger">{(bulk.error as Error).message}</p>
-        )}
-        {bulk.isSuccess && (
-          <p className="mb-2 text-2xs text-emerald-400">
-            Accepted {num(bulk.data.accepted)}{bulk.data.skipped.length > 0 ? `, skipped ${num(bulk.data.skipped.length)} that failed validation` : ""}.
-          </p>
-        )}
-
-        {isLoading && <p className="text-xs text-text3">Loading…</p>}
-        {!isLoading && rows.length === 0 && (
-          <p className="text-xs text-text3">Nothing awaiting review. The queue is clear.</p>
-        )}
-        <div className="space-y-0.5">
-          {rows.map((p) => (
-            <div key={p.id} className="flex items-center gap-2 text-xs py-1.5 border-b border-border/40">
-              <Badge className="text-2xs bg-raised text-text3 shrink-0">{p.type}</Badge>
-              <span className="text-foreground truncate flex-1" title={p.title}>{p.title}</span>
-              <CornerUpRight className="h-3 w-3 text-text3 shrink-0" />
-              <span className="text-text2 truncate w-40 shrink-0" title={p.parent_title ?? ""}>
-                {p.parent_title ?? <span className="text-text3">— no parent —</span>}
-              </span>
-              <span className="text-2xs text-text3 w-16 shrink-0">
-                {p.confidence === null ? "unscored" : p.confidence.toFixed(2)}
-              </span>
-              <Button
-                size="sm" variant="ghost" className="h-6 px-2 shrink-0"
-                disabled={accept.isPending}
-                onClick={() => accept.mutate(p.id)}
+            <span className="flex items-center gap-1">
+              <select
+                value={type}
+                onChange={(e) => { setType(e.target.value); setOffset(0) }}
+                className="h-7 rounded border border-border bg-surface px-2 text-xs text-text2"
               >
-                {accept.isPending && accept.variables === p.id
-                  ? <Loader2 className="h-3 w-3 animate-spin" />
-                  : <Check className="h-3 w-3" />}
-              </Button>
+                <option value="">All types</option>
+                {types.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <Button size="sm" variant="ghost" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - LIMIT))}>Prev</Button>
+              <Button size="sm" variant="ghost" disabled={offset + LIMIT >= total} onClick={() => setOffset(offset + LIMIT)}>Next</Button>
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading && <p className="text-xs text-text3">Loading…</p>}
+          {!isLoading && rows.length === 0 && <p className="text-xs text-text3">Nothing here.</p>}
+          <div className="space-y-0.5 max-h-[560px] overflow-y-auto scrollbar-thin">
+            {rows.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setSelected(p.node_id)}
+                className={`flex w-full items-center gap-2 text-xs py-1.5 px-1 border-b border-border/40 text-left transition-colors ${
+                  selected === p.node_id ? "bg-accent-porter/10" : "hover:bg-raised/50"
+                }`}
+              >
+                <Badge className="text-2xs bg-raised text-text3 shrink-0">{p.type}</Badge>
+                <span className="text-foreground truncate flex-1" title={p.title}>{p.title}</span>
+                <CornerUpRight className="h-3 w-3 text-text3 shrink-0" />
+                <span className="text-text3 truncate w-28 shrink-0 text-2xs">{p.parent_title ?? "—"}</span>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* RIGHT — why is it like this? */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">
+            Why is it like this?
+            <span className="text-text3 font-normal ml-1.5 text-xs">
+              every association, and the rule + row that caused it
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!selected && <p className="text-xs text-text3">Pick anything on the left to step through its logic.</p>}
+          {explaining && <p className="text-xs text-text3">Loading…</p>}
+          {explain && (
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-medium text-foreground">{explain.node.title}</p>
+                <p className="text-2xs text-text3">{explain.node.type} · {explain.node.layer}</p>
+              </div>
+
+              {explain.placements.map((p) => (
+                <div key={p.id} className="rounded border border-border bg-raised/30 p-2">
+                  <p className="text-2xs uppercase tracking-wide text-text3 mb-0.5">Filed under</p>
+                  <p className="text-xs text-foreground">{p.parent_title ?? "— nothing —"}</p>
+                  <p className="text-2xs text-text3 mt-0.5">
+                    {p.state} · decided by {p.reviewed_by ?? p.proposed_by ?? "unknown"}
+                    {p.proposed_by === "app" && " (the app's own hierarchy, not an AI)"}
+                  </p>
+                  {p.state === "proposed" && (
+                    <Button size="sm" variant="ghost" className="h-6 mt-1 text-2xs" disabled={accept.isPending}
+                      onClick={() => accept.mutate(p.id)}>
+                      {accept.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm this filing"}
+                    </Button>
+                  )}
+                </div>
+              ))}
+
+              <div>
+                <p className="text-2xs uppercase tracking-wide text-text3 mb-1">
+                  Associations ({explain.edges.length})
+                </p>
+                {explain.edges.length === 0 && <p className="text-xs text-text3">None.</p>}
+                <div className="space-y-1.5 max-h-[300px] overflow-y-auto scrollbar-thin">
+                  {explain.edges.map((e) => (
+                    <div key={e.id} className="rounded border border-border p-2">
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-foreground truncate">
+                            <span className="text-text3">{e.direction === "out" ? "→" : "←"} {e.kind}</span>{" "}
+                            {e.other_title}
+                          </p>
+                          {e.why ? (
+                            <>
+                              <p className="text-2xs text-text2 mt-0.5">{e.why.note}</p>
+                              <p className="text-2xs text-text3 mt-0.5 truncate" title={e.why.sourceId ?? ""}>
+                                rule <span className="text-text2">{e.why.rule}</span>
+                                {e.why.sourceTable && <> · from {e.why.sourceTable}</>}
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-2xs text-danger mt-0.5">No reason recorded — this cannot be audited.</p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm" variant="ghost" className="h-6 px-2 shrink-0 text-2xs text-danger"
+                          disabled={cut.isPending}
+                          onClick={() => cut.mutate(e.id)}
+                          title="Cut this association (the documents are untouched)"
+                        >
+                          {cut.isPending && cut.variables === e.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Cut"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {explain.artifacts.length > 0 && (
+                <div>
+                  <p className="text-2xs uppercase tracking-wide text-text3 mb-1">Files ({explain.artifacts.length})</p>
+                  {explain.artifacts.map((a) => (
+                    <p key={a.id} className="text-2xs text-text3 truncate" title={a.path ?? ""}>
+                      {a.kind} · {a.path ?? a.source_system}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
-          ))}
-        </div>
-        <p className="text-2xs text-text3 mt-2">
-          Showing {rows.length ? offset + 1 : 0}–{offset + rows.length} of {num(total)}.
-        </p>
-      </CardContent>
-    </Card>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 

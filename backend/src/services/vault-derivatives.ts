@@ -110,7 +110,7 @@ const STUCK_QUEUED_SECONDS = 600; // a 'queued' job older than this is treated a
  * dollars — so the real risk of raising it is starving Tom and Bridge dispatch of the same quota.
  * That is what the headroom guard below exists to prevent.
  */
-const DEFAULT_BATCH_LIMIT = Number(process.env.VAULT_DERIVATIVE_BATCH_LIMIT || 100);
+export const DEFAULT_BATCH_LIMIT = Number(process.env.VAULT_DERIVATIVE_BATCH_LIMIT || 100);
 
 /** Refuse to spend the last of a gateway's quota on background derivative work. */
 const QUOTA_HEADROOM_FLOOR = 0.20; // keep >=20% of a known limit in reserve for Tom/Bridge
