@@ -50,7 +50,9 @@ interface Overview {
   placements: {
     byState: Record<string, number>
     proposedWithoutConfidence: number
+    byProvenance: Record<string, number>
   }
+  classifier: { active: boolean; note: string }
   derivatives: {
     byStatus: Record<string, number>
     total: number
@@ -116,11 +118,11 @@ export default function VaultPage() {
         <div className="space-y-2">
           {ov.placements.byState.proposed > 0 && (
             <Alert
-              title={`${num(ov.placements.byState.proposed)} placements proposed by the AI, none reviewed`}
+              title={`${num(ov.placements.byState.proposed)} placements awaiting review — and no AI ever filed them`}
               body={
-                ov.placements.proposedWithoutConfidence === ov.placements.byState.proposed
-                  ? "Every one carries NO confidence score, so the queue can't be triaged by trusting the confident ones — the association engine proposes without scoring. Review them below, or fix the engine to score them."
-                  : `${num(ov.placements.proposedWithoutConfidence)} of them carry no confidence score.`
+                ov.classifier.active
+                  ? `${num(ov.placements.proposedWithoutConfidence)} of them carry no confidence score.`
+                  : "These were recorded as AI proposals. They are not. The auto-association classifier has never been built — it is a pass-through stub, so every one of these is the app's OWN declared hierarchy, and nothing was ever scored. That matters: this is not a pile of machine guesses needing your judgement, it is ymc's existing structure waiting to be confirmed."
               }
             />
           )}
@@ -341,7 +343,7 @@ function ReviewTab({ types }: { types: string[] }) {
           <span>
             Proposed placements
             <span className="text-text3 font-normal ml-1.5 text-xs">
-              {num(total)} awaiting a human — accept keeps the AI&apos;s parent, nothing is ever deleted
+              {num(total)} awaiting confirmation — these are the app&apos;s own filings, not AI guesses. Nothing is ever deleted.
             </span>
           </span>
           <span className="flex items-center gap-1">
@@ -369,7 +371,7 @@ function ReviewTab({ types }: { types: string[] }) {
               <>
                 <span className="text-xs text-text2 flex-1">
                   Accept all <strong className="text-foreground">{num(total)}</strong> proposed{" "}
-                  <strong className="text-foreground">{type}</strong> placements, as the AI filed them?
+                  <strong className="text-foreground">{type}</strong> placements, as the app filed them?
                 </span>
                 <Button size="sm" variant="ghost" className="h-6" onClick={() => setConfirming(true)}>Accept all {num(total)}</Button>
               </>
@@ -414,7 +416,7 @@ function ReviewTab({ types }: { types: string[] }) {
                 {p.parent_title ?? <span className="text-text3">— no parent —</span>}
               </span>
               <span className="text-2xs text-text3 w-16 shrink-0">
-                {p.confidence === null ? "no score" : p.confidence.toFixed(2)}
+                {p.confidence === null ? "unscored" : p.confidence.toFixed(2)}
               </span>
               <Button
                 size="sm" variant="ghost" className="h-6 px-2 shrink-0"

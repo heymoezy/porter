@@ -1,3 +1,29 @@
+## 2026-07-13 — v6.100.0: the vault was lying about who filed 5,176 things
+
+Chasing "why is confidence NULL on all 4,900?" found something worse: NO AI EVER FILED THEM.
+
+resolveProposedParentId() has always been a deterministic PASS-THROUGH STUB — `git log -S` shows
+exactly ONE commit ever touched it (the one that created it, R1c v6.51.0). No classifier has ever
+run. Yet every placement was stamped proposed_by='ai'. All 5,176 are the calling app's OWN
+declared hierarchy, passed straight through; confidence is NULL because nothing ever scored them.
+
+WHY IT MATTERS (not cosmetic): it told a reviewer that 4,900 filings were MACHINE GUESSES needing
+human judgement, when they are ymc's OWN EXISTING STRUCTURE waiting to be confirmed. That changes
+the right decision. Porter architecture rule 5: never label an unconfigured feature as active.
+I also wrote that false claim into the R4 UI myself, from reading the column instead of the code.
+
+FIXED AT THE SOURCE:
+- PLACEMENT_PROVENANCE: 'app' (caller declared it) / 'default_root' (nobody did). 'ai' is
+  RESERVED — it cannot be claimed until a real Bridge-backed classifier exists.
+- drizzle/0106: backfilled 5,148 → 'app', 28 → 'default_root'. LABELS ONLY — verified ymc still
+  276 active / 4,900 proposed, before and after. No placement/parent/state/node altered.
+- GET /vault/overview reports classifier.active=false + the reason + byProvenance.
+- Admin copy corrected: "4,900 awaiting review — and no AI ever filed them".
+- VERIFIED: tsc 0 (backend + admin) · deployed · screenshotted · 0 JS errors · /health 6.100.0.
+
+CONSEQUENCE FOR MOE'S DECISION: bulk-accepting the 4,900 is now much less scary — you are
+CONFIRMING ymc's own structure, not rubber-stamping AI guesses. Still his call; still untouched.
+
 ## 2026-07-13 — v6.99.0: #27 R4b — the review queue is actually clearable
 
 R4 exposed 4,900 unreviewed placements. A queue of 4,900 you can only clear one row at a time is

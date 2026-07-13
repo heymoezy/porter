@@ -86,16 +86,39 @@ async function loadSchema(scope: string): Promise<Map<string, NodeTypeDecl>> {
 /**
  * Decide a node's hierarchy placement.
  *
- * R1c: this is the AI auto-association SEAM. Today it is a deterministic stub —
- * it honours the app-supplied proposedParentExternalId (or roots the node when
- * none is given). A later release swaps this body for a Bridge-backed classifier
- * that reads the scope's schema + existing tree; the contract (return a resolved
- * parent node-id, or null for root) stays the same. Every placement is created in
- * state='proposed' so it flows through the per-app review queue and nothing that
- * is already active is ever disturbed.
+ * R1c: this is the AI auto-association SEAM. Today it is a DETERMINISTIC STUB — it honours the
+ * app-supplied proposedParentExternalId (or roots the node when none is given). A later release
+ * swaps this body for a Bridge-backed classifier that reads the scope's schema + existing tree;
+ * the contract (return a resolved parent node-id, or null for root) stays the same.
+ *
+ * 2026-07-13 — PROVENANCE CORRECTION. Every placement this stub created was stamped
+ * `proposed_by = 'ai'`. That was FALSE: no classifier has ever run (one commit has ever touched
+ * this function — the stub itself), so all 5,176 placements were labelled as AI proposals when
+ * they are in fact the calling app's OWN declared hierarchy, passed straight through.
+ *
+ * That mislabel is not cosmetic. It told a reviewer that 4,900 filings were machine guesses
+ * needing human judgement, when they are the app's own structure. It is exactly what Porter
+ * architecture rule 5 forbids: never label an unconfigured feature as active.
+ *
+ * So provenance is now stamped by whoever ACTUALLY decided the parent. `ai` is reserved for a
+ * real classifier and cannot be claimed until one exists.
  */
+export const PLACEMENT_PROVENANCE = {
+  /** The calling app declared this parent; we passed it through unchanged. */
+  APP: 'app',
+  /** No parent supplied — rooted by default. A decision by nobody. */
+  DEFAULT_ROOT: 'default_root',
+  /** RESERVED. Only a real Bridge-backed classifier may claim this. */
+  CLASSIFIER: 'ai',
+} as const;
+
 function resolveProposedParentId(proposedParentNodeId: string | null): string | null {
   return proposedParentNodeId;
+}
+
+/** Who actually decided this placement — not who we wish had. */
+function placementProvenance(resolvedParent: string | null): string {
+  return resolvedParent === null ? PLACEMENT_PROVENANCE.DEFAULT_ROOT : PLACEMENT_PROVENANCE.APP;
 }
 
 export default async function vaultRoutes(fastify: FastifyInstance) {
@@ -401,16 +424,16 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
             )).rows[0] as { id: string } | undefined;
             if (proposed) {
               await client.query(
-                `UPDATE vault_placements SET parent_id=$1, proposed_by='ai', created_at=$2 WHERE id=$3`,
-                [resolvedParent, now, proposed.id]
+                `UPDATE vault_placements SET parent_id=$1, proposed_by=$2, created_at=$3 WHERE id=$4`,
+                [resolvedParent, placementProvenance(resolvedParent), now, proposed.id]
               );
               itemResult.placement = { id: proposed.id, state: 'proposed', parentId: resolvedParent, action: 'updated' };
             } else {
               const plId = crypto.randomUUID();
               await client.query(
                 `INSERT INTO vault_placements (id, app_scope, node_id, parent_id, layer, state, proposed_by, created_at)
-                 VALUES ($1,$2,$3,$4,$5,'proposed','ai',$6)`,
-                [plId, scope, nodeId, resolvedParent, p.layer, now]
+                 VALUES ($1,$2,$3,$4,$5,'proposed',$6,$7)`,
+                [plId, scope, nodeId, resolvedParent, p.layer, placementProvenance(resolvedParent), now]
               );
               itemResult.placement = { id: plId, state: 'proposed', parentId: resolvedParent, action: 'created' };
             }
@@ -559,7 +582,7 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
       const scopeFilter = scope ? 'WHERE app_scope = $1' : '';
       const params = scope ? [scope] : [];
 
-      const [scopes, schema, nodes, placements, edges, artifacts, derivatives] = await Promise.all([
+      const [scopes, schema, nodes, placements, provenance, edges, artifacts, derivatives] = await Promise.all([
         pool.query(`SELECT id, scope_kind, parent_scope_id, label FROM vault_scopes ORDER BY scope_kind, id`),
         pool.query(
           `SELECT app_scope, jsonb_array_length(node_types) AS type_count, updated_at
@@ -575,6 +598,10 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
           `SELECT state, count(*)::int AS count,
                   count(*) FILTER (WHERE confidence IS NULL)::int AS no_confidence
              FROM vault_placements ${scopeFilter} GROUP BY 1`,
+          params
+        ),
+        pool.query(
+          `SELECT proposed_by, count(*)::int AS count FROM vault_placements ${scopeFilter} GROUP BY 1 ORDER BY 2 DESC`,
           params
         ),
         pool.query(
@@ -618,9 +645,18 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
             artifacts: artifacts.rows,
             placements: {
               byState: placeByState,
-              // The AI proposes placements but records NO confidence — so the review
-              // queue cannot be triaged by "trust the confident ones". Surfaced, not hidden.
               proposedWithoutConfidence,
+              // WHO actually decided each placement. Until a real classifier exists this is
+              // 'app' / 'default_root' — never 'ai'. See PLACEMENT_PROVENANCE.
+              byProvenance: Object.fromEntries(
+                (provenance.rows as Array<{ proposed_by: string; count: number }>).map((r) => [r.proposed_by, r.count])
+              ),
+            },
+            // Porter architecture rule 5: show REAL capability state. The auto-association
+            // classifier is a deterministic stub — say so, rather than implying an AI filed these.
+            classifier: {
+              active: false,
+              note: 'resolveProposedParentId is a deterministic stub — it passes through the parent the app supplied. No model call is made, and no confidence is scored.',
             },
             derivatives: {
               byStatus: derivByStatus,

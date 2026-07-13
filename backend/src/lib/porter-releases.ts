@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.100.0',
+    date: '2026-07-13',
+    title: 'The vault was crediting an AI for work no AI did',
+    bullets: [
+      'Every one of the 5,176 filings in the vault was recorded as having been proposed by an AI. None of them were. The auto-filing classifier was never actually built — it is a placeholder that just passes through whatever structure the app already declared. So those 4,900 items waiting for your review are not machine guesses you need to second-guess; they are ymc\'s own existing structure waiting to be confirmed. That changes what you should do with them.',
+      'Fixed where it was wrong, not just where it showed: filings now record who actually decided them, and "AI" is reserved until a real classifier exists and can earn the label. The 5,176 mislabelled records were corrected — labels only, nothing moved.',
+    ],
+  },
+  {
     version: '6.99.0',
     date: '2026-07-13',
     title: 'You can now clear the filing queue without clicking 4,900 times',

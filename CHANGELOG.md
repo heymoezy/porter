@@ -1,3 +1,26 @@
+## v6.100.0 (2026-07-13) — the vault was lying about who filed 5,176 things
+
+- **No AI ever proposed those placements.** Every vault placement was stamped
+  `proposed_by = 'ai'`. It was false. `resolveProposedParentId()` has always been a
+  **deterministic pass-through stub** — exactly one commit has ever touched it, the commit that
+  created it — so **no classifier has ever run**. All 5,176 placements are the calling app's
+  **own declared hierarchy**, passed straight through, and every one has `confidence = NULL`
+  because nothing ever scored them.
+  - **This is not cosmetic.** It told a reviewer that 4,900 filings were *machine guesses
+    needing human judgement*, when they are ymc's **own existing structure** waiting to be
+    confirmed. It changes what the right decision is. It is precisely what Porter architecture
+    rule 5 forbids: **never label an unconfigured feature as active.**
+  - I wrote that false claim into the R4 UI myself ("4,900 placements proposed by the AI") after
+    reading the column instead of the code. Corrected.
+- **Fixed at the source, not just in the display.** Provenance is now stamped by whoever
+  ACTUALLY decided the parent — `app` (the caller declared it) or `default_root` (nobody did).
+  **`ai` is RESERVED** and cannot be claimed until a real Bridge-backed classifier exists.
+- **Backfilled the false labels** (`0106_placement_provenance_correction.sql`): 5,148 → `app`,
+  28 → `default_root`. **Labels only** — no placement, parent, state or node was altered
+  (ymc still 276 active / 4,900 proposed, verified before and after).
+- `GET /vault/overview` now reports `classifier.active: false` with the reason, and a
+  `byProvenance` breakdown. The admin says it plainly instead of implying an AI did the work.
+
 ## v6.99.0 (2026-07-13)
 
 - **#27 R4b — the review queue can actually be cleared.** R4 exposed 4,900 unreviewed
