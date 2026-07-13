@@ -1,3 +1,21 @@
+## v6.88.0 (2026-07-13)
+
+- **#49 — cost per ACCEPTED change (the only loop metric that matters).**
+  "Below 50% acceptance a loop costs more than it saves" — and we were flying blind
+  on exactly that. I had claimed the token feed did not exist; it did: the CLI
+  transcript carries exact per-message usage.
+  - `session_usage` (0105) + `services/intellect/cost-metrics.ts`.
+  - `POST /api/v1/intellect/session-usage` (idempotent per session — never double-counts)
+    and `GET /api/v1/intellect/cost-per-change?project=`.
+  - New SessionEnd hook `~/.claude/hooks/porter-session-usage.js`: parses the transcript
+    for EXACT tokens and counts releases/reverts **observed from git**.
+  - Built so it cannot flatter us: tokens exact; cost clearly an ESTIMATE from a rate
+    table (never a bill; unknown models fall back to a mid rate, never free); acceptance
+    OBSERVED from git — a session does not get to self-report how good it was. Under 50%
+    the verdict says so bluntly.
+  - First real reading: 406k output tokens, ~$16.71, 2 releases, 0 reverts →
+    **$8.36 per accepted change, 100% acceptance.**
+
 ## v6.87.0 (2026-07-13)
 
 - **Porter MCP is actually runnable — and registered in Claude Code (#37).**

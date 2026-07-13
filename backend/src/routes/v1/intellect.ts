@@ -1081,6 +1081,40 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     return reply.send(ok(await getHot(q.project, q.scope ?? 'default')));
   });
 
+  // ── #49 — cost per ACCEPTED change ───────────────────────────────────
+  // The one metric that says whether the loop is worth running. Tokens are
+  // EXACT (from the CLI transcript); cost is an estimate; acceptance is OBSERVED
+  // from git — we do not grade our own work.
+  fastify.post('/session-usage', async (request, reply) => {
+    const b = (request.body ?? {}) as Record<string, unknown>;
+    if (!b?.sessionId) return reply.status(400).send(err('BAD_REQUEST', 'sessionId required'));
+    try {
+      const { recordSessionUsage } = await import('../../services/intellect/cost-metrics.js');
+      const out = await recordSessionUsage({
+        sessionId: String(b.sessionId),
+        project: (b.project as string) ?? null,
+        gateway: (b.gateway as string) ?? null,
+        models: (b.models as string[]) ?? [],
+        inputTokens: Number(b.inputTokens ?? 0),
+        outputTokens: Number(b.outputTokens ?? 0),
+        cacheRead: Number(b.cacheRead ?? 0),
+        cacheWrite: Number(b.cacheWrite ?? 0),
+        releases: Number(b.releases ?? 0),
+        reverts: Number(b.reverts ?? 0),
+      });
+      return reply.send(ok(out));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return reply.status(500).send(err('USAGE_RECORD_FAILED', message));
+    }
+  });
+
+  fastify.get('/cost-per-change', async (request, reply) => {
+    const q = request.query as { project?: string };
+    const { costPerAcceptedChange } = await import('../../services/intellect/cost-metrics.js');
+    return reply.send(ok(await costPerAcceptedChange(q?.project ?? null)));
+  });
+
   // POST /memory — R2 structured write path (porter_write_memory).
   // kinds: note | handoff. A 'handoff' lets a session hand its warm state to the
   // NEXT session mid-flight (without ending), which is what long-running or

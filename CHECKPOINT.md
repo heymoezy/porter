@@ -1,3 +1,18 @@
+## 2026-07-13 — v6.88.0: #49 cost per ACCEPTED change (loop metric) — DONE
+- I was WRONG that the token feed didn't exist: the CLI transcript carries exact per-message usage
+  (input/output/cache + model). Built on it.
+- session_usage (0105) + services/intellect/cost-metrics.ts (estimateCostUsd with a RATES table,
+  recordSessionUsage idempotent per session, costPerAcceptedChange).
+- POST /api/v1/intellect/session-usage · GET /api/v1/intellect/cost-per-change?project=
+- FEED: ~/.claude/hooks/porter-session-usage.js (wired into settings.json SessionEnd, alongside the existing
+  porter-session-end.js). Parses transcript for EXACT tokens; counts releases + reverts OBSERVED FROM GIT
+  (--since session start; version-bump subjects = releases, ^Revert = reverts).
+- ANTI-FLATTERY BY DESIGN: tokens exact; cost labelled an ESTIMATE (unknown models fall back to a mid rate,
+  never zero — zero would flatter); acceptance OBSERVED from git, not self-reported; verdict says bluntly when
+  acceptance < 50%.
+- FIRST REAL READING (this session): 406,400 output tok, ~$16.71 est, 2 releases, 0 reverts → $8.36 per
+  accepted change, 100% acceptance, "the loop is paying for itself." porter tsc 0.
+
 ## 2026-07-13 — v6.87.0: Porter MCP runnable + registered in Claude Code (#37)
 - ROOT CAUSE of "Porter is in no CLI": porter-mcp.ts only EXPORTED createPorterMcpServer() and never
   connected a transport — the server existed but was not launchable. Fixed: new src/mcp/porter-mcp-stdio.ts
