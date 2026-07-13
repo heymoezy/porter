@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.101.0',
+    date: '2026-07-13',
+    title: 'Phoenix is out of the knowledge graph — the "4,900 documents" were never documents',
+    bullets: [
+      'You said there was no way you added 4,900 documents, and you were right. Roughly 1,740 of them were Phoenix cold-outreach prospects and their scoring notes — CRM rows from the database, shovelled into your second brain. That is what was generating the weird associations you spotted in the graph.',
+      'They are archived, not deleted, and the Phoenix data itself is completely untouched — it simply stops being treated as knowledge. When Phoenix is revamped, it can be brought back deliberately.',
+      'The review queue drops from 4,900 to 3,198 as a result. Phoenix\'s own design docs are kept — our engineering knowledge is knowledge; a prospect record is not.',
+    ],
+  },
+  {
     version: '6.100.1',
     date: '2026-07-13',
     title: 'Removed the last place the code still claimed an AI did the filing',

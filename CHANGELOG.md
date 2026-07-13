@@ -1,3 +1,25 @@
+## v6.101.0 (2026-07-13) — Phoenix is out of the knowledge graph
+
+- **The "4,900 documents" were never 4,900 documents.** Moe: *"there is no way I added 4,900
+  documents."* He was right. The queue was inflated by **Phoenix CRM rows pushed into a knowledge
+  graph**: 1,702 `outreach_target` (cold-outreach PROSPECT COMPANIES from
+  `phoenix_v3_outreach_drafts`), 5 `mandate`, 32 `concept` nodes titled "Thesis: <prospect>"
+  (per-company scoring hypotheses masquerading as durable knowledge), and the `Outreach` domain.
+  - That breaks the standing rule — **memory ≠ database**: structured contact/deal/prospect data
+    lives in the admin DB, never in memory. **1,702 cold prospects wired into a second brain is
+    precisely what produced the "weird associations" Moe saw in the graph.**
+  - Moe: *"phoenix needs to be completely out of the knowledge graph for now — it's an experiment
+    we launched and paused because it's not really working and needs a total revamp later."*
+- **Archived, never deleted** (`0107_phoenix_out_of_the_graph.sql`): 1,740 nodes + their placements
+  flipped to `archived`, 14 Phoenix edges removed. All restorable by flipping `status` back when
+  Phoenix is revamped. **The Phoenix data itself is untouched in `ymc_capital`** — verified
+  identical before and after (3,232 contacts / 661 prospects / 301 CRM users).
+- The one real `enquiry` lived under the Outreach domain — **re-parented to Deals** rather than
+  orphaned.
+- **Phoenix ENGINEERING DOCS are deliberately KEPT** (`topic:phoenix` learnings). Our own design
+  knowledge is knowledge; a CRM row is not.
+- **Review queue: 4,900 → 3,198.**
+
 ## v6.100.1 (2026-07-13)
 
 - Corrected the stale docblock in `admin/.../routes/vault.tsx`. 6.100.0 fixed the UI copy and the

@@ -1,3 +1,36 @@
+## 2026-07-13 — v6.101.0: R1 — PHOENIX OUT OF THE KNOWLEDGE GRAPH
+
+Moe: "there is no way I added 4,900 documents" — correct. The queue was inflated by PHOENIX CRM
+ROWS pushed into a KNOWLEDGE graph:
+    1,702 outreach_target  (cold-outreach PROSPECT COMPANIES, phoenix_v3_outreach_drafts)
+        5 mandate          (phoenix_v3_mandates)
+       32 concept "Thesis:*" (per-prospect scoring hypotheses posing as durable concepts)
+        1 domain "Outreach"
+Breaks memory != database. 1,702 cold prospects wired into a second brain IS the "weird
+associations" he saw.
+
+Moe: "phoenix needs to be completely out of the knowledge graph for now. phoenix is an experiment
+which we have launched and paused because it's not really working and needs a total revamp later."
+
+- FIXED AT SOURCE: ymc backend/scripts/vault-ingest.ts no longer emits any Phoenix node/edge/concept
+  (types, Outreach domain, thesis-concepts, outreach→mandate edges all cut). Dry-run: 1,374 items
+  (was ~3,076), edges resolve, no orphans.
+- ARCHIVED NOT DELETED (drizzle/0107): 1,740 nodes + placements → 'archived'; 14 Phoenix edges
+  deleted. Restorable by flipping status when Phoenix is revamped.
+- The 1 real `enquiry` (waplacino) lived under Outreach → RE-PARENTED to Deals, not orphaned.
+- Phoenix ENGINEERING DOCS (topic:phoenix learnings) deliberately KEPT — our design knowledge is
+  knowledge; a CRM row is not.
+- VERIFIED: queue 4,900 → 3,198 · ymc_capital Phoenix data IDENTICAL before/after (3,232 contacts /
+  661 prospects / 301 CRM users — nothing deleted) · enquiry survived under Deals.
+
+FOUND EN ROUTE (gap): ymc backend/tsconfig.json only includes src/**/* — backend/scripts/*.ts are
+NEVER typechecked. A broken script typechecks green. Caught only because I typechecked the file
+directly and it showed 2 real errors. Needs its own fix.
+
+REMAINING: the 288 `person` nodes are NOT Phoenix (they are ymc `users` — 3 staff + 285 investor
+contacts) and carry real edges (document_owned_by_person, person_related_to_investment). NOT
+touched — surfaced to Moe as a separate call rather than silently gutting his CRM from the graph.
+
 ## 2026-07-13 — v6.100.1: killed the last stale claim that an AI files the vault
 
 6.100.0 fixed the data and the UI copy, but vault.tsx's own header docblock still said "the AI
