@@ -1,3 +1,18 @@
+## v6.109.0 (2026-07-14) — the graph was still serving the nodes I had archived
+
+- **R1 did not actually work, and I announced that it had.** It archived 1,740 Phoenix nodes and I
+  said "Phoenix is out of the knowledge graph". But `/vault/graph` never filtered on `status`, so it
+  kept serving **all 1,707 of them**. Moe would have opened the vault and seen 1,702 cold prospects
+  staring back at him — after being told they were gone.
+- **Archiving that the reader ignores is not archiving. It is bookkeeping.** The graph now excludes
+  `status = 'archived'`, which is the entire point of the state existing.
+- Effect: the ymc graph drops **4,414 → 2,674 nodes**, review count **4,176 → 2,436**, and the vault
+  finally shows the business — YMC, Deals, Funds, Workouts, Team, Contacts, Data Rooms, Compliance,
+  Common Ground, Dunross/Crow — instead of a wall of cold prospects.
+- **Caught only by screenshotting the actual page.** The database was right, the migration was right,
+  the announcement was confident, and the product was still wrong. A change is not done because the
+  data changed; it is done when the thing a human looks at changed.
+
 ## v6.108.0 (2026-07-14) — #52: ONE registry for everything that runs
 
 - **A thing that runs but is registered nowhere cannot be monitored, and dies silently.** That is not

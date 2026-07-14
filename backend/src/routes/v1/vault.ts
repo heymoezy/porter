@@ -998,7 +998,13 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
 
       // Nodes + their best placement (active preferred, else latest proposed).
       const params: unknown[] = [scope];
-      let where = `n.app_scope = $1`;
+      // ARCHIVED nodes are NOT in the graph. This is the whole point of archiving.
+      //
+      // 2026-07-14: R1 archived 1,740 Phoenix nodes and I announced "Phoenix is out of the
+      // knowledge graph" — but this query never filtered on status, so the graph kept serving all
+      // 1,707 of them. Moe would have opened the vault and seen 1,702 cold prospects staring back.
+      // Archiving that the reader ignores is not archiving; it is bookkeeping.
+      let where = `n.app_scope = $1 AND n.status <> 'archived'`;
       if (layer) { params.push(layer); where += ` AND n.layer = $${params.length}`; }
       if (focusIds) { params.push(focusIds); where += ` AND n.id = ANY($${params.length})`; }
       // TOMBSTONE FILTER: a document node whose file locations are ALL absent

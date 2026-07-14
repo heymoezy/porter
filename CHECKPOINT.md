@@ -1,3 +1,22 @@
+## 2026-07-14 — v6.109.0: the graph was STILL SERVING the nodes I archived
+
+R1 DID NOT ACTUALLY WORK, AND I ANNOUNCED THAT IT HAD. It archived 1,740 Phoenix nodes; I said
+"Phoenix is out of the knowledge graph". But /vault/graph never filtered on n.status, so it kept
+serving ALL 1,707 of them. Moe would have opened the vault and seen 1,702 cold prospects staring
+back — after being told they were gone.
+
+ARCHIVING THAT THE READER IGNORES IS NOT ARCHIVING. IT IS BOOKKEEPING.
+  · graph node query: `n.app_scope = $1` → `n.app_scope = $1 AND n.status <> 'archived'`
+  · ymc graph: 4,414 → 2,674 nodes · review count 4,176 → 2,436
+  · the vault finally shows the BUSINESS (YMC, Deals, Funds, Workouts, Team, Contacts, Data Rooms,
+    Compliance, Common Ground, Dunross/Crow) instead of a wall of cold prospects.
+
+HOW IT WAS CAUGHT: by SCREENSHOTTING THE ACTUAL PAGE while preparing R5. The migration was right,
+the DB was right, the announcement was confident — and the product was still wrong. A change is not
+done because the data changed. It is done when the thing a human looks at changed. This is the
+fourth false-green today (double envelope unwrap; tsc not covering scripts; secret-scan matching
+nothing; and now an archive nobody read).
+
 ## 2026-07-14 — v6.108.0: #52 — ONE registry for everything that runs
 
 Moe: agents / loops / hooks / goals / cron jobs overlap so badly nobody can say what is running.

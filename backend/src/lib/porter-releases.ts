@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.109.0',
+    date: '2026-07-14',
+    title: 'The vault was still showing the 1,700 prospects it had been told to hide',
+    bullets: [
+      'Phoenix was archived out of the knowledge graph and announced as done — but the graph never checked whether a node was archived, so it kept serving all 1,707 of them. You would have opened the vault and seen the cold prospects still sitting there after being told they were gone. Archiving that the reader ignores is not archiving; it is bookkeeping.',
+      'Fixed. The vault now shows 2,674 nodes instead of 4,414, the review count drops from 4,176 to 2,436, and what remains is the actual business: YMC, Deals, Funds, Workouts, Team, Contacts, Data Rooms, Compliance, and the live matters.',
+      'It was caught by screenshotting the real page. The database was right and the announcement was confident, and the product was still wrong.',
+    ],
+  },
+  {
     version: '6.108.0',
     date: '2026-07-14',
     title: 'One registry for everything that runs — so nothing can die quietly again',
