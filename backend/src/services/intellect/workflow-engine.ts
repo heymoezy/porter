@@ -349,14 +349,56 @@ function summarizeResult(result: unknown): unknown {
  *
  * Tags like: 'every_30m', 'every_6h', 'every_24h', 'every_tick'.
  */
+/**
+ * How long each cadence tag means, in seconds. The DUE CHECK below is what actually decides whether
+ * a workflow runs — not how often the caller happens to call us.
+ */
+const CADENCE_SECONDS: Record<string, number> = {
+  every_30m: 30 * 60,
+  every_6h: 6 * 3600,
+  every_24h: 24 * 3600,
+  every_week: 7 * 24 * 3600,
+};
+
+/**
+ * Run every enabled workflow on this cadence that is actually DUE, judged by its PERSISTED
+ * last_run_at — never by how long this process has been alive.
+ *
+ * WHY (2026-07-14): the scheduler used to gate these purely on an in-process tick counter —
+ * `tickCount % (24h/2s) === 0`. tickCount resets to 0 on every restart, so a cadence longer than the
+ * gap between restarts COULD NEVER FIRE. Porter restarts on every deploy. The result:
+ *
+ *   every_30m   fires (30 min of uptime is easy)          ✓
+ *   every_6h    needs 6 unbroken hours                    last ran 2 days ago
+ *   every_24h   needs 24 unbroken hours                   last ran 2 days ago
+ *   every_week  needs 7 unbroken DAYS                     effectively never
+ *
+ * Twelve workflows — the vault derivative sweep, memory pruning, session-rule mirroring, the
+ * dream-proposal digest — had quietly stopped. Everything reported `success`, because the last time
+ * they ran they DID succeed. They just never ran again.
+ *
+ * The code even carried a comment describing this exact bug being fixed for ONE job (the distiller,
+ * moved to a persisted gate after Tom's learning loop froze on 2026-06-20) while leaving the same
+ * broken mechanism under twelve others. Fixing the instance and not the mechanism is how it came
+ * back.
+ *
+ * Desired state lives in the database and is reconciled; it does not live in a counter that
+ * evaporates on restart.
+ */
 export async function runScheduledWorkflows(tag: string, ctx: EventContext = {}): Promise<void> {
+  const cadence = CADENCE_SECONDS[tag];
   const { rows } = await pool.query<WorkflowRow>(
     `SELECT id, name, trigger_type, trigger_value, agent_id,
             action_type, action_config, enabled, last_run_at, run_count
      FROM workflows
-     WHERE trigger_type = 'schedule' AND trigger_value = $1 AND enabled = true`,
-    [tag]
+     WHERE trigger_type = 'schedule' AND trigger_value = $1 AND enabled = true
+       AND ($2::bigint IS NULL
+            OR last_run_at IS NULL
+            OR extract(epoch from now()) - last_run_at >= $2::bigint)`,
+    [tag, cadence ?? null]
   );
+  if (!rows.length) return;
+  console.log(`[workflows] ${tag}: ${rows.length} due → ${rows.map(r => r.name).join(', ')}`);
   await Promise.all(rows.map(row => runWorkflow(row, ctx)));
 }
 

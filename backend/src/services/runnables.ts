@@ -155,6 +155,24 @@ async function discoverTimers(): Promise<Array<Omit<Runnable, 'id'>>> {
   return out;
 }
 
+/**
+ * A workflow's cadence tag → how long it may be silent before something is wrong.
+ * Same 2.2x tolerance as the systemd timers: one missed run is not an incident, two is.
+ */
+const WORKFLOW_PERIODS: Record<string, number> = {
+  every_30m: 30 * 60,
+  every_6h: 6 * 3600,
+  every_24h: 24 * 3600,
+  every_week: 7 * 24 * 3600,
+};
+
+function workflowSilenceFor(triggerValue: string | null): number | null {
+  const period = triggerValue ? WORKFLOW_PERIODS[triggerValue] : undefined;
+  // An unrecognised cadence gets NO staleness rule rather than a guessed one — a made-up threshold
+  // pages Moe about a job that is fine, and false alarms are how alerting gets ignored.
+  return period ? Math.round(period * 2.2) : null;
+}
+
 /** Porter's own workflow engine — a real registry, but only of Porter's things. */
 async function discoverWorkflows(): Promise<Array<Omit<Runnable, 'id'>>> {
   const { rows } = await pool.query(
@@ -172,7 +190,10 @@ async function discoverWorkflows(): Promise<Array<Omit<Runnable, 'id'>>> {
       last_success_at: w.last_run_at,
       last_result: w.last_run_at ? 'success' : 'unknown',
       // Event-triggered workflows have no cadence, so silence means nothing for them.
-      max_silence_seconds: w.trigger_type === 'schedule' ? 48 * 3600 : null,
+      // Scheduled ones get 2.2x their OWN period — the same rule as the timers above. This used to
+      // be a flat 48h for every scheduled workflow, which called a WEEKLY job stale after two days
+      // and would have paged Moe about a job that was running perfectly.
+      max_silence_seconds: w.trigger_type === 'schedule' ? workflowSilenceFor(w.trigger_value) : null,
       governed: true,
       notes: `porter workflow (${w.trigger_type})`,
     }));

@@ -1,3 +1,35 @@
+## 2026-07-14 — v6.112.0: the DEGRADED alerts were TRUE. 12 workflows had silently stopped.
+
+Moe: "why does tom keep sending messages that ymc is degraded we fixed this shit."
+I had fixed the alert's SPAM (sticky systemd state + in-memory cooldown) and NEVER ASKED whether the
+thing it complained about was real. It was real. I silenced a true alarm and called it fixed.
+
+ROOT CAUSE — scheduler gated cadence on tickCount, an IN-PROCESS counter that resets on restart:
+  every_30m  = 900 ticks   → 30 min uptime      → fired
+  every_6h   = 10800 ticks → 6 UNBROKEN hours   → last ran 2 days ago
+  every_24h  = 43200 ticks → 24 UNBROKEN hours  → last ran 2 days ago
+  every_week = 302400      → 7 UNBROKEN DAYS    → effectively NEVER
+Porter restarts on EVERY deploy (6x today alone). So any cadence longer than the deploy gap never
+fired. 12 workflows dead: vault derivative sweep, prune stale memory, prune transcripts, mine
+patterns, mirror Claude session rules, mirror directives→vault, dream-proposal digest, index vault
+concepts, refresh worker knowledge, distill ymc failure digest, expire memory proposals, GitHub
+watchlist. ALL reporting last_result='success' — because the last time they ran, they DID succeed.
+A status field records the last OUTCOME; it cannot tell you the job stopped HAPPENING.
+
+THE MECHANISM, NOT THE INSTANCE: the code carried a comment describing this exact bug being fixed
+for ONE job (the distiller — moved to a persisted gate after Tom's learning loop froze 2026-06-20)
+while leaving the same broken counter under twelve others. Fixing the instance and not the mechanism
+is why it came back.
+
+- FIX: runScheduledWorkflows() now gates on each workflow's PERSISTED last_run_at, polled on the
+  30-min tick. Restart-proof + idempotent. Deleted INTELLECT_DAILY/WEEKLY_INTERVAL (dead).
+- ALSO: runnables max_silence for workflows was a flat 48h → would call a WEEKLY job stale after 2
+  days. Now 2.2x the job's OWN period (same rule as the timers).
+- ALSO (ymc 1.811.0): ymc's health verdict was alerting on PORTER's workflows — "YMC system
+  DEGRADED" because Porter's dream digest was quiet. Wrong product, not actionable. Now scoped to
+  owner='ymc'.
+- VERIFIED: 16 overdue workflows fired; stale 12 → 0.
+
 ## 2026-07-14 — v6.111.0: #28 — the tool registry pointed at a browser nothing could reach
 
 Moe: "we have a central location for tools rather than installing multiple copies of them."

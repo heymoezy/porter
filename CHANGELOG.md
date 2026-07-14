@@ -1,3 +1,32 @@
+## v6.112.0 (2026-07-14) — twelve scheduled jobs had silently stopped running
+
+Moe asked why he was still getting "system DEGRADED" alerts after I said they were fixed. The alerts
+were **telling the truth**. I had fixed the alert's *spam* and never asked whether the thing it was
+complaining about was real. It was.
+
+- **Any workflow with a cadence longer than the gap between deploys had never been firing.** The
+  scheduler decided whether a job was due by counting its own uptime ticks — `tickCount % (24h / 2s)`.
+  `tickCount` resets to zero on every restart, and Porter restarts on every deploy:
+  - `every_30m` — needs 30 min of uptime — fired fine
+  - `every_6h` — needs 6 unbroken hours — last ran 2 days ago
+  - `every_24h` — needs 24 unbroken hours — last ran 2 days ago
+  - `every_week` — needs **7 unbroken days** — effectively never
+- **Twelve workflows were dead**: the vault derivative sweep, daily memory pruning, transcript
+  pruning, pattern mining, the Claude session-rule mirror, the directives→vault mirror, the
+  dream-proposal digest, vault concept indexing, and more. Every one of them reported `success`,
+  because the last time they ran, they did succeed. **They simply never ran again.** A status field
+  records the last outcome; it cannot tell you the job stopped happening.
+- **The mechanism, not the instance.** The code already carried a comment describing this exact bug
+  being fixed for ONE job — the memory distiller, moved to a persisted gate after Tom's learning loop
+  froze in June — while leaving the same broken counter under twelve others. Fixing the instance and
+  not the mechanism is why it came back. Cadence is now decided by each workflow's **persisted**
+  `last_run_at`, asked of the database on a frequent tick: restart-proof, and anything overdue fires
+  within one tick of a restart.
+- **The staleness threshold was also wrong**: a flat 48h for every scheduled workflow, which would
+  have called a *weekly* job stale after two days. It is now 2.2× the job's own period — the same
+  rule the systemd timers already used.
+- Verified: all 16 overdue workflows fired; stale count **12 → 0**.
+
 ## v6.111.0 (2026-07-14) — #28: the tool registry was pointing at a browser nothing could reach
 
 - **Porter's tool registry advertised a Chrome that no code on this box resolves to.** The detector

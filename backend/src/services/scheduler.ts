@@ -26,8 +26,10 @@ const HEALTH_PROBE_INTERVAL = 15; // 15 × 2000ms = 30s
 const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
 const MEMORY_VALIDATION_INTERVAL = 900;  // 900 ticks x 2s = 30 min — validate memory references
 const DISPATCH_SCORING_INTERVAL = 10800; // 10800 ticks x 2s = 6h — auto-score recent dispatches
-const INTELLECT_DAILY_INTERVAL = 43200;  // 43200 ticks x 2s = 24h — daily intellect maintenance (prune, mine)
-const INTELLECT_WEEKLY_INTERVAL = 302400; // 302400 ticks x 2s = 7d — weekly intellect maintenance (dream workers)
+// NOTE: there is deliberately no INTELLECT_DAILY_INTERVAL / INTELLECT_WEEKLY_INTERVAL any more.
+// Counting uptime ticks to decide whether a daily or weekly job is due only works if the process
+// never restarts. Porter restarts on every deploy, so those counters never reached 24h/7d and the
+// jobs never fired. Long cadences now ask the database what is due (see runScheduledWorkflows).
 const SILO_CADENCE_CHECK_INTERVAL = 1800; // 1800 ticks × 2s = 1h. Per-silo cadence is day-scale; hourly granularity is plenty.
 const RELEASE_RECONCILE_INTERVAL = 300;   // 300 ticks × 2s = 10 min — re-assert announce for every project's current version (self-heals a skipped announce ceremony, session-independent).
 const CONTEXT_PRESSURE_THRESHOLD = 0.8;
@@ -245,14 +247,24 @@ async function tick() {
     if (tickCount > 0 && tickCount % DISPATCH_SCORING_INTERVAL === 0) {
       runDispatchScoring().catch(err =>
         console.error('[scheduler:intellect] dispatch scoring error', err));
-      runScheduledWorkflows('every_6h').catch(err =>
-        console.error('[scheduler:intellect] every_6h workflows error', err));
     }
 
-    // Intellect daily maintenance — every 24h (pruner + pattern miner)
-    if (tickCount > 0 && tickCount % INTELLECT_DAILY_INTERVAL === 0) {
-      runScheduledWorkflows('every_24h').catch(err =>
-        console.error('[scheduler:intellect] every_24h workflows error', err));
+    // ── Long-cadence workflows: ASK, don't count ────────────────────────────
+    // These are polled on the same 30-min tick as every_30m, and runScheduledWorkflows() decides
+    // what is actually DUE from each workflow's PERSISTED last_run_at.
+    //
+    // They used to be gated on tickCount — an in-process counter that resets to 0 on every restart.
+    // every_24h needed 24 unbroken hours of uptime and every_week needed 7 unbroken DAYS, so on a
+    // box where Porter restarts on every deploy they simply never fired. Twelve workflows had
+    // quietly stopped, all still reporting `success` from the last time they DID run.
+    //
+    // Polling frequently and letting the database answer "is it due?" is restart-proof and
+    // idempotent: after any restart, anything overdue fires within one tick.
+    if (tickCount > 0 && tickCount % MEMORY_VALIDATION_INTERVAL === 0) {
+      for (const cadence of ['every_6h', 'every_24h', 'every_week'] as const) {
+        runScheduledWorkflows(cadence).catch(err =>
+          console.error(`[scheduler:intellect] ${cadence} workflows error`, err));
+      }
     }
 
     // Release ceremony enforcement — every 10 min. Re-asserts the group announce
@@ -264,12 +276,6 @@ async function tick() {
       reconcileReleases()
         .then(rs => { const filled = rs.filter(r => r.announced); if (filled.length) console.log('[scheduler:release] announce gaps filled:', JSON.stringify(filled)); })
         .catch(err => console.error('[scheduler:release] reconcile error', err));
-    }
-
-    // Intellect weekly maintenance — every 7 days (dream workers)
-    if (tickCount > 0 && tickCount % INTELLECT_WEEKLY_INTERVAL === 0) {
-      runScheduledWorkflows('every_week').catch(err =>
-        console.error('[scheduler:intellect] every_week workflows error', err));
     }
 
     // Phase 50 MSF-04 — per-silo dream cadence check (1h granularity).

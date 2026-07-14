@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.112.0',
+    date: '2026-07-14',
+    title: 'Twelve scheduled jobs had quietly stopped running',
+    bullets: [
+      'The "system degraded" alerts were right, and I was wrong to treat them as noise. Twelve background jobs really had stopped: the vault document sweep, daily memory cleanup, pattern mining, the dream-proposal digest, and others. All of them still reported success, because the last time they ran they did succeed. They just never ran again.',
+      'The cause: the scheduler worked out whether a daily job was due by counting how long it had been running without a restart. Porter restarts on every deploy, so a job that needed twenty-four unbroken hours never got there, and a weekly job needed seven unbroken days and effectively never ran at all.',
+      'Jobs now remember when they last ran, in the database, so a restart cannot erase that. Anything overdue runs within half an hour of a restart instead of never. All twelve are running again.',
+    ],
+  },
+  {
     version: '6.111.0',
     date: '2026-07-14',
     title: 'One copy of each tool — and the registry now points at the one we actually use',
