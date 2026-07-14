@@ -1,3 +1,25 @@
+## v6.115.0 (2026-07-14) — Codex has been dead for hours, and Bridge was quietly answering as Claude
+
+- **Every "ask Codex for a second opinion" was silently returning Claude.** Bridge's failover chain
+  did its job — codex_cli errored, so it fell through to claude_cli and returned a perfectly good
+  answer. Which is the problem: **a second opinion that is secretly the same model is worse than no
+  second opinion, because it manufactures agreement.** It ran for hours; the only trace was in the
+  dispatch log.
+- **Two causes, both duplicate-install rot:**
+  1. `~/.codex/config.toml` set `model_reasoning_effort = "max"`, which the CLI does not accept
+     (`none|minimal|low|medium|high|xhigh`). Codex exited 1 on *every* invocation.
+  2. `which codex` resolved to a **stray v0.128.0** in `~/node_modules/.bin` — from an accidental
+     `package.json` sitting in the home directory — while the real Codex is **v0.144.3** in
+     `~/.npm-global/bin`. The tool registry recorded the stray one as canonical, and Bridge's
+     boot-time discovery believed it.
+- Both the tool detector and the Codex adapter now prefer the **canonical global install**. A stray
+  `node_modules` in someone's home directory does not get to decide which version of a tool the whole
+  platform runs.
+- **A newly-installed job was invisible to staleness detection.** `max_silence_seconds` was derived
+  purely from a timer's last-vs-next fire, so a timer that had *never fired* got `null` — which
+  excludes it from the stale check entirely. The window where a job is most likely to be misconfigured
+  was exactly the window where nothing was watching it. It now falls back to the last successful run.
+
 ## v6.114.0 (2026-07-14) — a node's label should be enough to tell it apart
 
 - The graph drew **eleven identical squares labelled "Share Certificate.pdf"**. They are not

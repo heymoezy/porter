@@ -68,7 +68,25 @@ interface DetectResult {
   path: string;
 }
 
+/**
+ * Resolve a CLI, preferring the canonical global install over whatever `which` happens to hit.
+ *
+ * WHY (2026-07-14): `which codex` resolved to /home/lobster/node_modules/.bin/codex — a STRAY
+ * install, v0.128.0, from an accidental package.json sitting in the home directory. The canonical
+ * codex is v0.144.3 in ~/.npm-global/bin. The registry recorded the stray one as canonical, Bridge's
+ * boot-time discovery read the registry, and every Bridge call to codex_cli therefore ran a stale
+ * binary that exited 1 and silently failed over to Claude.
+ *
+ * The damage from that is subtle and worse than an outage: asking a "second model" for a second
+ * opinion and quietly getting Claude back is not a second opinion. It is the same model agreeing
+ * with itself while wearing a different name. It ran for hours before anyone looked at the logs.
+ *
+ * So: the canonical global install wins. A stray node_modules in someone's home directory does not
+ * get to define which version of a tool the whole platform runs.
+ */
 function which(binary: string): string {
+  const canonical = join(homedir(), '.npm-global', 'bin', binary);
+  if (existsSync(canonical)) return canonical;
   try {
     return execSync(`which ${binary}`, { timeout: 5000, stdio: 'pipe', encoding: 'utf8' })
       .trim()

@@ -1,3 +1,26 @@
+## 2026-07-14 — v6.115.0: CODEX WAS DEAD FOR HOURS AND BRIDGE ANSWERED AS CLAUDE
+
+Found by chasing ONE stale runnable ("Refresh worker knowledge", 59h silent) that the #52 registry
+flagged. The registry paid for itself.
+
+- EVERY "ask Codex" WAS SILENTLY RETURNING CLAUDE. Bridge's failover chain worked exactly as designed:
+  codex_cli errored → fell through to claude_cli → returned a good answer. THAT IS THE PROBLEM. A
+  second opinion that is secretly the same model is WORSE than none — it manufactures agreement. My
+  own design council this morning: codex_cli "agreed" with my pick. It WAS me. Only Grok was real.
+- CAUSE 1: ~/.codex/config.toml had model_reasoning_effort = "max" — not a valid variant
+  (none|minimal|low|medium|high|xhigh). Codex exited 1 on EVERY call. Fixed → xhigh.
+- CAUSE 2: `which codex` → /home/lobster/node_modules/.bin/codex, a STRAY v0.128.0 from an accidental
+  package.json IN THE HOME DIRECTORY, while the real codex is v0.144.3 in ~/.npm-global/bin. The tool
+  registry recorded the stray as canonical; Bridge's boot discovery believed it.
+  → tool-detector + codex adapter now PREFER the canonical global install. A stray node_modules in a
+    home directory does not get to decide what version the platform runs. (Same disease as the 10
+    Chromes: duplicate installs, one of them wrong, nobody looking.)
+- RUNNABLES: max_silence was derived only from a timer's last-vs-next fire, so a timer that had NEVER
+  FIRED got null → EXCLUDED from staleness detection entirely. The window where a job is most likely
+  to be misconfigured is exactly the window nothing was watching it. Now falls back to last success.
+- VERIFIED: Bridge → codex_cli returns codex_cli (was claude_cli). Worker-knowledge workflow ran
+  (run_count 2 → 3). ymc-vault-refresh now watched (alerts if silent > 29h).
+
 ## 2026-07-14 — v6.114.0: a node's label should be enough to tell it apart
 
 The graph drew ELEVEN identical squares labelled "Share Certificate.pdf". NOT duplicates — 11

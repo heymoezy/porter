@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.115.0',
+    date: '2026-07-14',
+    title: 'Asking Codex for a second opinion was quietly returning Claude',
+    bullets: [
+      'Codex had been failing on every single call for hours, and the fallback chain was doing its job perfectly: it caught the error, asked Claude instead, and returned a good answer. That is the problem. A second opinion that is secretly the same model is worse than no second opinion, because it manufactures agreement. Nothing looked broken.',
+      'Two causes, both from having more than one copy of a tool installed. Its config asked for a setting the tool does not support, so it refused to start; and the platform was running an old stray copy of Codex from a stray folder in the home directory instead of the real one. Both fixed, and the canonical install now wins by default.',
+      'Also: a job that had just been installed and had never yet run was invisible to the check that notices when a job goes quiet. The moment a job is most likely to be misconfigured was exactly the moment nothing was watching it.',
+    ],
+  },
+  {
     version: '6.114.0',
     date: '2026-07-14',
     title: 'Eleven squares that all said the same thing',

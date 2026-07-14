@@ -33,7 +33,9 @@
  */
 
 import { spawn } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import which from 'which';
 import type {
   GatewayAdapter,
@@ -136,6 +138,14 @@ export class CodexCLIAdapter implements GatewayAdapter {
   constructor(private readonly row: GatewayRow) {}
 
   private get binaryPath(): string {
+    // Prefer the canonical global install. `codex` on PATH — and the binary_path the boot-time
+    // discovery recorded — both resolved to a STRAY v0.128.0 in ~/node_modules/.bin (from an
+    // accidental package.json in the home directory), while the real codex is v0.144.3 in
+    // ~/.npm-global/bin. The stale binary exited 1 on every call and Bridge silently failed over to
+    // Claude, so every "ask Codex for a second opinion" quietly returned Claude. A second opinion
+    // that is secretly the same model is worse than no second opinion: it manufactures agreement.
+    const canonical = join(homedir(), '.npm-global', 'bin', 'codex');
+    if (existsSync(canonical)) return canonical;
     return (this.row.metadata as Record<string, string>).binary_path ?? 'codex';
   }
 

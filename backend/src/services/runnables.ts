@@ -65,9 +65,19 @@ function ownerOf(unit: string): string {
  * an incident; one that misses two is. Never a hardcoded per-job list: that would rot exactly like
  * the thing it is meant to catch.
  */
-function maxSilenceFor(nextElapse: number | null, lastTrigger: number | null): number | null {
-  if (!nextElapse || !lastTrigger || nextElapse <= lastTrigger) return null;
-  const period = nextElapse - lastTrigger;
+function maxSilenceFor(nextElapse: number | null, lastTrigger: number | null, lastSuccess?: number | null): number | null {
+  // A timer that has never fired has no LastTriggerUSec, so the period could not be computed and the
+  // job got max_silence = null — which excludes it from staleness detection ENTIRELY. A newly
+  // installed job was therefore invisible to the very check that exists to catch a job dying quietly.
+  // That is the Fatburger hole, reopened inside the thing built to close it: the window where a job
+  // is most likely to be misconfigured is exactly the window where nothing was watching it.
+  //
+  // So: anchor on the last trigger when there is one, and fall back to the last successful run (a
+  // manual first run, which is how any sane person tests a new timer). Only give up when there is no
+  // anchor at all.
+  const anchor = lastTrigger ?? lastSuccess ?? null;
+  if (!nextElapse || !anchor || nextElapse <= anchor) return null;
+  const period = nextElapse - anchor;
   return Math.round(period * 2.2);
 }
 
@@ -147,7 +157,7 @@ async function discoverTimers(): Promise<Array<Omit<Runnable, 'id'>>> {
       desired_state: state,
       last_success_at: result === 'success' ? (exitAt ?? lastTrigger) : null,
       last_result: result,
-      max_silence_seconds: maxSilenceFor(nextElapse, lastTrigger),
+      max_silence_seconds: maxSilenceFor(nextElapse, lastTrigger, result === 'success' ? (exitAt ?? null) : null),
       governed,
       notes: props.Description || null,
     });
