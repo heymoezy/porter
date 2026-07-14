@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.113.0',
+    date: '2026-07-14',
+    title: 'The vault total was still counting the things we took out of it',
+    bullets: [
+      'The vault overview said 5,220 items. It holds 3,480. The other 1,740 were the archived Phoenix prospects, still being counted in the headline figure even though they no longer appear in the graph. Same mistake as last week, in the one number you look at first.',
+      'Archived items are now shown as their own separate count rather than folded into the total or hidden entirely. Phoenix is out of the graph, not deleted, and it comes back when you revamp it.',
+    ],
+  },
+  {
     version: '6.112.0',
     date: '2026-07-14',
     title: 'Twelve scheduled jobs had quietly stopped running',

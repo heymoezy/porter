@@ -1,3 +1,17 @@
+## v6.113.0 (2026-07-14) — the vault overview was still counting the nodes we archived
+
+- **The headline count was inflated by every archived node.** `/vault/overview` counted `vault_nodes`
+  regardless of status, so it reported **5,220** when the vault actually holds **3,480** — the other
+  1,740 being the archived Phoenix prospects. This is the same defect fixed in the graph in 6.109.0
+  (*archiving that the reader ignores is not archiving*) still sitting in **the one number Moe looks
+  at first**. Fixing an instance is not fixing a class.
+- Archived nodes are now reported as their own figure (`archivedTotal`) rather than hidden — Phoenix
+  is out of the graph, but it is not gone, and it returns when Phoenix is revamped.
+- **Multi-tenancy verified end-to-end**, not assumed: the vault engine carries no hardcoded scope,
+  and `scope=themozaic` correctly returns 0 with no leakage from `ymc`. The scope ladder
+  (`porter → moe → ymc`) is real. Other products can have vaults whenever they have documents worth
+  organizing; none is being built speculatively.
+
 ## v6.112.0 (2026-07-14) — twelve scheduled jobs had silently stopped running
 
 Moe asked why he was still getting "system DEGRADED" alerts after I said they were fixed. The alerts

@@ -1,3 +1,16 @@
+## 2026-07-14 — v6.113.0: the vault OVERVIEW was still counting archived nodes
+
+Found while auditing #26. /vault/overview counted vault_nodes with NO status filter → reported 5,220
+when the vault holds 3,480 live (1,740 archived Phoenix). This is EXACTLY the bug fixed in the graph
+in 6.109.0, still sitting in THE ONE NUMBER MOE LOOKS AT FIRST. Fixing an instance is not fixing a
+class — the same lesson as the scheduler in 6.112.0, twice in one day.
+
+- nodeTotal now excludes archived; archivedTotal reported SEPARATELY (not hidden — Phoenix returns).
+- Verified against ground truth: live 3,480 · archived 1,740. Exact match.
+- MULTI-TENANCY VERIFIED (not assumed): no hardcoded scope in the engine; scope=themozaic returns 0
+  with zero leakage from ymc. Scope ladder porter→moe→ymc is real. Other products get vaults when
+  they have documents worth organizing — NOT building any speculatively.
+
 ## 2026-07-14 — v6.112.0: the DEGRADED alerts were TRUE. 12 workflows had silently stopped.
 
 Moe: "why does tom keep sending messages that ymc is degraded we fixed this shit."

@@ -598,16 +598,27 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
       const scopeFilter = scope ? 'WHERE app_scope = $1' : '';
       const params = scope ? [scope] : [];
 
-      const [scopes, schema, nodes, placements, provenance, edges, artifacts, derivatives] = await Promise.all([
+      const [scopes, schema, nodes, archivedNodes, placements, provenance, edges, artifacts, derivatives] = await Promise.all([
         pool.query(`SELECT id, scope_kind, parent_scope_id, label FROM vault_scopes ORDER BY scope_kind, id`),
         pool.query(
           `SELECT app_scope, jsonb_array_length(node_types) AS type_count, updated_at
              FROM vault_schemas ${scope ? 'WHERE app_scope = $1' : ''}`,
           params
         ),
+        // LIVE nodes only. This used to count every row regardless of status, so the headline still
+        // included the 1,740 archived Phoenix nodes and the overview reported 5,220 when the vault
+        // actually holds 3,480. That is the same defect fixed in the graph in 6.109.0 — archiving
+        // that the reader ignores is not archiving — and it was still sitting in the ONE number Moe
+        // looks at first. Archived rows are reported separately below rather than hidden.
         pool.query(
           `SELECT app_scope, layer, type, count(*)::int AS count
-             FROM vault_nodes ${scopeFilter} GROUP BY 1,2,3 ORDER BY 4 DESC`,
+             FROM vault_nodes ${scopeFilter}${scopeFilter ? ' AND' : ' WHERE'} status <> 'archived'
+             GROUP BY 1,2,3 ORDER BY 4 DESC`,
+          params
+        ),
+        pool.query(
+          `SELECT count(*)::int AS count FROM vault_nodes
+            ${scopeFilter}${scopeFilter ? ' AND' : ' WHERE'} status = 'archived'`,
           params
         ),
         pool.query(
@@ -657,6 +668,9 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
             schema: (schema.rows[0] as { app_scope: string; type_count: number } | undefined) ?? null,
             nodes: nodes.rows,
             nodeTotal: (nodes.rows as Array<{ count: number }>).reduce((a, r) => a + r.count, 0),
+            // Reported, not hidden: Phoenix is out of the graph but it is not gone, and it comes
+            // back when Phoenix is revamped.
+            archivedTotal: (archivedNodes.rows[0] as { count: number } | undefined)?.count ?? 0,
             edges: edges.rows,
             artifacts: artifacts.rows,
             placements: {
