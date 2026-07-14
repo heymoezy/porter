@@ -1,3 +1,14 @@
+## v6.114.0 (2026-07-14) — a node's label should be enough to tell it apart
+
+- The graph drew **eleven identical squares labelled "Share Certificate.pdf"**. They are not
+  duplicates — 11 distinct files, 11 distinct source rows. They are the Epic Games cap table, one
+  certificate per investor, and the only thing distinguishing them was a folder name nobody was
+  reading. **571 document nodes across 265 colliding names** were in that state.
+- `/vault/graph` nodes now carry `parentTitle` and `titleAmbiguous`, so a label can read
+  "Share Certificate.pdf — Yai Sukonthabhund" instead of leaving the reader to guess. The node keeps
+  its real title: renaming source data to suit a canvas would be a lie. **How** a label uses this is
+  a design decision; **having** the information is not.
+
 ## v6.113.0 (2026-07-14) — the vault overview was still counting the nodes we archived
 
 - **The headline count was inflated by every archived node.** `/vault/overview` counted `vault_nodes`

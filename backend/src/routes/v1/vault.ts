@@ -1033,8 +1033,21 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
          WHERE val.app_scope = n.app_scope AND val.document_node_id = n.id AND val.present = true))`;
 
       const nodeRows = (await pool.query(
+        // parentTitle + titleAmbiguous exist to solve a real complaint: the graph drew ELEVEN
+        // identical squares all labelled "Share Certificate.pdf". They are not duplicates — 11
+        // distinct files, 11 distinct source rows; every entity has its own share certificate. But
+        // the reader cannot know that, and a wall of identically-named nodes is exactly the "weird"
+        // Moe saw. 571 document nodes across 265 colliding names are in this state.
+        //
+        // The node keeps its real title (renaming source data to suit a canvas would be a lie). We
+        // just also return the parent's name, and a flag saying "this title is not unique here", so
+        // a label can read "Share Certificate.pdf — Stablekey Holdings" instead of leaving the
+        // reader to guess. Which of those the UI shows is a design decision; having the information
+        // is not.
         `SELECT n.id, n.external_id, n.layer, n.type, n.title, n.status,
                 pl.id AS placement_id, pl.parent_id, pl.state AS placement_state, pl.confidence,
+                par.title AS parent_title,
+                (amb.n > 1) AS title_ambiguous,
                 src.kind AS source_kind, src.source_system, src.source_id, src.path AS source_path
          FROM vault_nodes n
          LEFT JOIN LATERAL (
@@ -1044,6 +1057,13 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
            ORDER BY CASE p.state WHEN 'active' THEN 0 ELSE 1 END, p.created_at DESC
            LIMIT 1
          ) pl ON true
+         LEFT JOIN vault_nodes par
+           ON par.id = pl.parent_id AND par.app_scope = n.app_scope
+         LEFT JOIN LATERAL (
+           SELECT count(*)::int AS n FROM vault_nodes d
+           WHERE d.app_scope = n.app_scope AND d.status <> 'archived'
+             AND d.type = n.type AND d.title = n.title
+         ) amb ON true
          LEFT JOIN LATERAL (
            SELECT kind, source_system, source_id, path FROM vault_artifacts a
            WHERE a.app_scope = n.app_scope AND a.node_id = n.id
@@ -1055,6 +1075,7 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
       )).rows as Array<{
         id: string; external_id: string; layer: string; type: string; title: string;
         status: string; placement_id: string | null; parent_id: string | null; placement_state: string | null; confidence: number | null;
+        parent_title: string | null; title_ambiguous: boolean;
         source_kind: string | null; source_system: string | null; source_id: string | null; source_path: string | null;
       }>;
 
@@ -1075,6 +1096,10 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
         parentId: r.parent_id,
         placementState: r.placement_state,
         confidence: r.confidence,
+        parentTitle: r.parent_title,
+        // true when another LIVE node of the same type carries this exact title — i.e. the label
+        // alone cannot identify this node, and the UI should qualify it with parentTitle.
+        titleAmbiguous: r.title_ambiguous === true,
         source: r.source_kind
           ? { kind: r.source_kind, sourceSystem: r.source_system, sourceId: r.source_id, path: r.source_path }
           : null,

@@ -1,3 +1,15 @@
+## 2026-07-14 — v6.114.0: a node's label should be enough to tell it apart
+
+The graph drew ELEVEN identical squares labelled "Share Certificate.pdf". NOT duplicates — 11
+distinct files, 11 distinct source rows: the Epic Games cap table, one certificate per investor. The
+only thing distinguishing them was a folder name nothing displayed. 571 document nodes across 265
+colliding names were in this state. THAT is a large part of the "weird" Moe saw.
+
+- /vault/graph nodes now carry parentTitle + titleAmbiguous (another LIVE node of the same type holds
+  this exact title). The node KEEPS its real title — renaming source data to suit a canvas is a lie.
+  How a label uses this is a design decision (#55, awaiting Moe's pick); HAVING the information is not.
+- The deeper fix shipped alongside in ymc 1.813.0: those docs had NO EDGES AT ALL.
+
 ## 2026-07-14 — v6.113.0: the vault OVERVIEW was still counting archived nodes
 
 Found while auditing #26. /vault/overview counted vault_nodes with NO status filter → reported 5,220

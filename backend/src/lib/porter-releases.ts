@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.114.0',
+    date: '2026-07-14',
+    title: 'Eleven squares that all said the same thing',
+    bullets: [
+      'The vault drew eleven identical boxes labelled "Share Certificate.pdf". They were not duplicates: they are the Epic Games cap table, one certificate per investor, and the only thing telling them apart was a folder name that nothing displayed. 571 documents across 265 shared names were in the same position.',
+      'The graph now knows which parent a node hangs off and whether its name is unique, so a label can say which investor a certificate belongs to instead of leaving you to guess.',
+    ],
+  },
+  {
     version: '6.113.0',
     date: '2026-07-14',
     title: 'The vault total was still counting the things we took out of it',
