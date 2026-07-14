@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.107.0',
+    date: '2026-07-14',
+    title: 'A commit carrying a password is now refused',
+    bullets: [
+      'Yesterday the admin password for this system was found sitting in 11 commits of a public repository — and while fixing that, the live gateway token very nearly went into the same repo. It was caught by hand. Nothing but attention stood between a live credential and GitHub, and attention is not a control.',
+      'Every commit is now scanned before it is allowed through, in both repos, and refused if it carries anything shaped like a credential. It cannot be skipped: a release can be rushed, a leaked password cannot be un-published.',
+      'Testing it against real secrets found two bugs that would have made it useless — it was silently matching nothing, and it was letting private keys through. Both fixed. A security check that never fires is worse than none, because it makes you feel safe.',
+    ],
+  },
+  {
     version: '6.106.0',
     date: '2026-07-14',
     title: 'You can now ask the vault why — and cut a wrong association',

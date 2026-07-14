@@ -1,3 +1,33 @@
+## v6.107.0 (2026-07-14) — R9: a commit carrying a secret is now refused
+
+- **Attention is not a control.** On 2026-07-13 the admin service token was found sitting in **11
+  commits of this PUBLIC repo** — and while fixing that, I very nearly committed the live
+  `OPENCLAW_TOKEN` into the same repo by tracking the systemd unit verbatim. It had **0 commits in
+  history**; I caught it by hand. Nothing but my own attention stood between a live credential and
+  GitHub. That is not a control; it is luck.
+- **`_ops/bin/secret-scan.sh`** now runs first in the pre-commit hook of **both** repos and REFUSES
+  the commit. It scans the **staged diff (added lines only)**, so it sees exactly what is about to
+  enter history — and a secret being *removed* never blocks its own removal.
+- Patterns are **shape-based**, not a blocklist of what already leaked: AWS keys, GitHub PATs,
+  Anthropic/OpenAI keys, Slack tokens, private-key headers, DSNs with inline passwords, and any
+  `TOKEN/SECRET/PASSWORD = <16+ chars>`. Plus the two known-leaked literals, so they can never return.
+- **Not bypassable** by `SKIP_RELEASE_GATE`. A release can be rushed; a leaked credential cannot be
+  un-published.
+- **Two bugs found while testing it — both of which would have made it useless:**
+  - this box's `grep` is **ugrep**, which rejects `^\+\+\+` as invalid regex, so the diff filter
+    errored out and the scanner **matched nothing while reporting success**. A security control that
+    silently matches nothing is worse than none: it manufactures confidence. Rewritten with `awk`.
+  - `grep` parsed the `-----BEGIN PRIVATE KEY-----` pattern as a **flag** (it starts with `-`), so a
+    private key sailed straight through. Fixed with `-e`.
+  - A **third** surfaced immediately: the scanner **refused its own release notes**, because this
+    changelog *describes* the private-key pattern in prose. A false positive that blocks honest work
+    teaches people to bypass the gate, which is how a security control dies. The PEM pattern is now
+    anchored to a whole line — a real key header occupies one; prose wraps it in backticks.
+  - All three were caught only because the scanner was tested against **real secrets** and **real
+    commits**, not assumed to work.
+- Verified: 7 secret shapes refused; placeholders (`USER:PASSWORD`, `process.env.X`) allowed; both
+  repos scan clean; a real commit carrying the token is REFUSED end to end.
+
 ## v6.106.0 (2026-07-14) — R4: the Inspector. Step through the logic; cut a wrong association.
 
 - **The graph could not explain itself.** 1,731 of its 1,766 edges recorded **no reason at all** —

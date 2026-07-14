@@ -1,3 +1,29 @@
+## 2026-07-14 — v6.107.0: R9 — a commit carrying a secret is REFUSED
+
+Attention is not a control. 2026-07-13: the admin service token was in 11 commits of this PUBLIC
+repo, AND while fixing it I nearly committed the live OPENCLAW_TOKEN into the same repo (0 commits
+in history — caught by hand). Only my own attention stood between a credential and GitHub.
+
+- _ops/bin/secret-scan.sh runs FIRST in the pre-commit hook of BOTH repos and REFUSES the commit.
+  Scans the STAGED DIFF (added lines only) — so it sees what is about to enter history, and a secret
+  being REMOVED never blocks its own removal.
+- SHAPE-based patterns, not a blocklist of what already leaked (that only catches the leak you had):
+  AWS/GitHub/Anthropic/OpenAI/Slack keys, private-key headers, DSNs with inline passwords,
+  TOKEN/SECRET/PASSWORD=<16+ chars>. Plus the 2 known-leaked literals so they can never return.
+- NOT bypassable by SKIP_RELEASE_GATE. A release can be rushed; a leaked credential cannot be
+  un-published.
+
+TWO BUGS FOUND WHILE TESTING — either would have made it USELESS:
+  1. this box's `grep` is ugrep, which REJECTS `^\+\+\+` as invalid regex → the diff filter errored,
+     produced nothing, and the scanner PASSED EVERY SECRET while reporting success. A control that
+     silently matches nothing is worse than no control: it manufactures confidence. Rewrote with awk.
+  2. `grep` parsed the `-----BEGIN PRIVATE KEY-----` pattern as a FLAG (leading `-`) → private keys
+     sailed through. Fixed with `-e`.
+  Both caught ONLY because I tested against REAL secrets instead of assuming it worked.
+
+VERIFIED: 7 shapes refused · placeholders + process.env refs allowed · both repos scan clean ·
+a real commit carrying the token is REFUSED end to end.
+
 ## 2026-07-14 — v6.106.0: R4 — the INSPECTOR (what Moe actually asked for)
 
 His ask was to step through the logic and fix the weird associations. What I had built was a

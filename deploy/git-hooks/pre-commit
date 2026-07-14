@@ -20,6 +20,12 @@
 set -uo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 
+# SECRET SCANNER — first, always, and NOT bypassable by SKIP_RELEASE_GATE.
+# heymoezy/porter is PUBLIC. On 2026-07-13 the admin service token was found sitting in 11 of its
+# commits, and while fixing that I very nearly committed the live OPENCLAW_TOKEN into the same repo.
+# Attention is not a control.
+"$HOME/projects/_ops/bin/secret-scan.sh" || exit 1
+
 if [ "${SKIP_RELEASE_GATE:-}" = "1" ]; then
   if [ -z "${SKIP_REASON:-}" ]; then
     echo "[porter-release gate] SKIP_RELEASE_GATE=1 requires SKIP_REASON. REFUSED."
