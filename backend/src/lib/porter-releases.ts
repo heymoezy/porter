@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.110.0',
+    date: '2026-07-14',
+    title: 'Brain becomes Memory, and one part of the design was refused',
+    bullets: [
+      'The ratified design said to fold Brain into the Vault. It was wrong, and it was refused: Brain holds Porter\'s OWN memory, which spans every product, while the Vault is one product\'s knowledge graph. Hiding a global thing inside a single customer\'s tab is a category error. Brain is now simply "Memory", filed under Porter where it belongs.',
+      'Nothing was deleted. Every page still opens; one moved to where it belongs. The old surfaces come out once the new layout has actually been used and confirmed.',
+      'Also fixed a review queue nobody could reach: the Memory page has always offered to let you review new memories before the system auto-promotes them, and the button behind it led to an endpoint that did not exist. A review queue you cannot reach is not a review queue.',
+    ],
+  },
+  {
     version: '6.109.0',
     date: '2026-07-14',
     title: 'The vault was still showing the 1,700 prospects it had been told to hide',

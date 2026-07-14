@@ -1,3 +1,26 @@
+## 2026-07-14 — v6.110.0: #27 R8 — the folds, and one part of the council design REFUSED
+
+Moe's instruction: show me, make it reversible, delete only after I confirm — but don't leave legacy
+code hanging around indefinitely. And he chose: fold Bridge only; keep Brain separate.
+
+- BRAIN → "MEMORY", under PORTER (not folded into Vault). The council design (R6) said fold Brain
+  into Vault > Nodes/Edges. CATEGORY ERROR, and Moe agreed: Brain is Porter's OWN memory (Synapse
+  Feed, Episodes, Knowledge, Rules, dream proposals) — PORTER-GLOBAL. The Vault is a PER-PRODUCT
+  knowledge graph (scope=ymc). Folding a global surface inside a customer's product tab hides it in
+  the wrong place. I executed a council design unquestioned once today (the review queue) and it was
+  a fabrication. Not twice.
+- BRIDGE needed NO fold: it has been the "Services" entry since R2. R7 was already done.
+- NOTHING DELETED. Every route resolves. Brain simply left Legacy and became Memory under Porter.
+  Deletion waits for Moe to use the folded IA and confirm — then it happens PROMPTLY.
+- FIXED A REVIEW QUEUE NOBODY COULD REACH: the Memory page's "To review" section called
+  /api/v1/intellect/candidates, which NEVER EXISTED — the page 404'd. directives.status='candidate'
+  is real (memory-promoter auto-promotes at priority>=80, archives after 14d), so a human is meant to
+  intervene BEFORE the promoter decides. GET /candidates + POST /candidates/:id/:action now exist.
+  A review queue you cannot reach is not a review queue — the same defect as the vault's, in another
+  room.
+- VERIFIED: tsc 0 · deployed · screenshotted · 0 JS errors (was 2 x 404) · nav shows
+  PORTER → Memory + System; LEGACY no longer carries Brain.
+
 ## 2026-07-14 — v6.109.0: the graph was STILL SERVING the nodes I archived
 
 R1 DID NOT ACTUALLY WORK, AND I ANNOUNCED THAT IT HAD. It archived 1,740 Phoenix nodes; I said

@@ -35,7 +35,8 @@ const pageTitles: Array<{ path: string; exact?: boolean; label: string; icon: Lu
   { path: "/system", label: "System", icon: Monitor },
   { path: "/changelog", label: "Changelog", icon: FileText },
   { path: "/settings", label: "Settings", icon: Settings },
-  { path: "/brain", label: "Brain", icon: LayoutDashboard },
+  // "Brain" is now "Memory", under Porter. The route stays /brain so nothing breaks.
+  { path: "/brain", label: "Memory", icon: LayoutDashboard },
   { path: "/intelligence", label: "Intelligence", icon: LayoutDashboard },
   { path: "/architecture", label: "Architecture", icon: LayoutDashboard },
   { path: "/design-system", label: "Design System", icon: LayoutDashboard },

@@ -1436,4 +1436,45 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     return reply.send(ok(await reconcileRunnables(), request.id));
   });
 
+  /**
+   * Memory candidates — the human review step that was never wired up.
+   *
+   * `directives.status = 'candidate'` is a real concept: memory-promoter.ts auto-promotes a
+   * candidate to `active` at priority >= 80, and archives it after 14 days below that. The Brain
+   * (now "Memory") page has always had a "To review" section so a human can intervene BEFORE the
+   * promoter decides for them — but the endpoint behind it never existed, so the page just 404'd.
+   * A review queue you cannot reach is not a review queue.
+   *
+   * There are 0 candidates today (the promoter has settled them all), so this returns an empty list
+   * rather than an error — which is the honest state, not a broken one.
+   */
+  fastify.get('/candidates', { preHandler: [fastify.requireAuth] }, async (request, reply) => {
+    const { rows } = await pool.query(
+      `SELECT id, scope, scope_id, content, priority, source_type, created_by, created_at, tags
+         FROM directives
+        WHERE status = 'candidate'
+        ORDER BY priority DESC, created_at DESC
+        LIMIT 200`,
+    );
+    return reply.send(ok({ candidates: rows }, request.id));
+  });
+
+  /** Accept a candidate (promote to active) or reject it (archive). Never deletes — a rejected
+   *  memory stays on the record, it just stops being applied. */
+  fastify.post('/candidates/:id/:action', { preHandler: [fastify.requireAuth] }, async (request, reply) => {
+    const { id, action } = request.params as { id: string; action: string };
+    if (action !== 'accept' && action !== 'reject') {
+      return reply.code(400).send(err('INVALID_ACTION', 'action must be accept|reject', request.id));
+    }
+    const status = action === 'accept' ? 'active' : 'archived';
+    const { rowCount } = await pool.query(
+      `UPDATE directives SET status = $1, updated_at = extract(epoch from now())
+        WHERE id = $2 AND status = 'candidate'`,
+      [status, id],
+    );
+    if (!rowCount) return reply.code(404).send(err('CANDIDATE_NOT_FOUND', `no candidate "${id}"`, request.id));
+    request.log.info({ id, action, by: request.sessionUser?.username }, '[intellect] candidate reviewed');
+    return reply.send(ok({ id, status }, request.id));
+  });
+
 }

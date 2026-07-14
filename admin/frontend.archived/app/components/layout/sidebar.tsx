@@ -61,13 +61,21 @@ const groups = [
     { icon: ListChecks, label: "Open Items", path: "/approvals" },
     { icon: Rocket, label: "Releases", path: "/changelog" },
   ]},
+  // PORTER — Porter's own things, not a product's.
+  //
+  // "Brain" moved OUT of Legacy and is now "Memory", here. The council design (R6) said to fold it
+  // into the Vault. That is a CATEGORY ERROR and Moe agreed: Brain shows Porter's own memory —
+  // Synapse Feed, Episodes, Knowledge, Rules, dream proposals — which is Porter-GLOBAL, while the
+  // Vault is a PER-PRODUCT knowledge graph (scope=ymc). Folding Porter's brain inside a customer's
+  // vault tab hides a global thing inside a product surface. It belongs here, under Porter.
+  //
+  // Bridge needed no fold: it has been the "Services" entry since R2. R7 is already done.
   { label: "Porter", items: [
+    { icon: Brain, label: "Memory", path: "/brain" },
     { icon: Monitor, label: "System", path: "/system" },
   ]},
-  // Kept, not killed. These fold into the sections above in R5–R7; until Moe
-  // approves that, they stay reachable exactly as before.
+  // Kept, not killed. Nothing is deleted until Moe has seen the folded IA and confirmed.
   { label: "Legacy", items: [
-    { icon: Brain, label: "Brain", path: "/brain" },
     { icon: Wrench, label: "Env Tools", path: "/env-tools" },
     { icon: Plug, label: "MCP Servers", path: "/mcp" },
     { icon: Palette, label: "Design System", path: "/design-system" },

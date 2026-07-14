@@ -1,3 +1,25 @@
+## v6.110.0 (2026-07-14) — #27 R8: the folds, and one part of the design refused
+
+- **Brain is now "Memory", under Porter — not folded into the Vault.** The council design (R6) said
+  to fold Brain into `Vault > Nodes/Edges`. **That is a category error and Moe agreed.** Brain shows
+  Porter's own memory — Synapse Feed, Episodes, Knowledge, Rules, dream proposals — which is
+  **Porter-global**. The Vault is a **per-product** knowledge graph (`scope=ymc`). Folding Porter's
+  brain inside a customer's vault tab hides a global thing inside a product surface.
+  - I executed a council design without question once today (the review queue) and it turned out to
+    be a fabrication. Not twice.
+- **Bridge needed no fold at all** — it has been the `Services` entry since R2. R7 was already done.
+- **Nothing is deleted.** Every route still resolves; `Brain` simply moved out of `Legacy` and became
+  `Memory` under `Porter`, which is where a global memory surface belongs. Deletion waits for Moe to
+  have used the folded IA and confirmed — and then it happens promptly, because he does not want
+  legacy code hanging around indefinitely.
+- **Fixed a review queue that could not be reached.** The Memory page has always had a "To review"
+  section for memory candidates, and the endpoint behind it **never existed** — the page just 404'd.
+  `directives.status='candidate'` is real (`memory-promoter` auto-promotes at priority ≥ 80 and
+  archives after 14 days), so a human is supposed to be able to intervene *before* the promoter
+  decides for them. `GET /intellect/candidates` and `POST /intellect/candidates/:id/:action` now
+  exist. **A review queue you cannot reach is not a review queue** — the same defect as the vault's,
+  in a different room.
+
 ## v6.109.0 (2026-07-14) — the graph was still serving the nodes I had archived
 
 - **R1 did not actually work, and I announced that it had.** It archived 1,740 Phoenix nodes and I
