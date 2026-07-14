@@ -1021,16 +1021,23 @@ export default async function vaultRoutes(fastify: FastifyInstance) {
       let where = `n.app_scope = $1 AND n.status <> 'archived'`;
       if (layer) { params.push(layer); where += ` AND n.layer = $${params.length}`; }
       if (focusIds) { params.push(focusIds); where += ` AND n.id = ANY($${params.length})`; }
-      // TOMBSTONE FILTER: a document node whose file locations are ALL absent
-      // (moved/deleted, or PRUNED-AFTER-INGEST for privacy — e.g. a K-1 that was
-      // ingested before the tax-PII rule existed) must NOT render. The admin
-      // Files view already filters present=true; the graph did not, so pruned
-      // personal-tax docs leaked as ghost nodes (Moe 2026-07-10). Non-document
-      // nodes (domains/deals/people/entities) have no file locations, so the
-      // filter only applies to type='document'.
-      where += ` AND (n.type <> 'document' OR EXISTS (
-        SELECT 1 FROM vault_artifact_locations val
-         WHERE val.app_scope = n.app_scope AND val.document_node_id = n.id AND val.present = true))`;
+      // TOMBSTONE FILTER: a FILE-BACKED document whose locations are ALL absent (moved, deleted, or
+      // PRUNED-AFTER-INGEST for privacy — e.g. a K-1 ingested before the tax-PII rule existed) must
+      // NOT render. Pruned personal-tax docs were leaking as ghost nodes (Moe 2026-07-10).
+      //
+      // But this required `present = true` to EXIST, and a database-backed document has NO
+      // vault_artifact_locations rows AT ALL — those are only ever written by the file scanner. So
+      // the filter silently swallowed every db-sourced document: 803 of them, including all 172 in
+      // "Needs Filing", the one pile that actually needs a human decision. They were in the vault,
+      // they were counted in every total, and they could not be seen.
+      //
+      // A privacy tombstone must fire on "this file is gone", never on "this was never a file".
+      // Hidden ⇔ it HAS location rows and every one of them is absent.
+      where += ` AND (n.type <> 'document'
+        OR NOT EXISTS (SELECT 1 FROM vault_artifact_locations val
+                        WHERE val.app_scope = n.app_scope AND val.document_node_id = n.id)
+        OR EXISTS (SELECT 1 FROM vault_artifact_locations val
+                    WHERE val.app_scope = n.app_scope AND val.document_node_id = n.id AND val.present = true))`;
 
       const nodeRows = (await pool.query(
         // parentTitle + titleAmbiguous exist to solve a real complaint: the graph drew ELEVEN

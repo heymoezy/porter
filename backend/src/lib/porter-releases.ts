@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.116.0',
+    date: '2026-07-14',
+    title: '803 documents were in the vault and could not be seen',
+    bullets: [
+      'The vault hides a document when its file has been deleted, so that documents pruned for privacy do not linger as ghosts. That is right. But the check demanded proof that the file was still on disk, and documents uploaded through the app are not files on disk at all — so every one of them was quietly swallowed.',
+      '803 documents, including all 172 that are sitting unfiled: LP updates, an incorporation form, an executed subscription agreement, certificates. They were in the vault, they were counted in every total, and they could not be seen. Now they can.',
+    ],
+  },
+  {
     version: '6.115.0',
     date: '2026-07-14',
     title: 'Asking Codex for a second opinion was quietly returning Claude',

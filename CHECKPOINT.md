@@ -1,3 +1,22 @@
+## 2026-07-14 — v6.116.0: 803 DOCUMENTS WERE IN THE VAULT AND COULD NOT BE SEEN
+
+Found by asking a simple question I should have asked hours ago: are the 172 "Needs Filing" orphans
+actually REACHABLE in the new Inspector? They were not. Nothing was.
+
+- THE TOMBSTONE FILTER (added 2026-07-10 so PRUNED personal-tax docs — K-1s — do not leak as ghost
+  nodes) required `EXISTS (location WHERE present = true)`. Correct for FILE-backed documents.
+  But a DB-SOURCED document has NO vault_artifact_locations rows AT ALL — those are only ever written
+  by the file scanner. So the filter silently swallowed EVERY db-sourced document: 803, including ALL
+  172 in "Needs Filing" — the one pile that actually needs a human. LP updates, BVI incorporation
+  form, executed subscription agreement, certificates of incorporation. In the vault, counted in every
+  total, INVISIBLE.
+- A privacy tombstone must fire on "this file is GONE", never on "this was NEVER a file".
+  Hidden ⇔ HAS location rows AND every one absent. Proven as a truth table (db-doc VISIBLE ·
+  present file VISIBLE · pruned K-1 HIDDEN) — the regression test on live data was VACUOUS (0
+  tombstoned docs exist right now), so I proved the predicate instead of pretending the empty result
+  was a pass.
+- Graph 2,676 → 3,479 nodes (2,100 → 2,903 documents).
+
 ## 2026-07-14 — v6.115.0: CODEX WAS DEAD FOR HOURS AND BRIDGE ANSWERED AS CLAUDE
 
 Found by chasing ONE stale runnable ("Refresh worker knowledge", 59h silent) that the #52 registry

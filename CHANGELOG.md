@@ -1,3 +1,18 @@
+## v6.116.0 (2026-07-14) — 803 documents were in the vault and could not be seen
+
+- **A privacy filter was hiding 803 real business documents.** The graph tombstones a document whose
+  file locations are ALL absent — pruned personal-tax docs must not leak as ghost nodes (Moe,
+  2026-07-10). Correct. But it required a `present = true` location to EXIST, and a **database-backed
+  document has no location rows at all** — those are only ever written by the file scanner.
+- So every db-sourced document was silently swallowed: **803 of them, including all 172 in "Needs
+  Filing"** — the one pile in the vault that actually needs a human decision. LP updates, a BVI
+  incorporation form, an executed subscription agreement, certificates of incorporation. They were in
+  the vault, counted in every total, and invisible.
+- **A privacy tombstone must fire on "this file is gone", never on "this was never a file."** Hidden
+  is now exactly: *has location rows, and every one of them is absent.* Verified as a truth table — a
+  pruned K-1 still hides; a database document now shows.
+- Graph: 2,676 → **3,479 nodes** (2,100 → 2,903 documents).
+
 ## v6.115.0 (2026-07-14) — Codex has been dead for hours, and Bridge was quietly answering as Claude
 
 - **Every "ask Codex for a second opinion" was silently returning Claude.** Bridge's failover chain
