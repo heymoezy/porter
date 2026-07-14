@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.108.0',
+    date: '2026-07-14',
+    title: 'One registry for everything that runs — so nothing can die quietly again',
+    bullets: [
+      'A job that runs but is recorded nowhere cannot be watched, and dies silently. That is exactly what happened to the Fatburger Daily email: it stopped on 18 June and nothing noticed for 25 days, because every check was looking for things that BROKE, and nothing was looking for things that simply STOPPED.',
+      'Porter now discovers everything that runs — scheduled jobs, its own workflows, and what governs them — into one registry. 42 found on the first pass, including 4 that were running under no governance at all. Each job knows its own rhythm and how long it may stay silent before something is wrong.',
+      'Proven the way it should be: simulate the digest going quiet for 25 days, and the system now reports "stopped running: fatburger-daily (silent 25d)" instead of a cheerful green tick.',
+    ],
+  },
+  {
     version: '6.107.0',
     date: '2026-07-14',
     title: 'A commit carrying a password is now refused',

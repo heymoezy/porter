@@ -1,3 +1,35 @@
+## 2026-07-14 — v6.108.0: #52 — ONE registry for everything that runs
+
+Moe: agents / loops / hooks / goals / cron jobs overlap so badly nobody can say what is running.
+It already cost him: Fatburger Daily stopped 2026-06-18, unnoticed for 25 DAYS. Every health check
+stayed green — because everything watched for things that BREAK, and nothing watched for things that
+simply STOP.
+
+- `runnables` table (drizzle/0110). It DISCOVERS, never hand-maintained: systemd timers + ymc
+  scheduler.manifest + Porter workflows. 42 found on the first pass.
+- TAXONOMY (not synonyms): agent (reasons) · job (scheduled deterministic) · hook (invariant gate;
+  event-driven, exists to REFUSE — a hook is NOT a job) · loop (agent iterating to a condition) ·
+  goal (an outcome; no schedule at all).
+- STALENESS is the payload: max_silence_seconds derived from each job's OWN cadence (2.2x period),
+  never a hardcoded list (which would rot like the thing it catches). Folded into the SAME ymc health
+  verdict that already alerts Moe — no new channel, no new cooldown to get wrong.
+- 4 UNGOVERNED jobs surfaced (journeyful-db-backup, journeyful-fx, porter-db-backup,
+  launchpadlib-cache-clean): they run, but no manifest says they should.
+- Reconcile rides the every_24h workflow tick, so the registry is never stale about staleness.
+
+ACCEPTANCE TEST (the one the task demanded) — PASSES END TO END:
+  healthy — nominal
+  → simulate Fatburger silent 25d →  degraded — "stopped running: ymc-fatburger-daily (silent 25d)"
+  → restore →                        healthy — nominal
+  (test sessions cleaned; 0 leftover)
+
+⚠ CORRECTION ON RECORD: I earlier claimed Porter's `agents` AND `workflows` tables were "both empty"
+and wrote it into two checkpoints and a group announcement. WRONG. My query used a column that does
+not exist (`schedule` vs `trigger_type`), errored, returned nothing — and I read an empty result as
+an empty table. `workflows` holds 21 LIVE workflows, all enabled, all have run. There is no `agents`
+table at all. The core finding survives (Fatburger matched 0 workflows — it truly existed nowhere),
+but the detail was false. An errored query is not an empty table: check the error, not just the rows.
+
 ## 2026-07-14 — v6.107.0: R9 — a commit carrying a secret is REFUSED
 
 Attention is not a control. 2026-07-13: the admin service token was in 11 commits of this PUBLIC

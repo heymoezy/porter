@@ -1,3 +1,34 @@
+## v6.108.0 (2026-07-14) — #52: ONE registry for everything that runs
+
+- **A thing that runs but is registered nowhere cannot be monitored, and dies silently.** That is not
+  a theory — it cost Moe his "Fatburger Daily" legal digest, which stopped on 2026-06-18 and went
+  unnoticed for **25 days**. Every health check stayed green the entire time, because **nothing
+  anywhere was watching for absence**.
+- **`runnables` — the one registry.** It **DISCOVERS** rather than being told: systemd timers, ymc's
+  `scheduler.manifest`, and Porter's own `workflows` engine. A hand-maintained list drifts the moment
+  someone adds a timer; a discovered one cannot. **42 runnables found** on the first pass.
+- **The taxonomy Moe asked for, and they are NOT synonyms:** `agent` (a persona that reasons) ·
+  `job` (a scheduled deterministic execution) · `hook` (an invariant gate that fires on an event and
+  exists to REFUSE — a hook is not a job) · `loop` (an agent iterating toward a condition) · `goal`
+  (an outcome a human wants; no schedule at all).
+- **Staleness is the payload.** Each job carries `max_silence_seconds`, derived from its own cadence
+  (2.2× its period) — never a hardcoded list, which would rot exactly like the thing it is meant to
+  catch. **"Has gone quiet" is now folded into the same health verdict that already alerts Moe** — no
+  new channel, no new cooldown to get wrong.
+- **4 jobs were found running under no governance at all** (`journeyful-db-backup`, `journeyful-fx`,
+  `porter-db-backup`, `launchpadlib-cache-clean`) — they run, but no manifest says they should. Now
+  flagged rather than quietly tolerated.
+- **Acceptance test — the one the task demanded — passes end to end:** simulate Fatburger Daily going
+  silent for 25 days → the verdict flips from `healthy — nominal` to
+  **`degraded — stopped running: ymc-fatburger-daily (silent 25d)`** → and back to healthy on
+  restore. Exactly the condition that stayed green for 25 days.
+- **CORRECTION ON RECORD:** I previously stated that Porter's `agents` and `workflows` tables were
+  "both empty" and put it in two checkpoints and a group announcement. **That was wrong.** My query
+  used a column that does not exist, errored, and returned nothing — and I read the empty result as
+  an empty table. `workflows` holds **21 live workflows**, all enabled, all of which have run. There
+  is no `agents` table at all. The core finding stands (Fatburger matched **0** workflows — it truly
+  existed nowhere), but the detail was false and is corrected here.
+
 ## v6.107.0 (2026-07-14) — R9: a commit carrying a secret is now refused
 
 - **Attention is not a control.** On 2026-07-13 the admin service token was found sitting in **11

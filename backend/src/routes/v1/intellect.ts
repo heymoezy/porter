@@ -34,6 +34,7 @@ import { runGithubScan } from '../../services/intellect/github-scan.js';
 import { randomUUID } from 'node:crypto';
 import { resolveActiveProject, setActiveProject, clearActiveProject, recentProjects } from '../../services/intellect/active-project.js';
 import { observeShadow, shadowFlagOn, canaryScopes } from '../../services/memory-injection-v2.js';
+import { reconcileRunnables, listRunnables } from '../../services/runnables.js';
 
 // Surprise-salience write-gate (R3). An agent episode is skipped when its
 // salience (1 − max trigram-similarity vs recent episodes + active concepts)
@@ -1418,4 +1419,21 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       },
     }));
   });
+  /**
+   * #52 — the ONE registry of everything that runs.
+   *
+   * GET  /runnables            what runs, what governs it, and what has gone quiet
+   * POST /runnables/reconcile  re-discover from systemd + the ymc manifest + Porter workflows
+   *
+   * It DISCOVERS rather than being told. A hand-maintained list drifts the moment someone adds a
+   * timer — which is exactly how "Fatburger Daily" died unnoticed for 25 days.
+   */
+  fastify.get('/runnables', { preHandler: [fastify.requireAuth] }, async (request, reply) => {
+    return reply.send(ok(await listRunnables(), request.id));
+  });
+
+  fastify.post('/runnables/reconcile', { preHandler: [fastify.requireAuth] }, async (request, reply) => {
+    return reply.send(ok(await reconcileRunnables(), request.id));
+  });
+
 }

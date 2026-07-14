@@ -42,6 +42,7 @@ import { runClaudeRulesMirror } from './claude-rules-mirror.js';
 import { runWorkerKnowledgeRefresh } from './worker-knowledge.js';
 import { runGithubScan } from './github-scan.js';
 import { runVaultDerivativeSweep } from '../vault-derivatives.js';
+import { reconcileRunnables } from '../runnables.js';
 import { broadcast } from '../sse-hub.js';
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -68,6 +69,7 @@ export type WorkflowActionType =
   | 'claude_rules_mirror'       // U6 2026-07-06 — CLAUDE.md hard rules + project non-negotiables → ONE workspace directive
   | 'worker_knowledge_refresh'  // worker-knowledge loop 2026-07-06 — ONE due worker/day researched via CHEAP gateway → proposal
   | 'github_scan'               // worker-knowledge loop 2026-07-06 — weekly (state-gated) gh watchlist scan → digest proposal
+  | 'runnables_reconcile'       // #52 2026-07-14 — re-discover systemd timers + workflows into the ONE registry
   | 'vault_derivative_sweep'    // Vault v2 R4 2026-07-07 — raw_file artifacts w/o markdown_derivative → generate via Bridge failover; stale detection
   | 'noop';
 
@@ -250,6 +252,9 @@ const actionHandlers: Record<WorkflowActionType, ActionHandler> = {
   // Vault v2 R4 (2026-07-07): derivative loop rides the same every_24h tick —
   // no new timer. Generic across every app_scope (no scope filter here).
   vault_derivative_sweep: async () => runVaultDerivativeSweep({ triggeredBy: 'schedule' }),
+  // #52 — re-discover everything that runs. A registry that is itself stale cannot tell you what
+  // has gone quiet, so this rides the same tick as everything else.
+  runnables_reconcile: async () => reconcileRunnables(),
   noop: async () => null,
 };
 
