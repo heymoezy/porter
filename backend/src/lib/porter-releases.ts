@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.111.0',
+    date: '2026-07-14',
+    title: 'One copy of each tool — and the registry now points at the one we actually use',
+    bullets: [
+      'Porter kept a registry of where each tool lives so nothing downloads a second copy of itself. It turned out to be pointing at a Chrome that nothing on this box can reach: it picked whichever version folder sorted last, which is not the same as the version our code runs. Porter had been taking its own screenshots through an orphaned browser.',
+      'Both browsers are now resolved by asking the code what it launches, rather than guessing from the folder names on disk.',
+      'A shared tool folder that never cleans up is not one copy of a tool, it is every copy in one place. There is now a weekly sweep that quarantines browser builds nothing uses. It reclaimed 1.8 GB on the first run, and it puts things in quarantine rather than deleting them.',
+    ],
+  },
+  {
     version: '6.110.0',
     date: '2026-07-14',
     title: 'Brain becomes Memory, and one part of the design was refused',

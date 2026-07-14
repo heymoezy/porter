@@ -1,3 +1,30 @@
+## 2026-07-14 — v6.111.0: #28 — the tool registry pointed at a browser nothing could reach
+
+Moe: "we have a central location for tools rather than installing multiple copies of them."
+The location was already central. That was never the problem.
+
+- THE BUG: tool-detector scanned ~/.cache/puppeteer, sorted, took the LAST dir — "newest folder
+  wins" — and pinned Chrome 148, an ORPHAN no installed puppeteer resolves to. Porter's own self-QA
+  screenshotted through it. Exposed only when browser-gc quarantined the orphan and self-QA broke.
+  A registry reporting the newest thing on disk instead of the thing in use is a directory listing
+  with extra steps — and a frozen revision-pinned abs path breaks Porter's own rule #2 (no hardcoded
+  binary locations).
+- FIX: canonical = what the code pins. puppeteer.executablePath() → 147.56;
+  playwright-core/browsers.json → 1208. NOTE playwright-core's "exports" map REFUSES the
+  browsers.json subpath — require.resolve on it throws and silently fell back to the bad scan; had
+  to resolve the package entry and walk to root. (A silent fallback to the broken path is how the
+  first fix "passed" while changing nothing.)
+- ROOT CAUSE OF THE BLOAT: a central cache that never prunes is not ONE copy of a tool, it is EVERY
+  copy in one place. puppeteer pins a new Chrome per version bump (370MB) and never GCs the old one,
+  and its installer ALSO pulls a chrome-headless-shell per revision (~257MB) that NOTHING here
+  launches (no code passes headless:'shell').
+- _ops/bin/browser-gc.sh — derives the reachable set by ASKING the installed libs; reversibly
+  quarantines the rest (restore manifest, --restore). First run: 6 unreachable, 1.8 GB.
+  Weekly timer vps-browser-gc → discovered + governed by the #52 runnables registry.
+- VERIFIED: tsc 0 · both puppeteers launch (Porter self-QA screenshot ✓ 0 JS errors; ymc site
+  chrome-146 loaded ymc.capital) · registry how_detected now puppeteer.executablePath() +
+  playwright-core/browsers.json · runnables shows vps-browser-gc infra/governed.
+
 ## 2026-07-14 — v6.110.0: #27 R8 — the folds, and one part of the council design REFUSED
 
 Moe's instruction: show me, make it reversible, delete only after I confirm — but don't leave legacy

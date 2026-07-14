@@ -22,9 +22,10 @@
 import { pool } from '../../db/client.js';
 import { logIntellectEvent } from './file-watcher.js';
 import { execSync } from 'node:child_process';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
 
 interface ToolSpec {
   key: string;
@@ -159,11 +160,31 @@ async function detectBrowsersAndDocs(now: number): Promise<{ detected: number; m
         }
       } catch { /* ignore */ }
     }
-    const found = execPaths.length > 0;
+    // Same rule as puppeteer below: canonical = the build the INSTALLED playwright pins, read from
+    // its own browsers.json — not the highest-numbered folder in the cache. Porter's tests pin
+    // chromium-1208 while the cache also holds 1217 (ymc/site + themozaic), so "newest folder wins"
+    // had the registry advertising a browser Porter itself never launches.
+    // NOTE: resolve the package ENTRY, then walk to its root — playwright-core declares an "exports"
+    // map that does not expose browsers.json, so require.resolve('playwright-core/browsers.json')
+    // throws. Asking for a subpath the package refuses to export is how this silently fell back to
+    // the cache scan on the first attempt.
+    let pinned = '';
+    try {
+      const entry = createRequire(import.meta.url).resolve('playwright-core');
+      const root = entry.slice(0, entry.indexOf('playwright-core') + 'playwright-core'.length);
+      const { browsers } = JSON.parse(readFileSync(join(root, 'browsers.json'), 'utf8')) as {
+        browsers: Array<{ name: string; revision: string }>;
+      };
+      const rev = browsers.find((b) => b.name === 'chromium')?.revision;
+      const exec = rev ? join(pwRoot, `chromium-${rev}`, 'chrome-linux64', 'chrome') : '';
+      if (exec && existsSync(exec)) pinned = exec;
+    } catch { /* playwright absent → fall back to the scan */ }
+
+    const found = pinned !== '' || execPaths.length > 0;
     const isDrift = chromiumBuilds.length > 1;
     if (found) detected++; else missing++;
     if (isDrift) drift++;
-    const canonical = execPaths.length ? execPaths[execPaths.length - 1] : '';
+    const canonical = pinned || (execPaths.length ? execPaths[execPaths.length - 1] : '');
     const status = !found ? 'missing' : isDrift ? 'drift' : 'present';
     const health = !found ? 'missing' : isDrift ? 'drift' : 'ok';
     const c = await upsertTool({
@@ -171,14 +192,28 @@ async function detectBrowsersAndDocs(now: number): Promise<{ detected: number; m
       version: found ? `chromium builds: ${chromiumBuilds.join(', ')}` : '',
       source: 'browser', kind: 'browser',
       canonicalPath: canonical, altPaths: execPaths,
-      howDetected: 'cache-scan',
-      installRecipe: `PLAYWRIGHT_BROWSERS_PATH=${pwRoot} npx playwright install chromium  (browsers live in ${pwRoot}; set PLAYWRIGHT_BROWSERS_PATH so sessions reuse them; prune older chromium-* builds to fix drift)`,
+      howDetected: pinned ? 'playwright-core/browsers.json' : 'cache-scan',
+      installRecipe: `PLAYWRIGHT_BROWSERS_PATH=${pwRoot} npx playwright install chromium  (browsers live in ${pwRoot}; run _ops/bin/browser-gc.sh to prune builds nothing pins)`,
       now,
     });
     if (c) changed++;
   }
 
   // ── Puppeteer chrome cache ───────────────────────────────────────────────
+  //
+  // The canonical Chrome is the one puppeteer ACTUALLY RESOLVES TO — asked of puppeteer itself, not
+  // guessed from the cache directory.
+  //
+  // This used to sort the cache dir and take the last entry, i.e. the highest-numbered directory on
+  // disk. That is "newest folder wins", which is not the same question as "which browser does our
+  // code launch". On 2026-07-14 those two answers diverged: the cache held Chrome 148, no installed
+  // puppeteer resolved to it, and the registry had pinned it anyway. Porter's own self-QA had been
+  // launching an ORPHANED browser that survived only because nothing ever garbage-collected the
+  // cache — and it broke the moment something did (_ops/bin/browser-gc.sh).
+  //
+  // A registry that reports the newest thing on disk rather than the thing in use is not a registry;
+  // it is a directory listing with extra steps. It also violated this codebase's rule #2 — no
+  // hardcoded binary locations — by freezing a revision-pinned absolute path.
   const ppRoot = join(home, '.cache', 'puppeteer');
   {
     const chromeDir = join(ppRoot, 'chrome');
@@ -193,11 +228,23 @@ async function detectBrowsersAndDocs(now: number): Promise<{ detected: number; m
         }
       } catch { /* ignore */ }
     }
-    const found = execPaths.length > 0;
+
+    // Authoritative: what does the installed puppeteer launch?
+    let resolved = '';
+    try {
+      const pp = await import('puppeteer');
+      const p = (pp.default ?? pp) as { executablePath?: () => string };
+      const e = p.executablePath?.();
+      if (e && existsSync(e)) resolved = e;
+    } catch { /* puppeteer absent → fall back to the scan below */ }
+
+    const found = resolved !== '' || execPaths.length > 0;
+    // Drift is now a real signal: more than one Chrome on disk means some project pins a different
+    // revision (today ymc/site is a minor version behind ymc/backend), and the extra copy is ~370 MB.
     const isDrift = versions.length > 1;
     if (found) detected++; else missing++;
     if (isDrift) drift++;
-    const canonical = execPaths.length ? execPaths[execPaths.length - 1] : '';
+    const canonical = resolved || (execPaths.length ? execPaths[execPaths.length - 1] : '');
     const status = !found ? 'missing' : isDrift ? 'drift' : 'present';
     const health = !found ? 'missing' : isDrift ? 'drift' : 'ok';
     const c = await upsertTool({
@@ -205,8 +252,8 @@ async function detectBrowsersAndDocs(now: number): Promise<{ detected: number; m
       version: found ? `chrome builds: ${versions.join(', ')}` : '',
       source: 'browser', kind: 'browser',
       canonicalPath: canonical, altPaths: execPaths,
-      howDetected: 'cache-scan',
-      installRecipe: `PUPPETEER_CACHE_DIR=${ppRoot} npx puppeteer browsers install chrome  (browsers live in ${ppRoot}; prune older linux-* builds to fix drift)`,
+      howDetected: resolved ? 'puppeteer.executablePath()' : 'cache-scan',
+      installRecipe: `PUPPETEER_CACHE_DIR=${ppRoot} npx puppeteer browsers install chrome  (browsers live in ${ppRoot}; run _ops/bin/browser-gc.sh to prune builds nothing resolves to)`,
       now,
     });
     if (c) changed++;

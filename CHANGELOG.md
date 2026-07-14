@@ -1,3 +1,26 @@
+## v6.111.0 (2026-07-14) — #28: the tool registry was pointing at a browser nothing could reach
+
+- **Porter's tool registry advertised a Chrome that no code on this box resolves to.** The detector
+  scanned the puppeteer cache, sorted it, and took the **last directory** — "newest folder wins",
+  which is not the same question as "which browser do we actually launch". It had pinned Chrome
+  **148**, an orphan left behind by an old install, while every puppeteer here resolves to **147.56**.
+  Porter's own self-QA had been screenshotting through that orphan for as long as it existed.
+  - It only surfaced because something finally garbage-collected the cache. A registry that reports
+    the newest thing on disk rather than the thing in use is a directory listing with extra steps —
+    and freezing a revision-pinned absolute path also broke this codebase's own rule #2, *no
+    hardcoded binary locations*.
+- **Both browsers now resolve from what the code pins**, not from what the filesystem happens to
+  hold: `puppeteer.executablePath()` for Chrome, `playwright-core/browsers.json` for Chromium. The
+  registry now says 147.56 and 1208 — which is what Porter actually launches.
+  - Playwright needed a second pass: `playwright-core` declares an `exports` map that refuses
+    `browsers.json`, so asking for that subpath threw and silently fell back to the same bad scan.
+- **A central tool directory that never prunes is not one copy of the tool — it is every copy, in one
+  place.** `_ops/bin/browser-gc.sh` derives the reachable set by asking the installed libraries, then
+  reversibly quarantines the rest. First run: **6 unreachable browsers, 1.8 GB** — two orphaned
+  Chromes and four `chrome-headless-shell` builds that puppeteer's installer downloads for every
+  revision and that nothing here has ever launched. Weekly timer (`vps-browser-gc`), discovered and
+  monitored by the #52 runnables registry.
+
 ## v6.110.0 (2026-07-14) — #27 R8: the folds, and one part of the design refused
 
 - **Brain is now "Memory", under Porter — not folded into the Vault.** The council design (R6) said
