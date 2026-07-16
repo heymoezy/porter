@@ -493,6 +493,21 @@ const BUILTIN_WORKFLOWS: SeedWorkflow[] = [
     action_type: 'dream_runs_stuck_sweep',
     action_config: {},
   },
+  // #52 (2026-07-14) shipped the runnables registry + the `runnables_reconcile`
+  // ACTION but NEVER a workflow to drive it — so reconcile ran once at seed time
+  // (2026-07-14 16:12) and never again. The registry froze while the jobs kept
+  // running on systemd, and its OWN staleness surfaced to Moe as "YMC DEGRADED —
+  // stopped running: … (silent 2d)" about jobs that were fine. The reconcile is
+  // now a first-class scheduled built-in so it can never be forgotten again: every
+  // 30 min it re-reads systemd LastTrigger, so a genuinely stopped job still
+  // SCREAMS while a fresh registry never cries wolf. (Fixed 2026-07-16.)
+  {
+    name: 'Reconcile runnables registry',
+    trigger_type: 'schedule',
+    trigger_value: 'every_30m',
+    action_type: 'runnables_reconcile',
+    action_config: {},
+  },
   {
     name: 'Expire stale memory proposals',
     trigger_type: 'schedule',

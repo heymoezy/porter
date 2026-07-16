@@ -231,6 +231,16 @@ export async function reconcileRunnables(): Promise<{ discovered: number; stale:
     );
   }
 
+  // Prune vanished systemd units. Discovery UPSERTs what EXISTS; without this a
+  // DELETED timer (e.g. ymc-yai-annoy, removed 2026-07-16) lingers frozen and then
+  // false-alarms as "silent Nd" forever — the same cry-wolf that made Moe restart
+  // healthy services. Only rows NOT re-seen this run (last_seen_at < now) are
+  // orphans; workflows are re-discovered every run so they are never caught here.
+  await pool.query(
+    `DELETE FROM runnables WHERE source = 'systemd' AND last_seen_at < $1`,
+    [now],
+  );
+
   const { rows } = await pool.query(`SELECT count(*)::int AS n FROM runnables WHERE ${STALE_SQL}`);
   return { discovered: found.length, stale: (rows[0] as { n: number }).n };
 }

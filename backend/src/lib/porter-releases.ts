@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.117.0',
+    date: '2026-07-16',
+    title: 'The health monitor was crying wolf about jobs that were running fine',
+    bullets: [
+      'The repeated "YMC system DEGRADED — stopped running (silent 2d)" alerts were false. The jobs were running fine, on schedule. What had stopped was the monitor’s OWN refresh: the registry that tracks whether a job has gone quiet was seeded once when it was built, and never scheduled to run again — so it froze, and its own staleness got reported as the jobs being silent, climbing a day at a time and telling Moe to restart healthy services.',
+      'The reconcile is now a first-class scheduled job that re-reads the real system every 30 minutes and re-installs itself on every boot, so it can never be forgotten again — a genuinely stopped job still screams, and a fresh registry stops crying wolf. It also now removes jobs that were deleted, so a retired timer no longer lingers and false-alarms forever.',
+    ],
+  },
+  {
     version: '6.116.0',
     date: '2026-07-14',
     title: '803 documents were in the vault and could not be seen',

@@ -1,3 +1,14 @@
+## v6.117.0 (2026-07-16) — the health monitor was crying wolf about jobs that were fine
+
+- The repeated "YMC system DEGRADED — stopped running (silent 2d)" alerts were FALSE: the jobs ran
+  fine on systemd; the monitor's own refresh had stopped. The runnables registry (which tracks "has
+  this job gone quiet") was seeded once when built on 2026-07-14 and never scheduled — so it froze,
+  and its own staleness surfaced as the jobs being silent, +1 day each day, telling Moe to restart
+  services that were healthy.
+- Root cause: the `runnables_reconcile` action shipped without a workflow to drive it. It is now a
+  scheduled every-30m builtin (re-seeded on boot, can't be forgotten), and reconcile now prunes
+  vanished units so a deleted timer no longer lingers and false-alarms.
+
 ## v6.116.0 (2026-07-14) — 803 documents were in the vault and could not be seen
 
 - **A privacy filter was hiding 803 real business documents.** The graph tombstones a document whose
