@@ -47,6 +47,8 @@ export interface Runnable {
   max_silence_seconds: number | null;
   governed: boolean;
   notes: string | null;
+  /** Epoch seconds of the reconcile that last observed this row. The clock staleness is judged on. */
+  last_seen_at?: number | null;
 }
 
 /** Owner is inferred from the unit prefix — the same convention the box already uses. */
@@ -248,32 +250,80 @@ export async function reconcileRunnables(): Promise<{ discovered: number; stale:
 /**
  * STALE — the whole point of the registry.
  *
- * A job whose desired state is `active`, that has a known cadence, and that has not SUCCEEDED within
- * ~2 of its own periods. This is the condition that was true of Fatburger Daily for 25 days while
- * nothing anywhere noticed.
+ * A job whose desired state is `active`, that has a known cadence, and that had not SUCCEEDED within
+ * ~2 of its own periods AS OF THE LAST TIME WE LOOKED. This is the condition that was true of
+ * Fatburger Daily for 25 days while nothing anywhere noticed.
+ *
+ * The clock is `last_seen_at`, NOT `now()` (fixed 2026-07-26).
+ *
+ * `last_success_at` is a SNAPSHOT taken by reconcileRunnables, which runs every 30 min. Comparing a
+ * 30-min-old snapshot against a live `now()` charges the job for the observer's own lag: a 10-min
+ * timer gets a 22-min tolerance (2.2x period), so from minute 22 to minute 30 of every single
+ * reconcile window it read as "stopped running" while it was in fact firing on time. That flapped
+ * ymc-tom-silent-drop-reconciler into repeated "🚨 YMC system DEGRADED — stopped running (silent 0d)"
+ * pages at Moe, each one clearing itself at the next reconcile. Any job whose period is under ~13.6
+ * min (2.2 * period < 30 min) was guaranteed to false-alarm every cycle.
+ *
+ * You cannot know more than what you last observed, so the comparison is made at observation time.
+ * A genuinely dead job still screams — the gap keeps growing at every reconcile — just up to one
+ * reconcile interval later. That is a real cost of at most one cycle, paid to stop crying wolf.
+ *
+ * This makes registry freshness load-bearing, which is exactly the failure of v6.117.0 (the reconcile
+ * was seeded once and never scheduled, froze, and reported its own staleness as the jobs being
+ * silent). So the registry's own lag is now reported explicitly — see `registry` in listRunnables()
+ * and REGISTRY_STALE_AFTER_SECONDS. A frozen registry is its own alarm, never silence.
  */
 export const STALE_SQL = `
   desired_state = 'active'
   AND max_silence_seconds IS NOT NULL
   AND (last_success_at IS NULL
-       OR extract(epoch from now()) - last_success_at > max_silence_seconds)
+       OR last_seen_at - last_success_at > max_silence_seconds)
 `;
 
+/**
+ * How stale the registry itself may be before its verdicts stop meaning anything: 2 reconcile
+ * cycles + slack. Derived from the reconcile cadence (every_30m) — if that cadence changes this
+ * must change with it, so it is named, not inlined.
+ */
+export const REGISTRY_STALE_AFTER_SECONDS = 2 * 30 * 60 + 5 * 60;
+
 export async function listRunnables(): Promise<{
-  runnables: Array<Runnable & { stale: boolean; silent_for_seconds: number | null }>;
+  runnables: Array<Runnable & {
+    stale: boolean;
+    silent_for_seconds: number | null;
+    observation_age_seconds: number;
+  }>;
   summary: { total: number; stale: number; ungoverned: number; byKind: Record<string, number> };
+  registry: { last_reconciled_at: number | null; observation_age_seconds: number | null; stale: boolean };
 }> {
   const { rows } = await pool.query(
     `SELECT *,
             (${STALE_SQL}) AS stale,
+            -- Measured at observation time, on the same clock the verdict uses (see STALE_SQL).
+            -- Reporting a live now()-based number next to an as-of-observation verdict is how the
+            -- "silent 0d" nonsense read: a job called stale while its own counter said zero.
             CASE WHEN last_success_at IS NULL THEN NULL
-                 ELSE round(extract(epoch from now()) - last_success_at)::bigint END AS silent_for_seconds
+                 ELSE round(last_seen_at - last_success_at)::bigint END AS silent_for_seconds,
+            round(extract(epoch from now()) - last_seen_at)::bigint AS observation_age_seconds
        FROM runnables
       ORDER BY (${STALE_SQL}) DESC, governed ASC, owner, name`,
   );
-  const list = rows as Array<Runnable & { stale: boolean; silent_for_seconds: number | null }>;
+  const list = rows as Array<Runnable & {
+    stale: boolean;
+    silent_for_seconds: number | null;
+    observation_age_seconds: number;
+  }>;
   const byKind: Record<string, number> = {};
   for (const r of list) byKind[r.kind] = (byKind[r.kind] ?? 0) + 1;
+
+  // The registry's own freshness. Staleness is judged as of the last reconcile, so a frozen
+  // reconcile silently freezes every verdict with it — consumers must be able to see that and say
+  // so instead of reporting stale jobs (v6.117.0) or, worse, a confident all-clear.
+  const lastReconciled = list.reduce<number | null>(
+    (max, r) => (r.last_seen_at != null && (max === null || r.last_seen_at > max) ? r.last_seen_at : max),
+    null,
+  );
+  const registryAge = lastReconciled === null ? null : Math.round(Date.now() / 1000 - lastReconciled);
   return {
     runnables: list,
     summary: {
@@ -281,6 +331,11 @@ export async function listRunnables(): Promise<{
       stale: list.filter((r) => r.stale).length,
       ungoverned: list.filter((r) => !r.governed).length,
       byKind,
+    },
+    registry: {
+      last_reconciled_at: lastReconciled,
+      observation_age_seconds: registryAge,
+      stale: registryAge === null || registryAge > REGISTRY_STALE_AFTER_SECONDS,
     },
   };
 }

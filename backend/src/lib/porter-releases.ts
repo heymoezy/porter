@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.118.0',
+    date: '2026-07-26',
+    title: 'The DEGRADED alerts were the monitor charging jobs for its own slow watch',
+    bullets: [
+      'The "YMC system DEGRADED — stopped running (silent 0d)" pages were false again, for a different reason. The registry that decides whether a job has gone quiet refreshes every 30 minutes, but it compared that half-hour-old reading against the current time — so a job was billed for however long the monitor had not looked. A job that runs every 10 minutes is allowed 22 minutes of silence, which meant that in the last 8 minutes of every single refresh cycle it read as stopped while it was firing exactly on schedule. Anything running more often than about every 14 minutes was guaranteed to false-alarm, clear itself at the next refresh, and do it again.',
+      'Staleness is now judged as of the moment it was actually measured, so a job is only ever charged for its own silence. A job that has genuinely stopped still raises the alarm, at most one refresh later. The alert also states the real duration instead of rounding every sub-day gap to "silent 0d", which read as a bug in the alert rather than a number.',
+      'Because the verdict now rests on when the registry last looked, the registry reports its own age, and a frozen refresh raises a distinct alarm naming itself — never silence, and never mistaken for the jobs being down. That is the failure of v6.117.0, closed from the other side.',
+    ],
+  },
+  {
     version: '6.117.0',
     date: '2026-07-16',
     title: 'The health monitor was crying wolf about jobs that were running fine',

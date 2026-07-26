@@ -1,3 +1,32 @@
+## 2026-07-26 — v6.118.0: THE RUNNABLES REGISTRY WAS CHARGING JOBS FOR ITS OWN SLOW WATCH
+
+Moe asked why he keeps getting "YMC system degraded" and whether it should not auto-heal. It WAS auto-healing
+— that was the tell. The pages cleared themselves minutes later and came straight back, because no job had
+stopped. Second cry-wolf in this registry after v6.117.0, different mechanism.
+
+ROOT CAUSE: `runnables.last_success_at` is a SNAPSHOT written by `reconcileRunnables()`, which rides the
+`every_30m` workflow tick. `STALE_SQL` compared that snapshot against a live `now()`, so every job was billed for
+however long the observer had not looked. `maxSilenceFor` grants 2.2x the job's own period, so a 10-min timer is
+allowed 1,305s (~22 min) — less than the 30-min refresh. `ymc-tom-silent-drop-reconciler` therefore read as
+stale for the last ~8 min of EVERY reconcile window while firing exactly on schedule. Anything with a period
+under ~13.6 min (2.2 * period < 30 min) was guaranteed to flap. Proof row at diagnosis: silence measured at
+observation = 15s, measured against now() = 1,075s, climbing past 1,305s before the next reconcile.
+
+FIX (backend/src/services/runnables.ts):
+- `STALE_SQL` clocks on `last_seen_at`, not `now()`. You cannot know more than what you last observed, so the
+  comparison happens at observation time and a job answers only for its own silence. A genuinely dead job still
+  screams — the gap keeps growing at every reconcile — at most one cycle later. `silent_for_seconds` now uses the
+  same clock, so the number and the verdict can never disagree ("stale" next to "silent 0d" was exactly that).
+- That makes registry freshness load-bearing, which is the v6.117.0 failure from the other side. So
+  `listRunnables()` returns `registry { last_reconciled_at, observation_age_seconds, stale }` with
+  `REGISTRY_STALE_AFTER_SECONDS` = 2 cycles + 5 min slack. A frozen reconcile is now its own named alarm —
+  never silence, never mistaken for the jobs being down. ymc 1.863.0 consumes it as a distinct degraded reason.
+- `Runnable.last_seen_at` added to the interface (was selected by `SELECT *` but undeclared).
+
+VERIFIED: tsc 0 · /health 6.118.0 · reconciler reads silent 15s at 44-min observation age (stale under the old
+clock) · only stale runnable box-wide is `vps-browser-gc` (owner=infra, genuinely failed) · ymc verdict healthy,
+zero alerts since.
+
 ## 2026-07-14 — v6.116.0: 803 DOCUMENTS WERE IN THE VAULT AND COULD NOT BE SEEN
 
 Found by asking a simple question I should have asked hours ago: are the 172 "Needs Filing" orphans
