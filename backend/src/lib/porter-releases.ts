@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.125.0',
+    date: '2026-07-28',
+    title: 'Wrote down how memory actually reaches a model',
+    bullets: [
+      'Porter\u2019s own notes described how memory works in a way that was true for Tom and not for a coding session. That one missing distinction is how four separate versions of the same thing grew up side by side, and how a handover note went unread for two weeks.',
+      'The notes now say plainly which path serves which consumer, and record the rules that were learned the expensive way this week \u2014 including that anything placed in the projects folder is read by the memory system, so scratch copies of a repo must live elsewhere.',
+      'The one unresolved decision from this audit is written down with its evidence, so whoever picks it up next inherits the decision rather than rediscovering the problem.',
+    ],
+  },
+  {
     version: '6.124.0',
     date: '2026-07-28',
     title: 'Porter’s own rules were being given to every other project',

@@ -1,3 +1,19 @@
+## 2026-07-28 — v6.125.0: WROTE DOWN HOW MEMORY ACTUALLY REACHES A MODEL
+
+CLAUDE.md said "Memory — 3 layers ... Pipeline: memory-injection.ts". That is the path TOM uses. It is
+not the path a Claude session gets. That one missing distinction is the root of everything this audit
+found: four context builders, a priority scale read in two directions at once, and a warm packet written
+for two weeks that no read path opened.
+
+The Memory pillar now carries a table of the three delivery paths (push / pull / dispatch), who receives
+each, which file builds it, and its ordering — plus the invariants learned the expensive way today:
+priority LOW=generic HIGH=binding with Moe at 90+; `workspace` scope reaches EVERY session; a new
+consumer consumes getHotParts() instead of becoming a fourth builder; and /home/lobster/projects/* is an
+INPUT to the memory system so worktrees belong in ~/.worktrees/.
+
+The V1/V2 fork is named in CLAUDE.md with its evidence (456 observations identical, never once injected)
+so the next session inherits a decision rather than rediscovering a fork.
+
 ## 2026-07-28 — v6.124.0: PORTER'S OWN RULES WERE BEING GIVEN TO EVERY OTHER PROJECT
 
 Data curation, no code change. Completes the scoping thread: v6.121.0 fixed the mirror that GENERATES

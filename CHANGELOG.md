@@ -1,3 +1,21 @@
+## v6.125.0 (2026-07-28) — write down how memory actually reaches a model
+
+Docs. `CLAUDE.md` described memory as "3 layers, pipeline: memory-injection.ts" — which is the path Tom
+uses and NOT the one a Claude session gets. That single missing distinction is what let four context
+builders grow, a priority scale get read in two directions at once, and a warm packet be written for two
+weeks that nothing read.
+
+- The Memory pillar now states the three delivery paths, who receives each, which file builds it, and the
+  ordering it uses.
+- Written down explicitly, because each was learned the hard way this session: priority runs LOW = generic
+  / HIGH = binding and Moe sits at 90+; `workspace` scope reaches EVERY session so nothing project-specific
+  belongs there; a new consumer consumes `getHotParts()` rather than becoming a fourth builder.
+- ⚠️ `/home/lobster/projects/*` is an INPUT to the memory system — `claude-rules-mirror` scans every
+  `CLAUDE.md` under it. Keep git worktrees out of it (`~/.worktrees/`). A worktree placed there during
+  this session would have minted a directive from a scratch checkout.
+- The unresolved V1/V2 fork is named in the file with its evidence, so the next session inherits the
+  decision instead of rediscovering the fork.
+
 ## v6.124.0 (2026-07-28) — Porter's own rules were being given to every other project
 
 Data curation, no code change. Completes the scoping thread from v6.121.0: that release fixed the mirror
