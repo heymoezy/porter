@@ -1,3 +1,29 @@
+## 2026-07-28 — v6.123.0: THE PRIORITY SCALE WAS READ BACKWARDS, SO PROMPTS GOT FILLER AND LOST MOE'S RULES
+
+Fourth finding from the memory audit, and the sharpest correctness bug in it. `directives.priority` runs
+LOW = generic, HIGH = binding. Every WRITER uses it that way — claude-rules-mirror sets 60 "above default
+workspace guidance (50)", the agent-write path clamps to 1-89 "never outrank moe-direct" (so Moe sits at
+90+). The injection path read it upside down.
+
+- `memory-injection.ts` ordered `priority ASC`; `directive-scorer.ts` scored `10 - floor(priority/10)`.
+  Both rank the LEAST binding rule highest. `memory-projection.ts` (the V2 mirror's reader) had the same
+  ASC, fixed too so V1 and V2 stay byte-identical under the shadow canary.
+- MEASURED, not asserted. For ymc.capital, 12 directives went into a Bridge/chat prompt in the order
+  "You are a worker in Porter" → "The user is Moe" → "Never guess", breaking at priority 40. The
+  priority-90 rule ("reply to my messages even when I don't tag you") and the CLAUDE SESSION RULES mirror
+  were BOTH excluded — the budget was spent on filler before reaching them. After: the 90 leads.
+- `ALWAYS_INJECT_THRESHOLD = 2` ("priority <= 2 bypasses scoring") had NEVER FIRED ONCE — no directive has
+  ever had a priority below 10. Dead code wearing the name of a safety feature. Now
+  `ALWAYS_INJECT_MIN_PRIORITY = 90`, the moe-direct floor.
+
+Scope: every Bridge dispatch and /chat call — Tom's prompts. NOT the Claude SessionStart payload, which
+sorts DESC and was never wrong. That divergence is why this hid: the path I look at daily was correct.
+
+HOOK, NOT A REMINDER: `directive-scorer.ts` — the function deciding which rules reach a prompt — had NO
+test. Added src/__tests__/directive-scorer.test.ts, 6 tests pinning the DIRECTION rather than values.
+Verified the guard has teeth: reverting the bonus formula + fallback sort turns 4 of 6 red, restoring
+turns them green. A future flip is now loud instead of a prompt quietly getting dumber.
+
 ## 2026-07-28 — v6.122.0: DEAD CODE FROM THE DELETED PYTHON ERA
 
 Cleanup arm of the memory audit. Each item was PROVEN dead before removal, not assumed.

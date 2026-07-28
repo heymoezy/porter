@@ -7,10 +7,10 @@
  * Reuses the keyword-matching pattern established in skill-selector.ts (Phase 33).
  *
  * Scoring:
- *   - Priority bonus:    (10 - directive.priority / 10) — high-priority directives always score well
+ *   - Priority bonus:    floor(directive.priority / 10) — HIGH priority number = more binding
  *   - Task word match:   +2 per matched word in directive content
  *   - Skill tag match:   +3 per matched tag — directive tags that appear in active skill tags
- *   - Always-inject:     directives with priority <= 2 bypass scoring entirely
+ *   - Always-inject:     directives with priority >= 90 (moe-direct) bypass scoring entirely
  */
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -39,8 +39,21 @@ export interface DirectiveSelectionStats {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-/** Directives with priority <= this value bypass scoring and are always injected */
-const ALWAYS_INJECT_THRESHOLD = 2;
+/**
+ * Directives at or above this priority bypass scoring and are always injected.
+ *
+ * The number scale runs LOW = generic, HIGH = binding. Every writer in the
+ * codebase uses it that way: claude-rules-mirror sets 60 "above default
+ * workspace guidance (50)", and the agent-write path clamps to 1-89 with the
+ * comment "never outrank moe-direct" — i.e. Moe's own rules sit at 90+.
+ * So 90 is exactly the moe-direct floor, and those are the rules that must
+ * never be dropped to fit a budget.
+ *
+ * This used to be `priority <= 2`, which selected the LEAST binding rules (and
+ * in practice nothing at all — no directive has ever had a priority below 10,
+ * so the always-inject path was dead code that never fired once).
+ */
+const ALWAYS_INJECT_MIN_PRIORITY = 90;
 
 // ── Tokenizer ─────────────────────────────────────────────────────────────────
 
@@ -58,7 +71,7 @@ function tokenize(text: string): string[] {
  * Pure function — no I/O, safe to unit test directly.
  *
  * Scoring weights:
- *   - Priority bonus: max(0, 10 - floor(priority / 10)) — ranges from 0-10
+ *   - Priority bonus: floor(priority / 10), clamped 0-10 — higher priority scores higher
  *   - Task word match: +2 per matched word found in directive content
  *   - Skill tag match: +3 per directive tag that matches an active skill tag
  *
@@ -74,9 +87,11 @@ export function scoreDirective(
   let score = 0;
   const matched: string[] = [];
 
-  // Priority bonus: higher priority (lower number) = higher base score
-  // priority 10 → bonus 9, priority 50 → bonus 5, priority 100 → bonus 0
-  const priorityBonus = Math.max(0, 10 - Math.floor(directive.priority / 10));
+  // Priority bonus: HIGHER priority number = more binding = higher base score.
+  // priority 90 → bonus 9, priority 50 → bonus 5, priority 10 → bonus 1.
+  // This was inverted (`10 - floor(priority/10)`), which scored the most
+  // generic rules highest and the binding ones lowest.
+  const priorityBonus = Math.min(10, Math.max(0, Math.floor(directive.priority / 10)));
   score += priorityBonus;
 
   const contentLower = directive.content.toLowerCase();
@@ -118,12 +133,12 @@ export function scoreDirective(
  * Select a prioritized subset of directives for injection.
  *
  * Algorithm:
- *   1. Partition into always_inject (priority <= ALWAYS_INJECT_THRESHOLD) and scoreable
+ *   1. Partition into always_inject (priority >= ALWAYS_INJECT_MIN_PRIORITY) and scoreable
  *   2. Score scoreable directives against taskWords + skillTags
  *   3. Sort scored directives by score DESC
  *   4. Inject always_inject first, then scored until token budget exhausted
  *
- * Fallback: if no taskWords AND no skillTags — return all directives in priority order
+ * Fallback: if no taskWords AND no skillTags — return all directives in priority order (DESC: most binding first)
  * (backward compatibility for dispatch paths without task context).
  *
  * @param allDirectives - full list of active directives from DB
@@ -142,7 +157,7 @@ export function selectDirectives(
   // Fallback: no context — return all in priority order (original behavior)
   if (noContext) {
     return {
-      directives: [...allDirectives].sort((a, b) => a.priority - b.priority),
+      directives: [...allDirectives].sort((a, b) => b.priority - a.priority),
       stats: {
         total: allDirectives.length,
         alwaysInjected: 0,
@@ -155,8 +170,8 @@ export function selectDirectives(
   }
 
   // Partition into always-inject vs scoreable
-  const alwaysInject = allDirectives.filter(d => d.priority <= ALWAYS_INJECT_THRESHOLD);
-  const scoreable = allDirectives.filter(d => d.priority > ALWAYS_INJECT_THRESHOLD);
+  const alwaysInject = allDirectives.filter(d => d.priority >= ALWAYS_INJECT_MIN_PRIORITY);
+  const scoreable = allDirectives.filter(d => d.priority < ALWAYS_INJECT_MIN_PRIORITY);
 
   // Score scoreable directives
   const scored: ScoredDirective[] = scoreable.map(directive => {
@@ -164,10 +179,10 @@ export function selectDirectives(
     return { directive, score, reason };
   });
 
-  // Sort by score descending, then by priority ascending as tiebreaker
+  // Sort by score descending, then by priority DESCENDING as tiebreaker
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
-    return a.directive.priority - b.directive.priority;
+    return b.directive.priority - a.directive.priority;
   });
 
   // Collect injected directives (always-inject first, then scored until budget)

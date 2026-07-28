@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.123.0',
+    date: '2026-07-28',
+    title: 'Tom’s prompts were being filled with the least important rules and losing Moe’s',
+    bullets: [
+      'Rules carry an importance number. Everything that WRITES a rule treats a higher number as more important — that is how Moe’s own instructions are kept above anything an agent teaches itself. The part that puts rules into a prompt read the number the other way round.',
+      'Measured on live data: twelve rules were going into Tom’s prompts, starting with "You are a worker in Porter" and "The user is Moe", and the space ran out before reaching the important ones. Moe’s highest-priority instruction — reply to my messages even when I don’t tag you — was being left out completely, along with the standing session rules. Both now come first.',
+      'A safety feature meant to force the most important rules through regardless of space had never once worked: it was checking for a number below 2, and no rule has ever been below 10. It now correctly protects Moe’s own instructions.',
+      'This affects Tom and anything else routed through Porter. It does not change what a Claude coding session receives — that path was already reading the number correctly.',
+      'The code that chooses which rules reach a prompt had no test, which is why this survived for months. It has one now, checked to actually fail if the mistake is reintroduced.',
+    ],
+  },
+  {
     version: '6.122.0',
     date: '2026-07-28',
     title: 'Cleared out leftovers from the deleted Python Porter',

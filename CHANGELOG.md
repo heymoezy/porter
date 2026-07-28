@@ -1,3 +1,30 @@
+## v6.123.0 (2026-07-28) — the directive priority scale was read backwards, so prompts got the filler and lost Moe's rules
+
+The `directives.priority` scale runs LOW = generic, HIGH = binding, and every WRITER uses it that way:
+`claude-rules-mirror` sets 60 "above default workspace guidance (50)", and the agent-write path clamps to
+1-89 with the comment "never outrank moe-direct" — so Moe's own rules sit at 90+. The injection path read
+it upside down.
+
+- `memory-injection.ts` (and its V2 mirror's projection) ordered `priority ASC`, and `directive-scorer.ts`
+  scored `10 - floor(priority/10)` — both ranking the LEAST binding rule highest.
+- Measured on live data for ymc.capital: 12 directives were injected into a Bridge/chat prompt, in the order
+  "You are a worker in Porter" → "The user is Moe" → "Never guess", stopping at priority 40. **The priority-90
+  rule ("you need to reply to my messages even when I don't tag you directly") and the CLAUDE SESSION RULES
+  mirror were both excluded entirely** — the token budget had been spent on filler before reaching them.
+  After the fix the priority-90 rule leads.
+- `ALWAYS_INJECT_THRESHOLD = 2` meant "priority <= 2 bypasses scoring". No directive has ever had a priority
+  below 10, so the always-inject path had **never fired once** — it was dead code wearing the name of a safety
+  feature. Now `ALWAYS_INJECT_MIN_PRIORITY = 90`: the moe-direct floor, the rules that must never be dropped
+  to fit a budget.
+- Both sort comparators (no-context fallback, and the score tiebreaker) flipped to DESC to match.
+
+This affects every Bridge dispatch and `/chat` call — i.e. Tom's prompts. It does NOT affect the Claude
+SessionStart payload, which sorts DESC already and was never wrong.
+
+**`directive-scorer.ts` had no test.** That is why an inverted comparator in the code that chooses which rules
+reach a prompt survived for months. Added `src/__tests__/directive-scorer.test.ts` — 6 tests pinning the
+DIRECTION, not the values. Proven to have teeth: reverting the fix turns 4 of them red.
+
 ## v6.122.0 (2026-07-28) — dead code from the deleted Python era, and the MCP entrypoint that leaked
 
 Cleanup pass out of the memory audit. Nothing here changes what a session is handed; it removes code that

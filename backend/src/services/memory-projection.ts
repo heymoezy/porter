@@ -96,7 +96,7 @@ export async function projectPersona(agentId: string): Promise<VaultRecord | nul
 
 // ── Tier 2: directives ────────────────────────────────────────────────────────
 // Mirrors buildMemoryContext tier-2 query EXACTLY (workspace + optional project),
-// ORDER BY priority ASC. Adds `id` for the stable vault id.
+// ORDER BY priority DESC. Adds `id` for the stable vault id.
 export async function projectDirectives(projectId?: string): Promise<VaultRecord[]> {
   const rows = projectId
     ? (
@@ -104,7 +104,7 @@ export async function projectDirectives(projectId?: string): Promise<VaultRecord
           `SELECT id, content, priority, tags FROM directives
            WHERE status = 'active'
              AND (scope = 'workspace' OR (scope = 'project' AND scope_id = $1))
-           ORDER BY priority ASC`,
+           ORDER BY priority DESC`,
           [projectId],
         )
       ).rows
@@ -112,7 +112,7 @@ export async function projectDirectives(projectId?: string): Promise<VaultRecord
         await pool.query<{ id: string; content: string; priority: number; tags: string[] | null }>(
           `SELECT id, content, priority, tags FROM directives
            WHERE status = 'active' AND scope = 'workspace'
-           ORDER BY priority ASC`,
+           ORDER BY priority DESC`,
         )
       ).rows;
   return rows.map((r) => ({

@@ -104,7 +104,7 @@ export async function buildMemoryContext(opts: {
         `SELECT content, priority, tags FROM directives
          WHERE status = 'active'
            AND (scope = 'workspace' OR (scope = 'project' AND scope_id = $1))
-         ORDER BY priority ASC`,
+         ORDER BY priority DESC`,
         [projectId]
       );
       allDirectiveRows = res.rows;
@@ -112,7 +112,7 @@ export async function buildMemoryContext(opts: {
       const res = await pool.query<{ content: string; priority: number; tags: string[] | null }>(
         `SELECT content, priority, tags FROM directives
          WHERE status = 'active' AND scope = 'workspace'
-         ORDER BY priority ASC`
+         ORDER BY priority DESC`
       );
       allDirectiveRows = res.rows;
     }
