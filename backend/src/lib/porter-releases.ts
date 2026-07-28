@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.124.0',
+    date: '2026-07-28',
+    title: 'Porter’s own rules were being given to every other project',
+    bullets: [
+      'A session working on the hotel was being told to read Porter’s progress file and that it was "a worker in Porter, an AI orchestration platform", along with Porter’s internal architecture rules. Those five rules now belong to Porter and only appear when working on Porter.',
+      'One of them stated a web address that has been dead for weeks. Corrected — a rule that asserts something false is worse than no rule at all.',
+      'Five more rules were duplicates. The same instructions are now kept in sync automatically from the master rules file, and a hand-typed second copy cannot be updated by editing the master — it can only drift apart from it. One had already drifted, describing a release process that no longer matches the real one.',
+      'Taken together with the last four updates, the briefing a session starts with is roughly half the size it was for some projects, and what remains is relevant — beginning with what the previous session handed over.',
+    ],
+  },
+  {
     version: '6.123.0',
     date: '2026-07-28',
     title: 'Tom’s prompts were being filled with the least important rules and losing Moe’s',

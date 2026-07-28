@@ -1,3 +1,30 @@
+## v6.124.0 (2026-07-28) — Porter's own rules were being given to every other project
+
+Data curation, no code change. Completes the scoping thread from v6.121.0: that release fixed the mirror
+that GENERATES directives, this one fixes the hand-written rows that predate it.
+
+- **5 Porter-internal rules re-scoped from `workspace` to `project`/Porter.** Workspace reaches every
+  session, so a Baan Yin Dee session was being told *"Read the canonical checkpoint at
+  /home/lobster/projects/Porter/CHECKPOINT.md"*, *"You are a worker in Porter, an AI orchestration
+  platform"*, and Porter's bridge-architecture rules. None of it actionable there.
+  (`dir-identity-001`, `dir-arch-003`, `dir-arch-004`, `dir-arch-005`, `dir-context-001`)
+- **`dir-arch-004` asserted a dead port.** It named the admin at `:5175`; the admin SPA has been served by
+  Caddy at askporter.app for weeks and the inline brain-ui is `:5176`. Corrected while re-scoping — a
+  directive that states a false fact is worse than no directive.
+- **5 hand-written rules archived as duplicates of the `claude_rules_mirror`.** "Never guess", "Never ask
+  shall I proceed", "Find root causes", "Delete dead code" and a restated ship sequence are all synced
+  automatically from `/home/lobster/CLAUDE.md` now. A second hand-written copy cannot be updated by editing
+  the source, so it can only drift out of agreement with it — and the restated ship sequence already
+  conflicted with `_ops/DEPLOY.md`, which is the actual truth.
+  (`dir-behavior-001`, `dir-behavior-002`, `dir-quality-001`, `dir-quality-002`, `dir-quality-003`)
+
+Active workspace directives 18 → 8; Porter-scoped 1 → 6. Counts were predicted before running so a wrong
+number would fail loudly. Reversible — see CHECKPOINT.md for the exact revert.
+
+Cumulative effect of v6.120.0–v6.124.0 on the session-start payload:
+Baan Yin Dee 2,131 → 1,021 tokens · ymc.capital 2,127 → 1,785 · Porter 1,790 → 1,447 — and what remains is
+relevant, with the last session's handoff at the top instead of "Session (3 dispatches, 16m)".
+
 ## v6.123.0 (2026-07-28) — the directive priority scale was read backwards, so prompts got the filler and lost Moe's rules
 
 The `directives.priority` scale runs LOW = generic, HIGH = binding, and every WRITER uses it that way:

@@ -1,3 +1,38 @@
+## 2026-07-28 — v6.124.0: PORTER'S OWN RULES WERE BEING GIVEN TO EVERY OTHER PROJECT
+
+Data curation, no code change. Completes the scoping thread: v6.121.0 fixed the mirror that GENERATES
+directives; this fixes the hand-written rows that predate it.
+
+- 5 Porter-internal rules re-scoped workspace → project/Porter. Workspace reaches every session, so a Baan
+  Yin Dee session was told "Read the canonical checkpoint at /home/lobster/projects/Porter/CHECKPOINT.md"
+  and "You are a worker in Porter, an AI orchestration platform".
+- dir-arch-004 asserted the admin at :5175 — dead for weeks (Caddy serves askporter.app; brain-ui is :5176).
+  Corrected while re-scoping. A directive stating a false fact is worse than no directive.
+- 5 hand-written rules ARCHIVED as duplicates of claude_rules_mirror ("Never guess", "Never ask shall I
+  proceed", "Find root causes", "Delete dead code", a restated ship sequence). Truth is /home/lobster/
+  CLAUDE.md; a hand-typed copy cannot be updated by editing the source, so it can only drift. The ship one
+  already had — it restated a generic sequence that disagrees with _ops/DEPLOY.md.
+
+PREDICTED BEFORE RUNNING (so a wrong number fails loudly): workspace active 18 → 8, Porter-scoped 1 → 6.
+Actual: exactly that; the three UPDATEs hit 5 / 1 / 5 rows.
+
+REVERT (single transaction):
+  UPDATE directives SET scope='workspace', scope_id=NULL
+   WHERE id IN ('dir-identity-001','dir-arch-003','dir-arch-004','dir-arch-005','dir-context-001');
+  UPDATE directives SET status='active'
+   WHERE id IN ('dir-behavior-001','dir-behavior-002','dir-quality-001','dir-quality-002','dir-quality-003');
+  (dir-arch-004's :5175 text is NOT restored by this, deliberately — it was false.)
+
+VERIFIED on the live service: Porter-internal rules now present ONLY in a Porter session; ":5175" returns 0
+matches in any payload; systemDirectives 18 → 8 for every project.
+
+SESSION-START PAYLOAD, cumulative v6.120.0 → v6.124.0:
+  Baan Yin Dee  2,131 → 1,021 tokens (-52%)
+  ymc.capital   2,127 → 1,785 (-16%)
+  Porter        1,790 → 1,447 (-19%)
+  journeyful    ~2,100 → 1,159
+and the top of it is now the last session's handoff instead of "Session (3 dispatches, 16m)".
+
 ## 2026-07-28 — v6.123.0: THE PRIORITY SCALE WAS READ BACKWARDS, SO PROMPTS GOT FILLER AND LOST MOE'S RULES
 
 Fourth finding from the memory audit, and the sharpest correctness bug in it. `directives.priority` runs
