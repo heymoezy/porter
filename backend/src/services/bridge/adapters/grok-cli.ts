@@ -17,7 +17,10 @@
  */
 
 import { spawn } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import which from 'which';
 import type {
   GatewayAdapter,
@@ -29,6 +32,14 @@ import type {
 } from '../types.js';
 
 const TIMEOUT_MS = 300_000; // 5 min — same as claude_cli / codex_cli
+
+/**
+ * Largest prompt we will pass as a positional argv. The kernel caps a SINGLE
+ * argument at MAX_ARG_STRLEN (32 pages = 128KB) independently of ARG_MAX, and
+ * exceeding it fails with `spawn E2BIG` before the binary runs. 96KB leaves
+ * headroom for the rest of argv and the environment block, which count too.
+ */
+const MAX_ARG_PROMPT_BYTES = 96 * 1024;
 
 // Sandbox cwd. /tmp has no CLAUDE.md / AGENTS.md ancestors grok might
 // auto-discover. Mirrors codex-cli / claude-cli adapters.
@@ -103,21 +114,52 @@ export class GrokCLIAdapter implements GatewayAdapter {
     const userContent = req.messages.filter((m) => m.role === 'user').at(-1)?.content ?? '';
     const prompt = req.systemPrompt ? `${req.systemPrompt}\n\n${userContent}` : userContent;
 
-    // grok -p <prompt> : headless single-turn, response on stdout. Prompt is a
-    // positional arg (Linux ARG_MAX ~2MB — big prompts are safe).
-    const args = ['-p', prompt, '--output-format', 'plain'];
+    // grok -p <prompt> : headless single-turn, response on stdout.
+    //
+    // ⚠️ The prompt CANNOT always be a positional arg. The old comment here read
+    // "Linux ARG_MAX ~2MB — big prompts are safe", which is a real limit but the
+    // wrong one: a SINGLE argument is capped by MAX_ARG_STRLEN (32 pages =
+    // 128KB), whatever ARG_MAX says. Anything larger fails `spawn E2BIG` before
+    // grok is even reached — so grok could never serve a dream (2026-07-28: the
+    // failover chain reached it and died E2BIG on all four gateways).
+    //
+    // Over the threshold we use grok's own `--prompt-file`, which exists for
+    // exactly this. Small prompts keep the arg form — fewer moving parts, no
+    // temp file to leak.
+    let promptFile: string | null = null;
+    const args: string[] = [];
+    if (Buffer.byteLength(prompt, 'utf8') > MAX_ARG_PROMPT_BYTES) {
+      promptFile = path.join(tmpdir(), `porter-grok-${randomUUID()}.txt`);
+      writeFileSync(promptFile, prompt, { encoding: 'utf8', mode: 0o600 });
+      args.push('--prompt-file', promptFile);
+    } else {
+      args.push('-p', prompt);
+    }
+    args.push('--output-format', 'plain');
 
-    const child = spawn(this.binaryPath, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: SANDBOX_CWD,
-      env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
-    });
-    child.stdin.end();
+    const cleanupPromptFile = () => {
+      if (!promptFile) return;
+      try { unlinkSync(promptFile); } catch { /* best-effort */ }
+      promptFile = null;
+    };
+
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(this.binaryPath, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: SANDBOX_CWD,
+        env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
+      });
+    } catch (e) {
+      cleanupPromptFile();
+      throw e;
+    }
+    child.stdin?.end();
 
     const stdoutChunks: Buffer[] = [];
-    child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
+    child.stdout?.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
     const stderrChunks: Buffer[] = [];
-    child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+    child.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
 
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -130,6 +172,7 @@ export class GrokCLIAdapter implements GatewayAdapter {
       child.once('error', () => resolve(null));
     });
     clearTimeout(timer);
+    cleanupPromptFile();
 
     if (timedOut) throw new Error(`Grok CLI timed out after ${TIMEOUT_MS}ms`);
 

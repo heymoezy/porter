@@ -426,6 +426,20 @@ export class RoutingEngine {
    * Dispatch to Claude CLI with circuit breaker and retry.
    * Single gateway — no fallback iteration.
    */
+  /**
+   * ⚠️ MISNAMED — THIS DOES NOT FALL BACK. It selects ONE gateway, retries it
+   * behind the circuit breaker, and throws `Gateway <type> failed: …` when that
+   * gateway is down, timed out, or out of quota. There is no second candidate.
+   *
+   * The name cost us the dream worker: it called this believing it was covered,
+   * and the `software` silo logged 655 failed runs — 594 of them
+   * "Gateway claude_cli failed: Timed out after 180000ms", 11 a quota message
+   * parsed as JSON — while `dispatchWithFailover` (the REAL chain) sat unused
+   * beside it. All dreaming had stopped by 2026-07-26 and nobody was told.
+   *
+   * @deprecated Use {@link dispatchWithFailover}. Keep this only for a caller
+   * that genuinely must hard-fail on one gateway, and say why at the call site.
+   */
   async selectWithFallback(
     ctx: RoutingContext,
     req: BridgeDispatchRequest,
@@ -491,7 +505,24 @@ export class RoutingEngine {
   async dispatchWithFailover(
     ctx: RoutingContext,
     req: BridgeDispatchRequest,
-    opts?: { fallback?: boolean; simulateFailure?: GatewayType[]; budgetMs?: number },
+    opts?: {
+      fallback?: boolean;
+      simulateFailure?: GatewayType[];
+      budgetMs?: number;
+      /**
+       * Treat ctx.forceGatewayType as a PREFERENCE, not a requirement: if that
+       * gateway isn't an active candidate, lead with the chain instead of
+       * throwing.
+       *
+       * Background work (dreams, worker-knowledge, session analysis) wants a
+       * preferred model but must never die because it is missing — Moe,
+       * 2026-07-28: "ensure the fallback to other models within the council is
+       * there so he never dies because of usage issues". A user who explicitly
+       * says "send this to codex" means it, so bridge/agent-message leaves this
+       * off and still gets a hard error.
+       */
+      leadPreferred?: boolean;
+    },
   ): Promise<{ decision: RoutingDecision; result: BridgeDispatchResult; failover: FailoverRecord }> {
     const candidates = await this.selectAllCandidates();
     if (candidates.length === 0) throw new Error('No active gateways available');
@@ -501,11 +532,17 @@ export class RoutingEngine {
     const simulate = opts?.simulateFailure ?? [];
 
     const candidateTypes: string[] = candidates.map(c => c.row.type);
-    const lead = ctx.forceGatewayType;
+    let lead = ctx.forceGatewayType;
     if (lead && !candidateTypes.includes(lead)) {
-      throw new Error(
-        `Forced gateway type '${lead}' not available (active candidates: ${candidateTypes.join(', ') || 'none'})`,
+      if (!opts?.leadPreferred) {
+        throw new Error(
+          `Forced gateway type '${lead}' not available (active candidates: ${candidateTypes.join(', ') || 'none'})`,
+        );
+      }
+      console.warn(
+        `[routing] preferred gateway '${lead}' not active — falling back to the chain (${candidateTypes.join(', ')})`,
       );
+      lead = undefined;
     }
 
     let chain = orderChain(candidateTypes, lead);

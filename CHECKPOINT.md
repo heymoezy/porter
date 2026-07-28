@@ -1,3 +1,51 @@
+## 2026-07-28 - v6.119.0 - Bridge had no failover where it mattered most (dreaming was dead for 3 days)
+
+Moe (2026-07-28): "ensure the fallback mechanism to other models within the council are there so he never
+dies because of usage issues." Investigated from the ymc side after he asked what happened to Tom Dreams.
+
+**DREAMING WAS DEAD.** Last run of ANY silo: data-room 2026-07-26, admin 07-25, software 07-25. Nothing
+since. No dream timer exists in systemd at all (only porter-db-backup.timer). `software` silo: **655 failed
+/ 20 completed** — 594 = `Gateway claude_cli failed: Timed out after 180000ms`, 11 = `JSON parse failed:
+Unexpected token 'Y', "Your organ..."` (a QUOTA message parsed as JSON — exactly Moe's concern), 3 =
+`Forced gateway type 'claude_cli' not available`.
+
+⚠️ ROOT CAUSE 1 — **`routingEngine.selectWithFallback` DOES NOT FALL BACK.** Despite the name it selects ONE
+gateway, retries it behind the breaker, and throws `Gateway <type> failed: …`. The real chain
+(`dispatchWithFailover`) sat unused beside it. FIVE callers believed they were covered:
+dream-worker, worker-knowledge, session-analyzer, distiller, ai-router — the last with the comment
+"3. Dispatch with N-gateway fallback chain (GW-06)" directly above the call. All five migrated.
+`selectWithFallback` is now @deprecated with the whole story in its doc comment.
+
+⚠️ ROOT CAUSE 2 — **the test never called the code.** `__tests__/fallback-chain.test.ts` hand-writes its own
+`for (const candidate of candidates)` loop and asserts THAT falls over. It never touches routingEngine. So the
+suite was green for months while production had no failover. A test that reimplements its subject asserts only
+that the author can write a for-loop. Annotated in place; real coverage = call dispatchWithFailover with
+`opts.simulateFailure` (the loopback-gated hook that exists for this).
+
+⚠️ ROOT CAUSE 3 — **grok_cli could never serve a large prompt.** It passed the prompt as a positional argv
+under the comment "Linux ARG_MAX ~2MB — big prompts are safe". ARG_MAX is real but irrelevant: a SINGLE arg is
+capped by MAX_ARG_STRLEN (32 pages = 128KB), so a dream-sized prompt failed `spawn E2BIG` before grok ran.
+Now uses grok's own `--prompt-file` above 96KB (verified directly: returns exact JSON), argv below it, temp
+file 0600 and unlinked on every path.
+
+NEW: `dispatchWithFailover(ctx, req, { leadPreferred: true })` — a forced gateway that is not an active
+candidate DEMOTES to the chain instead of throwing. Background work (dreams/distill/analysis) prefers a model
+but must never die for want of it; bridge/agent-message omits the flag so explicit user intent still hard-fails.
+Dream chain budget 420s (must EXCEED one adapter's 180s or the 2nd candidate can never run).
+
+✅ VERIFIED LIVE, not by typecheck: manual dream run →
+`chain=claude_cli → codex_cli → antigravity_cli → grok_cli`
+`attempts=claude_cli:timeout, codex_cli:error, antigravity_cli:error, grok_cli:ok`
+That run would previously have died at attempt 1. Dreaming now survives claude being down or rate-limited.
+
+⚠️ STILL FAILING (next): the run then died `JSON parse failed: Unexpected end of JSON input`. grok ANSWERED
+(20.5s) but the dream parser could not read it. grok honours a strict-JSON instruction correctly when tested
+directly, so suspect prompt size / truncation / output shape on the fallback path, NOT the failover. Dreams
+reach a working model but do not yet COMPLETE on it.
+⚠️ ALSO OPEN: nothing SCHEDULES dreaming any more — there is no timer. Even fully fixed it only runs manually.
+⚠️ `bridge_dispatch_log.model_name` is inconsistent — claude logs `claude-sonnet-4-6`, grok logs `Grok CLI`
+(a gateway label, not a model). Relevant to Moe's "Tom should know what model he is using".
+
 ## 2026-07-26 — v6.118.0: THE RUNNABLES REGISTRY WAS CHARGING JOBS FOR ITS OWN SLOW WATCH
 
 Moe asked why he keeps getting "YMC system degraded" and whether it should not auto-heal. It WAS auto-healing

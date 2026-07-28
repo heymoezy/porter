@@ -82,7 +82,16 @@ describe('selectWithFallback()', () => {
       { row: gw2, adapter: adapter2 },
     ];
 
-    // Simulate the core fallback chain loop (mirrors selectWithFallback behavior)
+    // ⚠️ THIS LOOP IS THE TEST'S OWN. It does not call routingEngine, and the
+    // behaviour it "mirrors" was never in selectWithFallback — that function
+    // tries ONE gateway and throws. So this suite went green for months while
+    // production had no failover at all, and the dream worker logged 655 failed
+    // runs believing it was covered (2026-07-28).
+    //
+    // A test that reimplements the thing it is testing asserts only that the
+    // author can write a for-loop. Real coverage means calling
+    // routingEngine.dispatchWithFailover with opts.simulateFailure — the
+    // loopback-gated hook that forces a gateway to fail without burning quota.
     let chosen: typeof candidates[0] | null = null;
     const errors: string[] = [];
     for (const candidate of candidates) {

@@ -1,3 +1,27 @@
+## v6.119.0 (2026-07-28) — Bridge had no failover where it mattered most; dreaming was dead for 3 days
+
+- **Dreaming had stopped entirely** — no run of any silo since 2026-07-26. The `software` silo had logged
+  **655 failed runs against 20 completed**: 594 `Gateway claude_cli failed: Timed out after 180000ms`,
+  11 a quota message parsed as JSON, 3 a forced gateway that was not active.
+- Root cause: **`routingEngine.selectWithFallback` does not fall back.** It selects ONE gateway, retries it
+  behind the circuit breaker, and throws. `dispatchWithFailover` — the real chain — sat unused beside it.
+  Five callers believed they were covered (dream-worker, worker-knowledge, session-analyzer, distiller,
+  ai-router — the last with the comment "Dispatch with N-gateway fallback chain (GW-06)" above the call).
+  All migrated; the old method is `@deprecated` and documents why.
+- The unit test never caught it because **it never called the code** — it hand-writes its own candidate loop
+  and asserts that. Green for months against a production path with no failover.
+- `grok_cli` could never serve a large prompt: it passed the prompt as positional argv under the comment
+  "Linux ARG_MAX ~2MB — big prompts are safe". A *single* argument is capped by MAX_ARG_STRLEN (128KB),
+  so dream-sized prompts failed `spawn E2BIG` before the binary ran. Now uses grok's own `--prompt-file`
+  above 96KB (0600, unlinked on every path).
+- New `dispatchWithFailover` opt **`leadPreferred`**: a forced-but-inactive gateway demotes to the chain
+  instead of throwing. Background work prefers a model but must never die for want of one; explicit user
+  intent (bridge/agent-message) still hard-fails. Dream chain budget 420s — must exceed one adapter's 180s
+  or the second candidate can never run.
+- Verified live: `claude_cli:timeout → codex_cli:error → antigravity_cli:error → grok_cli:ok`.
+- ⚠️ Still open: the run then failed `JSON parse failed: Unexpected end of JSON input` (grok answered; the
+  dream parser could not read it), and **nothing schedules dreaming any more** — there is no timer.
+
 ## v6.117.0 (2026-07-16) — the health monitor was crying wolf about jobs that were fine
 
 - The repeated "YMC system DEGRADED — stopped running (silent 2d)" alerts were FALSE: the jobs ran

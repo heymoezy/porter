@@ -329,8 +329,14 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
 
   const bridgeReq: BridgeDispatchRequest = { messages, systemPrompt };
 
-  // 3. Dispatch with N-gateway fallback chain (GW-06)
-  const { decision, result: bridgeResult } = await routingEngine.selectWithFallback(ctx, bridgeReq);
+  // 3. Dispatch with the N-gateway fallback chain (GW-06).
+  //
+  // This comment was true of the INTENT and false of the CODE until 2026-07-28:
+  // it called selectWithFallback, which despite the name tries exactly one
+  // gateway and throws. No leadPreferred here — if a caller explicitly forced a
+  // gateway, that is user intent and must still hard-fail rather than silently
+  // answer from a different model.
+  const { decision, result: bridgeResult } = await routingEngine.dispatchWithFailover(ctx, bridgeReq);
 
   // 4. Map to DispatchResult (callers expect this shape)
   const result: DispatchResult = {

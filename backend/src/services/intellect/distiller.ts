@@ -83,11 +83,16 @@ async function dispatch(prompt: string): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), BRIDGE_TIMEOUT_MS);
   try {
-    const { decision, result } = await routingEngine.selectWithFallback(ctx, req);
+    // Background distillation — must survive one gateway being down or out of
+    // quota by moving to the next council model (2026-07-28).
+    const { decision, result } = await routingEngine.dispatchWithFailover(ctx, req, {
+      leadPreferred: true,
+      budgetMs: BRIDGE_TIMEOUT_MS,
+    });
     if (!result || typeof result !== 'object') {
       throw new Error(`Bridge returned no result for gateway ${decision.gatewayRow?.type ?? 'unknown'}`);
     }
-    // Populate bridge_dispatch_log for observability (selectWithFallback skips it).
+    // Populate bridge_dispatch_log for observability (dispatchWithFailover skips it).
     await routingEngine.logDispatch(decision, ctx, result, undefined).catch(() => undefined);
     return result.response ?? '';
   } finally {

@@ -131,7 +131,13 @@ async function synthesizeMeaningfulSummary(sessionId: string, project: string | 
     };
     const timer = new Promise<null>((resolve) => setTimeout(() => resolve(null), SUMMARY_TIMEOUT_MS));
     const dispatch = (async () => {
-      const { result } = await routingEngine.selectWithFallback(ctx, req);
+      // Best-effort summary, but "best effort" should mean trying the whole
+      // council before giving up — not one gateway. The SUMMARY_TIMEOUT_MS race
+      // above still caps the total wait.
+      const { result } = await routingEngine.dispatchWithFailover(ctx, req, {
+        leadPreferred: true,
+        budgetMs: SUMMARY_TIMEOUT_MS,
+      });
       const text = result?.response?.replace(/\s+/g, ' ').trim();
       return text && text.length > 20 ? text.slice(0, 700) : null;
     })();

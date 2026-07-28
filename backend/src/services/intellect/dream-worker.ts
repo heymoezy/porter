@@ -15,14 +15,14 @@
  *   - We do NOT call selectSkills
  *   - We do NOT call decideDoctrine
  *   - We do NOT prefix the system message with identity
- * The routingEngine.selectWithFallback path just sends the prompt and reads the response.
+ * The routingEngine.dispatchWithFailover path just sends the prompt and reads the response.
  * This replicates the {raw: true} contract from /api/v1/chat/stream by not engaging
  * those services in the first place. DO NOT add Memory V3 / skills / doctrine wiring
  * here in the future — that is the entire point of dream-time isolation.
  *
- * Dispatch log id: selectWithFallback does NOT call logDispatch internally — only
+ * Dispatch log id: dispatchWithFailover does NOT call logDispatch internally — only
  * dispatchStream does. We therefore call routingEngine.logDispatch(decision, ctx,
- * result, undefined) EXPLICITLY after selectWithFallback returns, capture the
+ * result, undefined) EXPLICITLY after dispatchWithFailover returns, capture the
  * returned id, and use it for dream_runs.dispatch_id. Without this explicit call
  * the dispatch_id column would always be null and Plan 05's live verify of raw
  * passthrough (system_prompt inspection) could not run.
@@ -54,7 +54,14 @@ import {
   type ParsedFailurePattern,
 } from './dream-parser.js';
 
-const BRIDGE_TIMEOUT_MS = 180_000;
+/**
+ * Wall-clock budget shared across the WHOLE failover chain, not per gateway.
+ * Must exceed one adapter's own timeout (180s) or the chain would spend its
+ * entire budget on the lead and the second candidate could never run — which is
+ * the shape of the 594 "Gateway claude_cli failed: Timed out after 180000ms"
+ * runs this replaces.
+ */
+const DREAM_CHAIN_BUDGET_MS = 420_000;
 const EXPIRES_IN_S = 30 * 86400;
 const ERROR_MESSAGE_CAP = 1000;
 
@@ -108,21 +115,27 @@ async function dispatchDream(
   promptBody: string,
   modelName: string,
   mockResponsePathArg?: string,
-): Promise<{ response: string; latencyMs: number; modelUsed: string; dispatchLogId?: string }> {
+): Promise<{ response: string; latencyMs: number; modelUsed: string; answeredBy: string; dispatchLogId?: string }> {
   // Mock-injection contract (smoke-test only — env var OR arg never set in prod).
   // Arg takes precedence so the smoke harness can reach this over HTTP (env vars
   // don't propagate from curl to the backend process).
   const mockPath = mockResponsePathArg ?? process.env.DREAM_WORKER_MOCK_RESPONSE_PATH;
   if (mockPath && mockPath.length > 0) {
     const response = await fs.promises.readFile(mockPath, 'utf8');
-    return { response, latencyMs: 0, modelUsed: 'mock', dispatchLogId: undefined };
+    return { response, latencyMs: 0, modelUsed: 'mock', answeredBy: 'mock', dispatchLogId: undefined };
   }
 
-  // Real dispatch — direct routingEngine call, no HTTP, no Memory V3.
-  // forceGatewayType + forceModelName pin the backend; OMITTING agentId/projectId/
-  // chatId/skillsUsed/directiveStats/dispatchStrategy is what makes this a RAW
-  // dispatch (the routing engine and its consumers skip Memory V3 / skills /
-  // doctrine wiring when these fields are undefined).
+  // Real dispatch — direct routingEngine call, no HTTP, no Memory V3. OMITTING
+  // agentId/projectId/chatId/skillsUsed/directiveStats/dispatchStrategy is what
+  // makes this a RAW dispatch (the routing engine and its consumers skip Memory
+  // V3 / skills / doctrine wiring when these fields are undefined).
+  //
+  // claude_cli LEADS the chain but no longer OWNS it. Pinning it here is what
+  // killed dreaming: selectWithFallback tries exactly ONE gateway, so a claude
+  // timeout or a usage limit ended the run outright — 655 failed `software`
+  // runs, and every silo silent from 2026-07-26. leadPreferred means a missing
+  // claude_cli demotes to the chain instead of throwing
+  // "Forced gateway type 'claude_cli' not available".
   const ctx: RoutingContext = {
     message: promptBody,
     forceGatewayType: 'claude_cli',
@@ -136,13 +149,28 @@ async function dispatchDream(
     maxTokens: 16000,
   };
 
-  // Hard outer 180s timeout via AbortController. The adapter's internal timeout
-  // is the inner ring; this is the outer ring that catches an adapter that
-  // doesn't respect its own deadline.
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), BRIDGE_TIMEOUT_MS);
-  try {
-    const { decision, result } = await routingEngine.selectWithFallback(ctx, req);
+  // The CHAIN owns the deadline: one budget shared across every gateway it
+  // tries, so it MUST exceed a single adapter's timeout or the second candidate
+  // could never run. (The AbortController that used to sit here was inert — its
+  // signal was never passed to anything. The 180s in every failure message came
+  // from the adapter itself, not from that timer. Deleted rather than left to
+  // look like protection.)
+  {
+    const { decision, result, failover } = await routingEngine.dispatchWithFailover(ctx, req, {
+      leadPreferred: true,
+      budgetMs: DREAM_CHAIN_BUDGET_MS,
+    });
+
+    // Say out loud when the lead did not answer. A dream that quietly completed
+    // on a different model is not a failure, but it IS the fact that explains a
+    // change in tone or quality, and it must be in the record.
+    if (failover.answeredBy && failover.answeredBy !== 'claude_cli') {
+      console.warn(
+        `[dream-worker] claude_cli did not answer — completed on ${failover.answeredBy}. ` +
+        `chain=${failover.chain.join(' → ')} attempts=${failover.attempts
+          .map(a => `${a.gatewayType}:${a.outcome}`).join(', ')}`,
+      );
+    }
 
     // Defensive: if the adapter returned an incomplete BridgeDispatchResult (some
     // legacy adapters return undefined on partial failure), DO NOT call logDispatch
@@ -154,20 +182,23 @@ async function dispatchDream(
       throw new Error(`Bridge dispatch returned no result for gateway ${decision.gatewayRow?.type ?? 'unknown'}`);
     }
 
-    // CRITICAL: selectWithFallback does NOT call logDispatch (only dispatchStream does).
-    // We must explicitly call logDispatch to populate bridge_dispatch_log and capture
-    // the row id for dream_runs.dispatch_id. Without this, Plan 05's raw-passthrough
-    // verify (system_prompt inspection) has nothing to inspect.
+    // CRITICAL: dispatchWithFailover does NOT call logDispatch (only dispatchStream
+    // does). We must explicitly call logDispatch to populate bridge_dispatch_log and
+    // capture the row id for dream_runs.dispatch_id. Without this, Plan 05's
+    // raw-passthrough verify (system_prompt inspection) has nothing to inspect.
     const dispatchLogId = await routingEngine.logDispatch(decision, ctx, result, undefined);
 
+    // decision is the gateway that ACTUALLY answered, so modelName is the model
+    // that actually ran — not the one we hoped for. dream_runs.model_used has
+    // been reading 'pending-selection' on every failed run precisely because
+    // nothing ever got far enough to overwrite it.
     return {
       response: result.response,
       latencyMs: result.latencyMs,
       modelUsed: decision.modelName,
+      answeredBy: failover.answeredBy ?? decision.gatewayRow?.type ?? 'unknown',
       dispatchLogId,
     };
-  } finally {
-    clearTimeout(timer);
   }
 }
 

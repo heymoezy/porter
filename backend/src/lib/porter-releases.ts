@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.119.0',
+    date: '2026-07-28',
+    title: 'Tom\u2019s nightly thinking had been dead for three days, and the safety net was never connected',
+    bullets: [
+      'The part of Tom that reviews his own work overnight and proposes durable rules from it had stopped entirely \u2014 nothing since 26 July, after 655 failed attempts against 20 successful ones. Almost all of them died the same way: the one model it asks was busy or slow, and the attempt ended there. Eleven died holding a usage-limit notice they tried to read as a result.',
+      'There is a mechanism for exactly this \u2014 try the next model in the council when the first cannot answer \u2014 and five separate parts of Porter were calling something that looked like it, was named like it, and does not do it. It asks one model and gives up. One of those five even carried a comment above the call describing the fallback chain it was not using. All five now use the real one.',
+      'The test that should have caught this never ran the code. It wrote out its own version of the logic and checked that, so it passed for months while the real thing had no fallback at all.',
+      'Separately, one council member could never have taken the work: long requests were handed to it as a command-line argument, and the system refuses any single argument over 128KB, so it failed before it started. It now receives long requests as a file, which is the method it documents for this.',
+      'Confirmed by running it: the first model timed out, the next two errored, the fourth answered. Before today that request would have ended at the first.',
+    ],
+  },
+  {
     version: '6.118.0',
     date: '2026-07-26',
     title: 'The DEGRADED alerts were the monitor charging jobs for its own slow watch',

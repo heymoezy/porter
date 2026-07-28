@@ -248,11 +248,15 @@ export async function dispatchCheap(promptBody: string, sourceAgent: string): Pr
     temperature: 0.2,
     maxTokens: 8000,
   };
-  const { decision, result } = await routingEngine.selectWithFallback(ctx, req);
+  // Background distillation — a preferred gateway being down or out of quota
+  // must degrade to another council model, never end the run (2026-07-28).
+  const { decision, result } = await routingEngine.dispatchWithFailover(ctx, req, {
+    leadPreferred: true,
+  });
   if (!result || typeof result !== 'object') {
     throw new Error(`Bridge dispatch returned no result for gateway ${decision.gatewayRow?.type ?? 'unknown'}`);
   }
-  // selectWithFallback does NOT log the dispatch itself (dream-worker precedent).
+  // dispatchWithFailover does NOT log the dispatch itself (dream-worker precedent).
   await routingEngine.logDispatch(decision, ctx, result, undefined);
   return {
     response: result.response,
