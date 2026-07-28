@@ -1,3 +1,25 @@
+## 2026-07-28 — v6.122.0: DEAD CODE FROM THE DELETED PYTHON ERA
+
+Cleanup arm of the memory audit. Each item was PROVEN dead before removal, not assumed.
+
+- `Porter/.claude/` DELETED. Five hooks all pointed at `/home/lobster/documents/porter/.claude/hooks/`,
+  which does not exist — silent no-ops since the repo moved. I read the scripts before deleting rather than
+  treating "paths are stale" as "config is broken, fix the paths": all five are built around `porter.py`,
+  the Python SaaS deleted 2026-07-06. `syntax-gate.sh` only ever fired on a `porter.py` edit. Fixing the
+  paths would have resurrected hooks for a codebase that no longer exists.
+- TWO MCP ENTRYPOINTS collapsed to one. `mcp/server.ts` and `mcp/porter-mcp-stdio.ts` both built the same
+  server; `~/.claude.json` registers the stdio one. The one NOT registered was the one with SIGINT/SIGTERM
+  handling and `pool.end()` — so the live MCP server (one process per CLI session) had no clean shutdown.
+  Took the good part first, then deleted. Verified by real handshake, not a typecheck: initialize +
+  tools/list → all 9 tools.
+- `Porter/memory/` — 8 empty dirs, 0 files, last git touch 2026-03-24, zero references. Gone.
+- Dead SQL builder in `GET /directives` — built args/sql, spliced a parameter in with the comment
+  "awkward — rebuild", then discarded both and rebuilt cleanly. Kept the rebuild.
+
+NOT deleted, because I checked: `routes/v1/memory.ts` looked like L2-era dead weight (last modified
+2026-03-24) but `/api/v1/memory/concepts` is prefetched by the admin SPA at
+`admin/frontend.archived/app/routes/layout.tsx:53`. Live surface. Left alone.
+
 ## 2026-07-28 — v6.121.0: EVERY SESSION WAS HANDED EVERY OTHER PROJECT'S RULES
 
 Second finding out of the memory audit. `claude-rules-mirror` (U6) renders CLAUDE.md rule truth into the

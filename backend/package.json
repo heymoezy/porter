@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "6.121.0",
+  "version": "6.122.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -8,7 +8,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "mcp": "tsx src/mcp/server.ts",
+    "mcp": "tsx src/mcp/porter-mcp-stdio.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },

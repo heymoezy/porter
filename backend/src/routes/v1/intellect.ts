@@ -487,12 +487,6 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     const scope = String(q?.scope || 'workspace').trim();
     const scopeId = q?.scope_id ? String(q.scope_id).trim() : null;
     const limit = Math.min(parseInt(String(q?.limit || '40'), 10) || 40, 200);
-    const args: any[] = [scope, limit];
-    let sql = `SELECT id, scope, scope_id, content, priority, source_type, tags, created_at
-                 FROM directives
-                WHERE status = 'active' AND scope = $1`;
-    if (scopeId) { sql += ` AND scope_id = $3`; args.splice(1, 0, scopeId); /* awkward — rebuild */ }
-    // Rebuild cleanly to avoid placeholder confusion
     const params: any[] = [scope];
     let where = `status = 'active' AND scope = $1`;
     if (scopeId) { params.push(scopeId); where += ` AND scope_id = $${params.length}`; }

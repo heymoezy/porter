@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.122.0',
+    date: '2026-07-28',
+    title: 'Cleared out leftovers from the deleted Python Porter',
+    bullets: [
+      'Five automated checks that were supposed to run while working on Porter had been doing nothing since the code moved — they pointed at a folder that no longer exists. Reading them before deleting showed why they were never missed: every one was built around the old Python version of Porter, which was deleted in July.',
+      'Porter offers a set of tools directly inside Claude and the other CLIs. There were two copies of the launcher for it, and the one actually in use was missing its shutdown step — so every session left a database connection to be cleaned up late. Now one launcher, with the shutdown, confirmed working end to end.',
+      'Also removed: eight empty folders left behind by a March reorganisation, and a piece of database code that built a query, commented that it was awkward, then threw it away and built it again.',
+      'No change to what a session is given. This removes things that could only mislead whoever reads the code next.',
+    ],
+  },
+  {
     version: '6.121.0',
     date: '2026-07-28',
     title: 'Every session was handed every other project’s rules',

@@ -17,6 +17,7 @@
  */
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createPorterMcpServer } from './porter-mcp.js';
+import { pool } from '../db/client.js';
 
 async function main(): Promise<void> {
   const server = createPorterMcpServer();
@@ -24,6 +25,23 @@ async function main(): Promise<void> {
   await server.connect(transport);
   // stdout is the MCP channel — never log to it. Diagnostics go to stderr.
   process.stderr.write('[porter-mcp] connected over stdio\n');
+
+  // One MCP process per CLI session, so these accumulate: without an explicit
+  // close the Postgres pool is torn down by process exit and the connection is
+  // returned late (or not at all under a hard kill). Inherited from the second
+  // entrypoint this file replaced — that one had the shutdown handling and was
+  // NOT the one registered in ~/.claude.json, so nothing ever ran it.
+  const shutdown = async (signal: string): Promise<void> => {
+    process.stderr.write(`[porter-mcp] ${signal} — closing\n`);
+    try {
+      await server.close();
+    } finally {
+      await pool.end().catch(() => {});
+    }
+    process.exit(0);
+  };
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
 }
 
 main().catch((e) => {

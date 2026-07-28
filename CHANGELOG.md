@@ -1,3 +1,22 @@
+## v6.122.0 (2026-07-28) — dead code from the deleted Python era, and the MCP entrypoint that leaked
+
+Cleanup pass out of the memory audit. Nothing here changes what a session is handed; it removes code that
+could only mislead the next person reading it.
+
+- **`Porter/.claude/` deleted.** Five hooks (PreCompact ×2, PostToolUse ×2, Stop) all pointed at
+  `/home/lobster/documents/porter/.claude/hooks/` — a directory that does not exist — so every one had been
+  a silent no-op since the repo moved. The scripts themselves survived locally and were worth reading before
+  deleting: all five are built around **`porter.py`**, the Python SaaS deleted on 2026-07-06. `syntax-gate.sh`
+  only ever fired on a `porter.py` edit. Obsolete config pointing at obsolete scripts for a deleted codebase.
+- **Two MCP entrypoints collapsed to one.** `mcp/server.ts` and `mcp/porter-mcp-stdio.ts` both built the same
+  server; `~/.claude.json` registers the stdio one. The one NOT registered was the one with SIGINT/SIGTERM
+  handling and `pool.end()` — so the live MCP server, one process per CLI session, had no clean shutdown.
+  Took the shutdown handling into the surviving entrypoint, deleted `server.ts`, repointed `npm run mcp`.
+  Verified by handshake: `initialize` + `tools/list` return all 9 tools.
+- **`Porter/memory/`** — 8 empty directories, 0 files, last touched 2026-03-24, zero code references. Gone.
+- **Dead SQL builder in `GET /directives`** — built `args`/`sql`, spliced a parameter into the middle with
+  the comment "awkward — rebuild", then discarded both and rebuilt cleanly. Kept the rebuild, deleted the rest.
+
 ## v6.121.0 (2026-07-28) — every session was handed every other project's rules
 
 `claude-rules-mirror` rendered the global hard rules AND every project's non-negotiables into ONE
