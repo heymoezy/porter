@@ -1191,3 +1191,24 @@
   - backend/src/release-kit/cli.ts (EDIT — gate uses executeGate; add `register` subcommand)
   - backend/src/routes/admin/releases.ts (EDIT — POST /register + GET /registrations, service-token auth)
 - Status: **DONE (uncommitted)** — see final report. tsc 0; dry-run proofs in scratchpad; live tree untouched.
+| 2026-07-09T05:29:05+00:00 | dedup-agent | Document Library dedup tooling (_ops/bin/dedup-docs.py) + quarantine byte-identical dups | in-progress |
+| 2026-07-09T05:45:16+00:00 | dedup-agent | COMPLETE — 828 exact dups quarantined (695 MiB), plan written, restore proven | done |
+
+## memory-harness (Opus 5 1M) — 2026-07-28 (SGT)
+- Workstream: audit the memory system from inception; turn Porter into a proper harness for Claude.
+  Council: codex_cli + grok_cli via Bridge (dispatchLogs e7e14182 / ccef7b20).
+- Isolation: git worktree `../Porter-memory-harness` on branch `memory-harness`. Main tree NOT edited.
+- ⚠️ OBSERVED CONCURRENT SESSION: `backend/src/services/bridge/routing-engine.ts` (16:32) and
+  `backend/src/services/intellect/dream-worker.ts` (16:37) have uncommitted edits by another session.
+  Those two files are OFF-LIMITS to me. I will NOT `npm run build` / restart porter-fastify while
+  they are dirty — a build would compile their WIP into dist and ship it.
+- Files I claim (all under backend/src, none overlapping the above):
+  services/intellect/hot-context.ts · routes/v1/intellect.ts · services/memory-injection*.ts ·
+  services/memory-projection.ts · services/directive-scorer.ts · services/intellect/claude-rules-mirror.ts ·
+  mcp/porter-mcp-stdio.ts · mcp/server.ts (deleted) · CLAUDE.md
+- Shipped v6.120.0 → v6.125.0, each built/restarted/verified/pushed/announced. No file collision with the
+  concurrent session (they shipped v6.119.0; I rebased onto it and never built while their tree was dirty).
+- ⚠️ Worktree was at /home/lobster/projects/Porter-memory-harness and had to be MOVED to
+  ~/.worktrees/porter-memory-harness — claude-rules-mirror scans /home/lobster/projects/*/CLAUDE.md and
+  would have minted a directive from a scratch checkout. Now documented in Porter/CLAUDE.md.
+- Status: done

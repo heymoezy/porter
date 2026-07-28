@@ -12,7 +12,7 @@ Business model: API metering. Any UI is just an API customer.
 
 ### Memory — how it actually reaches a model (read this before touching injection)
 
-There are **two delivery paths, and they are not the same code**:
+There are **three delivery paths, and they are not the same code**:
 
 | Path | Who gets it | Built by | Ordering |
 |---|---|---|---|
