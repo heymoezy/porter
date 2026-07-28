@@ -1,3 +1,19 @@
+## v6.121.0 (2026-07-28) — every session was handed every other project's rules
+
+`claude-rules-mirror` rendered the global hard rules AND every project's non-negotiables into ONE
+**workspace**-scoped directive. Workspace is injected into every session, so a Baan Yin Dee session was
+handed ymc's ship ceremony, journeyful's version-bump rule and Porter's architecture rules — none of
+which it can act on, all of which it pays for.
+
+- **One row per scope.** Global hard rules → one workspace row (everyone needs them). Each project's
+  non-negotiables → a row scoped to THAT project, which `/context` already injects only when the project
+  is active. No route change was needed; the scoping was the bug.
+- **The combined body was also being truncated mid-sentence.** Global + every project ran past the 2,400
+  char cap, so the last project in alphabetical order got a severed rule and nothing said it was severed.
+  Each body is now capped on its own — one long project can no longer eat another's rules.
+- Idempotence moved from one body's hash to a hash over the whole SET, and the unchanged-check now
+  compares row COUNT as well. Hash alone would not notice a row that went missing.
+
 ## v6.120.0 (2026-07-28) — the session-start payload never told a session where the last one got to
 
 Porter wrote the warm packet on every session-end and no read path ever opened it. `hot_contexts` has been

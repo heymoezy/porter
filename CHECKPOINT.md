@@ -1,3 +1,27 @@
+## 2026-07-28 — v6.121.0: EVERY SESSION WAS HANDED EVERY OTHER PROJECT'S RULES
+
+Second finding out of the memory audit. `claude-rules-mirror` (U6) renders CLAUDE.md rule truth into the
+`directives` table. It rendered the global hard rules AND every project's non-negotiables into ONE
+WORKSPACE-scoped row — and workspace is injected into every session. So a Baan Yin Dee session opened
+holding ymc's ship ceremony, journeyful's version-bump rule and Porter's architecture rules.
+
+- One row per scope now: global hard rules → workspace; each project's non-negotiables → scope='project',
+  scope_id=<dir>. `/context` already injects project directives only for the ACTIVE project, so no route
+  change was needed — the scoping was the whole bug.
+- The combined body also exceeded CONTENT_CAP (2,400) and was truncated mid-sentence: the last project
+  alphabetically got a severed rule with nothing marking it severed. Each body is capped independently now.
+- Idempotence is over the row SET (hash of scope+content across rows) and checks row COUNT too — hashing
+  one body could not notice a row that had gone missing.
+
+⚠️ CAUGHT BEFORE IT SHIPPED: the mirror scans `/home/lobster/projects/*/CLAUDE.md`, and my git worktree was
+sitting at `/home/lobster/projects/Porter-memory-harness`. Running the mirror would have minted a bogus
+"Porter-memory-harness non-negotiables" directive from my own scratch checkout. Worktree relocated to
+`~/.worktrees/porter-memory-harness`. Any future session using a worktree must keep it OUT of projects/ —
+that directory is an input to the memory system, not just a place to put code.
+
+VERIFIED: 1 workspace row + 3 project rows (Porter, journeyful.com, ymc.capital) — count predicted before
+running, so a wrong number would have been loud. Session payload for ymc.capital 2,031 → see below.
+
 ## 2026-07-28 — v6.120.0: PORTER TOLD EVERY SESSION THE RULES AND NEVER THE WORK
 
 Moe asked for an audit of the memory system from inception and for Porter to become a proper harness for

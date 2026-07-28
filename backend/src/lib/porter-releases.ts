@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.121.0',
+    date: '2026-07-28',
+    title: 'Every session was handed every other project’s rules',
+    bullets: [
+      'The rules Porter injects at the start of a session were bundled into one block that went to everyone. A session working on the hotel was handed YMC’s release ceremony, journeyful’s version rules and Porter’s own architecture rules — none of which apply to it, all of which it pays to read.',
+      'Each project’s rules are now attached to that project and only appear when you are working on it. The rules that genuinely apply everywhere still go to everyone.',
+      'The bundle had also grown past its size limit, so it was being cut off mid-sentence — the last project alphabetically lost the tail of its rules and nothing indicated anything was missing. Each project now has its own room and cannot crowd out another.',
+    ],
+  },
+  {
     version: '6.120.0',
     date: '2026-07-28',
     title: 'Every session was told the rules and never told where the last one got to',
