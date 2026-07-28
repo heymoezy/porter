@@ -1,3 +1,36 @@
+## v6.120.0 (2026-07-28) — the session-start payload never told a session where the last one got to
+
+Porter wrote the warm packet on every session-end and no read path ever opened it. `hot_contexts` has been
+filling since 2026-07-13; the block Claude actually receives at SessionStart is built inline by
+`GET /api/v1/intellect/context`, which had its own episode query and had never heard of it. Porter was
+telling every session the RULES and never the WORK.
+
+- **The warm packet is now in the session-start payload.** `/context` renders a continuity block —
+  handoffs a previous session deliberately left, then the real work that preceded this one — through
+  `getHotParts()`, the SAME source `porter_bootstrap` (MCP) reads. Two mouths, one builder: the push
+  path and the pull path can no longer drift, which is how they got here.
+  Deliberately NOT the whole warm packet: the session-start hook chain already prints the active
+  project's CHECKPOINT.md excerpt, so repeating the checkpoint head would bill the same bytes twice.
+- **`porter_bootstrap`'s "Recent sessions" has never rendered once.** `hot-context.ts` queried
+  `episodes.project` — a column that has never existed; the table is keyed `(scope, scope_id)`. It threw
+  on every call into a bare `catch {}`. Fixed, and the catch now logs: fail-open is for "the table isn't
+  there yet", not for hiding a query that cannot succeed.
+- **The old "Recent Sessions" section was mostly junk, injected into every session.** It read episodes
+  project-scoped OR **workspace**-scoped, and workspace is where the analyzer dumps
+  `Session (3 dispatches, 16m)` when it has nothing to say. Of 758 project-scoped episodes, 681 (90%)
+  carry no fact: the counter template, or the model declining to summarize a session it could not see
+  (566 of 758 open in the first person), or provider quota text stored as if it were memory.
+  Now filtered — validated across all 758, and the 15 highest-risk drops were hand-read: zero real
+  summaries lost.
+- The analyzer also *appends* `[Worked on **x** (41 transcript turns, 187m)]` to good summaries. That tag
+  is stripped, not treated as a junk signal — judging the line without stripping first rejects every real
+  summary that carries one.
+- Cost: ymc.capital 2,127 → 2,031 tokens, Porter 1,790 → 1,521, and what remains is worth reading. A
+  cold/unknown project renders nothing rather than an empty heading.
+
+Root cause of the junk itself — the analyzer being handed sessions whose transcript it cannot see, and
+gateway timeouts — is v6.119.0's territory, not this release's. This stops it reaching the prompt.
+
 ## v6.119.0 (2026-07-28) — Bridge had no failover where it mattered most; dreaming was dead for 3 days
 
 - **Dreaming had stopped entirely** — no run of any silo since 2026-07-26. The `software` silo had logged

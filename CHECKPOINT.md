@@ -1,3 +1,52 @@
+## 2026-07-28 — v6.120.0: PORTER TOLD EVERY SESSION THE RULES AND NEVER THE WORK
+
+Moe asked for an audit of the memory system from inception and for Porter to become a proper harness for
+Claude. Council (codex_cli e7e14182 · grok_cli ccef7b20, both real — gateway verified, not a failover
+answering as Claude) converged independently on the same answer: reads are over-built, the write path is
+the gap, ship the session-end→hot→session-start loop first. The audit found the write path already
+existed and worked. Nothing read it.
+
+WHAT THE AUDIT FOUND — six generations of memory coexist (Memory Tab → Cortex → Recall → Memory V3 →
+Intellect → vault-projection V2 → hot context). FOUR context builders exist, and the one Claude actually
+receives is a hand-rolled inline block in routes/v1/intellect.ts that consumes neither V1 nor V2 and has
+no token budget. So the V1/V2 shadow-canary machinery has nothing to do with what a session is handed.
+- `hot_contexts` live and current (written by session-end since 2026-07-13). Never read at session start.
+- 0 of 175 active concepts have `use_count > 0` — not one has ever been recorded as used.
+- 24 of 66 active directives are Tom's WhatsApp complaints ("You seem stuck on everything").
+- 456/456 shadow observations: V2 token-identical to V1, zero missing directives, over 20 days —
+  and `observeShadow()` hardcodes `injected='v1'`, so the session path structurally cannot promote it.
+
+SHIPPED (R1 — the one thing): the warm packet is in the session-start payload, via `getHotParts()` — the
+same source `porter_bootstrap` reads. One builder, two mouths. A session now opens knowing what the last
+one handed off ("WhatsApp is unlinked — Tom is mute", left by a grok session) instead of only the rules.
+
+- `hot-context.ts` queried `episodes.project`. That column has never existed — the table is keyed
+  (scope, scope_id). It threw on EVERY call into a bare `catch {}`, so `porter_bootstrap`'s "Recent
+  sessions" has not rendered once since #37 R1 shipped on 2026-07-13. Fixed; the catch now logs.
+- The section it replaces read workspace-scoped episodes too — where the analyzer dumps
+  "Session (3 dispatches, 16m)". 681 of 758 project episodes (90%) carry no fact. Filtered on structure,
+  not phrases: a summary opening in the FIRST PERSON is the analyzer talking to the user instead of
+  summarizing (566 of 758), which no amount of phrase-matching catches.
+- The analyzer APPENDS "[Worked on **x** (41 transcript turns, 187m)]" to good summaries. Stripped, not
+  rejected — my first cut judged the line without stripping and dropped all 758. Caught because the
+  validator prints the longest DROPPED rows, so a real summary in that list is loud.
+
+VERIFIED — not a typecheck. Built the worktree and ran a SECOND instance on :3999 against the live DB
+(:3001 untouched), then diffed the real payload: ymc.capital 2,127 → 2,031 tokens with 2 handoffs now
+present, Porter 1,790 → 1,521. Filter validated across all 758 episodes; the 15 highest-risk drops
+hand-read, zero real summaries lost. `porter_bootstrap` body 429 tokens, "Recent sessions" rendering.
+
+⚠️ CONCURRENCY: another session shipped v6.119.0 mid-flight. I saw `dream-worker.ts` change under me at
+16:37, stopped, and did NOT build or restart the shared service while their source was dirty — a build
+would have compiled their WIP into dist and shipped it. Worked in a worktree, rebased onto their commit
+after it landed. Their fix (Bridge failover) is the root cause of the junk summaries this release filters.
+
+STILL OPEN (next, in order): one typed builder behind both mouths with a real token budget; the
+cross-project pollution (a Porter session is handed journeyful + ymc non-negotiables); the directive
+priority inversion (`/context` sorts DESC, memory-injection sorts ASC — a directive set to 60 to outrank
+50 ranks BELOW a 10 in the other reader); promote V2 and delete V1 + the canary on the 456-row evidence;
+delete the dead layers (`Porter/memory/` 0 files, `mcp/server.ts`, `routes/v1/memory.ts`).
+
 ## 2026-07-28 - v6.119.0 - Bridge had no failover where it mattered most (dreaming was dead for 3 days)
 
 Moe (2026-07-28): "ensure the fallback mechanism to other models within the council are there so he never

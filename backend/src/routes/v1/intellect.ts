@@ -69,14 +69,6 @@ interface ConceptRow {
   source_url: string | null;
 }
 
-interface EpisodeRow {
-  id: string;
-  scope_id: string | null;
-  summary: string;
-  files_changed_json: unknown;
-  created_at: number;
-}
-
 interface IntellectEventRow {
   id: string;
   event_type: string;
@@ -180,29 +172,39 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       effectiveProject ? [effectiveProject] : []
     );
 
-    // Fetch recent episodes — project-scoped first, then workspace-scoped fallback.
-    // Most episodes are workspace-scoped (session analyzer doesn't always know the project).
-    // Uses effectiveProject for symmetry — cwd-only callers see project-scope episodes too.
-    let episodes: EpisodeRow[] = [];
+    // ── CONTINUITY — what the last session left behind ──────────────────────
+    // This route used to run its own episode query here: 5 rows, project-scoped
+    // OR **workspace**-scoped. Workspace is where the session analyzer dumps
+    // "Session (3 dispatches, 16m)" when it has nothing to say — 945 of them on
+    // this box — so the section that was supposed to say "here is where we got
+    // to" was mostly filler, plus the occasional transcript artifact of a model
+    // declining to summarize. It was injected into every session start.
+    //
+    // The warm packet (#37) already answers this question properly, and
+    // session-end already writes it. Nothing read it. Now this does — through
+    // getHotParts, the SAME source the MCP pull path (porter_bootstrap) uses,
+    // so the two mouths cannot drift.
+    let continuity: string | null = null;
+    let continuityCounts = { handoffs: 0, sessions: 0 };
     if (effectiveProject) {
-      const { rows } = await pool.query<EpisodeRow>(
-        `SELECT id, scope_id, summary, files_changed_json, created_at
-         FROM episodes
-         WHERE (scope = 'project' AND scope_id = $1)
-            OR scope = 'workspace'
-         ORDER BY created_at DESC
-         LIMIT 5`,
-        [effectiveProject]
-      );
-      episodes = rows;
-    } else {
-      const { rows } = await pool.query<EpisodeRow>(
-        `SELECT id, scope_id, summary, files_changed_json, created_at
-         FROM episodes
-         ORDER BY created_at DESC
-         LIMIT 5`
-      );
-      episodes = rows;
+      try {
+        const { getHotParts, renderContinuitySection, safeProjectDir } =
+          await import('../../services/intellect/hot-context.js');
+        // safeProjectDir also rejects traversal — effectiveProject can come
+        // from a query param, and getHotParts reads CHECKPOINT.md off disk.
+        if (safeProjectDir(effectiveProject)) {
+          const parts = await getHotParts(effectiveProject);
+          continuity = renderContinuitySection(parts);
+          continuityCounts = {
+            handoffs: parts.handoffs.length,
+            sessions: parts.recentSessions.length,
+          };
+        }
+      } catch (err) {
+        // Fail-open — a session must still start if continuity is unavailable —
+        // but never fail silent, which is how the old bug survived for weeks.
+        request.log.warn({ err }, '[intellect] continuity lookup failed — context served without it');
+      }
     }
 
     // ── Skill recommendations based on recent episode tool patterns ───
@@ -330,12 +332,8 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       sections.push('');
     }
 
-    if (episodes.length > 0) {
-      sections.push('### Recent Sessions');
-      for (const e of episodes) {
-        const when = new Date(e.created_at * 1000).toISOString().split('T')[0];
-        sections.push(`- **${when}**: ${e.summary}`);
-      }
+    if (continuity) {
+      sections.push(continuity);
       sections.push('');
     }
 
@@ -378,7 +376,11 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       stats: {
         systemDirectives: systemDirectives.length,
         projectDirectives: projectDirectives.length,
-        episodes: episodes.length,
+        // Kept for shape compatibility: this counted the raw episode rows the
+        // route used to render. It now counts the real project sessions that
+        // survived junk-filtering, which is what actually reaches the session.
+        episodes: continuityCounts.sessions,
+        handoffs: continuityCounts.handoffs,
         concepts: concepts.length,
         // Phase 49 LRN-03 observability — clients can see whether the project
         // scoping came from their explicit ?project= or from cwd-derivation.

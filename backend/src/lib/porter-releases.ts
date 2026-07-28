@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.120.0',
+    date: '2026-07-28',
+    title: 'Every session was told the rules and never told where the last one got to',
+    bullets: [
+      'Porter has been writing a short handover note at the end of every session since 13 July — what was done, what was left open — and nothing ever read it back. A new session opened knowing the standing rules and nothing about the work in front of it. It now opens with that handover: what the last session deliberately passed on, and the real work that came before.',
+      'The first thing it surfaced was a note left by an earlier session on a different model: WhatsApp is unlinked, Tom is mute, relink before trusting any announcement. That is exactly the kind of thing that used to be rediscovered the hard way.',
+      'The list of recent work shown at the start of a session was mostly not work. Nine of every ten entries were either an automatic counter ("3 dispatches, 16 minutes") or the model replying that it could not see the session it was asked to summarise. That was being handed to every new session as memory. It is now filtered out, checked against all 758 stored entries, with the borderline cases read by hand to make sure nothing real was lost.',
+      'A related fault meant one of the two ways of reading the handover had never worked at all — it asked the database for a column that has never existed, failed silently every single time, and showed an empty section. Fixed, and it can no longer fail quietly.',
+      'Sessions now start smaller and more useful: the briefing is shorter than before and what remains is worth reading.',
+    ],
+  },
+  {
     version: '6.119.0',
     date: '2026-07-28',
     title: 'Tom\u2019s nightly thinking had been dead for three days, and the safety net was never connected',
