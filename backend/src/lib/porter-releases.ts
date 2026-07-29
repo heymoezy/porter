@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.133.0',
+    date: '2026-07-29',
+    title: 'The login screen can now show your password and recover your account',
+    bullets: [
+      'Added the eye icon to reveal what you are typing, on both the sign-in box and when setting a new password.',
+      'Added a "Forgot password?" flow: ask for a code, then enter that code with a new password. It sits on the login screen itself, because recovery is no use to someone who cannot get past the login.',
+      'Both of these talk to parts of Porter that already existed and had never been connected to anything \u2014 the recovery routes were sitting unused and were, until today, on the list of dead code to delete.',
+      'One honest limit: there is still no mail server, so the code currently lands in the machine log instead of your inbox. The screen is finished and working; where the code gets delivered is the remaining decision.',
+    ],
+  },
+  {
     version: '6.132.0',
     date: '2026-07-29',
     title: 'Password reset was impossible, and failing told strangers which emails have accounts',

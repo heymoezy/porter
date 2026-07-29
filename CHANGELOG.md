@@ -1,3 +1,24 @@
+## v6.133.0 (2026-07-29) — the login screen can now recover an account
+
+Requested after a lockout: *"porter admin login screen should have a show password icon and a forgot password
+flow so i can change it when you go silent."* Both endpoints already existed and **nothing in the UI called
+them** — `/forgot-password` and `/reset-password` were on the dead-endpoint purge list until this.
+
+- **Show/hide password toggle**, on sign-in and on the new-password field, via one shared `PasswordField` so
+  the two cannot drift. The toggle is `type="button"` deliberately: a bare `<button>` inside a `<form>`
+  defaults to submit, so revealing a password would have posted the form.
+- **Forgot-password flow** in the same card — request a code, then enter code + new password. Recovery must
+  be reachable by someone who cannot get in, so it cannot sit behind a login.
+- Wording matches the server's behaviour: it answers identically whether or not an address has an account, so
+  the UI says *"if that address has an account"* rather than promising mail was sent. Claiming a definite send
+  would re-introduce by implication the enumeration leak v6.132.0 just closed.
+- The code field accepts digits only, is capped at 6, and uses `autocomplete="one-time-code"`; submit stays
+  disabled until the code is 6 digits and the password is 8+ characters, matching the server's schema so a
+  round-trip isn't spent learning that.
+
+⚠️ Still true, and it limits how much this helps: **there is no mail server**, so the code lands in the
+service log rather than an inbox. The screen is correct and ready; delivery is the open decision.
+
 ## v6.132.0 (2026-07-29) — password reset was impossible, and its failure leaked which emails have accounts
 
 `sendEmailInternal` handled "SMTP not configured" and not "SMTP configured but unreachable". `smtp_host` is

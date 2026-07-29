@@ -1,3 +1,23 @@
+## 2026-07-29 — v6.133.0: THE LOGIN SCREEN CAN NOW RECOVER AN ACCOUNT
+
+Moe, after being locked out: "porter admin login screen should have a show password icon and a forgot
+password flow so i can change it when you go silent."
+
+Both endpoints ALREADY EXISTED and nothing in the UI called them — /forgot-password and /reset-password were
+on my dead-endpoint purge list. Good argument for asking before deleting "unused" code.
+
+- Shared PasswordField (eye toggle) used by sign-in AND the new-password field so they cannot drift. The
+  toggle is type="button" on purpose: a bare <button> in a <form> defaults to submit, so revealing the
+  password would have submitted the form.
+- Recovery lives ON the login card — it must be reachable by someone who cannot log in.
+- Copy says "if that address has an account…" because the server answers identically either way. Promising a
+  definite send would re-introduce by implication the enumeration oracle v6.132.0 closed.
+- Client validation mirrors the server schema (6 digits, 8+ char password) so a round trip isn't spent
+  learning the rule.
+
+⚠️ STILL OPEN: no mail server, so the code lands in journalctl, not an inbox. Screen is done; DELIVERY is the
+decision. Porter has a working WhatsApp service and Moe uses it daily — obvious candidate, his call.
+
 ## 2026-07-29 — v6.132.0: PASSWORD RESET WAS IMPOSSIBLE, AND ITS FAILURE WAS AN ENUMERATION ORACLE
 
 Found while acting on Moe's ask for a forgot-password flow "so i can change it when you go silent".
