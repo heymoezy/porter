@@ -1250,8 +1250,9 @@
   Caddy does send X-Forwarded-For — the service token presented from the public host is now REFUSED
   (401) while the same token on 127.0.0.1 returns 200, and /api/v1/intellect/directives is 401 from
   outside and 200 from loopback. Your S4/S5 files are untouched by me.
-- Shipped v6.128.0 (code live since the 06:11 restart; verified from OUTSIDE). Did NOT restart again:
-  routing-engine.ts is dirty (yours?) and tsx runs off source — a restart would ship that WIP. /health still
-  reads 6.127.0 until someone restarts. tsc + 237 unit tests green WITH it on disk. Containment (password
-  rotation + sessions wipe) done; the password went to Moe in the report only, nowhere on disk.
+- Shipped v6.128.0 (code live since the 06:11 restart; verified from OUTSIDE, again after commit). I did NOT
+  restart — routing-engine.ts was dirty and tsx runs off source, so a restart would have shipped that WIP.
+  Whoever owns it restarted at 07:13:48 UTC and it landed clean: /health reads 6.128.0, all source mtimes
+  predate the unit start. tsc + 237 unit tests were green WITH it on disk. Containment (password rotation +
+  sessions wipe) done; the password went to Moe in the report only, nowhere on disk.
 - Status: done

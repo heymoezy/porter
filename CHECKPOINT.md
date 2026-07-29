@@ -66,18 +66,25 @@ plaintext, not in any file.
 ✅ **VERIFIED FROM OUTSIDE** (https://askporter.app, after restart): `401` on
 `/api/v1/intellect/{directives,context}`, `/api/v1/sessions/search`, `/api/admin/{brain/summary,health/logs,health/dashboard}`,
 `/api/v1/{files,registry/scopes,agents,bridge/gateways,chat/sessions,vault/graph}`, `POST /intellect/dream-run`,
-`POST /api/admin/health/log-external`; `403` on `POST /api/v1/auth/register`. Still `200`: `/health`,
-`/api/admin/health/`, and the admin SPA at `/` and `/login`. Service token on localhost: 200 everywhere.
+`POST /api/admin/health/log-external`; `403` on `POST /api/v1/auth/register`. Still `200`:
+`/api/v1/health`, `/api/admin/health/`, and the admin SPA at `/` and `/login`. Service token on localhost:
+200 everywhere; the SAME token presented through askporter.app: 401.
+
+Note for the next reader: `askporter.app/health` is NOT Porter — the live Caddy route sends only `/api/*` to
+:3001 and everything else to the SPA, so that path returns index.html with a 200 and proves nothing. Porter's
+public health is `/api/v1/health`. Also `brain-ui :5176` is not listening and that is CORRECT — it was
+retired in an earlier release; `CLAUDE.md` still describes it as live and is stale on that point.
 `npx tsc --noEmit` clean; 237 unit tests, 0 fail.
 
-⚠️ **THE RUNNING PROCESS STILL REPORTS 6.127.0 — I DID NOT RESTART, ON PURPOSE.** Another session has
-`backend/src/services/bridge/routing-engine.ts` dirty (observed-model logging, mtime 06:44). The unit runs
-`npx tsx` straight off SOURCE, so restarting would have shipped their unverified in-flight work live — the
-exact thing `.coordination/SESSIONS.md` exists to prevent. It costs nothing here: the 06:11 restart already
-picked up every security fix in this release, which is why the 401s above are real and not a stale-code
-illusion ([[feedback_liveness_is_not_currency]] — I verified the NEW BEHAVIOUR, not a version string).
-**Whoever finishes routing-engine.ts: restart `porter-fastify` and `/health` will read 6.128.0.**
-`npx tsc --noEmit` and the full unit suite are green WITH their change on disk.
+**RESTART — I did not run one, another session did (07:13:48 UTC) and it landed clean.** I deliberately
+skipped restarting because `backend/src/services/bridge/routing-engine.ts` was dirty with someone's in-flight
+observed-model work (mtime 06:44) and the unit runs `npx tsx` straight off SOURCE — restarting would have
+shipped their unverified WIP live, the exact thing `.coordination/SESSIONS.md` exists to prevent. Their own
+restart at 07:13 picked up both. `127.0.0.1:3001/health` now reads **6.128.0**, and every source file
+predates the unit's start time, so the process is running the committed code — not a stale-code green
+([[feedback_liveness_is_not_currency]]). The security fixes were live from the 06:11 restart regardless,
+which is why the 401s above are behavioural proof rather than a version string. `npx tsc --noEmit` and the
+full unit suite were green WITH routing-engine.ts's change on disk.
 
 ⚠️ **STILL OPEN — needs a decision from Moe, not touched here:**
 - `/api/v1/auth/change-password` sets a new password with no current-password re-auth (same class as the BYD
