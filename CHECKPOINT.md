@@ -1,3 +1,28 @@
+## 2026-07-29 — v6.132.0: PASSWORD RESET WAS IMPOSSIBLE, AND ITS FAILURE WAS AN ENUMERATION ORACLE
+
+Found while acting on Moe's ask for a forgot-password flow "so i can change it when you go silent".
+
+ROOT CAUSE (one gap, four faults): sendEmailInternal handled "SMTP not configured" but not "configured but
+unreachable". smtp_* settings live in workspace_settings (NOT porter.env — my first check looked in the wrong
+place and wrongly concluded mail was unconfigured). They point at 127.0.0.1:587 and nothing listens there.
+sendMail threw; the throw escaped the route.
+
+1. Reset impossible — every attempt 500 ECONNREFUSED.
+2. ENUMERATION ORACLE — /forgot-password returns {sent:true} for everyone by design, but only ATTEMPTS a send
+   for a real user. Unknown email -> 200, real email -> 500. Verified live on the public host.
+3. The 500 body returned the internal host:port to an unauthenticated caller.
+4. The [email-dev] fallback (which logs the code so it stays recoverable) never ran — the throw beat it.
+
+Fail-soft fixes all four. Same answer either way; code still lands in the service log.
+
+⚠️ STILL OPEN, and it is the substantive half: NO MAIL SERVER EXISTS. A reset code cannot reach a mailbox.
+"Recovery" today = reading journalctl on the box, which is not recovery for someone locked out. Moe uses
+WhatsApp daily and Porter already has a working WhatsApp service — that is the obvious candidate channel, but
+it is his decision, not mine to assume.
+
+CONTEXT: Moe currently has NO known password (two sessions rotated it 15 min apart) and holds a browser
+session valid to 2026-08-28. He can self-serve via Settings -> change password while that session lives.
+
 ## 2026-07-29 — v6.131.0: A NUL BYTE MADE claude-rules-mirror.ts UNREVIEWABLE
 
 Self-inflicted in v6.121.0: the set-hash separator was written `.join('\x00')` instead of `.join(' ')`.

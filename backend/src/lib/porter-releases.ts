@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.132.0',
+    date: '2026-07-29',
+    title: 'Password reset was impossible, and failing told strangers which emails have accounts',
+    bullets: [
+      'The "forgot password" flow could never have worked. It is set up to hand mail to a mail server on this machine, and there is no mail server on this machine \u2014 so every attempt failed outright. The one route that exists so you can regain access without help was dead.',
+      'Worse, the way it failed gave something away: asking about an address that has no account returned a normal answer, while asking about a REAL account returned an error. Anyone could use that difference to work out which email addresses are registered \u2014 the exact thing the flow was written to avoid revealing. Confirmed against the live site, now closed.',
+      'The failure also returned internal machine details to whoever asked, and prevented the built-in fallback that keeps the reset code recoverable.',
+      'Still outstanding, and it is the real one: there is no mail server, so a reset code cannot actually reach your inbox yet. Today it only lands in the log on the machine \u2014 which is no help to someone locked out. Where those codes should be delivered is the open question.',
+    ],
+  },
+  {
     version: '6.131.0',
     date: '2026-07-29',
     title: 'A stray invisible character had made one file impossible to review',

@@ -1,3 +1,26 @@
+## v6.132.0 (2026-07-29) — password reset was impossible, and its failure leaked which emails have accounts
+
+`sendEmailInternal` handled "SMTP not configured" and not "SMTP configured but unreachable". `smtp_host` is
+`127.0.0.1:587` and **nothing listens there**, so `sendMail` threw, the throw escaped the route, and one gap
+produced four faults:
+
+- **Password reset could never work.** Every attempt returned `500 ECONNREFUSED`. The one flow that exists so
+  an operator can recover access unaided was dead.
+- **It leaked which addresses have accounts.** `/forgot-password` deliberately answers `{sent:true}` for
+  everyone so it cannot confirm membership — but it only ATTEMPTS a send for a real user. Unknown address →
+  `200`; real address → `500`. The status code was exactly the oracle the design removes. Confirmed live
+  against the public host.
+- **The 500 body carried the internal host and port** back to an unauthenticated caller.
+- **The `[email-dev]` fallback never ran** — it exists so the code stays recoverable from the log, but the
+  throw happened first.
+
+Failing soft fixes all four: callers get the same answer either way, and the code is still retrievable from
+the service log.
+
+Not fixed here, and it is the substantive one: **there is still no mail server**, so a reset code cannot
+reach a mailbox. Recovery today means reading the log on the box — which is not recovery for someone locked
+out. Choosing a delivery channel is the open decision.
+
 ## v6.131.0 (2026-07-29) — a NUL byte made claude-rules-mirror.ts unreviewable
 
 Self-inflicted, in v6.121.0. The set-hash separator was written as `.join('\x00')` where `.join(' ')` was

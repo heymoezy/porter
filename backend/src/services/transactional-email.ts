@@ -83,13 +83,37 @@ async function sendEmailInternal(to: string, subject: string, html: string): Pro
     return false;
   }
 
-  await mailer.sendMail({
-    from: `"${cfg.fromName}" <${cfg.fromEmail}>`,
-    to,
-    subject,
-    html,
-  });
-  return true;
+  // A CONFIGURED-BUT-UNREACHABLE server is a different failure from an
+  // unconfigured one, and it used to be unhandled: sendMail threw, the throw
+  // escaped the route, and the caller got a 500 carrying the internal host and
+  // port. Three things went wrong downstream of that one gap:
+  //
+  //  1. Password reset was impossible — smtp_host points at 127.0.0.1:587 and
+  //     nothing listens there, so every reset attempt 500'd.
+  //  2. It leaked which addresses have accounts. /forgot-password deliberately
+  //     answers `{sent:true}` for everyone to avoid confirming membership — but
+  //     it only ATTEMPTS a send for a real user, so an unknown address returned
+  //     200 and a real one returned 500. The status code was the oracle the
+  //     design was trying to remove.
+  //  3. The `[email-dev]` fallback that exists precisely so a code is still
+  //     recoverable never ran, because the throw happened first.
+  //
+  // Failing soft here fixes all three at once: callers see the same answer
+  // either way, and the code is still retrievable from the service log.
+  try {
+    await mailer.sendMail({
+      from: `"${cfg.fromName}" <${cfg.fromEmail}>`,
+      to,
+      subject,
+      html,
+    });
+    return true;
+  } catch (e) {
+    console.error(
+      `[email] send FAILED to ${to} via ${cfg.host}:${cfg.port} — ${e instanceof Error ? e.message : e}`,
+    );
+    return false;
+  }
 }
 
 export async function sendVerificationCode(email: string, code: string): Promise<void> {
