@@ -37,9 +37,33 @@ builder.
 ⚠️ `/home/lobster/projects/*` is an INPUT to the memory system (`claude-rules-mirror` scans every
 `CLAUDE.md` there). Keep git worktrees OUT of it — use `~/.worktrees/`.
 
-`memory-injection-v2.ts` is a vault-projection mirror of V1 behind a shadow canary. 456 observations
-show it token-identical to V1 with zero missing directives — but it has **never actually been injected**
-(`observeShadow()` logs `injected='v1'` unconditionally). Decide it or delete it; do not leave the fork.
+#### The V1/V2 fork — evidence is complete, the DECISION is not made
+
+`memory-injection-v2.ts` mirrors V1 but reads through `memory-projection.ts` (a vault-shaped view), behind
+a shadow canary with mandatory auto-fallback to V1.
+
+**Evidence gathered (2026-07-29) — no more is needed to decide:**
+- 456 live shadow observations, 2026-07-08 → 07-28, across 10 scopes: token-identical, 0 missing
+  directives, 0 fallbacks, invariants OK on every row.
+- Full replay parity across **all 15 live project scopes**: 0 divergent, 0 missing, 0 extra, tools match.
+- But V2 has **never once been injected in production** — `observeShadow()` logs `injected='v1'`
+  unconditionally, and the canary env var only reaches the `/chat` path, which has never run with a
+  canary scope. So equivalence is proven *computationally*, never *in service*.
+
+**The decision is not "which is correct" — they are provably the same. It is whether the indirection
+earns its keep.** `memory-projection.ts` currently reads the SAME legacy tables V1 reads; it is a shim
+whose payoff arrives only if/when the vault becomes the actual store. Until then V2 is a second
+implementation to maintain for zero behavioural gain.
+
+Two honest options — do not leave it forked a third time:
+1. **Promote V2, keep V1 one release as the fallback, then delete V1 + the canary.** Buys the vault-store
+   migration path. Costs a live change to Tom's path for no present benefit.
+2. **Delete V2 + `memory-projection.ts` + the canary + `memory_injection_shadow`.** Buys ~900 lines gone
+   and one path to reason about. Costs the migration scaffolding, which would have to be rebuilt if the
+   vault ever becomes the store.
+
+Whichever is chosen: concept-usage recording lives in V1 only (see `services/intellect/concept-usage.ts`)
+and must move with it.
 
 ## Stack
 
