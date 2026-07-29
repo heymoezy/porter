@@ -1,3 +1,27 @@
+## 2026-07-29 — v6.137.0: ONE MEMORY SYSTEM — THE SECOND INJECTION BUILDER IS GONE
+
+Moe: "which one is live? if v1 is dead, it should be deleted. there should only be one memory system this is
+exactly the stuff i told you i want resolved. we cannot have conflicting code and even you seem confused by it."
+
+Fair hit — I had stated it backwards in an earlier summary. The data settles it: memory_injection_shadow held
+486 rows, ALL mode='shadow' / injected='v1'. ZERO canary rows. V1 is the only builder that has ever served;
+V2 never served once. V2 was the dead one.
+
+DELETED: memory-injection-v2.ts (632L) · memory-projection.ts · the shadow/canary machinery · the
+MEMORY_INJECTION_VAULT_SCOPES flag. Callers rewired to buildMemoryContext directly: memory-snapshot.ts,
+routes/v1/chat.ts, and the fire-and-forget shadow block on the /context hot path.
+
+WHY, not just what: the projection shim read the SAME legacy tables V1 reads. It was scaffolding for a future
+vault-as-store migration that would now be built against the generic connectors instead. Zero behavioural
+gain, permanent second path to reason about.
+
+VERIFIED byte-identical, not "it compiled": second instance on :3999 with V2 deleted, diffed against live
+:3001 with V2 present — ymc.capital 7,160=7,160 · Porter 5,807=5,807 · Baan Yin Dee 4,103=4,103. Builder
+exercised across all 15 live scopes, 0 failures.
+
+NOTE for whoever revisits this: concept-usage recording (services/intellect/concept-usage.ts) lives in V1 and
+stayed with it. The v6.136.0 note about moving it with the winner is now moot.
+
 ## 2026-07-29 — v6.136.0: SMTP CREDENTIALS OPTIONAL (groundwork for the standalone mail server)
 
 Moe's decision, twice reaffirmed after I flagged deliverability risk: Porter sends its own mail, standalone,

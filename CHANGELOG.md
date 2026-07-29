@@ -1,3 +1,29 @@
+## v6.137.0 (2026-07-29) — one memory system: the second injection builder is gone
+
+Moe: *"which one is live? if v1 is dead, it should be deleted. there should only be one memory system this is
+exactly the stuff i told you i want resolved. we cannot have conflicting code and even you seem confused by
+it."*
+
+He was right to call that out — I had it backwards in an earlier summary. The evidence settles it:
+`memory_injection_shadow` held **486 rows, every one `mode='shadow'`, `injected='v1'`. Zero canary rows.**
+
+- **`memory-injection.ts` (V1) is the only builder that has ever served a request.**
+- **`memory-injection-v2.ts` never served once.** It was computed, compared against V1, and thrown away.
+
+So V2 was the dead one. Deleted, with `memory-projection.ts` (the vault-shaped shim it read through), the
+shadow/canary machinery, and the `MEMORY_INJECTION_VAULT_SCOPES` flag. Three callers rewired to
+`buildMemoryContext` directly: `memory-snapshot.ts`, `routes/v1/chat.ts`, and the fire-and-forget shadow block
+on the `/context` hot path.
+
+The abstraction was scaffolding for a future where the vault becomes the actual store — but
+`memory-projection.ts` read the **same legacy tables V1 reads**, so it bought nothing today and cost a second
+path to reason about. If that migration ever happens it should be built against the generic connectors, not
+this shim.
+
+**Verified byte-identical, not merely compiling.** A second instance on :3999 with V2 deleted, diffed against
+live :3001 with V2 present: ymc.capital 7,160 = 7,160 · Porter 5,807 = 5,807 · Baan Yin Dee 4,103 = 4,103.
+The builder was also exercised across all 15 live project scopes, zero failures.
+
 ## v6.136.0 (2026-07-29) — SMTP credentials are optional, so a local relay can actually be used
 
 Groundwork for the standalone mail server (Moe's decision, twice reaffirmed after I flagged the risks: no

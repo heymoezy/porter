@@ -13,7 +13,7 @@
  */
 
 import { pool } from '../db/client.js';
-import { resolveInjectedMemoryContext } from './memory-injection-v2.js';
+import { buildMemoryContext } from './memory-injection.js';
 
 // ── LRU In-Memory Cache ───────────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ export async function getOrBuildSnapshot(
   // Layer 3: cache miss — build once and freeze.
   // R4.1: drop-in wrapper; both injection flags OFF (default) → byte-identical
   // to buildMemoryContext(...). Shadow/canary only activate when flagged.
-  const fresh = await resolveInjectedMemoryContext({
+  const fresh = await buildMemoryContext({
     agentId: opts.agentId,
     projectId: opts.projectId,
     searchQuery: opts.searchQuery,

@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.137.0',
+    date: '2026-07-29',
+    title: 'There is now one memory system instead of two',
+    bullets: [
+      'Porter had two separate pieces of code for deciding what a model is told at the start of a task \u2014 a working one and a replacement that had been built, tested against the original, and then never actually used. The records are unambiguous: 486 out of 486 times, the original did the work and the replacement\u2019s answer was thrown away.',
+      'The replacement has been removed, along with the machinery for comparing the two. Roughly 900 lines gone, and one place to look instead of two.',
+      'It existed to prepare for a future change in how knowledge is stored, but it was reading exactly the same data as the original \u2014 so it added a second thing to maintain and no benefit today. If that change ever happens it should be built fresh, not from this.',
+      'Checked properly rather than assumed: ran both versions side by side on the live system and confirmed the text handed to a model is identical, character for character, across every project.',
+    ],
+  },
+  {
     version: '6.136.0',
     date: '2026-07-29',
     title: 'Porter can now use its own mail server instead of demanding a password for it',
