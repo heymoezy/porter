@@ -1236,8 +1236,16 @@
   services/intellect/claude-rules-mirror.ts · services/intellect/vault-mirror.ts · services/runnables.ts
   · new backend/src/__tests__/ files. Work = S4 (destructive-sweep floor guards) + S5 (contract goldens).
 - Context: askporter.app was serving Porter memory publicly with no auth (files were always protected).
-  Caddy route patched at 03:50 via admin API (ephemeral — needs sudo for the Caddyfile).
-- Status: in-progress
+  Caddy route patched at 03:50 via admin API; Moe applied the durable Caddyfile + access log via sudo 07:3x.
+- SHIPPED v6.130.0 (floor guards) + v6.131.0 (NUL byte in claude-rules-mirror.ts made it git-binary since
+  v6.121.0 — caused a false "guard MISSING" reading during verification).
+- ⚠️ CREDENTIAL COLLISION: I rotated the moe platform_admin password ~07:12 to fix a lockout; the parallel
+  session rotated again after. Neither of us knows the live password. Moe holds a browser session valid to
+  08-28 and can self-serve via Settings → change password. Root cause of the ORIGINAL lockout was NOT either
+  rotation: users `moe` and `system` both had email moe@askporter.app and the login query has no ORDER BY,
+  so Postgres returned `system` and checked Moe's password against its hash. Fixed: moe → moe@themozaic.com
+  + unique index on lower(email). AGREE WITH THE OTHER SESSION: SESSIONS.md locks files, not live accounts.
+- Status: done
 
 ## porter-security-P1-P6 (Opus 5 1M) — 2026-07-29 07:0x (SGT)
 - Plan: ~/.claude/plans/serene-plotting-chipmunk.md (approved). Owns Porter items P-1..P-6.
