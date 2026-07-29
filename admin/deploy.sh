@@ -35,7 +35,10 @@ curl -s -o /dev/null -w 'https://askporter.app/api/v1/health: %{http_code}\n' ht
 
 echo "Deploy complete."
 echo ""
-echo "NOTE: Caddy's askporter.app -> static-file-server + /api proxy routing is"
+echo "NOTE: Caddy routing for askporter.app is DURABLE (in /etc/caddy/Caddyfile
+since 2026-07-29): static root + /api proxy + JSON access log. This script
+only ships the SPA bundle; it does not touch Caddy routing.
+'s askporter.app -> static-file-server + /api proxy routing is"
 echo "applied via the Caddy admin API and is EPHEMERAL (reverts if caddy is"
 echo "restarted/reloaded from the on-disk Caddyfile, which still points"
 echo "askporter.app straight at :3001). Durable persistence needs one sudo"

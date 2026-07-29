@@ -1,3 +1,20 @@
+## 2026-07-29 — v6.134.0: THREE RUNBOOKS DOCUMENTED A FIX THAT WOULD HAVE BROKEN THE SITE
+
+Found by shipping v6.133.0: admin/deploy.sh printed "Caddy routing is EPHEMERAL, needs one sudo edit" on a
+deploy that happened AFTER Moe applied that sudo edit. Chased the claim and found three files wrong.
+
+- Porter/CLAUDE.md, admin/CLAUDE.md, _ops/askporter-login-fix.md ALL described brain-ui on :5176 as a live
+  secondary dashboard. DELETED as dead code in v6.61.0; nothing listens there.
+- _ops/askporter-login-fix.md instructed pointing Caddy AT :5176 — i.e. the documented remedy for this exact
+  outage converts a 404 into a 502. Rewritten with the real config + why the site 404'd while /api/* stayed
+  publicly reachable underneath.
+- admin/CLAUDE.md gains the access-log tail; the host ran weeks with NO request logging, which is why "was
+  this accessed?" was unanswerable during the security review.
+
+Same class as this week's code faults: a document asserting something false is worse than no document,
+because it is followed under pressure. I read Porter/CLAUDE.md at session start and did not catch the :5176
+claim until it cost time during a live outage.
+
 ## 2026-07-29 — v6.133.0: THE LOGIN SCREEN CAN NOW RECOVER AN ACCOUNT
 
 Moe, after being locked out: "porter admin login screen should have a show password icon and a forgot

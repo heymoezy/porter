@@ -1,3 +1,22 @@
+## v6.134.0 (2026-07-29) — three runbooks documented a fix that would have broken the site
+
+Docs + one script. No runtime behaviour changes.
+
+Moe applied the durable Caddyfile with sudo, so every *"this routing is EPHEMERAL, re-apply it after a
+reload"* warning became false — `admin/deploy.sh` printed one during the deploy that shipped v6.133.0.
+
+Worse: `Porter/CLAUDE.md`, `admin/CLAUDE.md` and `_ops/askporter-login-fix.md` all still described a brain-ui
+on `:5176` as a live secondary dashboard. **It was deleted as dead code in v6.61.0** and nothing listens on
+that port. `_ops/askporter-login-fix.md` instructed pointing Caddy *at* `:5176` — so the documented fix for
+this exact outage would have turned a 404 into a **502**. That file is rewritten with the working
+configuration and the reason the site 404'd while its API stayed publicly reachable underneath.
+
+`admin/CLAUDE.md` also gains the access-log tail command, since the host ran for weeks with no request
+logging and that made "was this accessed?" unanswerable during a security review.
+
+This is the same class of fault as the code bugs found this week: a document asserting something false is
+worse than no document, because it is followed under pressure.
+
 ## v6.133.0 (2026-07-29) — the login screen can now recover an account
 
 Requested after a lockout: *"porter admin login screen should have a show password icon and a forgot password

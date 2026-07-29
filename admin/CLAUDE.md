@@ -28,22 +28,17 @@ source tree directly; that's why the rsync-out step exists (same pattern as
 - everything else → `file_server` on `/home/websites/porter/admin`, SPA
   fallback to `index.html`
 
-This routing is currently applied via the **Caddy admin API** (a live,
-in-memory config patch) and is **EPHEMERAL** — a `caddy reload`/restart
-reverts to the on-disk `/etc/caddy/Caddyfile`, which still points
-`askporter.app` straight at `:3001` with no static/SPA handling. Making it
-durable needs one `sudo sed` line into the Caddyfile + `sudo systemctl reload
-caddy` — see `/home/lobster/projects/_ops/askporter-login-fix.md` for the
-exact command. That edit needs Moe (sudo); until then, re-apply the admin-API
-patch if Caddy ever restarts.
+This routing is **durable as of 2026-07-29** — the static root, the `/api`
+proxy and a JSON access log live in `/etc/caddy/Caddyfile` (applied by Moe with
+sudo). It is no longer an ephemeral admin-API patch, so it survives a
+`caddy reload` and does not need re-applying.
 
 ## What else is here
 
 - **Admin API routes:** `../backend/src/routes/admin/` — live on `:3001`
   (cookie auth, platform_admin only). The SPA calls these via `/api/*`.
-- **Secondary dashboard:** inline brain-ui on `:5176`
-  (`../backend/src/routes/brain-ui.ts`), started by the same porter-fastify
-  process — a lightweight monitoring view, distinct from the full admin SPA.
+- ⚠️ **There is no brain-ui on `:5176`.** It was deleted as dead code in
+  v6.61.0 and nothing listens on that port. This SPA is the only admin surface.
 
 ## Commands
 
@@ -52,6 +47,7 @@ bash admin/deploy.sh                      # build + ship the admin SPA
 systemctl --user restart porter-fastify   # backend + brain-ui (backend changes only)
 curl -s http://127.0.0.1:3001/health      # expect current version
 curl -s https://askporter.app/            # expect 200, admin SPA HTML
+tail -f /var/log/caddy/askporter-access.log  # who is hitting the public host
 ```
 
 ## Monorepo Layout

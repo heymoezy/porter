@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.134.0',
+    date: '2026-07-29',
+    title: 'Three internal guides described a fix that would have broken the site',
+    bullets: [
+      'Porter keeps written instructions for how the website is served. All three still described a second dashboard that was deleted back in June, and one of them told you to point the website at it \u2014 so following the documented fix for this week\u2019s outage would have replaced a broken homepage with a completely dead site.',
+      'They also warned that the website routing was temporary and needed re-applying after any restart. That stopped being true when you applied the permanent fix \u2014 the deploy script was still printing the outdated warning.',
+      'All three corrected, and the working setup written down properly, including how to see who is visiting the site.',
+      'No change to how anything runs. This is the same problem as the code faults found this week: a guide that states something untrue is worse than no guide, because it gets followed under pressure.',
+    ],
+  },
+  {
     version: '6.133.0',
     date: '2026-07-29',
     title: 'The login screen can now show your password and recover your account',

@@ -106,13 +106,16 @@ The admin SPA (`admin/frontend.archived/`, name is a historical artifact — it 
 un-archived and is LIVE) is a static React Router build served by Caddy at
 **askporter.app**, with `/api/*` reverse-proxied to this Fastify brain on :3001.
 Ship it with `bash admin/deploy.sh` (build → rsync to `/home/websites/porter/admin`;
-Caddy picks up new files immediately, no restart needed). The lightweight inline
-brain-ui on :5176 (`backend/src/routes/brain-ui.ts`) still exists as a secondary
-monitoring dashboard served by the same backend process — restart porter-fastify
-after a backend rebuild for that one. See `admin/CLAUDE.md` for the full admin
-ship story, including the caveat that Caddy's askporter.app routing is currently
-an ephemeral admin-API reload (see `_ops/askporter-login-fix.md` for the durable
-fix, which needs one sudo line from Moe).
+Caddy picks up new files immediately, no restart needed).
+
+The Caddy routing is **durable as of 2026-07-29** — Moe applied the static-root +
+`/api` block and a JSON access log to `/etc/caddy/Caddyfile`. It is no longer an
+ephemeral admin-API patch and no longer needs re-applying after a reload.
+
+⚠️ There is **no brain-ui on :5176**. It was deleted as dead code in v6.61.0 and
+nothing listens on that port. Earlier revisions of this file and
+`_ops/askporter-login-fix.md` said otherwise; following that advice turns a
+working site into a 502. The only Porter process is porter-fastify on :3001.
 
 ## Verification — Before Claiming Done
 
