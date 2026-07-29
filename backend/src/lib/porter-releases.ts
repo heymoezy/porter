@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.140.0',
+    date: '2026-07-29',
+    title: 'Tom was one long instruction away from going silent, and nothing was watching',
+    bullets: [
+      'Tom\u2019s instructions are handed to the model as a single command-line value, and Linux refuses any single value over 128KB \u2014 it fails before the model is even started. Tom\u2019s instructions currently measure somewhere between 100KB and 128KB, and nothing anywhere recorded that number, so nobody knew how close he was. Crossing it would not have made him worse; it would have made him stop answering.',
+      'This exact fault took out one of the other models yesterday and was fixed there. The fix was never applied to the one Tom actually uses.',
+      'Long instructions now travel in a file instead of on the command line, and the size is reported with the remaining headroom whenever it gets close. Proven by reproducing the failure against the real program and confirming the new path succeeds where the old one refused to start.',
+      'This also explains why adding Porter\u2019s skill library to Tom would have been dangerous: the skill text measured 22,000 characters, which is more than the headroom he had. That work stays parked until this is in.',
+      'Protects every part of the system that talks to this model, not just Tom.',
+    ],
+  },
+  {
     version: '6.139.0',
     date: '2026-07-29',
     title: 'The login form had no limit on how many passwords you could try',

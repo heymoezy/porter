@@ -14,7 +14,10 @@
 
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import which from 'which';
 import type {
   GatewayAdapter,
@@ -26,6 +29,66 @@ import type {
 } from '../types.js';
 
 const TIMEOUT_MS = 300_000; // 5 min — research tasks need more time than simple queries
+
+/**
+ * Largest system prompt we will pass as a single argv element.
+ *
+ * The kernel caps ONE argument at MAX_ARG_STRLEN (32 pages = 128KB on this box:
+ * `getconf PAGESIZE` × 32) independently of ARG_MAX. Exceeding it fails
+ * `spawn E2BIG` **before claude runs**, so the caller sees a dead gateway rather
+ * than a model error.
+ *
+ * This is not hypothetical and it is not new. grok_cli died exactly this way on
+ * 2026-07-28 — "the failover chain reached it and died E2BIG on all four
+ * gateways" — and grok-cli.ts got `MAX_ARG_PROMPT_BYTES` + `--prompt-file` as
+ * the fix. THIS adapter never got the same treatment, and it is the one YMC Tom
+ * runs on: his system prompt is SOUL.md (40KB and grown from 21KB) plus ~116
+ * rendered tool descriptions, measured between 100KB and 128KB against a 131KB
+ * ceiling. Nothing logged the size, so nobody knew how close it was.
+ *
+ * Above the threshold the prompt goes in a file via `--system-prompt-file`
+ * (verified present in claude 2.x). Below it, the flag form stays — fewer moving
+ * parts and no temp file to leak.
+ */
+const MAX_ARG_PROMPT_BYTES = 96 * 1024;
+
+/** Kernel limit, for reporting. 32 pages; PAGE_SIZE is 4096 on Linux x86-64. */
+const MAX_ARG_STRLEN = 32 * 4096;
+
+/**
+ * Decide how the system prompt travels, and say so out loud.
+ *
+ * Returns the argv fragment plus a cleanup for the temp file. Callers MUST call
+ * cleanup in a `finally` — a leaked file under /tmp holds prompt text.
+ */
+function systemPromptArgs(systemPrompt: string | undefined, label: string): {
+  args: string[];
+  cleanup: () => void;
+} {
+  if (!systemPrompt) return { args: [], cleanup: () => {} };
+
+  const bytes = Buffer.byteLength(systemPrompt, 'utf8');
+  const headroom = MAX_ARG_STRLEN - bytes;
+
+  if (bytes <= MAX_ARG_PROMPT_BYTES) {
+    // Warn while there is still time to act. A prompt that has crossed the
+    // kernel limit does not degrade — the gateway simply stops answering.
+    if (headroom < 24 * 1024) {
+      console.warn(
+        `[claude-cli] system prompt ${bytes} bytes for ${label} — ${headroom} bytes from the ${MAX_ARG_STRLEN}-byte argv ceiling`,
+      );
+    }
+    return { args: ['--system-prompt', systemPrompt], cleanup: () => {} };
+  }
+
+  const file = path.join(tmpdir(), `porter-claude-sys-${randomUUID()}.txt`);
+  writeFileSync(file, systemPrompt, { encoding: 'utf8', mode: 0o600 });
+  console.warn(`[claude-cli] system prompt ${bytes} bytes for ${label} — over ${MAX_ARG_PROMPT_BYTES}, using --system-prompt-file`);
+  return {
+    args: ['--system-prompt-file', file],
+    cleanup: () => { try { unlinkSync(file); } catch { /* already gone */ } },
+  };
+}
 
 // Sandbox cwd for claude subprocess. /tmp has no CLAUDE.md ancestors, so claude
 // won't pull in /home/lobster/CLAUDE.md or ~/projects/Porter/CLAUDE.md when
@@ -125,6 +188,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     // Bounded worker sandbox: an explicit string[] allow-list restricts claude
     // to EXACTLY those tools (read-only research set for delegated workers).
     const toolAllowList = Array.isArray(req.tools) && req.tools.length > 0 ? req.tools.join(',') : null;
+    const sysPrompt = systemPromptArgs(req.systemPrompt, 'dispatch');
     const args = [
       '-p',
       '--output-format', 'stream-json',
@@ -135,7 +199,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       // req.model — without it the CLI uses its account default (Opus). Agnostic
       // passthrough; Porter never hardcodes a model here.
       ...(req.model ? ['--model', req.model] : []),
-      ...(req.systemPrompt ? ['--system-prompt', req.systemPrompt] : []),
+      ...sysPrompt.args,
       ...(noTools
         ? ['--tools', '']
         : ['--permission-mode', 'auto',
@@ -240,6 +304,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       }
     } finally {
       clearTimeout(timer);
+      sysPrompt.cleanup();
     }
 
     if (timedOut) {
@@ -292,6 +357,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     // Bounded worker sandbox: an explicit string[] allow-list restricts claude
     // to EXACTLY those tools (read-only research set for delegated workers).
     const toolAllowList = Array.isArray(req.tools) && req.tools.length > 0 ? req.tools.join(',') : null;
+    const sysPrompt = systemPromptArgs(req.systemPrompt, 'stream');
     const args = [
       '-p',
       '--output-format', 'stream-json',
@@ -302,7 +368,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       // req.model — without it the CLI uses its account default (Opus). Agnostic
       // passthrough; Porter never hardcodes a model here.
       ...(req.model ? ['--model', req.model] : []),
-      ...(req.systemPrompt ? ['--system-prompt', req.systemPrompt] : []),
+      ...sysPrompt.args,
       ...(noTools
         ? ['--tools', '']
         : ['--permission-mode', 'auto',
@@ -394,6 +460,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     } finally {
       clearTimeout(timer);
       signal.removeEventListener('abort', onAbort);
+      sysPrompt.cleanup();
     }
   }
 

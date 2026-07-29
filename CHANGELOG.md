@@ -1,3 +1,36 @@
+## v6.140.0 (2026-07-29) — Tom was one long prompt away from going silent, and nothing was watching
+
+`claude-cli.ts` passed the system prompt as a **single argv element**. Linux caps one argument at
+`MAX_ARG_STRLEN` (32 pages = 131,072 bytes on this box) independently of `ARG_MAX`; over it, `spawn` fails
+**E2BIG before claude runs**. The caller sees a dead gateway, not a model error — for Tom that surfaces in the
+group chat as *"Something glitched on my end"*.
+
+**This is the same fault that killed grok_cli on 2026-07-28** — *"the failover chain reached it and died E2BIG
+on all four gateways"*. `grok-cli.ts:42` got `MAX_ARG_PROMPT_BYTES` + `--prompt-file` as the fix.
+**`claude-cli.ts` never got the same treatment, and it is the adapter YMC Tom runs on.**
+
+- Above 96 KB the system prompt now travels via `--system-prompt-file` (verified present in claude 2.x),
+  written 0600 and unlinked in `finally` on both the dispatch and stream paths. Below it, the flag form stays.
+- **It now says the size out loud.** Within 24 KB of the ceiling it warns with the exact byte count and
+  remaining headroom. Nothing measured this before, which is why nobody knew how close Tom was.
+
+**Proven, not reasoned about.** With a 140,050-byte system prompt against the real binary:
+
+```
+ARGV (before the fix): spawn THREW -> E2BIG
+FILE (with the fix)  : code=0
+```
+
+and through the adapter itself: 1,053 bytes → argv path → OK; 140,053 bytes → file path → OK.
+
+**Why it mattered now.** Tom's system prompt is SOUL.md (40 KB, grown from 21 KB) plus ~116 rendered tool
+descriptions. Two independent measurements bracket it at **100–128 KB against the 131 KB ceiling** — headroom
+somewhere between 3 KB and 31 KB, and no way to know which without this logging. Separately, a Porter skill
+block was measured at 22,016 chars in v6.138.0; appending that to Tom's prompt would have crossed the limit
+and taken him offline rather than degrading him. That work is parked behind this fix.
+
+This protects every `claude_cli` consumer, not only Tom.
+
 ## v6.139.0 (2026-07-29) — the login form accepted unlimited password guesses
 
 Round 2 of the security work opened by v6.128.0. Four items, one of them reversed by decision.

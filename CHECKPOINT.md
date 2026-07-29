@@ -1,3 +1,34 @@
+## 2026-07-29 — v6.140.0: TOM WAS ONE LONG PROMPT FROM GOING SILENT, AND NOTHING WAS WATCHING
+
+Found while scoping "should Tom use Porter's skills". The answer turned out to be "not until this is fixed".
+
+claude-cli.ts passed systemPrompt as a SINGLE argv element (lines 138/305). Linux caps one argument at
+MAX_ARG_STRLEN = 32 pages = 131,072 bytes (verified: getconf PAGESIZE = 4096), independent of ARG_MAX. Over
+it, spawn fails E2BIG BEFORE claude runs — the caller sees a dead gateway, and for Tom that is "Something
+glitched on my end" in the group chat.
+
+⚠️ SAME FAULT AS grok_cli ON 2026-07-28 ("the failover chain reached it and died E2BIG on all four
+gateways"). grok-cli.ts:42 got MAX_ARG_PROMPT_BYTES + --prompt-file. claude-cli.ts NEVER GOT IT — and it is
+the adapter Tom runs on. A fix applied to one adapter and not its sibling is how this stayed live.
+
+FIX: >96KB → --system-prompt-file (verified present in claude 2.x), 0600, unlinked in finally on BOTH the
+dispatch and stream paths. Below → flag form unchanged. Plus size logging with remaining headroom whenever
+within 24KB of the ceiling — nothing measured this before, which is exactly why nobody knew.
+
+PROVEN against the real binary, not reasoned about:
+  140,050-byte system prompt, ARGV: spawn THREW -> E2BIG
+  140,050-byte system prompt, FILE: code=0
+  through the adapter: 1,053 bytes -> argv OK · 140,053 bytes -> file path OK (warning emitted)
+
+TOM'S REAL EXPOSURE: SOUL.md 40,520 bytes (grown from 21KB) + ~116 rendered tool descriptions. Two
+measurement methods bracket the prompt at 100–128KB vs the 131KB ceiling — headroom between 3KB and 31KB. I
+could not pin it exactly without capturing a live prompt, and that uncertainty IS the finding. The logging
+now answers it.
+
+⚠️ DIRECT CONSEQUENCE FOR THE SKILLS WORK: a Porter skill block measured 22,016 chars in v6.138.0. Appending
+that to Tom would have crossed the ceiling — not degraded him, taken him offline. Skills for Tom stay parked
+behind this.
+
 ## 2026-07-29 — v6.139.0: THE LOGIN FORM ACCEPTED UNLIMITED PASSWORD GUESSES
 
 Round 2 of the v6.128.0 security work. Four deferred items; one reversed on Moe's call. 255 tests, 0 fail
