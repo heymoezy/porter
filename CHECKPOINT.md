@@ -1,3 +1,39 @@
+## 2026-07-29 — v6.126.0: THE "UNUSED CONCEPT" PRUNER WAS A BLANKET 30-DAY DELETE
+
+Follow-on from the memory audit — the thread I named as next at the end of v6.125.0.
+
+`concepts.use_count` / `last_used_at` have existed since Memory V3 and NOTHING has ever written to them.
+All 1,053 concepts: use_count 0, last_used_at NULL. The only writer I found for those column names is
+routing-engine.ts:251, and that updates `persona_skills`, not `concepts`.
+
+That is load-bearing, because memory-pruner.archiveUnusedConcepts() acts on it:
+  WHERE use_count = 0 AND created_at < now-30d AND source_type <> 'vault'
+With use_count permanently 0 this reduces to "archive every non-vault concept older than 30 days" — a
+blanket expiry wearing the name of a usage-based pruner. Fired 621 times. 877 of 879 non-vault concepts
+archived; exactly 2 older than 30d still active; the 47 surviving vault rows survive only because vault is
+explicitly exempt. Porter learned, then deleted what it learned on a timer, and could never compound.
+
+FIX: services/intellect/concept-usage.ts — recordConceptUsage(), fire-and-forget, never throws, logs on
+failure. Wired at the two places a concept actually reaches a model (/context render, tier 6 of the dispatch
+builder). ONLY RENDERED ROWS COUNT — /context fetches 20 and renders 8; tier 6 fetches 10 and appends until
+the budget runs out. Counting the fetched set would recreate the same meaningless number.
+
+TRAP CAUGHT: observeShadow() builds a full V1 context on EVERY /context call purely to diff against V2, then
+throws it away — confirmed still running (2 rows in the last hour). Unguarded, that would have counted
+payloads nobody received. buildMemoryContext now takes recordUsage (default true); the shadow path passes
+false. Also flagged at V2's concept site: promoting V2 without moving the call re-creates the bug.
+
+VERIFIED on live data, not a typecheck: two /context calls against a second instance (:3999, :3001 untouched)
+incremented exactly the 8 RENDERED concepts to use_count=2 — not the 20 fetched. Probe counters then reset to
+0 so the live counter starts clean. Also killed two stray node instances left from earlier verification runs.
+
+⚠️ HONEST LIMIT — this does NOT by itself make the loop compound. VAULT_CONFIDENCE_BOOST is an additive +80
+on a 0-100 scale and vault rows carry confidence_score = 0, so they rank at exactly 80. In the scope /context
+reads (global + active project) the only non-vault residents are 12 `subscription` concepts at confidence 30.
+They can never win a rendered slot → never marked used → still pruned at 30 days. Agent-scoped `distiller`
+concepts (112 active) are not in that scope at all and are reachable only via tier 6 FTS — those DO benefit.
+Whether the vault boost should dominate is a knowledge-priority decision, not a bug. Reported, not re-tuned.
+
 ## 2026-07-28 — v6.125.0: WROTE DOWN HOW MEMORY ACTUALLY REACHES A MODEL
 
 CLAUDE.md said "Memory — 3 layers ... Pipeline: memory-injection.ts". That is the path TOM uses. It is

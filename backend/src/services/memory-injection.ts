@@ -1,5 +1,6 @@
 import { pool } from '../db/client.js';
 import { selectDirectives, tokenizeTaskText } from './directive-scorer.js';
+import { recordConceptUsage } from './intellect/concept-usage.js';
 import type { DirectiveSelectionStats } from './directive-scorer.js';
 import { VAULT_RANK_BOOST } from './intellect/vault-indexer.js';
 
@@ -37,6 +38,7 @@ export async function buildMemoryContext(opts: {
   searchQuery?: string;
   taskText?: string;
   skillTags?: string[];
+  recordUsage?: boolean;
 }): Promise<string>;
 
 export async function buildMemoryContext(opts: {
@@ -46,6 +48,7 @@ export async function buildMemoryContext(opts: {
   searchQuery?: string;
   taskText?: string;
   skillTags?: string[];
+  recordUsage?: boolean;
   returnMeta: true;
 }): Promise<MemoryContextResult>;
 
@@ -56,9 +59,19 @@ export async function buildMemoryContext(opts: {
   searchQuery?: string;
   taskText?: string;
   skillTags?: string[];
+  /**
+   * Whether concepts rendered here should be counted as USED. Default true.
+   *
+   * Pass false when the result will NOT be delivered to a model — the shadow
+   * canary builds a full V1 context purely to diff against V2 and throws it
+   * away. Counting that would inflate use_count for a payload nobody received,
+   * which is the same class of meaningless number this counter exists to fix.
+   */
+  recordUsage?: boolean;
   returnMeta?: boolean;
 }): Promise<string | MemoryContextResult> {
   const { agentId, projectId, searchQuery, taskText, skillTags, returnMeta } = opts;
+  const recordUsage = opts.recordUsage !== false;
   let totalRemaining = opts.tokenBudget ?? 2000;
 
   const sections: string[] = [];
@@ -278,8 +291,8 @@ export async function buildMemoryContext(opts: {
     // filter: a clearly more relevant non-vault row still outranks (see
     // VAULT_RANK_BOOST). Vault rows also cite their source node.
     if (searchQuery && totalRemaining > 50) {
-      const res = await pool.query<{ content: string; confidence_score: number | null; source_type: string; source_url: string | null }>(
-        `SELECT content, confidence_score, source_type, source_url
+      const res = await pool.query<{ id: string; content: string; confidence_score: number | null; source_type: string; source_url: string | null }>(
+        `SELECT id, content, confidence_score, source_type, source_url
          FROM concepts
          WHERE search_vector @@ websearch_to_tsquery('english', $1)
            AND status = 'active'
@@ -291,6 +304,10 @@ export async function buildMemoryContext(opts: {
       if (res.rows.length > 0) {
         const header = '## Related Knowledge\n';
         let body = '';
+        // Only rows that survive the budget are counted as used — the loop can
+        // break long before row 10, and a concept that never made it into the
+        // prompt was not used. See services/intellect/concept-usage.ts.
+        const injectedIds: string[] = [];
         for (const row of res.rows) {
           const cite = row.source_type === 'vault' && row.source_url
             ? ` _(vault: ${row.source_url.replace('/home/lobster/vault/', '')})_`
@@ -298,9 +315,11 @@ export async function buildMemoryContext(opts: {
           const line = row.content + cite + '\n';
           if (estimateTokens(header + body + line) > totalRemaining) break;
           body += line;
+          injectedIds.push(row.id);
         }
         if (body) {
           sections.push(header + body);
+          if (recordUsage) recordConceptUsage(injectedIds);
         }
       }
     }

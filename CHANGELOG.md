@@ -1,3 +1,40 @@
+## v6.126.0 (2026-07-29) — the "unused concept" pruner was a blanket 30-day delete on everything learned
+
+`concepts.use_count` and `concepts.last_used_at` have existed since Memory V3 and **nothing has ever written
+to them.** All 1,053 concepts read `use_count = 0`, `last_used_at = NULL`. That is not cosmetic, because the
+pruner acts on it:
+
+```
+archiveUnusedConcepts()  →  WHERE use_count = 0 AND created_at < now-30d AND source_type <> 'vault'
+```
+
+With `use_count` permanently 0 the predicate reduces to **"archive every non-vault concept older than 30
+days"** — a blanket expiry wearing the name of a usage-based pruner. It has fired 621 times. Of 879 non-vault
+concepts, 877 are archived and exactly **2** older than 30 days remain active. The only durable knowledge that
+survived is vault-sourced, because vault rows are explicitly exempt. The system learned, then deleted what it
+learned on a timer.
+
+- `services/intellect/concept-usage.ts` — `recordConceptUsage()`, fire-and-forget, never throws, logs on
+  failure (a counter that silently stops writing is how this started).
+- Wired at the two places a concept actually reaches a model: the SessionStart payload and tier 6 of the
+  dispatch builder. **Only rendered rows count.** `/context` fetches 20 and renders 8; tier 6 fetches 10 and
+  appends until the budget runs out. Counting the fetched set would make `use_count` another number that
+  means nothing — the exact failure being fixed.
+- `buildMemoryContext` takes `recordUsage` (default true). The shadow canary passes **false**: it builds a
+  full V1 context purely to diff against V2 and throws it away, and that runs on every `/context` call. Left
+  unguarded it would have inflated the counter for payloads nobody received.
+- Verified on live data: two `/context` calls incremented exactly the 8 rendered concepts to `use_count = 2`,
+  not the 20 fetched. Probe counters reset to 0 afterwards so the live counter starts clean.
+
+⚠️ **This does not by itself make the knowledge loop compound, and it is worth being precise about why.**
+Vault concepts get an additive `+80` on a 0-100 confidence scale (`VAULT_CONFIDENCE_BOOST`), and vault rows
+carry `confidence_score = 0`, so they rank at exactly 80. In the scope `/context` reads (global + active
+project) the only non-vault residents are 12 `subscription` concepts at confidence 30. They can never win a
+rendered slot, so they will never be marked used, so they will still be pruned at 30 days. Agent-scoped
+`distiller` concepts (112 active) are not in that scope at all and are only reachable through tier 6 FTS —
+those now do benefit. Whether the vault boost *should* dominate is a knowledge-priority decision, not a bug,
+so it is reported here rather than re-tuned.
+
 ## v6.125.0 (2026-07-28) — write down how memory actually reaches a model
 
 Docs. `CLAUDE.md` described memory as "3 layers, pipeline: memory-injection.ts" — which is the path Tom

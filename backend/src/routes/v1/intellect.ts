@@ -12,6 +12,7 @@ import { pool } from '../../db/client.js';
 import { config } from '../../config.js';
 import { ok, err } from '../../lib/envelope.js';
 import { runMemoryValidation } from '../../services/intellect/memory-validator.js';
+import { recordConceptUsage } from '../../services/intellect/concept-usage.js';
 import { analyzeAndStoreSession } from '../../services/intellect/session-analyzer.js';
 import { runMemoryPromotion } from '../../services/intellect/memory-promoter.js';
 import { runDispatchScoring } from '../../services/intellect/dispatch-scorer.js';
@@ -338,8 +339,12 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     }
 
     if (concepts.length > 0) {
+      // The query fetches 20; only these 8 are rendered. Usage is recorded for
+      // what a model actually RECEIVES, never for what was merely selected —
+      // counting the fetched set would make use_count meaningless again.
+      const rendered = concepts.slice(0, 8);
       sections.push('### Relevant Concepts');
-      for (const c of concepts.slice(0, 8)) {
+      for (const c of rendered) {
         // U3: vault-sourced concepts cite their vault node so the reader can
         // follow the truth to its source (source_url = absolute vault path).
         const cite = c.source_type === 'vault' && c.source_url
@@ -347,6 +352,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
           : '';
         sections.push(`- ${c.content.substring(0, 200)}${c.content.length > 200 ? '...' : ''}${cite}`);
       }
+      recordConceptUsage(rendered.map((c) => c.id));
     }
 
     if (skillRecs.length > 0) {

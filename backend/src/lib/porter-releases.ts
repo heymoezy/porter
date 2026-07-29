@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.126.0',
+    date: '2026-07-29',
+    title: 'What Porter learned was being deleted on a 30-day timer',
+    bullets: [
+      'Porter keeps a store of things it has learned, and a cleanup job that is supposed to remove the ones nothing ever uses. It decides that by reading a "times used" counter \u2014 and nothing in the system had ever written to that counter. Every entry read zero, forever, so the cleanup removed everything older than thirty days regardless of value. It had run 621 times: of 879 learned entries, 877 are gone.',
+      'The only knowledge that survived is what comes from the vault, because that source was deliberately exempt. Everything Porter worked out for itself was on a one-month timer.',
+      'Porter now records when a piece of knowledge is actually put in front of a model \u2014 counting only what genuinely reaches it, not what was merely considered. That makes the cleanup rule mean what it says.',
+      'One honest limit: this alone does not make the knowledge compound. Vault entries outrank everything else by a wide margin and take every available slot, so a class of automatically-harvested entries still cannot be selected and will still expire. Whether the vault should dominate that ranking is a judgement call about what knowledge matters most, so it is being raised rather than quietly changed.',
+    ],
+  },
+  {
     version: '6.125.0',
     date: '2026-07-28',
     title: 'Wrote down how memory actually reaches a model',

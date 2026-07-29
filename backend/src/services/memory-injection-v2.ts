@@ -265,6 +265,13 @@ async function buildV2Detailed(opts: MemoryContextOpts): Promise<MemoryContextV2
     // Preserves the VAULT_RANK_BOOST reserved-slot behavior via the projection's
     // identical ORDER BY, and cites vault-sourced rows exactly as V1 does.
     if (searchQuery && totalRemaining > 50) {
+      // ⚠️ IF V2 IS EVER PROMOTED: V1 records concept usage here
+      // (services/intellect/concept-usage.ts) and V2 does not, because V2 is
+      // only ever COMPUTED for the shadow diff and never delivered. Promoting
+      // V2 without moving that call re-creates the bug the counter exists to
+      // fix — use_count stops advancing and the pruner reverts to a blanket
+      // 30-day expiry on all non-vault knowledge. It must fire only on the
+      // build that is actually injected, never on the diff baseline.
       const rows = await projectConcepts(searchQuery);
       if (rows.length > 0) {
         const header = '## Related Knowledge\n';
@@ -581,7 +588,10 @@ async function logShadow(
 // response, never throws). Only does work when a flag is on (caller guards).
 export async function observeShadow(opts: MemoryContextOpts): Promise<void> {
   try {
-    const v1Text = await buildMemoryContext(opts);
+    // recordUsage:false — this V1 build is a DIFF BASELINE, thrown away, never
+    // shown to a model. Counting its concepts as "used" would inflate the
+    // counter on every /context call for a payload nobody received.
+    const v1Text = await buildMemoryContext({ ...opts, recordUsage: false });
     const { comparison } = await shadowCompareMemoryContext(opts, v1Text);
     await logShadow(comparison, 'shadow', 'v1');
   } catch (e) {
