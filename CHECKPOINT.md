@@ -1,3 +1,30 @@
+## 2026-07-29 - v6.129.0 - dispatch recorded the GATEWAY'S NAME, not the model
+
+Moe (2026-07-29): "tom should know what model he is using". He could not, and neither could anything else.
+
+⚠️ ROOT CAUSE — **no gateway had `metadata.default_model` set**, and `resolveModelName()` falls back to
+`row.name`. So `decision.modelName` was "Claude CLI" / "Codex CLI" / "Grok CLI" — a DISPLAY NAME — and that
+is what `bridge_dispatch_log.model_name`, the SSE feed, `session_routing_context` and the COST lookup all
+received. The log could not distinguish one model from another.
+
+FIXED:
+- Configured all 4 gateways' `metadata.default_model` from each adapter's OWN `DEFAULT_MODEL` constant
+  (claude-sonnet-4-6 · codex/gpt-5.5 · grok/grok-4.5 · antigravity/default) — grounded in code, not invented.
+- `resolveModelName()` now WARNS when it has to fall back, so a newly-added gateway is noisy instead of
+  silently passing its display name off as a model (Porter rule 5).
+- `logDispatch()` records the **OBSERVED** model — `result.model`, what the adapter actually reported —
+  rather than the configured one, so a failover answer is filed under the model that served it.
+  `recordSessionTurn()` takes it as an optional param. Registry/pricing lookups KEEP `decision.modelName`
+  because they join on the configured name; swapping it would silently break the join.
+
+✅ VERIFIED LIVE (not a typecheck): claude_cli → `claude-opus-5[1m]`, codex_cli → `codex/gpt-5.6-terra`.
+Both previously logged as the gateway's name.
+
+⚠️ KNOWN GAP: `dispatchStream()` synthesises its result with `model: decision.modelName` and never sees the
+adapter's detected model, so STREAMED turns still record the configured default rather than the observed one.
+That is Tom's main chat path. The claude adapter DOES detect the real model (`detectedModel`) — surfacing it
+through the stream is the remaining work.
+
 ## 2026-07-29 - v6.128.0 - SECURITY: every privileged route on askporter.app was reachable without logging in
 
 Caddy proxies **every path** of askporter.app to this backend. Each item below was verified from OUTSIDE the

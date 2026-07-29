@@ -161,6 +161,19 @@ export class RoutingEngine {
   ): Promise<string> {
     const id = uuidv4();
 
+    // WHAT ACTUALLY ANSWERED, not what the gateway row is labelled.
+    // decision.modelName is the registry's configured name — for codex_cli and
+    // grok_cli that is "Codex CLI" / "Grok CLI", a gateway label rather than a
+    // model. Logging it meant bridge_dispatch_log could not answer "which model
+    // produced this?", which is exactly what Moe asked Tom to be able to say
+    // (2026-07-29). The adapters already return the real identifier on
+    // result.model; it was simply never recorded.
+    //
+    // Registry lookups below (models / model_versions / pricing) deliberately
+    // KEEP decision.modelName — those join on the configured name, and swapping
+    // in the observed one would silently break the join.
+    const observedModel = (result.model ?? '').trim() || decision.modelName;
+
     (async () => {
       try {
         const costUsd = await calculateCostUsd(
@@ -212,7 +225,7 @@ export class RoutingEngine {
             id,
             decision.gatewayRow.id,
             decision.gatewayRow.type,
-            decision.modelName,
+            observedModel,
             decision.reason,
             JSON.stringify(decision.alternatives),
             costUsd,
@@ -368,7 +381,7 @@ export class RoutingEngine {
 
       emitSSE('bridge:dispatch', {
         gateway_type: decision.gatewayRow.type,
-        model_name: decision.modelName,
+        model_name: observedModel,
         reason: decision.reason,
         latency_ms: result.latencyMs,
       }).catch(() => {});
@@ -385,6 +398,10 @@ export class RoutingEngine {
     ctx: RoutingContext,
     decision: RoutingDecision,
     dispatchLogId: string,
+    /** What ACTUALLY answered. Optional because not every caller has the result
+     *  in hand; falls back to the gateway row's configured name, which for
+     *  codex/grok is a gateway label rather than a model. See logDispatch. */
+    observedModel?: string,
   ): Promise<void> {
     if (!ctx.chatId) return;
 
@@ -400,7 +417,7 @@ export class RoutingEngine {
             ctx.messageSequence ?? 0,
             decision.gatewayRow.id,
             decision.gatewayRow.type,
-            decision.modelName,
+            (observedModel ?? '').trim() || decision.modelName,
             dispatchLogId,
           ],
         );
@@ -714,11 +731,26 @@ export const routingEngine = new RoutingEngine();
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
+/**
+ * The model this gateway runs by default.
+ *
+ * ⚠️ The fallback returns the gateway's DISPLAY NAME, which is not a model. For
+ * a long time no gateway had metadata.default_model set, so every consumer —
+ * bridge_dispatch_log, pricing lookups, and Tom answering "what are you running
+ * on?" — was handed "Claude CLI" / "Grok CLI" and believed it (Moe, 2026-07-29).
+ * The values are configured now; the warning exists so a NEW gateway added
+ * without one is noisy instead of quietly mislabelled. Porter's own rule: never
+ * label unconfigured state as if it were real.
+ */
 function resolveModelName(row: GatewayRow): string {
   const meta = row.metadata as Record<string, unknown> | undefined;
   if (meta?.default_model && typeof meta.default_model === 'string') {
     return meta.default_model;
   }
+  console.warn(
+    `[routing] gateway '${row.type}' has no metadata.default_model — falling back to its display ` +
+    `name '${row.name}', which is NOT a model identifier. Set default_model on the gateway row.`,
+  );
   return row.name;
 }
 

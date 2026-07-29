@@ -1,3 +1,20 @@
+## v6.129.0 (2026-07-29) — dispatch logged the gateway's display name, not the model
+
+- `bridge_dispatch_log.model_name` recorded **"Claude CLI" / "Grok CLI"** — gateway labels, not models. The
+  log could not answer "which model produced this?", which is exactly what Moe asked Tom to be able to say.
+  Cost lookups keyed off the same value.
+- Root cause: **no gateway had `metadata.default_model` set**, and `resolveModelName()` falls back to
+  `row.name`. Configured all four from each adapter's own `DEFAULT_MODEL` constant (claude-sonnet-4-6,
+  codex/gpt-5.5, grok/grok-4.5, antigravity/default). The fallback now **warns**, so a newly-added gateway
+  without one is noisy rather than silently mislabelled — Porter rule 5, never label unconfigured state as real.
+- `logDispatch` records the **observed** model (`result.model` — what the adapter reported) instead of the
+  configured one, so a failover answer is filed under the model that served it. Registry/pricing lookups
+  deliberately keep `decision.modelName`; they join on the configured name.
+- Verified live: `claude_cli → claude-opus-5[1m]`, `codex_cli → codex/gpt-5.6-terra`. Both previously read
+  as the gateway's name.
+- ⚠️ Known gap: the STREAMING path synthesises its log row with `model: decision.modelName` and never sees
+  the adapter's detected model, so streamed turns still record the configured default.
+
 ## v6.128.0 (2026-07-29) — every privileged route on askporter.app was reachable without logging in
 
 `askporter.app` proxies **every path** to this backend. Everything below was verified from outside the

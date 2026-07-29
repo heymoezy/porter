@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.129.0',
+    date: '2026-07-29',
+    title: 'Every request recorded the name of the tool, not the model that answered it',
+    bullets: [
+      'Moe asked for Tom to know what he is running on. He could not: every request was filed under the tool\u2019s display name \u2014 "Claude CLI", "Grok CLI" \u2014 rather than the model that actually produced the answer. The record could not tell one model from another, so nothing built on it could either, including what each one costs.',
+      'The models had simply never been configured. The code looks for a default model on each connection and falls back to using the connection\u2019s own name when it finds none \u2014 and none had ever been set. All four are configured now, and a new one added without a model says so in the log instead of quietly passing its own name off as one.',
+      'What gets recorded is now what actually answered, read from the response rather than from configuration \u2014 so a request that fell through to a second model is filed under that model. Confirmed live: one recorded claude-opus-5, another codex/gpt-5.6-terra, where both would previously have read as the tool\u2019s name.',
+    ],
+  },
+  {
     version: '6.128.0',
     date: '2026-07-29',
     title: 'Porter was answering the internet without asking who was calling',
