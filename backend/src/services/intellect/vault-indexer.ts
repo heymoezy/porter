@@ -61,6 +61,8 @@ export interface VaultIndexResult {
   updated: number;
   unchanged: number;
   archived: number; // rows whose vault node vanished
+  /** Set when the floor guard refused the run; nothing was archived. */
+  aborted?: string;
 }
 
 interface VaultNode {
@@ -108,6 +110,23 @@ async function readVaultNodes(): Promise<VaultNode[]> {
   return nodes;
 }
 
+/**
+ * The floor-guard decision, as a pure predicate so it can be tested without a
+ * filesystem or a database.
+ *
+ * "Scanned nothing where something used to be" is a FAILED SCAN, not an emptied
+ * vault. Returning true means: keep every row, archive none, log, try again on
+ * the next tick.
+ *
+ * Deliberately NOT a ratio (e.g. "abort if we lost >50%"): a partial loss is a
+ * legitimate bulk delete, and guessing a threshold would either block real
+ * deletions or let a half-readable root through. Zero-vs-nonzero is the one
+ * case that is unambiguously a malfunction.
+ */
+export function shouldAbortOnEmptyScan(scanned: number, activeBefore: number): boolean {
+  return scanned === 0 && activeBefore > 0;
+}
+
 export async function runVaultIndexing(): Promise<VaultIndexResult> {
   const nodes = await readVaultNodes();
 
@@ -122,6 +141,33 @@ export async function runVaultIndexing(): Promise<VaultIndexResult> {
       WHERE source_type = 'vault'`,
   );
   const existingById = new Map(existing.map(r => [r.id, r]));
+
+  // ── FLOOR GUARD — never archive on an empty read ────────────────────────
+  //
+  // This function's contract is "a file that vanished means archive its row".
+  // That is right for a deleted page and catastrophic for an unreadable ROOT:
+  // if VAULT_ROOT is missing, renamed, unmounted, or (once it becomes config)
+  // simply pointed somewhere wrong, readVaultNodes() returns [] — every page
+  // looks deleted — and one nightly tick archives EVERY vault-sourced concept.
+  // Directives thin out, the injected context degrades, and nothing throws.
+  //
+  // A scan that finds nothing where it previously found something is a scan
+  // that FAILED, not a vault that emptied. Treat it as a failure: keep the
+  // rows, log loudly, let the next tick recover. The only way to legitimately
+  // reach zero is to delete every page, which this refuses to do automatically
+  // — and that is the correct trade, because the recovery cost of a wrong
+  // archive is a manual restore of the whole layer.
+  const activeBefore = existing.filter(r => r.status === 'active').length;
+  if (shouldAbortOnEmptyScan(nodes.length, activeBefore)) {
+    const reason = `vault scan returned 0 nodes but ${activeBefore} active vault concepts exist — refusing to archive`;
+    console.error(`[vault-indexer] ABORT: ${reason} (root=${VAULT_ROOT})`);
+    await logIntellectEvent('vault_index_aborted', 'vault_indexer', {
+      reason,
+      vault_root: VAULT_ROOT,
+      active_before: activeBefore,
+    });
+    return { scanned: 0, inserted: 0, updated: 0, unchanged: activeBefore, archived: 0, aborted: reason };
+  }
 
   let inserted = 0;
   let updated = 0;

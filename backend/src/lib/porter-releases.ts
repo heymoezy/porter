@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.130.0',
+    date: '2026-07-29',
+    title: 'Three nightly jobs could delete everything if they simply failed to look',
+    bullets: [
+      'Porter runs jobs overnight that tidy up knowledge which no longer exists \u2014 if a note was deleted, its record is retired. The flaw: those jobs could not tell the difference between "this was deleted" and "I could not read the folder at all". A missing or mistyped path made everything look deleted.',
+      'The worst case would have archived every piece of vault knowledge on the next nightly run, thinning the rules and quietly making every session dumber, with nothing raising an alarm. A second job could have replaced your standing rules with an empty shell. A third could have wiped the register that watches whether other jobs are still running.',
+      'All three now refuse to act when they read nothing but know something was there a moment ago. They log it and try again on the next run.',
+      'Proven by forcing the exact failure against the live system: it refused, and all 47 vault entries survived untouched.',
+      'This had to land before the next stage of work, which makes those folder locations configurable \u2014 after which a single typo would otherwise have been enough to empty the memory.',
+    ],
+  },
+  {
     version: '6.129.0',
     date: '2026-07-29',
     title: 'Every request recorded the name of the tool, not the model that answered it',

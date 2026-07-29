@@ -1,3 +1,32 @@
+## v6.130.0 (2026-07-29) — an empty read must never mean "delete everything"
+
+Three nightly sweeps destroy rows on the premise that "I can no longer see X" means "X was deleted". That is
+right for a deleted page and catastrophic for an unreadable ROOT — and every reader here swallows a missing
+directory as the fresh-start case, so the failure is completely silent.
+
+- **`vault-indexer`** — `readVaultNodes()` `continue`s past a missing folder and returns `[]`, so every
+  concept looks deleted and it archives **all** of them. A wrong vault path would empty the memory layer on
+  the next 24h tick, thinning directives and quietly degrading every session.
+- **`claude-rules-mirror`** — an unreadable `CLAUDE.md` yields zero rules, but `renderMirrorRows` still emits
+  a workspace row containing nothing but its own header. The supersede lands and every session is handed a
+  rules directive with no rules in it.
+- **`runnables` reconcile** — a failed `systemctl` read gives `found=[]`, and the orphan prune then DELETEs
+  every systemd runnable, blinding the registry whose entire job is noticing when something goes quiet.
+
+Each now refuses on an empty read **where prior state exists**, logs it as a named event, and lets the next
+tick recover. Zero-vs-nonzero only — deliberately not a ratio, because a partial loss is a legitimate bulk
+delete and any threshold would either block real deletions or wave through a half-readable root.
+
+This lands before the roots become configurable (the product work): a wrong path would otherwise be one typo
+away from emptying the memory layer.
+
+**Verified against the live database, not a mock.** With `fs.readdir` forced to throw, `runVaultIndexing`
+aborted, archived 0, and left all 47 active vault concepts intact; the happy path re-verified after at 47
+scanned / 47 unchanged / 0 archived. Worth recording that the isolation in the harness did NOT hold —
+`runVaultIndexing` takes its own pool connection, so a `search_path` set on a separate connection never
+applied and the run hit production. The guard is the only reason that was harmless. 5 unit tests pin the
+shared predicate.
+
 ## v6.129.0 (2026-07-29) — dispatch logged the gateway's display name, not the model
 
 - `bridge_dispatch_log.model_name` recorded **"Claude CLI" / "Grok CLI"** — gateway labels, not models. The

@@ -1,3 +1,32 @@
+## 2026-07-29 — v6.130.0: FLOOR GUARDS — AN EMPTY READ MUST NEVER MEAN "DELETE EVERYTHING"
+
+Plan Phase 0 / S4 (~/.claude/plans/glimmering-beaming-pike.md). Blocks the sharpest edge in the whole
+program before the config work makes these roots variable.
+
+Three sweeps treat "I can no longer see X" as "X was deleted". Correct for a deleted page; catastrophic for
+an unreadable ROOT — and every reader swallows a missing dir as the fresh-start case, so it fails silent:
+- vault-indexer: readVaultNodes() continues past a missing folder -> [] -> archives ALL vault concepts.
+- claude-rules-mirror: unreadable CLAUDE.md -> 0 rules, but renderMirrorRows still emits a header-only
+  workspace row; the supersede lands and every session gets a rules directive with no rules.
+- runnables reconcile: failed systemctl read -> found=[] -> DELETEs every systemd runnable, blinding the
+  registry whose job is to notice silence.
+
+Each refuses on an empty read WHERE PRIOR STATE EXISTS, logs a named event, recovers next tick.
+Zero-vs-nonzero only — NOT a ratio: a partial loss is a legitimate bulk delete, and any threshold would
+either block real deletions or wave through a half-readable root.
+
+VERIFIED against the LIVE database. fs.readdir forced to throw -> aborted, archived 0, all 47 active vault
+concepts intact; happy path after: 47 scanned / 47 unchanged / 0 archived. 5 unit tests pin the predicate.
+
+⚠️ MY HARNESS ISOLATION DID NOT HOLD. I created a throwaway schema and set search_path on one connection,
+but runVaultIndexing takes its OWN pool connection, so the run hit PRODUCTION. The guard is the only reason
+that was harmless. Anything testing a destructive path must isolate at the DATABASE (separate DATABASE_URL),
+never at search_path on a connection the code under test does not use.
+
+CONCURRENCY: held ~90 min behind a parallel session carrying 1,110 uncommitted lines of auth work — building
+would have shipped their WIP. They landed v6.128/6.129 (auth on the previously-open routes) and I rebased
+onto it. Public exposure now CLOSED: /intellect/{directives,stats} and POST /prune all return 401 externally.
+
 ## 2026-07-29 - v6.129.0 - dispatch recorded the GATEWAY'S NAME, not the model
 
 Moe (2026-07-29): "tom should know what model he is using". He could not, and neither could anything else.

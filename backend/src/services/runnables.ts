@@ -238,10 +238,24 @@ export async function reconcileRunnables(): Promise<{ discovered: number; stale:
   // false-alarms as "silent Nd" forever — the same cry-wolf that made Moe restart
   // healthy services. Only rows NOT re-seen this run (last_seen_at < now) are
   // orphans; workflows are re-discovered every run so they are never caught here.
-  await pool.query(
-    `DELETE FROM runnables WHERE source = 'systemd' AND last_seen_at < $1`,
-    [now],
-  );
+  //
+  // FLOOR GUARD: only prune when discovery actually SAW systemd units. `found`
+  // is empty whenever the systemctl read fails — systemd unavailable, the user
+  // bus not reachable, a parse change, a container without it — and an empty
+  // read is indistinguishable here from "every timer was deleted". Without this
+  // check a single transient failure DELETEs every systemd runnable, and the
+  // registry that exists to notice a job going quiet goes silently blind
+  // instead. Re-discovery would repopulate them, but the alerting gap in
+  // between is exactly the window a real failure hides in.
+  const systemdSeen = found.filter((r) => r.source === 'systemd').length;
+  if (systemdSeen > 0) {
+    await pool.query(
+      `DELETE FROM runnables WHERE source = 'systemd' AND last_seen_at < $1`,
+      [now],
+    );
+  } else {
+    console.error('[runnables] discovery saw 0 systemd units — skipping orphan prune (empty read ≠ empty system)');
+  }
 
   const { rows } = await pool.query(`SELECT count(*)::int AS n FROM runnables WHERE ${STALE_SQL}`);
   return { discovered: found.length, stale: (rows[0] as { n: number }).n };
