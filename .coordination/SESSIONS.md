@@ -1211,4 +1211,11 @@
 - ⚠️ Worktree was at /home/lobster/projects/Porter-memory-harness and had to be MOVED to
   ~/.worktrees/porter-memory-harness — claude-rules-mirror scans /home/lobster/projects/*/CLAUDE.md and
   would have minted a directive from a scratch checkout. Now documented in Porter/CLAUDE.md.
+- Continued 2026-07-29 → v6.126.0: concepts.use_count had never been written by ANYTHING, so the
+  "unused concept" pruner was a blanket 30-day delete on all non-vault knowledge (877 of 879 archived,
+  621 prune events). Usage now recorded on RENDER only. Worktree ~/.worktrees/porter-concepts (removed).
+- V1/V2 fork: replay parity across all 15 live scopes — 0 divergent. Evidence complete; both options
+  costed in Porter/CLAUDE.md for whoever takes the decision. Deleted neither.
+- ⚠️ 02:20 29-Jul: ANOTHER session is live on backend/src/services/bridge/adapters/* and
+  intellect/dream-parser.ts. I did not touch those and did not build/restart after seeing them.
 - Status: done
