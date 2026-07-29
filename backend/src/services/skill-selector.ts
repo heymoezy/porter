@@ -10,12 +10,13 @@
  */
 
 import { pool } from '../db/client.js';
+import { config } from '../config.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
-const SKILLS_ROOT = path.resolve(process.env.PORTER_SKILLS_DIR || path.join(process.cwd(), 'skills'));
+const SKILLS_ROOT = path.resolve(config.skillsDir);
 
 /** Maximum number of skills selected per dispatch */
 const MAX_SELECTED = 3;

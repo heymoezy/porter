@@ -7,6 +7,24 @@ export const config = {
   host: process.env.PORTER_BACKEND_HOST || '127.0.0.1',
   databaseUrl: process.env.DATABASE_URL || 'postgresql://porter:porter@localhost:5432/porter',
   dataDir: process.env.PORTER_DATA_DIR || path.join(process.env.HOME || os.homedir(), '.porter'),
+
+  /**
+   * Where the skill packs live (one directory per skill, each with SKILL.md).
+   *
+   * ONE definition, because there were two and they disagreed. The runtime
+   * selector resolved `process.cwd() + '/skills'`, and the service runs with
+   * WorkingDirectory=<repo>/backend — so it looked in `backend/skills`, which
+   * has never existed. `selectSkills()` is called on every dispatch and its
+   * disk read therefore always failed: 207 registered skills, 20 assigned and
+   * enabled, and not one has ever been loaded. The admin route meanwhile
+   * hardcoded an absolute path to this machine, which was right by luck and
+   * breaks on any other install.
+   *
+   * Derived from dataDir so it moves with the install and needs no env var.
+   */
+  skillsDir: process.env.PORTER_SKILLS_DIR
+    || path.join(process.env.PORTER_DATA_DIR || path.join(process.env.HOME || os.homedir(), '.porter'), 'skills'),
+
   logLevel: process.env.LOG_LEVEL || 'info',
 
   // AI backend URLs — override these in the environment for your deployment.

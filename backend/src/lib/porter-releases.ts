@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.138.0',
+    date: '2026-07-29',
+    title: 'Porter\u2019s skill library has never once been used',
+    bullets: [
+      'Porter has a library of 207 written skills \u2014 focused instructions for particular kinds of work, like diagnosing a failing service or curating rules. Twenty of them are assigned and switched on. Not one has ever actually been read.',
+      'The cause was a wrong folder: the code looked for the skills one directory below where they live. Everything else worked \u2014 the right skills were picked every time, then their contents came back empty and nothing noticed.',
+      'Fixed, and the two places that disagreed about where skills live now share one answer. One of them had the location of this specific machine written into it, which would break on any other installation.',
+      'Confirmed by actually loading them rather than by checking the code compiles: the instructions handed to Porter go from an empty heading to a full set of relevant guidance.',
+      'Honest note: this makes those requests meaningfully larger, since real content now loads where there was none. It affects only Porter\u2019s own internal workers \u2014 Tom and coding sessions are unaffected.',
+    ],
+  },
+  {
     version: '6.137.0',
     date: '2026-07-29',
     title: 'There is now one memory system instead of two',

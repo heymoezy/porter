@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { config } from '../../config.js';
 import fsp from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
@@ -9,7 +10,7 @@ import { proxyToAdmin } from '../../lib/admin-proxy.js';
 
 // ── Quality scoring (ported from admin/backend/src/services/skill-library.ts) ──
 
-const SKILLS_ROOT = path.resolve(process.env.PORTER_SKILLS_DIR || '/home/lobster/projects/Porter/skills');
+const SKILLS_ROOT = path.resolve(config.skillsDir);
 
 const EXPECTED_PACK_FILES = ['SKILL.md', 'prompt.md', 'guides/qa-checklist.md', 'examples/README.md', 'meta/skill.json'];
 

@@ -1,3 +1,30 @@
+## v6.138.0 (2026-07-29) — 207 skills, 20 assigned, none ever loaded
+
+`selectSkills()` runs on every dispatch and its disk read has always failed. `SKILLS_ROOT` resolved
+`process.cwd() + '/skills'`, and the service runs with `WorkingDirectory=<repo>/backend` — so it looked in
+`backend/skills`, a directory that has never existed. The skills live one level up.
+
+The database chain was fine the whole time: 207 registered skills, 20 assigned and enabled across two
+personas. Every dispatch selected the right skills, then read their `SKILL.md` from a path that isn't there
+and injected a 160-character header with no content.
+
+- **One definition instead of two.** The admin route hardcoded an absolute path to *this machine* — right by
+  luck, broken on any other install (Architecture Rule 2). Both now read `config.skillsDir`, derived from
+  `dataDir` so it moves with the install.
+- **Verified by loading, not by compiling.** With the service's real environment the prompt block goes from
+  160 chars to **22,016** — `healthcheck`, `handoff-director` and `worker-architect` selected for a
+  diagnostic task, with their full bodies.
+
+Two things worth stating plainly:
+
+- **This adds roughly 5,500 tokens to an affected dispatch.** That is the fix working, not a regression, but
+  it is not free. Scope is narrow: only `porter-core` (17 skills) and `skills-curator` (3) have assignments.
+  Tom, the Claude CLI sessions and every other consumer are untouched — the remaining ~190 skills on disk are
+  unassigned and still never load.
+- **The `~/.porter` footgun is real and this surfaced it.** Run without `PORTER_DATA_DIR`, `skillsDir`
+  resolves to `~/.porter/skills` — the dead pre-cutover data directory. The systemd unit sets the variable, so
+  the service is correct; anything started by hand is not.
+
 ## v6.137.0 (2026-07-29) — one memory system: the second injection builder is gone
 
 Moe: *"which one is live? if v1 is dead, it should be deleted. there should only be one memory system this is

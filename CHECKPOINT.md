@@ -1,3 +1,31 @@
+## 2026-07-29 — v6.138.0: 207 SKILLS, 20 ASSIGNED, NONE EVER LOADED
+
+Plan M3. selectSkills() runs on EVERY dispatch and its disk read has always failed: SKILLS_ROOT resolved
+process.cwd()+'/skills' while the service runs WorkingDirectory=<repo>/backend, so it looked in
+backend/skills — never existed. Skills live one level up.
+
+The DB chain was fine all along: 207 skills registered, 20 assigned+enabled across porter-core (17) and
+skills-curator (3). Every dispatch selected correctly, then read SKILL.md from a missing path and injected a
+160-char header with no content.
+
+FIX: one definition. The admin route hardcoded /home/lobster/projects/Porter/skills — right by luck on this
+box, broken anywhere else (Architecture Rule 2). Both now read config.skillsDir, derived from dataDir.
+
+VERIFIED by loading, not compiling: with the service's real env the prompt block goes 160 -> 22,016 chars
+(healthcheck + handoff-director + worker-architect for a diagnostic task, full bodies).
+
+⚠️ COST: ~5,500 tokens added to an affected dispatch. That is the fix working, not a regression — but scope
+matters: ONLY porter-core and skills-curator have assignments. Tom, Claude CLI sessions and all other
+consumers are untouched; the other ~190 skills on disk are unassigned and still never load.
+
+⚠️ ~/.porter FOOTGUN CONFIRMED LIVE. My first verification run had no PORTER_DATA_DIR and skillsDir resolved
+to ~/.porter/skills — the DEAD pre-cutover data dir the audit flagged. The systemd unit sets the var so the
+service is right; anything hand-started writes/reads the wrong tree. Reinforces the Phase 2 purge of ~/.porter.
+
+⚠️ I OVERSTATED THE RISK EARLIER. I warned against "enabling 211 untested skills into live prompts". Wrong:
+only 20 are assigned, to two Porter-internal personas. Sampled memory-curator / directive-librarian /
+healthcheck — well-scoped, explicit "do not use for" boundaries, not batch-generated filler.
+
 ## 2026-07-29 — v6.137.0: ONE MEMORY SYSTEM — THE SECOND INJECTION BUILDER IS GONE
 
 Moe: "which one is live? if v1 is dead, it should be deleted. there should only be one memory system this is
