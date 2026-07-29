@@ -1256,3 +1256,15 @@
   predate the unit start. tsc + 237 unit tests were green WITH it on disk. Containment (password rotation +
   sessions wipe) done; the password went to Moe in the report only, nowhere on disk.
 - Status: done
+
+## ⚠️ LIVE-ACCOUNT COLLISION — platform_admin password, 2026-07-29 07:0x–07:13 UTC
+- TWO sessions independently rotated the `moe` platform_admin password within ~15 minutes.
+  porter-security-P1-P6 rotated at ~07:06 (verified working, wrong-password 401, sessions wiped).
+  A parallel session rotated again ~07:13 — confirmed by recomputing scrypt over the live salt: the
+  first password no longer matches the stored hash.
+- Resolution: the LATER rotation stands. porter-security-P1-P6 did NOT rotate a third time — a browser
+  login from 101.109.69.250 succeeded at 07:24:55, so Moe already holds a working credential and
+  re-rotating would only have locked him out.
+- LESSON: this ledger locks FILES, not LIVE ACCOUNTS. Rotating a credential, wiping sessions, or any
+  destructive op on a live account must claim it here FIRST. Two agents both "containing" the same
+  account is how a lockout happens.

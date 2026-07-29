@@ -90,6 +90,19 @@ verified working and a wrong password verified 401 — then that test session de
 The new password was delivered to Moe in the session report ONLY: not in this repo, not in the DB in
 plaintext, not in any file.
 
+⚠️ **MY ROTATION WAS SUPERSEDED ~07:13 UTC — a PARALLEL SESSION rotated again on top of it.** Verified, not
+guessed: the password I set no longer matches the stored hash (recomputed scrypt against the live salt →
+false). The trail is three `curl` logins as `moe` from `76.13.190.52` (this box's own public IP, i.e. an
+agent going out through askporter.app) at 07:13:28, 07:13:54 and 07:22:08, then a real BROWSER login from
+`101.109.69.250` at 07:24:55 that succeeded — so Moe holds a working credential from whichever session
+issued it. **I deliberately did NOT rotate a third time:** re-rotating would have invalidated the credential
+Moe had just used, to fix nothing. The credential of record is the later session's. Containment still holds
+either way — the wipe and the token burn are not undone by a later password change.
+
+⚠️ Two sessions independently ran the same containment on the same live account inside 15 minutes. That is
+the coordination gap, not the passwords: `.coordination/SESSIONS.md` has no lock for *live-account* actions,
+only for files. A rotation should claim the account in the ledger BEFORE touching it.
+
 ✅ **VERIFIED FROM OUTSIDE** (https://askporter.app, after restart): `401` on
 `/api/v1/intellect/{directives,context}`, `/api/v1/sessions/search`, `/api/admin/{brain/summary,health/logs,health/dashboard}`,
 `/api/v1/{files,registry/scopes,agents,bridge/gateways,chat/sessions,vault/graph}`, `POST /intellect/dream-run`,
