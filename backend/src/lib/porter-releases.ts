@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.127.0',
+    date: '2026-07-29',
+    title: 'Tom\u2019s nightly thinking runs again \u2014 it was being given more than any model could read',
+    bullets: [
+      'Yesterday restored the ability to fall back to another model when the first cannot answer. That exposed the next problem: every model was then failing on the same request. The overnight review was being handed 200KB of transcript at once, which none of them could get through \u2014 the first timed out, two errored, the last returned nothing. The same review at a fifth of the size finishes in about five minutes. It now runs at the size that has actually been observed to work, rather than a number nobody had tested.',
+      'The models Porter falls back to are conversational assistants, not silent answer machines: one of them opens with "I\u2019ll read the cited paths first" before giving the answer. The review expected a bare result and threw that away as unreadable. It now takes the answer out of the surrounding chat, which is what any of these models may reasonably send back.',
+      'A model that exits cleanly but says nothing at all was being recorded as a successful answer, so the failure surfaced later as an unrelated-looking error. An empty answer is now treated as a failure, which lets the next model in the council take the work \u2014 the entire point of having one.',
+      'The schedule that runs this had been deleted at some point, so even once repaired it would only ever have run when triggered by hand. It is back, and a full-size run has been confirmed end to end: five proposals, answered by the second model after the first timed out.',
+    ],
+  },
+  {
     version: '6.126.0',
     date: '2026-07-29',
     title: 'What Porter learned was being deleted on a 30-day timer',

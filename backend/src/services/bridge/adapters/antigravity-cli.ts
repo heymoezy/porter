@@ -169,8 +169,20 @@ export class AntigravityCLIAdapter implements GatewayAdapter {
     }
 
     // Plain-text contract: stdout IS the response.
+    // An empty answer on a clean exit is a FAILED dispatch, not a successful
+    // empty one. Reported as success it becomes someone else's confusing error
+    // far downstream — a dream run died "JSON parse failed: Unexpected end of
+    // JSON input" (which is what JSON.parse('') throws) while the failover
+    // record said this gateway answered ok. Throwing here lets the chain try
+    // the next gateway, which is the whole point of having one.
+    const agyText = stdout.trim();
+    if (!agyText) {
+      const stderrTail = Buffer.concat(stderrChunks).toString('utf8').trim().slice(-300);
+      throw new Error(`Antigravity CLI exited 0 but returned an empty response${stderrTail ? `: ${stderrTail}` : ''}`);
+    }
+
     return {
-      response: stdout.trim(),
+      response: agyText,
       model: req.model ?? DEFAULT_MODEL,
       latencyMs: Date.now() - start,
       cached: false,

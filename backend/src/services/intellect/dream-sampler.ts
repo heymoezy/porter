@@ -59,7 +59,20 @@ export interface SamplingLog {
 }
 
 const PER_TURN_CAP_BYTES = 8 * 1024;                 // 8 KB hard cap per turn (signal density at synthesis time)
-const DEFAULT_BUDGET_BYTES = 200 * 1024;             // 200 KB default budget
+/**
+ * Default corpus budget.
+ *
+ * Was 200KB, which NO gateway could actually digest: on 2026-07-29 a 200KB run
+ * failed across the whole chain (claude timeout, codex error, antigravity error,
+ * grok empty) while the SAME silo at 40KB completed on codex with 4 proposals.
+ * 655 historical failures sit behind that number.
+ *
+ * 40KB is the size that has been observed to work end-to-end, not a guess.
+ * Raising it again is fine — but prove it with a completed run first, because
+ * the failure mode is silent: an oversized corpus fails every gateway and looks
+ * like the council being down.
+ */
+const DEFAULT_BUDGET_BYTES = 40 * 1024;
 // Outer absolute ceiling enforced by the sampler. Per-model clamping (e.g. Sonnet 800KB) is the
 // POST /dream-run endpoint's responsibility (Plan 05): it rejects with 400 INVALID_SAMPLE_SIZE_FOR_MODEL
 // when model_override is sonnet-class AND sample_size_override > 800000. The sampler stays model-agnostic.

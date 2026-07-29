@@ -1,3 +1,25 @@
+## v6.127.0 (2026-07-29) — dreaming completes again: corpus size, agentic preamble, empty-response
+
+- **The 200KB default corpus was undigestible by every gateway.** A default-size run failed the whole chain
+  (claude timeout → codex error → antigravity error → grok empty); the SAME silo at 40KB completed on codex
+  with 4 proposals. `DEFAULT_BUDGET_BYTES` is now **40KB — the size observed to work**, not a guess. Raising
+  it again is fine but must be proven with a completed run: the failure mode is silent and looks like the
+  council being down.
+- **The fallback gateways are AGENTIC CLIs, not completion endpoints.** grok opens with "I'll read the cited
+  paths first…" before answering. The first fallback answer after yesterday's fix died on
+  `Unexpected token 'I', "I'll read "...`. `parseDreamResponse` now extracts the outermost balanced `{...}`
+  from surrounding prose — a **balanced scan, not a greedy regex**, so braces in trailing prose or inside
+  string values can't break it. 5 shapes pass (plain/preamble/fenced/trailing-prose/brace-in-string);
+  truncated and no-JSON still fail correctly.
+- **An empty response on a clean exit was recorded as success** in all four adapters, so the real failure
+  surfaced far downstream as `JSON.parse('')`. Now an error in claude/codex/antigravity/grok — which lets the
+  chain try the next gateway instead of poisoning the caller.
+- **The dream schedule had been deleted.** `dream_run` existed as a wired action with no workflow row using
+  it (only the stuck-sweep and review-digest survived), so dreaming could only ever run by hand. Restored:
+  `Software dream — weekly consolidation`, every_week, enabled.
+- ✅ Verified end-to-end at the new default: `completed | model=Codex CLI | proposals=5 | turns=17`, answered
+  by failover after claude timed out. First completed software dream since 2026-07-25.
+
 ## v6.126.0 (2026-07-29) — the "unused concept" pruner was a blanket 30-day delete on everything learned
 
 `concepts.use_count` and `concepts.last_used_at` have existed since Memory V3 and **nothing has ever written

@@ -100,6 +100,37 @@ export type ParsedFailurePattern = z.infer<typeof failurePatternSchema>;
 
 const FENCE_REGEX = /```(?:json)?\s*(\{[\s\S]*\})\s*```/;
 
+/**
+ * Return the first balanced JSON object in `text`, or null.
+ *
+ * Skips over string literals so braces inside values never unbalance the depth
+ * count, which is what a naive regex gets wrong. Used to pull a dream response
+ * out of an agentic CLI's narration — see parseDreamResponse.
+ */
+function extractFirstJsonObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null; // unbalanced — truncated response
+}
+
 export function parseDreamResponse(raw: string): ParsedDreamResponse {
   const trimmed = raw.trim();
   let candidate: unknown;
@@ -108,15 +139,31 @@ export function parseDreamResponse(raw: string): ParsedDreamResponse {
   } catch (firstErr) {
     // Fence-extraction fallback (some models wrap JSON in ```json ... ``` despite the prompt)
     const m = trimmed.match(FENCE_REGEX);
-    if (!m) {
+    const fenced = m?.[1] ?? null;
+    // Preamble fallback. The gateways behind the failover chain are AGENTIC
+    // CLIs, not raw completion endpoints — grok narrates before it answers
+    // ("I'll read the cited paths first…") and that preamble is not optional
+    // politeness we can prompt away reliably. Once dreaming could fail over
+    // (2026-07-28) the very first fallback answer died on
+    // `Unexpected token 'I', "I'll read "...`. So: take the outermost balanced
+    // {...} object out of the surrounding prose.
+    //
+    // Balanced-scan, NOT a greedy /\{[\s\S]*\}/ regex: the prose after the
+    // JSON can legitimately contain braces, and a greedy match would swallow
+    // them and fail. String literals and escapes are skipped so a brace inside
+    // a value can't unbalance the count.
+    const extracted = fenced ?? extractFirstJsonObject(trimmed);
+    if (!extracted) {
       const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
       throw new Error(`JSON parse failed: ${msg}`);
     }
     try {
-      candidate = JSON.parse(m[1]);
+      candidate = JSON.parse(extracted);
     } catch (secondErr) {
       const msg = secondErr instanceof Error ? secondErr.message : String(secondErr);
-      throw new Error(`JSON parse failed (fence-extraction also failed): ${msg}`);
+      throw new Error(
+        `JSON parse failed (${fenced ? 'fence' : 'preamble'}-extraction also failed): ${msg}`,
+      );
     }
   }
   // Zod validation — throws on schema mismatch with a useful path-prefixed message

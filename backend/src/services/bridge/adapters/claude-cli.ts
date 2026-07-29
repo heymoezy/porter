@@ -250,6 +250,14 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     await new Promise<void>((resolve) => child.once('close', () => resolve()));
 
     const response = streamText || resultText;
+    // An empty answer on a clean exit is a FAILED dispatch, not a successful
+    // empty one. Reported as success it becomes someone else's confusing error
+    // far downstream (JSON.parse('') throws "Unexpected end of JSON input").
+    // Throwing lets the failover chain try the next gateway — the whole point
+    // of having one.
+    if (!response?.trim()) {
+      throw new Error('Claude CLI exited cleanly but returned an empty response');
+    }
     const tokensUsed =
       inputTokens !== undefined && outputTokens !== undefined
         ? inputTokens + outputTokens

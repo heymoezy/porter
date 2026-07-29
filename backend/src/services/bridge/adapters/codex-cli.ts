@@ -258,6 +258,16 @@ export class CodexCLIAdapter implements GatewayAdapter {
 
     const parsed = parseCodexOutput(stdout, Buffer.concat(stderrChunks).toString('utf8'));
 
+    // An empty answer on a clean exit is a FAILED dispatch, not a successful
+    // empty one. Reported as success it becomes someone else's confusing error
+    // far downstream — a dream run died "JSON parse failed: Unexpected end of
+    // JSON input" (which is what JSON.parse('') throws) while the failover
+    // record said this gateway answered ok. Throwing here lets the chain try
+    // the next gateway, which is the whole point of having one.
+    if (!parsed.response?.trim()) {
+      throw new Error('Codex CLI exited 0 but returned an empty response');
+    }
+
     return {
       response: parsed.response,
       model: parsed.model ?? req.model ?? DEFAULT_MODEL,

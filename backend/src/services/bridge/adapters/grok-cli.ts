@@ -183,8 +183,20 @@ export class GrokCLIAdapter implements GatewayAdapter {
       throw new Error(`Grok CLI exited with code ${exitCode}: ${detail}`);
     }
 
+    // An empty answer on a clean exit is a FAILED dispatch, not a successful
+    // empty one. Reported as success it becomes someone else's confusing error
+    // far downstream — a dream run died "JSON parse failed: Unexpected end of
+    // JSON input" (which is what JSON.parse('') throws) while the failover
+    // record said this gateway answered ok. Throwing here lets the chain try
+    // the next gateway, which is the whole point of having one.
+    const grokText = stdout.trim();
+    if (!grokText) {
+      const stderrTail = Buffer.concat(stderrChunks).toString('utf8').trim().slice(-300);
+      throw new Error(`Grok CLI exited 0 but returned an empty response${stderrTail ? `: ${stderrTail}` : ''}`);
+    }
+
     return {
-      response: stdout.trim(),
+      response: grokText,
       model: req.model ?? DEFAULT_MODEL,
       latencyMs: Date.now() - start,
       cached: false,

@@ -1,3 +1,38 @@
+## 2026-07-29 - v6.127.0 - Dreaming COMPLETES again (corpus size, agentic preamble, empty-response)
+
+v6.119.0 restored failover. That exposed the next layer: every gateway then failed on the SAME request.
+
+⚠️ ROOT CAUSE 4 — **the 200KB default corpus was undigestible by every gateway.** A default-size run failed
+the whole chain (claude timeout → codex error → antigravity error → grok empty). The SAME silo at
+`sample_size_override: 40000` COMPLETED on codex with 4 proposals. `DEFAULT_BUDGET_BYTES` 200KB → **40KB, the
+size actually observed to work.** Raising it again is fine — but prove it with a completed run first: the
+failure mode is silent and reads as "the council is down".
+
+⚠️ ROOT CAUSE 5 — **the fallback gateways are AGENTIC CLIs, not completion endpoints.** grok opens with
+"I'll read the cited paths first…" before answering (same behaviour it showed on the ymc council brief). The
+first fallback answer after v6.119.0 died on `Unexpected token 'I', "I'll read "...`. `parseDreamResponse` now
+pulls the outermost balanced `{...}` out of surrounding prose — a BALANCED SCAN, not a greedy
+`/\{[\s\S]*\}/`, because trailing prose and string values legitimately contain braces. Verified: plain,
+preamble, fenced, trailing-prose, brace-in-string all parse; truncated + no-JSON still fail.
+
+⚠️ ROOT CAUSE 6 — **an empty response on a clean exit was recorded as SUCCESS** in ALL FOUR adapters. That
+turned a failed dispatch into someone else's confusing error downstream (`JSON.parse('')` → "Unexpected end of
+JSON input") AND denied the chain its next candidate. Now an error in claude/codex/antigravity/grok.
+
+⚠️ ROOT CAUSE 7 — **the dream schedule had been DELETED.** `dream_run` is a wired action with NO workflow row
+using it; only `dream_runs_stuck_sweep` and `dream_proposals_review_digest` survived. Given 655 failures, it
+looks deleted to stop the noise rather than fixed — [[feedback_never_silence_a_true_alarm]]. Restored:
+`Software dream — weekly consolidation`, every_week, enabled (matches the original migrate-dreams-v1 seed).
+
+✅ VERIFIED END-TO-END AT THE NEW DEFAULT (not a typecheck):
+`completed | model=Codex CLI | proposals=5 | turns=17` — answered by FAILOVER after claude timed out.
+First completed software dream since 2026-07-25.
+
+⚠️ STILL OPEN: `bridge_dispatch_log.model_name` is inconsistent — claude logs `claude-sonnet-4-6`, grok/codex
+log `Grok CLI` / `Codex CLI` (gateway labels, not models). Blocks Moe's "Tom should know what model he is
+using". claude_cli also times out on EVERY dream attempt — failover covers it, but claude is effectively not
+contributing to dreaming and that has not been diagnosed.
+
 ## 2026-07-29 — v6.126.0: THE "UNUSED CONCEPT" PRUNER WAS A BLANKET 30-DAY DELETE
 
 Follow-on from the memory audit — the thread I named as next at the end of v6.125.0.
