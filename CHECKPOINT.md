@@ -1,3 +1,28 @@
+## 2026-07-29 - v6.135.0 - the DEGRADED alert was TRUE: uptime-counted scheduling froze every cadence
+
+Alert: "runnables registry frozen — last reconcile 69m ago". Diagnosed before restarting, because this alert
+has a history of being FALSE (v6.117.0, v6.118.0). This time it was TRUE, and understated.
+
+⚠️ **ALL FIVE `every_30m` workflows were frozen**, 79–109 min: Validate memory references · Sweep stuck dream
+runs · **Promote reinforced corrections (Tom's learning)** · Sweep stale sessions · Reconcile runnables.
+Only runnables is watched by the health check, so the other four were silent.
+
+ROOT CAUSE: fired from `tickCount % MEMORY_VALIDATION_INTERVAL` (900 ticks × 2s = 30 min). `tickCount` is
+in-process and RESETS TO 0 ON EVERY RESTART, so the job needed 30 minutes of UNBROKEN UPTIME. Porter shipped
+6× that afternoon (6.128 → 6.134) — never reached 900 ticks.
+
+⚠️ THE SAME FAULT WAS ALREADY FOUND AND FIXED for every_24h/every_week ("twelve workflows had quietly
+stopped, all still reporting success") — and THAT FIX WAS GATED ON `tickCount % 900` TOO. The disease was
+diagnosed correctly and re-implemented one level up. An uptime counter is wrong at ANY scale, not just long
+ones; the shorter the interval the more it looks safe, which is why it survived review.
+
+FIX: `WORKFLOW_POLL_INTERVAL = 30 ticks (60s)` polls `runScheduledWorkflows()` for ALL FOUR cadences.
+Due-ness comes from each workflow's PERSISTED `last_run_at` (it already did — only the CALLER was fragile),
+so it is restart-proof and idempotent. every_30m is no longer fired from the uptime tick at all.
+
+✅ VERIFIED EMPIRICALLY, not by reasoning: restarted cold, waited 75s, all five had run (mins_ago = 0).
+Immediate remediation before the fix: manual reconcile → discovered 46, stale 6.
+
 ## 2026-07-29 — v6.134.0: THREE RUNBOOKS DOCUMENTED A FIX THAT WOULD HAVE BROKEN THE SITE
 
 Found by shipping v6.133.0: admin/deploy.sh printed "Caddy routing is EPHEMERAL, needs one sudo edit" on a

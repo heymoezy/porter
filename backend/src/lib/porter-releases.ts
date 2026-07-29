@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.135.0',
+    date: '2026-07-29',
+    title: 'Every scheduled job stopped whenever Porter was deployed often',
+    bullets: [
+      'The DEGRADED alert was right, and it was worse than the one job it named. Deciding whether a job is due was counted from how long Porter had been running, and that count restarts from zero on every deploy. Six deploys in an afternoon meant the count never reached thirty minutes, so every half-hourly job simply stopped \u2014 five of them, idle for over an hour, including the one that promotes what Tom has learned.',
+      'This exact fault was found and fixed once before for the daily and weekly jobs, and the fix was then put behind the same kind of uptime count, half an hour long. It is not a matter of choosing a better interval: a job must never be scheduled on how long the process has been alive.',
+      'Due-ness is now read from when each job last actually ran, checked once a minute. Anything overdue runs within a minute of a restart rather than waiting for uninterrupted uptime that a working day never provides. Confirmed by restarting and watching all five run 75 seconds later.',
+    ],
+  },
+  {
     version: '6.134.0',
     date: '2026-07-29',
     title: 'Three internal guides described a fix that would have broken the site',

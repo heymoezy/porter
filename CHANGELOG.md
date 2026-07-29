@@ -1,3 +1,17 @@
+## v6.135.0 (2026-07-29) — uptime-counted scheduling froze every cadence
+
+- The "runnables registry frozen" DEGRADED alert was **TRUE and far broader than the job it named**: ALL FIVE
+  `every_30m` workflows were idle 79–109 minutes — memory_validate, dream_runs_stuck_sweep, memory_promote
+  (Tom's learning), sweep_stale_sessions, runnables_reconcile.
+- Root cause: they fired on `tickCount % 900` — an in-process counter reset to 0 on every restart, so it
+  required **30 minutes of unbroken uptime**. Porter shipped six times that afternoon and never reached it.
+- ⚠️ The same fault had already been found and fixed for `every_24h`/`every_week` — and that fix was itself
+  gated on `tickCount % 900`. Re-implementing the disease one level up. The gate must not be uptime at ANY
+  scale.
+- All cadences now poll `runScheduledWorkflows()` once a minute; it decides due-ness from each workflow's
+  PERSISTED `last_run_at`, so it is restart-proof and idempotent.
+- Verified empirically: restarted cold, all five ran 75 seconds later.
+
 ## v6.134.0 (2026-07-29) — three runbooks documented a fix that would have broken the site
 
 Docs + one script. No runtime behaviour changes.

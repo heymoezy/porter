@@ -26,6 +26,22 @@ const HEALTH_PROBE_INTERVAL = 15; // 15 × 2000ms = 30s
 const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
 const MEMORY_VALIDATION_INTERVAL = 900;  // 900 ticks x 2s = 30 min — validate memory references
 const DISPATCH_SCORING_INTERVAL = 10800; // 10800 ticks x 2s = 6h — auto-score recent dispatches
+/**
+ * How often we ASK the database which workflows are due. 30 ticks x 2s = 60s.
+ *
+ * ⚠️ NOT a cadence — the cadence lives in each workflow's `trigger_value` and is
+ * enforced inside runScheduledWorkflows() against its PERSISTED last_run_at. This
+ * is only how often we look, and looking is one indexed query.
+ *
+ * It exists because the previous gate was `tickCount % 900` — thirty minutes of
+ * UNBROKEN UPTIME. The comment below correctly diagnosed that uptime counters
+ * reset on every deploy and then re-implemented the same fault one level up: on
+ * 2026-07-29 Porter shipped six times in an afternoon, never reached 900 ticks,
+ * and ALL FIVE every_30m workflows sat frozen for 79–109 minutes — including
+ * "Promote reinforced corrections", which is Tom's learning. The health check
+ * caught it only because the runnables registry is watched; nothing else was.
+ */
+const WORKFLOW_POLL_INTERVAL = 30;
 // NOTE: there is deliberately no INTELLECT_DAILY_INTERVAL / INTELLECT_WEEKLY_INTERVAL any more.
 // Counting uptime ticks to decide whether a daily or weekly job is due only works if the process
 // never restarts. Porter restarts on every deploy, so those counters never reached 24h/7d and the
@@ -237,10 +253,9 @@ async function tick() {
       runDistillerIfDue({ agent: 'tom' })
         .then(r => { if (!('skipped' in r)) console.log('[scheduler:distiller] tom →', JSON.stringify(r)); })
         .catch(err => console.error('[scheduler:distiller] error', err));
-      // Fire any workflow registered under `every_30m` (memory_promote,
-      // sweep_stale_sessions, etc.).
-      runScheduledWorkflows('every_30m').catch(err =>
-        console.error('[scheduler:intellect] every_30m workflows error', err));
+      // every_30m workflows are NOT fired here any more — they are polled from
+      // the database-driven block below, which survives a restart. Firing them
+      // from this uptime tick is what froze them.
     }
 
     // Intellect dispatch scoring — every 6h
@@ -249,19 +264,25 @@ async function tick() {
         console.error('[scheduler:intellect] dispatch scoring error', err));
     }
 
-    // ── Long-cadence workflows: ASK, don't count ────────────────────────────
-    // These are polled on the same 30-min tick as every_30m, and runScheduledWorkflows() decides
-    // what is actually DUE from each workflow's PERSISTED last_run_at.
+    // ── EVERY scheduled workflow: ASK, don't count ──────────────────────────
+    // runScheduledWorkflows() decides what is actually DUE from each workflow's
+    // PERSISTED last_run_at, so this poll is restart-proof and idempotent:
+    // after any restart, anything overdue fires within one minute.
     //
-    // They used to be gated on tickCount — an in-process counter that resets to 0 on every restart.
-    // every_24h needed 24 unbroken hours of uptime and every_week needed 7 unbroken DAYS, so on a
-    // box where Porter restarts on every deploy they simply never fired. Twelve workflows had
-    // quietly stopped, all still reporting `success` from the last time they DID run.
+    // The cadences used to be gated on tickCount, an in-process counter that
+    // resets to 0 on every restart. every_24h needed 24 unbroken hours and
+    // every_week needed 7 unbroken DAYS, so on a box that restarts on every
+    // deploy they simply never fired — twelve workflows quietly stopped, all
+    // still reporting `success` from the last time they DID run.
     //
-    // Polling frequently and letting the database answer "is it due?" is restart-proof and
-    // idempotent: after any restart, anything overdue fires within one tick.
-    if (tickCount > 0 && tickCount % MEMORY_VALIDATION_INTERVAL === 0) {
-      for (const cadence of ['every_6h', 'every_24h', 'every_week'] as const) {
+    // ⚠️ That fix was then gated on `tickCount % 900` — thirty minutes of
+    // unbroken uptime — which is the SAME FAULT at a shorter interval, and it
+    // bit on 2026-07-29: six deploys in an afternoon, 900 ticks never reached,
+    // and all five every_30m workflows frozen for over an hour. The gate must
+    // not be uptime at any scale. It is one query a minute; the database owns
+    // the cadence.
+    if (tickCount > 0 && tickCount % WORKFLOW_POLL_INTERVAL === 0) {
+      for (const cadence of ['every_30m', 'every_6h', 'every_24h', 'every_week'] as const) {
         runScheduledWorkflows(cadence).catch(err =>
           console.error(`[scheduler:intellect] ${cadence} workflows error`, err));
       }
