@@ -1,3 +1,18 @@
+## 2026-07-29 — v6.131.0: A NUL BYTE MADE claude-rules-mirror.ts UNREVIEWABLE
+
+Self-inflicted in v6.121.0: the set-hash separator was written `.join('\x00')` instead of `.join(' ')`.
+
+Harmless at runtime — any consistent separator yields a stable idempotence key. The cost was REVIEW: git
+classifies a file containing NUL as binary, so that file has shown `Bin 10234 -> 11809 bytes` instead of a
+diff since 2026-07-28. No line review, no blame, and grep silently matches nothing inside it. That produced
+a live false alarm today: verifying the v6.130.0 floor guards reported claude-rules-mirror's guard as
+MISSING when it was present in both source and dist.
+
+LESSON: when a verification says "missing", check whether the TOOL can see the file before believing it.
+`grep -c` returning nothing and returning zero are different answers.
+
+Fixed; hash changes once so the mirror re-renders on the next tick.
+
 ## 2026-07-29 — v6.130.0: FLOOR GUARDS — AN EMPTY READ MUST NEVER MEAN "DELETE EVERYTHING"
 
 Plan Phase 0 / S4 (~/.claude/plans/glimmering-beaming-pike.md). Blocks the sharpest edge in the whole

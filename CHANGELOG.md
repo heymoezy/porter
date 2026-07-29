@@ -1,3 +1,17 @@
+## v6.131.0 (2026-07-29) — a NUL byte made claude-rules-mirror.ts unreviewable
+
+Self-inflicted, in v6.121.0. The set-hash separator was written as `.join('\x00')` where `.join(' ')` was
+intended — a literal NUL byte in a TypeScript source file.
+
+Functionally harmless: it is only a separator in a hash input, and any consistent separator produces a
+stable idempotence key. The real cost was to review. **Git classifies a file containing NUL as binary**, so
+since 2026-07-28 that file has produced `Bin 10234 -> 11809 bytes` instead of a diff — no line-level review,
+no blame, and `grep` silently reports nothing. Two guard checks against it in this session returned "MISSING"
+for code that was demonstrably present.
+
+Removed. The hash changes once as a result, so the mirror re-renders on its next tick — the only observable
+effect, and idempotence re-establishes immediately.
+
 ## v6.130.0 (2026-07-29) — an empty read must never mean "delete everything"
 
 Three nightly sweeps destroy rows on the premise that "I can no longer see X" means "X was deleted". That is

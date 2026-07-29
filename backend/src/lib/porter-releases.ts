@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.131.0',
+    date: '2026-07-29',
+    title: 'A stray invisible character had made one file impossible to review',
+    bullets: [
+      'A change I made yesterday accidentally wrote an invisible control character into one of Porter\u2019s source files. It did no harm to how the code runs, but it made version control treat that file as unreadable data rather than text \u2014 so nobody could see what changed in it, and searches through it silently found nothing.',
+      'It caused a real false alarm during this session: a safety check reported a piece of code missing when it was plainly there.',
+      'Removed, and the file reads normally again.',
+    ],
+  },
+  {
     version: '6.130.0',
     date: '2026-07-29',
     title: 'Three nightly jobs could delete everything if they simply failed to look',
