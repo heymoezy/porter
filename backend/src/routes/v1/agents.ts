@@ -17,6 +17,13 @@ import { ok, err } from '../../lib/envelope.js';
 const READ_ONLY_TOOLS = ['WebSearch', 'WebFetch', 'Read', 'Glob', 'Grep'];
 
 export default async function agentsV1Routes(fastify: FastifyInstance) {
+
+  // Every route in this file is platform-admin surface. `requireAuth` only ever
+  // asserted that SOMEONE was logged in — it never read `.role` — so any account
+  // reached all of it. One plugin-level hook, so a route added later inherits the
+  // guard instead of needing someone to remember it. The service token still
+  // passes: it resolves to platform_admin in plugins/auth.ts.
+  fastify.addHook('preHandler', fastify.requirePlatformAdmin);
   // ── List worker agents (personas) ──────────────────────────────────────
   fastify.get('/', { preHandler: [fastify.requireAuth] }, async (request, reply) => {
     const q = request.query as { status?: string; role?: string };

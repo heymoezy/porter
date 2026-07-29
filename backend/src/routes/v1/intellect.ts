@@ -79,6 +79,25 @@ interface IntellectEventRow {
 }
 
 export default async function intellectRoutes(fastify: FastifyInstance) {
+  // ── AUTH ───────────────────────────────────────────────────────────────
+  //
+  // Almost every route below carried a comment saying "127.0.0.1-only; relies on
+  // server bind for protection". That was false. Porter binds 127.0.0.1, but
+  // Caddy proxies askporter.app straight to it, so the whole of Porter's memory
+  // — read AND write — plus the billable job triggers (/dream-run, /github-scan,
+  // /worker-knowledge-refresh) were open to the internet. Only 4 of ~44 routes
+  // had a guard.
+  //
+  // The comment is now enforced instead of asserted. Two ways in:
+  //   1. a real on-box process (the Claude Code hooks, ship.sh, the smoke tests)
+  //      — made truthful by `trustProxy` in index.ts, without which request.ip
+  //      is always Caddy's own 127.0.0.1;
+  //   2. a platform_admin session — the admin SPA, and the X-Porter-Service-Token
+  //      which resolves to platform_admin in plugins/auth.ts.
+  //
+  // Plugin-level, so a route added to this file later inherits it.
+  fastify.addHook('preHandler', fastify.requireLoopbackOrAdmin);
+
   // ── GET /context — scoped memory for CLI session injection ────────────
 
   fastify.get('/context', async (request, reply) => {

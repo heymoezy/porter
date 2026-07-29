@@ -103,6 +103,13 @@ export default async function bridgeV1Routes(
   fastify: FastifyInstance,
   _options: FastifyPluginOptions,
 ) {
+
+  // Every route in this file is platform-admin surface. `requireAuth` only ever
+  // asserted that SOMEONE was logged in — it never read `.role` — so any account
+  // reached all of it. One plugin-level hook, so a route added later inherits the
+  // guard instead of needing someone to remember it. The service token still
+  // passes: it resolves to platform_admin in plugins/auth.ts.
+  fastify.addHook('preHandler', fastify.requirePlatformAdmin);
   // ── GET /detect — full gateway discovery with live health and models ─────────
   fastify.get('/detect', {
     preHandler: [fastify.requireAuth],

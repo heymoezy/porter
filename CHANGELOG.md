@@ -1,3 +1,53 @@
+## v6.128.0 (2026-07-29) — every privileged route on askporter.app was reachable without logging in
+
+`askporter.app` proxies **every path** to this backend. Everything below was verified from outside the
+network, returned 200 before, and returns 401/403 now.
+
+- ⚠️ **The emailed reset code was never checked.** `routes/v1/auth.ts` called the `async` `verifyAuthToken`
+  **without `await`** on both `/verify-email` and `/reset-password`, so `valid` was a Promise, a Promise is
+  always truthy, and `if (!valid)` never fired. Both routes are public. Anyone who knew `moe@askporter.app`
+  (the address on BOTH platform_admin rows) could set its password or mint a session with any six digits.
+  TypeScript cannot see this — `Promise<boolean>` in a truthiness test is legal — and there is no runtime
+  symptom, because the failure mode is silent success.
+  `src/__tests__/await-guards.test.ts` now pins the CLASS, not the two lines: every credential check must be
+  awaited, and no `async` function may sit in a boolean guard without `await`. Proven red against the
+  pre-fix source. The same sweep found one more real instance (`routes/v1/webhooks-whatsapp.ts` logged
+  `[object Promise]` as the routed agent and leaked rejections past its own try/catch) — fixed.
+- ⚠️ **`requireAuth` never read `.role`.** It asserted only that *someone* was logged in. Seven route files
+  whose own headers claim platform-admin — `v1/{files,vault,registry,recall,agents,bridge,chat}.ts` — were
+  protected by it alone; exactly one route in the codebase checked role. `v1/files.ts` is rooted at
+  `/home/lobster/projects` and the service runs `tsx` under `Restart=always`, so `POST /api/v1/files/upload`
+  was arbitrary code execution as `lobster`, into Porter and every other project on the box. Each file now
+  carries a plugin-level `requirePlatformAdmin` hook — the SAME guard the `/api/admin/*` files use, not a
+  second one — so a route added later inherits it. `adminAuthPlugin` moved ahead of the route trees in
+  `index.ts` so that decorator exists when `/api/v1` boots.
+- ⚠️ **`trustProxy` was unset, so `request.ip` was always Caddy's `127.0.0.1`.** Every "127.0.0.1-only;
+  relies on server bind" comment in this codebase was decorative: the whole internet passed those gates,
+  rate limiting was one shared bucket, and the audit log attributed every event to loopback. Now
+  `trustProxy: ['127.0.0.1','::1','::ffff:127.0.0.1']` — trusting ONLY loopback, so a forged
+  `X-Forwarded-For` still resolves to the real peer. This is what makes the gates below enforceable.
+- **`v1/intellect.ts` — 4 of ~44 routes were guarded.** Unauthenticated writes over Porter's memory
+  (`/agent-memory`, `/memory`, `/prune`, `/promote`, `/active-project`) and billable job triggers
+  (`/dream-run`, `/github-scan`, `/worker-knowledge-refresh`). One plugin-level `requireLoopbackOrAdmin`:
+  a real on-box process, or a platform_admin session (which the service token resolves to). The seven
+  credential-less Claude Code hooks keep working unchanged because they genuinely are on-box.
+- **`v1/sessions.ts`** — `/search` was unauthenticated full-text search over every agent transcript on the
+  box. **`admin/brain.ts`** — the only `/api/admin/*` file missing the hook every sibling has.
+  **`admin/health.ts`** — `/logs` (the audit log, including login attempts and their IPs) and `/dashboard`
+  were public; `/log-external` was an unauthenticated INSERT. `GET /` stays public for health checks.
+- **`POST /api/v1/auth/register` never read `registration_mode`.** The setting has existed in admin settings
+  since the beginning, defaults to `closed`, and nothing consulted it — the route minted `operator` accounts
+  for anyone. Gated; `getSetting` returns null on a DB error, so the failure mode is closed too.
+- **`backend/.env.r7bak2` was matched by no ignore rule.** `*.env` only matches names *ending* in `.env`, so
+  a suffixed copy holding `DATABASE_URL` sat one `git add -A` away from a PUBLIC repo. `.env.*` added, with
+  the `*.env.example` negations kept last.
+- **Containment:** both platform_admin passwords rotated, all sessions deleted, outstanding auth tokens
+  burned. Prior exploitation cannot be ruled out.
+
+⚠️ Not fixed here, flagged: `/api/v1/auth/change-password` sets a new password without asking for the old
+one; `moe` and `system` share one email, so `/auth/login` and `/reset-password` resolve by `LIMIT 1` /
+`WHERE email` across both rows; `/api/v1/health` publicly lists backend URLs and DB state.
+
 ## v6.127.0 (2026-07-29) — dreaming completes again: corpus size, agentic preamble, empty-response
 
 - **The 200KB default corpus was undigestible by every gateway.** A default-size run failed the whole chain

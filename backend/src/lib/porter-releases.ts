@@ -22,6 +22,19 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.128.0',
+    date: '2026-07-29',
+    title: 'Porter was answering the internet without asking who was calling',
+    bullets: [
+      'askporter.app passes every address straight through to Porter. A set of pages that were only ever meant for a signed-in administrator were answering anyone who asked. That included what Porter knows and remembers, a search across every saved agent conversation, the record of who signed in and from where, and the buttons that start paid overnight jobs. All of them now ask who you are first, and this was confirmed from outside the network rather than assumed.',
+      'The bigger one: the six-digit code emailed to reset a password was never actually checked. A single missing word in the code meant the check always passed, so anyone who knew the administrator email address could have set a new password. Nothing shows up when this goes wrong — the door simply opens — which is why it sat unnoticed. It is fixed, and there is now a test that fails if anyone reintroduces the same shape of mistake anywhere in Porter, not just on that one line.',
+      'Being signed in was treated as being an administrator. Any account at all could reach the file browser, which can write anywhere in the projects folder on the server. Those pages now check WHO you are, not just THAT you are, using the same single check the rest of the admin already used.',
+      'Porter could not tell a visitor from the internet apart from a program running on its own machine — everyone looked local, which is why the "local only" pages were not local at all. It can now, which is what makes every other fix above hold.',
+      'Sign-up was open to the public even though the setting that controls it says closed. Nothing had ever read that setting. It does now.',
+      'As a precaution, both administrator passwords were changed and everyone was signed out. Earlier misuse cannot be ruled out, so this is treated as part of the repair rather than a nicety.',
+    ],
+  },
+  {
     version: '6.127.0',
     date: '2026-07-29',
     title: 'Tom\u2019s nightly thinking runs again \u2014 it was being given more than any model could read',

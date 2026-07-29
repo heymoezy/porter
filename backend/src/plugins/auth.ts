@@ -13,6 +13,7 @@ declare module 'fastify' {
   }
   interface FastifyInstance {
     requireAuth: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    requireLoopbackOrAdmin: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     requireProjectAccess: (minRole: ProjectRole) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }
@@ -50,6 +51,19 @@ if (!SERVICE_TOKEN) {
 
 const LOCALHOST_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
+/**
+ * True only for a caller that really is on this box.
+ *
+ * This is only trustworthy because the server sets `trustProxy` to the loopback
+ * addresses (see index.ts): without it `request.ip` is Caddy's own `127.0.0.1`
+ * for EVERY request off the internet, and every "127.0.0.1-only" comment in this
+ * codebase was decorative. With it, a Caddy-proxied request resolves to the real
+ * client address and fails this test.
+ */
+export function isLoopbackRequest(request: FastifyRequest): boolean {
+  return LOCALHOST_IPS.has(request.ip);
+}
+
 async function authPlugin(fastify: FastifyInstance) {
   fastify.decorateRequest('sessionUser', null);
   fastify.decorateRequest('projectRole', null);
@@ -62,7 +76,7 @@ async function authPlugin(fastify: FastifyInstance) {
 
     if (serviceToken && SERVICE_TOKEN !== '' && serviceToken === SERVICE_TOKEN) {
       // Only accept from localhost.
-      if (LOCALHOST_IPS.has(request.ip)) {
+      if (isLoopbackRequest(request)) {
         request.sessionUser = {
           username: 'system',
           role: 'platform_admin',
@@ -95,6 +109,21 @@ async function authPlugin(fastify: FastifyInstance) {
     if (!request.sessionUser) {
       return reply.code(401).send(err('UNAUTHORIZED', 'Authentication required', request.id));
     }
+  });
+
+  /**
+   * Guard for the machine surface: routes driven by on-box hooks (Claude Code
+   * SessionStart/Stop, the `/silo` prompt hook, transcript capture, cron-style
+   * job triggers) AND read by the admin SPA.
+   *
+   * Two ways in, no third: you are a process on this machine, or you are a
+   * signed-in platform_admin (which the service token also resolves to). Anyone
+   * arriving through Caddy without an admin session gets 401.
+   */
+  fastify.decorate('requireLoopbackOrAdmin', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (isLoopbackRequest(request)) return;
+    if (request.sessionUser?.role === 'platform_admin') return;
+    return reply.code(401).send(err('UNAUTHORIZED', 'Authentication required', request.id));
   });
 
   fastify.decorate('requireProjectAccess', (minRole: ProjectRole) => {

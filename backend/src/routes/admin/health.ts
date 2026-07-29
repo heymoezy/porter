@@ -42,8 +42,10 @@ export default async function healthRoutes(fastify: FastifyInstance) {
     return ok({ version: ADMIN_VERSION, service: 'porter-admin' });
   });
 
-  // GET /api/admin/health/logs — combined user + error logs for dashboard terminal
-  fastify.get('/logs', async (req) => {
+  // GET /api/admin/health/logs — combined user + error logs for dashboard terminal.
+  // Admin only: this is the audit log, including login successes/failures and the
+  // IP behind each one. It was reachable unauthenticated from the internet.
+  fastify.get('/logs', { preHandler: [fastify.requirePlatformAdmin] }, async (req) => {
     const limit = Math.min(parseInt((req.query as Record<string, string>).limit || '20'), 50);
     const logs: Array<{ ts: number; text: string; color: string }> = [];
     try {
@@ -71,8 +73,8 @@ export default async function healthRoutes(fastify: FastifyInstance) {
     return ok({ logs: logs.slice(0, limit) });
   });
 
-  // GET /api/admin/health/dashboard — global platform metrics
-  fastify.get('/dashboard', async () => {
+  // GET /api/admin/health/dashboard — global platform metrics. Admin only.
+  fastify.get('/dashboard', { preHandler: [fastify.requirePlatformAdmin] }, async () => {
     const q = async (sql: string): Promise<Record<string, number>> => {
       try { return (await queryOne(sql)) as Record<string, number> ?? {}; }
       catch { return {}; }
@@ -125,12 +127,16 @@ export default async function healthRoutes(fastify: FastifyInstance) {
     });
   });
 
-  // POST /api/admin/health/log-external — public endpoint for CLI tool-use observability.
+  // POST /api/admin/health/log-external — on-box endpoint for CLI tool-use observability.
   //
   // CLI tool calls (Bash/Edit/Write/etc) are NOT model dispatches. They live in
   // cli_activity_log so they don't pollute Bridge metrics. The `intent` field
   // carries `tool:<Name>` from the PostToolUse hook.
-  fastify.post('/log-external', async (request, reply) => {
+  //
+  // Caller is ~/.claude/hooks/porter-activity-log.js on 127.0.0.1, so this is
+  // loopback-or-admin rather than public: it is an unauthenticated INSERT and
+  // the internet had it.
+  fastify.post('/log-external', { preHandler: [fastify.requireLoopbackOrAdmin] }, async (request, reply) => {
     const body = request.body as Record<string, unknown>;
     const gatewayType = (body.gateway_type as string) || 'unknown';
     const modelName = (body.model_name as string) || null;

@@ -1,3 +1,99 @@
+## 2026-07-29 - v6.128.0 - SECURITY: every privileged route on askporter.app was reachable without logging in
+
+Caddy proxies **every path** of askporter.app to this backend. Each item below was verified from OUTSIDE the
+network — 200 before, 401/403 after.
+
+⚠️ **P-1 — the emailed reset code was never checked.** `routes/v1/auth.ts` called the `async`
+`verifyAuthToken` WITHOUT `await` on `/verify-email` (:225) and `/reset-password` (:427). `valid` was a
+Promise, a Promise is always truthy, `if (!valid)` never fired. Both routes are public and unauthenticated.
+Anyone who knew `moe@askporter.app` — the address on BOTH platform_admin rows — could set its password or
+mint a session with any six digits. `tsc` cannot see this (`Promise<boolean>` in a truthiness test is legal)
+and there is no runtime symptom: the failure mode is silent success.
+
+`src/__tests__/await-guards.test.ts` pins the CLASS, not the two lines — every credential check must be
+awaited, and no `async` function may sit in a boolean guard position without `await`. **Proven red against
+the pre-fix source** (copy of the tree, not the live one). The sweep found one more real instance:
+`routes/v1/webhooks-whatsapp.ts:159` logged `[object Promise]` as the routed agent and let rejections escape
+its own try/catch. Fixed. Four other candidates were false positives (same-name sync helpers, a returned
+promise) and the test excludes those shapes.
+
+⚠️ **P-2 — `requireAuth` never read `.role`.** It asserted only that SOMEONE was logged in. Seven files
+whose own headers claim platform-admin — `v1/{files,vault,registry,recall,agents,bridge,chat}.ts` — relied on
+it alone; exactly ONE route in the codebase (`v1/memory.ts:243`) checked role. `v1/files.ts` is rooted at
+`/home/lobster/projects` per `porter_config.json`, and the unit runs `npx tsx` with `Restart=always`, so
+`POST /api/v1/files/upload` was arbitrary code execution as `lobster` — into Porter and every other project
+on the box. Each file now has a **plugin-level** `requirePlatformAdmin` hook (the SAME guard `/api/admin/*`
+uses — not a second one), so a route added later inherits it. `adminAuthPlugin` had to move AHEAD of the
+route trees in `index.ts`: Fastify decorators only exist for plugins booted after the decorating plugin, and
+`v1Routes` booted first.
+
+⚠️ **`trustProxy` was unset — this was the load-bearing one.** `request.ip` was Caddy's own `127.0.0.1` for
+every request off the internet, so every "127.0.0.1-only; relies on server bind" comment in this codebase was
+DECORATIVE: the whole internet passed those gates, rate limiting was one shared bucket, and the audit log
+attributed everything to loopback. Now `['127.0.0.1','::1','::ffff:127.0.0.1']` — trusting ONLY loopback, so
+a forged `X-Forwarded-For` still resolves to the real peer. Verified: the service token presented from the
+internet is now REFUSED (401) while the same token on localhost still works.
+
+**P-3 `v1/intellect.ts` — 4 of ~44 routes were guarded.** Unauthenticated WRITES over Porter's memory
+(`/agent-memory`, `/memory`, `/prune`, `/promote`, `/active-project`) and billable job triggers
+(`/dream-run`, `/github-scan`, `/worker-knowledge-refresh`). One plugin-level `requireLoopbackOrAdmin`:
+a real on-box process, or a platform_admin session (which the service token resolves to).
+**Chose loopback over a service-token carve-out deliberately** — the callers are seven credential-less Claude
+Code hooks in `~/.claude/hooks/` plus `scripts/ship.sh` and the smoke suites, all OUTSIDE this repo. Handing
+them a secret is more moving parts and more ways to break memory injection for every session on the box; with
+`trustProxy` correct, "on this machine" is now a fact rather than a comment.
+
+**P-4 `v1/sessions.ts`** — `/search` was unauthenticated full-text search over every agent transcript on the
+box. **P-5 `admin/brain.ts`** — the only `/api/admin/*` file missing the hook every sibling has.
+**P-6 `admin/health.ts`** — `/logs` (audit log incl. login attempts + IPs) and `/dashboard` public;
+`/log-external` was an unauthenticated INSERT, now loopback-or-admin (its caller is
+`~/.claude/hooks/porter-activity-log.js` on 127.0.0.1). `GET /` and `/version` stay public for health checks.
+
+**`POST /api/v1/auth/register` never read `registration_mode`.** The setting has existed in admin settings
+from the start, defaults to `closed`, and NOTHING consulted it — the route minted `operator` accounts for
+anyone on the internet. Gated. `getSetting` returns null on a DB error, so the failure mode is closed too.
+
+**`backend/.env.r7bak2` was matched by no ignore rule.** `*.env` only matches names ENDING in `.env`; a
+suffixed copy holding `DATABASE_URL` sat one `git add -A` away from a PUBLIC repo. `.env.*` + `*.env.*`
+added, negations kept LAST. Verified: backup ignored, all three `.env.example` files still tracked.
+
+✅ **CONTAINMENT DONE** (prior exploitation cannot be ruled out): both platform_admin passwords rotated
+(scrypt, fresh 16-byte salts), all 11 rows in `sessions` deleted, outstanding `auth_tokens` burned. New login
+verified working and a wrong password verified 401 — then that test session deleted, `sessions` is empty.
+The new password was delivered to Moe in the session report ONLY: not in this repo, not in the DB in
+plaintext, not in any file.
+
+✅ **VERIFIED FROM OUTSIDE** (https://askporter.app, after restart): `401` on
+`/api/v1/intellect/{directives,context}`, `/api/v1/sessions/search`, `/api/admin/{brain/summary,health/logs,health/dashboard}`,
+`/api/v1/{files,registry/scopes,agents,bridge/gateways,chat/sessions,vault/graph}`, `POST /intellect/dream-run`,
+`POST /api/admin/health/log-external`; `403` on `POST /api/v1/auth/register`. Still `200`: `/health`,
+`/api/admin/health/`, and the admin SPA at `/` and `/login`. Service token on localhost: 200 everywhere.
+`npx tsc --noEmit` clean; 237 unit tests, 0 fail.
+
+⚠️ **THE RUNNING PROCESS STILL REPORTS 6.127.0 — I DID NOT RESTART, ON PURPOSE.** Another session has
+`backend/src/services/bridge/routing-engine.ts` dirty (observed-model logging, mtime 06:44). The unit runs
+`npx tsx` straight off SOURCE, so restarting would have shipped their unverified in-flight work live — the
+exact thing `.coordination/SESSIONS.md` exists to prevent. It costs nothing here: the 06:11 restart already
+picked up every security fix in this release, which is why the 401s above are real and not a stale-code
+illusion ([[feedback_liveness_is_not_currency]] — I verified the NEW BEHAVIOUR, not a version string).
+**Whoever finishes routing-engine.ts: restart `porter-fastify` and `/health` will read 6.128.0.**
+`npx tsc --noEmit` and the full unit suite are green WITH their change on disk.
+
+⚠️ **STILL OPEN — needs a decision from Moe, not touched here:**
+- `/api/v1/auth/change-password` sets a new password with no current-password re-auth (same class as the BYD
+  bug that started this audit). Deliberately skipped: changing how login works was outside the approved scope.
+- `moe` and `system` SHARE the email `moe@askporter.app`. `/auth/login` does `WHERE email = $1` and takes
+  `rows[0]`; `/reset-password` does `UPDATE ... WHERE email = $1` and would rewrite BOTH rows. It resolves to
+  `moe` today but that is unspecified ordering, not a guarantee. `system` is only ever an attribution string
+  (the service token synthesises its identity in memory, no DB lookup) — it should probably not be a login
+  row at all.
+- `GET /api/v1/health` is public and lists backend URLs, models and DB state.
+- `generateCode()` in `services/transactional-email.ts:197` uses `Math.random()` for the 6-digit reset code —
+  the Porter twin of ymc `H1`. Left alone because it is Phase 3 of the plan and belongs with that change.
+- The askporter.app Caddy route is still the EPHEMERAL admin-API patch (`_ops/askporter-login-fix.md`);
+  a Caddy restart reverts it to `/etc/caddy/Caddyfile`, which proxies `/` to :3001 as well. Needs one sudo
+  line from Moe.
+
 ## 2026-07-29 - v6.127.0 - Dreaming COMPLETES again (corpus size, agentic preamble, empty-response)
 
 v6.119.0 restored failover. That exposed the next layer: every gateway then failed on the SAME request.

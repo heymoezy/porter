@@ -156,7 +156,7 @@ export default async function webhookWhatsAppRoutes(
       // For now, groupId is not directly in the standard payload — leave as undefined
       const groupId: string | undefined = undefined;
 
-      const agentId = routeInboundWhatsApp(from, messageText, groupId);
+      const agentId = await routeInboundWhatsApp(from, messageText, groupId);
 
       fastify.log.info(`[whatsapp-webhook] Routed message from ${from} to agent ${agentId ?? 'none'}`);
     } catch (err: unknown) {

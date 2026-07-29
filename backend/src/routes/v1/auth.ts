@@ -10,6 +10,7 @@ import {
   createAuthToken, verifyAuthToken,
   sendVerificationCode, sendPasswordResetCode,
 } from '../../services/transactional-email.js';
+import { getSetting } from '../../lib/workspace-settings.js';
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -153,6 +154,15 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
 
   // POST /api/v1/auth/register
   fastify.post('/register', async (request, reply) => {
+    // `registration_mode` has existed in admin settings since the beginning and
+    // nothing read it — this route minted `operator` accounts for anyone on the
+    // internet regardless of the setting. Default is 'closed' (getSetting also
+    // returns null on a DB error, so the failure mode is closed too).
+    const registrationMode = (await getSetting('registration_mode')) || 'closed';
+    if (registrationMode !== 'open') {
+      return reply.code(403).send(err('REGISTRATION_CLOSED', 'Registration is not open'));
+    }
+
     const parsed = registerBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send(err('INVALID_INPUT', 'Valid email, name, and password (8+ chars) required'));
@@ -212,7 +222,7 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
     const { email, code } = parsed.data;
     const emailLower = email.toLowerCase().trim();
 
-    const valid = verifyAuthToken(emailLower, code, 'verify_email');
+    const valid = await verifyAuthToken(emailLower, code, 'verify_email');
     if (!valid) {
       return reply.code(400).send(err('INVALID_CODE', 'Invalid or expired verification code'));
     }
@@ -414,7 +424,7 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
     const { email, code, password } = parsed.data;
     const emailLower = email.toLowerCase().trim();
 
-    const valid = verifyAuthToken(emailLower, code, 'reset_password');
+    const valid = await verifyAuthToken(emailLower, code, 'reset_password');
     if (!valid) {
       return reply.code(400).send(err('INVALID_CODE', 'Invalid or expired reset code'));
     }

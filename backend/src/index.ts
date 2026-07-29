@@ -75,6 +75,13 @@ const fastify = Fastify({
   },
   genReqId: () => crypto.randomUUID(),
   requestIdHeader: 'x-request-id',
+  // Caddy (askporter.app) is the only thing that ever connects from loopback on
+  // behalf of someone else. Without this, `request.ip` is Caddy's 127.0.0.1 for
+  // every request off the internet — which silently turned every "loopback only"
+  // gate in this codebase into "everyone", made rate limiting one global bucket,
+  // and recorded every audit row against 127.0.0.1. Trusting ONLY loopback means
+  // a forged X-Forwarded-For still resolves to the real peer.
+  trustProxy: ['127.0.0.1', '::1', '::ffff:127.0.0.1'],
 });
 
 // Global hook: set X-Request-ID header and sync trace_id in JSON response bodies
@@ -117,11 +124,15 @@ fastify.register(openapiPlugin);
 // Auth plugin (session resolution)
 fastify.register(authPlugin);
 
+// Admin auth plugin (adds requirePlatformAdmin, reads porter_admin_session cookie).
+// Registered BEFORE the route trees: Fastify decorators only exist for plugins
+// booted after the decorating plugin, and the privileged /api/v1 routes
+// (files, vault, registry, recall, agents, bridge, chat) now use
+// requirePlatformAdmin — the same single guard the /api/admin routes use.
+fastify.register(adminAuthPlugin);
+
 // V1 routes (Fastify-native, with response envelope)
 fastify.register(v1Routes, { prefix: '/api/v1' });
-
-// Admin auth plugin (adds requirePlatformAdmin, reads porter_admin_session cookie)
-fastify.register(adminAuthPlugin);
 
 // Admin API routes (absorbed from Porter Admin :5175)
 fastify.register(adminRoutes, { prefix: '/api/admin' });

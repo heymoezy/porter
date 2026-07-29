@@ -5,6 +5,11 @@ import { FastifyInstance } from 'fastify';
 import { searchSessions, countSessionSearchResults } from '../../services/session-search.js';
 
 export async function sessionsRoutes(app: FastifyInstance) {
+  // This is full-text search over every agent transcript captured on this box.
+  // It shipped with no guard at all and was reachable from the internet through
+  // Caddy. Platform admin only — the admin SPA calls it with the admin cookie.
+  app.addHook('preHandler', app.requirePlatformAdmin);
+
   // SIN-02: Cross-session FTS search
   app.get('/search', async (req, reply) => {
     const { q, agent_id, limit, offset } = req.query as {

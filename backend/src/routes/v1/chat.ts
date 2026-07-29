@@ -25,6 +25,13 @@ const sessionActionSchema = z.object({
 
 export default async function chatV1Routes(fastify: FastifyInstance, _opts: FastifyPluginOptions) {
 
+  // Every route in this file is platform-admin surface. `requireAuth` only ever
+  // asserted that SOMEONE was logged in — it never read `.role` — so any account
+  // reached all of it. One plugin-level hook, so a route added later inherits the
+  // guard instead of needing someone to remember it. The service token still
+  // passes: it resolves to platform_admin in plugins/auth.ts.
+  fastify.addHook('preHandler', fastify.requirePlatformAdmin);
+
   // POST /api/v1/chat/warm — pre-load Ollama model so first chat is instant
   fastify.post('/warm', {
     preHandler: [fastify.requireAuth],

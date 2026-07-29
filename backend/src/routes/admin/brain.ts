@@ -14,6 +14,9 @@ import { pool } from '../../db/client.js';
 import { ok } from '../../lib/envelope.js';
 
 export default async function brainRoutes(fastify: FastifyInstance) {
+  // The only /api/admin/* file that was missing the hook every sibling has.
+  fastify.addHook('preHandler', fastify.requirePlatformAdmin);
+
   // ── GET /api/admin/brain/summary — header metrics, all real ──────────────
   fastify.get('/summary', async (_req, reply) => {
     const dayAgo = 'EXTRACT(epoch FROM now()) - 86400';

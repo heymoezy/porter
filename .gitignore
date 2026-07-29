@@ -51,7 +51,15 @@ backend/dist.ship-bak
 admin/frontend.archived/build/
 
 # Env files — the repo is PUBLIC. Real secrets never get committed.
+#
+# `*.env` only matches names ENDING in .env, so a suffixed copy such as
+# backend/.env.r7bak2 (which holds DATABASE_URL) was matched by nothing and one
+# `git add -A` would have published it. `.env.*` covers every suffixed variant;
+# the negations stay last so they win.
 backend/.env
 .env
 *.env
+.env.*
+*.env.*
 !*.env.example
+!.env.example
