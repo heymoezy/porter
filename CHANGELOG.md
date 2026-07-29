@@ -1,3 +1,30 @@
+## v6.136.0 (2026-07-29) — SMTP credentials are optional, so a local relay can actually be used
+
+Groundwork for the standalone mail server (Moe's decision, twice reaffirmed after I flagged the risks: no
+Google relay). Porter's stored SMTP settings already point at `127.0.0.1:587`; this makes that usable.
+
+- **`getSmtpConfig` required `user` AND `pass`** and returned `null` without them. A relay on loopback needs
+  neither — only processes on this box can reach `127.0.0.1`, so the network boundary *is* the
+  authentication. The effect was that a correctly-configured local mail server would be rejected as
+  "unconfigured" and every send would silently fall back to a console log.
+- **The transport passed an `auth` block unconditionally.** Offering credentials to a server that does not
+  advertise AUTH is an error, not a no-op, so that alone made an unauthenticated local relay unusable.
+- Cleared the stored `smtp_user` / `smtp_pass` — `postmaster@askporter.app` with a 6-character placeholder,
+  for a server that has never existed.
+
+**Why standalone is the right shape for this domain, contrary to first instinct:** `askporter.app` publishes
+`v=spf1 mx ip4:76.13.190.52 ~all` — it authorises *this box only*, and **not** Google. It also publishes
+`p=quarantine`, the strictest DMARC policy in the workspace. So relaying Porter's mail through Google (as
+ymc does for `ymc.capital`) would fail SPF *and* DKIM alignment for `askporter.app` and be quarantined.
+Sending from this box is the configuration the DNS was actually built for.
+
+The remaining risk is reputation, not authentication: reverse DNS says `srv1379868.hstgr.cloud`, not
+`mail.askporter.app`. Outbound `:25` is open, which is the usual blocker and is not one here.
+
+Prepared, needs sudo: `ops/mail/install-mailserver.sh` (Postfix send-only on loopback + OpenDKIM, new 2048-bit
+key, selector `porter`) and `ops/mail/verify-mail.sh`, which reports the RECEIVING server's verdict — because
+Porter fails soft, a `200` from `/forgot-password` proves nothing was delivered.
+
 ## v6.135.0 (2026-07-29) — uptime-counted scheduling froze every cadence
 
 - The "runnables registry frozen" DEGRADED alert was **TRUE and far broader than the job it named**: ALL FIVE

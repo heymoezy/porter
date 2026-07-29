@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.136.0',
+    date: '2026-07-29',
+    title: 'Porter can now use its own mail server instead of demanding a password for it',
+    bullets: [
+      'Porter refused to use any mail server unless given a username and password. A mail server on the same machine needs neither \u2014 nothing outside the machine can reach it, which is the point. So a correctly set-up local mail server would have been ignored as "not configured" and every message would have quietly gone nowhere.',
+      'It was also presenting credentials to servers that do not ask for them, which counts as an error rather than being politely ignored \u2014 so a local mail server could never have worked.',
+      'Checking the domain settings confirmed standalone is the right choice here: askporter.app is set up to permit mail from this machine only, and explicitly not from Google, with the strictest possible policy for anything else. Sending through Google would have landed in spam.',
+      'The mail server itself still needs one command run as administrator. This release is the part that had to be right first, so that running it is enough rather than the start of more debugging.',
+    ],
+  },
+  {
     version: '6.135.0',
     date: '2026-07-29',
     title: 'Every scheduled job stopped whenever Porter was deployed often',

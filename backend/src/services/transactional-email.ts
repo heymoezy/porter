@@ -45,7 +45,12 @@ async function getSmtpConfig(): Promise<SmtpConfig | null> {
   const fromName = await getSetting('smtp_from_name') || process.env.SMTP_FROM_NAME || 'Porter';
   const fromEmail = await getSetting('smtp_from_email') || process.env.SMTP_FROM_EMAIL || '';
 
-  if (!host || !user || !pass || !fromEmail) return null;
+  // Credentials are OPTIONAL. A relay on loopback needs none — only processes on
+  // this box can reach 127.0.0.1, so the network boundary is the authentication.
+  // Requiring user+pass here meant a correctly-configured local mail server was
+  // rejected as "unconfigured" and every send silently fell back to a console
+  // log. Host + from-address are the genuinely required pair.
+  if (!host || !fromEmail) return null;
   return { host, port, user, pass, fromName, fromEmail };
 }
 
@@ -61,11 +66,14 @@ async function getTransport(): Promise<Transporter | null> {
   const hash = `${cfg.host}:${cfg.port}:${cfg.user}`;
   if (transport && hash === lastConfigHash) return transport;
 
+  // Only offer credentials when we actually have them. Passing an `auth` block
+  // to a server that does not advertise AUTH is an error, not a no-op — so an
+  // unconditional auth object makes an unauthenticated local relay unusable.
   transport = nodemailer.createTransport({
     host: cfg.host,
     port: cfg.port,
     secure: cfg.port === 465,
-    auth: { user: cfg.user, pass: cfg.pass },
+    ...(cfg.user && cfg.pass ? { auth: { user: cfg.user, pass: cfg.pass } } : {}),
   });
   lastConfigHash = hash;
   return transport;

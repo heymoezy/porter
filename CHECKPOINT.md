@@ -1,3 +1,38 @@
+## 2026-07-29 — v6.136.0: SMTP CREDENTIALS OPTIONAL (groundwork for the standalone mail server)
+
+Moe's decision, twice reaffirmed after I flagged deliverability risk: Porter sends its own mail, standalone,
+NO Google relay. "i don't want to configure through google so let's be completely stand alone for porter."
+
+⚠️ I INITIALLY ARGUED THE WRONG WAY AND THE DNS PROVES HIM RIGHT. I pushed a Google relay because ymc/BYD/
+themozaic all use one. But askporter.app publishes `v=spf1 mx ip4:76.13.190.52 ~all` — it authorises THIS
+BOX ONLY and NOT Google — plus `p=quarantine`, the strictest DMARC in the workspace. Relaying Porter's mail
+through Google would fail SPF *and* DKIM alignment and be quarantined. Standalone is what this DNS was built
+for. The remaining risk is reputation (PTR), not authentication.
+
+Other findings:
+- Stalwart was PLANNED and NEVER INSTALLED (tool-detector.ts:348 states it outright), yet index.ts:269 still
+  claims "Stalwart is the primary mail backend" and email.ts:229 claims it handles inbound webhooks. False.
+  smtp_host=127.0.0.1:587 has always pointed at a server that does not exist.
+- A DKIM public key is published under selector `default` whose PRIVATE KEY IS GONE — not on disk anywhere.
+  Generated a fresh 2048-bit pair under selector `porter` instead of trying to revive it.
+- ⚠️ Outbound :25 is OPEN on this host — the usual VPS dealbreaker does not apply.
+- ⚠️ PTR = srv1379868.hstgr.cloud, not mail.askporter.app. Most likely reason Gmail would filter. Needs
+  Hostinger. Flagged twice.
+- ymc relays via smtp.gmail.com as noreply@ymc.capital; BYD's forgot-password was DELETED in v0.59.0 for
+  being fake (it compared against the literal string "reset2026"). BYD is not a model to copy.
+
+CODE: getSmtpConfig required user+pass; a loopback relay needs neither. The transport also passed `auth`
+unconditionally, which is an ERROR against a server not advertising AUTH. Both fixed. Cleared stored
+smtp_user/smtp_pass.
+
+PREPARED, needs sudo: ops/mail/install-mailserver.sh · ops/mail/verify-mail.sh (checks the RECEIVING
+server's verdict in /var/log/mail.log — Porter fails soft since v6.132.0, so a 200 proves nothing).
+
+⚠️ VERSION COLLISION: a parallel session shipped its own v6.135.0 while I was building mine. Both branches
+claimed 6.135.0; ff-merge refused, all three ceremony files conflicted. Mine renumbered to 6.136.0. ALSO: my
+merge command piped git through `tail`, so the pipeline exit status masked the failure and the `&&` chain
+carried on to build+restart. Never pipe a command whose exit status gates the next step.
+
 ## 2026-07-29 - v6.135.0 - the DEGRADED alert was TRUE: uptime-counted scheduling froze every cadence
 
 Alert: "runnables registry frozen — last reconcile 69m ago". Diagnosed before restarting, because this alert
