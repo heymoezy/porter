@@ -33,6 +33,7 @@ import { migrateAcxV2 } from './db/migrate-acx-v2.js';
 import { migrateAcxV3 } from './db/migrate-acx-v3.js';
 import { migrateSinV1 } from './db/migrate-sin-v1.js';
 import { migrateTdeV1 } from './db/migrate-tde-v1.js';
+import { migrateAtkV1 } from './db/migrate-atk-v1.js';
 import { migrateAjqV1 } from './db/migrate-ajq-v1.js';
 import { migratePcpV1 } from './db/migrate-pcp-v1.js';
 import { migratePcpV2 } from './db/migrate-pcp-v2.js';
@@ -198,6 +199,7 @@ const start = async () => {
     await migrateAcxV3(pool);
     await migrateSinV1(pool);
     await migrateTdeV1(pool);
+    await migrateAtkV1(pool);
     await migrateAjqV1(pool);
     await migratePcpV1(pool);
     await migratePcpV2(pool);

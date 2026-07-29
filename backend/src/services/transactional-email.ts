@@ -13,6 +13,7 @@
  * every Porter restart an outage window for ymc auth/client mail. Rationale
  * recorded in /home/lobster/projects/_ops/mirrors.tsv.
  */
+import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import { pool } from '../db/client.js';
@@ -225,9 +226,19 @@ export async function sendDripReminder(opts: {
 
 // ── Token Helpers ────────────────────────────────────────────────────────────
 
+// These six digits are the ONLY thing standing between an email address and a
+// password reset, so they must come from the CSPRNG. Math.random() is a seeded
+// xorshift whose internal state is recoverable from a handful of observed
+// outputs — and this function feeds `reset_password`, not just email
+// verification, so predicting it is account takeover rather than a nuisance.
 export function generateCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
+  return String(crypto.randomInt(100000, 1000000)); // 6 digits
 }
+
+// Five bad guesses burn the code. Without a cap the 10^6 space over a 15-minute
+// TTL is walkable by a script, and verifyAuthToken previously charged nothing at
+// all for a miss — an unauthenticated, unlimited oracle against every account.
+export const MAX_TOKEN_ATTEMPTS = 5;
 
 export async function createAuthToken(email: string, purpose: string, ttlMinutes = 15): Promise<string> {
   const code = generateCode();
@@ -252,11 +263,26 @@ export async function verifyAuthToken(email: string, code: string, purpose: stri
 
   const token = (await pool.query(`
     SELECT id FROM auth_tokens
-    WHERE email = $1 AND code = $2 AND purpose = $3 AND used_at IS NULL AND expires_at > $4
+    WHERE email = $1 AND code = $2 AND purpose = $3 AND used_at IS NULL
+      AND expires_at > $4 AND attempts < $5
     ORDER BY created_at DESC LIMIT 1
-  `, [email, code, purpose, now])).rows[0] as { id: number } | undefined;
+  `, [email, code, purpose, now, MAX_TOKEN_ATTEMPTS])).rows[0] as { id: number } | undefined;
 
-  if (!token) return false;
+  if (!token) {
+    // Wrong (or expired, or already-burned) code. Charge the attempt against
+    // whatever live token exists for this email+purpose — createAuthToken
+    // invalidates prior unused tokens, so there is at most one — and mark it
+    // used the moment the cap is reached. The attacker then has to trigger a
+    // fresh email to buy another five guesses. Guarded in SQL rather than
+    // read-then-write so concurrent guesses cannot race past the cap.
+    await pool.query(`
+      UPDATE auth_tokens
+         SET attempts = attempts + 1,
+             used_at = CASE WHEN attempts + 1 >= $4 THEN EXTRACT(EPOCH FROM NOW()) ELSE used_at END
+       WHERE email = $1 AND purpose = $2 AND used_at IS NULL AND expires_at > $3
+    `, [email, purpose, now, MAX_TOKEN_ATTEMPTS]);
+    return false;
+  }
 
   // Mark as used
   await pool.query(`UPDATE auth_tokens SET used_at = EXTRACT(EPOCH FROM NOW()) WHERE id = $1`, [token.id]);

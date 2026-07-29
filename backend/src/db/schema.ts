@@ -297,6 +297,9 @@ export const authTokens = pgTable('auth_tokens', {
   purpose: text('purpose').notNull(),
   expiresAt: doublePrecision('expires_at').notNull(),
   usedAt: doublePrecision('used_at'),
+  // Failed guesses against this code. Burned at MAX_TOKEN_ATTEMPTS (5) — see
+  // services/transactional-email.ts. Added by migrate-atk-v1.
+  attempts: integer('attempts').notNull().default(0),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
 });
 

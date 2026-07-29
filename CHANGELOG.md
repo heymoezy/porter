@@ -1,3 +1,57 @@
+## v6.139.0 (2026-07-29) — the login form accepted unlimited password guesses
+
+Round 2 of the security work opened by v6.128.0. Four items, one of them reversed by decision.
+
+**`POST /api/v1/auth/login` had no brute-force budget at all.** The `rate_limits` tables in this repo
+meter API and gateway usage and have never been consulted by the login path — so guessing was limited
+only by how fast scrypt answers, against a form that fronts the box's only `platform_admin`. Now eight
+failures per (ip, email) per 15 minutes, in `lib/login-rate-limit.ts`.
+
+That module is copied from BYD's rather than ymc's, and the choice matters. **ymc burns the credential**
+— NULLs `password_hash` — after five failures, which is only safe where the owner can recover, and ymc's
+recovery is the emailed reset code. Porter's mail does not deliver (see below), so a burn here would be a
+permanent lockout triggerable by anyone who knows the admin's address: a denial of service handed to the
+attacker. A time-boxed counter costs the attacker the same and costs the owner fifteen minutes.
+
+Keying on IP is only meaningful because v6.128.0 set `trustProxy`. Before that, every request off the
+internet reported Caddy's own `127.0.0.1`, so an IP-keyed budget would have been one global bucket —
+the first attacker would have locked out every visitor at once.
+
+- **Reset codes now come from the CSPRNG.** `generateCode()` used `Math.random()`, a seeded xorshift
+  whose state is recoverable from a handful of outputs. It feeds `reset_password`, so predicting it is
+  account takeover. Now `crypto.randomInt(100000, 1000000)`.
+- **And those codes now have a guess limit.** `verifyAuthToken()` charged nothing for a miss: 10^6 codes,
+  a 15-minute TTL, unlimited attempts, unauthenticated. Five failures burns the token (`migrate-atk-v1`
+  adds `auth_tokens.attempts`). The increment is a guarded `UPDATE`, not read-then-write, so concurrent
+  guesses cannot race past the cap.
+- **`GET /api/v1/health` no longer publishes the topology.** It was returning AI backend URLs and models,
+  database engine and latency, and seven days of token usage to anonymous callers. Liveness stays public
+  because monitoring needs it — anonymous now gets `status` + `porter_version`, which is everything the
+  release smoke and `admin/deploy.sh` actually read. The full body is unchanged for a caller on loopback
+  or a signed-in `platform_admin`.
+- **The `system` row is no longer an account.** It held `moe@askporter.app` — the same address as `moe`
+  until a parallel session split them this morning — while being nothing but the string background writes
+  attribute to. Verified before touching it: `plugins/auth.ts` synthesises its `sessionUser` in memory and
+  never reads the row, no foreign key references `users`, it had no sessions, and every other `'system'`
+  in the codebase is a literal. Its email is now NULL and its credential empty, and `/login` refuses any
+  row without a usable hash — so the rule is enforced in code, not just in data.
+
+### Deliberately reverted: `/auth/change-password` still does not ask for the current password
+
+A re-auth check was written and backed out the same day on Moe's call. It is a real hole — a stolen
+`porter_session` cookie converts to permanent ownership of the account, and `sameSite:'strict'` does
+nothing about a cookie that has actually been stolen. But in *this* deployment the fix would have been a
+lockout mechanism: `smtp_host` is `127.0.0.1:587` with **no MTA listening**, so the emailed reset cannot
+be delivered, and requiring a password nobody holds would leave direct database access as the only way
+back in. The risk is accepted and recorded. Revisit when mail works — a test pins the revert so it does
+not creep back in unnoticed.
+
+**Open item, now tracked in CHECKPOINT:** Porter cannot send mail. This breaks password reset
+platform-wide, not just one account. v6.132.0 made the failure soft rather than a 500; soft-failing is
+still not delivering.
+
+255 tests, 0 failures (13 new).
+
 ## v6.138.0 (2026-07-29) — 207 skills, 20 assigned, none ever loaded
 
 `selectSkills()` runs on every dispatch and its disk read has always failed. `SKILLS_ROOT` resolved

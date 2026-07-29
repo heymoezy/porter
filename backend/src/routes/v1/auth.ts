@@ -11,6 +11,9 @@ import {
   sendVerificationCode, sendPasswordResetCode,
 } from '../../services/transactional-email.js';
 import { getSetting } from '../../lib/workspace-settings.js';
+import {
+  clearLoginFailures, loginAttemptKey, loginRateLimited, recordLoginFailure,
+} from '../../lib/login-rate-limit.js';
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -286,6 +289,17 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
     const { email, password } = parsed.data;
     const emailLower = email.toLowerCase().trim();
 
+    // Brute-force budget: 8 failures per (ip, email) per 15 minutes. Checked
+    // BEFORE the row lookup so a limited caller costs us neither a query nor a
+    // scrypt derivation. The message names the attempt count, never whether the
+    // address exists — /forgot-password and /resend-code both go out of their
+    // way to avoid confirming membership and this must not become the oracle
+    // they removed.
+    const attemptKey = loginAttemptKey(request.ip, emailLower);
+    if (loginRateLimited(attemptKey)) {
+      return reply.code(429).send(err('TOO_MANY_ATTEMPTS', 'Too many failed attempts. Try again in 15 minutes.'));
+    }
+
     // Lookup by email
     const user = (await pool.query(
       "SELECT username, display_name, password_hash, salt, email_verified, status, role FROM users WHERE email = $1",
@@ -297,13 +311,32 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
     } | undefined;
 
     if (!user) {
+      recordLoginFailure(attemptKey);
+      return reply.code(401).send(err('INVALID_CREDENTIALS', 'Invalid email or password'));
+    }
+
+    // A row with no usable credential is a NON-LOGIN IDENTITY, not an account
+    // with a blank password. `system` is one: it exists so background writes have
+    // something to attribute to, and plugins/auth.ts synthesises its sessionUser
+    // for service-token callers without ever reading this row. It must never be
+    // reachable through the front door. verifyPassword would fail on a null hash
+    // anyway; this states the rule instead of relying on a comparison accident,
+    // and it answers with the same message as any other bad login so the
+    // distinction is not an enumeration oracle.
+    if (!user.password_hash || !user.salt) {
+      recordLoginFailure(attemptKey);
       return reply.code(401).send(err('INVALID_CREDENTIALS', 'Invalid email or password'));
     }
 
     const valid = await verifyPassword(password, user.password_hash, user.salt);
     if (!valid) {
+      recordLoginFailure(attemptKey);
       return reply.code(401).send(err('INVALID_CREDENTIALS', 'Invalid email or password'));
     }
+
+    // Correct credential — zero the budget so a legitimate user who mistyped a
+    // few times is not still carrying those failures into their next login.
+    clearLoginFailures(attemptKey);
 
     // Check email verification
     if (!user.email_verified) {
@@ -371,6 +404,20 @@ export default async function authV1Routes(fastify: FastifyInstance, _options: F
   });
 
   // POST /api/v1/auth/change-password
+  //
+  // DELIBERATELY does NOT ask for the current password (decision: Moe,
+  // 2026-07-29). A re-auth check was written and reverted the same day, because
+  // in THIS deployment it would have been a lockout mechanism rather than a
+  // safety one: Porter's `smtp_host` points at 127.0.0.1:587 with no MTA
+  // listening, so the emailed reset cannot be delivered, and requiring an old
+  // password nobody holds would leave direct database access as the only way
+  // back into the account.
+  //
+  // The residual risk is accepted and recorded: a stolen `porter_session` cookie
+  // converts to permanent ownership of the account, because the holder can
+  // re-key it without proving they know the password. `sameSite:'strict'` blunts
+  // cross-site CSRF but does nothing about a cookie that has actually been
+  // stolen. Revisit when mail delivery works — not before.
   fastify.post('/change-password', {
     preHandler: [fastify.requireAuth],
   }, async (request, reply) => {

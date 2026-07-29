@@ -1,3 +1,82 @@
+## 2026-07-29 — v6.139.0: THE LOGIN FORM ACCEPTED UNLIMITED PASSWORD GUESSES
+
+Round 2 of the v6.128.0 security work. Four deferred items; one reversed on Moe's call. 255 tests, 0 fail
+(13 new in `__tests__/auth-hardening.test.ts`). tsc 0. Restarted 14:53:21 UTC; `/health` reads 6.139.0.
+
+**NEW (not in the brief) — `/api/v1/auth/login` had NO brute-force protection.** The `rate_limits` tables
+meter API/gateway usage and have never been read by the login path. Added `lib/login-rate-limit.ts`:
+8 failures per (ip, email) per 15 min, checked before the row lookup so a limited caller costs neither a
+query nor a scrypt derivation.
+
+Copied BYD's limiter, NOT ymc's, and the reason is load-bearing: **ymc burns the credential** (NULLs
+`password_hash`) after 5 failures. That is only safe where the owner can recover, and ymc's recovery is the
+emailed code. Porter cannot send mail (see OPEN below), so a burn here would be a permanent lockout that
+anyone knowing the admin's address could trigger — a DoS handed to the attacker. Time-boxed counter
+instead: same cost to the attacker, 15 minutes to the owner, destroys nothing.
+IP-keying only became meaningful when v6.128.0 set `trustProxy`; before that every internet request
+reported Caddy's `127.0.0.1`, so an IP budget would have been ONE global bucket.
+
+- **Reset codes → CSPRNG.** `generateCode()` was `Math.random()` (seeded xorshift, state recoverable from a
+  few outputs) feeding `reset_password`. Now `crypto.randomInt(100000, 1000000)`.
+- **Reset codes → attempt cap.** `verifyAuthToken()` charged nothing for a miss: 10^6 codes / 15-min TTL /
+  unlimited guesses / unauthenticated. `migrate-atk-v1` adds `auth_tokens.attempts`; 5 failures burns the
+  token. Increment is a guarded UPDATE (not read-then-write) so concurrent guesses can't race the cap.
+- **`GET /api/v1/health` split by caller.** Was publishing backend URLs+models, DB engine/latency and 7 days
+  of token usage to anonymous callers. Anonymous now gets `{status, porter_version}` — everything the
+  release smoke and `admin/deploy.sh` read (both check status codes only; `ship.sh` uses the separate root
+  `/health`). Full body unchanged for loopback or a signed-in `platform_admin`.
+- **`system` is no longer an account.** Investigated before acting: `plugins/auth.ts` synthesises its
+  sessionUser in memory and NEVER reads the row; zero FKs reference `users`; it had zero sessions; every
+  other `'system'` in the codebase is a string literal. Its email is NULL and credential empty
+  (`password_hash` is NOT NULL, so empty-string is the sentinel), and `/login` now refuses any row without a
+  usable hash — enforced in code, not only in data.
+
+### REVERSED BY DECISION — `/auth/change-password` still does not ask for the current password
+
+Moe, 2026-07-29: *"no i don't want it to ask for the password keep it as it is."* A re-auth check was
+written and backed out the same day. The hole is real and **accepted**: a stolen `porter_session` cookie
+converts to permanent account ownership, and `sameSite:'strict'` blunts cross-site CSRF but does nothing
+about a cookie that has actually been stolen. In THIS deployment the fix would have been a lockout
+mechanism, not a safety one — with mail dead, requiring a password nobody holds leaves direct DB access as
+the only recovery. A test pins the revert so it cannot creep back unnoticed. Revisit when mail works.
+
+### ⚠️ OPEN ITEM — Porter cannot send mail (breaks password reset platform-wide)
+
+`workspace_settings.smtp_host = 127.0.0.1`, `smtp_port = 587`, and **nothing is listening on that port**
+(connection refused; no MTA on the box). This is not just Moe's recovery — **every** account's password
+reset and every email-verification code is undeliverable. v6.132.0 made the failure soft instead of a 500,
+which fixed the enumeration oracle and the crash, but soft-failing is still not delivering.
+
+Until an MTA exists, the only recovery path is on-box: POST `/auth/forgot-password`, read the code out of
+`auth_tokens`, POST `/auth/reset-password`. Note the new cap means that code now dies after 5 wrong guesses.
+Decide: local relay (Stalwart is already in the estate) vs. an external SMTP identity.
+
+### Verified from OUTSIDE
+- `https://askporter.app/api/v1/health` → `{status, porter_version}` only. Loopback → full detail.
+- `/api/v1/intellect/directives`, `/api/v1/sessions/search`, `/api/admin/brain/summary`,
+  `/api/admin/health/logs` → all still **401** from the public host.
+- Service token: **200** on 127.0.0.1, **401** presented to askporter.app (trustProxy gate holds).
+- Credential-less hook path `/api/admin/health/log-external`: **200** from loopback, **401** from outside.
+  Admin SPA `/` and `/login` → 200.
+- Brute force: attempts 1–8 → 401, 9th → **429**; the correct password while limited → **429** (no bypass);
+  a different email from the same IP → 401 (per-account budget, no collateral lockout).
+- Token cap: 5 wrong codes drove `attempts` 1→5 and set `used_at`; the **correct** code then returned
+  INVALID_CODE.
+- `moe@askporter.app` (the old shared address) no longer authenticates.
+
+### Moe's account — NOT touched
+Password NOT rotated (two sessions already did that blind this morning). Proven untouched rather than
+asserted: `md5(password_hash)`=`127ccf56…`, `md5(salt)`=`1975a0de…` are **byte-identical** before and after,
+role still `platform_admin`, email `moe@themozaic.com`, and all **4** of his sessions survive.
+The login path itself was proven end-to-end on a throwaway `platform_admin` (login 200 → `/auth/me` returns
+`platform_admin`), then deleted — users/sessions/auth_tokens/customer_events/cli_activity_log all verified
+back to 0 rows.
+
+**Note on the brief:** its closing check ("verify `moe@askporter.app` still logs in") had become the WRONG
+test — a parallel session moved Moe to `moe@themozaic.com` at ~07:1x and added the unique index on
+`lower(email)`, so that address now belongs to `system`. Verifying it still logged in would have been
+verifying the bug.
+
 ## 2026-07-29 — v6.138.0: 207 SKILLS, 20 ASSIGNED, NONE EVER LOADED
 
 Plan M3. selectSkills() runs on EVERY dispatch and its disk read has always failed: SKILLS_ROOT resolved

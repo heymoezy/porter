@@ -1276,3 +1276,31 @@
 - LESSON: this ledger locks FILES, not LIVE ACCOUNTS. Rotating a credential, wiping sessions, or any
   destructive op on a live account must claim it here FIRST. Two agents both "containing" the same
   account is how a lockout happens.
+
+## porter-security-round2 (Opus 5 1M) — 2026-07-29 12:2x (SGT)
+- Workstream: the four deferred items from the v6.128.0 security report.
+  (1) /auth/change-password takes no current password + drops no sessions.
+  (2) reset codes use Math.random() + auth_tokens has no attempt cap.
+  (3) `system` is a login row holding moe@askporter.app.
+  (4) GET /api/v1/health is public and verbose.
+- Files claimed (EDIT): backend/src/routes/v1/auth.ts · backend/src/routes/v1/health.ts ·
+  backend/src/services/transactional-email.ts · backend/src/db/schema.ts ·
+  backend/src/index.ts (wire one migration only) ·
+  admin/frontend.archived/app/routes/settings.tsx
+  (CREATE): backend/src/db/migrate-atk-v1.ts · backend/src/__tests__/auth-hardening.test.ts
+  (SHIP): backend/package.json · backend/src/lib/porter-releases.ts · CHANGELOG.md · CHECKPOINT.md
+- ⚠️ LIVE-ACCOUNT CLAIM (per the 07:13 lesson — this ledger must lock accounts, not just files):
+  I claim the `system` users row. I do NOT claim and will NOT touch the `moe` row, its
+  password_hash/salt, or its 4 live sessions. Any test account I create is deleted before I finish.
+- SCOPE CHANGED MID-SESSION (Moe): item 1 (require current_password on /change-password) was written
+  then REVERTED — with smtp dead it would be a lockout, not a safety. Residual risk accepted+recorded.
+  Added instead: a real login brute-force cap (BYD-style in-memory (ip,email), NOT ymc's account-burn —
+  a burn is a permanent lockout when mail cannot deliver). settings.tsx therefore NOT touched, no SPA
+  deploy needed.
+- Status: **DONE** — shipped v6.139.0. tsc 0; 255 tests / 0 fail (13 new). Restarted 14:53:21 UTC.
+  Verified from OUTSIDE: public /api/v1/health reduced; the four v6.128.0 routes still 401; service
+  token 200 loopback / 401 public; credential-less hook path 200 loopback / 401 public; SPA 200.
+  `moe` row PROVEN untouched (md5 of hash+salt byte-identical before/after, 4 sessions intact,
+  password NOT rotated). Throwaway test account + all probe rows deleted (verified 0).
+  ⚠️ Left OPEN for whoever picks it up: Porter cannot send mail (smtp_host 127.0.0.1:587, no listener)
+  — password reset is broken platform-wide, not just for Moe. Recorded in CHECKPOINT.

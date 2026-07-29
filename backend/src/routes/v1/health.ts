@@ -3,6 +3,7 @@ import { pool } from '../../db/client.js';
 import { config } from '../../config.js';
 import { ok } from '../../lib/envelope.js';
 import { PORTER_VERSION } from '../../version.js';
+import { isLoopbackRequest } from '../../plugins/auth.js';
 
 interface BackendStatus {
   name: string;
@@ -29,8 +30,31 @@ async function probeBackend(name: string, url: string, model: string): Promise<B
 }
 
 export default async function healthV1Routes(fastify: FastifyInstance) {
-  // GET /api/v1/health — aggregate status of all services
-  fastify.get('/', async (_request, reply) => {
+  // GET /api/v1/health — liveness for everyone, detail for the operator.
+  //
+  // This route is unauthenticated by necessity: monitoring has to be able to ask
+  // whether Porter is up without holding a credential, and both the release
+  // smoke (release.manifest.json) and admin/deploy.sh poll it. But "is it up"
+  // never required publishing the internal topology, and until now an anonymous
+  // request to askporter.app got the AI backend URLs and models, the database
+  // engine and its latency, and seven days of token-usage totals — a free map of
+  // what to attack and a running signal of how busy the box is.
+  //
+  // So the answer is now split by who is asking. Anonymous callers get liveness
+  // only: status + version, which is everything the smoke checks and everything
+  // an uptime monitor needs. The full body is unchanged for an operator — a
+  // process on this box (the loopback gate, real only since `trustProxy` was set
+  // in index.ts) or a signed-in platform_admin.
+  fastify.get('/', async (request, reply) => {
+    const privileged = isLoopbackRequest(request) || request.sessionUser?.role === 'platform_admin';
+
+    if (!privileged) {
+      return reply.send(ok({
+        status: 'ok',
+        porter_version: PORTER_VERSION,
+      }));
+    }
+
     // Probe AI backends in parallel
     const backends = await Promise.all([
       probeBackend('Ollama', config.ollamaUrl, config.ollamaModel),
@@ -69,6 +93,9 @@ export default async function healthV1Routes(fastify: FastifyInstance) {
     }
 
     return reply.send(ok({
+      // `status` and `porter_version` are the two fields BOTH shapes carry, so a
+      // caller that only needs liveness reads the same keys either way.
+      status: 'ok',
       porter_version: PORTER_VERSION,
       db_engine: 'postgresql',
       db_connected: dbStatus === 'up',
