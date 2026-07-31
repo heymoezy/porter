@@ -219,6 +219,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
                       // message. claude_cli 2.1.x rejects fake "System:" text
                       // in the user turn as a prompt-injection attempt.
       tools?: 'none' | 'default' | string[];  // v6.21.0 (Tom-bug fix 2026-05-18): tool surface; string[] = bounded worker allow-list
+      workspace?: string;                     // a git worktree to run in; omitted = the /tmp sandbox (see DispatchRequest.workspace)
                       // on the underlying adapter. Cross-app callers (Tom on
                       // openclaw, Recall summarize/query) MUST pass 'none' so
                       // claude doesn't try to use its agentic tools (WebSearch,
@@ -242,6 +243,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
     const raw = body?.raw === true;
     // Explicit tools override > raw default. raw=true → tools='none' unless caller overrides.
     const tools: 'none' | 'default' | string[] = body?.tools ?? (raw ? 'none' : 'default');
+    const workspace = typeof body?.workspace === 'string' && body.workspace.trim() ? body.workspace.trim() : undefined;
     const model = typeof body?.model === 'string' && body.model.trim() ? body.model.trim() : undefined;
     // v6.31.0: consumer attribution slug (e.g. 'tom') — flows to
     // bridge_dispatch_log.source_agent for the Bridge consumers view.
@@ -486,6 +488,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       directiveStats,  // Phase 38: directive selection stats for context_stats logging
       dispatchStrategy,  // Phase 45: strategy logged in bridge_dispatch_log
       tools,  // Tom-bug fix 2026-05-18: pass through tool surface knob
+      ...(workspace ? { workspace } : {}),
       model,  // 2026-06-02: caller model override → claude_cli --model (Tom on Sonnet)
       sourceAgent,  // v6.31.0: consumer attribution → dispatch log
     });

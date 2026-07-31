@@ -57,6 +57,26 @@ export interface BridgeDispatchRequest {
    * Adapters that don't expose tools (codex_cli) ignore this field.
    */
   tools?: 'none' | 'default' | string[];
+
+  /**
+   * Run the session in a REAL directory instead of the /tmp sandbox.
+   *
+   * ⚠️ THIS IS A DELIBERATE, NARROW EXCEPTION TO THE ADAPTER'S ISOLATION, and it
+   * exists because the isolation was making Porter unusable as the harness for
+   * the one job that matters most. `claude_cli` pins `cwd = SANDBOX_CWD` (a /tmp
+   * dir with no CLAUDE.md ancestors) so a dispatched worker cannot see or touch
+   * a repo. That is exactly right for a research worker — and it means a
+   * code-changing job CANNOT run through Porter at all. So ymc.capital grew its
+   * own runner that spawns `claude` directly, bypassing the router, against the
+   * standing rule that Porter is always the router. Two harnesses, because the
+   * sandbox left no third option.
+   *
+   * Omitted (the default, and every existing caller) → unchanged behaviour:
+   * /tmp sandbox, read-only tool set. A workspace is only ever used when a
+   * caller asks for one explicitly, and the caller is responsible for it being
+   * a throwaway git worktree rather than a live tree.
+   */
+  workspace?: string;
 }
 
 export interface BridgeDispatchResult {

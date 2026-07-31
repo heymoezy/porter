@@ -81,7 +81,7 @@ export default async function agentsV1Routes(fastify: FastifyInstance) {
   // ── Enqueue a delegation job → runs async via job-executor ──────────────
   fastify.post('/:id/jobs', { preHandler: [fastify.requireAuth] }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const b = request.body as { task?: string; callback_url?: string; allowed_tools?: string[]; backend?: string };
+    const b = request.body as { task?: string; callback_url?: string; allowed_tools?: string[]; backend?: string; repo?: string };
     if (!b.task?.trim()) return reply.code(400).send(err('INVALID_INPUT', 'task required', request.id));
 
     const agent = (await pool.query(
@@ -101,7 +101,14 @@ export default async function agentsV1Routes(fastify: FastifyInstance) {
           : READ_ONLY_TOOLS);
 
     const jobId = randomUUID();
-    const triggerData = { task: b.task.trim(), callback_url: b.callback_url ?? null, allowed_tools: allowed };
+    // `repo` turns this into a CODE-CHANGING job: the executor creates a
+    // throwaway worktree of that repository and runs the session inside it.
+    // Without it, nothing changes — the session runs in the /tmp sandbox with
+    // whatever tools the allow-list permits, exactly as before.
+    const triggerData = {
+      task: b.task.trim(), callback_url: b.callback_url ?? null, allowed_tools: allowed,
+      ...(typeof b.repo === 'string' && b.repo.trim() ? { repo: b.repo.trim() } : {}),
+    };
     await pool.query(
       `INSERT INTO agent_jobs
          (id, agent_id, trigger_type, trigger_data, prompt, status, scheduled_for, attempt_count, source, assigned_gateway)

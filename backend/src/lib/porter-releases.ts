@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.141.0',
+    date: '2026-07-31',
+    title: 'Porter can now run a job that changes code \u2014 one harness instead of two',
+    bullets: [
+      'Porter could dispatch a Claude session, but only ever into an empty scratch directory with read-only tools. That is right for a research job and it meant a job that needs to EDIT CODE could not go through Porter at all \u2014 so YMC had grown its own runner that starts Claude directly, going around the router entirely. Two harnesses, because there was no third option.',
+      'A job can now name a repository. Porter makes a throwaway copy of it on its own branch, runs the session in there, reports exactly which files changed, and cleans the copy up afterwards \u2014 keeping the branch, because it holds the only copy of the work.',
+      'The live code is protected by a check, not by good intentions: the session refuses to start anywhere that is a real checkout rather than a throwaway copy, and it is barred from deploying, committing, pushing or restarting anything. It also runs without any of Porter\u2019s credentials.',
+      'Nothing changes for existing jobs \u2014 a job that does not name a repository behaves exactly as before.',
+    ],
+  },
+  {
     version: '6.140.0',
     date: '2026-07-29',
     title: 'Tom was one long instruction away from going silent, and nothing was watching',

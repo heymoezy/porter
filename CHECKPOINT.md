@@ -1,3 +1,44 @@
+## 2026-07-31 - v6.141.0 - PORTER CAN RUN A CODE-CHANGING JOB (one harness, at last)
+
+Moe: *"is tom handing off jobs to porter or is he controlling a claude code cli session? porter is the
+harness."* It was BOTH, and the sandbox is why.
+
+`adapters/claude-cli.ts` pins `cwd = SANDBOX_CWD` (a /tmp dir with no CLAUDE.md ancestors) with a
+read-only tool set. Correct for a research worker -- and it means a job that must EDIT CODE cannot run
+through Porter at all. So ymc.capital grew `scripts/tom-dev-runner.ts`, spawning `claude` directly in a
+worktree, OUTSIDE the router, against the standing "Porter is ALWAYS the router" rule. Two harnesses,
+because the sandbox left no third option.
+
+NOW: `POST /api/v1/agents/:id/jobs` accepts `repo`. The executor creates a throwaway worktree, runs the
+session inside it, reports the real diff, and removes the directory.
+- `services/bridge/workspace.ts` (NEW) -- worktree lifecycle, ported guard-for-guard from
+  tom-dev-runner: never the live tree · no deploy/commit/push/restart (WORKSPACE_RULES, appended to
+  every workspace task) · SANITISED env allowlist (no DATABASE_URL, no tokens) · node_modules
+  symlinked in so the session can actually typecheck its own work.
+- `DispatchRequest.workspace` + `resolveCwd()` guard: the path must exist AND `.git` must be a FILE,
+  not a directory. In a linked worktree `.git` is a file (`gitdir: …`); in a primary checkout it is a
+  directory. **That one distinction is what stops a write-enabled session being pointed at
+  `~/projects/ymc.capital` itself.** A failed check falls back to the sandbox and warns.
+- Default UNCHANGED: no `repo` -> /tmp sandbox, caller's read-only allow-list, 240s. A workspace job
+  gets the full agentic tool set and 1,800s, because editing code with read-only tools is not a
+  sandbox, it is a job that cannot work.
+- Branch SURVIVES cleanup deliberately -- it holds the only copy of what the session wrote, and
+  destroying it on a failed run would discard real work silently.
+
+⚠️ THREADING BUG CAUGHT BY TESTING, NOT BY READING. First run: Porter created the worktree, LOGGED it,
+and the session still ran in /tmp. `selectStreamBackend` spreads unknown keys into RoutingContext, so
+`workspace` was swept into routing state and never reached the adapter. Anything not named explicitly
+in `StreamOptions` is silently dropped. Fixed in stream-service.ts (option + destructure + forward).
+The agent itself flagged it: *"the working dir is not a git worktree."*
+
+VERIFIED end-to-end, 3 runs: session confirms `git rev-parse --show-toplevel` = the worktree and
+`--is-inside-work-tree` true · file created there · nothing committed · **live tree untouched** ·
+worktree dir removed, branch kept · diff report accurate (was "3 file(s) changed" for a 1-file job --
+our own node_modules symlinks; filtered in workspaceDiff, since a worktree's `info/exclude` is read
+from the COMMON git dir and writing it would alter the shared repo). Test branches deleted.
+
+NEXT (ymc side): tom-dev-runner becomes a thin caller of this; "flagged to dev" spawns immediately.
+
 ## 2026-07-29 — v6.140.0: TOM WAS ONE LONG PROMPT FROM GOING SILENT, AND NOTHING WAS WATCHING
 
 Found while scoping "should Tom use Porter's skills". The answer turned out to be "not until this is fixed".

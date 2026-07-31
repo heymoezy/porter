@@ -14,7 +14,7 @@
 
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
+import { mkdirSync, writeFileSync, unlinkSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -98,6 +98,37 @@ try {
   mkdirSync(SANDBOX_CWD, { recursive: true });
 } catch {
   // best-effort; spawn will surface a clearer error if cwd is unusable
+}
+
+/**
+ * Resolve the working directory for a dispatch.
+ *
+ * The sandbox is the default and stays the default. A workspace is honoured only
+ * when the caller passes one — but "the caller asked for it" is not sufficient
+ * licence to run a write-enabled Claude anywhere on disk, so the path is checked
+ * rather than trusted:
+ *
+ *   · it must exist and be a directory;
+ *   · it must be a git WORKTREE, not a primary checkout. In a linked worktree
+ *     `.git` is a FILE containing `gitdir: …`; in a main clone it is a
+ *     directory. That single distinction is what stops a code-changing session
+ *     being pointed at `~/projects/ymc.capital` itself — the live tree that
+ *     other sessions and the deploy hook are using.
+ *
+ * A failed check falls back to the sandbox and says so. Refusing loudly beats
+ * running a write-capable session somewhere nobody intended.
+ */
+function resolveCwd(workspace: string | undefined): { cwd: string; isWorkspace: boolean } {
+  if (!workspace) return { cwd: SANDBOX_CWD, isWorkspace: false };
+  try {
+    if (!statSync(workspace).isDirectory()) throw new Error('not a directory');
+    const dotGit = statSync(`${workspace}/.git`);
+    if (dotGit.isDirectory()) throw new Error('primary checkout, not a worktree — refusing to run in a live tree');
+    return { cwd: workspace, isWorkspace: true };
+  } catch (e) {
+    console.warn(`[claude-cli] workspace "${workspace}" rejected (${e instanceof Error ? e.message : e}) — falling back to the sandbox.`);
+    return { cwd: SANDBOX_CWD, isWorkspace: false };
+  }
 }
 
 export class ClaudeCLIAdapter implements GatewayAdapter {
@@ -188,6 +219,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     // Bounded worker sandbox: an explicit string[] allow-list restricts claude
     // to EXACTLY those tools (read-only research set for delegated workers).
     const toolAllowList = Array.isArray(req.tools) && req.tools.length > 0 ? req.tools.join(',') : null;
+    const { cwd, isWorkspace } = resolveCwd(req.workspace);
     const sysPrompt = systemPromptArgs(req.systemPrompt, 'dispatch');
     const args = [
       '-p',
@@ -203,7 +235,11 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       ...(noTools
         ? ['--tools', '']
         : ['--permission-mode', 'auto',
-           '--allowedTools', toolAllowList ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
+           // A workspace dispatch is a code-changing job by definition, so it
+           // gets the full agentic set. Without one, an explicit allow-list from
+           // the caller still wins — that is how a research worker stays
+           // read-only.
+           '--allowedTools', (isWorkspace ? null : toolAllowList) ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
       // Isolation: skip user-level settings (hooks like porter-session-start
       // that inject Porter Memory/directives). Combined with cwd=SANDBOX_CWD
       // (no CLAUDE.md ancestors), this keeps cross-app consumers (e.g. YMC
@@ -224,7 +260,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
 
     const child = spawn(this.binaryPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: SANDBOX_CWD,
+      cwd,
       env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
     });
 
@@ -357,6 +393,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     // Bounded worker sandbox: an explicit string[] allow-list restricts claude
     // to EXACTLY those tools (read-only research set for delegated workers).
     const toolAllowList = Array.isArray(req.tools) && req.tools.length > 0 ? req.tools.join(',') : null;
+    const { cwd, isWorkspace } = resolveCwd(req.workspace);
     const sysPrompt = systemPromptArgs(req.systemPrompt, 'stream');
     const args = [
       '-p',
@@ -372,7 +409,11 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       ...(noTools
         ? ['--tools', '']
         : ['--permission-mode', 'auto',
-           '--allowedTools', toolAllowList ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
+           // A workspace dispatch is a code-changing job by definition, so it
+           // gets the full agentic set. Without one, an explicit allow-list from
+           // the caller still wins — that is how a research worker stays
+           // read-only.
+           '--allowedTools', (isWorkspace ? null : toolAllowList) ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
       // Isolation: skip user-level settings (hooks like porter-session-start
       // that inject Porter Memory/directives). Combined with cwd=SANDBOX_CWD
       // (no CLAUDE.md ancestors), this keeps cross-app consumers (e.g. YMC
@@ -393,7 +434,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
 
     const child = spawn(this.binaryPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: SANDBOX_CWD,
+      cwd,
       env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
     });
 

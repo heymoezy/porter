@@ -1,3 +1,39 @@
+## v6.141.0 (2026-07-31) — Porter can run a code-changing job (one harness, at last)
+
+Moe: *"is tom handing off jobs to porter or is he controlling a claude code cli session? porter is the
+harness."* It was **both**, and the sandbox is why.
+
+`adapters/claude-cli.ts` pins `cwd = SANDBOX_CWD` (a /tmp dir, no CLAUDE.md ancestors) with a read-only
+tool set. Correct for a research worker — and it means a job that must EDIT CODE cannot run through
+Porter at all. So ymc.capital grew `scripts/tom-dev-runner.ts`, spawning `claude` directly in a
+worktree, **outside the router**, against the standing "Porter is ALWAYS the router" rule.
+
+`POST /api/v1/agents/:id/jobs` now accepts `repo`. The executor creates a throwaway worktree, runs the
+session in it, reports the real diff, removes the directory and keeps the branch.
+
+- **`services/bridge/workspace.ts`** (new) — worktree lifecycle, ported guard-for-guard from
+  tom-dev-runner: never the live tree · no deploy/commit/push/restart (`WORKSPACE_RULES`) · sanitised
+  env allowlist (no `DATABASE_URL`, no tokens) · `node_modules` symlinked so the session can typecheck.
+- **`DispatchRequest.workspace` + `resolveCwd()`** — the path must exist AND `.git` must be a FILE, not
+  a directory. In a linked worktree `.git` is a file; in a primary checkout it is a directory. That
+  distinction is what stops a write-enabled session being pointed at the live tree. Failure falls back
+  to the sandbox and warns.
+- **Default unchanged** — no `repo` → /tmp sandbox, caller's read-only allow-list, 240s. A workspace
+  job gets the full agentic set and 1,800s: editing code with read-only tools is not a sandbox, it is
+  a job that cannot work.
+- **The branch survives cleanup deliberately** — it holds the only copy of what the session wrote.
+
+⚠️ **Threading bug caught by testing, not reading.** First run: Porter created the worktree, logged it,
+and the session still ran in /tmp. `selectStreamBackend` spreads unknown keys into `RoutingContext`, so
+`workspace` was swept into routing state and never reached the adapter — anything not named explicitly
+in `StreamOptions` is silently dropped. The agent itself flagged it: *"the working dir is not a git
+worktree."*
+
+Verified over three runs: toplevel = the worktree, file lands there, nothing committed, **live tree
+untouched**, directory removed with branch kept, diff report accurate (it had claimed "3 file(s)
+changed" for a one-file job — our own `node_modules` symlinks, now filtered in `workspaceDiff`; a
+worktree's `info/exclude` is read from the COMMON git dir, so writing it would alter the shared repo).
+
 ## v6.140.0 (2026-07-29) — Tom was one long prompt away from going silent, and nothing was watching
 
 `claude-cli.ts` passed the system prompt as a **single argv element**. Linux caps one argument at

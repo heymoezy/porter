@@ -16,6 +16,7 @@
 
 import crypto from 'node:crypto';
 import { pool } from '../db/client.js';
+import { createWorkspace, removeWorkspace, workspaceDiff, WORKSPACE_RULES, type Workspace } from './bridge/workspace.js';
 import { config } from '../config.js';
 
 const POLL_INTERVAL_MS = 5_000;
@@ -163,12 +164,29 @@ async function runDueJobs(): Promise<void> {
     `, [`job-executor:${process.pid}`]);
 
     for (const job of claimed) {
+      // Delegation jobs (Tom → worker) carry a bounded tool allow-list + a
+      // callback URL in trigger_data; heartbeat jobs carry neither.
+      // Declared OUTSIDE the try so `finally` can clean the worktree up: a
+      // worktree that outlives a failed job is a full checkout left on disk.
+      const td = (job.trigger_data ?? {}) as { allowed_tools?: string[]; callback_url?: string; task?: string; repo?: string };
+      let ws: Workspace | null = null;
       try {
-        // Delegation jobs (Tom → worker) carry a bounded tool allow-list + a
-        // callback URL in trigger_data; heartbeat jobs carry neither.
-        const td = (job.trigger_data ?? {}) as { allowed_tools?: string[]; callback_url?: string; task?: string };
         const isDelegation = job.source === 'delegation';
         const tickMessage = job.prompt ?? td.task ?? 'tick';
+
+        // A job carrying `repo` needs somewhere to write. Create a throwaway
+        // worktree on its own branch — never the live tree — and hand the
+        // session the standing rules with the task.
+        if (td.repo) {
+          try {
+            ws = createWorkspace(td.repo, job.id);
+            console.log(`[job-executor] ${job.id} workspace ${ws.dir} on ${ws.branch}`);
+          } catch (e) {
+            // No workspace means the session would silently run in /tmp and
+            // report success having changed nothing. Fail the job instead.
+            throw new Error(`workspace setup failed for ${td.repo}: ${e instanceof Error ? e.message : e}`);
+          }
+        }
         const dispatchResp = await fetch(`http://${config.host}:${config.port}/api/v1/chat/stream`, {
           method: 'POST',
           headers: {
@@ -176,14 +194,19 @@ async function runDueJobs(): Promise<void> {
             'X-Porter-Service-Token': SERVICE_TOKEN,
           },
           body: JSON.stringify({
-            message: tickMessage,
+            message: ws ? `${tickMessage}\n\n---\n${WORKSPACE_RULES}` : tickMessage,
             agent_id: job.agent_id,
             chat_id: `${isDelegation ? 'delegation' : 'heartbeat'}-${job.id}`,
             ...(job.assigned_gateway ? { backend: job.assigned_gateway } : {}),
             // Enforced read-only worker sandbox → claude_cli --allowedTools.
+            // A workspace job overrides this at the adapter: editing code with a
+            // read-only tool set is not a sandbox, it is a job that cannot work.
             ...(Array.isArray(td.allowed_tools) && td.allowed_tools.length ? { tools: td.allowed_tools } : {}),
+            ...(ws ? { workspace: ws.dir } : {}),
           }),
-          signal: AbortSignal.timeout(isDelegation ? 240_000 : 120_000),
+          // A code-changing session is not a chat turn. 240s is a sensible
+          // ceiling for a research worker and far too short for real work.
+          signal: AbortSignal.timeout(ws ? 1_800_000 : (isDelegation ? 240_000 : 120_000)),
         });
 
         if (!dispatchResp.ok) {
@@ -217,7 +240,18 @@ async function runDueJobs(): Promise<void> {
         // Delegated synthesis output is the whole point — don't truncate it to
         // 500 chars like a heartbeat tick. Keep a generous cap for a WhatsApp-
         // bound summary.
-        const resultText = lastFull.slice(0, isDelegation ? 16_000 : 500);
+        let resultText = lastFull.slice(0, isDelegation ? 16_000 : 500);
+
+        // What the session actually changed, read from the worktree rather than
+        // from what it claims. A session reporting success having written
+        // nothing is the failure mode worth catching, and only the diff shows it.
+        if (ws) {
+          const { files, diffstat } = workspaceDiff(ws.dir);
+          resultText += files.length
+            ? `\n\n---\nBranch \`${ws.branch}\` — ${files.length} file(s) changed:\n${diffstat || files.join('\n')}`
+            : `\n\n---\nBranch \`${ws.branch}\` — NO FILES CHANGED. The session finished without editing anything.`;
+        }
+
         await pool.query(
           `UPDATE agent_jobs
            SET status = 'completed',
@@ -279,6 +313,16 @@ async function runDueJobs(): Promise<void> {
             [job.id, backoffSec, errMsg.slice(0, 500)],
           );
           console.warn(`[job-executor] ${job.agent_id} job ${job.id} attempt ${job.attempt_count} failed (backing off ${backoffSec}s): ${errMsg}`);
+        }
+      } finally {
+        // Always remove the worktree DIRECTORY — success, failure or retry.
+        // Leaving them accumulates checkouts of the whole repo on disk.
+        // ⚠️ The BRANCH survives: it holds the only copy of whatever the session
+        // wrote, and destroying it on a failed run would silently discard real
+        // work. Cheap to keep, expensive to lose.
+        if (ws && td.repo) {
+          try { removeWorkspace(td.repo, ws); }
+          catch (e) { console.warn(`[job-executor] worktree cleanup failed for ${job.id}:`, e); }
         }
       }
     }
