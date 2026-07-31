@@ -1,3 +1,20 @@
+## 2026-07-31 - v6.142.0 - closed two holes the security review found in v6.141.0
+
+**1. workspaceEnv() was written and never wired.** `workspace.ts`'s header promises "the subprocess gets
+a SANITISED env — no DATABASE_URL, no tokens, no provider keys". The adapter spawned with
+`env: { ...process.env }`. A WRITE-ENABLED session editing real code therefore held Porter's entire
+environment. ⚠️ Code that contradicts its own documented guarantee is worse than no guarantee — the
+comment made it look handled. Wired at BOTH spawn sites, gated on `isWorkspace` so the sandbox path is
+untouched. VERIFIED by asking a live session: DATABASE_URL not present, PORTER_SERVICE_TOKEN not
+present, `printenv | wc -l` = 22 (was the full parent env).
+
+**2. `repo` was unvalidated user input.** Any directory on the box with a `.git` could be worktree'd and
+a write-enabled session run in it. Service-token + loopback is NOT a security boundary. `assertAllowedRepo()`
+resolves the REALPATH (string checks prove nothing against `../` or a symlink out of the tree) and
+requires containment in `PORTER_WORKSPACE_ALLOWED_ROOTS` (default `$HOME/projects`); a leading `-` is
+refused because `git -C` would read it as an option. Route rejects with 400 up front.
+VERIFIED: `/home/lobster/.claude`, `/tmp`, `-o/tmp/x` rejected; `~/projects/ymc.capital` accepted.
+
 ## 2026-07-31 - v6.141.0 - PORTER CAN RUN A CODE-CHANGING JOB (one harness, at last)
 
 Moe: *"is tom handing off jobs to porter or is he controlling a claude code cli session? porter is the

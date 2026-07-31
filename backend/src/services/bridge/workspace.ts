@@ -23,7 +23,7 @@
  *     session that cannot run a typecheck cannot verify its own work.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, symlinkSync, rmSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 /** Worktrees live OUTSIDE any projects/ tree — a scratch checkout parked under
@@ -45,15 +45,55 @@ function git(repo: string, args: string[]): string {
 }
 
 /**
+ * Roots under which a workspace repository may live.
+ *
+ * `repo` arrives in an API request body. The endpoint is service-token gated and
+ * loopback-only, but "internal" is not a security boundary — it is the thing
+ * every SSRF write-up starts by assuming. Without this check the caller chooses
+ * any directory on the box that happens to contain a `.git`, and Porter then
+ * runs a WRITE-ENABLED Claude session in it.
+ */
+const ALLOWED_ROOTS = (process.env.PORTER_WORKSPACE_ALLOWED_ROOTS
+  || `${process.env.HOME}/projects`).split(':').map(r => r.trim()).filter(Boolean);
+
+/**
+ * Resolve `repo` and prove it sits under an allowed root.
+ *
+ * Checked on the REALPATH, because the string form proves nothing: `projects/x/../../../etc`
+ * and a symlink pointing out of the tree both look fine until resolved. A leading
+ * `-` is refused outright — `git -C` would read it as an option, not a path.
+ */
+function assertAllowedRepo(repo: string): string {
+  if (!repo || repo.startsWith('-')) throw new Error(`invalid repo path: ${repo}`);
+  let real: string;
+  try { real = realpathSync(repo); }
+  catch { throw new Error(`repo does not exist: ${repo}`); }
+  const ok = ALLOWED_ROOTS.some((root) => {
+    let r: string;
+    try { r = realpathSync(root); } catch { return false; }
+    return real === r || real.startsWith(r + path.sep);
+  });
+  if (!ok) throw new Error(`repo is outside the permitted roots (${ALLOWED_ROOTS.join(', ')}): ${real}`);
+  return real;
+}
+
+/** Exposed so the API can reject a bad repo with a 400 instead of failing at claim time. */
+export function isAllowedRepo(repo: string): boolean {
+  try { assertAllowedRepo(repo); return true; } catch { return false; }
+}
+
+/**
  * Create a worktree for `repo` on a fresh branch.
  *
  * `stamp` must be unique per job (the job id is ideal) — it names both the
  * branch and the directory, so a collision would put two sessions in one tree.
  */
 export function createWorkspace(repo: string, stamp: string, subdirs: string[] = ['', 'backend', 'site']): Workspace {
-  if (!existsSync(path.join(repo, '.git'))) {
-    throw new Error(`not a git repository: ${repo}`);
+  const safeRepo = assertAllowedRepo(repo);
+  if (!existsSync(path.join(safeRepo, '.git'))) {
+    throw new Error(`not a git repository: ${safeRepo}`);
   }
+  repo = safeRepo;
   const safe = stamp.replace(/[^A-Za-z0-9._-]/g, '-');
   const branch = `porter-dev/${safe}`;
   const dir = path.join(WT_BASE, safe);

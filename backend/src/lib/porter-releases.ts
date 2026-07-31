@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.142.0',
+    date: '2026-07-31',
+    title: 'Two holes in yesterday\u2019s code-changing sessions, closed',
+    bullets: [
+      'The session that edits code was still being handed Porter\u2019s entire environment \u2014 database password, service token, every provider key. The module that runs these sessions documents a stripped-down environment as one of its guarantees, and that part had been written but never actually connected. It is connected now: a session sees 22 operational variables and none of our credentials. Confirmed by asking a live one to look.',
+      'A job could also name ANY directory on the machine that happened to be a repository, and Porter would run a write-enabled session inside it. Permitted locations are now checked against the resolved real path, so a path that climbs out through a symlink or dot-dot is refused, as is anything shaped like a command-line flag. A bad location is rejected immediately with a clear error rather than failing obscurely once the job starts.',
+    ],
+  },
+  {
     version: '6.141.0',
     date: '2026-07-31',
     title: 'Porter can now run a job that changes code \u2014 one harness instead of two',

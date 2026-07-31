@@ -15,6 +15,7 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { mkdirSync, writeFileSync, unlinkSync, statSync } from 'node:fs';
+import { workspaceEnv } from '../workspace.js';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -261,7 +262,14 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     const child = spawn(this.binaryPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd,
-      env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
+      // ⚠️ A workspace session gets a SANITISED env, never Porter's own.
+      // workspace.ts documents this guarantee and I failed to wire it up here on
+      // the first pass — so a write-enabled session editing real code would have
+      // been handed DATABASE_URL, the service token and every provider key in
+      // the parent process. `claude` authenticates through its own file-based
+      // OAuth under HOME, so it needs none of them. The sandbox path is
+      // unchanged.
+      env: { ...(isWorkspace ? workspaceEnv() : process.env), PORTER_BRIDGE_DISPATCH: '1' },
     });
 
     // Write prompt to stdin and close it
@@ -435,7 +443,14 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     const child = spawn(this.binaryPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd,
-      env: { ...process.env, PORTER_BRIDGE_DISPATCH: '1' },
+      // ⚠️ A workspace session gets a SANITISED env, never Porter's own.
+      // workspace.ts documents this guarantee and I failed to wire it up here on
+      // the first pass — so a write-enabled session editing real code would have
+      // been handed DATABASE_URL, the service token and every provider key in
+      // the parent process. `claude` authenticates through its own file-based
+      // OAuth under HOME, so it needs none of them. The sandbox path is
+      // unchanged.
+      env: { ...(isWorkspace ? workspaceEnv() : process.env), PORTER_BRIDGE_DISPATCH: '1' },
     });
 
     // Write prompt to stdin and close it

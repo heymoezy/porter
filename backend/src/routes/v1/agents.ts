@@ -9,6 +9,7 @@
 // Read-only by design: workers fetch + read + summarise; they never mutate the
 // CRM or touch infra — every allow-list excludes Write/Edit/Bash/Agent.
 import { FastifyInstance } from 'fastify';
+import { isAllowedRepo } from '../../services/bridge/workspace.js';
 import { randomUUID } from 'crypto';
 import { pool } from '../../db/client.js';
 import { ok, err } from '../../lib/envelope.js';
@@ -99,6 +100,13 @@ export default async function agentsV1Routes(fastify: FastifyInstance) {
       : (Array.isArray(agent.template_tools) && (agent.template_tools as string[]).length
           ? (agent.template_tools as string[])
           : READ_ONLY_TOOLS);
+
+    // Reject a bad repo HERE with a 400, rather than letting the job be queued
+    // and fail obscurely at claim time three seconds later.
+    if (typeof b.repo === 'string' && b.repo.trim() && !isAllowedRepo(b.repo.trim())) {
+      return reply.code(400).send(err('INVALID_INPUT',
+        'repo is not a permitted workspace repository', request.id));
+    }
 
     const jobId = randomUUID();
     // `repo` turns this into a CODE-CHANGING job: the executor creates a

@@ -1,3 +1,24 @@
+## v6.142.0 (2026-07-31) — two holes in v6.141.0's workspace sessions, closed
+
+Both found by the automated commit security review, both real.
+
+**1. The sanitised env was written and never wired up.** `workspace.ts` exports `workspaceEnv()` and its
+header states the guarantee — "the subprocess gets a SANITISED env; no DATABASE_URL, no tokens, no
+provider keys". The adapter then spawned with `env: { ...process.env }`. So a WRITE-ENABLED session
+editing real code held Porter's full environment. Code contradicting its own documented guarantee is
+worse than no guarantee. Wired at BOTH spawn sites, `isWorkspace` only — the sandbox path is unchanged.
+**Verified against a live session:** `DATABASE_URL` not present, `PORTER_SERVICE_TOKEN` not present,
+`printenv | wc -l` = 22.
+
+**2. `repo` was unvalidated.** It arrives in an API body; any directory on the box containing a `.git`
+would be worktree'd and a write-enabled session run inside it. The endpoint is service-token gated and
+loopback-only, but "internal" is not a boundary — it is the assumption every SSRF write-up opens with.
+`assertAllowedRepo()` resolves the REALPATH (a string check proves nothing against `../` or a symlink
+out of the tree) and requires containment in `PORTER_WORKSPACE_ALLOWED_ROOTS` (default `$HOME/projects`).
+A leading `-` is refused outright — `git -C` would read it as an option. `isAllowedRepo()` is exported so
+`POST /agents/:id/jobs` rejects with 400 up front instead of failing at claim time.
+**Verified:** `/home/lobster/.claude`, `/tmp`, `-o/tmp/x` all rejected; `~/projects/ymc.capital` accepted.
+
 ## v6.141.0 (2026-07-31) — Porter can run a code-changing job (one harness, at last)
 
 Moe: *"is tom handing off jobs to porter or is he controlling a claude code cli session? porter is the
