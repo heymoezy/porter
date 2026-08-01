@@ -140,11 +140,43 @@ export function workspaceDiff(dir: string): { files: string[]; diffstat: string 
 }
 
 /**
+ * Commit whatever the session wrote, so the branch actually holds it.
+ *
+ * ⚠️ THIS IS THE MISSING HALF OF removeWorkspace(). The session itself is barred
+ * from committing (WORKSPACE_RULES), which is right — a session must not decide
+ * what lands. But nothing was committing on its behalf either, so the worktree
+ * was removed with the work still uncommitted and the "preserved" branch pointed
+ * at the same commit as main. Every branch v6.141.0 left behind is empty.
+ *
+ * Committing here is bookkeeping, not shipping: it happens on the throwaway
+ * branch, never on main, and no hook runs (`--no-verify`) because the release
+ * ceremony belongs to whoever decides to merge, not to a snapshot.
+ */
+export function commitWorkspace(ws: Workspace, message: string): boolean {
+  try {
+    const dirty = execFileSync('git', ['-C', ws.dir, 'status', '--porcelain'], { encoding: 'utf-8' }).trim();
+    if (!dirty) return false;   // nothing written — an empty branch is honest here
+    // Exclude the node_modules symlinks this module created — they are OURS,
+    // not the session's work, and committing them puts two bogus entries in
+    // every preserved branch (observed on the first real run: "3 files changed"
+    // for a one-file job). Same exclusion workspaceDiff() already applies to the
+    // report, now applied to what actually lands.
+    execFileSync('git', ['-C', ws.dir, 'add', '-A', '--',
+      '.', ':(exclude)node_modules', ':(exclude)*/node_modules'], { encoding: 'utf-8' });
+    execFileSync('git', ['-C', ws.dir, 'commit', '--no-verify', '-m', message], { encoding: 'utf-8' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Remove the worktree directory.
  *
- * ⚠️ THE BRANCH IS DELIBERATELY KEPT. Removing it would destroy the only copy of
- * work a session just did, and the failure mode is silent — the caller sees a
- * clean exit and no output. A stale branch is cheap; a lost afternoon is not.
+ * ⚠️ THE BRANCH IS DELIBERATELY KEPT — and is only worth keeping because
+ * commitWorkspace() ran first. Without that it points at the same commit as main
+ * and preserves nothing, which is exactly what v6.141.0 shipped while claiming
+ * the opposite. A stale branch is cheap; a lost afternoon is not.
  */
 export function removeWorkspace(repo: string, ws: Workspace): void {
   try { git(repo, ['worktree', 'remove', '--force', ws.dir]); }

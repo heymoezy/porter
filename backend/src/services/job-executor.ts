@@ -16,7 +16,7 @@
 
 import crypto from 'node:crypto';
 import { pool } from '../db/client.js';
-import { createWorkspace, removeWorkspace, workspaceDiff, WORKSPACE_RULES, type Workspace } from './bridge/workspace.js';
+import { createWorkspace, removeWorkspace, workspaceDiff, commitWorkspace, WORKSPACE_RULES, type Workspace } from './bridge/workspace.js';
 import { config } from '../config.js';
 
 const POLL_INTERVAL_MS = 5_000;
@@ -321,6 +321,18 @@ async function runDueJobs(): Promise<void> {
         // wrote, and destroying it on a failed run would silently discard real
         // work. Cheap to keep, expensive to lose.
         if (ws && td.repo) {
+          // ⚠️ COMMIT BEFORE REMOVING, or the branch is empty and the work is gone.
+          //
+          // v6.141.0 said "the BRANCH survives: it holds the only copy of whatever
+          // the session wrote". That was FALSE and I shipped it. WORKSPACE_RULES
+          // forbid the session to commit, and this `finally` force-removes the
+          // worktree — so the uncommitted changes were destroyed and the branch
+          // held nothing. Proof: both porter-dev/* branches left by that release
+          // are 0 commits ahead of main. A comment describing a protection that
+          // does not exist is worse than no protection, because it stops anyone
+          // looking.
+          try { commitWorkspace(ws, `porter job ${job.id}`); }
+          catch (e) { console.warn(`[job-executor] could not preserve work for ${job.id}:`, e); }
           try { removeWorkspace(td.repo, ws); }
           catch (e) { console.warn(`[job-executor] worktree cleanup failed for ${job.id}:`, e); }
         }

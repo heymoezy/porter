@@ -1,3 +1,28 @@
+## v6.143.0 (2026-08-01) — v6.141.0's "preserved" branches were empty, and its 1,800s budget was dead
+
+Both faults are mine, both shipped in v6.141.0, and both were found by reading the code rather than by
+the smoke test — which passed happily either way.
+
+**1. `removeWorkspace()`'s header claimed "THE BRANCH IS DELIBERATELY KEPT… it holds the only copy of
+work a session just did". It held nothing.** `WORKSPACE_RULES` forbids the session to commit (right —
+a session must not decide what lands), and `job-executor.ts`'s `finally` force-removed the worktree,
+so the uncommitted work was destroyed and the branch pointed at the same commit as main.
+⚠️ **Proof: both `porter-dev/*` branches that release left behind were 0 commits ahead of main.**
+A comment describing a protection that does not exist is worse than no protection, because it stops
+anyone from looking.
+`commitWorkspace()` now commits onto the throwaway branch before cleanup — `--no-verify`, because the
+release ceremony belongs to whoever decides to MERGE, not to a snapshot. The `node_modules` symlinks
+this module creates are excluded, so a one-file job leaves one file (the first run committed three).
+
+**2. `AbortSignal.timeout(1_800_000)` on the job was dead code.** The adapter kills the subprocess at
+`TIMEOUT_MS = 300_000` first, so every workspace job actually got 5 minutes while the release notes
+said 30. ⚠️ A ceiling set in the caller cannot raise one enforced in the callee.
+`WORKSPACE_TIMEOUT_MS` (default 1,800s, env-overridable) now applies at the adapter when a dispatch
+carries a workspace.
+
+VERIFIED end-to-end twice: a real workspace job's branch is now **1 commit ahead** and contains exactly
+the file the session wrote, with no symlink noise. Test branches deleted.
+
 ## v6.142.0 (2026-07-31) — two holes in v6.141.0's workspace sessions, closed
 
 Both found by the automated commit security review, both real.

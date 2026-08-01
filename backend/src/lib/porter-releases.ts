@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.143.0',
+    date: '2026-08-01',
+    title: 'The branch a code session leaves behind now actually contains its work',
+    bullets: [
+      'Two days ago Porter learned to run a job that changes code, in a throwaway copy of the repository, and it promised to keep the branch afterwards so nothing was lost. That promise was empty. The session is barred from committing \u2014 correctly, since a session should not decide what ships \u2014 but nothing was committing on its behalf either, so the copy was deleted with the work still unsaved and the branch pointed at exactly the same place as before. Every branch left by that release was empty.',
+      'The work is now saved onto the branch before the copy is removed, so what it claims to preserve is what it holds. Our own bookkeeping files are excluded, so a one-file job leaves one file.',
+      'And a code-changing job now genuinely gets its longer time budget. The previous release set a thirty-minute limit in one place while another cut every session off at five, so code work was being stopped a quarter of the way in.',
+    ],
+  },
+  {
     version: '6.142.0',
     date: '2026-07-31',
     title: 'Two holes in yesterday\u2019s code-changing sessions, closed',

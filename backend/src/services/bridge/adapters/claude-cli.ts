@@ -30,6 +30,15 @@ import type {
 } from '../types.js';
 
 const TIMEOUT_MS = 300_000; // 5 min — research tasks need more time than simple queries
+/**
+ * A workspace dispatch is a code-changing session, not a query.
+ *
+ * ⚠️ v6.141.0 set a 1,800s budget on the JOB in job-executor.ts and it was dead:
+ * this adapter kills the subprocess at TIMEOUT_MS first, so every workspace job
+ * actually got 5 minutes. The release notes claimed 30. A ceiling set in the
+ * caller cannot raise one enforced in the callee.
+ */
+const WORKSPACE_TIMEOUT_MS = Number(process.env.PORTER_WORKSPACE_TIMEOUT_MS || 1_800_000);
 
 /**
  * Largest system prompt we will pass as a single argv element.
@@ -289,7 +298,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill('SIGTERM');
-    }, TIMEOUT_MS);
+    }, isWorkspace ? WORKSPACE_TIMEOUT_MS : TIMEOUT_MS);
 
     try {
       const rl = createInterface({ input: child.stdout!, terminal: false });
@@ -352,7 +361,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     }
 
     if (timedOut) {
-      throw new Error(`Claude CLI timed out after ${TIMEOUT_MS}ms`);
+      throw new Error(`Claude CLI timed out after ${isWorkspace ? WORKSPACE_TIMEOUT_MS : TIMEOUT_MS}ms`);
     }
 
     // Wait for child to fully exit
@@ -464,7 +473,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     const onAbort = () => { child.kill('SIGTERM'); };
     signal.addEventListener('abort', onAbort, { once: true });
 
-    const timer = setTimeout(() => { child.kill('SIGTERM'); }, TIMEOUT_MS);
+    const timer = setTimeout(() => { child.kill('SIGTERM'); }, isWorkspace ? WORKSPACE_TIMEOUT_MS : TIMEOUT_MS);
 
     try {
       const rl = createInterface({ input: child.stdout!, terminal: false });

@@ -1,3 +1,22 @@
+## 2026-08-01 - v6.143.0 - v6.141.0 preserved nothing and its timeout was dead
+
+⚠️ BOTH FAULTS ARE MINE, FROM v6.141.0, and both were found by an agent READING the code — the smoke
+test passed either way, which is [[feedback_liveness_is_not_currency]] in a new costume.
+
+**1. The "preserved" branch was empty.** `removeWorkspace()`'s header said the branch "holds the only
+copy of work a session just did". `WORKSPACE_RULES` forbids the session to commit, and the executor's
+`finally` force-removes the worktree — so the work was destroyed and the branch pointed at main.
+**Proof: both porter-dev/* branches from that release were 0 commits ahead.** `commitWorkspace()` now
+commits before cleanup (`--no-verify`; the ceremony belongs to whoever MERGES, not to a snapshot), with
+the node_modules symlinks excluded — the first run committed 3 files for a 1-file job.
+
+**2. `AbortSignal.timeout(1_800_000)` never applied.** The adapter kills at `TIMEOUT_MS = 300_000`
+first, so workspace jobs got 5 minutes while the notes claimed 30. A ceiling in the caller cannot raise
+one enforced in the callee. `WORKSPACE_TIMEOUT_MS` now applies at the adapter for workspace dispatches.
+
+VERIFIED twice end-to-end: branch is 1 commit ahead and holds exactly the session's file. Test branches
+deleted.
+
 ## 2026-07-31 - v6.142.0 - closed two holes the security review found in v6.141.0
 
 **1. workspaceEnv() was written and never wired.** `workspace.ts`'s header promises "the subprocess gets
