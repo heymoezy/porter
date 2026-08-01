@@ -33,7 +33,7 @@
  */
 
 import pg from 'pg';
-import { scrubPII } from './pii-scrub.js';
+import { scrubPII, scrubNames, countNamesRedacted } from './pii-scrub.js';
 
 /**
  * Which body of evidence a silo dreams over.
@@ -527,37 +527,63 @@ interface YmcRawItem {
 }
 
 /**
- * PII redaction for CRM text — scrubPII with DATES held back.
+ * PII redaction for CRM text — the shared scrubber, plus NAMES.
  *
- * ⚠️ scrubPII's phone pattern is `\b\+?[\d][\d\s\-().]{7,}\d\b`, and `2026-07-31`
- * satisfies it exactly: leading digit, eight characters drawn from digits and
- * hyphens, trailing digit. On CLI transcripts that costs nothing. On this corpus
- * it is fatal — a dated certificate superseding an undated one, an expiry that
- * outranks a filing date, a fee due in thirty days: every rule this silo exists
- * to learn is a rule ABOUT dates, and the first sampler run redacted every one of
- * them ("last [REDACTED]").
+ * ⚠️ The date workaround that used to live here is GONE, because the bug it
+ * worked around is fixed at source. `scrubPII`'s phone pattern matched
+ * `2026-07-31` (leading digit, eight digits-and-hyphens, trailing digit) and was
+ * redacting every date in the corpus — fatal here, since a dated certificate
+ * superseding an undated one, an expiry outranking a filing date and a fee due
+ * in thirty days are all rules ABOUT dates. It was equally wrong for every other
+ * intellect writer, so patching it locally left the shared scrubber broken for
+ * the learner and transcript capture too. One copy of the fix, in `pii-scrub.ts`.
  *
- * So dates are masked to an inert token, scrubPII runs, and the dates are put
- * back. The redaction itself is unchanged — this only stops it from eating what
- * it was never aimed at. Deliberately narrow: ISO `YYYY-MM-DD` and
- * `D/M/YYYY`-style dates only. A nine-digit run that is NOT date-shaped is still
- * treated as a phone number and still redacted.
+ * NAMES: Moe's rule is *"always firewall our info"*, and Porter's failover means
+ * a dispatch that Claude drops is answered by Codex or Grok — which is exactly
+ * what happened to the first run of this silo (108 CRM items reached Codex).
+ * Asked whether to pin this corpus to Claude, Moe's answer was *"the whole point
+ * of bridge is never to fail right?"* — so failover stays and the names go.
+ *
+ * Names come from the real contact records, not from guessing at capitalised
+ * words, and each becomes a STABLE pseudonym so "A introduced B to C" survives as
+ * a learnable shape instead of collapsing into "[REDACTED] introduced [REDACTED]".
  */
-function scrubYmcText(text: string): string {
-  const dates: string[] = [];
-  // Token shape matters: the brackets are NOT in scrubPII's phone character
-  // class, so a run of masked dates can never re-form into something that looks
-  // like a phone number, and the mask carries no spaces of its own — restoring it
-  // cannot eat the whitespace around a date at a string boundary.
-  const masked = text.replace(
-    /\b(\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{4})\b/g,
-    (m) => {
-      dates.push(m);
-      return `[[D${dates.length - 1}]]`;
-    },
-  );
-  const scrubbed = scrubPII(masked);
-  return scrubbed.replace(/\[\[D(\d+)\]\]/g, (_m, i) => dates[Number(i)] ?? '');
+let knownNamesCache: { names: string[]; at: number } | null = null;
+const NAMES_TTL_MS = 10 * 60_000;
+
+async function knownNames(ymcPool: pg.Pool): Promise<string[]> {
+  if (knownNamesCache && Date.now() - knownNamesCache.at < NAMES_TTL_MS) return knownNamesCache.names;
+  try {
+    // The pool is PASSED IN, matching sampleYmcCorpus's own contract — reaching
+    // for a module-level singleton here diverged from how the caller supplies it
+    // and blew up with an undefined pool the first time it ran.
+    const { rows } = await ymcPool.query<{ name: string }>(
+      // ⚠️ LEGAL NAMES TOO, not just the name we file someone under. The first
+      // run of this leaked "Mohamed Ibrahim" — Moe's legal name, which appears
+      // throughout the document corpus while his CONTACT record reads "Moe
+      // Ibrahim". `identities.full_name` is where the legal name actually lives
+      // (it is what the KYC extractor writes), and omitting it meant the one
+      // person most present in the corpus was the one least redacted.
+      `SELECT DISTINCT display_name AS name FROM users
+        WHERE display_name IS NOT NULL AND length(display_name) >= 3
+       UNION
+       SELECT DISTINCT entity_name FROM investor_profiles
+        WHERE entity_name IS NOT NULL AND length(entity_name) >= 3
+       UNION
+       SELECT DISTINCT full_name FROM identities
+        WHERE full_name IS NOT NULL AND length(full_name) >= 3`);
+    knownNamesCache = { names: rows.map((r) => r.name), at: Date.now() };
+  } catch (e) {
+    // ⚠️ FAIL CLOSED. If the names cannot be loaded we cannot promise they were
+    // removed, and this corpus may leave for an external model. An empty list
+    // would silently ship real names.
+    throw new Error(`ymc dream: cannot load names for redaction — refusing to sample. ${(e as Error).message}`);
+  }
+  return knownNamesCache.names;
+}
+
+function scrubYmcText(text: string, names: string[]): string {
+  return scrubNames(scrubPII(text), names);
 }
 
 function truncateTo(text: string, cap: number): { text: string; truncated: boolean } {
@@ -695,12 +721,18 @@ export async function sampleYmcCorpus(
   let totalCorpusBytes = 0;
   let nextId = 1;
 
+  // Loaded ONCE per run, not per item — and it throws rather than returning an
+  // empty list, so a corpus can never leave unredacted because a query failed.
+  const names = await knownNames(ymcPool);
+  let namesRedacted = 0;
+
   for (const item of raw) {
     const capped = truncateTo(item.text, YMC_ITEM_CAPS[item.source]);
     if (capped.truncated) truncatedCount++;
     // PII redaction runs AFTER truncation so the cap is applied to real text and
     // the redaction token count can't push an item back over the cap.
-    const content = scrubYmcText(capped.text);
+    namesRedacted += countNamesRedacted(capped.text, names);
+    const content = scrubYmcText(capped.text, names);
     const byteSize = Buffer.byteLength(content, 'utf8');
     totalCorpusBytes += byteSize;
     const ageMs = nowMs - item.createdAt.getTime();

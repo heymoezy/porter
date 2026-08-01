@@ -1,3 +1,24 @@
+## 2026-08-01 - v6.146.0 - names stripped before external dispatch; ymc dream ENABLED
+
+Moe, asked whether to pin the CRM corpus to claude_cli so it could never reach an external model:
+*"the whole point of bridge is never to fail right?"* — so failover stays and the NAMES go instead.
+(The trial proves the point: claude_cli timed out, codex_cli answered, 108 CRM items went outward.)
+
+- `scrubNames()` uses STABLE PSEUDONYMS, not `[REDACTED]` — one token for every name destroys the
+  relationships the corpus is read for. Only KNOWN names, from real records, longest-first.
+- ⚠️ FIRST CUT STILL LEAKED: read display_name + entity_name, missed **"Mohamed Ibrahim"** — Moe's
+  LEGAL name, all over the documents while his contact says "Moe Ibrahim". `identities.full_name` is
+  where legal names live. The person most present in the corpus was the least redacted. Now clean in
+  every spelling.
+- FAIL CLOSED: sampling THROWS if the name list can't load. An empty list would silently ship names.
+
+⚠️ THE ISO-DATE BUG WAS STILL LIVE IN THE SHARED `pii-scrub.ts` — the Stage-4 fix had been made LOCALLY
+in dream-sampler, leaving the learner and transcript-capture still redacting every date. Fixed at
+source; duplicate workaround deleted. Verified: 93 ISO dates survive a real 107-item sample.
+
+**ymc silo ENABLED, daily.** Proposals land `pending`; nothing governs Tom without Moe accepting it —
+that review gate was always the real safety, which is why parking it disabled was wrong.
+
 ## 2026-08-01 - v6.145.0 - R6 gate measured; recall could not find concepts by their OWN WORDS
 
 R6 sat untouched five weeks because its gate (RELEASE-SCHEDULE.md:21, *"ONLY IF post-R2 logs still show

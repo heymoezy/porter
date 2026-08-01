@@ -1,3 +1,37 @@
+## v6.146.0 (2026-08-01) — name-scrubbing before external dispatch; ymc dream silo ENABLED
+
+Moe was asked whether to pin the CRM corpus to `claude_cli` so it could never reach Codex/Grok. His
+answer: *"the whole point of bridge is never to fail right?"* Correct — and the trial proves it, since
+claude_cli timed out and **codex_cli** answered (`dream_runs.model_used = 'Codex CLI'`). Pinning would
+have produced nothing. But his standing rule is also *"always firewall our info"*, and that run sent
+108 items of real CRM corpus outward with names in it.
+
+So: **failover stays, names go.**
+
+- `pii-scrub.ts` gains `scrubNames()` / `countNamesRedacted()`. ⚠️ **STABLE PSEUDONYMS, not
+  `[REDACTED]`** — one token for every name destroys the relationships the corpus is read FOR:
+  "A introduced B to C" is learnable, "[REDACTED] introduced [REDACTED] to [REDACTED]" is noise.
+- ⚠️ **ONLY KNOWN NAMES, from the real records** — never guessing at capitalised words, which would
+  shred prose and still miss anything unusual. Longest-first so "Wong Zhi Kang Clement" is consumed
+  before "Clement" can leave a fragment.
+- ⚠️ **THE FIRST CUT STILL LEAKED ONE NAME.** It read `users.display_name` + `investor_profiles.entity_name`
+  and missed **"Mohamed Ibrahim"** — Moe's LEGAL name, which is all over the document corpus while his
+  contact record says "Moe Ibrahim". `identities.full_name` is where legal names actually live. The
+  person most present in the corpus was the one least redacted. Verified after: no principal's name
+  survives in any spelling.
+- ⚠️ **FAIL CLOSED**: if the name list cannot be loaded, sampling THROWS. An empty list would silently
+  ship real names.
+
+⚠️ **AND THE ISO-DATE BUG WAS STILL LIVE IN THE SHARED SCRUBBER.** `scrubPII`'s phone pattern matches
+`2026-07-31` (digit, eight digits-and-hyphens, digit). A local workaround had been added inside
+dream-sampler, which left it broken for the learner and transcript-capture. Fixed AT SOURCE, and the
+duplicate workaround deleted. A scrubber that eats meaning is worse than none — the loss is invisible
+downstream. Verified: 93 ISO dates survive a real 107-item sample; amounts intact.
+
+**`UPDATE silos SET enabled = TRUE WHERE id = 'ymc';`** — the ymc dream silo is ON, daily. Proposals
+land `pending` in `/dreams`; nothing becomes a directive without Moe accepting it. That review gate is
+the real safety, which is why parking it disabled was the wrong call.
+
 ## v6.145.0 (2026-08-01) — recall could not find concepts by their OWN WORDS
 
 Taking the measurement R6 was gated on, and finding a cheaper bug underneath it.

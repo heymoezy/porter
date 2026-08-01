@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.146.0',
+    date: '2026-08-01',
+    title: 'Names are stripped before anything leaves the box \u2014 and the CRM learning loop is ON',
+    bullets: [
+      'Porter falls over to another provider when one times out, which is the entire point of it. The first CRM learning run did exactly that: our own client records went to an outside model because the first one was slow. Rather than switch the safety net off, the names now come out before anything is sent \u2014 real names read from our own records, not guessed at, and each replaced consistently so \u201cA introduced B to C\u201d still reads as a fact worth learning instead of collapsing into nonsense.',
+      'The first attempt still leaked one name: Moe\u2019s legal name, which appears throughout our documents while his contact record uses the short form. Legal names are now included. Checked against the real corpus afterwards \u2014 no name of any of the three principals survives, in any spelling.',
+      'A long-standing fault in the same code was destroying every date it touched, mistaking them for phone numbers. Every date in the corpus was being replaced before anyone read it, and the rules we most want learned are about dates \u2014 when something is due, which document expired, how long a reply has waited. Fixed for everything that uses it, not just this one feature.',
+      'With that in place the CRM learning loop is switched on. It proposes; nothing it suggests governs anything until Moe accepts it.',
+    ],
+  },
+  {
     version: '6.145.0',
     date: '2026-08-01',
     title: 'Memory search was failing to find things using their own words',
