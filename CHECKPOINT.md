@@ -1,3 +1,23 @@
+## 2026-08-01 - v6.147.0 - accepted ymc dream rules now reach Tom
+
+The loop was open: accept wrote `scope='silo'`, nothing read it. Verified end to end before fixing —
+`memory-injection.ts:117-131` selects workspace/project only; `tom-directives.ts` fetched
+project/ymc.capital + agent/tom; the push path needs `cwd_markers`, which ymc deliberately leaves empty.
+Moe's 4 sealed priority-95 silo rules were inert too.
+
+Fix: one extra fetch in `tom-directives.ts`. Porter's endpoint is already scope-generic.
+
+⚠️ Two things found while fixing:
+- Silo rules EVICTED all 7 of Tom's existing rules when merged into the shared 2,000-char cap (600
+  chars each at priority 95 beats everything). Own budget, SILO_CAP_CHARS=3000, sized from live rows.
+  This is the v1.921.0 failure shape again.
+- `dreams.ts` accept passed `proposed_metadata.priority` through UNCLAMPED. A proposal asking for 95
+  would sit level with Moe's sealed seeds. `intellect.ts:605` clamped; this path did not. Now
+  `clampProposedPriority()` + test (6/6).
+
+Verified: real proposal accepted via the live route -> directive d_a80524ef -> Tom's block renders 15
+lines, all 7 prior rules intact, new rule ranked last.
+
 ## 2026-08-01 - v6.146.0 - names stripped before external dispatch; ymc dream ENABLED
 
 Moe, asked whether to pin the CRM corpus to claude_cli so it could never reach an external model:

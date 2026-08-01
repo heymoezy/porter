@@ -67,6 +67,32 @@ interface DirectiveRow {
   status: string;
 }
 
+/**
+ * Ceiling for any directive a machine authored. One below
+ * ALWAYS_INJECT_MIN_PRIORITY (90, services/directive-scorer.ts) so Moe's rules
+ * always sort — and always inject — above them.
+ */
+export const AGENT_MAX_PRIORITY = 89;
+
+/**
+ * ⚠️ PRIORITY CONTRACT. `directives.priority` runs LOW = generic, HIGH = binding.
+ * Moe's own rules sit at 90+ and are always injected; anything a machine wrote
+ * clamps below that so it can never outrank him.
+ *
+ * Every memory_proposal is machine-authored — the dream worker writes the row AND
+ * picks `proposed_metadata.priority` itself — so the clamp is unconditional here,
+ * matching the agent-memory write path (routes/v1/intellect.ts:605). A human
+ * ACCEPTING a proposal endorses the RULE, not the rank it asked for.
+ *
+ * Exported and pure so `__tests__/dream-accept-priority.test.ts` can pin it: this
+ * is the only place a dream-derived rule gets a number, and a silent regression
+ * here buries Moe's instructions under machine output with nothing to catch it.
+ */
+export function clampProposedPriority(raw: unknown): number {
+  const n = typeof raw === 'number' && Number.isFinite(raw) ? raw : 50;
+  return Math.min(Math.max(Math.trunc(n), 1), AGENT_MAX_PRIORITY);
+}
+
 export default async function dreamsRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', fastify.requirePlatformAdmin);
 
@@ -191,7 +217,10 @@ export default async function dreamsRoutes(fastify: FastifyInstance) {
       // 3. Kind-specific mutation
       const touched: string[] = [];
       const metadata = proposal.proposed_metadata ?? {};
-      const proposedPriority = typeof metadata.priority === 'number' ? metadata.priority : 50;
+      // Clamped — see clampProposedPriority. Applies to every kind: `supersede`
+      // rewrites an existing directive's priority too, so an unclamped path there
+      // would let a proposal promote a rule it is allowed to edit up past Moe's.
+      const proposedPriority = clampProposedPriority(metadata.priority);
 
       if (proposal.proposal_kind === 'new_directive') {
         const newId = 'd_' + randomUUID();

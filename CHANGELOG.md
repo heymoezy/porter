@@ -1,3 +1,32 @@
+## v6.147.0 (2026-08-01) — accepted ymc dream rules now reach Tom
+
+Accepting a proposal wrote `scope='silo', scope_id='ymc'`. Nothing read that scope:
+`memory-injection.ts:117-131` selects `workspace` or `project`; `tom-directives.ts` fetched
+`project/ymc.capital` and `agent/tom`. The push path renders silo sections but only for silos
+`silo-detector.ts` matches on `cwd_markers`, and ymc's are empty on purpose.
+
+Moe's four sealed priority-95 silo rules were inert too — none of them duplicated in `project/ymc.capital`.
+
+Fix is one file: `tom-directives.ts` adds a `silo/ymc` fetch. Porter's directives endpoint is already
+scope-generic, so no Porter API change. Teaching `memory-injection.ts` about silos would have threaded
+a silo hint through the path all agent traffic uses, for one consumer.
+
+Two problems found on the way:
+
+**Silo rules evicted every existing rule.** Merged into the 2,000-char pool they are ~600 chars each at
+priority 95 vs ≤90, so they took every slot — including "reply even when not tagged", "short bullet
+points", "never claim an action you did not take". Own budget now, `SILO_CAP_CHARS = 3000`, sized from
+live rows (seeds 1,734 chars, proposal average 591).
+
+**Accept wrote priority through unclamped.** `dreams.ts` passed `proposed_metadata.priority` verbatim
+on all kinds; a proposal asking for 95 would have landed level with Moe's seeds.
+`routes/v1/intellect.ts:605` already clamped, this path did not. Now `clampProposedPriority()`, pinned
+by `dream-accept-priority.test.ts` (6/6).
+
+Verified with the real pending proposal, accepted through the live route: became directive
+`d_a80524ef`, and Tom's rendered block shows 15 lines — 4 seeds, all 7 existing rules intact, the new
+rule last.
+
 ## v6.146.0 (2026-08-01) — name-scrubbing before external dispatch; ymc dream silo ENABLED
 
 Moe was asked whether to pin the CRM corpus to `claude_cli` so it could never reach Codex/Grok. His

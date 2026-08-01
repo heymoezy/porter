@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.147.0',
+    date: '2026-08-01',
+    title: 'Accepted dream rules now reach Tom',
+    bullets: [
+      'Accepting a proposal from the CRM learning loop wrote a rule nothing ever read. Same for the four safety rules seeded with the silo \u2014 no unattended contact messaging, KYC never auto-filed, never infer a record, never reveal internal identifiers. All of them were inert.',
+      'Tom now reads them. Verified with a real accepted proposal: it appears in his rules, ranked below his existing ones.',
+      'Dream proposals could also set their own priority, which would have let one outrank Moe\u2019s own rules. Now clamped to 89, below his 90+. Test added.',
+      'The silo rules get their own space in the prompt. Merged into the shared budget they used every slot and pushed out all seven rules Tom actually runs on.',
+    ],
+  },
+  {
     version: '6.146.0',
     date: '2026-08-01',
     title: 'Names are stripped before anything leaves the box \u2014 and the CRM learning loop is ON',
