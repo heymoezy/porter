@@ -1,3 +1,37 @@
+## v6.145.0 (2026-08-01) — recall could not find concepts by their OWN WORDS
+
+Taking the measurement R6 was gated on, and finding a cheaper bug underneath it.
+
+`planning/tom-memory/RELEASE-SCHEDULE.md:21` makes semantic recall CONDITIONAL — *"ONLY IF post-R2 logs
+still show paraphrase misses… Measure residual paraphrase-miss rate. If material: [embeddings]"*. R6 sat
+untouched for five weeks because **the gate was never evaluated**: the work was neither done nor ruled out.
+
+`scripts/measure-paraphrase-miss.ts` (new) measures it over the 147 live `agent:tom` concepts, with a
+CONTROL query (the concept's own words) beside each PARAPHRASE query.
+
+| | control misses | paraphrase misses |
+|---|---|---|
+| **AND** (shipped) | **3/8** | 5/5 = **100%** |
+| **OR** | **0/8** | 4/8 = **50%** |
+
+⚠️ **THE CONTROL MISSES ARE THE REAL FINDING.** `websearch_to_tsquery` ANDs unquoted terms, and
+`memory-injection.ts:297` — the path EVERY Tom turn goes through — used exactly that. So a question
+required every word to be present and one absent stem returned nothing. Three probes could not retrieve
+a concept **using that concept's own words**. That is not a paraphrase problem and no embedder would
+have fixed it; it was being attributed to "we need R6".
+
+RELEASE-SCHEDULE.md:16 specified FTS "(R1, OR)". The shipped code was AND — R1's OR never landed or
+regressed, and nothing noticed because nothing measured.
+
+FIX: **AND first, OR only when AND returns nothing.** AND-first keeps precision — when every term IS
+present that is the precise answer and should rank — and the OR fallback stops recall failing on its own
+words. Verified: all three control misses now resolve. Malformed input falls back to the AND result
+rather than losing the injection.
+
+**R6 verdict: still justified, on a smaller and better-understood residual.** 50% of paraphrases still
+miss with OR, so meaning-matching has a real job to do — but it is now scoped against a measured 50%,
+not an unmeasured 100%, and the cheap half was one query change rather than a resident model on an 8GB box.
+
 ## v6.144.0 (2026-08-01) — the YMC dream silo: Tom learns from the CRM corpus
 
 Wave 5 / Phase 48.5, designed 2026-05-16 and parked as "BLOCKED on Porter v7.0 Phase 50".

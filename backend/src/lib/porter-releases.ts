@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.145.0',
+    date: '2026-08-01',
+    title: 'Memory search was failing to find things using their own words',
+    bullets: [
+      'Searching Tom\u2019s memory required EVERY word of the question to appear in the stored note. One absent word returned nothing at all. Measured against his 147 real memories: three of eight searches could not find a note using that note\u2019s own wording, and every rephrased question found nothing whatsoever.',
+      'Searches now fall back to matching any of the words when matching all of them finds nothing. Exact matches still rank first, so precision is unchanged where it was working. All three failures that could not find their own words now succeed.',
+      'This was measured rather than assumed, because it was the gate on a much larger piece of work \u2014 running a language model permanently in memory to match meaning rather than words. That work is still justified on the remaining half of the gap, but it is now a smaller and better-understood gap, and this fix cost one query.',
+    ],
+  },
+  {
     version: '6.144.0',
     date: '2026-08-01',
     title: 'Tom can now learn from the CRM itself \u2014 built, and switched off until Moe says otherwise',

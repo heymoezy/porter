@@ -291,16 +291,38 @@ export async function buildMemoryContext(opts: {
     // filter: a clearly more relevant non-vault row still outranks (see
     // VAULT_RANK_BOOST). Vault rows also cite their source node.
     if (searchQuery && totalRemaining > 50) {
-      const res = await pool.query<{ id: string; content: string; confidence_score: number | null; source_type: string; source_url: string | null }>(
-        `SELECT id, content, confidence_score, source_type, source_url
-         FROM concepts
-         WHERE search_vector @@ websearch_to_tsquery('english', $1)
-           AND status = 'active'
-         ORDER BY ts_rank(search_vector, websearch_to_tsquery('english', $1))
-                  * CASE WHEN source_type = 'vault' THEN ${VAULT_RANK_BOOST} ELSE 1.0 END DESC
-         LIMIT 10`,
-        [searchQuery]
-      );
+      // ⚠️ AND-THEN-OR. `websearch_to_tsquery` ANDs unquoted terms, so a natural
+      // question required EVERY word to appear in the concept and one absent
+      // stem returned nothing at all. Measured over the 147 live concepts for
+      // agent:tom (scripts/measure-paraphrase-miss.ts): with AND, **3 of 8
+      // probes could not find a concept using that concept's OWN WORDS**, and
+      // every paraphrase missed. With the same terms OR-ed, the control misses
+      // go to ZERO and the paraphrase miss rate halves.
+      //
+      // RELEASE-SCHEDULE.md:16 specified FTS "(R1, OR)"; the shipped code was
+      // AND, so R1's OR either never landed or regressed — and the residual it
+      // caused was being attributed to "we need embeddings" (R6).
+      //
+      // AND first, because when every term IS present that is the precise
+      // answer and should rank; OR only when AND finds nothing, so precision is
+      // preserved and recall stops failing on its own words.
+      const FTS = (op: 'and' | 'or') => `
+         SELECT id, content, confidence_score, source_type, source_url
+           FROM concepts${op === 'or' ? `, websearch_to_tsquery('english', $1) AS raw,
+                to_tsquery('english', array_to_string(ARRAY(
+                  SELECT unnest(string_to_array(replace(raw::text, '''', ''), ' & '))), ' | ')) AS q` : ''}
+          WHERE search_vector @@ ${op === 'or' ? 'q' : `websearch_to_tsquery('english', $1)`}
+            AND status = 'active'
+          ORDER BY ts_rank(search_vector, ${op === 'or' ? 'q' : `websearch_to_tsquery('english', $1)`})
+                   * CASE WHEN source_type = 'vault' THEN ${VAULT_RANK_BOOST} ELSE 1.0 END DESC
+          LIMIT 10`;
+      type Row = { id: string; content: string; confidence_score: number | null; source_type: string; source_url: string | null };
+      let res = await pool.query<Row>(FTS('and'), [searchQuery]);
+      if (res.rows.length === 0) {
+        // Malformed input can make the OR rewrite unparseable — fail back to the
+        // AND result (empty) rather than losing the whole injection.
+        res = await pool.query<Row>(FTS('or'), [searchQuery]).catch(() => res);
+      }
       if (res.rows.length > 0) {
         const header = '## Related Knowledge\n';
         let body = '';

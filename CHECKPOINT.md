@@ -1,3 +1,24 @@
+## 2026-08-01 - v6.145.0 - R6 gate measured; recall could not find concepts by their OWN WORDS
+
+R6 sat untouched five weeks because its gate (RELEASE-SCHEDULE.md:21, *"ONLY IF post-R2 logs still show
+paraphrase misses"*) was NEVER EVALUATED — neither built nor ruled out. Measured now over the 147 live
+`agent:tom` concepts, CONTROL (concept's own words) beside PARAPHRASE:
+
+  AND (shipped):  control 3/8 MISS · paraphrase 5/5 MISS (100%)
+  OR:             control 0/8 MISS · paraphrase 4/8 MISS (50%)
+
+⚠️ THE CONTROL MISSES ARE THE FINDING, not the paraphrases. `websearch_to_tsquery` ANDs unquoted terms
+and `memory-injection.ts:297` — EVERY Tom turn — used it, so one absent stem returned nothing and three
+probes could not retrieve a concept **using that concept's own words**. No embedder would have fixed
+that, and it was being attributed to "we need R6". RELEASE-SCHEDULE.md:16 specified FTS "(R1, OR)"; the
+code was AND. R1's OR never landed or regressed, and nothing noticed because nothing measured.
+
+FIX: AND first (precision — when every term IS present that is the precise answer), OR only when AND
+returns nothing. All three control misses now resolve. Malformed input falls back to the AND result.
+
+R6 VERDICT: still justified, but on a MEASURED 50% residual rather than an assumed 100%, and the cheap
+half turned out to be one query change instead of a resident embedder on an 8GB box.
+
 ## 2026-08-01 - v6.144.0 - YMC dream silo built, enrolled DISABLED
 
 Wave 5 / Phase 48.5 — designed 2026-05-16, parked 2.5 months as "BLOCKED on Phase 50".
