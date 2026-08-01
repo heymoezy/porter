@@ -1,3 +1,42 @@
+## 2026-08-01 - v6.144.0 - YMC dream silo built, enrolled DISABLED
+
+Wave 5 / Phase 48.5 — designed 2026-05-16, parked 2.5 months as "BLOCKED on Phase 50".
+⚠️ THE BLOCKER WAS STALE and it was checked, not assumed: all three "missing" primitives exist
+(silos table columns; `scheduler.ts:190` runSiloCadenceCheck reading `cadence_seconds`; silo-detector +
+/context). Enrolment is one INSERT plus a prompt file.
+
+⚠️ CORRECTION TO THE ORIGINAL PLAN: do NOT add a `workflows` row. `workflow-engine.ts:483-488` records
+that the Software dream's workflow row was deleted in Phase 50 because a workflow row racing the
+per-silo cadence tick DOUBLE-FIRES. `silos.cadence_seconds` + `enabled` IS the schedule — so
+"wire it disabled" means `enabled=FALSE`, and enabling it is what schedules it.
+
+Built: `migrate-ymc-silo-v1.ts` (enrols disabled, daily, 4 sealed moe-direct seeds so the first dream
+has something to REFINE rather than only append), `sampleYmcCorpus()` over a second pool to ymc_capital,
+`dream-prompts/ymc.md`, corpus chosen from `detect_rules.corpus`.
+
+HAND-RUN VERIFIED: 108 items. claude_cli timed out; **codex_cli answered via the failover chain**
+(4m18s) — the failover work paying off. 2 proposals, both PENDING, nothing promoted. The substantive
+rule traces via `corpus_index` to 7 real pinned notes reading "needs response (June backlog)".
+
+⚠️ TWO DEFECTS FIXED FOR EVERY SILO: `scrubPII`'s phone pattern MATCHES ISO DATES (every date returned
+`[REDACTED]` — and this silo exists to learn date-shaped rules); `FRUSTRATION_REGEX` tagged 106/107
+items.
+
+⚠️ OPEN: the loop is NOT closed — accepted `ymc` directives reach nothing, because
+`memory-injection.ts` (Tom's Bridge path) has no silo concept. That is Phase 48.5-05 and touches ymc's
+tom-llm.ts. PII posture needs Moe's call first: pii-scrub catches emails/phones/handles but NOT names.
+
+ENABLE (after sign-off): `UPDATE silos SET enabled = TRUE WHERE id = 'ymc';`
+
+⚠️ SECRET-SCAN GATE EARNED ITS KEEP TWICE ON THIS COMMIT:
+1. `getYmcPool()` had a hardcoded fallback connection string WITH A PASSWORD. **porter is a PUBLIC
+   repo** — committed = world-readable, permanently, and rotation does not un-publish. Now env-only
+   (`~/.config/porter/porter.env`, 600) and THROWS when unset: a dream that cannot read its corpus must
+   fail loudly, not sample nothing quietly.
+2. An untracked **DKIM PRIVATE KEY** (`ops/mail/porter-dkim.private`) was swept in by my broad
+   `git add -A`. Unstaged; `ops/mail/*.private` now gitignored. Never committed. ⚠️ Lesson: scope the
+   add, do not `-A` in a repo that holds operational key material.
+
 ## 2026-08-01 - v6.143.0 - v6.141.0 preserved nothing and its timeout was dead
 
 ⚠️ BOTH FAULTS ARE MINE, FROM v6.141.0, and both were found by an agent READING the code — the smoke

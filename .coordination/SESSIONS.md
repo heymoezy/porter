@@ -917,7 +917,10 @@
   backend/src/db/schema.ts (one column), backend/src/index.ts (one migration call),
   backend/src/routes/v1/bridge.ts, backend/src/routes/admin/bridge.ts, BRIDGE.md.
 - NOT touching: intellect/**, recall*, task-decomposition/**, CHANGELOG (operator ships v6.47.0). NO commits.
-- Status: in progress
+- Status: **DONE** — Porter tsc 0, ymc tsc 0. Migration applied by hand (idempotent, also wired into
+  index.ts startup). ONE real dream run proven: 108 corpus items, completed on codex_cli after
+  claude_cli timed out, 2 pending proposals traceable to 7 real contact notes. Silo left DISABLED.
+  Nothing committed, pushed or deployed — operator runs the ship ceremony.
 
 ## Admin revamp evidence+design+safe-removal (Opus 4.8 1M, subagent) — 2026-07-06 (SGT)
 - Workstream: Moe's direct order — revamp porter-admin-ui: delete Forge/Email/skill-feedback admin
@@ -1304,3 +1307,18 @@
   password NOT rotated). Throwaway test account + all probe rows deleted (verified 0).
   ⚠️ Left OPEN for whoever picks it up: Porter cannot send mail (smtp_host 127.0.0.1:587, no listener)
   — password reset is broken platform-wide, not just for Moe. Recorded in CHECKPOINT.
+
+## 2026-08-01 — YMC dream silo (Wave 5 / Phase 48.5) — claude session
+- SCOPE: enroll a `ymc` silo whose corpus is the ymc_capital CRM DB (not CLI transcripts).
+- (EDIT): backend/src/services/intellect/dream-sampler.ts · backend/src/services/intellect/dream-worker.ts ·
+  backend/src/index.ts (wire ONE migration call only)
+- (CREATE): backend/src/db/migrate-ymc-silo-v1.ts ·
+  backend/src/services/intellect/dream-prompts/ymc.md
+- NOT TOUCHING: backend/package.json · CHANGELOG.md · backend/src/lib/porter-releases.ts · CHECKPOINT.md
+  (ship ceremony is the operator's). No commit, no push, no deploy.
+- The `ymc` silo lands **enabled=FALSE** on purpose — runSiloCadenceCheck fires every enabled silo, and a
+  new scheduled job needs Moe's sign-off. Flip is one UPDATE.
+- Status: **DONE** — Porter tsc 0, ymc tsc 0. Migration applied by hand (idempotent, also wired into
+  index.ts startup). ONE real dream run proven: 108 corpus items, completed on codex_cli after
+  claude_cli timed out, 2 pending proposals traceable to 7 real contact notes. Silo left DISABLED.
+  Nothing committed, pushed or deployed — operator runs the ship ceremony.

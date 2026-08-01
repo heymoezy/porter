@@ -63,3 +63,6 @@ backend/.env
 *.env.*
 !*.env.example
 !.env.example
+
+# Private keys must never reach this repo — heymoezy/porter is PUBLIC.
+ops/mail/*.private

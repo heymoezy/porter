@@ -1,3 +1,61 @@
+## v6.144.0 (2026-08-01) — the YMC dream silo: Tom learns from the CRM corpus
+
+Wave 5 / Phase 48.5, designed 2026-05-16 and parked as "BLOCKED on Porter v7.0 Phase 50".
+
+⚠️ **THAT BLOCKER WAS STALE — verified, not assumed.** All three "missing" primitives exist: `silos`
+already carries `prompt_path/cadence_seconds/default_model/detect_rules/enabled` with three live silos;
+per-silo cadence runs at `scheduler.ts:190` (`runSiloCadenceCheck`) and `dream-worker.ts:394`; project-
+scope layering is `silo-detector.ts` + `/context`. Enrolment is one INSERT and a prompt file.
+
+⚠️ **AND ONE CORRECTION TO THE PLAN: you must NOT add a `workflows` row for this.**
+`workflow-engine.ts:483-488` records that the "Software dream — weekly consolidation" workflow row was
+deleted in Phase 50 *because a workflow row racing the per-silo cadence tick double-fires*.
+`silos.cadence_seconds` + `enabled` **is** the schedule.
+
+- `db/migrate-ymc-silo-v1.ts` — enrols `ymc` **disabled**, daily cadence, `detect_rules.corpus='ymc'`,
+  plus 4 sealed `moe-direct` seeds transcribed from ymc's own non-negotiables. ⚠️ Seeds exist so the
+  first dream has something to REFINE — a dream starting from zero can only append, which is the
+  failure mode the refine-don't-append doctrine exists to prevent.
+- `dream-sampler.ts:535-824` — `sampleYmcCorpus()` over a second lazy pool to `ymc_capital`
+  (vault-ingest's pattern), reading `documents.extracted_text` + `contact_notes` + aggregated
+  `audit_events`. 90-day window, 40KB budget, lanes 40/40/20, recency-first.
+- `dream-prompts/ymc.md` — refine-don't-append, plus three rules the transcript prompts don't need:
+  **a fact is not a rule**, **a complaint is not a rule** (cites the 2026-07-31 incident by name), and
+  **never put an identifier in a directive**.
+- `dream-worker.ts:497,528` — corpus selected from `detect_rules.corpus`, not branched on silo id.
+  Dispatch untouched, so the run goes through `dispatchWithFailover`.
+
+**Hand-run: 108 items sampled.** `claude_cli` timed out and **`codex_cli` answered via the failover
+chain** (4m18s) — the failover work earning its keep. Produced 2 pending proposals; the substantive one
+is an operating rule about recording a next action and owner on a reply that needs follow-up, traceable
+through the persisted `corpus_index` to 7 real pinned contact notes. It carries no identifiers and
+nothing became a directive.
+
+⚠️ **TWO DEFECTS THE RUN EXPOSED, fixed for EVERY silo:** `scrubPII`'s phone pattern **matches ISO
+dates** — every date in the corpus came back `[REDACTED]`, and every rule this silo exists to learn is
+about dates; and `FRUSTRATION_REGEX` tagged **106 of 107** items (its `rant_caps` arm under `/i` is
+effectively "any three words" on prose).
+
+**OPEN — the loop is not closed.** Accepted `ymc` directives currently reach nothing:
+`services/memory-injection.ts` (the Bridge path Tom uses) has no silo concept at all. That is
+Phase 48.5-05 and it touches ymc's `tom-llm.ts`.
+**PII posture needs a decision before enabling:** `pii-scrub.ts` catches emails/phones/handles but NOT
+names. Structurally compensated (identity docs excluded, notes read without the contact) but a document
+body can carry a name and the dream may be answered by an external gateway.
+
+To enable after sign-off: `UPDATE silos SET enabled = TRUE WHERE id = 'ymc';` — that statement is also
+what schedules it.
+
+⚠️ **THE PRE-COMMIT SECRET SCAN CAUGHT TWO THINGS ON THE WAY IN, both worth recording.**
+1. `getYmcPool()` carried a hardcoded fallback connection string **with a password**, on the reasoning
+   that a trust-auth box makes it harmless. **heymoezy/porter is PUBLIC** — anything committed there is
+   world-readable immediately and permanently, and rotating afterwards does not un-publish it. Removed;
+   `YMC_DATABASE_URL` now comes from `~/.config/porter/porter.env` (600) and its absence THROWS, because
+   a dream that cannot read its corpus must fail loudly rather than quietly sample nothing.
+2. An untracked **DKIM private key** (`ops/mail/porter-dkim.private`) was swept into the staging area by
+   a broad `git add -A`. Unstaged, and `ops/mail/*.private` is now gitignored so it cannot be staged
+   again. It was never committed.
+
 ## v6.143.0 (2026-08-01) — v6.141.0's "preserved" branches were empty, and its 1,800s budget was dead
 
 Both faults are mine, both shipped in v6.141.0, and both were found by reading the code rather than by

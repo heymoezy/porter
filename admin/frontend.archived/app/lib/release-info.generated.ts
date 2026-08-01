@@ -2,7 +2,7 @@
 // Do NOT edit. Source of truth: backend/package.json (version) +
 // backend/src/lib/porter-releases.ts (PORTER_RELEASES — same feed as the group announce).
 
-export const PORTER_VERSION = "6.75.0";
+export const PORTER_VERSION = "6.133.0";
 
 export interface PorterRelease {
   version: string;
@@ -12,6 +12,578 @@ export interface PorterRelease {
 }
 
 export const PORTER_RELEASES: PorterRelease[] = [
+  {
+    "version": "6.133.0",
+    "date": "2026-07-29",
+    "title": "The login screen can now show your password and recover your account",
+    "bullets": [
+      "Added the eye icon to reveal what you are typing, on both the sign-in box and when setting a new password.",
+      "Added a \"Forgot password?\" flow: ask for a code, then enter that code with a new password. It sits on the login screen itself, because recovery is no use to someone who cannot get past the login.",
+      "Both of these talk to parts of Porter that already existed and had never been connected to anything — the recovery routes were sitting unused and were, until today, on the list of dead code to delete.",
+      "One honest limit: there is still no mail server, so the code currently lands in the machine log instead of your inbox. The screen is finished and working; where the code gets delivered is the remaining decision."
+    ]
+  },
+  {
+    "version": "6.132.0",
+    "date": "2026-07-29",
+    "title": "Password reset was impossible, and failing told strangers which emails have accounts",
+    "bullets": [
+      "The \"forgot password\" flow could never have worked. It is set up to hand mail to a mail server on this machine, and there is no mail server on this machine — so every attempt failed outright. The one route that exists so you can regain access without help was dead.",
+      "Worse, the way it failed gave something away: asking about an address that has no account returned a normal answer, while asking about a REAL account returned an error. Anyone could use that difference to work out which email addresses are registered — the exact thing the flow was written to avoid revealing. Confirmed against the live site, now closed.",
+      "The failure also returned internal machine details to whoever asked, and prevented the built-in fallback that keeps the reset code recoverable.",
+      "Still outstanding, and it is the real one: there is no mail server, so a reset code cannot actually reach your inbox yet. Today it only lands in the log on the machine — which is no help to someone locked out. Where those codes should be delivered is the open question."
+    ]
+  },
+  {
+    "version": "6.131.0",
+    "date": "2026-07-29",
+    "title": "A stray invisible character had made one file impossible to review",
+    "bullets": [
+      "A change I made yesterday accidentally wrote an invisible control character into one of Porter’s source files. It did no harm to how the code runs, but it made version control treat that file as unreadable data rather than text — so nobody could see what changed in it, and searches through it silently found nothing.",
+      "It caused a real false alarm during this session: a safety check reported a piece of code missing when it was plainly there.",
+      "Removed, and the file reads normally again."
+    ]
+  },
+  {
+    "version": "6.130.0",
+    "date": "2026-07-29",
+    "title": "Three nightly jobs could delete everything if they simply failed to look",
+    "bullets": [
+      "Porter runs jobs overnight that tidy up knowledge which no longer exists — if a note was deleted, its record is retired. The flaw: those jobs could not tell the difference between \"this was deleted\" and \"I could not read the folder at all\". A missing or mistyped path made everything look deleted.",
+      "The worst case would have archived every piece of vault knowledge on the next nightly run, thinning the rules and quietly making every session dumber, with nothing raising an alarm. A second job could have replaced your standing rules with an empty shell. A third could have wiped the register that watches whether other jobs are still running.",
+      "All three now refuse to act when they read nothing but know something was there a moment ago. They log it and try again on the next run.",
+      "Proven by forcing the exact failure against the live system: it refused, and all 47 vault entries survived untouched.",
+      "This had to land before the next stage of work, which makes those folder locations configurable — after which a single typo would otherwise have been enough to empty the memory."
+    ]
+  },
+  {
+    "version": "6.129.0",
+    "date": "2026-07-29",
+    "title": "Every request recorded the name of the tool, not the model that answered it",
+    "bullets": [
+      "Moe asked for Tom to know what he is running on. He could not: every request was filed under the tool’s display name — \"Claude CLI\", \"Grok CLI\" — rather than the model that actually produced the answer. The record could not tell one model from another, so nothing built on it could either, including what each one costs.",
+      "The models had simply never been configured. The code looks for a default model on each connection and falls back to using the connection’s own name when it finds none — and none had ever been set. All four are configured now, and a new one added without a model says so in the log instead of quietly passing its own name off as one.",
+      "What gets recorded is now what actually answered, read from the response rather than from configuration — so a request that fell through to a second model is filed under that model. Confirmed live: one recorded claude-opus-5, another codex/gpt-5.6-terra, where both would previously have read as the tool’s name."
+    ]
+  },
+  {
+    "version": "6.128.0",
+    "date": "2026-07-29",
+    "title": "Porter was answering the internet without asking who was calling",
+    "bullets": [
+      "askporter.app passes every address straight through to Porter. A set of pages that were only ever meant for a signed-in administrator were answering anyone who asked. That included what Porter knows and remembers, a search across every saved agent conversation, the record of who signed in and from where, and the buttons that start paid overnight jobs. All of them now ask who you are first, and this was confirmed from outside the network rather than assumed.",
+      "The bigger one: the six-digit code emailed to reset a password was never actually checked. A single missing word in the code meant the check always passed, so anyone who knew the administrator email address could have set a new password. Nothing shows up when this goes wrong — the door simply opens — which is why it sat unnoticed. It is fixed, and there is now a test that fails if anyone reintroduces the same shape of mistake anywhere in Porter, not just on that one line.",
+      "Being signed in was treated as being an administrator. Any account at all could reach the file browser, which can write anywhere in the projects folder on the server. Those pages now check WHO you are, not just THAT you are, using the same single check the rest of the admin already used.",
+      "Porter could not tell a visitor from the internet apart from a program running on its own machine — everyone looked local, which is why the \"local only\" pages were not local at all. It can now, which is what makes every other fix above hold.",
+      "Sign-up was open to the public even though the setting that controls it says closed. Nothing had ever read that setting. It does now.",
+      "As a precaution, both administrator passwords were changed and everyone was signed out. Earlier misuse cannot be ruled out, so this is treated as part of the repair rather than a nicety."
+    ]
+  },
+  {
+    "version": "6.127.0",
+    "date": "2026-07-29",
+    "title": "Tom’s nightly thinking runs again — it was being given more than any model could read",
+    "bullets": [
+      "Yesterday restored the ability to fall back to another model when the first cannot answer. That exposed the next problem: every model was then failing on the same request. The overnight review was being handed 200KB of transcript at once, which none of them could get through — the first timed out, two errored, the last returned nothing. The same review at a fifth of the size finishes in about five minutes. It now runs at the size that has actually been observed to work, rather than a number nobody had tested.",
+      "The models Porter falls back to are conversational assistants, not silent answer machines: one of them opens with \"I’ll read the cited paths first\" before giving the answer. The review expected a bare result and threw that away as unreadable. It now takes the answer out of the surrounding chat, which is what any of these models may reasonably send back.",
+      "A model that exits cleanly but says nothing at all was being recorded as a successful answer, so the failure surfaced later as an unrelated-looking error. An empty answer is now treated as a failure, which lets the next model in the council take the work — the entire point of having one.",
+      "The schedule that runs this had been deleted at some point, so even once repaired it would only ever have run when triggered by hand. It is back, and a full-size run has been confirmed end to end: five proposals, answered by the second model after the first timed out."
+    ]
+  },
+  {
+    "version": "6.126.0",
+    "date": "2026-07-29",
+    "title": "What Porter learned was being deleted on a 30-day timer",
+    "bullets": [
+      "Porter keeps a store of things it has learned, and a cleanup job that is supposed to remove the ones nothing ever uses. It decides that by reading a \"times used\" counter — and nothing in the system had ever written to that counter. Every entry read zero, forever, so the cleanup removed everything older than thirty days regardless of value. It had run 621 times: of 879 learned entries, 877 are gone.",
+      "The only knowledge that survived is what comes from the vault, because that source was deliberately exempt. Everything Porter worked out for itself was on a one-month timer.",
+      "Porter now records when a piece of knowledge is actually put in front of a model — counting only what genuinely reaches it, not what was merely considered. That makes the cleanup rule mean what it says.",
+      "One honest limit: this alone does not make the knowledge compound. Vault entries outrank everything else by a wide margin and take every available slot, so a class of automatically-harvested entries still cannot be selected and will still expire. Whether the vault should dominate that ranking is a judgement call about what knowledge matters most, so it is being raised rather than quietly changed."
+    ]
+  },
+  {
+    "version": "6.125.0",
+    "date": "2026-07-28",
+    "title": "Wrote down how memory actually reaches a model",
+    "bullets": [
+      "Porter’s own notes described how memory works in a way that was true for Tom and not for a coding session. That one missing distinction is how four separate versions of the same thing grew up side by side, and how a handover note went unread for two weeks.",
+      "The notes now say plainly which path serves which consumer, and record the rules that were learned the expensive way this week — including that anything placed in the projects folder is read by the memory system, so scratch copies of a repo must live elsewhere.",
+      "The one unresolved decision from this audit is written down with its evidence, so whoever picks it up next inherits the decision rather than rediscovering the problem."
+    ]
+  },
+  {
+    "version": "6.124.0",
+    "date": "2026-07-28",
+    "title": "Porter’s own rules were being given to every other project",
+    "bullets": [
+      "A session working on the hotel was being told to read Porter’s progress file and that it was \"a worker in Porter, an AI orchestration platform\", along with Porter’s internal architecture rules. Those five rules now belong to Porter and only appear when working on Porter.",
+      "One of them stated a web address that has been dead for weeks. Corrected — a rule that asserts something false is worse than no rule at all.",
+      "Five more rules were duplicates. The same instructions are now kept in sync automatically from the master rules file, and a hand-typed second copy cannot be updated by editing the master — it can only drift apart from it. One had already drifted, describing a release process that no longer matches the real one.",
+      "Taken together with the last four updates, the briefing a session starts with is roughly half the size it was for some projects, and what remains is relevant — beginning with what the previous session handed over."
+    ]
+  },
+  {
+    "version": "6.123.0",
+    "date": "2026-07-28",
+    "title": "Tom’s prompts were being filled with the least important rules and losing Moe’s",
+    "bullets": [
+      "Rules carry an importance number. Everything that WRITES a rule treats a higher number as more important — that is how Moe’s own instructions are kept above anything an agent teaches itself. The part that puts rules into a prompt read the number the other way round.",
+      "Measured on live data: twelve rules were going into Tom’s prompts, starting with \"You are a worker in Porter\" and \"The user is Moe\", and the space ran out before reaching the important ones. Moe’s highest-priority instruction — reply to my messages even when I don’t tag you — was being left out completely, along with the standing session rules. Both now come first.",
+      "A safety feature meant to force the most important rules through regardless of space had never once worked: it was checking for a number below 2, and no rule has ever been below 10. It now correctly protects Moe’s own instructions.",
+      "This affects Tom and anything else routed through Porter. It does not change what a Claude coding session receives — that path was already reading the number correctly.",
+      "The code that chooses which rules reach a prompt had no test, which is why this survived for months. It has one now, checked to actually fail if the mistake is reintroduced."
+    ]
+  },
+  {
+    "version": "6.122.0",
+    "date": "2026-07-28",
+    "title": "Cleared out leftovers from the deleted Python Porter",
+    "bullets": [
+      "Five automated checks that were supposed to run while working on Porter had been doing nothing since the code moved — they pointed at a folder that no longer exists. Reading them before deleting showed why they were never missed: every one was built around the old Python version of Porter, which was deleted in July.",
+      "Porter offers a set of tools directly inside Claude and the other CLIs. There were two copies of the launcher for it, and the one actually in use was missing its shutdown step — so every session left a database connection to be cleaned up late. Now one launcher, with the shutdown, confirmed working end to end.",
+      "Also removed: eight empty folders left behind by a March reorganisation, and a piece of database code that built a query, commented that it was awkward, then threw it away and built it again.",
+      "No change to what a session is given. This removes things that could only mislead whoever reads the code next."
+    ]
+  },
+  {
+    "version": "6.121.0",
+    "date": "2026-07-28",
+    "title": "Every session was handed every other project’s rules",
+    "bullets": [
+      "The rules Porter injects at the start of a session were bundled into one block that went to everyone. A session working on the hotel was handed YMC’s release ceremony, journeyful’s version rules and Porter’s own architecture rules — none of which apply to it, all of which it pays to read.",
+      "Each project’s rules are now attached to that project and only appear when you are working on it. The rules that genuinely apply everywhere still go to everyone.",
+      "The bundle had also grown past its size limit, so it was being cut off mid-sentence — the last project alphabetically lost the tail of its rules and nothing indicated anything was missing. Each project now has its own room and cannot crowd out another."
+    ]
+  },
+  {
+    "version": "6.120.0",
+    "date": "2026-07-28",
+    "title": "Every session was told the rules and never told where the last one got to",
+    "bullets": [
+      "Porter has been writing a short handover note at the end of every session since 13 July — what was done, what was left open — and nothing ever read it back. A new session opened knowing the standing rules and nothing about the work in front of it. It now opens with that handover: what the last session deliberately passed on, and the real work that came before.",
+      "The first thing it surfaced was a note left by an earlier session on a different model: WhatsApp is unlinked, Tom is mute, relink before trusting any announcement. That is exactly the kind of thing that used to be rediscovered the hard way.",
+      "The list of recent work shown at the start of a session was mostly not work. Nine of every ten entries were either an automatic counter (\"3 dispatches, 16 minutes\") or the model replying that it could not see the session it was asked to summarise. That was being handed to every new session as memory. It is now filtered out, checked against all 758 stored entries, with the borderline cases read by hand to make sure nothing real was lost.",
+      "A related fault meant one of the two ways of reading the handover had never worked at all — it asked the database for a column that has never existed, failed silently every single time, and showed an empty section. Fixed, and it can no longer fail quietly.",
+      "Sessions now start smaller and more useful: the briefing is shorter than before and what remains is worth reading."
+    ]
+  },
+  {
+    "version": "6.119.0",
+    "date": "2026-07-28",
+    "title": "Tom’s nightly thinking had been dead for three days, and the safety net was never connected",
+    "bullets": [
+      "The part of Tom that reviews his own work overnight and proposes durable rules from it had stopped entirely — nothing since 26 July, after 655 failed attempts against 20 successful ones. Almost all of them died the same way: the one model it asks was busy or slow, and the attempt ended there. Eleven died holding a usage-limit notice they tried to read as a result.",
+      "There is a mechanism for exactly this — try the next model in the council when the first cannot answer — and five separate parts of Porter were calling something that looked like it, was named like it, and does not do it. It asks one model and gives up. One of those five even carried a comment above the call describing the fallback chain it was not using. All five now use the real one.",
+      "The test that should have caught this never ran the code. It wrote out its own version of the logic and checked that, so it passed for months while the real thing had no fallback at all.",
+      "Separately, one council member could never have taken the work: long requests were handed to it as a command-line argument, and the system refuses any single argument over 128KB, so it failed before it started. It now receives long requests as a file, which is the method it documents for this.",
+      "Confirmed by running it: the first model timed out, the next two errored, the fourth answered. Before today that request would have ended at the first."
+    ]
+  },
+  {
+    "version": "6.118.0",
+    "date": "2026-07-26",
+    "title": "The DEGRADED alerts were the monitor charging jobs for its own slow watch",
+    "bullets": [
+      "The \"YMC system DEGRADED — stopped running (silent 0d)\" pages were false again, for a different reason. The registry that decides whether a job has gone quiet refreshes every 30 minutes, but it compared that half-hour-old reading against the current time — so a job was billed for however long the monitor had not looked. A job that runs every 10 minutes is allowed 22 minutes of silence, which meant that in the last 8 minutes of every single refresh cycle it read as stopped while it was firing exactly on schedule. Anything running more often than about every 14 minutes was guaranteed to false-alarm, clear itself at the next refresh, and do it again.",
+      "Staleness is now judged as of the moment it was actually measured, so a job is only ever charged for its own silence. A job that has genuinely stopped still raises the alarm, at most one refresh later. The alert also states the real duration instead of rounding every sub-day gap to \"silent 0d\", which read as a bug in the alert rather than a number.",
+      "Because the verdict now rests on when the registry last looked, the registry reports its own age, and a frozen refresh raises a distinct alarm naming itself — never silence, and never mistaken for the jobs being down. That is the failure of v6.117.0, closed from the other side."
+    ]
+  },
+  {
+    "version": "6.117.0",
+    "date": "2026-07-16",
+    "title": "The health monitor was crying wolf about jobs that were running fine",
+    "bullets": [
+      "The repeated \"YMC system DEGRADED — stopped running (silent 2d)\" alerts were false. The jobs were running fine, on schedule. What had stopped was the monitor’s OWN refresh: the registry that tracks whether a job has gone quiet was seeded once when it was built, and never scheduled to run again — so it froze, and its own staleness got reported as the jobs being silent, climbing a day at a time and telling Moe to restart healthy services.",
+      "The reconcile is now a first-class scheduled job that re-reads the real system every 30 minutes and re-installs itself on every boot, so it can never be forgotten again — a genuinely stopped job still screams, and a fresh registry stops crying wolf. It also now removes jobs that were deleted, so a retired timer no longer lingers and false-alarms forever."
+    ]
+  },
+  {
+    "version": "6.116.0",
+    "date": "2026-07-14",
+    "title": "803 documents were in the vault and could not be seen",
+    "bullets": [
+      "The vault hides a document when its file has been deleted, so that documents pruned for privacy do not linger as ghosts. That is right. But the check demanded proof that the file was still on disk, and documents uploaded through the app are not files on disk at all — so every one of them was quietly swallowed.",
+      "803 documents, including all 172 that are sitting unfiled: LP updates, an incorporation form, an executed subscription agreement, certificates. They were in the vault, they were counted in every total, and they could not be seen. Now they can."
+    ]
+  },
+  {
+    "version": "6.115.0",
+    "date": "2026-07-14",
+    "title": "Asking Codex for a second opinion was quietly returning Claude",
+    "bullets": [
+      "Codex had been failing on every single call for hours, and the fallback chain was doing its job perfectly: it caught the error, asked Claude instead, and returned a good answer. That is the problem. A second opinion that is secretly the same model is worse than no second opinion, because it manufactures agreement. Nothing looked broken.",
+      "Two causes, both from having more than one copy of a tool installed. Its config asked for a setting the tool does not support, so it refused to start; and the platform was running an old stray copy of Codex from a stray folder in the home directory instead of the real one. Both fixed, and the canonical install now wins by default.",
+      "Also: a job that had just been installed and had never yet run was invisible to the check that notices when a job goes quiet. The moment a job is most likely to be misconfigured was exactly the moment nothing was watching it."
+    ]
+  },
+  {
+    "version": "6.114.0",
+    "date": "2026-07-14",
+    "title": "Eleven squares that all said the same thing",
+    "bullets": [
+      "The vault drew eleven identical boxes labelled \"Share Certificate.pdf\". They were not duplicates: they are the Epic Games cap table, one certificate per investor, and the only thing telling them apart was a folder name that nothing displayed. 571 documents across 265 shared names were in the same position.",
+      "The graph now knows which parent a node hangs off and whether its name is unique, so a label can say which investor a certificate belongs to instead of leaving you to guess."
+    ]
+  },
+  {
+    "version": "6.113.0",
+    "date": "2026-07-14",
+    "title": "The vault total was still counting the things we took out of it",
+    "bullets": [
+      "The vault overview said 5,220 items. It holds 3,480. The other 1,740 were the archived Phoenix prospects, still being counted in the headline figure even though they no longer appear in the graph. Same mistake as last week, in the one number you look at first.",
+      "Archived items are now shown as their own separate count rather than folded into the total or hidden entirely. Phoenix is out of the graph, not deleted, and it comes back when you revamp it."
+    ]
+  },
+  {
+    "version": "6.112.0",
+    "date": "2026-07-14",
+    "title": "Twelve scheduled jobs had quietly stopped running",
+    "bullets": [
+      "The \"system degraded\" alerts were right, and I was wrong to treat them as noise. Twelve background jobs really had stopped: the vault document sweep, daily memory cleanup, pattern mining, the dream-proposal digest, and others. All of them still reported success, because the last time they ran they did succeed. They just never ran again.",
+      "The cause: the scheduler worked out whether a daily job was due by counting how long it had been running without a restart. Porter restarts on every deploy, so a job that needed twenty-four unbroken hours never got there, and a weekly job needed seven unbroken days and effectively never ran at all.",
+      "Jobs now remember when they last ran, in the database, so a restart cannot erase that. Anything overdue runs within half an hour of a restart instead of never. All twelve are running again."
+    ]
+  },
+  {
+    "version": "6.111.0",
+    "date": "2026-07-14",
+    "title": "One copy of each tool — and the registry now points at the one we actually use",
+    "bullets": [
+      "Porter kept a registry of where each tool lives so nothing downloads a second copy of itself. It turned out to be pointing at a Chrome that nothing on this box can reach: it picked whichever version folder sorted last, which is not the same as the version our code runs. Porter had been taking its own screenshots through an orphaned browser.",
+      "Both browsers are now resolved by asking the code what it launches, rather than guessing from the folder names on disk.",
+      "A shared tool folder that never cleans up is not one copy of a tool, it is every copy in one place. There is now a weekly sweep that quarantines browser builds nothing uses. It reclaimed 1.8 GB on the first run, and it puts things in quarantine rather than deleting them."
+    ]
+  },
+  {
+    "version": "6.110.0",
+    "date": "2026-07-14",
+    "title": "Brain becomes Memory, and one part of the design was refused",
+    "bullets": [
+      "The ratified design said to fold Brain into the Vault. It was wrong, and it was refused: Brain holds Porter's OWN memory, which spans every product, while the Vault is one product's knowledge graph. Hiding a global thing inside a single customer's tab is a category error. Brain is now simply \"Memory\", filed under Porter where it belongs.",
+      "Nothing was deleted. Every page still opens; one moved to where it belongs. The old surfaces come out once the new layout has actually been used and confirmed.",
+      "Also fixed a review queue nobody could reach: the Memory page has always offered to let you review new memories before the system auto-promotes them, and the button behind it led to an endpoint that did not exist. A review queue you cannot reach is not a review queue."
+    ]
+  },
+  {
+    "version": "6.109.0",
+    "date": "2026-07-14",
+    "title": "The vault was still showing the 1,700 prospects it had been told to hide",
+    "bullets": [
+      "Phoenix was archived out of the knowledge graph and announced as done — but the graph never checked whether a node was archived, so it kept serving all 1,707 of them. You would have opened the vault and seen the cold prospects still sitting there after being told they were gone. Archiving that the reader ignores is not archiving; it is bookkeeping.",
+      "Fixed. The vault now shows 2,674 nodes instead of 4,414, the review count drops from 4,176 to 2,436, and what remains is the actual business: YMC, Deals, Funds, Workouts, Team, Contacts, Data Rooms, Compliance, and the live matters.",
+      "It was caught by screenshotting the real page. The database was right and the announcement was confident, and the product was still wrong."
+    ]
+  },
+  {
+    "version": "6.108.0",
+    "date": "2026-07-14",
+    "title": "One registry for everything that runs — so nothing can die quietly again",
+    "bullets": [
+      "A job that runs but is recorded nowhere cannot be watched, and dies silently. That is exactly what happened to the Fatburger Daily email: it stopped on 18 June and nothing noticed for 25 days, because every check was looking for things that BROKE, and nothing was looking for things that simply STOPPED.",
+      "Porter now discovers everything that runs — scheduled jobs, its own workflows, and what governs them — into one registry. 42 found on the first pass, including 4 that were running under no governance at all. Each job knows its own rhythm and how long it may stay silent before something is wrong.",
+      "Proven the way it should be: simulate the digest going quiet for 25 days, and the system now reports \"stopped running: fatburger-daily (silent 25d)\" instead of a cheerful green tick."
+    ]
+  },
+  {
+    "version": "6.107.0",
+    "date": "2026-07-14",
+    "title": "A commit carrying a password is now refused",
+    "bullets": [
+      "Yesterday the admin password for this system was found sitting in 11 commits of a public repository — and while fixing that, the live gateway token very nearly went into the same repo. It was caught by hand. Nothing but attention stood between a live credential and GitHub, and attention is not a control.",
+      "Every commit is now scanned before it is allowed through, in both repos, and refused if it carries anything shaped like a credential. It cannot be skipped: a release can be rushed, a leaked password cannot be un-published.",
+      "Testing it against real secrets found two bugs that would have made it useless — it was silently matching nothing, and it was letting private keys through. Both fixed. A security check that never fires is worse than none, because it makes you feel safe."
+    ]
+  },
+  {
+    "version": "6.106.0",
+    "date": "2026-07-14",
+    "title": "You can now ask the vault why — and cut a wrong association",
+    "bullets": [
+      "The graph could not explain itself: 1,731 of its 1,766 connections recorded no reason at all. That is what a \"weird association\" really is — not wrong logic, but invisible logic. Every connection now records why it exists: the rule that made it, the table it was read from, and the exact row to blame. It is impossible to create an unexplainable connection now; the code refuses.",
+      "The biggest group — 81% of the graph — turned out to be a sensible rule that simply never said so: a file living in the folder workoutdocs/edwardchen/ was linked to Edward Chen. Now it says so, so you can judge it.",
+      "Pick any item and see where it is filed, who decided that, and every connection with its reason — then cut the wrong ones with one click. Cutting a connection removes only the connection; the documents and their filing are untouched."
+    ]
+  },
+  {
+    "version": "6.105.0",
+    "date": "2026-07-14",
+    "title": "Document conversion runs 4x faster, and will never starve Tom to do it",
+    "bullets": [
+      "The job that converts your raw files into readable summaries was capped at 25 a day, which meant the remaining backlog would have taken about 84 months-worth of patience — roughly 84 days. It now does 100 a day, so it finishes in about three weeks.",
+      "The cost here is CLI quota, not a bill — and the danger of a bigger batch is that it eats the quota Tom needs to answer you. So the job now checks first: if the gateway was rate-limited in the last hour it skips entirely, and it always keeps 20% of any known limit in reserve for Tom and for live agent work. Background work yields to you, never the other way round.",
+      "Proven by forcing each condition rather than assuming it. The check run also converted 100 real documents with no failures."
+    ]
+  },
+  {
+    "version": "6.104.0",
+    "date": "2026-07-14",
+    "title": "The vault stops asking you to review documents you already approved",
+    "bullets": [
+      "426 documents were sitting in the vault's review queue that had already been approved in ymc — by you, personally. The two queues did not know about each other, so the same documents were waiting for a second decision from the same person. Those decisions are now imported, and they are recorded under your name, because you are who made them.",
+      "The match is exact rather than by filename: each vault record carries the ymc document id it came from. Nothing is guessed.",
+      "Across the last three changes the review queue has gone from 4,900 items to 2,772 — and you have not had to review anything."
+    ]
+  },
+  {
+    "version": "6.103.0",
+    "date": "2026-07-14",
+    "title": "The vault stops storing the same document twice",
+    "bullets": [
+      "The vault was holding 3,010 file records for only 2,170 actual files. The same document filed in two folders — byte-for-byte identical — was being stored twice, and each copy queued its own conversion job. 840 redundant records removed, and nothing was lost: every folder location is still recorded, and no converted document was destroyed.",
+      "The cause was in the importer, which identified a file by its PATH rather than its contents — so the same document in a second folder looked like a new document. It now recognises identical content, which means the clean-up cannot quietly undo itself on the next import.",
+      "A further 28 dead conversion jobs were removed — jobs pointing at files that no longer exist, which could never have succeeded and would have sat in the queue forever. The conversion backlog drops by 29% before any change to how fast it runs."
+    ]
+  },
+  {
+    "version": "6.102.0",
+    "date": "2026-07-14",
+    "title": "Release notes no longer quote private messages",
+    "bullets": [
+      "Release notes across Porter and ymc carried verbatim quotes taken from internal conversations. A changelog should state what changed and why it mattered, not reproduce what was said in chat. All 58 are rewritten as plain fact, with no loss of substance, and the same rule now applies to the group announcements."
+    ]
+  },
+  {
+    "version": "6.101.0",
+    "date": "2026-07-13",
+    "title": "Phoenix is out of the knowledge graph — the \"4,900 documents\" were never documents",
+    "bullets": [
+      "The vault review queue showed 4,900 items, which was never a real document count. Roughly 1,740 of them were Phoenix cold-outreach prospects and their scoring notes — CRM rows read out of the database and filed as knowledge. That is what was generating the odd associations in the graph.",
+      "They are archived, not deleted, and the Phoenix data itself is untouched — it simply stops being treated as knowledge. When Phoenix is revamped it can be brought back deliberately.",
+      "The review queue drops from 4,900 to 3,198 as a result. Phoenix's own design docs are kept — engineering knowledge is knowledge; a prospect record is not."
+    ]
+  },
+  {
+    "version": "6.100.1",
+    "date": "2026-07-13",
+    "title": "Removed the last place the code still claimed an AI did the filing",
+    "bullets": [
+      "The vault page's own header comment still repeated the claim that an AI files these documents, even after that was proven false. Corrected, so the next person reading the code is not taught the same mistake."
+    ]
+  },
+  {
+    "version": "6.100.0",
+    "date": "2026-07-13",
+    "title": "The vault was crediting an AI for work no AI did",
+    "bullets": [
+      "Every one of the 5,176 filings in the vault was recorded as having been proposed by an AI. None of them were. The auto-filing classifier was never actually built — it is a placeholder that just passes through whatever structure the app already declared. So those 4,900 items waiting for your review are not machine guesses you need to second-guess; they are ymc's own existing structure waiting to be confirmed. That changes what you should do with them.",
+      "Fixed where it was wrong, not just where it showed: filings now record who actually decided them, and \"AI\" is reserved until a real classifier exists and can earn the label. The 5,176 mislabelled records were corrected — labels only, nothing moved."
+    ]
+  },
+  {
+    "version": "6.99.0",
+    "date": "2026-07-13",
+    "title": "You can now clear the filing queue without clicking 4,900 times",
+    "bullets": [
+      "The review queue can be filtered to one kind of thing and approved in one go. It is deliberately not an \"approve everything\" button: you pick a type, you see the count, and the system refuses if that count has changed since you looked — so you can never approve a different set than the one in front of you.",
+      "Nothing is ever deleted. Approving a filing archives the previous one, so any decision can be walked back later.",
+      "Your 4,900 pending filings have NOT been touched. Approving them is your call."
+    ]
+  },
+  {
+    "version": "6.98.0",
+    "date": "2026-07-13",
+    "title": "The Vault will now tell you what it has been doing",
+    "bullets": [
+      "The vault engine has been running for weeks with nothing able to show its state. Two things were quietly true and now are visible: 4,900 filings the AI proposed that no human has ever reviewed, and a document-conversion backlog that is only 2.4% done.",
+      "Nobody had reviewed those 4,900 because it was impossible to: you could approve a filing if you knew its id, but nothing could list them. That is fixed — there is a queue now, and you can approve or re-file from it. Nothing is ever deleted.",
+      "The conversion backlog will take about 120 days to clear at its current speed limit of 25 documents a day. That limit is deliberate — it caps what we spend on the AI — and it is why the backlog stayed hidden: the job looks perfectly healthy doing its 25 a day. Speeding it up costs money, so it is your call, not a default."
+    ]
+  },
+  {
+    "version": "6.97.0",
+    "date": "2026-07-13",
+    "title": "The token that was on GitHub no longer opens anything",
+    "bullets": [
+      "The old admin token is now rejected outright. During the changeover it was kept working on purpose, but every use of it was logged with the caller — which is how two hidden users got caught: the release hook, and Tom's tool server. Both were quietly relying on a password published on the internet. Both are fixed, and the old token is now dead.",
+      "It also cannot come back: Porter refuses that specific value as a password even if someone pastes it into a config again."
+    ]
+  },
+  {
+    "version": "6.96.0",
+    "date": "2026-07-13",
+    "title": "Turned certificate checking back on, and deleted a mail server that was never there",
+    "bullets": [
+      "Porter was running with HTTPS certificate verification switched off globally — meaning any outbound secure connection could have been intercepted. It was switched off for a mail server (Stalwart) that turns out not to exist: no such service is installed, nothing listens on its port, and the code module it was supposedly talking to was never built. Verification is back on.",
+      "That also means the mail admin password leaked in the public repo was a password to nothing. It did not need rotating — it needed deleting, and it is gone.",
+      "The dashboard was reporting the mail server's health by pinging port 8080 — which belonged to the old Python app deleted last week, not to any mail server. That fake health check is deleted."
+    ]
+  },
+  {
+    "version": "6.95.0",
+    "date": "2026-07-13",
+    "title": "The release hook was quietly using the leaked token — fixed",
+    "bullets": [
+      "Removing the hardcoded token immediately exposed its first hidden user: the git hook that announces releases had no token of its own and had only ever worked by falling back to the public one. It now reads the real secret, and says so loudly if it cannot find it."
+    ]
+  },
+  {
+    "version": "6.94.0",
+    "date": "2026-07-13",
+    "title": "Security: the admin token for the brain was published on GitHub — rotated",
+    "bullets": [
+      "Porter's service token was written into the source as a default and is sitting in 11 commits of a public GitHub repo. That token is full admin on the brain: it can dispatch through Bridge, read and write memory, and run jobs. Only the localhost-only check stopped it being usable from the internet.",
+      "Rotated to a fresh random token, kept in a permission-locked file outside the repo. The hardcoded default is gone from all 17 places it appeared, so an unset token now fails loudly instead of silently falling back to a public one.",
+      "The old token still works for a short window so nothing breaks mid-flight — but every use of it is logged with the caller, so the last stragglers get found rather than guessed at.",
+      "The database URL had also been committed to the public repo since the Postgres migration. That file is now untracked."
+    ]
+  },
+  {
+    "version": "6.93.0",
+    "date": "2026-07-13",
+    "title": "The release gate blocks now — it used to just complain",
+    "bullets": [
+      "Eight releases in a row shipped without writing to this feed, so every one of them was announced as v6.84.0 — the last version the feed actually knew about. The check that was supposed to catch it printed a warning and let the commit through. It now refuses the commit.",
+      "The eight missing releases have been written back into the feed, so the release history is true again."
+    ]
+  },
+  {
+    "version": "6.92.0",
+    "date": "2026-07-13",
+    "title": "Porter comes back from a clean exit — and its secrets left the public repo",
+    "bullets": [
+      "Porter was found DEAD. It exited cleanly and systemd left it down: it was the only critical service set to restart on-failure, and a clean exit isn't a failure. Every CLI, the MCP server and the memory layer depend on Porter, and nothing was bringing it back. It now always restarts, proven by killing it and watching it return.",
+      "The systemd unit is now tracked in the repo, so the fix survives a rebuild — a fix that lives on one machine dies with that machine.",
+      "The unit had the database password and three API tokens written into it, and the Porter repo is public. Those moved to a private, permission-locked file outside the repo."
+    ]
+  },
+  {
+    "version": "6.91.0",
+    "date": "2026-07-13",
+    "title": "The admin now shows the same memory your CLI sessions open with",
+    "bullets": [
+      "The Overview page shows, for the product you have selected: where the last session got to, the handoff it left for the next one, and which CLI last touched it. One brain, two windows onto it.",
+      "Every page states which product it means, instead of showing an undifferentiated blob."
+    ]
+  },
+  {
+    "version": "6.90.0",
+    "date": "2026-07-13",
+    "title": "Product-first navigation",
+    "bullets": [
+      "The sidebar is organised the way Porter actually works — Overview, Vault, Services, Files, Open Items, Releases — with the old links kept, not killed. Nothing you could reach before is unreachable now."
+    ]
+  },
+  {
+    "version": "6.89.0",
+    "date": "2026-07-13",
+    "title": "Product switcher — the admin and your CLI sessions agree on what you are working on",
+    "bullets": [
+      "A product/tenant selector in the top bar. Picking one pins the same active-project that every Claude/codex/grok session reads, so the admin and the CLIs can never disagree about what is being worked on."
+    ]
+  },
+  {
+    "version": "6.88.0",
+    "date": "2026-07-13",
+    "title": "Cost per accepted change",
+    "bullets": [
+      "Porter now tracks what a shipped change actually costs. Tokens are exact (read from the session transcript, not estimated), and whether the change was ACCEPTED is observed from git — a session does not get to grade its own homework. First reading: $8.36 per accepted change, 100% acceptance."
+    ]
+  },
+  {
+    "version": "6.87.0",
+    "date": "2026-07-13",
+    "title": "Porter memory is available inside every CLI",
+    "bullets": [
+      "Porter's MCP server was never actually runnable — it defined its tools but had no entry point. Fixed, and registered in Claude, codex and grok. A handoff written by one CLI is now read back by another: proven end-to-end."
+    ]
+  },
+  {
+    "version": "6.86.0",
+    "date": "2026-07-13",
+    "title": "Memory writes itself at session end",
+    "bullets": [
+      "Ending a session writes what happened to Porter and mirrors it into the vault, so the next session — in any CLI — starts warm instead of re-reading the repo."
+    ]
+  },
+  {
+    "version": "6.85.1",
+    "date": "2026-07-13",
+    "title": "Security fix: path traversal in the memory endpoint",
+    "bullets": [
+      "A project name from the URL was used to build a file path without validation, which could have been used to read files outside the projects directory. Caught by the automated security review before any real use, and fixed with both a shape check and a containment check. Seven attack strings now rejected."
+    ]
+  },
+  {
+    "version": "6.85.0",
+    "date": "2026-07-13",
+    "title": "Hot context — sessions start warm",
+    "bullets": [
+      "A small, hard-capped packet per project (where we got to, what is open, what the last session handed off) that every CLI reads at startup. Pointers, not payloads — it stays under ~900 tokens so it cannot bloat your context."
+    ]
+  },
+  {
+    "version": "6.84.0",
+    "date": "2026-07-10",
+    "title": "Vault graph no longer shows ghost (removed) documents",
+    "bullets": [
+      "The knowledge graph was still drawing document nodes whose files are no longer present — including personal tax documents (K-1s) that were pruned for privacy after an earlier index. The graph now hides any document with no present file location, matching the Files view, so removed/moved/privacy-pruned files can't linger as ghost nodes. The lingering K-1 nodes were also deleted outright."
+    ]
+  },
+  {
+    "version": "6.83.0",
+    "date": "2026-07-10",
+    "title": "Extraction hardening (security review)",
+    "bullets": [
+      "Hardened the new document-text extraction against argument injection: a file named to start with a dash could have been parsed as a tool flag. Paths are now guarded, pdftotext gets an end-of-options marker, and office files are copied to a controlled name before conversion. Flagged by the automated security review of the previous release."
+    ]
+  },
+  {
+    "version": "6.82.0",
+    "date": "2026-07-10",
+    "title": "Markdown mirrors now read real PDFs",
+    "bullets": [
+      "The markdown-mirror generator can finally read binary documents: PDFs are extracted with pdftotext and Office files (docx/xlsx/ppt…) via LibreOffice before the mirror is written — so a mirror now contains the document's actual text instead of a placeholder. This unblocks generating the ~2,900 missing mirrors; the nightly sweep and the on-demand sweep both use it."
+    ]
+  },
+  {
+    "version": "6.81.0",
+    "date": "2026-07-09",
+    "title": "Document Library shows .md-mirror status (Grok-designed)",
+    "bullets": [
+      "The Document Library now shows, per file, whether its markdown (.md) mirror exists — a teal \".md\" chip when it does, a muted \"No mirror\" when it doesn't — plus a per-project coverage bar (\"X/Y mirrored\") so gaps are obvious at a glance. First slice of the Grok-designed file-inventory view: you can finally see which of your documents are missing their mirror. Generating the missing ones is the next step."
+    ]
+  },
+  {
+    "version": "6.80.0",
+    "date": "2026-07-09",
+    "title": "Files now report their markdown-mirror status",
+    "bullets": [
+      "The Document Library API now tells you, for every file, whether its markdown (.md) mirror exists yet — plus a per-project and app-wide coverage count (\"X of Y mirrored\"). This is the data foundation for the new file-inventory view: you can finally see which documents are missing their mirror. (Today that answer is honest and stark — almost none of the ~2,900 files have one yet; generating them is the next step.)"
+    ]
+  },
+  {
+    "version": "6.79.0",
+    "date": "2026-07-09",
+    "title": "Usage monitoring across every AI backend",
+    "bullets": [
+      "Bridge now reports how much each model backend is actually being used — calls, tokens, cost and latency per gateway (Claude, Codex, Grok, Antigravity) over rolling 5-hour / 24-hour / 7-day windows, from real dispatch data. It is honest consumption tracking rather than a fake quota scraper: the CLIs do not expose provider quotas, so this shows what we actually spent per backend, the early-warning signal for leaning too hard on one model. (Claude also has real provider rate-limit data via the capacity view.)"
+    ]
+  },
+  {
+    "version": "6.78.0",
+    "date": "2026-07-09",
+    "title": "Full changelog history restored",
+    "bullets": [
+      "The in-app changelog was only showing releases back to v6.69 — everything before it was missing. Nothing was lost; the feed the changelog reads was simply created at 6.69 and never backfilled. Restored the complete platform history from v6.0.0 (the Orchestration Platform, 4 Apr) up to today, so the changelog now shows every release Porter has shipped."
+    ]
+  },
+  {
+    "version": "6.77.0",
+    "date": "2026-07-09",
+    "title": "Porter now follows its own release rules",
+    "bullets": [
+      "Porter adopted the same release-kit every other product uses: it carries a release manifest, its commit hooks record each ship, and the cross-project release audit now shows Porter itself as fully wired — so the one product that enforces release consistency is no longer an exception to it. No change to how Porter builds, deploys, or announces."
+    ]
+  },
+  {
+    "version": "6.76.0",
+    "date": "2026-07-09",
+    "title": "Release reconciler hardened (no more mis-announces)",
+    "bullets": [
+      "Fixed the announce reconciler after it posted a garbled update: it now only announces a version when the release notes for that EXACT version exist (never forces a version onto stale notes), reads notes from the typed feed only (no fragile text parsing), and auto-announces Porter only — other apps announce through their own release flow. Safe by construction."
+    ]
+  },
   {
     "version": "6.75.0",
     "date": "2026-07-08",
@@ -66,6 +638,598 @@ export const PORTER_RELEASES: PorterRelease[] = [
     "title": "Document Library — every app’s files, deduped and in sync",
     "bullets": [
       "New Document Library in the Porter admin: all of an app’s documents, organised the way the knowledge graph sees them (app → project → document), completely de-duplicated (one entry per unique file with every location tracked) and kept in sync so moved or deleted files drop off automatically. Personal material (passports, tax, personal financials) is never indexed. First app live: YMC with ~2,900 documents across 6 projects."
+    ]
+  },
+  {
+    "version": "6.68.0",
+    "date": "2026-07-08",
+    "title": "Files perfect-sync",
+    "bullets": [
+      "Added a reconcile pass (POST /vault/reconcile) so the document index exactly matches what is on disk — moved or deleted files are corrected automatically, no drift."
+    ]
+  },
+  {
+    "version": "6.67.0",
+    "date": "2026-07-08",
+    "title": "One entry per unique file",
+    "bullets": [
+      "Documents are now de-duplicated by content: the same file appearing in several places collapses to a single indexed entry with every location tracked, instead of many near-duplicate rows."
+    ]
+  },
+  {
+    "version": "6.66.0",
+    "date": "2026-07-08",
+    "title": "Document Library foundation",
+    "bullets": [
+      "Laid the groundwork for the Porter Files directory — a table that records every place a given document lives across an app, so the library can show one file with all its locations."
+    ]
+  },
+  {
+    "version": "6.65.0",
+    "date": "2026-07-08",
+    "title": "Reorg tooling (dry-run)",
+    "bullets": [
+      "Added config-generation plus move/de-dup runbooks that preview every change before anything is touched — safe planning for large file reorganisations."
+    ]
+  },
+  {
+    "version": "6.64.0",
+    "date": "2026-07-08",
+    "title": "Knowledge graph associations",
+    "bullets": [
+      "Vault association engine: records can now link to each other and a focused view expands along those edges, so related knowledge surfaces together instead of in isolation."
+    ]
+  },
+  {
+    "version": "6.63.0",
+    "date": "2026-07-08",
+    "title": "Vault-reader shadow canary",
+    "bullets": [
+      "Internal safety step: ran the new vault reader in shadow mode with all flags off to prove zero risk before it goes live."
+    ]
+  },
+  {
+    "version": "6.62.0",
+    "date": "2026-07-07",
+    "title": "Tools registry",
+    "bullets": [
+      "First slice of a canonical tools registry so every tool Porter can call is discoverable in one place rather than scattered."
+    ]
+  },
+  {
+    "version": "6.61.0",
+    "date": "2026-07-07",
+    "title": "Dead-code cleanup",
+    "bullets": [
+      "Removed the retired brain-ui :5176 surface and unused mail/forge/rpg tables — less dead weight, clearer system."
+    ]
+  },
+  {
+    "version": "6.60.0",
+    "date": "2026-07-07",
+    "title": "Identity spine — scope ladder + product registry",
+    "bullets": [
+      "Introduced a scope ladder and product registry so every piece of knowledge and every service knows which app/project/product it belongs to — the backbone for clean multi-app separation."
+    ]
+  },
+  {
+    "version": "6.59.0",
+    "date": "2026-07-07",
+    "title": "Porter MCP server (alpha)",
+    "bullets": [
+      "First alpha of the Porter MCP server — lets Claude pull Porter knowledge directly (headless), plus vault review-queue engine operations."
+    ]
+  },
+  {
+    "version": "6.58.0",
+    "date": "2026-07-07",
+    "title": "Review-queue placement IDs",
+    "bullets": [
+      "The knowledge-graph read now returns a placement ID for each proposed item so the review queue can accept or refile it precisely."
+    ]
+  },
+  {
+    "version": "6.57.0",
+    "date": "2026-07-07",
+    "title": "Admin hygiene",
+    "bullets": [
+      "Housekeeping: zero type-check errors, stopped tracking build artefacts in git, and fixed a dream-run JSON bug."
+    ]
+  },
+  {
+    "version": "6.56.0",
+    "date": "2026-07-07",
+    "title": "Graph edges API",
+    "bullets": [
+      "Added edge ingestion (POST /vault/edges) so apps can declare relationships between knowledge nodes, not just the nodes themselves."
+    ]
+  },
+  {
+    "version": "6.55.0",
+    "date": "2026-07-07",
+    "title": "MCP management page",
+    "bullets": [
+      "New MCP management screen in the Porter admin, plus removal of dead Forge code."
+    ]
+  },
+  {
+    "version": "6.54.0",
+    "date": "2026-07-07",
+    "title": "Derivative loop — raw to markdown",
+    "bullets": [
+      "Vault now derives clean markdown from raw source documents and keeps it fresh, re-generating when the source changes (stale-aware)."
+    ]
+  },
+  {
+    "version": "6.53.0",
+    "date": "2026-07-07",
+    "title": "Placement accept/refile",
+    "bullets": [
+      "Review-queue operations: a proposed knowledge placement can now be accepted or refiled to a better spot."
+    ]
+  },
+  {
+    "version": "6.52.0",
+    "date": "2026-07-07",
+    "title": "Scoped graph reads",
+    "bullets": [
+      "Knowledge-graph reads can now be filtered by layer and focused on a subtree, so an app sees just its slice instead of the whole graph."
+    ]
+  },
+  {
+    "version": "6.51.0",
+    "date": "2026-07-07",
+    "title": "Type-checked ingest",
+    "bullets": [
+      "New ingest API accepts type-checked knowledge pushes and returns proposed placements for review before anything is committed."
+    ]
+  },
+  {
+    "version": "6.50.0",
+    "date": "2026-07-07",
+    "title": "Apps declare their node types",
+    "bullets": [
+      "Added a register-schema API so each app can declare the kinds of knowledge nodes it produces — the graph adapts per app instead of a fixed shape."
+    ]
+  },
+  {
+    "version": "6.49.0",
+    "date": "2026-07-07",
+    "title": "Vault v2 — generic schema",
+    "bullets": [
+      "Foundation of the v2 knowledge graph: a generic six-table schema that can hold any app’s knowledge, replacing the old fixed layout."
+    ]
+  },
+  {
+    "version": "6.48.0",
+    "date": "2026-07-06",
+    "title": "Admin revamp — dead screens removed",
+    "bullets": [
+      "Removed the Forge, Email and Skill-Feedback screens from the admin (their backends were already gone, so these were dead frontends) — trimming ~2,000 lines and clearing the way for the MCP, tools and CLI-config views that follow."
+    ]
+  },
+  {
+    "version": "6.47.0",
+    "date": "2026-07-06",
+    "title": "Bridge model failover",
+    "bullets": [
+      "Tom no longer breaks when Claude hits a quota or error: every Bridge dispatch now automatically retries the same task on the next model in the chain (Claude → Codex → Antigravity), with the whole failover recorded. Callers can opt out for hard-fail behaviour."
+    ]
+  },
+  {
+    "version": "6.46.0",
+    "date": "2026-07-06",
+    "title": "Cleanup + telemetry fix",
+    "bullets": [
+      "Removed the dead documents-tree code, fixed Codex cost/telemetry reporting, and shipped the second slice of the email verdict work."
+    ]
+  },
+  {
+    "version": "6.45.0",
+    "date": "2026-07-06",
+    "title": "Knowledge-evolution loop",
+    "bullets": [
+      "A background worker now researches on the cheap model tier and scans GitHub for improvements, filing proposals only — Porter suggests, a human still approves."
+    ]
+  },
+  {
+    "version": "6.44.0",
+    "date": "2026-07-06",
+    "title": "Antigravity gateway",
+    "bullets": [
+      "Registered and proved the Antigravity CLI (agy) as a Bridge gateway — another model backend Porter can route to."
+    ]
+  },
+  {
+    "version": "6.43.0",
+    "date": "2026-07-06",
+    "title": "Memory unification (U5+U6)",
+    "bullets": [
+      "Shipped the final slices of the memory-unification work that brings Porter memory and the vault into one consistent store."
+    ]
+  },
+  {
+    "version": "6.42.0",
+    "date": "2026-07-05",
+    "title": "Rules learned from failures",
+    "bullets": [
+      "New rule-distillation loop: repeated failures now turn into proposed operating rules for review, so Porter learns from what went wrong."
+    ]
+  },
+  {
+    "version": "6.41.0",
+    "date": "2026-07-05",
+    "title": "Memory unification (U3+U4)",
+    "bullets": [
+      "Memory injection now prefers the vault as its source, and nightly dream drafts write back into the vault — one knowledge home, not two."
+    ]
+  },
+  {
+    "version": "6.40.0",
+    "date": "2026-07-05",
+    "title": "Memory unification (U1+U2)",
+    "bullets": [
+      "Began unifying memory with the vault: a live mirror of memory into the vault plus a concept indexer, so structured knowledge and freeform memory stop drifting apart."
+    ]
+  },
+  {
+    "version": "6.39.0",
+    "date": "2026-07-04",
+    "title": "Dream reviewer + docs-match-reality",
+    "bullets": [
+      "Added a reviewer for the nightly dream proposals and a check that flags when documentation no longer matches the running system."
+    ]
+  },
+  {
+    "version": "6.38.0",
+    "date": "2026-07-04",
+    "title": "Dead-code batch + mail shutdown",
+    "bullets": [
+      "Cleared a batch of dead code and closed the old mail ports Porter no longer uses."
+    ]
+  },
+  {
+    "version": "6.37.0",
+    "date": "2026-07-04",
+    "title": "Unjammed the memory pruner",
+    "bullets": [
+      "Fixed the nightly memory pruner that had stalled, so old low-value memory is cleaned up again."
+    ]
+  },
+  {
+    "version": "6.36.1",
+    "date": "2026-07-02",
+    "title": "Active-project fallback + version fix",
+    "bullets": [
+      "The /context endpoint now falls back to the pinned active project when it can’t infer one, and a hardcoded version that had drifted out of sync was fixed."
+    ]
+  },
+  {
+    "version": "6.36.0",
+    "date": "2026-06-25",
+    "title": "Nightly memory dream",
+    "bullets": [
+      "The memory distiller became Tom’s nightly “dream” — each night Porter turns the day’s episodes into durable, reviewed knowledge."
+    ]
+  },
+  {
+    "version": "6.35.0",
+    "date": "2026-06-25",
+    "title": "Rules supersede on conflict",
+    "bullets": [
+      "When a new operating rule conflicts with an old one, the newer rule now supersedes it cleanly instead of both lingering."
+    ]
+  },
+  {
+    "version": "6.34.0",
+    "date": "2026-06-25",
+    "title": "Surprise-salience write-gate",
+    "bullets": [
+      "Memory now only saves what’s genuinely new or surprising, keeping the brain focused instead of hoarding routine noise."
+    ]
+  },
+  {
+    "version": "6.33.0",
+    "date": "2026-06-25",
+    "title": "“Where we left off” recall",
+    "bullets": [
+      "Added session-scoped recall so Porter can pick up exactly where a previous session left off."
+    ]
+  },
+  {
+    "version": "6.32.0",
+    "date": "2026-06-24",
+    "title": "Better recall + durable distiller",
+    "bullets": [
+      "Recall now matches on any of the query terms (broader, more relevant results) and the memory distiller survives restarts."
+    ]
+  },
+  {
+    "version": "6.31.3",
+    "date": "2026-06-14",
+    "title": "Agent persona text",
+    "bullets": [
+      "GET /agents/:id now returns the agent’s full persona text."
+    ]
+  },
+  {
+    "version": "6.31.2",
+    "date": "2026-06-13",
+    "title": "Bridge stream fix",
+    "bullets": [
+      "Fixed the Claude CLI gateway double-emitting stream chunks."
+    ]
+  },
+  {
+    "version": "6.31.1",
+    "date": "2026-06-11",
+    "title": "System screen cleanup",
+    "bullets": [
+      "Stripped the fake “theater” out of the admin System screen and repaired the changelog generator."
+    ]
+  },
+  {
+    "version": "6.31.0",
+    "date": "2026-06-10",
+    "title": "Ops revamp",
+    "bullets": [
+      "Rebuilt the admin Ops area on a clean light-only design system, added a Bridge console, and merged the Brain views into one screen."
+    ]
+  },
+  {
+    "version": "6.30.1",
+    "date": "2026-06-10",
+    "title": "Honest model lineup",
+    "bullets": [
+      "Refreshed the stale model list and corrected the cost labels so the numbers shown are honest."
+    ]
+  },
+  {
+    "version": "6.30.0",
+    "date": "2026-06-10",
+    "title": "Brain cleanup",
+    "bullets": [
+      "Cleaned up the brain: only meaningful episodes are kept, old telemetry is purged, and dead signals were removed from the UI."
+    ]
+  },
+  {
+    "version": "6.29.0",
+    "date": "2026-06-10",
+    "title": "Agents read/write the brain",
+    "bullets": [
+      "Non-CLI agents can now read from and write to Porter’s memory directly through a dedicated agent-memory surface."
+    ]
+  },
+  {
+    "version": "6.28.1",
+    "date": "2026-06-02",
+    "title": "Per-request model choice",
+    "bullets": [
+      "The Claude CLI gateway now honours a --model passthrough so a specific model can be requested per dispatch."
+    ]
+  },
+  {
+    "version": "6.28.0",
+    "date": "2026-05-31",
+    "title": "Leaner backbone",
+    "bullets": [
+      "Stripped the agent-hub “theater” down to a lean backbone — less decoration, clearer core."
+    ]
+  },
+  {
+    "version": "6.27.0",
+    "date": "2026-05-31",
+    "title": "Removed Atlas + org chart",
+    "bullets": [
+      "Removed the unused Atlas autonomous agent and the admin org-chart screen."
+    ]
+  },
+  {
+    "version": "6.26.0",
+    "date": "2026-05-29",
+    "title": "Dropped the old SaaS surface",
+    "bullets": [
+      "Trimmed the dead client-app SaaS code and the People/Costs admin tabs, sharpening Porter as a backbone rather than a product."
+    ]
+  },
+  {
+    "version": "6.25.0",
+    "date": "2026-05-23",
+    "title": "Tom “wrong surface” fix",
+    "bullets": [
+      "Passed --strict-mcp-config to the Claude CLI so Tom stops picking up the wrong toolset and producing noise."
+    ]
+  },
+  {
+    "version": "6.24.0",
+    "date": "2026-05-22",
+    "title": "System prompt wiring",
+    "bullets": [
+      "Bridge now routes the system prompt to Claude’s dedicated --system-prompt flag, so agent instructions land correctly."
+    ]
+  },
+  {
+    "version": "6.23.0",
+    "date": "2026-05-19",
+    "title": "Directives lookup",
+    "bullets": [
+      "Added a /directives endpoint so agents can fetch the current promoted operating rules on demand."
+    ]
+  },
+  {
+    "version": "6.22.0",
+    "date": "2026-05-18",
+    "title": "Porter identity split",
+    "bullets": [
+      "Separated Porter’s own identity from the active project: an active-project pin plus a rewritten session hook, so sessions resolve the right project cleanly."
+    ]
+  },
+  {
+    "version": "6.21.0",
+    "date": "2026-05-18",
+    "title": "Codex adapter + Tom fixes",
+    "bullets": [
+      "Shipped the Codex CLI adapter and a batch of Tom bug fixes."
+    ]
+  },
+  {
+    "version": "6.18.0",
+    "date": "2026-05-18",
+    "title": "Recall document Q&A",
+    "bullets": [
+      "Recall can now answer questions over ingested documents end-to-end — schema, ingest, retrieval and Codex-synthesised answers."
+    ]
+  },
+  {
+    "version": "6.17.1",
+    "date": "2026-05-15",
+    "title": "Checkpoint bump",
+    "bullets": [
+      "Housekeeping release rolling up the Dream Silos work."
+    ]
+  },
+  {
+    "version": "6.17.0",
+    "date": "2026-05-13",
+    "title": "Dream Silos — review surface",
+    "bullets": [
+      "Completed the Dream Silos series with an admin review surface: browse, run, and accept or reject the nightly memory proposals."
+    ]
+  },
+  {
+    "version": "6.16.0",
+    "date": "2026-05-13",
+    "title": "Software dream worker",
+    "bullets": [
+      "Added the software-silo dream worker and a manual trigger (POST /dream-run) so improvement proposals can be generated on demand."
+    ]
+  },
+  {
+    "version": "6.15.0",
+    "date": "2026-05-12",
+    "title": "Raw passthrough",
+    "bullets": [
+      "Added a raw:true passthrough on /chat/stream for callers that want the model output unmodified."
+    ]
+  },
+  {
+    "version": "6.14.0",
+    "date": "2026-05-12",
+    "title": "Isolated Claude subprocess",
+    "bullets": [
+      "The Claude CLI backend is now spawned in an isolated working directory so it can’t accidentally inherit Porter’s own operating context."
+    ]
+  },
+  {
+    "version": "6.13.0",
+    "date": "2026-05-11",
+    "title": "Transcript capture",
+    "bullets": [
+      "Porter now captures session transcripts, the raw material the memory system learns from."
+    ]
+  },
+  {
+    "version": "6.12.0",
+    "date": "2026-05-11",
+    "title": "Silo foundation",
+    "bullets": [
+      "Laid the multi-silo foundation that lets memory and dreams be scoped per domain rather than lumped together."
+    ]
+  },
+  {
+    "version": "6.11.0",
+    "date": "2026-05-10",
+    "title": "Bridge console revived",
+    "bullets": [
+      "Restored the Bridge tabs, summary metrics and live activity ticker in the admin."
+    ]
+  },
+  {
+    "version": "6.10.0",
+    "date": "2026-05-10",
+    "title": "Honest dispatch metrics",
+    "bullets": [
+      "Separated CLI tool-observability events from real model dispatches so the Bridge numbers reflect actual work."
+    ]
+  },
+  {
+    "version": "6.9.0",
+    "date": "2026-04-17",
+    "title": "Bridge simplified to Claude CLI",
+    "bullets": [
+      "Simplified the Bridge down to the Claude CLI backend, cutting the tangle of half-working gateways."
+    ]
+  },
+  {
+    "version": "6.8.1",
+    "date": "2026-04-15",
+    "title": "Removed direct API gateway",
+    "bullets": [
+      "Removed the direct Anthropic API gateway in favour of routing through the CLI."
+    ]
+  },
+  {
+    "version": "6.8.0",
+    "date": "2026-04-13",
+    "title": "Model correction + DB enforcement",
+    "bullets": [
+      "Corrected the model metadata and added database-trigger enforcement so bad data can’t be written."
+    ]
+  },
+  {
+    "version": "6.7.0",
+    "date": "2026-04-12",
+    "title": "Autonomy launch",
+    "bullets": [
+      "Launched the first autonomy features alongside fixes to the openclaw Bridge path."
+    ]
+  },
+  {
+    "version": "6.5.0",
+    "date": "2026-04-10",
+    "title": "Intellect, Forge, tools & skills",
+    "bullets": [
+      "Shipped Intellect phases 1–3 plus Forge, the tools and skills registries, and subscriptions — a large capability drop."
+    ]
+  },
+  {
+    "version": "6.4.0",
+    "date": "2026-04-10",
+    "title": "Operational roadmap",
+    "bullets": [
+      "Rolled up the tools, skills and evolution work and set the operational Porter roadmap."
+    ]
+  },
+  {
+    "version": "6.3.0",
+    "date": "2026-04-04",
+    "title": "Nothing left hidden",
+    "bullets": [
+      "Exposed the remaining five hidden data surfaces as admin pages — every part of Porter’s data is now visible in the admin."
+    ]
+  },
+  {
+    "version": "6.2.0",
+    "date": "2026-04-04",
+    "title": "Platform intelligence surfaces",
+    "bullets": [
+      "Surfaced eight previously hidden data areas as new admin pages."
+    ]
+  },
+  {
+    "version": "6.1.0",
+    "date": "2026-04-04",
+    "title": "Porter Mail Platform",
+    "bullets": [
+      "Added the Porter Mail platform (later retired) as part of the v6 build-out."
+    ]
+  },
+  {
+    "version": "6.0.0",
+    "date": "2026-04-04",
+    "title": "The Orchestration Platform",
+    "bullets": [
+      "The v6 milestone that reframed Porter as the orchestration platform / backbone — the foundation the whole current system is built on."
     ]
   }
 ];

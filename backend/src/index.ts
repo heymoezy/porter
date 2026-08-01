@@ -49,6 +49,7 @@ import { migrateDirectivesScopeIdxV1 } from './db/migrate-directives-scope-idx-v
 import { migrateVaultRecordLinksV1 } from './db/migrate-vault-record-links-v1.js';
 import { migrateVaultArtifactLocationsV1 } from './db/migrate-vault-artifact-locations-v1.js';
 import { migrateMultiSiloV1 } from './db/migrate-multi-silo-v1.js';
+import { migrateYmcSiloV1 } from './db/migrate-ymc-silo-v1.js';
 import { migrateRecallDocChunksV1 } from './db/migrate-recall-doc-chunks-v1.js';
 import { migrateRecallDocSummaryV1 } from './db/migrate-recall-doc-summary-v1.js';
 import { migrateTrgV1 } from './db/migrate-trg-v1.js';
@@ -214,6 +215,10 @@ const start = async () => {
     // Phase 50: multi-silo seed (admin + data-room) + legacy workflow row delete.
     // Runs BEFORE loadSiloCache so the cache picks up new silos on first boot.
     await migrateMultiSiloV1(pool);
+    // Wave 5 / Phase 48.5: the `ymc` silo — dreams over the ymc_capital CRM
+    // database instead of CLI transcripts. Lands DISABLED (runSiloCadenceCheck
+    // fires every enabled silo; a new scheduled job needs Moe's sign-off).
+    await migrateYmcSiloV1(pool);
     // Recall doc-QA: chunk + source tables for cross-project document Q&A.
     // No dependencies on prior migrations; ordered last for monotonic timeline.
     await migrateRecallDocChunksV1(pool);

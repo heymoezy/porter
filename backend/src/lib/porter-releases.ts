@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.144.0',
+    date: '2026-08-01',
+    title: 'Tom can now learn from the CRM itself \u2014 built, and switched off until Moe says otherwise',
+    bullets: [
+      'The plan for Tom getting smarter by reading our own files was written in May and parked as blocked on a Porter feature that, on inspection, has existed for months. It is now built: Tom\u2019s overnight reflection can read documents, contact notes and activity from the CRM and propose operating rules from what it finds.',
+      'Proposals go to the same review screen everything else does, and nothing becomes a rule without being accepted. That restraint is deliberate \u2014 unreviewed promotion of \u201clearnings\u201d is exactly what buried real instructions under complaints a few days ago.',
+      'A trial run over 108 real items produced one genuine rule: when a reply needs follow-up, record the next action and who owns it rather than treating an outreach thread as finished because the first message went out. It traces back to seven real contact notes saying precisely that.',
+      'Two faults surfaced during that run and are fixed for every silo, not just this one: the privacy scrubber was destroying every date in the corpus by mistaking it for a phone number, and the frustration detector was flagging 106 of 107 items.',
+      'It is enrolled but OFF. One line turns it on, and that is Moe\u2019s call \u2014 see the note about names in documents before making it.',
+    ],
+  },
+  {
     version: '6.143.0',
     date: '2026-08-01',
     title: 'The branch a code session leaves behind now actually contains its work',

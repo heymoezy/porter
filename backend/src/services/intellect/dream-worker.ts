@@ -43,7 +43,13 @@ import { routingEngine } from '../bridge/routing-engine.js';
 import type { BridgeDispatchRequest, RoutingContext } from '../bridge/types.js';
 import { logIntellectEvent } from './file-watcher.js';
 import { broadcast } from '../sse-hub.js';
-import { sampleSoftwareTurns, type SampledTurn } from './dream-sampler.js';
+import {
+  sampleSoftwareTurns,
+  sampleYmcCorpus,
+  corpusKindFromDetectRules,
+  getYmcPool,
+  type SampledTurn,
+} from './dream-sampler.js';
 import { latestFailureDigest, formatFailureDigestBlock } from './failure-digest.js';
 import {
   parseDreamResponse,
@@ -227,8 +233,12 @@ function formatTurnsBlock(turns: SampledTurn[]): string {
   return turns
     .map(t => {
       const ts = t.captured_at.toISOString();
-      const cwdSuffix = t.cwd ? ` ─── cwd: ${t.cwd} ───` : '';
-      return `─── turn ${t.id} ─── ${ts} ─── session: ${t.session_id} ─── role: ${t.role} ───${cwdSuffix}\n${t.content}`;
+      // A transcript turn locates itself by cwd; a CRM corpus item locates itself
+      // by the row it came from (source_ref). Prefer the ref when present so the
+      // model can name its evidence, not just cite an opaque integer.
+      const origin = t.source_ref ?? t.cwd;
+      const originSuffix = origin ? ` ─── ${t.source_ref ? 'source' : 'cwd'}: ${origin} ───` : '';
+      return `─── turn ${t.id} ─── ${ts} ─── session: ${t.session_id} ─── role: ${t.role} ───${originSuffix}\n${t.content}`;
     })
     .join('\n\n');
 }
@@ -475,8 +485,9 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
       id: string;
       prompt_path: string;
       default_model: string;
+      detect_rules: unknown;
     }>(
-      `SELECT id, prompt_path, default_model FROM silos WHERE id=$1 AND enabled=true`,
+      `SELECT id, prompt_path, default_model, detect_rules FROM silos WHERE id=$1 AND enabled=true`,
       [args.siloId],
     );
     const siloRow = siloRows[0];
@@ -503,11 +514,24 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
       [args.siloId],
     );
 
-    // ── 4. Sample transcript turns ─────────────────────────
-    const { turns: sampledTurns, samplingLog } = await sampleSoftwareTurns(
-      { siloId: args.siloId, sampleSizeOverride: args.sampleSizeOverride },
-      pool,
-    );
+    // ── 4. Sample the corpus this silo dreams over ─────────
+    //
+    // Wave 5 / Phase 48.5: which corpus is DATA (silos.detect_rules.corpus), not
+    // a branch on silo id. `transcripts` reads Porter's own session_transcript_turns
+    // over Porter's pool; `ymc` reads the ymc_capital CRM database over its own
+    // pool (separate Postgres database — see dream-sampler.ts header). Everything
+    // downstream of here is corpus-agnostic: same SampledTurn[] + SamplingLog.
+    const corpusKind = corpusKindFromDetectRules(siloRow.detect_rules);
+    const { turns: sampledTurns, samplingLog } =
+      corpusKind === 'ymc'
+        ? await sampleYmcCorpus(
+            { siloId: args.siloId, sampleSizeOverride: args.sampleSizeOverride },
+            getYmcPool(),
+          )
+        : await sampleSoftwareTurns(
+            { siloId: args.siloId, sampleSizeOverride: args.sampleSizeOverride },
+            pool,
+          );
 
     // ── 5. Empty corpus = success (legitimate quiet week) ──
     if (sampledTurns.length === 0) {
@@ -559,6 +583,14 @@ export async function runDreamWorker(args: RunDreamArgs): Promise<RunDreamResult
       TURNS_SAMPLED: sampledTurns.length,
       SESSIONS_SAMPLED: sessionsSampled,
       FAILURE_DIGEST_BLOCK: formatFailureDigestBlock(failureDigest),
+      // Wave 5: corpus-shape vars. Placeholders absent from a template are a
+      // no-op substitution, so the three transcript prompts are unaffected.
+      CORPUS_WINDOW_DAYS: samplingLog.window_days ?? 7,
+      CORPUS_SOURCES_LINE: samplingLog.sources
+        ? Object.entries(samplingLog.sources)
+            .map(([k, v]) => `${k}: ${v.selected} of ${v.available} (${v.selected_kb}KB)`)
+            .join(' · ')
+        : `transcript turns: ${sampledTurns.length}`,
     });
 
     // ── 7. Dispatch (explicit logDispatch happens inside dispatchDream) ──

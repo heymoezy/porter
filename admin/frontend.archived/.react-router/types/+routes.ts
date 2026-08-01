@@ -74,6 +74,9 @@ type Pages = {
   "/intelligence": {
     params: {};
   };
+  "/vault-files": {
+    params: {};
+  };
   "/files": {
     params: {};
   };
@@ -115,7 +118,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/login" | "/dashboard" | "/agents/:id" | "/system" | "/brain" | "/activity" | "/diagnostics" | "/templates/:id" | "/tools" | "/skills" | "/skills/:id/pack" | "/bridge" | "/recall" | "/changelog" | "/architecture" | "/design-system" | "/settings" | "/intelligence" | "/files" | "/approvals" | "/dreams" | "/decomposition" | "/decisions" | "/sessions" | "/evolution" | "/msg-bus" | "/env-tools" | "/mcp" | "/learnings" | "/routing";
+    page: "/" | "/login" | "/dashboard" | "/agents/:id" | "/system" | "/brain" | "/activity" | "/diagnostics" | "/templates/:id" | "/tools" | "/skills" | "/skills/:id/pack" | "/bridge" | "/recall" | "/changelog" | "/architecture" | "/design-system" | "/settings" | "/intelligence" | "/vault-files" | "/files" | "/approvals" | "/dreams" | "/decomposition" | "/decisions" | "/sessions" | "/evolution" | "/msg-bus" | "/env-tools" | "/mcp" | "/learnings" | "/routing";
   };
   "routes/home-redirect.tsx": {
     id: "routes/home-redirect";
@@ -127,7 +130,7 @@ type RouteFiles = {
   };
   "routes/layout.tsx": {
     id: "routes/layout";
-    page: "/dashboard" | "/agents/:id" | "/system" | "/brain" | "/activity" | "/diagnostics" | "/templates/:id" | "/tools" | "/skills" | "/skills/:id/pack" | "/bridge" | "/recall" | "/changelog" | "/architecture" | "/design-system" | "/settings" | "/intelligence" | "/files" | "/approvals" | "/dreams" | "/decomposition" | "/decisions" | "/sessions" | "/evolution" | "/msg-bus" | "/env-tools" | "/mcp" | "/learnings" | "/routing";
+    page: "/dashboard" | "/agents/:id" | "/system" | "/brain" | "/activity" | "/diagnostics" | "/templates/:id" | "/tools" | "/skills" | "/skills/:id/pack" | "/bridge" | "/recall" | "/changelog" | "/architecture" | "/design-system" | "/settings" | "/intelligence" | "/vault-files" | "/files" | "/approvals" | "/dreams" | "/decomposition" | "/decisions" | "/sessions" | "/evolution" | "/msg-bus" | "/env-tools" | "/mcp" | "/learnings" | "/routing";
   };
   "routes/home.tsx": {
     id: "routes/home";
@@ -196,6 +199,10 @@ type RouteFiles = {
   "routes/intelligence-redirect.tsx": {
     id: "routes/intelligence-redirect";
     page: "/intelligence";
+  };
+  "routes/vault-files.tsx": {
+    id: "routes/vault-files";
+    page: "/vault-files";
   };
   "routes/files.tsx": {
     id: "routes/files";
@@ -269,6 +276,7 @@ type RouteModules = {
   "routes/design-system-lazy": typeof import("./app/routes/design-system-lazy.tsx");
   "routes/settings": typeof import("./app/routes/settings.tsx");
   "routes/intelligence-redirect": typeof import("./app/routes/intelligence-redirect.tsx");
+  "routes/vault-files": typeof import("./app/routes/vault-files.tsx");
   "routes/files": typeof import("./app/routes/files.tsx");
   "routes/approvals": typeof import("./app/routes/approvals.tsx");
   "routes/dreams-redirect": typeof import("./app/routes/dreams-redirect.tsx");
