@@ -6,7 +6,7 @@
  * (FTS via the search_vector trigger) — agents never read the vault on the
  * hot path. This module is the deterministic out-of-band sync:
  *
- *   - scans concepts/*.md + entities/*.md (one row per node)
+ *   - scans concepts/*.md + entities/*.md + flows/*.md (one row per node)
  *   - id = 'vault:<folder>/<slug>' (slug = filename sans .md)
  *   - content = title (first '# ' heading, else slug) + body capped 1500 chars
  *   - source_type='vault', trust_tier='high', scope='global',
@@ -31,7 +31,11 @@ import { pool } from '../../db/client.js';
 import { logIntellectEvent } from './file-watcher.js';
 
 const VAULT_ROOT = '/home/lobster/vault';
-const VAULT_FOLDERS = ['concepts', 'entities'] as const;
+// `flows` added 2026-08-01: ymc's vault-ingest was the only thing indexing the
+// three flow pages (as `playbook:vault:flows/*` nodes in vault_nodes), which
+// made a second copy of a vault page the only way to find it. That copy is gone;
+// the pages belong here, with the rest of the vault, under one writer.
+const VAULT_FOLDERS = ['concepts', 'entities', 'flows'] as const;
 const BODY_CAP = 1500;
 
 // ── U3 — injection ranking boosts for vault-sourced concepts ─────────────

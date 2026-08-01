@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.148.0',
+    date: '2026-08-01',
+    title: 'Vault search was returning deleted records, and now covers memory too',
+    bullets: [
+      'Vault search never checked whether a record was archived, so it has been returning deleted material as current \u2014 including the 1,702 cold prospects Moe removed from the graph in July. Fixed.',
+      'Search now covers the document graph, concepts and directives together instead of the graph alone. Most queries return more than before; a few return fewer because the extra results were archived rows that should never have appeared.',
+      'Vault pages under flows/ are now indexed \u2014 3 pages that previously existed only as a title with no content.',
+    ],
+  },
+  {
     version: '6.147.0',
     date: '2026-08-01',
     title: 'Accepted dream rules now reach Tom',

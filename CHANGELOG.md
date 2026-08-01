@@ -1,3 +1,29 @@
+## v6.148.0 (2026-08-01) — vault search served archived rows; now spans graph + concepts + directives
+
+⚠️ **`searchGraphNodes` never filtered `status`.** `porter_search_vault` has been returning archived
+nodes as live knowledge — including the 1,702 Phoenix cold prospects Moe removed from the graph on
+2026-07-13. `routes/v1/vault.ts:1022` learned this in July; this reader never got the same filter.
+Added `AND n.status <> 'archived'`.
+
+**Three arms, not a repoint.** `vault-lookup.ts` now merges the graph, `concepts` and `directives`.
+Directives were added beyond the brief: archiving 61 duplicate directive nodes on the ymc side would
+otherwise drop 61 rows of coverage outright, and the constraint was coverage up, not down. Memory hits
+get a reserved third of the result budget so a document-heavy query cannot bury the one rule that
+answers it. Memory arms filter on `status='active'` only — `concepts`/`directives` use memory scopes,
+not `app_scope`, and filtering one by the other would drop Tom's memory from every ymc query.
+
+`vault-indexer.ts`: added `flows` to `VAULT_FOLDERS`. 3 flow pages existed only as title-only graph
+nodes. Ran it: 50 scanned, +3 inserted, 0 archived.
+
+Coverage, measured before/after on real queries: Edward Chen 15→15, Stablekey cap table 15→15,
+RMI redomiciliation 3→**5**, second brain rules 1→**7**, scheduler truth 1→**7**, ship ceremony 2→**8**.
+`release flow` 15→11 because 8 of the 17 matches were archived rows the old reader was serving.
+
+**One genuine loss, not papered over:** `useEffect` 1→0. Six `ui_rule`/`voice_rule` nodes came from
+`~/vault/claude-memory` and have no row in `concepts` or `directives`. That folder was deliberately not
+indexed — it holds personal-matters pages and the indexer writes `scope='global'` rows every agent
+reads. Widening that is Moe's call. Those six were title-only in the graph anyway.
+
 ## v6.147.0 (2026-08-01) — accepted ymc dream rules now reach Tom
 
 Accepting a proposal wrote `scope='silo', scope_id='ymc'`. Nothing read that scope:

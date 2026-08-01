@@ -1,3 +1,25 @@
+## 2026-08-01 - v6.148.0 - vault search served ARCHIVED rows as live
+
+⚠️ THE REAL FIND, outside the brief: `searchGraphNodes` never filtered `status`. `porter_search_vault`
+has been returning archived nodes as current knowledge the whole time — including the **1,702 Phoenix
+cold prospects Moe explicitly removed from the graph on 2026-07-13**. `routes/v1/vault.ts:1022` learned
+this lesson in July and this reader was never given the same filter.
+
+R2: `vault-lookup.ts` now spans graph + `concepts` + `directives` (three arms, merged, NOT a repoint).
+Directives added beyond the brief — archiving 61 duplicate directive nodes would otherwise cut 61 rows
+of coverage, and the constraint was coverage UP. Memory hits get a reserved third of the budget.
+
+Coverage measured before/after: Edward Chen 15→15, RMI redomiciliation 3→5, second brain rules 1→7,
+scheduler truth 1→7, ship ceremony 2→8. `release flow` 15→11 — 8 of 17 matches were archived rows the
+old reader was serving.
+
+⚠️ ONE GENUINE LOSS, stated rather than hidden: `useEffect` 1→0. Six ui_rule/voice_rule nodes come from
+`~/vault/claude-memory`, which was deliberately NOT indexed — it holds personal-matters pages and the
+indexer writes `scope='global'` rows every agent reads. Widening that blast radius is Moe's call. The
+six were title-only in the graph anyway.
+
+Also: `vault-indexer.ts` now indexes `flows` (+3 pages that were title-only).
+
 ## 2026-08-01 - v6.147.0 - accepted ymc dream rules now reach Tom
 
 The loop was open: accept wrote `scope='silo'`, nothing read it. Verified end to end before fixing —
