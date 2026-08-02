@@ -1,3 +1,20 @@
+## v6.151.0 (2026-08-02) — vault drafts were making live rules look unapplied
+
+`writeProposalDraft()` fired on EVERY accepted proposal regardless of kind. All four kinds the
+dream silos emit (`new_directive`, `merge`, `supersede`, `delete`) are **directive operations**,
+and the U4 design is explicit that directive-shaped proposals keep the Porter directives path —
+which they do: the directive is written inside the accept transaction, and that IS the injection
+path. The vault node alongside it was a second, inert copy of a rule already live.
+
+The cost was not the duplication. `vault/drafts/` accumulated five of them, read as a pile of
+accepted-but-unapplied work, and an audit this morning concluded from it that accepted proposals
+"never reached concepts/ and have had zero effect since". They had full effect. Each of the five
+was verified individually against a live matching directive before removal — 5/5.
+
+`writeProposalDraft` now returns `{skipped:true}` for a directive-shaped kind. Deliberately a
+DENYlist of the four directive kinds rather than an allowlist of concept kinds: no concept-shaped
+kind exists today, so an allowlist would silently drop the first one added.
+
 ## v6.150.0 (2026-08-02) — release registration had never once succeeded
 
 `[porter-release register] · ymc.capital v1.974.0 — Porter returned 401 (non-fatal)` printed on

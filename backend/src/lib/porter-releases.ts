@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.151.0',
+    date: '2026-08-02',
+    title: 'The drafts folder was making applied rules look unapplied',
+    bullets: [
+      'Accepting a learning proposal wrote the rule into Porter, where it takes effect, and ALSO dropped a copy into the vault drafts folder. The copy does nothing. Five had built up, and they made it look like five accepted rules had never been applied \u2014 an audit this morning concluded exactly that. All five had been live the whole time.',
+      'Only genuinely new knowledge goes to the vault now; rules stay in Porter, which is where the design always put them. The five redundant copies were removed after checking each one individually against the live rule it duplicated.',
+    ],
+  },
+  {
     version: '6.150.0',
     date: '2026-08-02',
     title: 'Release registration had been failing on every ship since it was built',

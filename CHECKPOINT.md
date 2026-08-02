@@ -1,3 +1,27 @@
+## 2026-08-02 - v6.151.0 - The drafts folder was evidence for a conclusion that was false
+
+The audit plan said: *"5 accepted-but-inert drafts in vault/drafts/ … Accepted proposals that
+never reached concepts/ have had zero effect since."* That was wrong, and the drafts folder is
+what made it look true.
+
+Accepting a proposal writes the directive INSIDE the accept transaction — the injection path.
+`writeProposalDraft()` then ran unconditionally and dropped a second copy into `vault/drafts/`,
+which is deliberately not indexed. So the rule was live and its shadow looked abandoned.
+
+All four kinds the silos emit are directive operations, so EVERY draft ever written was one of
+these. Verified before deleting: 5 drafts, 5 live matching directives, checked one at a time
+rather than on a bulk count — [[feedback_read_why_before_calling_it_a_bug]].
+
+Gate now lives inside `writeProposalDraft` (one home, so any future caller inherits it), as a
+DENYlist of directive kinds: an allowlist of concept kinds would silently drop the first genuine
+concept proposal, since none exists yet.
+
+⚠️ **This also kills plan item C's "register `workers` as a real silo".** `worker-knowledge.ts:66`
+says the missing FK is deliberate — *"no session ever resolves silo 'workers', so an accepted
+row's directive is inert — the operative artifact is the U4 vault draft written on accept"*.
+Registering it would have created a silo with no prompt and no corpus sampler. The code was
+right and the plan was reasoning from the symptom.
+
 ## 2026-08-02 - v6.150.0 - The release register had never once succeeded
 
 `[porter-release register] — Porter returned 401 (non-fatal)` printed on every ship of every

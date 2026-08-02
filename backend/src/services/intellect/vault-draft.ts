@@ -41,8 +41,11 @@ export interface ProposalDraftInput {
 }
 
 export interface ProposalDraftResult {
-  path: string;       // vault-relative path of the draft node
-  committed: boolean; // git commit landed (push is best-effort)
+  path?: string;       // vault-relative path of the draft node
+  committed?: boolean; // git commit landed (push is best-effort)
+  /** True when the proposal was directive-shaped and no vault node was written. */
+  skipped?: boolean;
+  reason?: string;
 }
 
 function fmtSgtDate(d: Date): string {
@@ -82,11 +85,40 @@ function renderDraft(input: ProposalDraftInput, date: string): string {
 }
 
 /**
+ * Proposal kinds that OPERATE ON DIRECTIVES. These must NOT become vault drafts.
+ *
+ * ⚠️ The U4 design ([[memory-unification-design]], the table at its top) splits
+ * the two stores on purpose: **concepts live in the vault, directives live in
+ * Porter** — "Directive-shaped proposals keep the Porter directives path".
+ * Accepting one of these already writes the directive inside the accept
+ * transaction, which IS the injection path; a vault draft alongside it is a
+ * second, inert copy of a rule that is already live.
+ *
+ * It was worse than redundant. Every draft in `vault/drafts/` was one of these,
+ * so the folder read as a pile of accepted-but-unapplied work — and an audit on
+ * 2026-08-02 concluded from it that "accepted proposals never reached concepts/
+ * and have had zero effect since". They had full effect. The evidence was
+ * checked before this change: all five drafts had a live matching directive.
+ *
+ * Deliberately a DENYlist, not an allowlist of concept kinds: the dream silos
+ * emit only these four kinds today, so a genuinely concept-shaped kind added
+ * later flows to the vault automatically instead of being silently dropped by a
+ * list nobody remembered to extend.
+ */
+const DIRECTIVE_KINDS = new Set(['new_directive', 'merge', 'supersede', 'delete']);
+
+/**
  * Write the draft node + commit it to the vault repo. File write failures throw
  * (caller logs); git commit/push are best-effort like vault-mirror.ts — the
  * draft on disk is still current even when the repo is unhappy.
+ *
+ * Returns `{ skipped: true }` without touching the vault for a directive-shaped
+ * proposal — see DIRECTIVE_KINDS.
  */
 export async function writeProposalDraft(input: ProposalDraftInput): Promise<ProposalDraftResult> {
+  if (DIRECTIVE_KINDS.has(input.proposalKind)) {
+    return { skipped: true, reason: `${input.proposalKind} is directive-shaped — it lives in Porter directives, not the vault` };
+  }
   const date = fmtSgtDate(new Date());
   // Deterministic per proposal: re-accept impossible (status flip), but a
   // retried write just overwrites the same file — idempotent.
