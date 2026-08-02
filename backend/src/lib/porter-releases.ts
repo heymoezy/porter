@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.149.0',
+    date: '2026-08-02',
+    title: 'Three of the four learning silos were producing nothing',
+    bullets: [
+      'An audit found the nightly learning had been broken for months. The software silo failed 659 of 681 runs. The admin silo completed 36 runs and produced nothing at all because it was reading an empty set. The data room silo did the same across 22 runs. Only the newest one worked.',
+      'A failed run was not counted as an attempt, so a broken silo retried every hour instead of waiting for its next scheduled slot. That is where 594 identical timeout errors came from.',
+      'The admin silo looked for a marker file that did not exist anywhere, and the detector only checked the exact folder rather than the folders above it \u2014 so working one level deeper meant no match. Both fixed.',
+      'Self-monitoring could not see any of this because it watched the wrong table. It now reports each silo\u2019s real numbers, and flags a silo that completes every run while producing nothing \u2014 the failure that looks most like success.',
+      'A weekly job that duplicated the schedule was being recreated on every restart by an old setup step, undoing a deliberate deletion each time. Removed at source.',
+    ],
+  },
+  {
     version: '6.148.0',
     date: '2026-08-01',
     title: 'Vault search was returning deleted records, and now covers memory too',

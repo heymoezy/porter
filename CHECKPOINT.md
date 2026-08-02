@@ -1,3 +1,26 @@
+## 2026-08-02 - v6.149.0 - three of four dream silos produced NOTHING
+
+Plan-vs-shipped audit. Before: software 681 runs / **659 failed**; admin 36 runs / **0 proposals ever**;
+data-room 22 runs / **0 ever**; ymc 1 / 2.
+
+1. **Failed runs did not back off.** Cadence pointer was `MAX(started_at) WHERE status IN
+   ('completed','running')` — a failure never advanced it, so the silo re-fired hourly forever. 594
+   identical timeouts. Any run now counts as an attempt.
+2. **`admin` had no corpus** — detects on `.admin-silo`, which existed nowhere. Marker created at
+   `admin/`. 36 green runs over an empty set.
+3. **Markers did not match subdirectories.** `silo-detector.ts` checked only the exact cwd, so a marker
+   at `Funds/` was invisible from `Funds/SomeFund/docs`. Walks ancestors now, bounded at `$HOME`.
+4. **Self-monitor watched `workflows.last_run_at`** — but per-silo dreams fire from
+   `runSiloCadenceCheck`, not as workflows, so it could not see them. New `dreams` signal.
+   ⚠️ `empty` is distinguished from `failing`: 36 completed runs producing nothing reads green
+   everywhere else, and that is the failure worth catching.
+5. **The double-fire row was recreated on EVERY BOOT.** `migrate-dreams-v1.ts` seeds it at startup;
+   `migrate-multi-silo-v1.ts` deletes it on purpose. Delete → restart → re-seed → SC-18 silently false.
+   Seed removed at source. Verified 0 after restart.
+
+VERIFIED: self-monitor now reports software FAILING / admin EMPTY / data-room EMPTY / ymc HEALTHY; a
+path three levels under a marker detects; the workflow row stays deleted across a restart.
+
 ## 2026-08-01 - v6.148.0 - vault search served ARCHIVED rows as live
 
 ⚠️ THE REAL FIND, outside the brief: `searchGraphNodes` never filtered `status`. `porter_search_vault`

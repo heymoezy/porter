@@ -123,18 +123,37 @@ export async function detectSilos(args: DetectArgs, pool: pg.Pool): Promise<Dete
   }
 
   // 3. cwd_markers fallback ------------------------------------------------
+  //
+  // ⚠️ WALKS ANCESTORS. This checked only `path.join(cwd, marker)` — the EXACT
+  // working directory — so a marker at `~/projects/Funds/.data-room-silo` was
+  // invisible to a session sitting in `Funds/SomeFund/docs`, which is where
+  // anyone actually works. A marker file marks a TREE, not one directory; that
+  // is the whole reason it is a file on disk rather than a config entry.
+  //
+  // The cost of the narrow read: the `data-room` silo produced **0 proposals
+  // across 21 runs** while its markers existed the entire time. It looked like a
+  // silo with nothing to say. It was a silo nobody could match.
+  //
+  // Bounded at $HOME so a deeply-nested path cannot walk to `/`.
+  const HOME = process.env.HOME || '/';
   for (const silo of cache) {
     if (matches.has(silo.id)) continue;
     const markers = silo.detectRules.cwd_markers || [];
-    for (const marker of markers) {
-      try {
-        if (fs.existsSync(path.join(cwd, marker))) {
-          matches.set(silo.id, { id: silo.id, displayName: silo.displayName });
-          break;
+    let dir = cwd;
+    walk: while (dir && dir.startsWith(HOME)) {
+      for (const marker of markers) {
+        try {
+          if (fs.existsSync(path.join(dir, marker))) {
+            matches.set(silo.id, { id: silo.id, displayName: silo.displayName });
+            break walk;
+          }
+        } catch {
+          // ignore — non-existent or permission denied paths just mean no match
         }
-      } catch {
-        // ignore — non-existent or permission denied paths just mean no match
       }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
     }
   }
 

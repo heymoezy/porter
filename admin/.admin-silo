@@ -1,0 +1,13 @@
+Marks this tree as the "admin" dream silo.
+
+Sessions working on Porter's admin surface are tagged `admin` so the nightly
+dream reads them as their own corpus, separate from general software work.
+
+⚠️ This file is the ONLY thing that made the admin silo detectable, and it did
+not exist until 2026-08-02. The silo ran 36 times over an empty corpus and
+produced zero proposals every time — reporting green while learning nothing.
+A silo whose marker is missing is not idle, it is broken, and it looks identical
+to one with nothing to say.
+
+Detection walks parent directories (silo-detector.ts), so anything under
+admin/ counts, not just this exact directory.

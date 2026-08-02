@@ -97,15 +97,19 @@ export async function migrateDreamsV1(pool: pg.Pool): Promise<void> {
     `);
     console.log('[migrate-dreams-v1] 3 memory_proposals indexes ready');
 
-    // ── Seed: weekly software dream workflow (idempotent by name) ──────
-    await client.query(`
-      INSERT INTO workflows (id, name, trigger_type, trigger_value, action_type, action_config, enabled)
-      SELECT gen_random_uuid()::text,
-             'Software dream — weekly consolidation',
-             'schedule', 'every_week', 'dream_run',
-             '{"silo_id":"software"}'::jsonb, true
-      WHERE NOT EXISTS (SELECT 1 FROM workflows WHERE name = 'Software dream — weekly consolidation')
-    `);
+    // ── Seed: weekly software dream workflow — REMOVED (Phase 50) ──────
+    //
+    // ⚠️ THIS SEED RAN ON EVERY BOOT AND KEPT RESURRECTING A ROW THAT PHASE 50
+    // DELETES ON PURPOSE. Per-silo cadence (`scheduler.ts` runSiloCadenceCheck,
+    // reading `silos.cadence_seconds`) is the schedule now. A workflow row
+    // alongside it fires the SAME dream a second time, racing the cadence tick —
+    // which is why `migrate-multi-silo-v1.ts:159` removes it and `smoke-50.sh`
+    // SC-18 asserts the count stays at zero.
+    //
+    // The seed was left here, so the sequence was: multi-silo migration deletes
+    // the row → Porter restarts → this re-inserts it → SC-18 silently false.
+    // Found live on 2026-08-02 with created_at 2026-07-29, i.e. a restart.
+    // Deleting the seed rather than adding a third place that deletes the row.
 
     // ── Seed: stuck-run sweep workflow (idempotent by name) ────────────
     await client.query(`

@@ -1,3 +1,41 @@
+## v6.149.0 (2026-08-02) — three of four dream silos were producing nothing
+
+Found by auditing plan-vs-shipped across both repos. Live numbers before this release:
+
+| silo | runs | completed | failed | proposals |
+|---|---|---|---|---|
+| `software` | 681 | 22 | **659** | 75 |
+| `admin` | 36 | 36 | 0 | **0, ever** |
+| `data-room` | 22 | 22 | 0 | **0, ever** |
+| `ymc` | 1 | 1 | 0 | 2 |
+
+**1. A failed run did not count as an attempt.** `scheduler.ts` computed the cadence pointer from
+`MAX(started_at) WHERE status IN ('completed','running')`, so a failure never advanced it and the silo
+re-fired on the next tick — hourly, forever. That produced 594 identical
+`claude_cli timed out after 180000ms`. Retrying a broken thing hourly is not resilience: it buries the
+real error in hundreds of copies and burns the quota the next attempt needs. Now any run counts.
+
+**2. `admin` had no corpus.** It detects on a `.admin-silo` marker that **did not exist anywhere on the
+box**. 36 green runs over an empty set. Marker created at `admin/`.
+
+**3. Markers did not match subdirectories.** `silo-detector.ts` checked only `path.join(cwd, marker)` —
+the exact working directory — so a marker at `Funds/.data-room-silo` was invisible to a session in
+`Funds/SomeFund/docs`, which is where anyone actually works. A marker marks a TREE. Now walks ancestors,
+bounded at `$HOME`. Verified: a path three levels below the marker now matches.
+
+**4. Self-monitoring watched the wrong table.** Its workflow signal reads `workflows.last_run_at`, and
+per-silo dreams do not run as workflows — they fire from `runSiloCadenceCheck` against
+`silos.cadence_seconds`. So the one signal claiming to watch scheduled work could not see the dream at
+all. New `dreams` signal reports per-silo runs/completed/failed/proposals. ⚠️ It flags `empty`
+separately from `failing`: completing every run and producing nothing is the quiet failure, and it reads
+green on every other signal. Now: software FAILING, admin EMPTY, data-room EMPTY, ymc HEALTHY.
+
+**5. The double-fire workflow row was being recreated on every boot.** `migrate-dreams-v1.ts` seeds
+`'Software dream — weekly consolidation'`, runs at startup, and `migrate-multi-silo-v1.ts` deletes it
+because a workflow row racing the cadence tick double-fires. Sequence was: migration deletes → restart →
+seed re-inserts → `smoke-50.sh` SC-18 silently false. Seed removed rather than adding a third place that
+deletes the row. Verified: row is 0 after a restart.
+
 ## v6.148.0 (2026-08-01) — vault search served archived rows; now spans graph + concepts + directives
 
 ⚠️ **`searchGraphNodes` never filtered `status`.** `porter_search_vault` has been returning archived

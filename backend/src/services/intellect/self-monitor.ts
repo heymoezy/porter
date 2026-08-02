@@ -77,6 +77,31 @@ export interface SelfMonitorSnapshot {
     health: 'healthy' | 'idle' | 'failing' | 'unknown';
   }>;
 
+  /**
+   * Per-silo dream health.
+   *
+   * ⚠️ THIS IS WHY NOBODY KNEW. The workflow signal above reads
+   * `workflows.last_run_at`, and per-silo dreams do NOT run as workflows — they
+   * fire from `scheduler.ts` runSiloCadenceCheck against `silos.cadence_seconds`.
+   * So the one signal that claims to watch scheduled work could not see the
+   * dream at all, and the `software` silo failed **659 runs out of 681** — 594 of
+   * them the identical timeout — while self-monitoring reported green for months.
+   *
+   * `proposals` matters as much as `failed`: the `admin` silo completed 36 runs
+   * with zero failures and produced NOTHING, because its corpus was empty. A
+   * green run over an empty set is the failure that looks most like success.
+   */
+  dreams: Array<{
+    siloId: string;
+    enabled: boolean;
+    runs: number;
+    completed: number;
+    failed: number;
+    proposals: number;
+    lastRunAgoSeconds: number | null;
+    health: 'healthy' | 'idle' | 'failing' | 'empty' | 'unknown';
+  }>;
+
   promotion: {
     candidates: number;
     promoted7d: number;
@@ -175,6 +200,41 @@ export async function runSelfMonitor(): Promise<SelfMonitorSnapshot> {
   );
   const failByWf = new Map(wfFailRows.map(r => [r.wf_id, parseInt(r.count, 10)]));
 
+  // ── Per-silo dream health (the gap that hid a 97% failure rate) ─────────
+  const dreamRows = (await pool.query<{
+    silo_id: string; enabled: boolean; runs: string; completed: string;
+    failed: string; proposals: string; last_started_at: number | null;
+  }>(`
+    SELECT s.id AS silo_id,
+           s.enabled,
+           COALESCE(COUNT(dr.id), 0)::text                                        AS runs,
+           COALESCE(COUNT(dr.id) FILTER (WHERE dr.status = 'completed'), 0)::text AS completed,
+           COALESCE(COUNT(dr.id) FILTER (WHERE dr.status = 'failed'), 0)::text    AS failed,
+           COALESCE(SUM(dr.proposals_extracted), 0)::text                         AS proposals,
+           MAX(dr.started_at)                                                      AS last_started_at
+      FROM silos s
+      LEFT JOIN dream_runs dr ON dr.silo_id = s.id
+     GROUP BY s.id, s.enabled
+     ORDER BY s.id
+  `)).rows;
+
+  const dreams = dreamRows.map(d => {
+    const runs = parseInt(d.runs, 10), completed = parseInt(d.completed, 10);
+    const failed = parseInt(d.failed, 10), proposals = parseInt(d.proposals, 10);
+    const lastRunAgoSeconds = d.last_started_at != null ? Math.round(now - Number(d.last_started_at)) : null;
+    let health: SelfMonitorSnapshot['dreams'][number]['health'] = 'unknown';
+    if (!d.enabled) health = 'idle';
+    else if (runs === 0) health = 'idle';
+    // A third of runs failing is a broken silo, not a bad night.
+    else if (failed > runs / 3) health = 'failing';
+    // ⚠️ Completing every run and producing nothing is the QUIET failure — an
+    // empty corpus. It reads as green on every other signal.
+    else if (completed > 3 && proposals === 0) health = 'empty';
+    else if (lastRunAgoSeconds != null && lastRunAgoSeconds < 14 * day) health = 'healthy';
+    else health = 'idle';
+    return { siloId: d.silo_id, enabled: d.enabled, runs, completed, failed, proposals, lastRunAgoSeconds, health };
+  });
+
   const workflows = wfRows.map(w => {
     const failures7d = failByWf.get(w.id) ?? 0;
     const lastRunAgoSeconds = w.last_run_at != null ? Math.round(now - w.last_run_at) : null;
@@ -232,6 +292,7 @@ export async function runSelfMonitor(): Promise<SelfMonitorSnapshot> {
 
   const snapshot: SelfMonitorSnapshot = {
     generatedAt: now,
+    dreams,
     corrections: { daily, last7d, prev7d, trend },
     memoryHitRate: {
       activeDirectives: parseInt(memRow.ad, 10),

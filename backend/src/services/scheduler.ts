@@ -180,12 +180,24 @@ export async function scheduleSystemJob(
  * Phase 50 MSF-04 — Per-silo dream cadence tick.
  *
  * Reads silos.cadence_seconds per enabled silo, compares against the max
- * started_at from dream_runs for that silo (status IN completed/running),
- * and fires runDreamWorker({siloId, triggeredBy:'schedule'}) for any silo
- * whose cadence has elapsed. The dream-worker's own checkSkipRecent guard
+ * started_at from dream_runs for that silo, and fires runDreamWorker for any
+ * silo whose cadence has elapsed. The dream-worker's own checkSkipRecent guard
  * then re-applies the same 95% floor as a defensive race check.
  *
  * Per-silo errors are caught — one failing silo never blocks the others.
+ *
+ * ⚠️ A FAILED RUN COUNTS AS AN ATTEMPT. This filtered `status IN
+ * ('completed','running')`, so a run that FAILED never advanced the pointer and
+ * the silo re-fired on the very next tick — every hour, forever, until one
+ * succeeded. That is not a hypothetical: the `software` silo produced **659
+ * failed runs against 22 completed**, 594 of them the identical
+ * `claude_cli timed out after 180000ms`, because each failure immediately
+ * re-armed the next attempt.
+ *
+ * Retrying a broken thing hourly is not resilience. It buries the real error in
+ * hundreds of copies, burns the model quota that the NEXT attempt needs, and
+ * makes the failure look like noise instead of one fact. A failed attempt is
+ * still an attempt: wait the cadence, then try once more.
  */
 async function runSiloCadenceCheck(): Promise<void> {
   const { rows } = await pool.query<{
@@ -197,8 +209,7 @@ async function runSiloCadenceCheck(): Promise<void> {
            s.cadence_seconds,
            (SELECT MAX(started_at)::text
               FROM dream_runs dr
-             WHERE dr.silo_id = s.id
-               AND dr.status IN ('completed','running')) AS last_started_at
+             WHERE dr.silo_id = s.id) AS last_started_at
       FROM silos s
      WHERE s.enabled = TRUE
   `);
