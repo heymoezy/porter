@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.152.0',
+    date: '2026-08-02',
+    title: 'Correction: the previous release would have made ten pending items do nothing',
+    bullets: [
+      'v6.151.0 stopped writing a vault copy for rules that already take effect in Porter. But the ten worker-knowledge items waiting for review are a special case: their rule is deliberately inert, and the vault copy is the only thing accepting them actually does. Under v6.151.0, approving one would have had no effect at all.',
+      'Fixed before any were approved. Caught while testing the weekly note that surfaces them \u2014 two of the ten expire in two days.',
+    ],
+  },
+  {
     version: '6.151.0',
     date: '2026-08-02',
     title: 'The drafts folder was making applied rules look unapplied',

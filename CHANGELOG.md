@@ -1,3 +1,18 @@
+## v6.152.0 (2026-08-02) — correction: v6.151.0 would have made the workers queue a no-op
+
+v6.151.0 gated `writeProposalDraft()` on KIND. Every workers proposal is kind `new_directive`,
+so it would have been skipped — and `worker-knowledge.ts:66` states plainly that a workers
+directive is inert (*"no session ever resolves silo 'workers' … the operative artifact is the U4
+vault draft written on accept"*). Accepting one of the 10 pending workers items would therefore
+have written an inert directive, no vault node, and changed nothing.
+
+The rule is not "which kind" but **"does the directive actually take effect"**. Where it does,
+the vault copy is redundant; where it cannot, the vault copy is the whole point. `workers` is now
+an explicit inert-silo exception.
+
+Caught by dry-running the weekly note that surfaces these, before any were accepted. Two of the
+ten expire in two days.
+
 ## v6.151.0 (2026-08-02) — vault drafts were making live rules look unapplied
 
 `writeProposalDraft()` fired on EVERY accepted proposal regardless of kind. All four kinds the

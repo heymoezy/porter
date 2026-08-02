@@ -108,6 +108,28 @@ function renderDraft(input: ProposalDraftInput, date: string): string {
 const DIRECTIVE_KINDS = new Set(['new_directive', 'merge', 'supersede', 'delete']);
 
 /**
+ * Silos whose directives are INERT, so the vault node is the real artifact.
+ *
+ * ⚠️ `workers` is not in the `silos` table and never will be — `worker-knowledge.ts`
+ * says so in as many words: *"no FK; deliberate: no session ever resolves silo
+ * 'workers', so an accepted row's directive is inert — the operative artifact is
+ * the U4 vault draft written on accept."* Its proposals refresh a WORKER's fact
+ * stock (Marshall RMI desk, Sentinel compliance, the GitHub watchlist), which
+ * lives in the vault, not in the injection path.
+ *
+ * So the DIRECTIVE_KINDS skip above must not apply to it. Gating on kind alone
+ * would have made accepting a workers proposal a complete no-op — an inert
+ * directive and no vault node — silently converting ten pending items into ten
+ * ways to do nothing. Caught while dry-running the weekly note that surfaces
+ * them, two days before the oldest two expire.
+ *
+ * The real rule is therefore not "which kind" but "does the directive actually
+ * take effect". Where it does, the vault copy is redundant; where it cannot, the
+ * vault copy is the whole point.
+ */
+const INERT_DIRECTIVE_SILOS = new Set(['workers']);
+
+/**
  * Write the draft node + commit it to the vault repo. File write failures throw
  * (caller logs); git commit/push are best-effort like vault-mirror.ts — the
  * draft on disk is still current even when the repo is unhappy.
@@ -116,8 +138,8 @@ const DIRECTIVE_KINDS = new Set(['new_directive', 'merge', 'supersede', 'delete'
  * proposal — see DIRECTIVE_KINDS.
  */
 export async function writeProposalDraft(input: ProposalDraftInput): Promise<ProposalDraftResult> {
-  if (DIRECTIVE_KINDS.has(input.proposalKind)) {
-    return { skipped: true, reason: `${input.proposalKind} is directive-shaped — it lives in Porter directives, not the vault` };
+  if (DIRECTIVE_KINDS.has(input.proposalKind) && !INERT_DIRECTIVE_SILOS.has(input.siloId)) {
+    return { skipped: true, reason: `${input.proposalKind} is directive-shaped and silo '${input.siloId}' injects — the directive IS the artifact` };
   }
   const date = fmtSgtDate(new Date());
   // Deterministic per proposal: re-accept impossible (status flip), but a

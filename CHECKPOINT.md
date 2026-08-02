@@ -1,3 +1,17 @@
+## 2026-08-02 - v6.152.0 - Correcting v6.151.0 before it cost anything
+
+v6.151.0's gate was right about the symptom and wrong about the rule. It skipped the vault copy
+for directive-shaped kinds. All 10 pending `workers` proposals are `new_directive` — and a
+workers directive is INERT by design, so the vault node is the only thing accepting one does.
+Under v6.151.0 approving any of them would have been a silent no-op.
+
+Found by dry-running the new weekly note that lists them, not by review. Nothing was accepted in
+between, so no learning was lost — but two of the ten expire in two days, which is how close
+this ran.
+
+The correct rule: not "which kind", but "does the directive take effect". `INERT_DIRECTIVE_SILOS`
+now carries `workers`, with the reasoning and the source comment quoted at the definition.
+
 ## 2026-08-02 - v6.151.0 - The drafts folder was evidence for a conclusion that was false
 
 The audit plan said: *"5 accepted-but-inert drafts in vault/drafts/ … Accepted proposals that
