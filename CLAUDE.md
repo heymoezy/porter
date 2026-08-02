@@ -6,7 +6,8 @@ Business model: API metering. Any UI is just an API customer.
 
 ## Pillars
 
-- **Bridge** — routes AI requests across backends. Two registered gateways: Claude CLI (`claude_cli`, priority 10) and Codex CLI (`codex_cli`, priority 20). One bridge, many backends. Hub/spoke contract: `BRIDGE.md`. Adapters: `backend/src/services/bridge/adapters/`.
+- **Bridge** — routes AI requests across backends. **Four** registered gateways, all enabled: Claude CLI (`claude_cli`, priority 10), Codex CLI (`codex_cli`, 20), Antigravity CLI (`antigravity_cli`, 30), Grok CLI (`grok_cli`, 40). Failover runs in that priority order. One bridge, many backends. Hub/spoke contract: `BRIDGE.md`. Adapters: `backend/src/services/bridge/adapters/`.
+  - ⚠️ **`routing_rules` is NOT consumed by anything.** The table exists (`migrate-bridge-v2.ts`) and `RoutingRuleAction` is declared in `types.ts`, but no dispatch code ever reads it — the routing engine is unbuilt and its tests are `it.todo`. Rows in it look like live configuration and change nothing. Five rows forcing agents to a gateway named `openclaw`, which has not existed for months, were deleted on 2026-08-02 (recovery SQL kept). Do not "configure" routing there until something reads it.
 - **Intelligence** — signal extraction from CLI activity, classification, surfacing. Consumers subscribe.
 - **Memory — 3 layers:** Directives (operating rules, high trust) → Concepts (durable truths, high trust, FTS) → Episodes (time-bound, medium), plus **hot context** (`hot_contexts` / `hot_notes`) — the warm packet a session opens with.
 

@@ -1,3 +1,24 @@
+## 2026-08-02 - v6.153.0 - Two doc facts that were wrong, one decision made cheap
+
+**Bridge has four gateways, not two.** `CLAUDE.md:9` listed claude_cli and codex_cli; antigravity_cli
+and grok_cli have been enabled and in the failover chain. A contract file that understates the
+system by half is worse than none — it gets trusted.
+
+**`routing_rules` is dead config that looks alive.** Created by a migration, typed in `types.ts`,
+read by NOTHING (routing-engine tests are `it.todo`). Five enabled rows forced five agents to
+`openclaw`, a gateway that has not existed for months — and could not have, because nothing
+consults the table. Deleted; CLAUDE.md now says so at the point of temptation.
+⚠️ I chained the backup COPY and the DELETE in one command; the COPY was denied (needs
+pg_write_server_files) and the DELETE ran anyway. No loss — the rows were fully reconstructable
+from the SELECT run moments earlier, and recovery SQL is in the session scratchpad — but chaining
+a backup to a destructive op means the op does not depend on the backup succeeding. Don't.
+
+**18 dead tables: NOT dropped, on purpose.** `0102_drop_dead_mail_forge_rpg.sql` says in its header
+that the operator applies it deliberately. That is a designed human gate, not a missed migration,
+so it stays for Moe. What was missing was the evidence to decide with: all 18 exist, **28 rows
+total** across them, all residue from Forge / RPG / the disabled mail subsystem. One command when
+he wants it.
+
 ## 2026-08-02 - v6.152.0 - Correcting v6.151.0 before it cost anything
 
 v6.151.0's gate was right about the symptom and wrong about the rule. It skipped the vault copy

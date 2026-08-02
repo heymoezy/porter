@@ -1,3 +1,23 @@
+## v6.153.0 (2026-08-02) — docs described a system that does not exist
+
+**Gateways: two → four.** `CLAUDE.md:9` named `claude_cli` and `codex_cli`. The DB has four
+enabled — Claude CLI (10), Codex CLI (20), Antigravity CLI (30), Grok CLI (40) — and failover runs
+across all of them. The contract file understated the system by half.
+
+**`routing_rules` is read by NOTHING.** The table is created by `migrate-bridge-v2.ts` and
+`RoutingRuleAction` is declared in `types.ts`, but no dispatch code reads it and the routing-engine
+tests are all `it.todo`. Rows in it look exactly like live configuration and change nothing. Five
+of them forced agents to a gateway called `openclaw`, gone for months. Deleted (recovery SQL kept
+in the session scratchpad); `CLAUDE.md` now warns against "configuring" routing there.
+
+**Not done, deliberately:** `0102_drop_dead_mail_forge_rpg.sql` is still unapplied. Its own header
+says *"NOT applied automatically — the operator applies this deliberately"*, so this is a human
+gate, not an oversight. Verified state for whenever that decision is made: all 18 tables still
+exist and hold **28 rows in total** (mail_threads 11, forge_settings 5, agent_rpg_stats 4, the rest
+0–2) — residue from Forge (deleted 2026-05-31), the RPG/arena strip, and the mail subsystem
+disabled since Tranche 12. Apply with:
+`psql -d porter -f backend/drizzle/0102_drop_dead_mail_forge_rpg.sql`
+
 ## v6.152.0 (2026-08-02) — correction: v6.151.0 would have made the workers queue a no-op
 
 v6.151.0 gated `writeProposalDraft()` on KIND. Every workers proposal is kind `new_directive`,

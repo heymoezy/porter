@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.153.0',
+    date: '2026-08-02',
+    title: 'Documentation that described a system we do not have',
+    bullets: [
+      'The project notes said Bridge had two AI backends. It has four, and failover runs across all of them. Corrected.',
+      'A settings table that looks like it controls routing is read by nothing at all \u2014 the feature was never built. Five entries in it pointed at a backend removed months ago and appeared to be steering live traffic. Removed, and the file now says plainly that changing that table does nothing.',
+    ],
+  },
+  {
     version: '6.152.0',
     date: '2026-08-02',
     title: 'Correction: the previous release would have made ten pending items do nothing',
