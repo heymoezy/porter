@@ -1,3 +1,25 @@
+## v6.150.0 (2026-08-02) — release registration had never once succeeded
+
+`[porter-release register] · ymc.capital v1.974.0 — Porter returned 401 (non-fatal)` printed on
+EVERY ship of every delegate repo. Nothing was ever recorded.
+
+`porterServiceToken()` read `process.env.PORTER_SERVICE_TOKEN` with — correctly — no hardcoded
+fallback, because the old default token leaked into 11 commits of this PUBLIC repo and was
+rotated on 2026-07-13. But the caller is a **git post-commit hook**, which inherits git's
+environment, not a shell profile and not a systemd unit. The variable was therefore empty on
+every single invocation.
+
+Two things kept it invisible:
+- the result is deliberately marked `(non-fatal)` so it can never fail a release — which also
+  means it can never get anyone's attention;
+- a 401 reads as "auth is misconfigured, someone will fix it", not as "this has never worked".
+
+Now falls back to `~/.config/porter/porter.env` (mode 600, deliberately outside this public
+repo — a PATH is not a secret), overridable with `PORTER_ENV_FILE`, and strips a wrapping quote
+pair since a quoted value fails auth in a way that looks identical to a wrong token.
+
+Verified end to end on the real hook path: `✓ recorded ymc.capital v1.974.0`.
+
 ## v6.149.0 (2026-08-02) — three of four dream silos were producing nothing
 
 Found by auditing plan-vs-shipped across both repos. Live numbers before this release:

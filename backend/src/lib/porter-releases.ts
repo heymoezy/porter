@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.150.0',
+    date: '2026-08-02',
+    title: 'Release registration had been failing on every ship since it was built',
+    bullets: [
+      'Every time a project shipped, it tried to record the release with Porter and was rejected as unauthorised. The line said "non-fatal" and scrolled past in otherwise-green deploy output, so nobody looked \u2014 and no release was ever recorded.',
+      'The cause: it read the service token from an environment variable, but it runs from a git hook, which does not get one. It now falls back to Porter\u2019s own config file. Verified by registering a real release.',
+    ],
+  },
+  {
     version: '6.149.0',
     date: '2026-08-02',
     title: 'Three of the four learning silos were producing nothing',

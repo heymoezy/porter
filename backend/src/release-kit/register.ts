@@ -23,8 +23,36 @@ import type { ReleaseManifest } from './manifest-schema.js';
 const DEFAULT_PORTER_URL = 'http://127.0.0.1:3001';
 const REGISTER_PATH = '/api/admin/releases/register';
 
+/**
+ * ⚠️ NO HARDCODED FALLBACK — the old default token leaked into 11 commits of
+ * this PUBLIC repo and was rotated on 2026-07-13. Never reintroduce one.
+ *
+ * But an env var alone was never going to work here: this runs from a git
+ * post-commit hook, which inherits git's environment, not a shell profile or a
+ * systemd unit. `PORTER_SERVICE_TOKEN` was therefore empty on EVERY release,
+ * every register POST 401'd, and because the caller marks it "(non-fatal)" the
+ * line scrolled past in green deploy output for months while nothing was ever
+ * recorded. A failure that is designed to be ignored still needs to not happen.
+ *
+ * So fall back to Porter's own config file — the canonical home for its secrets
+ * (mode 600, deliberately OUTSIDE this public repo). A PATH is not a secret.
+ */
 function porterServiceToken(): string {
-  return process.env.PORTER_SERVICE_TOKEN ?? ''; // no fallback: the old default leaked (public repo)
+  const fromEnv = process.env.PORTER_SERVICE_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
+  try {
+    const envFile = process.env.PORTER_ENV_FILE
+      || join(process.env.HOME || '', '.config', 'porter', 'porter.env');
+    const line = readFileSync(envFile, 'utf8')
+      .split('\n')
+      .find((l) => l.trimStart().startsWith('PORTER_SERVICE_TOKEN='));
+    if (!line) return '';
+    // Strip an optional wrapping quote pair; a quoted value read literally
+    // fails auth in a way that looks exactly like a wrong token.
+    return line.slice(line.indexOf('=') + 1).trim().replace(/^(['"])(.*)\1$/, '$2');
+  } catch {
+    return ''; // unreadable config is the same benign no-op as an unset var
+  }
 }
 
 function resolveEndpoint(override?: string): string {

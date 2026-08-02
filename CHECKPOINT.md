@@ -1,3 +1,24 @@
+## 2026-08-02 - v6.150.0 - The release register had never once succeeded
+
+`[porter-release register] — Porter returned 401 (non-fatal)` printed on every ship of every
+delegate repo, including all four of today's. Nothing was ever recorded.
+
+The token was read from `PORTER_SERVICE_TOKEN` with no hardcoded fallback — correct, since the
+old default leaked into 11 commits of this PUBLIC repo (rotated 2026-07-13). But the caller is a
+**git post-commit hook**: it inherits git's environment, not a shell profile and not a systemd
+unit, so the variable was empty every time.
+
+It stayed invisible because the result is deliberately `(non-fatal)` — it can never fail a
+release, which also means it can never get anyone's attention — and because a 401 reads as
+"misconfigured" rather than "never worked".
+
+Falls back to `~/.config/porter/porter.env` (600, outside the public repo; a PATH is not a
+secret), `PORTER_ENV_FILE` overrides, wrapping quotes stripped. Verified on the real hook path:
+`✓ recorded ymc.capital v1.974.0`.
+
+⚠️ Same shape as vps-browser-gc this morning and [[feedback_never_silence_a_true_alarm]]: a
+failure classified as ignorable at design time is a failure nobody will ever read.
+
 ## 2026-08-02 - v6.149.0 - three of four dream silos produced NOTHING
 
 Plan-vs-shipped audit. Before: software 681 runs / **659 failed**; admin 36 runs / **0 proposals ever**;
