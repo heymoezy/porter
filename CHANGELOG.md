@@ -1,3 +1,31 @@
+## v6.155.0 (2026-08-02) — the concept-dedup blocker was not real; the actual one is elsewhere
+
+R7 Stage B was parked behind: *"Porter does not dedup concepts the way it dedups directives, so a
+paraphrase arriving by another path still stacks."* With R6's embeddings in place that looked one
+query away. Measured instead (`scripts/measure-concept-duplication.ts`, 216 active concepts):
+
+| cosine | pairs | structural-by-design | real duplicates |
+|---|---|---|---|
+| ≥ 0.97 | 16 | 16 | **0** |
+| ≥ 0.93 | 36 | 36 | **0** |
+| ≥ 0.88 | 54 | 52 | **2** |
+
+Above 0.93, not one genuine duplicate. `[Ollama releases] v0.32.2-rc2` vs `v0.32.2-rc0` scores
+0.989 and they are DIFFERENT RELEASES — embeddings barely move on a version number, so short
+structured records dominate the top of the band. The two real duplicates need a 0.88 cut that also
+merges 52 legitimate records: 26 false positives per true one. **Not built.** Deleting real release
+history to merge two sentences is the 2026-07-31 re-key incident again (2,100 duplicates from
+running into a deliberate dedup design).
+
+The script is kept, with the reasoning in its header, so this is re-checkable rather than
+re-litigated — and so nobody builds the destructive version later.
+
+**The real Stage B blocker** (recorded in ymc `planning/tom-memory/RELEASE-SCHEDULE.md`):
+`renderGraphContext()` renders live-only via `confidence >= 0.35`, and the Stage A mirror does not
+carry confidence — `/api/v1/intellect/agent-memory` derives its own from salience and accepts none
+from the caller. Repointing today would surface decayed facts as current. Coverage is NOT the
+blocker: all 5 active `tom_knowledge` rows are already in Porter 1:1.
+
 ## v6.154.0 (2026-08-02) — R6: semantic recall, measured before and after
 
 **The gate was re-taken first, as the plan required.** The original 4/8 was measured against a

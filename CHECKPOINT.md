@@ -1,3 +1,23 @@
+## 2026-08-02 - v6.155.0 - Measured the dedup blocker instead of believing it
+
+R7 Stage B was parked behind "concepts don't dedup, paraphrases stack". R6 made that testable, so I
+tested it before building: **0 real duplicates above cosine 0.93, 2 at 0.88, against 52 structural
+false positives.** Consecutive Ollama release notes score 0.989 and are different releases;
+different workers share "Tom's FUNCTIONAL worker for…" boilerplate. A dedup pass sensitive enough
+to catch the two real ones would have deleted 52 genuine records — 26:1.
+
+Not built. `scripts/measure-concept-duplication.ts` keeps the evidence and the reasoning so the
+next session re-runs it rather than re-deriving the wrong conclusion.
+
+⚠️ **The real blocker was in the code Stage B would repoint, not in the data.**
+`renderGraphContext()` renders LIVE ONLY (`confidence >= 0.35`); `mirrorToPorter` writes the
+`[kg:…]` tag but no confidence, and the agent-memory endpoint derives its own from salience. Repoint
+today and decayed facts render as current. Coverage is fine — all 5 active `tom_knowledge` rows are
+in Porter 1:1. Unblock sequence written into ymc `planning/tom-memory/RELEASE-SCHEDULE.md`.
+
+This is [[feedback_read_why_before_calling_it_a_bug]] applied to a PLAN rather than to code: a
+recorded blocker is a hypothesis with age on it, and age is not evidence.
+
 ## 2026-08-02 - v6.154.0 - R6 shipped, and the number is modest
 
 Re-measured the gate BEFORE building, as plan E required — the original 4/8 was taken against a

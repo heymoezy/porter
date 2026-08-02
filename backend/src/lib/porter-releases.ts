@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.155.0',
+    date: '2026-08-02',
+    title: 'Checked whether memory has a duplicates problem. It does not.',
+    bullets: [
+      'A planned piece of work assumed the memory store was filling with duplicate entries and needed automatic merging. Measured it: of 216 entries, zero real duplicates above the level where merging would be safe, and two below it.',
+      'Almost everything that looks like a duplicate is not \u2014 consecutive Ollama release notes read as 99% identical to a computer but are different releases. Merging at the level needed to catch the two real duplicates would have deleted 52 genuine records.',
+      'Not building it. The check is saved so the next person sees the evidence rather than the assumption.',
+    ],
+  },
+  {
     version: '6.154.0',
     date: '2026-08-02',
     title: 'Memory can now be found by meaning, not just by matching words',
