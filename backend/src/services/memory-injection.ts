@@ -3,6 +3,7 @@ import { selectDirectives, tokenizeTaskText } from './directive-scorer.js';
 import { recordConceptUsage } from './intellect/concept-usage.js';
 import type { DirectiveSelectionStats } from './directive-scorer.js';
 import { VAULT_RANK_BOOST } from './intellect/vault-indexer.js';
+import { embed, toVectorLiteral } from './intellect/embeddings.js';
 
 // ── Token estimation helper ───────────────────────────────────────────────────
 // Approximate: 4 chars ≈ 1 token (common rule of thumb for English text)
@@ -322,6 +323,65 @@ export async function buildMemoryContext(opts: {
         // Malformed input can make the OR rewrite unparseable — fail back to the
         // AND result (empty) rather than losing the whole injection.
         res = await pool.query<Row>(FTS('or'), [searchQuery]).catch(() => res);
+      }
+
+      // ── R6: fuse in semantic neighbours ────────────────────────────────────
+      //
+      // FTS cannot join "who should I ask about anti money laundering paperwork"
+      // to a concept about compliance/KYC — the two share no token, so stemming
+      // has nothing to work with. Re-measured 2026-08-02 over 151 concepts after
+      // the AND-then-OR fix: still 4/8 paraphrase misses. That residual is what
+      // this closes.
+      //
+      // ⚠️ ADDITIVE, NEVER GATING. If ollama is down or slow, `embed()` returns
+      // null in ≤2s and this whole block is skipped — FTS results stand exactly
+      // as they are. A concept with no embedding is likewise still found by FTS,
+      // which is why the column is nullable and the index partial. Retrieval
+      // sits in front of a live reply; it may improve an answer, never delay one.
+      //
+      // ⚠️ RECIPROCAL RANK FUSION, not score blending. A ts_rank and a cosine
+      // distance are different units on different scales with no meaningful
+      // conversion — any weighted sum of the two is a made-up number that looks
+      // principled. RRF throws the scores away and uses only each ranker's
+      // ORDERING, which is the part both agree on the meaning of. k=60 is the
+      // standard constant: large enough that rank 1 does not dominate outright,
+      // small enough that the tail still separates.
+      const qVec = await embed(searchQuery);
+      if (qVec) {
+        const ann = await pool.query<Row>(
+          `SELECT id, content, confidence_score, source_type, source_url
+             FROM concepts
+            WHERE status = 'active' AND embedding IS NOT NULL
+            ORDER BY (embedding <=> $1::vector)
+                     -- Same vault preference the FTS ranker applies, expressed
+                     -- as distance: nearer is better, so vault rows are scaled
+                     -- DOWN rather than up.
+                     * CASE WHEN source_type = 'vault' THEN ${1 / VAULT_RANK_BOOST} ELSE 1.0 END
+            LIMIT 10`,
+          [toVectorLiteral(qVec)],
+        ).catch(() => null);
+
+        if (ann && ann.rows.length > 0) {
+          const K = 60;
+          const scores = new Map<string, number>();
+          const byId = new Map<string, Row>();
+          for (const [rank, row] of res.rows.entries()) {
+            scores.set(row.id, (scores.get(row.id) ?? 0) + 1 / (K + rank + 1));
+            byId.set(row.id, row);
+          }
+          for (const [rank, row] of ann.rows.entries()) {
+            scores.set(row.id, (scores.get(row.id) ?? 0) + 1 / (K + rank + 1));
+            if (!byId.has(row.id)) byId.set(row.id, row);
+          }
+          // A row both rankers found accumulates from both and rises — which is
+          // the whole point of fusing rather than concatenating.
+          const fused = [...scores.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([id]) => byId.get(id)!)
+            .filter(Boolean);
+          if (fused.length > 0) res = { ...res, rows: fused } as typeof res;
+        }
       }
       if (res.rows.length > 0) {
         const header = '## Related Knowledge\n';

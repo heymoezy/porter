@@ -24,6 +24,7 @@
  */
 import 'dotenv/config';
 import { pool } from '../src/db/client.js';
+import { embed, toVectorLiteral } from '../src/services/intellect/embeddings.js';
 
 interface Probe { label: string; needle: RegExp; control: string; paraphrase: string }
 
@@ -122,17 +123,53 @@ async function hits(query: string, needle: RegExp, sql = RECALL_SQL): Promise<{ 
   };
 }
 
+
+/**
+ * HYBRID — the retrieval `memory-injection.ts` actually performs since R6:
+ * FTS(OR) ⊕ ANN, fused by reciprocal rank with k=60. Reimplemented here rather
+ * than imported because the injection builder returns a rendered prompt string,
+ * not rows, and this needs to ask "is the right concept in the candidate set".
+ * ⚠️ If the fusion in memory-injection.ts changes, change it here too or this
+ * measures a retrieval nobody runs.
+ */
+async function hybridHits(query: string, needle: RegExp): Promise<{ found: boolean; top: string | null; n: number }> {
+  const fts = await pool.query<{ content: string }>(OR_SQL, [query])
+    .catch(() => ({ rows: [] as { content: string }[] }));
+  const qVec = await embed(query);
+  let ann: { rows: { content: string }[] } = { rows: [] };
+  if (qVec) {
+    ann = await pool.query<{ content: string }>(
+      `SELECT content FROM concepts
+        WHERE status='active' AND scope='agent' AND scope_id='tom' AND embedding IS NOT NULL
+        ORDER BY (embedding <=> $1::vector) LIMIT 8`,
+      [toVectorLiteral(qVec)],
+    ).catch(() => ({ rows: [] as { content: string }[] }));
+  }
+  const K = 60;
+  const score = new Map<string, number>();
+  fts.rows.forEach((r, i) => score.set(r.content, (score.get(r.content) ?? 0) + 1 / (K + i + 1)));
+  ann.rows.forEach((r, i) => score.set(r.content, (score.get(r.content) ?? 0) + 1 / (K + i + 1)));
+  const fused = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([c]) => c);
+  return { found: fused.some((c) => needle.test(c)), top: fused[0]?.slice(0, 60) ?? null, n: fused.length };
+}
+
 async function main(): Promise<void> {
   const total = (await pool.query<{ n: string }>(
     `SELECT count(*) AS n FROM concepts WHERE status='active' AND scope='agent' AND scope_id='tom'`)).rows[0].n;
   console.log(`R6 GATE MEASUREMENT — paraphrase-miss rate over ${total} active concepts for agent:tom\n`);
 
   let controlMiss = 0, paraMiss = 0, orControlMiss = 0, orParaMiss = 0;
+  let hybControlMiss = 0, hybParaMiss = 0, hybParaMissAbs = 0;
   for (const p of PROBES) {
     const c = await hits(p.control, p.needle);
     const q = await hits(p.paraphrase, p.needle);
     const oc = await hits(p.control, p.needle, OR_SQL);
     const oq = await hits(p.paraphrase, p.needle, OR_SQL);
+    const hc = await hybridHits(p.control, p.needle);
+    const hq = await hybridHits(p.paraphrase, p.needle);
+    if (!hc.found) hybControlMiss++;
+    if (hc.found && !hq.found) hybParaMiss++;
+    if (!hq.found) hybParaMissAbs++;
     if (!oc.found) orControlMiss++;
     if (oc.found && !oq.found) orParaMiss++;
     if (!c.found) controlMiss++;
@@ -147,6 +184,12 @@ async function main(): Promise<void> {
   console.log(`\n--- same probes with OR semantics ---`);
   console.log(`control misses: ${orControlMiss}/${PROBES.length}`);
   console.log(`paraphrase misses: ${orParaMiss}/${orTestable} testable = ${orTestable ? ((orParaMiss/orTestable)*100).toFixed(0) : 0}%`);
+
+  const hybTestable = PROBES.length - hybControlMiss;
+  console.log(`\n--- HYBRID (FTS-OR + embeddings, RRF k=60) — what injection actually runs ---`);
+  console.log(`control misses: ${hybControlMiss}/${PROBES.length}`);
+  console.log(`paraphrase misses: ${hybParaMiss}/${hybTestable} testable = ${hybTestable ? ((hybParaMiss/hybTestable)*100).toFixed(0) : 0}%`);
+  console.log(`paraphrase misses, ALL probes (not just testable): ${hybParaMissAbs}/${PROBES.length}`);
 
   const testable = PROBES.length - controlMiss;
   const rate = testable ? (paraMiss / testable) * 100 : 0;

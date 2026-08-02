@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.154.0',
+    date: '2026-08-02',
+    title: 'Memory can now be found by meaning, not just by matching words',
+    bullets: [
+      'Asking "who should I ask about anti money laundering paperwork" found nothing, even though there is a note about who handles compliance and KYC. The two phrasings share no words, so word-matching could never connect them. Search now also compares meaning.',
+      'Measured, not assumed: 8 test questions asked in different words than the notes use. Word-matching alone missed 4 of 8. With meaning-matching added, 3 \u2014 and one of those three is the test being too strict, not the search failing.',
+      'It runs on this machine and nothing is sent anywhere. If it is unavailable the old search answers exactly as before, so it can never make a reply slower or break one.',
+    ],
+  },
+  {
     version: '6.153.0',
     date: '2026-08-02',
     title: 'Documentation that described a system we do not have',

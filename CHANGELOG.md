@@ -1,3 +1,42 @@
+## v6.154.0 (2026-08-02) — R6: semantic recall, measured before and after
+
+**The gate was re-taken first, as the plan required.** The original 4/8 was measured against a
+corpus produced by a pipeline that was failing 97% of runs; re-measuring after v6.149.0 repaired
+it, over 151 active concepts for agent:tom:
+
+| retrieval | control misses | paraphrase misses |
+|---|---|---|
+| FTS, AND semantics | 3/8 | 5/5 testable (100%) |
+| FTS, OR semantics (shipped R1 fix) | 0/8 | 4/8 (50%) |
+| **FTS-OR ⊕ embeddings, RRF k=60** | **0/8** | **3/8 (38%)** |
+
+The residual FTS cannot reach is real: *"who should I ask about anti money laundering paperwork"*
+returns nothing while a concept about compliance/KYC sits in the table. Those strings share no
+token, so stemming has nothing to work with.
+
+**Honest reading of 4→3.** That is one probe recovered, which is a modest result and is reported
+as one. Pure ANN independently answers 2 of the 5 hard probes at rank 1. And at least one
+remaining "miss" is a HARNESS artifact, not a retrieval failure: the needle for the board-resolution
+probe requires the literal phrase `board resolution`, while ANN's top hit reads *"resolutions of
+the board"* — the harness tests for exact wording, which is precisely what embeddings exist to make
+unnecessary, so it systematically under-credits them. The needles were deliberately NOT loosened
+after seeing the result; fitting the test to the outcome would make the number meaningless.
+
+**Design.**
+- `nomic-embed-text` (768d) on the LOCAL ollama. No vendor, no key, no egress — same reasoning as
+  Kokoro for TTS.
+- `concepts.embedding vector(768)`, NULLABLE, with a PARTIAL HNSW index. A concept with no vector
+  is still fully findable by FTS. HNSW not IVFFlat: IVFFlat needs a representative training sample
+  and this table is small and grows nightly.
+- **RRF, not score blending.** A `ts_rank` and a cosine distance are different units on different
+  scales; any weighted sum of them is an invented number that looks principled. RRF discards the
+  scores and fuses only the two ORDERINGS.
+- **Fails open, always.** `embed()` returns null within 2s if ollama is down or slow, and the whole
+  fusion block is skipped — FTS results stand untouched. Retrieval sits in front of a live reply;
+  it may improve an answer, never delay one.
+
+216/216 active concepts embedded, zero failures.
+
 ## v6.153.0 (2026-08-02) — docs described a system that does not exist
 
 **Gateways: two → four.** `CLAUDE.md:9` named `claude_cli` and `codex_cli`. The DB has four

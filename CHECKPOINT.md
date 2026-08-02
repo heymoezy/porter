@@ -1,3 +1,26 @@
+## 2026-08-02 - v6.154.0 - R6 shipped, and the number is modest
+
+Re-measured the gate BEFORE building, as plan E required — the original 4/8 was taken against a
+corpus from a 97%-failing pipeline. Post-repair over 151 concepts: FTS-OR still misses 4/8
+paraphrases. Gate open. Built it.
+
+**Result: 4/8 → 3/8.** One probe recovered. Reported as one — it is not the win the plan implied.
+Pure ANN answers 2 of the 5 hard probes at rank 1, and one remaining "miss" is the HARNESS being
+literal (needle wants `board resolution`; ANN returns "resolutions of the board" at rank 1). The
+needles were NOT loosened after seeing the result — fitting the test to the outcome would make the
+whole measurement worthless, and this file exists so the next person can trust these numbers.
+
+⚠️ Local ollama, nothing leaves the box. Nullable column + partial HNSW index so an un-embedded
+concept stays findable. RRF over the two ORDERINGS, never a weighted sum of a ts_rank and a cosine
+distance — those are different units and blending them invents a number. Fails open in 2s.
+
+⚠️ `scripts/measure-paraphrase-miss.ts` now reimplements the fusion to measure it. If the fusion in
+`memory-injection.ts` changes and this does not, it measures a retrieval nobody runs.
+
+Open, for whoever picks this up: the two genuine remaining misses ("how does he like me to write",
+"anti money laundering paperwork") are worth reading individually — it may be corpus coverage
+rather than retrieval, in which case more embedding work is the wrong fix.
+
 ## 2026-08-02 - v6.153.0 - Two doc facts that were wrong, one decision made cheap
 
 **Bridge has four gateways, not two.** `CLAUDE.md:9` listed claude_cli and codex_cli; antigravity_cli
