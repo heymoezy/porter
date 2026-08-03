@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.156.0',
+    date: '2026-08-03',
+    title: 'Mirrored knowledge now keeps its confidence score',
+    bullets: [
+      'When Tom records something he knows about a person, a copy is kept in Porter. That copy was losing the confidence attached to it, so there was no way to tell a fact he is sure about from one that has faded. It now carries across.',
+      'The two systems store confidence on different scales \u2014 0 to 1 in one, 0 to 100 in the other. A first attempt wrote every value as 1, reported success five times, and was only caught by reading the result back. The conversion now happens in one place.',
+    ],
+  },
+  {
     version: '6.155.0',
     date: '2026-08-02',
     title: 'Checked whether memory has a duplicates problem. It does not.',

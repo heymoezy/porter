@@ -1,3 +1,20 @@
+## v6.156.0 (2026-08-03) — agent-memory concepts accept and store confidence
+
+R7 Stage B prerequisite. `POST /api/v1/intellect/agent-memory` inserted concepts without ever
+setting `confidence_score`, so ymc's mirrored `tom_knowledge` facts arrived with no confidence and
+a repointed `renderGraphContext()` (which renders LIVE ONLY, `confidence >= 0.35`) could not tell a
+current fact from a decayed one.
+
+⚠️ **SCALE MISMATCH, caught only by reading the write back.** Callers think in 0..1;
+`concepts.confidence_score` is an **INTEGER on a 0..100 scale** (the live corpus is 95/85/80/55).
+The first backfill passed 0.7 straight through: Postgres rounded it to `1`, all five `UPDATE`
+statements reported `UPDATE 1`, and every value silently became "1 out of 100" — the opposite of
+what was meant. `UPDATE 1` is a row count, not a value confirmation. Conversion now happens at ONE
+point in the route, so no caller has to know the storage scale.
+
+`confidence` is optional and defaults to **NULL, not to a number** — a default would be
+indistinguishable from a real high-confidence value and the reader could never fail safe.
+
 ## v6.155.0 (2026-08-02) — the concept-dedup blocker was not real; the actual one is elsewhere
 
 R7 Stage B was parked behind: *"Porter does not dedup concepts the way it dedups directives, so a

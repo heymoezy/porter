@@ -1,3 +1,16 @@
+## 2026-08-03 - v6.156.0 - Concepts carry confidence (and a scale trap worth remembering)
+
+Stage B prerequisite: the agent-memory route never set `confidence_score`, so every mirrored
+`tom_knowledge` fact landed without one.
+
+⚠️ **`concepts.confidence_score` is an INTEGER, 0..100.** ymc's `tom_knowledge.confidence` is a
+float, 0..1. Passing 0.7 in rounds to 1 — and 1 on a 0..100 scale reads as almost no confidence at
+all. Five UPDATEs all reported `UPDATE 1` and I believed them; the values were only wrong when read
+back. **A row count is not a value confirmation.** One conversion point now, in the route.
+
+NULL default, deliberately: a numeric default is indistinguishable from a genuine high-confidence
+value, so a reader could never fail safe.
+
 ## 2026-08-02 - v6.155.0 - Measured the dedup blocker instead of believing it
 
 R7 Stage B was parked behind "concepts don't dedup, paraphrases stack". R6 made that testable, so I

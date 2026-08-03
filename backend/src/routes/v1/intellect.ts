@@ -535,6 +535,8 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     const body = (request.body || {}) as {
       agent?: string; kind?: string; content?: string; action?: string;
       query?: string; priority?: number; tags?: string[]; session_id?: string; force?: boolean;
+      /** 0..1, concept writes only. NULL when absent — see the concept branch. */
+      confidence?: number;
     };
     const agent = String(body.agent || '').trim().toLowerCase();
     const kind = String(body.kind || '').trim();
@@ -596,10 +598,34 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       ).catch(() => undefined);
       return reply.send(ok({ id, kind, agent, salience: Number(salience.toFixed(3)) }));
     } else if (kind === 'concept') {
+      // ⚠️ `confidence` is accepted from the caller and defaults to NULL, not to a
+      // number. R7 Stage B repoints ymc's `renderGraphContext()` — which renders
+      // LIVE ONLY, `confidence >= 0.35` — at these rows. The mirror carried no
+      // confidence, so every mirrored fact would have rendered as current no
+      // matter how far it had decayed, and there was no way to tell a genuinely
+      // confident fact from one that simply never carried the field.
+      //
+      // NULL is deliberate over a default like 1.0: a default is indistinguishable
+      // from a real high-confidence value, so the reader could never fail safe.
+      // With NULL the reader can decide — ymc's repointed render treats NULL as
+      // "not mirrored with confidence, do not surface".
+      // ⚠️ SCALE CONVERSION, and it is the whole reason this is fiddly.
+      // Callers think in 0..1 (ymc's `tom_knowledge.confidence` is a float in
+      // that range). `concepts.confidence_score` is an **INTEGER on a 0..100
+      // scale** — the existing corpus is 95/85/80/55, not 0.95. Passing 0.7
+      // straight in rounds to 1, which reads as "confidence 1 out of 100", i.e.
+      // the opposite of what was meant. That is exactly what happened on the
+      // first backfill attempt: five UPDATEs all reported success and every
+      // value silently became 1.
+      // ONE conversion point, here, so no caller has to know the storage scale.
+      const rawConf = Number(body.confidence);
+      const confidence = Number.isFinite(rawConf)
+        ? Math.round(Math.min(Math.max(rawConf, 0), 1) * 100)
+        : null;
       await pool.query(
-        `INSERT INTO concepts (id, memory_kind, trust_tier, scope, scope_id, content, source_type, review_state)
-         VALUES ($1, 'concept', 'medium', 'agent', $2, $3, 'agent', 'accepted')`,
-        [id, agent, content],
+        `INSERT INTO concepts (id, memory_kind, trust_tier, scope, scope_id, content, source_type, review_state, confidence_score)
+         VALUES ($1, 'concept', 'medium', 'agent', $2, $3, 'agent', 'accepted', $4)`,
+        [id, agent, content, confidence],
       );
     } else {
       const priority = Math.min(Math.max(Number(body.priority) || 70, 1), 89); // < 90: never outrank moe-direct
