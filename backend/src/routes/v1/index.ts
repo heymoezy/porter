@@ -10,6 +10,7 @@ import bridgeV1Routes from './bridge.js';
 import { dispatchOutcomeRoutes } from './dispatch-outcome.js';
 import sessionsV1Routes from './sessions.js';
 import intellectV1Routes from './intellect.js';
+import { eventsV1Routes } from './events.js';
 import recallV1Routes from './recall.js';
 import agentsV1Routes from './agents.js';
 import vaultV1Routes from './vault.js';
@@ -23,6 +24,8 @@ export default async function v1Routes(fastify: FastifyInstance) {
   fastify.register(filesV1Routes, { prefix: '/files' });
   fastify.register(webhookWhatsAppRoutes, { prefix: '/webhooks/whatsapp' });
   fastify.register(memoryV1Routes, { prefix: '/memory' });
+  // THE one log — see events.ts. Additive to the domain tables, never authoritative.
+  fastify.register(eventsV1Routes, { prefix: '/events' });
   fastify.register(bridgeV1Routes, { prefix: '/bridge' });
   fastify.register(dispatchOutcomeRoutes);
   fastify.register(sessionsV1Routes, { prefix: '/sessions' });

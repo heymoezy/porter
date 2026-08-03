@@ -1,3 +1,25 @@
+## 2026-08-03 - v6.157.0 - One log, and the tables that are deliberately NOT in it
+
+Moe: *"one log is the best idea. one source of truth."* Built as `POST/GET /api/v1/events`.
+
+The judgement call worth recording: "consolidate everything" could not mean one table. `tom_tasks`
+is a QUEUE, `tom_knowledge` is KNOWLEDGE, `document_reviews` is a compliance record whose whole
+value is the named reviewer on it. Merging those loses what each is for — the same error as merging
+two Ollama release notes because they score 0.989. So: ONE truth for what HAPPENED (this), ONE
+truth per domain for what IS (unchanged).
+
+⚠️ Reuses `intellect_events` (38,956 rows, already this exact shape). Adding an eleventh table to
+fix "too many logs" would have been the joke writing itself.
+
+⚠️ `recordEvent()` is fire-and-forget with a 3s ceiling and swallows everything. It runs AFTER the
+`tom_sent_log` write, never instead of it — that row is what proves delivery and what dedup reads.
+Nothing may gate on this stream.
+
+Verified live end to end: a real send produced `ymc.send/message_sent`; both verification rows
+deleted afterwards, `ymc%` events back to 0.
+
+Next writers to wire: filings, releases, proposals, jobs.
+
 ## 2026-08-03 - v6.156.0 - Concepts carry confidence (and a scale trap worth remembering)
 
 Stage B prerequisite: the agent-memory route never set `confidence_score`, so every mirrored

@@ -1,3 +1,29 @@
+## v6.157.0 (2026-08-03) — THE one log: `GET/POST /api/v1/events`
+
+Moe, on Buzz's unified event log: *"take this opportunity to consolidate everything — having all of
+these various logs is a mess — one log is the best idea. one source of truth."*
+
+Counted first: `tom_sent_log` 845, `tom_tasks` 54, `tom_knowledge` 14, `document_reviews` 492,
+`contact_activities` 952, `agent_jobs` 4,518, `agent_activity` 9,317, `agent_messages` 2,977,
+`intellect_events` 38,956, plus file logs.
+
+⚠️ **NOT a merge of all of them.** Several are not logs — `tom_tasks` is a queue, `tom_knowledge` is
+knowledge, `document_reviews` is a compliance record carrying a named reviewer. Folding those into
+one table destroys what each means. The split that holds: **one truth for what HAPPENED** (this
+append-only stream) and **one truth per domain for what IS** (the existing tables, untouched).
+
+⚠️ **Reuses `intellect_events`, does not add an eleventh table.** It is already exactly this shape
+and already holds 38,956 rows. The gap was never a missing table — it was that ymc's side never
+reached this one. `GET /events` (filter by source/type/text/window), `GET /events/summary`
+(what happened and how often), `POST /events` (record).
+
+⚠️ **Additive, never authoritative, never blocking.** ymc's `recordEvent()` fires after the domain
+write and swallows every error — a logging call that can fail a send is worse than no log. Nothing
+may read this to decide whether an action already occurred; dedup and suppression stay on the
+domain tables, because an append-only stream with a best-effort writer is the wrong thing to gate on.
+
+Verified on a live send: 0 ymc events → send → 1 `ymc.send/message_sent` → verification rows removed.
+
 ## v6.156.0 (2026-08-03) — agent-memory concepts accept and store confidence
 
 R7 Stage B prerequisite. `POST /api/v1/intellect/agent-memory` inserted concepts without ever

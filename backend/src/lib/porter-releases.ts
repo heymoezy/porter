@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.157.0',
+    date: '2026-08-03',
+    title: 'One place to ask what happened',
+    bullets: [
+      'Answering "what happened today" meant checking ten different logs across two databases. There is now one searchable stream everything writes to, and Tom\u2019s messages reach it for the first time.',
+      'It reuses the event log that already existed rather than adding an eleventh one, and it does not merge the tables that are not logs \u2014 a task queue and a compliance record with a named reviewer keep their own meaning.',
+      'Writing to it can never fail or slow down the thing being logged, and nothing is allowed to read it to decide whether an action already happened.',
+    ],
+  },
+  {
     version: '6.156.0',
     date: '2026-08-03',
     title: 'Mirrored knowledge now keeps its confidence score',
