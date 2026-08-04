@@ -24,6 +24,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { config } from '../../config.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { promises as fs } from 'node:fs';
@@ -33,7 +34,7 @@ import { logIntellectEvent } from './file-watcher.js';
 
 const execFileP = promisify(execFile);
 
-const VAULT_ROOT = '/home/lobster/vault';
+const VAULT_ROOT = config.vaultDir;
 const MIRROR_REL = 'mirrors/porter-directives.md';
 const MIRROR_ABS = path.join(VAULT_ROOT, MIRROR_REL);
 const DEBOUNCE_MS = 30_000;

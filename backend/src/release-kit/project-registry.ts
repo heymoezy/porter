@@ -12,9 +12,10 @@
  * repos are wired in R3+).
  */
 import { join } from 'node:path';
+import { config } from '../config.js';
 import { MANIFEST_FILENAME } from './manifest-schema.js';
 
-const PROJECTS_DIR = '/home/lobster/projects';
+const PROJECTS_DIR = config.projectsDir;
 
 export interface RegistryProject {
   /** stable id used in manifests + announce routing. */

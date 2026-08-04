@@ -105,8 +105,13 @@ export async function detectAndUpsertGateways(pool: pg.Pool): Promise<DetectionR
          ON CONFLICT (type, source) WHERE source IN ('auto_detected', 'env_bootstrap')
          DO UPDATE SET
            status       = 'active',
-           capabilities = EXCLUDED.capabilities,
-           metadata     = EXCLUDED.metadata,
+           -- ⚠️ COALESCE, not assignment. This wrote the compile-time capability
+           -- registry over the row on EVERY BOOT, so a capability edited in the
+           -- admin was silently reverted on the next restart. All four gateways are
+           -- source='auto_detected' — exactly this ON CONFLICT's scope — so nothing
+           -- was exempt. Detection SEEDS a gateway; it never overrules a stored value.
+           capabilities = COALESCE(gateways.capabilities, EXCLUDED.capabilities),
+           metadata     = COALESCE(gateways.metadata, EXCLUDED.metadata),
            updated_at   = EXTRACT(EPOCH FROM NOW())`,
         [
           id,
@@ -146,8 +151,13 @@ export async function detectAndUpsertGateways(pool: pg.Pool): Promise<DetectionR
          ON CONFLICT (type, source) WHERE source IN ('auto_detected', 'env_bootstrap')
          DO UPDATE SET
            status       = 'active',
-           capabilities = EXCLUDED.capabilities,
-           metadata     = EXCLUDED.metadata,
+           -- ⚠️ COALESCE, not assignment. This wrote the compile-time capability
+           -- registry over the row on EVERY BOOT, so a capability edited in the
+           -- admin was silently reverted on the next restart. All four gateways are
+           -- source='auto_detected' — exactly this ON CONFLICT's scope — so nothing
+           -- was exempt. Detection SEEDS a gateway; it never overrules a stored value.
+           capabilities = COALESCE(gateways.capabilities, EXCLUDED.capabilities),
+           metadata     = COALESCE(gateways.metadata, EXCLUDED.metadata),
            updated_at   = EXTRACT(EPOCH FROM NOW())`,
         [
           codexId,
@@ -187,8 +197,13 @@ export async function detectAndUpsertGateways(pool: pg.Pool): Promise<DetectionR
          ON CONFLICT (type, source) WHERE source IN ('auto_detected', 'env_bootstrap')
          DO UPDATE SET
            status       = 'active',
-           capabilities = EXCLUDED.capabilities,
-           metadata     = EXCLUDED.metadata,
+           -- ⚠️ COALESCE, not assignment. This wrote the compile-time capability
+           -- registry over the row on EVERY BOOT, so a capability edited in the
+           -- admin was silently reverted on the next restart. All four gateways are
+           -- source='auto_detected' — exactly this ON CONFLICT's scope — so nothing
+           -- was exempt. Detection SEEDS a gateway; it never overrules a stored value.
+           capabilities = COALESCE(gateways.capabilities, EXCLUDED.capabilities),
+           metadata     = COALESCE(gateways.metadata, EXCLUDED.metadata),
            updated_at   = EXTRACT(EPOCH FROM NOW())`,
         [
           agyId,
@@ -228,8 +243,13 @@ export async function detectAndUpsertGateways(pool: pg.Pool): Promise<DetectionR
          ON CONFLICT (type, source) WHERE source IN ('auto_detected', 'env_bootstrap')
          DO UPDATE SET
            status       = 'active',
-           capabilities = EXCLUDED.capabilities,
-           metadata     = EXCLUDED.metadata,
+           -- ⚠️ COALESCE, not assignment. This wrote the compile-time capability
+           -- registry over the row on EVERY BOOT, so a capability edited in the
+           -- admin was silently reverted on the next restart. All four gateways are
+           -- source='auto_detected' — exactly this ON CONFLICT's scope — so nothing
+           -- was exempt. Detection SEEDS a gateway; it never overrules a stored value.
+           capabilities = COALESCE(gateways.capabilities, EXCLUDED.capabilities),
+           metadata     = COALESCE(gateways.metadata, EXCLUDED.metadata),
            updated_at   = EXTRACT(EPOCH FROM NOW())`,
         [
           grokId,

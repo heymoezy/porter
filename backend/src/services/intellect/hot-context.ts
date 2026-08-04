@@ -18,11 +18,12 @@
  *    memory can't be polluted by ad-hoc writes from every CLI.
  */
 import fs from 'node:fs';
+import { config } from '../../config.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pool } from '../../db/client.js';
 
-const PROJECTS_ROOT = '/home/lobster/projects';
+const PROJECTS_ROOT = config.projectsDir;
 /** Hard cap. Bootstrap must stay cheap — that is the entire point. */
 const MAX_CHARS = 3600; // ~900 tokens
 

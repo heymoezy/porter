@@ -25,6 +25,27 @@ export const config = {
   skillsDir: process.env.PORTER_SKILLS_DIR
     || path.join(process.env.PORTER_DATA_DIR || path.join(process.env.HOME || os.homedir(), '.porter'), 'skills'),
 
+  /**
+   * The projects tree and the vault — ONE definition each.
+   *
+   * ⚠️ These were hardcoded in EIGHT separate modules: PROJECTS_ROOT in
+   * hot-context, claude-rules-mirror, active-project, index.ts and
+   * release-kit/project-registry; VAULT_ROOT in vault-draft, vault-mirror,
+   * vault-indexer and worker-knowledge. Porter's own first architecture rule is
+   * "No hardcoding. No paths, hosts, ports, tokens", and skillsDir above carries
+   * the note about there being two that disagreed. Eight copies of a path is the
+   * same defect waiting to happen eight ways: a move breaks silently in whichever
+   * modules were missed.
+   *
+   * ⚠️ /home/lobster/projects is also an INPUT to the memory system —
+   * claude-rules-mirror scans every CLAUDE.md under it — so a wrong value does
+   * not merely fail to read, it mints directives from the wrong tree.
+   */
+  projectsDir: process.env.PORTER_PROJECTS_DIR
+    || path.join(process.env.HOME || os.homedir(), 'projects'),
+  vaultDir: process.env.PORTER_VAULT_DIR
+    || path.join(process.env.HOME || os.homedir(), 'vault'),
+
   logLevel: process.env.LOG_LEVEL || 'info',
 
   // AI backend URLs — override these in the environment for your deployment.

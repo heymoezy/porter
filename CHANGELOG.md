@@ -1,3 +1,21 @@
+## v6.158.0 (2026-08-04) — eight copies of a path, and capabilities that reset on boot
+
+**`PROJECTS_ROOT` / `VAULT_ROOT` were hardcoded in EIGHT modules** — hot-context,
+claude-rules-mirror, active-project, index.ts, release-kit/project-registry, vault-draft,
+vault-mirror, vault-indexer, worker-knowledge. Porter's own first architecture rule is *"No
+hardcoding. No paths, hosts, ports, tokens"*, and `config.ts` already carries the note about
+`skillsDir` — "there were two and they disagreed". Eight copies is that defect waiting to happen
+eight ways. Now `config.projectsDir` / `config.vaultDir`, env-overridable, derived from `$HOME`.
+⚠️ Not cosmetic: `/home/lobster/projects` is an INPUT to the memory system (claude-rules-mirror
+scans every CLAUDE.md under it), so a wrong value mints directives from the wrong tree.
+
+**Gateway capabilities were overwritten on every boot.** `startup-detector.ts` upserted the
+compile-time `GATEWAY_CAPABILITY_REGISTRY` with `capabilities = EXCLUDED.capabilities` at four call
+sites, scoped `ON CONFLICT … WHERE source IN ('auto_detected','env_bootstrap')` — and all four live
+gateways are `auto_detected`, so nothing was exempt. Any capability edited in the admin was silently
+reverted on the next restart: compile-time data fighting its own database column. Now `COALESCE`,
+so detection SEEDS a gateway and never overrules a stored value.
+
 ## v6.157.0 (2026-08-03) — THE one log: `GET/POST /api/v1/events`
 
 Moe, on Buzz's unified event log: *"take this opportunity to consolidate everything — having all of

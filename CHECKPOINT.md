@@ -1,3 +1,18 @@
+## 2026-08-04 - v6.158.0 - Eight copies of two paths; capabilities reset on every boot
+
+Both from the hardcoded-data audit.
+
+**Eight modules each held their own `/home/lobster/projects` or `/home/lobster/vault`.** Now one
+`config.projectsDir` / `config.vaultDir`. ⚠️ The projects tree is an INPUT to memory —
+claude-rules-mirror scans every CLAUDE.md beneath it — so a stale copy does not merely fail to
+read, it mints directives from the wrong tree. Verified: both resolve to the same values as before,
+zero hardcoded occurrences remain.
+
+**`capabilities = EXCLUDED.capabilities` on every boot, at 4 sites.** The ON CONFLICT is scoped to
+`source IN ('auto_detected','env_bootstrap')` and all four gateways ARE `auto_detected`, so an admin
+edit was reverted on the next restart — compile-time data overwriting its own column. Now COALESCE:
+detection seeds, never overrules. Verified after restart: 4 gateways, capabilities intact.
+
 ## 2026-08-03 - v6.157.0 - One log, and the tables that are deliberately NOT in it
 
 Moe: *"one log is the best idea. one source of truth."* Built as `POST/GET /api/v1/events`.

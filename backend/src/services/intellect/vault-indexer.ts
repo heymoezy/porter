@@ -25,12 +25,13 @@
  */
 
 import { createHash } from 'node:crypto';
+import { config } from '../../config.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pool } from '../../db/client.js';
 import { logIntellectEvent } from './file-watcher.js';
 
-const VAULT_ROOT = '/home/lobster/vault';
+const VAULT_ROOT = config.vaultDir;
 // `flows` added 2026-08-01: ymc's vault-ingest was the only thing indexing the
 // three flow pages (as `playbook:vault:flows/*` nodes in vault_nodes), which
 // made a second copy of a vault page the only way to find it. That copy is gone;

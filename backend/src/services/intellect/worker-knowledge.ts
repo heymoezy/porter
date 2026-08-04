@@ -50,7 +50,7 @@ import { broadcast } from '../sse-hub.js';
 export const CHEAP_GATEWAY = 'codex_cli';
 export const CHEAP_MODEL = 'codex/gpt-5.5';
 
-const VAULT_ROOT = '/home/lobster/vault'; // same precedent as vault-indexer.ts / vault-draft.ts
+const VAULT_ROOT = config.vaultDir;
 const WORKERS_GLOB_DIR = path.join(VAULT_ROOT, 'entities');
 const WORKER_NODE_RE = /^worker-([a-z0-9-]+)\.md$/;
 // Runtime state home is <PORTER_DATA_DIR>/runtime/ (gitignored — leases,

@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.158.0',
+    date: '2026-08-04',
+    title: 'Two paths written down eight times, and settings that reset on restart',
+    bullets: [
+      'The location of the projects folder and the vault was hardcoded in eight separate files. Moving either would have broken whichever ones were missed, silently. Both now come from one place.',
+      'Gateway capabilities were rewritten from code on every restart, so any change made in the admin was quietly undone the next time Porter started. Detection now fills in a gateway that has no settings and never overrules ones that do.',
+    ],
+  },
+  {
     version: '6.157.0',
     date: '2026-08-03',
     title: 'One place to ask what happened',

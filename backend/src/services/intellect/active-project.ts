@@ -21,10 +21,11 @@
  */
 
 import pg from 'pg';
+import { config } from '../../config.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const PROJECTS_ROOT = '/home/lobster/projects';
+const PROJECTS_ROOT = config.projectsDir;
 
 export type ActiveProject = {
   project: string;            // e.g. 'ymc.capital' (case-sensitive directory name)

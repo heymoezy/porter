@@ -248,7 +248,7 @@ const start = async () => {
     jobExecutor.start();
 
     // Start Intellect file watcher on project directories
-    const projectDirs = ['/home/lobster/projects'];
+    const projectDirs = [config.projectsDir];
     startFileWatcher(projectDirs);
 
     // Seed Intellect built-in workflows + subscriptions (idempotent)

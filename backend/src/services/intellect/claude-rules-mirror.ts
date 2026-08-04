@@ -24,6 +24,7 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto';
+import { config } from '../../config.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pool } from '../../db/client.js';
@@ -31,7 +32,7 @@ import { logIntellectEvent } from './file-watcher.js';
 import { scheduleDirectivesMirror } from './vault-mirror.js';
 
 const GLOBAL_CLAUDE_MD = '/home/lobster/CLAUDE.md';
-const PROJECTS_ROOT = '/home/lobster/projects';
+const PROJECTS_ROOT = config.projectsDir;
 const SOURCE_TYPE = 'claude_rules_mirror';
 const MIRROR_PRIORITY = 60; // above default workspace guidance (50); moe-direct rows stay senior by trust, not rank
 const RULE_CAP = 200;       // chars per condensed rule

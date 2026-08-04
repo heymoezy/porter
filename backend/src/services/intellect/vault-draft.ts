@@ -21,6 +21,7 @@
  */
 
 import { execFile } from 'node:child_process';
+import { config } from '../../config.js';
 import { promisify } from 'node:util';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -28,7 +29,7 @@ import { logIntellectEvent } from './file-watcher.js';
 
 const execFileP = promisify(execFile);
 
-const VAULT_ROOT = '/home/lobster/vault';
+const VAULT_ROOT = config.vaultDir;
 const DRAFTS_DIR = 'drafts';
 const SLUG_WORDS = 6;
 
