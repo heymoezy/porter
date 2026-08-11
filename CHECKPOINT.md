@@ -1,3 +1,31 @@
+## 2026-08-11 — v6.160.1: SIXTY JOBS SAID "RUNNING" SINCE APRIL AND NOTHING EVER ASKED
+
+Moe: "why are 60 agent_jobs stuck clean this up".
+
+A row enters `running` at claim and leaves it in the code that finishes the job. Process dies in between →
+stranded forever. There was no sweep in any file. All 60 dated 04-04 → 04-14: old debris, not a live leak.
+
+52 were `system`/`learning_session`, 8 were `job-executor`/`scheduled`.
+
+⚠️ **I NEARLY REPORTED THE 52 AS ACTIVE DAMAGE.** `scheduler.ts` dedups enqueue on trigger_type ALONE while
+counting `running` rows, so one stranded row suppresses that whole job type — which reads like four months of
+silently disabled learning sessions. Checked before saying it: `scheduleSystemJob()` has ZERO callers and
+`learning_session` appears nowhere outside the schema; `job-executor` only claims
+`source IN ('job-executor','delegation')`. Nothing schedules it, nothing runs it, so nothing was blocked. The
+function is DELETED — a loaded gun with no trigger is still worth removing.
+
+**Fixed with a hook**: `reclaimOrphanedJobs()` at startup, before the claim loop. ⚠️ Its test is "is anyone
+working this", never "has it been a while" — v6.160.0 made age an actively WRONG proxy, since a legitimate
+workspace session may now run 12h and an age-based sweep would kill exactly what that release protects.
+Startup is the one moment the answer is knowable: this process just began, holds nothing, is the only
+executor. `inFlight` is in memory, so a live long job cannot be caught — it does not survive the restart that
+triggers the sweep. FAILED not retried: a 4-month-old heartbeat tick is noise, and a terminal state is how
+Tom's delegation reconciler learns the work died rather than waiting on it forever.
+
+**Verified live**: 60 → 0, logged `system/learning_session=52 job-executor/scheduled=8`; a fresh job then ran
+clean in 3.5s returning `ok`. ⚠️ An earlier probe sat `pending` 40s and looked like a regression — it was
+queued behind three in-flight heartbeats at the concurrency cap, i.e. the cap working.
+
 ## 2026-08-11 — v6.160.0: THE 30-MINUTE CEILING AND THE SERIAL QUEUE WERE ONE BUG, NOT TWO
 
 Dev #109 (Moe): a dev session Tom starts "should be independent of him once started… duration should be

@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.160.1',
+    date: '2026-08-11',
+    title: 'Sixty jobs had been marked "in progress" since April',
+    bullets: [
+      'A job is marked as being worked on when it is picked up, and marked finished by the code that finishes it. If the process stops in between, the record sits there saying work is underway forever. Nothing ever checked. Sixty of them had been in that state since April.',
+      'Fifty-two belonged to a feature that no longer exists — nothing schedules that work and nothing runs it — so the code that created them has been deleted rather than left to make more.',
+      'The check runs at startup and asks whether anyone is actually working the job, never how long it has been going. Age would have been the wrong question: a coding session is now allowed to run for twelve hours, so a sweep based on how long something has been running would kill exactly the long sessions the last release exists to protect.',
+      'They are recorded as failed rather than retried. There is no way to know how long one has been abandoned, and re-running a routine check from four months ago is noise. It also means Tom finds out a delegated job died with the process instead of waiting on it indefinitely.',
+    ],
+  },
+  {
     version: '6.160.0',
     date: '2026-08-11',
     title: 'A dev session can now take as long as the work takes',

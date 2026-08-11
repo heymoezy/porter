@@ -147,33 +147,6 @@ async function runContextPressureCheck(): Promise<void> {
   }
 }
 
-// ── System job self-scheduling (AJQ-03) ─────────────────────────────────────
-
-/**
- * Enqueue a system job with deduplication guard.
- * Returns the job ID if created, null if a pending/running duplicate exists.
- */
-export async function scheduleSystemJob(
-  triggerType: string,
-  triggerData: Record<string, unknown> = {},
-  delaySeconds: number = 0,
-): Promise<string | null> {
-  // Deduplication guard: don't create if one already pending/running
-  const existing = await pool.query(
-    `SELECT 1 FROM agent_jobs WHERE trigger_type = $1 AND source = 'system' AND status IN ('pending', 'running') LIMIT 1`,
-    [triggerType],
-  );
-  if (existing.rows.length > 0) return null;
-
-  const id = crypto.randomUUID();
-  await pool.query(`
-    INSERT INTO agent_jobs (id, agent_id, trigger_type, trigger_data, source, status, scheduled_for, created_at)
-    VALUES ($1, 'system', $2, $3, 'system', 'pending', EXTRACT(EPOCH FROM NOW()) + $4, EXTRACT(EPOCH FROM NOW()))
-  `, [id, triggerType, JSON.stringify(triggerData), delaySeconds]);
-  console.log('[scheduler:system] enqueued %s job %s (delay=%ds)', triggerType, id.slice(0, 8), delaySeconds);
-  return id;
-}
-
 // ── Per-silo dream cadence tick (Phase 50 MSF-04) ──────────────────────────
 
 /**

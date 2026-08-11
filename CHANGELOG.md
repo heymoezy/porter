@@ -1,3 +1,49 @@
+## v6.160.1 (2026-08-11) — sixty jobs had said "running" since April, and nothing ever asked
+
+Moe: *"why are 60 agent_jobs stuck clean this up"*.
+
+**Why they were stuck.** A row is moved to `running` by the claim query and moved out of it by the code that
+finishes the job. If the process dies in between, the row is stranded — and there was no sweep of any kind, in
+any file. Four months of that is the evidence. All 60 dated 04-04 → 04-14, none since, so this was old debris
+rather than an active leak.
+
+**Two populations, and they are not the same problem.**
+
+| n | source / type | what it is |
+|---|---|---|
+| 52 | `system` / `learning_session` | a feature that no longer exists |
+| 8 | `job-executor` / `scheduled` | genuine orphans of a process that died in April |
+
+⚠️ **I NEARLY REPORTED THE 52 AS ACTIVE DAMAGE, AND CHECKED FIRST.** `scheduler.ts` guards enqueue with
+`SELECT 1 … WHERE trigger_type = $1 AND status IN ('pending','running')`, keyed on trigger_type ALONE — so one
+stranded row permanently suppresses that entire job type. That reads like four months of silently disabled
+learning sessions. It was not: `scheduleSystemJob()` has **zero callers**, and `learning_session` appears
+nowhere outside the schema. Nothing schedules it and nothing claims it — `job-executor` only takes
+`source IN ('job-executor','delegation')`. The guard is real and the blockage was not, because there is no
+caller left to block. **`scheduleSystemJob()` is deleted** rather than left as a loaded gun with no trigger.
+
+**The fix is a hook, not a cleanup.** `reclaimOrphanedJobs()` runs at startup, before the claim loop.
+
+⚠️ **THE TEST IS "IS ANYONE WORKING IT", NEVER "HAS IT BEEN A WHILE".** Elapsed time was always a poor proxy
+and v6.160.0 made it an actively wrong one — a legitimate workspace session may now run twelve hours, so any
+age-based sweep would kill precisely the long dev sessions that release exists to protect. Startup is the one
+moment the answer is knowable without guessing: this process has just begun, holds no jobs, and is the only
+executor, so anything still `running` is by definition abandoned. `inFlight` lives in memory, which is exactly
+why a live long job can never be caught by it — it does not survive the restart that triggers the sweep.
+
+⚠️ **FAILED, NOT RETRIED.** We cannot know how long a row has been orphaned, and re-dispatching a heartbeat
+tick from April is noise, not recovery. A heartbeat is re-scheduled by the scan loop within seconds anyway. A
+delegation matters more: its delegator polls the row, so a terminal state is how Tom learns the work died with
+the process instead of waiting on it forever.
+
+**Verified live.** 60 running before the restart, 0 after, with the breakdown logged:
+`reclaimed 60 orphaned job(s) … system/learning_session=52 job-executor/scheduled=8`. A fresh job then ran
+clean (3.5s, returned `ok`), so the dispatch path is intact.
+
+⚠️ One earlier probe of that job looked like a regression — it sat `pending` for 40s. It was not: three
+heartbeat dispatches were in flight and it was queued behind the concurrency cap, which is the cap working.
+Worth recording because the first reading of a slow queue is always "it is broken".
+
 ## v6.160.0 (2026-08-11) — a dev session takes as long as the work takes, and no longer blocks the queue
 
 Dev #109, filed by Moe: a dev session Tom starts *"should be independent of him once started… duration should

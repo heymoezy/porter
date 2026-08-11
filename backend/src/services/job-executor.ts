@@ -437,8 +437,57 @@ async function runDueJobs(): Promise<void> {
   }
 }
 
+/**
+ * Resolve jobs left `running` by a process that is no longer alive.
+ *
+ * ⚠️ 60 ROWS SAT IN `running` SINCE APRIL AND NOTHING EVER LOOKED AT THEM. A job
+ * is moved to `running` by the claim query and moved out of it by the code that
+ * finishes it — so if the process dies in between, the row is stranded forever.
+ * There was no sweep of any kind. Four months of that is the evidence.
+ *
+ * ⚠️ THE TEST IS "IS ANYONE WORKING IT", NEVER "HAS IT BEEN A WHILE". Elapsed
+ * time was always a poor proxy and dev #109 made it an actively wrong one: a
+ * legitimate workspace session may now run for twelve hours, so any sweep keyed
+ * on age would kill exactly the long dev sessions that release exists to
+ * protect. Startup is the one moment when the answer is knowable without
+ * guessing — this process has just begun, it holds no jobs, and it is the only
+ * executor, so anything still marked `running` is by definition abandoned.
+ * `inFlight` is in memory, which is why a live long job can never be caught by
+ * this: it does not survive the restart that triggers the sweep.
+ *
+ * ⚠️ FAILED, NOT RETRIED. We cannot know how long a row has been orphaned, and
+ * re-dispatching a heartbeat tick from four months ago is noise, not recovery. A
+ * heartbeat is re-scheduled by the scan loop within seconds anyway. A delegation
+ * matters more: its delegator (Tom) polls the row, so a terminal state is how he
+ * learns the work died with the process instead of waiting on it forever.
+ */
+async function reclaimOrphanedJobs(): Promise<void> {
+  const { rows } = await pool.query<{ id: string; source: string | null; trigger_type: string }>(
+    `UPDATE agent_jobs
+        SET status = 'failed',
+            completed_at = EXTRACT(EPOCH FROM NOW()),
+            error = left(coalesce(error || ' | ', '') || $1, 500)
+      WHERE status = 'running'
+      RETURNING id, source, trigger_type`,
+    ['abandoned: the executor process that claimed this job exited before finishing it, and was not the process that found the row on the next start'],
+  );
+  if (!rows.length) return;
+  const bySource = rows.reduce<Record<string, number>>((acc, r) => {
+    const k = `${r.source ?? 'null'}/${r.trigger_type}`;
+    acc[k] = (acc[k] ?? 0) + 1;
+    return acc;
+  }, {});
+  console.warn(
+    `[job-executor] reclaimed ${rows.length} orphaned job(s) left running by a dead process:`,
+    Object.entries(bySource).map(([k, n]) => `${k}=${n}`).join(' '),
+  );
+}
+
 export function start(): void {
   if (scanIntervalId || runIntervalId) return;
+  // Before claiming anything new, settle what a previous incarnation abandoned.
+  reclaimOrphanedJobs().catch(err =>
+    console.error('[job-executor] orphan reclaim failed:', err instanceof Error ? err.message : err));
   scanIntervalId = setInterval(() => {
     scanForDueAgents().catch(err => console.error('[job-executor] scan crash:', err));
   }, POLL_INTERVAL_MS);
