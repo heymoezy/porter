@@ -21,6 +21,23 @@ import { config } from '../config.js';
 
 const POLL_INTERVAL_MS = 5_000;
 const MAX_ATTEMPTS = 3;
+
+/**
+ * Client-side wall-clock for a dispatched job, by kind.
+ *
+ * These MUST NOT be shorter than the server's own ceiling for the same
+ * dispatch, or the client aborts work the server would have completed. That is
+ * exactly what happened: delegation waited 240s while the claude adapter allows
+ * TIMEOUT_MS = 300s for a non-workspace dispatch, so the final 60s of every
+ * delegated job was unreachable and the job reported a bare "aborted due to
+ * timeout" with no indication that the ceiling was ours, not the model's.
+ *
+ * A workspace dispatch is the adapter's long path (WORKSPACE_TIMEOUT_MS,
+ * 30 min) because a code-changing session is not a chat turn.
+ */
+const WORKSPACE_JOB_TIMEOUT_MS = 1_800_000;
+const DELEGATION_JOB_TIMEOUT_MS = 300_000;
+const HEARTBEAT_JOB_TIMEOUT_MS = 120_000;
 const SERVICE_TOKEN = process.env.PORTER_SERVICE_TOKEN ?? ''; // no fallback: the old default leaked (public repo)
 
 let scanIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -206,7 +223,13 @@ async function runDueJobs(): Promise<void> {
           }),
           // A code-changing session is not a chat turn. 240s is a sensible
           // ceiling for a research worker and far too short for real work.
-          signal: AbortSignal.timeout(ws ? 1_800_000 : (isDelegation ? 240_000 : 120_000)),
+          //
+          // ⚠️ 240s was also SHORTER THAN THE SERVER'S OWN CEILING. The claude
+          // adapter allows TIMEOUT_MS = 300s for a non-workspace dispatch, so
+          // this client aborted work the server would have finished, and the
+          // last 60s of every delegated job was unreachable by construction.
+          // Matching the two removes a race we could only ever lose.
+          signal: AbortSignal.timeout(ws ? WORKSPACE_JOB_TIMEOUT_MS : (isDelegation ? DELEGATION_JOB_TIMEOUT_MS : HEARTBEAT_JOB_TIMEOUT_MS)),
         });
 
         if (!dispatchResp.ok) {
@@ -280,7 +303,22 @@ async function runDueJobs(): Promise<void> {
           }).catch(err => console.warn(`[job-executor] callback failed for ${job.id}:`, err instanceof Error ? err.message : err));
         }
       } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
+        let errMsg = err instanceof Error ? err.message : String(err);
+        // "The operation was aborted due to timeout" says nothing about WHICH
+        // ceiling was hit or why it was that low. Every delegation failure in
+        // the last fortnight carried exactly that string, and diagnosing it
+        // meant reading three files to discover that a build task dispatched
+        // WITHOUT a repo gets the 5-minute chat ceiling rather than the 30-min
+        // workspace one. Say so in the error, where whoever reads it next will
+        // actually see it.
+        if (err instanceof Error && (err.name === 'TimeoutError' || /aborted due to timeout/i.test(err.message))) {
+          const budgetMs = ws
+            ? WORKSPACE_JOB_TIMEOUT_MS
+            : (job.source === 'delegation' ? DELEGATION_JOB_TIMEOUT_MS : HEARTBEAT_JOB_TIMEOUT_MS);
+          errMsg = ws
+            ? `timed out after ${Math.round(budgetMs / 1000)}s in workspace ${ws.dir}`
+            : `timed out after ${Math.round(budgetMs / 1000)}s with NO WORKSPACE — a code-changing job must be dispatched with a \`repo\`, which gives it the ${Math.round(WORKSPACE_JOB_TIMEOUT_MS / 1000)}s workspace budget instead of this one`;
+        }
         const final = job.attempt_count >= MAX_ATTEMPTS;
         if (final) {
           await pool.query(

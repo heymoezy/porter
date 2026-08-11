@@ -1,3 +1,36 @@
+## 2026-08-11 — v6.159.0: DELEGATION DIED ON OUR OWN CEILING, AND THE ERROR NEVER SAID SO
+
+Moe (AFK, "assemble council and make the best architecture decisions"): "tom still stalls when ingesting
+files... his worker delegation doesn't seem to be working too well anymore."
+
+MEASURED: 2 jobs in 10 days, both failed, vs 15 on 07-31. Every failure `agent_dev`, every one the string
+"The operation was aborted due to timeout", every one a BUILD task with has_repo=false.
+
+ROOT CAUSE — three nested timeouts that disagreed:
+  job-executor client AbortSignal   240s  (delegation, no workspace)
+  claude adapter TIMEOUT_MS         300s
+  bridge chain budget               300s
+The CLIENT was the shortest. It aborted work the server would have finished; the final 60s of every delegated
+job was unreachable by construction. Aligned to 300s, constants named, invariant documented: a client
+wall-clock must never be shorter than the server's ceiling for the same dispatch.
+
+SECOND DEFECT: the error explained nothing. Diagnosing it took three files to learn that a code job WITHOUT a
+repo gets the 5-min chat ceiling instead of the 30-min WORKSPACE_TIMEOUT_MS. The message now names the budget
+and the missing workspace. Verified by rendering both branches plus a non-timeout error (passes through).
+
+⚠️ I ALMOST SHIPPED THE WRONG FIX. An uncommitted budgetMs clamp sat in the tree from 08-06/07 whose comment
+names this exact incident. It is correct and worth shipping — but it is on /bridge/agent-message and
+job-executor dispatches via /chat/stream. It would NOT have fixed this. Checked the route before believing the
+comment.
+
+⚠️ NOT FIXED, DELIBERATELY: coding work does not finish in 5 minutes at any budget. The real fix is the
+delegator passing `repo` — accepted by routes/v1/agents.ts:85,118 since v6.141.0, never sent by the caller.
+Caller-side, filed not smuggled.
+
+COORDINATION: parallel "Fix Tom" session owns tom-llm.ts history windowing (+ MOE_VERBATIM_CAP), whatsapp-tom
+ingest, #106 and the ingest half of #104. Confirmed neither uncommitted Porter file is theirs. Mine: tool
+block, LEARN_CAP_CHARS, pinned-notes→knowledge, #107, #108.
+
 ## 2026-08-04 - v6.158.0 - Eight copies of two paths; capabilities reset on every boot
 
 Both from the hardcoded-data audit.

@@ -1,3 +1,35 @@
+## v6.159.0 (2026-08-11) — delegation has been dying on a ceiling we set ourselves, and the error never said so
+
+Moe: *"tom still stalls when ingesting files... his worker delegation doesn't seem to be working too well
+anymore."* It is not working at all: **2 jobs in the last 10 days, both failed**, against 15 on 07-31.
+
+Every failure is `agent_dev` carrying the same string — `The operation was aborted due to timeout` — and every
+one is a BUILD task (*"Build stage 1 of the prediction-market trading capability"*, *"Build an HTML document
+text-extraction tool"*) dispatched with **no `repo`**.
+
+Two defects, both ours:
+
+- **The client gave up before the server did.** `job-executor` aborted a delegation at **240s** while the
+  claude adapter allows `TIMEOUT_MS = 300s` for a non-workspace dispatch. The last 60 seconds of every
+  delegated job was unreachable by construction — a race we could only ever lose. Now aligned at 300s.
+- **The error explained nothing.** Diagnosing that string meant reading three files to discover that a
+  code-changing job dispatched WITHOUT a `repo` gets the 5-minute chat ceiling instead of the 30-minute
+  workspace one (`WORKSPACE_TIMEOUT_MS`). The timeout now says which budget was hit and why it was that low:
+
+  > `timed out after 300s with NO WORKSPACE — a code-changing job must be dispatched with a \`repo\`, which
+  > gives it the 1800s workspace budget instead of this one`
+
+  Non-timeout errors pass through untouched.
+
+The three magic numbers become named constants with the invariant written down: **a client wall-clock must
+never be shorter than the server's ceiling for the same dispatch.**
+
+⚠️ This makes the real problem visible rather than fixing it. Coding work does not finish in 5 minutes at any
+budget, and a session with no workspace "would silently run in /tmp and report success having changed
+nothing" (v6.141.0). The actual fix is that the delegator passes a `repo` — the API has accepted one since
+v6.141.0 (`routes/v1/agents.ts:85,118`) and the caller has never sent it. That is a caller-side change and is
+filed rather than smuggled in here.
+
 ## v6.158.0 (2026-08-04) — eight copies of a path, and capabilities that reset on boot
 
 **`PROJECTS_ROOT` / `VAULT_ROOT` were hardcoded in EIGHT modules** — hot-context,

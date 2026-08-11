@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.159.0',
+    date: '2026-08-11',
+    title: 'Delegated jobs were being cut off early by a limit we set ourselves',
+    bullets: [
+      'When Tom hands work to a background worker, the job was being abandoned after four minutes \u2014 while the system running it was willing to allow five. The last minute of every delegated job was unreachable, so work that was still progressing was killed and reported as a timeout.',
+      'Only two jobs have been attempted in the last ten days and both failed this way. Both were requests to BUILD something, and real coding does not finish in five minutes.',
+      'The failure message said only "the operation was aborted due to timeout", which explained nothing \u2014 working out the cause meant reading three separate files. It now states which limit was hit and why it was that low.',
+      'Honest note: this makes the real problem visible rather than solving it. A job that writes code needs to be given a repository when it is handed over, which unlocks a thirty-minute budget instead of five. The system has accepted that since July and whatever hands the job over has never supplied it \u2014 filed as its own fix rather than quietly bundled in here.',
+    ],
+  },
+  {
     version: '6.158.0',
     date: '2026-08-04',
     title: 'Two paths written down eight times, and settings that reset on restart',
