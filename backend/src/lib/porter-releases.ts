@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.160.0',
+    date: '2026-08-11',
+    title: 'A dev session can now take as long as the work takes',
+    bullets: [
+      'A coding session handed to a background worker was killed after thirty minutes, whatever it was doing. Real work does not fit a deadline set by our impatience, and cutting it off destroyed what it had written and reported a failure that had not happened. It now runs until it is done.',
+      'The reason thirty minutes existed at all: jobs were run strictly one after another, so a long one blocked everything queued beside it, including the routine checks. Simply raising the limit would have turned "dev sessions get killed" into "one dev session freezes Porter for the rest of the day". Jobs now run alongside each other, four at a time, so a long session occupies one place and nothing waits behind it.',
+      'Measured, not assumed: two jobs queued together now start in the same second and finish in the same four-second window. Run one after the other they would have taken twice as long, with the second not starting until the first had finished.',
+      'The limit the client waits for is now derived from the limit the server enforces, so the two cannot drift apart. They have disagreed twice — once at 1,800 against 300 seconds, once at 240 against 300 — and both times the shorter number won silently and the work was thrown away.',
+    ],
+  },
+  {
     version: '6.159.0',
     date: '2026-08-11',
     title: 'Delegated jobs were being cut off early by a limit we set ourselves',

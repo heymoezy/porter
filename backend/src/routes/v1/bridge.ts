@@ -573,6 +573,15 @@ export default async function bridgeV1Routes(
     const simulateFailure = isLoopback
       ? sanitizeSimulateFailure((message as { simulateFailure?: unknown }).simulateFailure)
       : [];
+    // budgetMs ⇒ caller-supplied wall-clock for the WHOLE failover chain. The 300s default
+    // is right for chat turns and killed every long coding/design dispatch on 2026-08-06/07:
+    // the chain burned all four gateways at the slice while the lead CLI was still working.
+    // Clamped 60s–30min; loopback callers only (same trust posture as simulateFailure — every
+    // legitimate long-job dispatcher is a local session or service).
+    const requestedBudget = Number((message as { budgetMs?: unknown }).budgetMs);
+    const budgetMs = isLoopback && Number.isFinite(requestedBudget)
+      ? Math.min(Math.max(requestedBudget, 60_000), 1_800_000)
+      : undefined;
 
     let decision;
     let result;
@@ -581,6 +590,7 @@ export default async function bridgeV1Routes(
       const out = await routingEngine.dispatchWithFailover(ctx, dispatchReq, {
         fallback: fallbackEnabled,
         simulateFailure,
+        ...(budgetMs !== undefined ? { budgetMs } : {}),
       });
       decision = out.decision;
       result = out.result;

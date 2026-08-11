@@ -126,9 +126,10 @@ export function createPorterMcpServer(): McpServer {
     {
       title: 'Search the vault',
       description:
-        'Search Porter\'s vault knowledge graph for a query. Returns the most relevant nodes ' +
-        '(id/title/type/layer) matched by title or artifact content, within a scope. Use this to ' +
-        'find WHAT exists before pulling a full context pack.',
+        'Search ALL of Porter\'s knowledge for a query — both the vault graph (entities, documents, ' +
+        'people, deals, hierarchy) and Porter\'s concepts memory (authored vault pages, agent ' +
+        'knowledge, distilled learnings). Returns the most relevant hits (id/title/type/layer, plus ' +
+        '`store`: "graph" or "concepts"). Use this to find WHAT exists before pulling a full context pack.',
       inputSchema: {
         query: z.string().trim().min(1).describe('Free-text search query.'),
         scope: z.string().trim().min(1).optional().describe('Scope to search (defaults to the active/selected scope, else "ymc").'),

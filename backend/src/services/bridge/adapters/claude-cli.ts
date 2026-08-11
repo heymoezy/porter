@@ -37,8 +37,21 @@ const TIMEOUT_MS = 300_000; // 5 min — research tasks need more time than simp
  * this adapter kills the subprocess at TIMEOUT_MS first, so every workspace job
  * actually got 5 minutes. The release notes claimed 30. A ceiling set in the
  * caller cannot raise one enforced in the callee.
+ *
+ * ⚠️ 30 MINUTES WAS STILL A DEADLINE ON WORK THAT HAS NO DEADLINE (dev #109).
+ * Moe: a dev session Tom starts "should be independent of him once started…
+ * duration should be irrelevant, whether it's 1 hour or 10+ hours. Tom should
+ * never treat a long-running session as timed out, stuck, or a problem." A
+ * coding session does not finish faster because we are impatient; killing it at
+ * 30 minutes destroys the work and reports a defect that was never there. The
+ * ceiling now exists only to stop a WEDGED process holding a slot forever, so
+ * it is set far beyond any real session rather than near it.
+ *
+ * This is safe to make large ONLY because job-executor no longer runs jobs
+ * serially — see the concurrency note there. A long ceiling on a serial queue
+ * is a way to starve every other job, not a feature.
  */
-const WORKSPACE_TIMEOUT_MS = Number(process.env.PORTER_WORKSPACE_TIMEOUT_MS || 1_800_000);
+export const WORKSPACE_TIMEOUT_MS = Number(process.env.PORTER_WORKSPACE_TIMEOUT_MS || 43_200_000);
 
 /**
  * Largest system prompt we will pass as a single argv element.

@@ -18,6 +18,9 @@ import crypto from 'node:crypto';
 import { pool } from '../db/client.js';
 import { createWorkspace, removeWorkspace, workspaceDiff, commitWorkspace, WORKSPACE_RULES, type Workspace } from './bridge/workspace.js';
 import { config } from '../config.js';
+// The SERVER's ceiling for a workspace dispatch. Imported so the client budget
+// below is derived from it and the two can never drift apart again.
+import { WORKSPACE_TIMEOUT_MS } from './bridge/adapters/claude-cli.js';
 
 const POLL_INTERVAL_MS = 5_000;
 const MAX_ATTEMPTS = 3;
@@ -32,18 +35,51 @@ const MAX_ATTEMPTS = 3;
  * delegated job was unreachable and the job reported a bare "aborted due to
  * timeout" with no indication that the ceiling was ours, not the model's.
  *
- * A workspace dispatch is the adapter's long path (WORKSPACE_TIMEOUT_MS,
- * 30 min) because a code-changing session is not a chat turn.
+ * A workspace dispatch is the adapter's long path (WORKSPACE_TIMEOUT_MS)
+ * because a code-changing session is not a chat turn.
+ *
+ * ⚠️ The workspace budget is IMPORTED from the adapter, never re-declared here.
+ * Twice now these two numbers have been set independently and disagreed, and
+ * both times the shorter one won silently: v6.141.0 raised the client to 1,800s
+ * while the adapter still killed at 300s, and v6.159.0 found the client at 240s
+ * against the adapter's 300s. A constant copied into the caller is a constant
+ * that will drift. Deriving it makes "the client must never be shorter than the
+ * server" true by construction instead of by vigilance.
  */
-const WORKSPACE_JOB_TIMEOUT_MS = 1_800_000;
+const WORKSPACE_JOB_TIMEOUT_MS = WORKSPACE_TIMEOUT_MS + 60_000;
 const DELEGATION_JOB_TIMEOUT_MS = 300_000;
 const HEARTBEAT_JOB_TIMEOUT_MS = 120_000;
 const SERVICE_TOKEN = process.env.PORTER_SERVICE_TOKEN ?? ''; // no fallback: the old default leaked (public repo)
+
+/**
+ * How many jobs may be in flight at once (dev #109/#110).
+ *
+ * ⚠️ THE OLD LOOP WAS SERIAL AND THAT IS WHY A LONG JOB WAS A PROBLEM. Jobs were
+ * claimed in batches of 4 and then `await`ed one after another, with the whole
+ * cycle re-entrancy-guarded — so a single 30-minute workspace job blocked the
+ * three jobs claimed beside it AND every heartbeat for the next half hour. The
+ * only thing that made that survivable was the short ceiling, which is exactly
+ * the thing dev #109 asks us to remove. Lifting the ceiling on a serial queue
+ * would have converted "dev sessions get killed" into "one dev session freezes
+ * Porter for twelve hours" — a worse bug wearing the fix's clothes.
+ *
+ * So the ceiling and the concurrency had to move together. Jobs now run
+ * independently and the loop keeps claiming while they run; a long session
+ * occupies ONE slot and nothing else waits on it. That is what makes
+ * "duration is irrelevant" a true statement rather than an aspiration.
+ *
+ * 4 concurrent CLI sessions on a 4-vCPU box: these are overwhelmingly waiting on
+ * a remote API rather than burning CPU, and this is the same number the claim
+ * query already used per cycle.
+ */
+const MAX_CONCURRENT_JOBS = Number(process.env.PORTER_MAX_CONCURRENT_JOBS || 4);
 
 let scanIntervalId: ReturnType<typeof setInterval> | null = null;
 let runIntervalId: ReturnType<typeof setInterval> | null = null;
 let scanInProgress = false;
 let runInProgress = false;
+/** Jobs currently executing. Bounds concurrency and keeps a long job from being re-claimed. */
+const inFlight = new Set<string>();
 
 interface DueAgent {
   agent_id: string;
@@ -151,7 +187,13 @@ async function runDueJobs(): Promise<void> {
   if (runInProgress) return;
   runInProgress = true;
   try {
-    // Claim up to 4 jobs per cycle. SKIP LOCKED keeps concurrent workers safe.
+    // Claim only what there is room to RUN. Claiming marks the row 'running', so
+    // taking more than the in-flight cap allows would park jobs in a state that
+    // says they are being worked on while nothing is working on them — and the
+    // stuck-job sweep would eventually treat that as a failure it invented.
+    const capacity = MAX_CONCURRENT_JOBS - inFlight.size;
+    if (capacity <= 0) return;
+    // SKIP LOCKED keeps concurrent workers safe.
     const { rows: claimed } = await pool.query<{
       id: string;
       agent_id: string;
@@ -168,7 +210,7 @@ async function runDueJobs(): Promise<void> {
           AND scheduled_for <= EXTRACT(EPOCH FROM NOW())
           AND source IN ('job-executor', 'delegation')
         ORDER BY scheduled_for ASC
-        LIMIT 4
+        LIMIT $2
         FOR UPDATE SKIP LOCKED
       )
       UPDATE agent_jobs
@@ -178,9 +220,15 @@ async function runDueJobs(): Promise<void> {
           attempt_count = attempt_count + 1
       WHERE id IN (SELECT id FROM next_jobs)
       RETURNING id, agent_id, attempt_count, assigned_gateway, prompt, source, trigger_data
-    `, [`job-executor:${process.pid}`]);
+    `, [`job-executor:${process.pid}`, capacity]);
 
     for (const job of claimed) {
+      // ⚠️ LAUNCHED, NOT AWAITED (dev #109). The body below is unchanged; only the
+      // control flow around it moved. `await`ing here made every job wait for the
+      // one before it, so a long workspace session stalled the heartbeats claimed
+      // beside it. Each job now settles on its own and the claim loop carries on.
+      inFlight.add(job.id);
+      void (async () => {
       // Delegation jobs (Tom → worker) carry a bounded tool allow-list + a
       // callback URL in trigger_data; heartbeat jobs carry neither.
       // Declared OUTSIDE the try so `finally` can clean the worktree up: a
@@ -375,6 +423,12 @@ async function runDueJobs(): Promise<void> {
           catch (e) { console.warn(`[job-executor] worktree cleanup failed for ${job.id}:`, e); }
         }
       }
+      })()
+        // The body handles its own failures; this only catches a throw from the
+        // cleanup path itself. The slot MUST be released either way — a leaked
+        // entry here permanently shrinks how much work Porter can take on.
+        .catch(err => console.error(`[job-executor] ${job.id} crashed outside its handler:`, err instanceof Error ? err.message : err))
+        .finally(() => { inFlight.delete(job.id); });
     }
   } catch (err) {
     console.error('[job-executor] run error:', err instanceof Error ? err.message : err);

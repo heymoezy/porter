@@ -1,3 +1,36 @@
+## 2026-08-11 — v6.160.0: THE 30-MINUTE CEILING AND THE SERIAL QUEUE WERE ONE BUG, NOT TWO
+
+Dev #109 (Moe): a dev session Tom starts "should be independent of him once started… duration should be
+irrelevant, whether it's 1 hour or 10+ hours. Tom should never treat a long-running session as timed out,
+stuck, or a problem."
+
+⚠️ **RAISING THE CEILING ALONE WOULD HAVE BEEN A WORSE BUG WEARING THE FIX'S CLOTHES.** `runDueJobs()` claimed
+four jobs and `await`ed them ONE AFTER ANOTHER under a re-entrancy guard. A single long workspace session
+blocked the three jobs claimed beside it and every heartbeat behind it. The 30-minute ceiling was the only
+thing making that survivable — so lifting it on a serial queue converts "dev sessions get killed" into "one
+dev session freezes Porter for twelve hours". The ceiling and the concurrency are the same defect and had to
+move together.
+
+Jobs are now LAUNCHED, not awaited (`MAX_CONCURRENT_JOBS`=4, env-overridable); the claim takes only what there
+is room to run, because claiming marks a row `running` and over-claiming parks jobs in a state that lies about
+them. Workspace ceiling → 12h, existing only to stop a wedged process holding a slot forever. The client
+budget is IMPORTED from the adapter, not re-declared: those two numbers have disagreed twice (1,800 vs 300;
+240 vs 300) and the shorter won silently both times.
+
+⚠️ **VERIFIED BY RUNNING IT.** Two jobs queued together: both started 17:06:42, both completed 17:06:46,
+~4.2s each — overlapping windows. Serially the second could not have started before :46. Both succeeded, so
+the dispatch path is intact. Test rows deleted.
+
+⚠️ **I ALMOST BLAMED THE WRONG LAYER.** `DEFAULT_CHAIN_BUDGET_MS`=300s with `raceBudget()` is a HARD cap on a
+single attempt, and it looked like the answer. It is not: it only applies to `dispatchWithFailover`, while
+`/chat/stream` — what job-executor actually uses — goes through `streamFromBridge` and never touches it. Read
+the path before believing the constant. It remains a live trap for anything routed the other way.
+
+⚠️ **NOT FIXED, STATED PLAINLY:** 60 `agent_jobs` rows are stuck in `running` from earlier process lifetimes.
+Harmless here (capacity is counted in memory, so they cannot starve the executor) but nothing reaps them — and
+now that 12-hour jobs are legitimate, no sweep may use "running a while" as its test. Needs its own fix.
+Dev #110 (dev sessions should loop and pick up outstanding dev-owned tasks) is NOT done.
+
 ## 2026-08-11 — v6.159.0: DELEGATION DIED ON OUR OWN CEILING, AND THE ERROR NEVER SAID SO
 
 Moe (AFK, "assemble council and make the best architecture decisions"): "tom still stalls when ingesting

@@ -1,3 +1,49 @@
+## v6.160.0 (2026-08-11) — a dev session takes as long as the work takes, and no longer blocks the queue
+
+Dev #109, filed by Moe: a dev session Tom starts *"should be independent of him once started… duration should
+be irrelevant, whether it's 1 hour or 10+ hours. Tom should never treat a long-running session as timed out,
+stuck, or a problem."*
+
+**The ceiling and the concurrency had to move together, and that is the whole point.**
+
+A workspace dispatch was killed at **30 minutes**. Lifting that alone would have been a worse bug wearing the
+fix's clothes, because `runDueJobs()` claimed up to four jobs and then `await`ed them **one after another**
+under a re-entrancy guard — so a single long session blocked the three jobs claimed beside it and every
+heartbeat until it finished. The short ceiling was the only thing making a serial queue survivable. Raise one
+without the other and "dev sessions get killed" becomes "one dev session freezes Porter for twelve hours".
+
+- **Jobs now run independently.** Each is launched rather than awaited, bounded by `MAX_CONCURRENT_JOBS` (4,
+  env-overridable). The claim query takes only what there is room to run — claiming marks a row `running`, and
+  claiming more than can be worked would park jobs in a state that lies about what is happening to them.
+- **The workspace ceiling is 12 hours**, and exists only to stop a WEDGED process holding a slot forever. It is
+  deliberately set far beyond any real session rather than near it.
+- **The client budget is DERIVED from the server's**, imported rather than re-declared. These two numbers have
+  been set independently and disagreed twice — v6.141.0 put the client at 1,800s against the adapter's 300s,
+  v6.159.0 found it at 240s against 300s — and both times the shorter won silently. A constant copied into the
+  caller is a constant that will drift.
+
+⚠️ **VERIFIED BY RUNNING IT, NOT BY READING THE DIFF.** Two jobs queued together both started at 17:06:42 and
+both completed at 17:06:46 — overlapping windows, ~4.2s each. Serially the second could not have started
+before 17:06:46. Both completed successfully, so the dispatch path is intact.
+
+⚠️ **WHAT I DID NOT FIX, AND DID NOT PRETEND TO.** `agent_jobs` holds **60 rows stuck in `running`** from
+earlier process lifetimes. They are harmless to this change — capacity is counted in memory, so stale rows
+cannot starve the executor — but nothing reaps them, and with 12-hour jobs now legitimate, a sweep can no
+longer use "it has been running a while" as its test. That needs its own fix.
+
+⚠️ **AND THE CHAIN BUDGET IS A TRAP STILL SET.** `DEFAULT_CHAIN_BUDGET_MS` is 300s and `raceBudget()` enforces
+it as a hard cap on a single attempt — but only on the `dispatchWithFailover` path. `/chat/stream`, which is
+what job-executor uses, goes through `streamFromBridge` and never touches it. So it is not what was killing
+dev sessions. It WOULD kill any long dispatch routed the other way, so the `budgetMs` clamp on
+`/bridge/agent-message` — written on 08-06/07 for exactly that reason and left sitting uncommitted in the
+tree ever since — ships here: a caller may set the chain budget (clamped 60s–30min, loopback only, the same
+trust posture as `simulateFailure`). It does not fix the dev-session path, and its own comment says so.
+
+Also `porter_search_vault` now describes what it actually does. It has searched Porter's concepts and
+directives alongside the vault graph for some time — `searchVaultNodes` returns which store answered — while
+the tool description still promised only graph nodes, so callers had no reason to use it for the memory it
+could already reach.
+
 ## v6.159.0 (2026-08-11) — delegation has been dying on a ceiling we set ourselves, and the error never said so
 
 Moe: *"tom still stalls when ingesting files... his worker delegation doesn't seem to be working too well
