@@ -1,3 +1,39 @@
+## 2026-08-30 - v6.160.2 - Document search said "nothing on file" about documents it held
+
+⚠️ **`plainto_tsquery` ANDs EVERY CONTENT WORD.** `retrieveChunks()` in
+`backend/src/services/recall-query.ts` required all of a question's terms inside ONE 3,200-char
+chunk before anything matched, so a natural-language question mostly matched nothing — and the
+caller renders that as `"Nothing on file."`, which is indistinguishable from an empty corpus. Short
+keyword queries worked, which is why this survived: the failure only shows on the questions people
+actually ask.
+
+Measured on the live store (941 sources / 5,965 chunks): a full natural question matched **0**
+chunks; the same question as OR-of-lexemes matched **3,426**, and the best-ranked results were the
+right documents. `ts_rank_cd` already rewards a chunk covering more of the query's lexemes, so
+breadth in the candidate set does not become noise in the ranking.
+
+**Cascade:** AND first (precise, and the better answer when it works) → OR-of-lexemes only if that
+returned zero → the existing trigram fallback.
+
+⚠️ **THE TRIGRAM FALLBACK WAS NEVER FIRING.** `c.text % $1` compares a 3,200-char chunk against a
+short question at the default `pg_trgm.similarity_threshold` of 0.3, which a chunk that size cannot
+clear. It only ran when the step above returned nothing, so it looked like a safety net for months
+while catching nothing. Left in place, no longer relied on.
+
+⚠️ **LEXEMES ARE `quote_literal`'d.** They leave `to_tsvector` already normalised, and quoting them
+keeps every part of a user's question out of `to_tsquery` as syntax — verified with a question
+containing `& | ! ( ) :*` and apostrophes (895 chunks, no syntax error). A pure stop-word question
+yields a NULL tsquery and `tsv @@ NULL` is NULL, so it matches nothing rather than failing.
+
+`QueryResult.retrieved_by` (`fts` | `fts_or` | `trgm` | `none`) is new, so how often the OR step
+carries the work is a measurement rather than a guess — and that number is the input to any future
+decision about embeddings, which this store does not have (`embedding vector(1536)` is 100% NULL,
+no ANN index).
+
+Verified live after restart: natural question → `fts_or`, 3 citations, and a grounded answer that
+correctly says the chunks do not cover the question rather than inventing one. Precise query →
+`fts` (unchanged). Stop-words → `none`, 0 chunks.
+
 ## 2026-08-11 — v6.160.1: SIXTY JOBS SAID "RUNNING" SINCE APRIL AND NOTHING EVER ASKED
 
 Moe: "why are 60 agent_jobs stuck clean this up".

@@ -43,7 +43,16 @@ export interface QueryResult {
   citations: Citation[];
   chunks_considered: number;
   latencyMs: number;
+  /**
+   * Which retrieval step produced the chunks: 'fts' (all terms present),
+   * 'fts_or' (any term), 'trgm' (fuzzy), or 'none'. Reported so the value of
+   * the OR step is MEASURED rather than assumed — that number is the input to
+   * the decision about whether this corpus ever needs embeddings.
+   */
+  retrieved_by: RetrievalStep;
 }
+
+export type RetrievalStep = 'fts' | 'fts_or' | 'trgm' | 'none';
 
 // -- Internal row shapes -----------------------------------------------------
 
@@ -72,7 +81,7 @@ async function retrieveChunks(
   question: string,
   k: number,
   sourceIds: string[] | undefined,
-): Promise<RetrievedChunk[]> {
+): Promise<{ rows: RetrievedChunk[]; retrievedBy: RetrievalStep }> {
   const hasFilter = Array.isArray(sourceIds) && sourceIds.length > 0;
 
   // 1) Check tsquery non-empty — pure stop-words yield ''::tsquery
@@ -83,6 +92,7 @@ async function retrieveChunks(
   const tsqEmpty = tsqCheck.rows[0]?.empty === true;
 
   let rows: RetrievedChunk[] = [];
+  let retrievedBy: RetrievalStep = 'none';
 
   if (!tsqEmpty) {
     // Primary: FTS rank
@@ -118,6 +128,70 @@ async function retrieveChunks(
       ...r,
       score: Number(r.score),
     }));
+    if (rows.length > 0) retrievedBy = 'fts';
+  }
+
+  if (rows.length === 0) {
+    // ── ANY term, not EVERY term ──────────────────────────────────────────
+    //
+    // ⚠️ `plainto_tsquery` ANDs every content word, so a natural question had
+    // to have ALL of its terms inside ONE 3,200-char chunk or it matched
+    // nothing — and the trigram fallback below cannot save it, because it
+    // compares a 3,200-char chunk against a short question at the default
+    // similarity threshold of 0.3 and effectively never fires. So Tom was
+    // being told "Nothing on file." about documents this corpus answers well.
+    //
+    // Measured on the live ymc.capital store (941 sources, 5,965 chunks):
+    //   plainto_tsquery('what is the current status of the share transfer
+    //   dispute')                                            →     0 chunks
+    //   the same question as OR-of-lexemes                    → 3,426 chunks
+    // and the top 6 by ts_rank_cd were the three Registers of Members. So
+    // breadth in the candidate set does not become noise in the result:
+    // ts_rank_cd rewards chunks covering MORE of the query's lexemes, which is
+    // exactly the ranking this needs.
+    //
+    // AND stays first because it is the precise answer when it works — this
+    // only runs when it returned nothing at all.
+    //
+    // Lexemes come back from to_tsvector already normalised and are
+    // quote_literal'd before being joined, so no part of the user's question
+    // reaches to_tsquery as syntax. A question of pure stop-words yields NULL
+    // here, and `tsv @@ NULL` is NULL, so it simply matches nothing.
+    const params: unknown[] = [question, project, k];
+    let filterClause = '';
+    if (hasFilter) {
+      params.push(sourceIds);
+      filterClause = `AND s.source_id = ANY($4::text[])`;
+    }
+
+    const sql = `
+      WITH q AS (
+        SELECT to_tsquery('english', (
+          SELECT string_agg(quote_literal(lexeme), ' | ')
+            FROM (SELECT DISTINCT lexeme FROM unnest(to_tsvector('english', $1))) w
+        )) AS tsq
+      )
+      SELECT
+        s.source_id          AS source_id,
+        s.title              AS title,
+        c.chunk_idx          AS chunk_idx,
+        c.text               AS text,
+        ts_rank_cd(c.tsv, q.tsq) AS score,
+        ts_headline('english', c.text, q.tsq,
+          'StartSel=«,StopSel=»,MaxFragments=2,MaxWords=24,MinWords=8') AS snippet
+      FROM recall_doc_chunks c
+      JOIN recall_doc_sources s ON s.id = c.source_pk
+      CROSS JOIN q
+      WHERE s.project = $2
+        AND q.tsq IS NOT NULL
+        AND c.tsv @@ q.tsq
+        ${filterClause}
+      ORDER BY score DESC
+      LIMIT $3
+    `;
+    const res = await pool.query<RetrievedChunk>(sql, params);
+    rows = res.rows.map((r) => ({ ...r, score: Number(r.score) }));
+    if (rows.length > 0) retrievedBy = 'fts_or';
   }
 
   if (rows.length === 0) {
@@ -151,6 +225,7 @@ async function retrieveChunks(
       score: Number(r.score),
       snippet: r.text.slice(0, SNIPPET_FALLBACK_CHARS),
     }));
+    if (rows.length > 0) retrievedBy = 'trgm';
   }
 
   // Ensure snippet always populated (ts_headline can return '' for short text)
@@ -160,7 +235,7 @@ async function retrieveChunks(
     }
   }
 
-  return rows;
+  return { rows, retrievedBy };
 }
 
 // -- Directives (Tom's data-room silo) ---------------------------------------
@@ -240,7 +315,7 @@ export async function queryDocs(
   const sourceIds = input.filters?.source_ids;
 
   // 1) Retrieve
-  const chunks = await retrieveChunks(pool, project, question, k, sourceIds);
+  const { rows: chunks, retrievedBy } = await retrieveChunks(pool, project, question, k, sourceIds);
 
   if (chunks.length === 0) {
     return {
@@ -248,6 +323,7 @@ export async function queryDocs(
       citations: [],
       chunks_considered: 0,
       latencyMs: Date.now() - started,
+      retrieved_by: 'none',
     };
   }
 
@@ -287,5 +363,6 @@ export async function queryDocs(
     citations,
     chunks_considered: chunks.length,
     latencyMs: Date.now() - started,
+    retrieved_by: retrievedBy,
   };
 }

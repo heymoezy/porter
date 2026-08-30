@@ -1,3 +1,42 @@
+## v6.160.2 (2026-08-30) — document search said "nothing on file" about documents it held
+
+`retrieveChunks()` in `backend/src/services/recall-query.ts` built its query with
+`plainto_tsquery('english', $1)`, which **ANDs every content word**. A natural-language question
+therefore had to have all of its terms inside ONE chunk (3,200 chars, 400 overlap) or it matched
+nothing at all — and the caller renders that as `"Nothing on file."`, which is indistinguishable
+from an empty corpus.
+
+**Measured on a live store (941 sources / 5,965 chunks):**
+
+| form | chunks matched |
+|---|---|
+| `plainto_tsquery` on a full natural question | **0** |
+| the same question as OR-of-lexemes | **3,426** |
+| `websearch_to_tsquery` on the key terms alone | 49 |
+
+The top results under the OR form were the correct documents, because `ts_rank_cd` already rewards
+a chunk covering more of the query's lexemes — breadth in the candidate set does not become noise
+in the ranking.
+
+**The cascade.** AND first (precise, and the right answer when it works) → OR-of-lexemes if that
+returned zero → the existing trigram fallback.
+
+⚠️ **The trigram fallback was never firing.** It compares `c.text % $1` — a 3,200-char chunk against
+a short question — at the default `pg_trgm.similarity_threshold` of 0.3, which a chunk that size
+essentially cannot clear. It only ran when the step above returned nothing, so it presented as a
+safety net while catching nothing. Left in place (it costs nothing) but no longer relied on.
+
+⚠️ **Lexemes are `quote_literal`'d before being joined.** They come out of `to_tsvector` already
+normalised, and quoting them means no part of a user's question reaches `to_tsquery` as syntax —
+verified with a question containing `& | ! ( ) :*` and apostrophes, which matched 895 chunks
+rather than raising a syntax error. A question of pure stop-words yields a NULL tsquery, and
+`tsv @@ NULL` is NULL, so it matches nothing instead of failing.
+
+`QueryResult` now carries `retrieved_by: 'fts' | 'fts_or' | 'trgm' | 'none'` so the value of the OR
+step is measured rather than assumed — that number is the input to any future decision about
+embeddings, which this store does not have (the `embedding vector(1536)` column is 100% NULL with
+no ANN index).
+
 ## v6.160.1 (2026-08-11) — sixty jobs had said "running" since April, and nothing ever asked
 
 Moe: *"why are 60 agent_jobs stuck clean this up"*.

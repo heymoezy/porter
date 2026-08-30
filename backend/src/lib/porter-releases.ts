@@ -22,6 +22,19 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.160.2',
+    date: '2026-08-30',
+    title: 'Document search said "nothing on file" about documents it held',
+    bullets: [
+      'Asking the document store a question in ordinary English required every word of that question to appear inside a single passage before anything matched. Short, precise queries worked. Whole questions mostly did not, and the answer came back as "nothing on file", which reads exactly like an empty archive.',
+      'Measured on a live store of roughly six thousand passages: one natural question matched nothing at all, while the same question treated as "any of these words" matched several thousand, and the best-ranked results were the right documents. Ranking already rewards a passage that covers more of the question, so a wider candidate set does not make the answer noisier.',
+      'The precise form still runs first, because when it works it is the better answer. The wider form only runs when the precise one found nothing, and the fuzzy match stays behind both.',
+      'That fuzzy match was never reaching anything. It compares a whole passage against a short question, and at the default threshold a passage of three thousand characters is never similar enough to a sentence. It only ever ran when the step above it returned nothing, so it looked like a safety net and was not one.',
+      'Each answer now reports which of the three steps produced it, so how often the wider form is carrying the work is a number rather than a guess. That number is what decides whether this store ever needs semantic search.',
+      'Words from the question are normalised and quoted before the query is built, so punctuation and search operators typed into a question cannot change its meaning. A question made only of common words matches nothing instead of erroring.',
+    ],
+  },
+  {
     version: '6.160.1',
     date: '2026-08-11',
     title: 'Sixty jobs had been marked "in progress" since April',
