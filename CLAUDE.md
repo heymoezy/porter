@@ -47,6 +47,28 @@ legacy tables V1 reads, so it bought nothing today and cost a second path to rea
 If the vault ever becomes the actual store, rebuild that read path against the generic connectors, not
 against the deleted shim.
 
+## Calendar — one place, and it is not here
+
+⚠️ **Porter has no calendar integration. Do not add a second one.** `services/calendar.ts` (a Google
+Calendar sync into `calendar_events`, plus `pushMilestoneToCalendar` on the external dispatcher) was
+**deleted on 2026-08-31**. It could not run: nothing in Porter has ever written a row to
+`workspace_connections`, so the `google_calendar` connection it required had to be inserted by hand, and
+it was additionally gated behind `FEATURE_EXTERNAL_CONNECTIONS`. Even had it run, it read
+`calendarId: 'primary'` off the FIRST connection only, into a table no route or query ever read —
+`checkCalendarDeadlines` was its sole consumer.
+
+The calendar Moe actually asks about lives in **ymc.capital** (`backend/src/lib/tom-google.ts`,
+`listUpcoming` / `listUpcomingDetailed`), which reads moe@ymc.partners AND moe@themozaic.com through
+each account's own credentials. That is the one place. Two calendar readers means two answers to
+"what's on Tuesday", and the dead one here was a standing invitation to build the second.
+
+The `calendar_events` table is left in the schema — dropping it is a data decision, not a code one — but
+nothing reads or writes it.
+
+If a calendar service ever belongs in Porter (it plausibly does; Porter is the platform and YMC is a
+consumer), build it against the generic connectors with a real OAuth flow. Do not resurrect the deleted
+file, and do not leave both alive at once.
+
 ## Stack
 
 - Backend: `backend/` — Fastify 5, TypeScript, Drizzle ORM

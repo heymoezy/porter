@@ -3,7 +3,6 @@ import { config, featureFlags } from '../config.js';
 import { dispatch as aiRouterDispatch } from './ai-router.js';
 import { reconcileReleases } from './release-reconciler.js';
 import { checkDeadlineTriggers } from './event-triggers.js';
-import { syncCalendarEvents, checkCalendarDeadlines } from './calendar.js';
 import { dispatchExternalCall, checkConnectionHealth } from './external-dispatcher.js';
 import { runHealthProbe } from './bridge/health-probe.js';
 import { refreshAllGateways } from './bridge/model-catalog.js';
@@ -21,7 +20,6 @@ import crypto from 'crypto';
 const POLL_INTERVAL_MS = 2000;
 const MAX_ATTEMPTS = 3;
 const DEADLINE_CHECK_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
-const CALENDAR_SYNC_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const HEALTH_PROBE_INTERVAL = 15; // 15 × 2000ms = 30s
 const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
 const MEMORY_VALIDATION_INTERVAL = 900;  // 900 ticks x 2s = 30 min — validate memory references
@@ -317,22 +315,6 @@ async function tick() {
 
     if (tickCount % DEADLINE_CHECK_INTERVAL === 0) {
       await checkDeadlineTriggers();
-    }
-
-    // Calendar sync -- every 60 seconds
-    if (featureFlags.externalConnections && tickCount % CALENDAR_SYNC_INTERVAL === 0) {
-      try {
-        // Only sync if a calendar connection exists
-        const hasCalendar = (await pool.query(
-          `SELECT 1 FROM workspace_connections WHERE provider = 'google_calendar' AND status = 'connected' LIMIT 1`
-        )).rows[0];
-        if (hasCalendar) {
-          await syncCalendarEvents();
-          await checkCalendarDeadlines();
-        }
-      } catch (e) {
-        console.error('[scheduler] calendar sync error', e);
-      }
     }
 
     // Unblock jobs whose connections have been restored -- every 30 seconds
