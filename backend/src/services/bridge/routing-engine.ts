@@ -593,10 +593,21 @@ export class RoutingEngine {
           throw new Error(`[simulateFailure] forced failure for ${type}`);
         }
         const result = await raceBudget(
-          withRetry(() =>
-            getQueue(cand.row.type).add(() =>
-              breaker.fire(async () => cand.adapter.dispatch(req)),
-            ) as Promise<BridgeDispatchResult>,
+          withRetry(
+            () =>
+              getQueue(cand.row.type).add(() =>
+                breaker.fire(async () => cand.adapter.dispatch(req)),
+              ) as Promise<BridgeDispatchResult>,
+            undefined,
+            undefined,
+            {
+              // A timed-out gateway gets one more try — but only when this
+              // chain's shared clock can still hold a full attempt. Sampled at
+              // the moment of the decision, not now: the attempt that timed out
+              // is exactly what spent the time.
+              retryTimeouts: true,
+              remainingBudgetMs: () => budgetMs - (Date.now() - startTs),
+            },
           ),
           remaining,
         );
