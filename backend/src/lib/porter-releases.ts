@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.160.3',
+    date: '2026-08-31',
+    title: 'Recall now says which conversation a memory came from',
+    bullets: [
+      'Memory search returns matches from every conversation an agent has had. That is right for an assistant with one user and wrong the moment the same assistant also speaks in a room with other people in it, because something said in a private chat can come back up in a group one days later.',
+      'The record has always stored which conversation each memory came from. It was simply never handed back, so nothing reading memory could tell a private exchange from a shared one.',
+      'It is returned now, on memories and on the recent list. What to do with it is the caller\u2019s decision, which is the right place for it: the same memory is fine in one room and not in another, and only the caller knows which room it is in.',
+      'Firm-level notes and standing rules are unaffected. They belong to no conversation and are returned as before.',
+    ],
+  },
+  {
     version: '6.160.2',
     date: '2026-08-30',
     title: 'Document search said "nothing on file" about documents it held',

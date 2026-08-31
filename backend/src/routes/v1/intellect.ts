@@ -669,7 +669,9 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     const recentN = Math.min(parseInt(String(q?.recent || '3'), 10) || 3, 10);
     const session = q?.session ? String(q.session).trim().slice(0, 200) : null;
 
-    const hits: Array<{ kind: string; content: string; created_at: number; rank: number }> = [];
+    // session_id is present on episode hits and null on concepts/directives,
+    // which are firm-level and belong to no single chat.
+    const hits: Array<{ kind: string; content: string; created_at: number; rank: number; session_id?: string | null }> = [];
     // websearch_to_tsquery ANDs every term, so a multiword natural-language ask
     // (e.g. a whole WhatsApp message) almost never matched any single memory row
     // — recall returned 0 FTS hits on ~99% of real turns and silently fell back
@@ -689,8 +691,15 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
         [...baseArgs, limit],
       )).rows;
       for (const r of conceptRows) hits.push({ kind: 'concept', content: r.content, created_at: Number(r.created_at), rank: Number(r.rank) });
+      // ⚠️ session_id IS RETURNED SO A CONSUMER CAN SCOPE BY CHAT. Recall is
+      // global by design — "relevance hits across all chats" — which is right
+      // for a single-operator agent and wrong the moment that agent also talks
+      // in a room with other people in it. An answer given in a private chat
+      // could surface, unattributed, in a group turn a week later: a leak with
+      // no attacker and nothing to detect. The column already existed; only the
+      // projection did not, so nothing downstream could tell the two apart.
       const episodeRows = (await pool.query(
-        `SELECT summary AS content, created_at,
+        `SELECT summary AS content, created_at, session_id,
                 ts_rank(to_tsvector('english', summary), to_tsquery('english', $1))
                   * (0.5 + COALESCE(salience, 0.5)) AS rank
            FROM episodes
@@ -698,7 +707,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
           ORDER BY rank DESC, created_at DESC LIMIT $${baseArgs.length + 1}`,
         [...baseArgs, limit],
       )).rows;
-      for (const r of episodeRows) hits.push({ kind: 'episode', content: r.content, created_at: Number(r.created_at), rank: Number(r.rank) });
+      for (const r of episodeRows) hits.push({ kind: 'episode', content: r.content, created_at: Number(r.created_at), rank: Number(r.rank), session_id: r.session_id ?? null });
       const directiveRows = (await pool.query(
         `SELECT content, created_at,
                 ts_rank(to_tsvector('english', content), to_tsquery('english', $1)) AS rank
@@ -712,10 +721,10 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       hits.splice(limit);
     }
     const recent = (await pool.query(
-      `SELECT summary AS content, created_at FROM episodes
+      `SELECT summary AS content, created_at, session_id FROM episodes
         WHERE scope='agent' AND scope_id=$1 ORDER BY created_at DESC LIMIT $2`,
       [agent, recentN],
-    )).rows.map((r) => ({ kind: 'episode', content: r.content, created_at: Number(r.created_at) }));
+    )).rows.map((r) => ({ kind: 'episode', content: r.content, created_at: Number(r.created_at), session_id: r.session_id ?? null }));
     // Session-scoped "where we left off" — the current thread's last N episodes
     // (R2). Lets a consumer resume one conversation across tool-turn gaps without
     // re-explaining. Empty when no session_id is passed or the thread is new.

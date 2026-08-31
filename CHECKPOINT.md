@@ -1,3 +1,29 @@
+## 2026-08-31 - v6.160.3 - Recall now says which conversation a memory came from
+
+⚠️ **AGENT-MEMORY RECALL IS GLOBAL, AND A CONSUMER HAD NO WAY TO NARROW IT.** `hits` and `recent`
+returned matches across every chat — correct for a single-operator agent, and wrong the moment that
+agent also answers in a room with other people in it. Something said in a private chat resurfaces in
+a group turn days later: **a leak with no attacker**, no injection and nothing to detect.
+
+`episodes.session_id` has stored the answer since the table was created (`g:<jid>` for a group,
+`d:<e164>` for a DM). It was never projected, so nothing downstream could tell the two apart. Added
+to the episode `hits` rows and to `recent`.
+
+⚠️ **PORTER DOES NOT DECIDE WHAT TO SUPPRESS, AND SHOULD NOT.** The same memory is fine in one room
+and not in another, and only the caller knows which room it is in. Porter reports provenance; the
+consumer holds the policy. ymc.capital consumes it in v2.142.2.
+
+⚠️ **`project` IS NOT AN ISOLATION BOUNDARY — measured, not assumed.** Before this I tried scoping by
+writing under a different project string: an episode written with `project: 'ymc.capital.private'`
+was returned by a recall on `project: 'ymc.capital'`. Anyone reaching for that field as a privacy
+control will get silence, not an error. (Probe row deleted afterwards.)
+
+⚠️ **STILL OPEN, one layer down:** the distiller consolidates episodes into `concepts`, and a concept
+carries no `session_id`. Anything distilled out of a private episode is indistinguishable
+afterwards. Recorded, not fixed.
+
+Concepts and directives are firm-level, belong to no conversation, and are returned unchanged.
+
 ## 2026-08-30 - v6.160.2 - Document search said "nothing on file" about documents it held
 
 ⚠️ **`plainto_tsquery` ANDs EVERY CONTENT WORD.** `retrieveChunks()` in
