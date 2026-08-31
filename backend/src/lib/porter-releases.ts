@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.161.0',
+    date: '2026-08-31',
+    title: 'Messages that arrived and were never answered',
+    bullets: [
+      'When several WhatsApp messages arrived at once they came in one delivery, and only the first was ever read. The rest were confirmed as delivered to whoever sent them and then discarded, so a burst of messages got one reply and nobody could tell the others had gone missing.',
+      'Anything that was not plain text went the same way. A photo, a voice note, a forwarded PDF, a tap on a quick-reply button \u2014 all of them arrived with an empty text field and were treated as background noise rather than as somebody talking.',
+      'Both are fixed, and a message that still cannot be handled is now recorded rather than dropped in silence, so the failure can be found afterwards instead of being invisible.',
+      'A backend that times out is now given one more attempt, where there is time left to make it. It was previously treated as permanently broken and never retried, which is the wrong reading of a slow answer. Where there is not enough time, the error now says so instead of failing without explanation.',
+      'Porter had a second calendar integration that could never have run \u2014 it needed a connection nobody has ever been able to create. It has been removed. The calendar lives in one place, and two systems answering "what is on Tuesday" was a problem waiting to happen.',
+    ],
+  },
+  {
     version: '6.160.3',
     date: '2026-08-31',
     title: 'Recall now says which conversation a memory came from',
