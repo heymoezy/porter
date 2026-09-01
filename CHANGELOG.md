@@ -1,3 +1,13 @@
+## 6.160.6 - 2026-09-01
+
+dispatch-queues.ts held ONE PQueue at concurrency 1 and getQueue(_gatewayType?) ignored the
+argument, so all four gateways shared a single lane and every bridge dispatch on the box was
+serial. WORKSPACE_TIMEOUT_MS is 12h, so one workspace job could block every model call for half
+a day. Now per (gateway, lane) queues, lane derived from req.workspace at the call site so it
+cannot disagree with the adapter's ceiling, behind a global in-flight cap
+(PORTER_BRIDGE_MAX_INFLIGHT, default 3) which is the guardrail against the 2026-08-14 token
+burn. 8 checks in backend/scripts/verify-dispatch-lanes.ts. Porter tsc 0.
+
 ## 6.160.5 - 2026-09-01
 
 Work found uncommitted for 18 days during a sweep of every working tree, not authored in this

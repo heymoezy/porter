@@ -1,3 +1,40 @@
+## 2026-09-01 - v6.160.6 - every model call on this box was running one at a time
+
+Found while specifying the Lau Wang deal room: a buyer-facing question needs a predictable
+latency, and the bridge could not give one.
+
+⚠️ **`getQueue(_gatewayType?)` TOOK THE GATEWAY TYPE AND IGNORED IT.** One module-level
+`PQueue({concurrency: 1})` served claude_cli, codex_cli, grok_cli and antigravity_cli alike, so
+every bridge dispatch on the machine was strictly serial. A council fan-out to codex and grok
+"in parallel" ran sequentially. `routing-engine.ts` documents the method as "Dispatch through
+per-gateway concurrency queue" and it never was one; the underscore in the parameter name is the
+author recording the intent.
+
+⚠️ **AND `WORKSPACE_TIMEOUT_MS` IS 43,200,000ms.** Twelve hours, on that serial queue. One
+workspace job could block Tom's next chat turn, ops-chat, Recall and every interactive question
+for half a day.
+
+**The shape is copied, not invented**: `task-executor.ts:46` already keeps a
+`Map<string, PQueue>` for exactly this, 40 lines away in a sibling file.
+
+- Lane queues per `(gateway, lane)`, concurrency 1, so ordering within a lane survives.
+- The lane is derived at the call site from `req.workspace`, which is the SAME field
+  `resolveCwd()` uses to choose the adapter's ceiling. One signal, so the lane and the timeout
+  cannot disagree.
+- ⚠️ **A GLOBAL IN-FLIGHT CAP, and it is not decoration.** Removing the serial job queue in
+  `1d04e859` is what let two personas on thirty-second heartbeats run ~285 Claude CLI cold boots
+  an hour on Opus for 58 hours (`_ops/incidents/2026-08-14-token-burn`). Serialisation was
+  masking a runaway. `PORTER_BRIDGE_MAX_INFLIGHT` defaults to 3 on a 4 vCPU box.
+  Checked before shipping: 0 of 9 personas currently have heartbeats enabled.
+
+**8 checks in `backend/scripts/verify-dispatch-lanes.ts`**, and they assert the two things that
+were previously impossible: two gateways finishing in the time of one, and a short interactive
+call overtaking a long batch job on the same gateway. Plus that the cap actually holds (peak 3)
+and that it is not accidentally serial again (peak > 1).
+
+Porter tsc 0. **Committed, NOT restarted** — porter-fastify is the backbone for Tom and every
+model dispatch, so the bounce is Moe's call. Nothing changes until it restarts.
+
 ## 2026-09-01 - v6.160.5 - eighteen days of finished work was sitting in a dirty working tree
 
 ⚠️ **NOT AUTHORED IN THIS SESSION.** Found during a sweep of every git tree on the box, run

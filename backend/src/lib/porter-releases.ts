@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.160.6',
+    date: '2026-09-01',
+    title: 'Every model call on this machine was running one at a time',
+    bullets: [
+      'There was a single queue for all four backends, and the function that hands out queues took the backend name and ignored it. So Claude, Codex, Grok and Antigravity all shared one lane. Sending a question to two of them at once ran them one after the other, and the code that calls it describes itself as a per-backend queue. It never was one.',
+      'Worse, a workspace job is allowed twelve hours. On a single lane that job could hold up every other model call on the box for half a day: a chat turn, a question in a data room, anything.',
+      'Each backend now has its own lane, and within each backend the work someone is waiting for is separated from long background jobs. A question no longer sits behind a twelve hour build.',
+      'The reason it was never simply set higher: taking the serial queue out once before is what let two agents on thirty second timers run roughly 285 cold starts an hour on the most expensive model for 58 hours. So this ships with a hard ceiling on how many can run at once, set to three on a four core box, and the ceiling is what makes the lanes safe rather than a repeat.',
+      'Proved rather than argued: eight checks that two backends now finish in the time of one, that the same backend still takes its turn in order, that a short question overtakes a long job beside it, and that the ceiling actually holds under load.',
+    ],
+  },
+  {
     version: '6.160.5',
     date: '2026-09-01',
     title: 'Work that had been sitting uncommitted for eighteen days',
