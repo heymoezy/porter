@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.160.7',
+    date: '2026-09-01',
+    title: 'A memory can be marked as one that must not become a lesson',
+    bullets: [
+      'The nightly pass that turns an agent\u2019s conversations into durable lessons was reading every conversation it had, including private ones. A lesson gets repeated wherever the agent speaks, so anything private that fed one could come back out in a room full of other people.',
+      'Attribution afterwards is not possible. Every conversation goes into a single request and what comes back is a set of lessons with no record of which conversations produced which. Once private material is in the input there is nothing left to filter on.',
+      'So a memory can now be marked at the point it is written, and marked memories are never read by that nightly pass. The caller decides what counts as private, which is the only place that decision can honestly be made.',
+      'The mark is also handed back on search, so a caller that wants to withhold something in one room and not another can do that too.',
+      'Nothing is marked unless a caller asks for it, so existing behaviour is unchanged.',
+    ],
+  },
+  {
     version: '6.160.6',
     date: '2026-09-01',
     title: 'Every model call on this machine was running one at a time',

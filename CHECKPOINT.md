@@ -1,3 +1,31 @@
+## 2026-09-01 - v6.160.7 - A memory can be marked as one that must not become a lesson
+
+⚠️ **THE DISTILLER READ EVERY EPISODE, INCLUDING PRIVATE ONES.** A concept is durable, firm-level and
+gets recited wherever the agent speaks, so private material reaching the distiller comes back out in
+a room the person never chose.
+
+⚠️ **AND IT CANNOT BE UNPICKED AFTERWARDS.** `distiller.ts` hands the model EVERY episode in ONE
+prompt and parses back a set of lessons with **no mapping from a lesson to the episodes that
+produced it**. Tainting per concept is impossible; tainting the whole run would mark nearly every
+concept private and destroy the feature. Excluding at the source is the only point where the
+decision can still be made.
+
+`episodes.private` (migration applied), settable on the agent-memory write, excluded by the
+distiller (`AND private = false`), and returned on recall beside `session_id`.
+
+⚠️ **PORTER DOES NOT DECIDE WHAT IS PRIVATE.** The caller marks the write. Porter cannot know which
+of an agent's rooms is which, and the same material is fine in one and not another — the same
+division as v6.160.3, where Porter reports provenance and the consumer holds the policy.
+
+⚠️ **CHANNEL WOULD HAVE BEEN THE WRONG SIGNAL.** Excluding a whole chat was the obvious fix and it is
+too blunt: most of what is said in a direct chat is ordinary work the agent SHOULD learn from.
+ymc.capital marks the individual turn that actually read a private project.
+
+Verified live: written with `private:true` → stored `t`, the distiller's own predicate returns 0 for
+it, recall hands back `private` and `session_id`, probe deleted.
+
+Default is false, so nothing changes for a caller that does not ask.
+
 ## 2026-09-01 - v6.160.6 - every model call on this box was running one at a time
 
 Found while specifying the Lau Wang deal room: a buyer-facing question needs a predictable
