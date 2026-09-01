@@ -12,6 +12,29 @@ per-turn number this argument is about: `bridge_dispatch_log.latency_ms`, with
 Do not act on the ranking below before running §"Settle it in five minutes". Two of the five
 candidates are disprovable in one query each.
 
+## Correction — the code I read is not the code that is running
+
+Added after v6.160.4 landed on master and flagged it:
+
+> **PORTER HAS 12 UNCOMMITTED FILES, LAST TOUCHED 11-14 AUGUST, AND THEY ARE LIVE.** 233 insertions
+> that exist in no commit. `porter-fastify` runs `npx tsx src/index.ts`, so it loads the working tree
+> directly. **The job-executor timeout-derivation work is among it.**
+
+Everything below was read against committed `HEAD` in a fresh clone. The box serves its **working
+tree**. So there is a known, unread delta sitting exactly on the subject of candidate #1, first
+touched **11 August** — the same date this diagnosis independently landed on from the release history
+alone. That is either a coincidence or the answer, and one command tells you which:
+
+```bash
+cd /home/lobster/projects/Porter && git status --short && git diff --stat && git diff
+```
+
+**Read that diff before anything else in this document.** If it touches `job-executor.ts`,
+`claude-cli.ts`, `dispatch-queues.ts` or `routing-engine.ts`, the ranking below is provisional and
+those 233 insertions are the first suspect. They also need capturing on a branch regardless of this
+investigation — three-week-old unreviewed code running in production is one `git checkout` from
+being gone with no record of what it was.
+
 ## The path Tom actually runs on
 
 Establishing this first, because three plausible-looking suspects are **not on it**.
@@ -52,8 +75,17 @@ Since **v6.160.0 (2026-08-11)** — the release window that matches "again".
 - A workspace dispatch gets the full agentic set — `--permission-mode auto --allowedTools
   WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent` (`claude-cli.ts:446`) — in a real
   git worktree. That is `npm`, `tsc`, `playwright`: **CPU**, not "waiting on a remote API".
-- Nothing runs those at a lower priority. No `nice`, no cgroup, no reserved capacity for
-  interactive traffic. Tom's turn is one more `spawn` of the same binary competing with them.
+- Nothing runs those at a lower priority. No `nice`, no reserved capacity for interactive traffic.
+  Tom's turn is one more `spawn` of the same binary competing with them.
+
+**And they are not competing for 4 vCPUs — they are competing for 1.8.**
+`ops/systemd/porter-fastify.service` sets `CPUQuota=180%` and `MemoryMax=2G`, added 2026-05-11 "after
+CPU saturation incident". A spawned `claude` stays in the unit's cgroup, so **every dev session, every
+dream, every 30s health probe and Tom's live turn share one 180% quota**. When the cgroup exceeds it
+the kernel throttles every task inside it — a dev session running `tsc` does not merely compete with
+Tom's turn, it gets both throttled together. The quota was sized in May, when a workspace dispatch
+could not outlive 5 minutes and jobs ran one at a time. Nothing revisited it on 11 August when four
+of them became able to run for twelve hours.
 
 The comment justifying concurrency 4 (`job-executor.ts:71`) says these sessions are
 "overwhelmingly waiting on a remote API rather than burning CPU". That is true of a chat turn
@@ -146,15 +178,26 @@ inside them, #1 is proven and #3 is a red herring.
 uptime                                    # load average vs 4 vCPU
 ps -eo pid,etimes,%cpu,rss,args | grep -c '[c]laude'   # concurrent CLI processes
 journalctl --user -u porter-fastify --since '7 days ago' | grep 'system prompt'  # §3 headroom
+
+# 5. THE decisive one for #1 — is the cgroup being throttled?
+cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/app.slice/\
+porter-fastify.service/cpu.stat        # nr_throttled, throttled_usec
+systemctl --user show porter-fastify -p CPUQuotaPerSecUSec -p MemoryMax
 ```
+`nr_throttled` climbing while Tom is slow **is** #1, measured rather than argued. Sample it twice a
+minute apart: if `throttled_usec` moves at all during a dev session, every turn taken in that window
+paid for it.
 
 ## What I would fix, in order
 
 1. **Separate interactive from background.** A dev session must not be able to take CPU from a
    turn a human is waiting on. Cheapest correct version: spawn workspace dispatches under
    `nice`/`ionice` (they have no deadline — that is the whole premise of dev #109), and drop
-   `MAX_CONCURRENT_JOBS` to 2 on a 4-vCPU box until there is a measurement supporting 4. The
-   number was inherited from the old claim batch size, not chosen.
+   `MAX_CONCURRENT_JOBS` to 2 until there is a measurement supporting 4; the number was inherited
+   from the old claim batch size, not chosen. If the cgroup is throttling, the honest fix is a
+   **separate slice for background work** with its own quota, so a dev session cannot spend the
+   budget Tom's turn needs — raising `CPUQuota` alone just moves the saturation back onto the box
+   the May incident was about.
 2. **Bound total concurrent CLI processes**, not just jobs. Today the streaming path is
    unlimited; four jobs plus dreams plus Tom is already over-subscribed.
 3. **Record prompt size per turn** so #3 is a trend and not a memory. `input_tokens` is already
