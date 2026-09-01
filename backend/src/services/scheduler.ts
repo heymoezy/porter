@@ -3,7 +3,6 @@ import { config, featureFlags } from '../config.js';
 import { dispatch as aiRouterDispatch } from './ai-router.js';
 import { reconcileReleases } from './release-reconciler.js';
 import { checkDeadlineTriggers } from './event-triggers.js';
-import { syncCalendarEvents, checkCalendarDeadlines } from './calendar.js';
 import { dispatchExternalCall, checkConnectionHealth } from './external-dispatcher.js';
 import { runHealthProbe } from './bridge/health-probe.js';
 import { refreshAllGateways } from './bridge/model-catalog.js';
@@ -317,22 +316,6 @@ async function tick() {
 
     if (tickCount % DEADLINE_CHECK_INTERVAL === 0) {
       await checkDeadlineTriggers();
-    }
-
-    // Calendar sync -- every 60 seconds
-    if (featureFlags.externalConnections && tickCount % CALENDAR_SYNC_INTERVAL === 0) {
-      try {
-        // Only sync if a calendar connection exists
-        const hasCalendar = (await pool.query(
-          `SELECT 1 FROM workspace_connections WHERE provider = 'google_calendar' AND status = 'connected' LIMIT 1`
-        )).rows[0];
-        if (hasCalendar) {
-          await syncCalendarEvents();
-          await checkCalendarDeadlines();
-        }
-      } catch (e) {
-        console.error('[scheduler] calendar sync error', e);
-      }
     }
 
     // Unblock jobs whose connections have been restored -- every 30 seconds

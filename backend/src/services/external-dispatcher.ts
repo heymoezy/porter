@@ -13,7 +13,6 @@
 
 import { listRepos, readFile, createBranch, createPullRequest } from './github.js';
 import { sendEmail } from './email.js';
-import { pushMilestoneToCalendar } from './calendar.js';
 import { sendWhatsAppMessage } from './whatsapp.js';
 import { pool } from '../db/client.js';
 import crypto from 'crypto';
@@ -34,7 +33,7 @@ import crypto from 'crypto';
 export async function queueExternalCall(
   agentId: string,
   projectId: string | null,
-  service: 'github' | 'email' | 'calendar' | 'whatsapp',
+  service: 'github' | 'email' | 'whatsapp',
   action: string,
   params: Record<string, unknown>,
 ): Promise<string> {
@@ -59,7 +58,6 @@ export async function checkConnectionHealth(service: string): Promise<'ok' | 'bl
   const providerMap: Record<string, string> = {
     github: 'github',
     email: 'email',
-    calendar: 'google_calendar',
     whatsapp: 'whatsapp',
   };
 
@@ -150,8 +148,6 @@ export async function dispatchExternalCall(triggerData: string): Promise<string>
       return await dispatchGitHub(data);
     case 'email':
       return await dispatchEmail(data);
-    case 'calendar':
-      return await dispatchCalendar(data);
     case 'whatsapp':
       return await dispatchWhatsApp(data);
     default:
@@ -226,22 +222,6 @@ async function dispatchEmail(data: Record<string, unknown>): Promise<string> {
     }
     default:
       throw new Error(`Unknown email action: ${String(data.action)}`);
-  }
-}
-
-async function dispatchCalendar(data: Record<string, unknown>): Promise<string> {
-  switch (data.action) {
-    case 'push_milestone': {
-      const eventId = await pushMilestoneToCalendar({
-        title: data.title as string,
-        date: data.date as string,
-        projectName: data.project_name as string,
-        projectId: data.project_id as string | undefined,
-      });
-      return eventId;
-    }
-    default:
-      throw new Error(`Unknown calendar action: ${String(data.action)}`);
   }
 }
 
