@@ -22,6 +22,19 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.160.5',
+    date: '2026-09-01',
+    title: 'Work that had been sitting uncommitted for eighteen days',
+    bullets: [
+      'Found during a sweep of every working tree, not written today. Twelve files had been finished and left uncommitted since the middle of August, which means none of it was backed up anywhere and any mistake in that tree would have taken it.',
+      'The largest piece stops a timeout from being copied. The adapter that runs the model has a five minute ceiling, and two callers had re-typed their own shorter numbers beside it. The shorter one wins silently: the caller gives up while the subprocess keeps running, and the difference is an orphan nobody sees. Both now derive from the adapter\u2019s own number, which is how the workspace path was fixed once already and has not drifted since.',
+      'A model with no cost entry now says so once, by name, and says where to add it, instead of being quietly priced at nothing.',
+      'A scheduled agent takes its interval from its own schedule where it has one, rather than only from the template it was made from.',
+      'And the database setup no longer recreates three tables belonging to a feature that was abandoned in April, nor re-seeds their settings on every boot.',
+      'Typechecks clean. This release commits it so it exists somewhere other than one folder on one machine.',
+    ],
+  },
+  {
     version: '6.160.4',
     date: '2026-09-01',
     title: 'Removed a calendar sync that could never have run',

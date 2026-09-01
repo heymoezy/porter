@@ -226,7 +226,11 @@ export const tokenUsageDaily = pgTable('token_usage_daily', {
   outputTokens: integer('output_tokens').default(0),
   requestCount: integer('request_count').default(0),
   createdAt: doublePrecision('created_at').default(sql`EXTRACT(EPOCH FROM NOW())`),
-});
+}, (t) => ({
+  // trackTokenUsage() upserts with ON CONFLICT (model, date). Without this index
+  // every write raises 42P10 and the meter silently stops — it did, for 4 months.
+  modelDate: uniqueIndex('token_usage_daily_model_date_key').on(t.model, t.date),
+}));
 
 // ── External Connections ─────────────────────────────────────────────────────
 

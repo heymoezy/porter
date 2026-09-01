@@ -1,3 +1,35 @@
+## 2026-09-01 - v6.160.5 - eighteen days of finished work was sitting in a dirty working tree
+
+⚠️ **NOT AUTHORED IN THIS SESSION.** Found during a sweep of every git tree on the box, run
+because a session specifying the Lau Wang deal room needed the bridge dispatch area and found it
+mid-edit. Twelve tracked files, 233 insertions, last touched 11 to 14 August. It was finished and
+it typechecked; it had simply never been committed, so it existed in exactly one place and any
+`git checkout` would have taken it.
+
+What it does, verified by reading the diff rather than the ledger:
+
+- `claude-cli.ts` exports `TIMEOUT_MS`, and `job-executor.ts` derives `DELEGATION_JOB_TIMEOUT_MS`
+  and `HEARTBEAT_JOB_TIMEOUT_MS` from it instead of the bare literals 300000 and 120000. The
+  file's own comment records that both copies had already drifted short once, and a short client
+  budget aborts the fetch while this adapter keeps the subprocess alive to its own ceiling,
+  leaking an orphan for the difference. `WORKSPACE_TIMEOUT_MS` was exported for this reason and
+  never drifted again.
+- `model-catalog.ts` warns once per unknown model, by name, naming `MODEL_METADATA` as the place
+  to add it, rather than silently pricing it at zero. Plumbed through `cost-metrics.ts`,
+  `dispatch-scorer.ts` and `usage-collector.ts`.
+- `job-executor.ts` takes a heartbeat interval from the agent's own cron where it has one, falling
+  back to the template.
+- `migrate-consolidated.ts` stops recreating the three abandoned Forge tables and re-seeding
+  `tick_interval_ms` on every boot. The tables were already dropped by hand on 2026-08-14 per
+  `.coordination/SESSIONS.md`; this stops them coming back.
+
+⚠️ Untracked files in that tree were deliberately NOT committed: `ops/backups/`,
+`backend/src/scripts/`, `ops/ledger-snapshot.py`, `ops/repair-intel-feed-ms-timestamps.sql`.
+Backups and one-off repair SQL do not belong in the repo, and I did not write them.
+
+Porter tsc 0. **Committed, NOT restarted**: porter-fastify is the backbone for Tom and every
+model dispatch, and bouncing it mid-session is the operator's call.
+
 ## 2026-09-01 - v6.160.4 - Removed a calendar sync that could never have run
 
 The Porter half of the ymc v2.144.x calendar work, which the phone session proposed and never landed

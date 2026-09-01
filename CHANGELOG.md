@@ -1,3 +1,12 @@
+## 6.160.5 - 2026-09-01
+
+Work found uncommitted for 18 days during a sweep of every working tree, not authored in this
+session. Timeout constants now derive from the adapter's exported ceiling instead of being
+re-typed by callers (a shorter client budget aborts the fetch while the subprocess lives on,
+leaking an orphan for the difference). Unknown models warn once by name with the fix. Heartbeat
+interval comes from the agent's own cron where present. migrate-consolidated no longer recreates
+the abandoned Forge tables or re-seeds them on boot. Porter tsc 0.
+
 ## v6.160.2 (2026-08-30) — document search said "nothing on file" about documents it held
 
 `retrieveChunks()` in `backend/src/services/recall-query.ts` built its query with

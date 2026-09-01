@@ -10,13 +10,22 @@ POST http://127.0.0.1:3001/api/v1/chat/stream
 
 ## Authentication
 ```
-X-Porter-Service-Token: porter-local-service-2026
+X-Porter-Service-Token: $PORTER_SERVICE_TOKEN
 ```
 Or:
 ```
-Authorization: Bearer porter-local-service-2026
+Authorization: Bearer $PORTER_SERVICE_TOKEN
 ```
 Localhost only (127.0.0.1). Authenticates as system/platform_admin.
+
+The token lives in `~/.config/porter/porter.env` — never in this repo, never in a
+committed `.env`. Source it; do not paste it.
+
+Rotated 2026-07-13. The pre-rotation literal is committed in a
+PUBLIC repo and is now **refused as a secret** even if set explicitly
+(`backend/src/plugins/auth.ts`). Service auth is fail-closed: no env token → every
+machine-to-machine caller gets 401. If you are getting 401 with a token that "used
+to work", that is this.
 
 ## Request
 ```json
@@ -41,7 +50,9 @@ SSE stream of `data: {"token":"..."}` lines, ending with `data: {"done":true,"ba
 
 ## Working Example
 ```bash
-curl -s -H "X-Porter-Service-Token: porter-local-service-2026" \
+set -a; . ~/.config/porter/porter.env; set +a
+
+curl -s -H "X-Porter-Service-Token: $PORTER_SERVICE_TOKEN" \
   -H "Content-Type: application/json" \
   -X POST http://127.0.0.1:3001/api/v1/chat/stream \
   -d '{"message":"say hello","backend":"claude_cli"}'
