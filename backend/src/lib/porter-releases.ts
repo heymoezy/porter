@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.160.4',
+    date: '2026-09-01',
+    title: 'Removed a calendar sync that could never have run',
+    bullets: [
+      'Porter carried its own Google Calendar sync. It needed a stored set of Google credentials, and nothing in Porter has ever written one, so the row it read had to be placed by hand and never was. It also sat behind a switch that defaults to off.',
+      'Both of its tables are empty and always have been. Nothing outside the deleted file ever wrote to either.',
+      'Tom has been the one calendar integration all along, on ymc, and that is where the work to read both of Moe\u2019s diaries landed this week. Two of them was one too many.',
+    ],
+  },
+  {
     version: '6.160.3',
     date: '2026-08-31',
     title: 'Recall now says which conversation a memory came from',

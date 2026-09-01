@@ -1,3 +1,32 @@
+## 2026-09-01 - v6.160.4 - Removed a calendar sync that could never have run
+
+The Porter half of the ymc v2.144.x calendar work, which the phone session proposed and never landed
+anywhere. **Verified dead before deleting, not asserted:**
+
+- `workspace_connections` — **0 rows**, and there is no INSERT anywhere in Porter. The credentials
+  row `getCalendarClient` reads had to be placed by hand, and never was.
+- `calendar_events` — **0 rows**, and the deleted file was the only writer.
+- Gated on `featureFlags.externalConnections`, i.e. `FEATURE_EXTERNAL_CONNECTIONS === 'true'`, which
+  is set in neither `porter.env` nor `backend/.env`.
+
+Deleted `services/calendar.ts` and its two call sites: the 60-second sync tick in `scheduler.ts` and
+the `calendar` channel in `external-dispatcher.ts` (whose `service` union no longer accepts it, so a
+caller that tries fails the typecheck rather than at runtime). `calendar_events` is LEFT IN PLACE —
+dropping a table is destructive and is its own decision, and an empty table costs nothing.
+
+⚠️ **FOUND WHILE DOING THIS: PORTER HAS 12 UNCOMMITTED FILES, LAST TOUCHED 11-14 AUGUST, AND THEY
+ARE LIVE.** 233 insertions that exist in no commit. This is not an inference from timestamps —
+`porter-fastify` runs `npx tsx src/index.ts`, so it loads the working tree directly, and the service
+restarted at 06:12 today. The job-executor timeout-derivation work is among it. `dist/` is a stale
+artifact from 31 Aug and is not what runs.
+
+They are another session's and were not touched, staged or committed here. **This needs Moe:** the
+work is three weeks old, it is running in production, and it is one `git checkout` away from being
+gone with no record of what it was.
+
+Not restarted as part of this change beyond the verify below — the deletion is unreachable code, so
+nothing behaves differently either way.
+
 ## 2026-08-31 - v6.160.3 - Recall now says which conversation a memory came from
 
 ⚠️ **AGENT-MEMORY RECALL IS GLOBAL, AND A CONSUMER HAD NO WAY TO NARROW IT.** `hits` and `recent`
