@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.160.8',
+    date: '2026-09-03',
+    title: 'A hidden document stays hidden in search',
+    bullets: [
+      'A file that has been removed from every scanned folder no longer shows up in vault search. The graph already hid it; search did not.',
+      'Both readers now use one rule for what may be shown.',
+    ],
+  },
+  {
     version: '6.160.7',
     date: '2026-09-01',
     title: 'A memory can be marked as one that must not become a lesson',

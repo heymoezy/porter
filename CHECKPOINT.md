@@ -1,3 +1,16 @@
+## 2026-09-03 - v6.160.8 - A hidden document stays hidden in search
+
+ymc's file scanner retired a private root (`dunross-crow-investments`) and `/reconcile` flipped all 43
+of its locations absent. The graph route hid the 36 documents; `porter_search_vault` kept returning
+them, because `mcp/vault-lookup.ts` filtered `status <> 'archived'` only and the tombstone is a
+location state, not a node status. Same class as 2026-07-14: two readers, one rule, one reader without
+it. `lib/vault-visibility.ts` now holds `visibleNodeSql()` (archived OR file-backed with every location
+absent), and both the graph query and the search query call it. Verified: the search for the retired
+root returns nothing from under it; db-backed documents unaffected.
+
+Noticed, not fixed: `porter-releases.ts` says a post-commit hook announces each Porter release. There
+is no post-commit hook in `.git/hooks`.
+
 ## 2026-09-01 - v6.160.7 - A memory can be marked as one that must not become a lesson
 
 ⚠️ **THE DISTILLER READ EVERY EPISODE, INCLUDING PRIVATE ONES.** A concept is durable, firm-level and
