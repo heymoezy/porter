@@ -8,8 +8,8 @@ it. `lib/vault-visibility.ts` now holds `visibleNodeSql()` (archived OR file-bac
 absent), and both the graph query and the search query call it. Verified: the search for the retired
 root returns nothing from under it; db-backed documents unaffected.
 
-Noticed, not fixed: `porter-releases.ts` says a post-commit hook announces each Porter release. There
-is no post-commit hook in `.git/hooks`.
+Hooks live in `deploy/git-hooks` (`core.hooksPath`), not `.git/hooks`; the post-commit there announced
+this release to the group.
 
 ## 2026-09-01 - v6.160.7 - A memory can be marked as one that must not become a lesson
 
