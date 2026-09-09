@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.163.0',
+    date: '2026-09-09',
+    title: 'The limit that protects the box was not covering chat',
+    bullets: [
+      'Porter caps how many model processes can run at once, and that cap is what stops a repeat of the run that burned tokens for 58 hours. Chat was never counted against it. Every other kind of request went through the gate; the streaming path, which is what a live conversation uses, went around it. So the protection covered the background work and not the traffic most likely to arrive all at once.',
+      'Chat now takes its place in the queue like everything else. The tricky part was letting go of that place at the right moment: the step that runs after a reply finishes asks Porter a question of its own, so holding on until the very end would have had every conversation waiting for a turn that could never come. The place is given up the moment the words stop.',
+      'Someone closing a tab mid-answer used to leave their place in the queue occupied. It is released immediately now. This was found by a test that hung rather than by reading the code.',
+      'A job that has hung was only ever noticed when Porter restarted, so it could sit holding one of four slots for up to twelve hours. It is now checked for every five minutes.',
+      'The memory and CPU limits on the service were set in May, when only one model process could run at a time and none could last more than five minutes. Both are now true of neither. They have been raised to match, with the reasoning written down next to them. The memory one mattered most: it does not slow things down when exceeded, it kills Porter outright.',
+    ],
+  },
+  {
     version: '6.162.0',
     date: '2026-09-09',
     title: 'Porter can now tell whether its memory got better',

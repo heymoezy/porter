@@ -402,6 +402,41 @@ export async function runSupersessionScan(opts: { dryRun?: boolean } = {}): Prom
   return result;
 }
 
+/** How long between scheduled scans. A contradiction is not urgent; a bill is. */
+export const SCAN_MIN_GAP_HOURS = 24;
+
+/**
+ * The scheduled entry point. Self-gates on the last persisted run.
+ *
+ * ⚠️ GATED ON THE DATABASE, NOT ON A TICK COUNTER — the same lesson as
+ * `runDistillerIfDue`. `scheduler.ts` counts ticks from process start and Porter
+ * restarts on every deploy, so an `every_24h` counter never reaches 24 hours and
+ * the job silently never runs. That is exactly how Tom's learning loop froze on
+ * 2026-06-20. Driven from the restart-proof 30-minute tick and gated here, a
+ * missed window costs at most 30 minutes rather than forever.
+ *
+ * Writes proposals (dryRun defaults to false): a pending row is inert until
+ * someone reviews it, which is the whole posture of this module. The model-call
+ * cost is bounded by MAX_PAIRS_PER_SCAN.
+ */
+export async function runSupersessionScanIfDue(
+  opts: { minGapHours?: number; dryRun?: boolean } = {},
+): Promise<ScanResult | { skipped: string }> {
+  const minGap = opts.minGapHours ?? SCAN_MIN_GAP_HOURS;
+  const last = (
+    await pool.query(
+      `SELECT created_at FROM intellect_events
+        WHERE source_type = 'supersession'
+          AND details_json->>'action' = 'supersession_scan'
+          AND created_at > EXTRACT(EPOCH FROM NOW()) - ($1::int * 3600)
+        ORDER BY created_at DESC LIMIT 1`,
+      [minGap],
+    )
+  ).rows[0];
+  if (last) return { skipped: 'within cadence gap' };
+  return runSupersessionScan({ dryRun: opts.dryRun ?? false });
+}
+
 /**
  * Apply an accepted proposal. Called from review, never from the scan.
  *

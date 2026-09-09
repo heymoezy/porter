@@ -15,6 +15,7 @@ import { runScheduledWorkflows } from './intellect/workflow-engine.js';
 import { runDispatchScoring } from './intellect/dispatch-scorer.js';
 import { runDreamWorker } from './intellect/dream-worker.js';
 import { runDistillerIfDue } from './intellect/distiller.js';
+import { runSupersessionScanIfDue } from './intellect/supersession.js';
 import crypto from 'crypto';
 
 const POLL_INTERVAL_MS = 2000;
@@ -236,6 +237,15 @@ async function tick() {
       runDistillerIfDue({ agent: 'tom' })
         .then(r => { if (!('skipped' in r)) console.log('[scheduler:distiller] tom →', JSON.stringify(r)); })
         .catch(err => console.error('[scheduler:distiller] error', err));
+      // Supersession scan — find directives that CONTRADICT rather than merely
+      // duplicate (the pruner's pg_trgm pass cannot see a conflict written in
+      // different words). Same restart-proof shape as the distiller above: fired
+      // from this 30-minute tick, gated in the DB on a 24h gap, never on a tick
+      // counter that resets on every deploy. It only ever writes PENDING
+      // proposals — nothing is retired without review.
+      runSupersessionScanIfDue()
+        .then(r => { if (!('skipped' in r)) console.log('[scheduler:supersession] →', JSON.stringify(r)); })
+        .catch(err => console.error('[scheduler:supersession] error', err));
       // every_30m workflows are NOT fired here any more — they are polled from
       // the database-driven block below, which survives a restart. Firing them
       // from this uptime tick is what froze them.

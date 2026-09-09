@@ -1,3 +1,48 @@
+## 6.163.0 - 2026-09-09
+
+Three findings from TOM-SLOWDOWN-2026-09-01.md that survived master's v6.160.5/6 fixes, plus the
+memory work from 6.162.0 wired into the scheduler.
+
+THE STREAM PATH NOW QUEUES. dispatchStream called adapter.stream() directly and took no slot at all,
+so it skipped both the lane queue and the global MAX_INFLIGHT cap. v6.160.6 rests a safety argument on
+that cap — its changelog says the ceiling "is what makes the lanes safe rather than a repeat" of the
+58-hour token burn — but interactive chat IS the streaming path, so the guardrail bounded background
+work and not the burstiest traffic on the box. New acquireDispatchSlot() holds a lane slot and a
+global slot for as long as tokens flow.
+
+⚠️ THE SLOT IS RELEASED WHEN THE TOKENS STOP, NOT WHEN THE HANDLER RETURNS. The tail of
+dispatchStream calls compressToolOutput, which issues an HTTP request back into Porter
+(127.0.0.1:3001/api/v1/chat/send) and therefore needs a slot of its own. Holding across it deadlocks
+the bridge at MAX_INFLIGHT concurrent streams — every slot waiting on a compression call that can
+never be admitted. The slot bounds CLI subprocesses and the subprocess is done when its stream ends.
+
+Aborting while queued now returns immediately instead of waiting out the dispatch in front of it —
+found by check 9, which hung the first time it ran. On a concurrency-1 lane a waiter that ignored its
+abort sat out the whole job ahead and then took a slot nobody wanted. verify-dispatch-lanes.ts grows
+from 8 checks to 15.
+
+WEDGED JOBS ARE RECLAIMED ON A TIMER. reclaimOrphanedJobs() ran only at start(), so a wedged session
+held one of MAX_CONCURRENT_JOBS slots until the next restart — up to 12 hours — with nothing saying
+so. It could not simply be put on an interval: its predicate is a bare status='running' with no owner
+and no age, correct exactly once at startup and catastrophic on a timer, and worker_id is no better
+because SKIP LOCKED tolerates multiple executors that would then kill each other's live work. The new
+sweep uses age past WORKSPACE_JOB_TIMEOUT_MS + 15min, which is safe under any number of executors.
+
+CGROUP CEILINGS RESIZED. A spawned claude stays in porter-fastify's cgroup, so MemoryMax/CPUQuota
+bound Porter and everything it dispatches together. Both were sized 2026-05-11 when dispatch was
+serial and a workspace job could not outlive 5 minutes; since then jobs run 12 hours and three
+subprocesses run at once. CPUQuota 180% → 350%, MemoryMax 2G → 6G, MemoryHigh 1500M → 5G, derivation
+written into the unit file. Memory was the sharper edge: MemoryMax OOM-KILLS the backbone, and at 2G
+three CLI processes plus a workspace session were credibly inside a kill that would read as an
+unexplained restart. Requires daemon-reload + restart to take effect; revert values are in the file.
+
+SUPERSESSION SCAN SCHEDULED. Gated in the database on a 24h gap and fired from the restart-proof
+30-minute tick, not a tick counter that resets on every deploy — the failure that froze Tom's
+distiller on 2026-06-20. Writes pending proposals only. npm scripts added for test, bench:memory,
+scan:supersession and verify:lanes; the repo had no test script at all.
+
+Porter tsc 0. 330 tests / 186 pass / 0 fail. 15/15 lane checks pass.
+
 ## 6.162.0 - 2026-09-09
 
 Imported the method, not the runtime, from supermemoryai/memorybench and supermemoryai/supermemory

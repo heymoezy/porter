@@ -87,6 +87,7 @@ const MAX_CONCURRENT_JOBS = Number(process.env.PORTER_MAX_CONCURRENT_JOBS || 4);
 
 let scanIntervalId: ReturnType<typeof setInterval> | null = null;
 let runIntervalId: ReturnType<typeof setInterval> | null = null;
+let wedgedIntervalId: ReturnType<typeof setInterval> | null = null;
 let scanInProgress = false;
 let runInProgress = false;
 /** Jobs currently executing. Bounds concurrency and keeps a long job from being re-claimed. */
@@ -496,6 +497,57 @@ async function reclaimOrphanedJobs(): Promise<void> {
   );
 }
 
+/**
+ * Reclaim jobs that have outlived every legitimate ceiling — the periodic
+ * counterpart to the startup sweep above.
+ *
+ * ⚠️ WHY NOT JUST RUN reclaimOrphanedJobs() ON A TIMER. Its predicate is bare
+ * `status = 'running'` with no owner and no age. That is correct exactly once,
+ * at startup, when this process has claimed nothing yet and every running row is
+ * therefore someone else's corpse. On a timer it would fail every job THIS
+ * process is currently running, seconds after claiming it.
+ *
+ * ⚠️ AND NOT `worker_id <> me` EITHER. Jobs are claimed with FOR UPDATE SKIP
+ * LOCKED, which is a design that tolerates more than one executor. Under two
+ * instances an owner-based sweep has each one killing the other's live work.
+ *
+ * Age is the predicate that is safe in both cases. A job still running past the
+ * longest ceiling the system can legitimately produce — WORKSPACE_JOB_TIMEOUT_MS,
+ * itself derived from the adapter's own WORKSPACE_TIMEOUT_MS — is wedged no
+ * matter who owns it or how many executors are live. The margin below is
+ * deliberately generous: this is a backstop for a job nothing else will ever
+ * finish, not a second timeout competing with the real ones.
+ *
+ * The gap this closes: reclaim ran ONLY at startup, so a wedged session held one
+ * of MAX_CONCURRENT_JOBS slots until the next restart — up to 12 hours — and
+ * nothing said so (TOM-SLOWDOWN-2026-09-01.md, still-open item 3).
+ */
+const WEDGED_JOB_GRACE_MS = 15 * 60_000;
+const WEDGED_SWEEP_INTERVAL_MS = 5 * 60_000;
+
+async function reclaimWedgedJobs(): Promise<void> {
+  const cutoffSeconds = (Date.now() - (WORKSPACE_JOB_TIMEOUT_MS + WEDGED_JOB_GRACE_MS)) / 1000;
+  const { rows } = await pool.query<{ id: string; source: string | null; trigger_type: string }>(
+    `UPDATE agent_jobs
+        SET status = 'failed',
+            completed_at = EXTRACT(EPOCH FROM NOW()),
+            error = left(coalesce(error || ' | ', '') || $1, 500)
+      WHERE status = 'running'
+        AND started_at IS NOT NULL
+        AND started_at < $2
+      RETURNING id, source, trigger_type`,
+    [
+      'wedged: still running past every ceiling this system can produce, so nothing was ever going to finish it',
+      cutoffSeconds,
+    ],
+  );
+  if (!rows.length) return;
+  console.warn(
+    `[job-executor] reclaimed ${rows.length} wedged job(s) past the ${Math.round(WORKSPACE_JOB_TIMEOUT_MS / 60_000)}min ceiling:`,
+    rows.map(r => `${r.source ?? 'null'}/${r.trigger_type}`).join(' '),
+  );
+}
+
 export function start(): void {
   if (scanIntervalId || runIntervalId) return;
   // Before claiming anything new, settle what a previous incarnation abandoned.
@@ -507,11 +559,18 @@ export function start(): void {
   runIntervalId = setInterval(() => {
     runDueJobs().catch(err => console.error('[job-executor] run crash:', err));
   }, POLL_INTERVAL_MS);
-  console.log(`[job-executor] started — scan + run every ${POLL_INTERVAL_MS}ms`);
+  // Backstop, not a hot loop: a wedged job is by definition hours old, so
+  // checking every 5 minutes finds it just as surely as checking every 5 seconds
+  // and does not put a write query on the poll interval.
+  wedgedIntervalId = setInterval(() => {
+    reclaimWedgedJobs().catch(err => console.error('[job-executor] wedged reclaim crash:', err));
+  }, WEDGED_SWEEP_INTERVAL_MS);
+  console.log(`[job-executor] started — scan + run every ${POLL_INTERVAL_MS}ms, wedged sweep every ${WEDGED_SWEEP_INTERVAL_MS / 60_000}min`);
 }
 
 export function stop(): void {
   if (scanIntervalId) { clearInterval(scanIntervalId); scanIntervalId = null; }
   if (runIntervalId) { clearInterval(runIntervalId); runIntervalId = null; }
+  if (wedgedIntervalId) { clearInterval(wedgedIntervalId); wedgedIntervalId = null; }
   console.log('[job-executor] stopped');
 }
