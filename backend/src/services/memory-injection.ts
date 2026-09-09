@@ -2,8 +2,7 @@ import { pool } from '../db/client.js';
 import { selectDirectives, tokenizeTaskText } from './directive-scorer.js';
 import { recordConceptUsage } from './intellect/concept-usage.js';
 import type { DirectiveSelectionStats } from './directive-scorer.js';
-import { VAULT_RANK_BOOST } from './intellect/vault-indexer.js';
-import { embed, toVectorLiteral } from './intellect/embeddings.js';
+import { searchConcepts } from './concept-retrieval.js';
 
 // ── Token estimation helper ───────────────────────────────────────────────────
 // Approximate: 4 chars ≈ 1 token (common rule of thumb for English text)
@@ -292,105 +291,22 @@ export async function buildMemoryContext(opts: {
     // filter: a clearly more relevant non-vault row still outranks (see
     // VAULT_RANK_BOOST). Vault rows also cite their source node.
     if (searchQuery && totalRemaining > 50) {
-      // ⚠️ AND-THEN-OR. `websearch_to_tsquery` ANDs unquoted terms, so a natural
-      // question required EVERY word to appear in the concept and one absent
-      // stem returned nothing at all. Measured over the 147 live concepts for
-      // agent:tom (scripts/measure-paraphrase-miss.ts): with AND, **3 of 8
-      // probes could not find a concept using that concept's OWN WORDS**, and
-      // every paraphrase missed. With the same terms OR-ed, the control misses
-      // go to ZERO and the paraphrase miss rate halves.
-      //
-      // RELEASE-SCHEDULE.md:16 specified FTS "(R1, OR)"; the shipped code was
-      // AND, so R1's OR either never landed or regressed — and the residual it
-      // caused was being attributed to "we need embeddings" (R6).
-      //
-      // AND first, because when every term IS present that is the precise
-      // answer and should rank; OR only when AND finds nothing, so precision is
-      // preserved and recall stops failing on its own words.
-      const FTS = (op: 'and' | 'or') => `
-         SELECT id, content, confidence_score, source_type, source_url
-           FROM concepts${op === 'or' ? `, websearch_to_tsquery('english', $1) AS raw,
-                to_tsquery('english', array_to_string(ARRAY(
-                  SELECT unnest(string_to_array(replace(raw::text, '''', ''), ' & '))), ' | ')) AS q` : ''}
-          WHERE search_vector @@ ${op === 'or' ? 'q' : `websearch_to_tsquery('english', $1)`}
-            AND status = 'active'
-          ORDER BY ts_rank(search_vector, ${op === 'or' ? 'q' : `websearch_to_tsquery('english', $1)`})
-                   * CASE WHEN source_type = 'vault' THEN ${VAULT_RANK_BOOST} ELSE 1.0 END DESC
-          LIMIT 10`;
-      type Row = { id: string; content: string; confidence_score: number | null; source_type: string; source_url: string | null };
-      let res = await pool.query<Row>(FTS('and'), [searchQuery]);
-      if (res.rows.length === 0) {
-        // Malformed input can make the OR rewrite unparseable — fail back to the
-        // AND result (empty) rather than losing the whole injection.
-        res = await pool.query<Row>(FTS('or'), [searchQuery]).catch(() => res);
-      }
-
-      // ── R6: fuse in semantic neighbours ────────────────────────────────────
-      //
-      // FTS cannot join "who should I ask about anti money laundering paperwork"
-      // to a concept about compliance/KYC — the two share no token, so stemming
-      // has nothing to work with. Re-measured 2026-08-02 over 151 concepts after
-      // the AND-then-OR fix: still 4/8 paraphrase misses. That residual is what
-      // this closes.
-      //
-      // ⚠️ ADDITIVE, NEVER GATING. If ollama is down or slow, `embed()` returns
-      // null in ≤2s and this whole block is skipped — FTS results stand exactly
-      // as they are. A concept with no embedding is likewise still found by FTS,
-      // which is why the column is nullable and the index partial. Retrieval
-      // sits in front of a live reply; it may improve an answer, never delay one.
-      //
-      // ⚠️ RECIPROCAL RANK FUSION, not score blending. A ts_rank and a cosine
-      // distance are different units on different scales with no meaningful
-      // conversion — any weighted sum of the two is a made-up number that looks
-      // principled. RRF throws the scores away and uses only each ranker's
-      // ORDERING, which is the part both agree on the meaning of. k=60 is the
-      // standard constant: large enough that rank 1 does not dominate outright,
-      // small enough that the tail still separates.
-      const qVec = await embed(searchQuery);
-      if (qVec) {
-        const ann = await pool.query<Row>(
-          `SELECT id, content, confidence_score, source_type, source_url
-             FROM concepts
-            WHERE status = 'active' AND embedding IS NOT NULL
-            ORDER BY (embedding <=> $1::vector)
-                     -- Same vault preference the FTS ranker applies, expressed
-                     -- as distance: nearer is better, so vault rows are scaled
-                     -- DOWN rather than up.
-                     * CASE WHEN source_type = 'vault' THEN ${1 / VAULT_RANK_BOOST} ELSE 1.0 END
-            LIMIT 10`,
-          [toVectorLiteral(qVec)],
-        ).catch(() => null);
-
-        if (ann && ann.rows.length > 0) {
-          const K = 60;
-          const scores = new Map<string, number>();
-          const byId = new Map<string, Row>();
-          for (const [rank, row] of res.rows.entries()) {
-            scores.set(row.id, (scores.get(row.id) ?? 0) + 1 / (K + rank + 1));
-            byId.set(row.id, row);
-          }
-          for (const [rank, row] of ann.rows.entries()) {
-            scores.set(row.id, (scores.get(row.id) ?? 0) + 1 / (K + rank + 1));
-            if (!byId.has(row.id)) byId.set(row.id, row);
-          }
-          // A row both rankers found accumulates from both and rises — which is
-          // the whole point of fusing rather than concatenating.
-          const fused = [...scores.entries()]
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 10)
-            .map(([id]) => byId.get(id)!)
-            .filter(Boolean);
-          if (fused.length > 0) res = { ...res, rows: fused } as typeof res;
-        }
-      }
-      if (res.rows.length > 0) {
+      // Ranking lives in services/concept-retrieval.ts so the benchmark in
+      // services/membench/ scores THIS path rather than a copy of it. The SQL,
+      // the AND-then-OR fallback, the vault boost and the RRF fusion all moved
+      // there unchanged. One difference, deliberate: a failing FTS query now
+      // returns [] rather than throwing up into this function's outer catch,
+      // which used to drop the WHOLE context — directives included — over a
+      // malformed query. See that file's header.
+      const rows = await searchConcepts(searchQuery);
+      if (rows.length > 0) {
         const header = '## Related Knowledge\n';
         let body = '';
         // Only rows that survive the budget are counted as used — the loop can
         // break long before row 10, and a concept that never made it into the
         // prompt was not used. See services/intellect/concept-usage.ts.
         const injectedIds: string[] = [];
-        for (const row of res.rows) {
+        for (const row of rows) {
           const cite = row.source_type === 'vault' && row.source_url
             ? ` _(vault: ${row.source_url.replace('/home/lobster/vault/', '')})_`
             : '';

@@ -1,3 +1,82 @@
+## 2026-09-09 - v6.161.0 - Memory can now be measured, and a rule can be contradicted
+
+Imported from `supermemoryai/memorybench` and `supermemoryai/supermemory` (both MIT). Not the runtime
+— their local engine is a second store on a second port with its own graph DB, against "one schema,
+one truth" and against `hot-context.ts`'s invariant that Porter's DB is the source of truth. What was
+worth taking is the **method**, and it lands in two places.
+
+⚠️ **THEIR BENCHMARKS DO NOT MEASURE WHAT PORTER'S MEMORY DOES.** LongMemEval, LoCoMo and ConvoMem all
+score recalling facts a *user stated about themselves* across chat sessions. Porter's directives are
+normative rules with a precedence lattice; nothing in those benchmarks would catch the inverted sort
+that cost Moe's rules their place in every Tom prompt until v6.123.0. The numbers are real and mostly
+irrelevant to the directive path. What they ARE relevant to is entity recall — and every one of the
+eight probes in `measure-paraphrase-miss.ts` is an entity-fact question, which is why the harness
+below is built around them.
+
+**1. `services/membench/` — the harness.** memorybench's shape: pluggable provider, pluggable probe
+set, a checkpointed pipeline, and a report carrying accuracy AND latency AND context-tokens together
+(their MemScore, `95% / 120ms / 720tok`). One string on purpose — retrieval quality is trivially
+bought with a wider token budget, and tier 6's budget is the thing most likely to be widened chasing
+a number. Their INGEST/INDEXING/ANSWER phases are dropped: Porter's corpus is live and written by the
+real system, so loading a fixture would measure the fixture, and relevance is settled by the probe's
+own ground truth rather than by a judge model — which makes a run free, offline and deterministic.
+
+⚠️ **THEIR RECALL IS NOT RECALL.** memorybench derives the denominator from what was retrieved
+(`totalRelevant = max(1, relevantRetrieved)`), so recall can never fall below 1.0 on a hit and is
+identical to hit@k in every report they publish. That is exactly wrong for Porter's failure mode: the
+compliance probe in `embeddings.ts:16` returns rows, just not Clement, and would score a perfect
+recall. Ours uses the probe's declared denominator and reports `recallBasis:'ground_truth'`; where
+none is known it falls back to their number and says `'hit_proxy'`, so the two are never averaged
+silently. Pinned by `__tests__/membench-metrics.test.ts`.
+
+`scripts/memory-bench.ts` replaces `measure-paraphrase-miss.ts` as the thing to run before and after
+touching retrieval — same eight probes, same needles, so the 4/8 paraphrase-miss figure stays
+comparable, but every run is checkpointed and `--compare <runId>` diffs probe by probe. Also
+`--verify-needles`: a needle that no longer matches any row reports as a retrieval miss, and telling
+those two apart by hand costs more than the check.
+
+**2. `services/concept-retrieval.ts` — tier 6, extracted.** The benchmark must score the REAL ranking
+path; one that re-implements the query it measures drifts within a change and then reads as evidence.
+So the SQL, the AND-then-OR fallback, the vault boost and the RRF fusion moved out of
+`memory-injection.ts` and both readers call the same function. Not a second builder — the ranking step
+the injector already contained, given a name. One behaviour change, deliberate: a failing FTS query
+now returns `[]` instead of throwing. The throw used to unwind to the builder's outer catch, so ONE
+malformed search query dropped the ENTIRE context — identity, directives, everything — not just the
+concept tier. The least important of the six tiers was taking the other five with it.
+
+**3. `services/intellect/supersession.ts` — contradiction, not duplication.** supermemory's real
+claim is that a store which only accumulates gets worse: what makes it memory is knowing "I moved to
+SF" RETIRES "I live in NYC". Porter had no such thing. `memory-pruner.ts` retires at pg_trgm 0.85 and
+`consolidation.ts` merges at 0.6 — both LEXICAL. "Always deploy from main after CI passes" and "Never
+ship without Moe's sign-off, regardless of CI" score ~0.1 on trigrams, so neither is retired and BOTH
+inject into the same prompt. This finds those pairs: semantically close (cosine ≥ 0.72 on the
+embeddings we already have) but lexically distinct (trigram < 0.85, so the pruner's territory is left
+alone), then adjudicated by a model.
+
+⚠️ **WE DID NOT IMPORT THEIR RESOLUTION POLICY AND MUST NOT.** supermemory resolves by RECENCY, which
+is right for a user's own facts and catastrophic here: it would let a directive an agent wrote this
+morning retire a rule Moe set in June, silently, in a background job. `gateSupersession()` enforces
+PRECEDENCE OVER RECENCY — nothing below priority 90 may ever retire anything at or above it, no
+binding rule is retired in favour of a weaker one, cross-scope pairs are refused (a workspace rule and
+a project rule on one subject are usually a general case and its exception), and `moe-direct` rows are
+untouchable at the query, at the gate and at apply, because the DB trigger that seals them aborts the
+whole transaction — the fault that broke the nightly pruner from 2026-05-09 until PR-1. Pure function,
+27 tests in `__tests__/supersession.test.ts`.
+
+**PROPOSES, NEVER APPLIES.** Findings land in `memory_proposals` (kind='supersede', status='pending'),
+the queue the dream worker already writes to. A contradiction is a judgement call in a way a duplicate
+is not, and the cost of being wrong is a rule silently leaving every prompt. `scripts/supersession-scan.ts`
+defaults to a dry run; `--write` is required to record anything.
+
+**NOT WIRED TO THE SCHEDULER.** The scan costs one model call per candidate pair (capped at 40). If it
+should run nightly, add it to the `every_24h` cadence in `scheduler.ts` alongside the pruner —
+deliberately left as Moe's call, not a background bill that appeared on its own.
+
+Verified: `npx tsc --noEmit` clean; 330 tests / 186 pass / 0 fail (144 pre-existing `it.todo`), which
+includes `directive-scorer.test.ts` still green after the tier-6 extraction. NOT verified against live
+data — this session has no Postgres and no ollama, so the first real `memory-bench` run and the first
+`supersession-scan --dry-run` still need to happen on the box.
+
 ## 2026-09-03 - v6.160.8 - A hidden document stays hidden in search
 
 ymc's file scanner retired a private root (`dunross-crow-investments`) and `/reconcile` flipped all 43
