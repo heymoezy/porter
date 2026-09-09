@@ -216,3 +216,57 @@ injection builder selects `agent_notes` for the agent **with no `LIMIT`**
 (`memory-injection.ts:202`). So every non-raw injection reads a table growing by ~24 rows per
 agent per day, and that telemetry competes for the same 400-token tier as real learnings. Tom
 is raw so this is not his problem; it is Porter's own chat path and the personas'.
+
+---
+
+## Re-checked against master, 2026-09-09
+
+Written 09-01 against a master at v6.160.4. Master is now v6.160.8 and has shipped two of the things
+this document was arguing for. Re-read before acting on anything above.
+
+### Closed
+
+**The unread delta is no longer unread.** The "Correction" section above says the box serves its
+working tree and 12 uncommitted files sat there since 11-14 August, on exactly the subject of
+candidate #1. `v6.160.5` committed them ("Work found uncommitted for 18 days during a sweep of every
+working tree"), and the largest piece is the one predicted: timeout constants now derive from the
+adapter's exported ceiling instead of being re-typed by callers, so a shorter client budget no longer
+aborts the fetch while the subprocess lives on. The open question at the top of this document has an
+answer, and it was the answer it guessed.
+
+**Candidate #1's queueing half is fixed.** `v6.160.6` found something worse than this document
+described: `getQueue(_gatewayType?)` took the gateway name and IGNORED it, so all four gateways shared
+ONE lane at concurrency 1 and every model call on the box was serial. There are now per-(gateway,
+lane) queues, with `laneFor(req)` splitting interactive turns from `batch` workspace jobs, behind a
+global gate at `PORTER_BRIDGE_MAX_INFLIGHT` (default 3). A twelve-hour dev session no longer sits in
+front of Tom's turn.
+
+### Still open - and one of them is worse than it reads above
+
+**1. The streaming path still bypasses the gate entirely.** This document flagged it as an
+aggravation; it survives `v6.160.6` untouched. `dispatchWithQueue`, `selectWithFallback` and
+`dispatchWithFailover` all route through `runDispatch(...)`, which is what applies both the lane queue
+and the global `MAX_INFLIGHT` ceiling. `dispatchStream` (routing-engine.ts:633) does not - it calls
+`decision.adapter.stream(req, signal)` directly at :647.
+
+That matters more than it did on 09-01, because `v6.160.6` now rests a safety argument on that
+ceiling: its changelog says the cap "is what makes the lanes safe rather than a repeat" of the 58-hour
+token burn. The cap does not bound streamed dispatches, and interactive chat is the streaming path. So
+the ceiling bounds the background work and not the traffic most able to arrive in bursts.
+
+**2. `CPUQuota=180%` is unchanged.** `ops/systemd/porter-fastify.service` still carries the May
+sizing, set when a workspace dispatch could not outlive 5 minutes and jobs ran one at a time. A spawned
+`claude` stays in the unit's cgroup, so every dev session, dream, health probe and Tom's live turn
+still share one 180% quota and get throttled together when it is exceeded. Lanes separate them
+logically; the cgroup does not.
+
+**3. `reclaimOrphanedJobs()` still runs only at startup.** `job-executor.ts:502`, called from
+`start()` and nowhere else. A wedged session holds one of four slots for up to 12h and nothing notices
+until a restart.
+
+### What to do with this document
+
+Items 1-3 are the residue and 1 is the one to take first - it is a real hole in a guardrail that is
+currently believed to be closed. Everything else here has either shipped or is superseded by the
+`bridge_dispatch_log` queries in "Settle it in five minutes", which are still the right way to confirm
+a cause rather than argue one.
