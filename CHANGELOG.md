@@ -1,3 +1,45 @@
+## 6.162.0 - 2026-09-09
+
+Imported the method, not the runtime, from supermemoryai/memorybench and supermemoryai/supermemory
+(both MIT). Their local engine is a second store on a second port with its own graph DB, against "one
+schema, one truth" and against hot-context.ts's invariant that Porter's DB is the source of truth.
+
+services/membench/ is a benchmark harness in memorybench's shape: pluggable provider, pluggable probe
+set, checkpointed pipeline, MemScore reported as accuracy AND latency AND context-tokens in one string
+so a retrieval win bought with a wider budget cannot read as a straight improvement. INGEST/INDEXING/
+ANSWER dropped — the corpus is live, so a fixture would measure the fixture, and relevance comes from
+each probe's ground truth rather than a judge model, making a run free, offline and deterministic.
+Their recall is NOT ported: memorybench derives the denominator from what was retrieved, so recall can
+never fall below 1.0 on a hit and equals hit@k in every report they publish. Ours uses the probe's
+declared denominator and tags recallBasis 'ground_truth', falling back to their number as 'hit_proxy'
+where none is known so the two are never averaged silently.
+
+scripts/memory-bench.ts replaces measure-paraphrase-miss.ts — same eight probes and needles so the 4/8
+figure stays comparable, runs checkpointed, --compare diffs probe by probe, --verify-needles separates
+a stale probe from a real miss.
+
+services/concept-retrieval.ts extracts tier 6 so the benchmark scores the real ranking path rather
+than a copy that would drift and then read as evidence. Both readers call one function; not a second
+builder. One deliberate behaviour change: a failing FTS query returns [] instead of throwing, where
+the throw unwound to the builder's outer catch and dropped the ENTIRE context — identity, directives,
+everything — over one malformed query.
+
+services/intellect/supersession.ts adds contradiction detection, which the lexical passes cannot do:
+the pruner retires at pg_trgm 0.85 and consolidation merges at 0.6, so two rules that conflict in
+meaning while sharing no trigrams both survive and both inject. Pairs are semantically close (cosine
+>= 0.72) but lexically distinct (< 0.85, leaving the pruner's territory alone), then adjudicated.
+supermemory's recency-wins resolution is NOT ported — it would let a directive an agent wrote this
+morning retire a rule Moe set in June. gateSupersession() enforces precedence over recency: nothing
+below priority 90 retires anything at or above it, no binding rule falls to a weaker one, cross-scope
+pairs refused, moe-direct untouchable at query, gate and apply (the trigger that seals them aborts the
+transaction — the fault that broke the nightly pruner from 2026-05-09 until PR-1). Proposes only;
+findings land in memory_proposals as pending and the scan defaults to a dry run. Not scheduled: one
+model call per candidate pair is a recurring bill and that is Moe's call.
+
+51 new tests. Porter tsc 0. NOT verified against live data — the authoring session had no Postgres and
+no ollama, so the first real memory-bench run and supersession-scan --dry-run still need to happen on
+the box.
+
 ## 6.160.6 - 2026-09-01
 
 dispatch-queues.ts held ONE PQueue at concurrency 1 and getQueue(_gatewayType?) ignored the

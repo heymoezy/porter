@@ -22,6 +22,18 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.162.0',
+    date: '2026-09-09',
+    title: 'Porter can now tell whether its memory got better',
+    bullets: [
+      'Until now there was no way to answer "did that change help". Memory could be altered and the only evidence was whether it felt sharper afterwards. There is now a proper measurement that runs against the real memory, scores whether the right thing came back, and saves each run so two of them can be compared directly.',
+      'It reports three numbers together and deliberately refuses to report just one: how often it found the right thing, how long that took, and how much of the prompt it used up. Getting better at recall is easy if you are allowed to spend more of the prompt on it, and a single score would hide that trade.',
+      'The measurement borrows from a public benchmark, but not its definition of success. That one works out its own pass mark from what it happened to find, so it can never score badly for missing something. Ours is told in advance what the right answer is, which is the only version of the question worth asking.',
+      'Separately: two operating rules that contradict each other could both sit in memory and both get used. The existing cleanup only catches rules that are worded almost identically, so a genuine conflict written in different words survived and the model quietly picked one. Conflicts are now found by meaning.',
+      'Nothing is deleted automatically. A conflict is a judgement call, so it is raised for review rather than acted on, and Moe\u2019s own rules can never be retired in favour of a weaker one no matter how recently the weaker one was written.',
+    ],
+  },
+  {
     version: '6.160.8',
     date: '2026-09-03',
     title: 'A hidden document stays hidden in search',

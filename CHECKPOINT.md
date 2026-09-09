@@ -1,4 +1,17 @@
-## 2026-09-09 - v6.161.0 - Memory can now be measured, and a rule can be contradicted
+## 2026-09-09 - v6.162.0 - Memory can now be measured, and a rule can be contradicted
+
+⚠️ **THIS WAS v6.161.0 UNTIL THE SWEEP.** `claude/dev-backlog-review-9etzkn` claimed 6.161.0 on
+08-31 and is still unmerged, so two branches carried the same number and the same package.json bump.
+The earlier claim keeps it. Also caught in the same sweep: this release originally shipped with a
+CHECKPOINT entry and a version bump and NOTHING ELSE — no CHANGELOG, no `porter-releases.ts`. Same
+ceremony violation that branch documents, same root cause: `core.hooksPath` is LOCAL config, a fresh
+clone does not carry it, so `deploy/git-hooks/pre-commit` was never wired here and the gate that
+refuses exactly this did not exist to refuse it. Both entries are added below.
+
+⚠️ **DO NOT WIRE `core.hooksPath` IN A CLOUD CLONE.** The pre-commit hook shells out to
+`$HOME/projects/_ops/bin/secret-scan.sh` and hard-exits 1 when it is missing — which it is anywhere
+but Moe's box. Wiring it in an ephemeral container blocks every commit.
+
 
 Imported from `supermemoryai/memorybench` and `supermemoryai/supermemory` (both MIT). Not the runtime
 — their local engine is a second store on a second port with its own graph DB, against "one schema,
