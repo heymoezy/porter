@@ -20,7 +20,6 @@ import crypto from 'crypto';
 const POLL_INTERVAL_MS = 2000;
 const MAX_ATTEMPTS = 3;
 const DEADLINE_CHECK_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
-const CALENDAR_SYNC_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const HEALTH_PROBE_INTERVAL = 15; // 15 × 2000ms = 30s
 const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
 const MEMORY_VALIDATION_INTERVAL = 900;  // 900 ticks x 2s = 30 min — validate memory references

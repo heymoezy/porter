@@ -32,8 +32,18 @@ describe('classifyError()', () => {
     assert.equal(classifyError(new Error('500 internal server error')), 'persistent');
   });
 
-  it('classifies timeout as persistent', () => {
-    assert.equal(classifyError(new Error('timeout')), 'persistent');
+  // Changed deliberately: 'persistent' meant a timed-out gateway was never tried
+  // again, which is the reported symptom behind Tom's timeout failures. Timeouts
+  // are their own class now, retried once and only when the budget can hold it.
+  it('classifies timeout as timeout', () => {
+    assert.equal(classifyError(new Error('timeout')), 'timeout');
+    assert.equal(classifyError(new Error('Claude CLI timed out after 300000ms')), 'timeout');
+  });
+
+  // The breaker's errorFilter is isTransientError: true there means "do not hold
+  // this against the gateway". A gateway that times out SHOULD be held to it.
+  it('does not treat a timeout as transient, so the breaker still counts it', () => {
+    assert.equal(isTransientError(new Error('Claude CLI timed out after 300000ms')), false);
   });
 });
 

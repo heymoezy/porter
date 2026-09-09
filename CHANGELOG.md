@@ -1,3 +1,61 @@
+## v6.161.0 (2026-08-31) — inbound messages that were dropped, timeouts that were never retried, and a calendar that could not run
+
+Three changes from a backlog session with Moe.
+
+**WhatsApp intake dropped messages, two ways** (`routes/v1/webhooks-whatsapp.ts`, dev #108). The
+handler read exactly `entry[0].changes[0].messages[0]`, then bailed on `if (!from || !messageText)`.
+
+- Meta batches. Three messages sent quickly arrive in ONE POST; the second and third were discarded.
+  All three levels are flattened now — entries, changes, messages — and handled in order.
+- Only `text` carries `text.body`. Photo, voice note, forwarded PDF, quick-reply tap: empty body,
+  treated as a status update, gone. Each type renders a description now. Reactions, stickers and
+  unsupported messages are archived but deliberately NOT routed — a thumbs-up is not a question.
+
+Both ended identically: a 200 to Meta, delivery ticks for the sender, no reply. Per-message error
+isolation so one poisoned message does not cost the ones behind it, and anything still undeliverable
+is written to `intellect_events` as `whatsapp.inbound_dropped`. Meta still gets a 200 in every case:
+a non-200 replays the WHOLE batch, duplicating what succeeded to retry what did not. 14 tests.
+
+**Timeouts were classified as permanent** (`services/bridge/retry.ts`, dev #127/#113).
+`classifyError()` put a timeout in `'persistent'`, alongside 500 and ECONNREFUSED, so `withRetry()`
+threw immediately and a gateway that timed out was never tried again.
+
+Timeout is its own class now, retried at most ONCE and only when the chain's shared clock can hold a
+further attempt as long as the one that just failed. No backoff before a timeout retry — the attempt
+already spent minutes.
+
+Three things deliberately NOT changed:
+- `isTransientError()` still returns false for a timeout. It is the circuit breaker's `errorFilter`,
+  where true means "do not hold this against the gateway", and a gateway that times out should be.
+- A budget timeout (`[failover:budget-timeout]`) is never retried — it is the chain's own clock
+  refusing, and retrying is exactly what it refused.
+- `DEFAULT_CHAIN_BUDGET_MS` stays 300s. It equals one adapter ceiling, so on the default chat path a
+  timeout consumes the whole budget and the retry is correctly refused. Raising it is not free:
+  `job-executor`'s `DELEGATION_JOB_TIMEOUT_MS` is 300s, and a server ceiling above the client's
+  wall-clock is the precise defect v6.159.0 fixed. That trade is Moe's.
+
+So the retry fires where budgets are already generous — `/bridge/agent-message` admits a loopback
+`budgetMs` up to 30 min. Where it cannot fire it now NAMES the budget left and the time an attempt
+needs. 7 tests.
+
+**The calendar was in two places, and this one could not run** (`services/calendar.ts`, deleted).
+Moe: *"let's make sure calendar is one place — whenever you find access in more than one place always
+try and consolidate so we don't have competing searches."*
+
+Nothing in Porter has ever `INSERT`ed into `workspace_connections` — every reference is a `SELECT` —
+so the connected `google_calendar` row it required, carrying access and refresh tokens, had to be
+placed by hand. No OAuth flow, no callback, no admin route. It was additionally gated behind
+`FEATURE_EXTERNAL_CONNECTIONS`, off by default. Had it run, it read `calendarId: 'primary'` from the
+FIRST connected row into a table nothing reads.
+
+Removed with the scheduler's 60s tick and `dispatchCalendar` (its provider-map entry and union member
+with it). No caller anywhere passed `service:'calendar'`. The `calendar_events` TABLE stays —
+dropping it is a data decision. CLAUDE.md records why it went so it is not rebuilt.
+
+The calendar Moe asks about lives in ymc.capital (`lib/tom-google.ts`), which now reads
+moe@ymc.partners AND moe@themozaic.com through each account's own credentials.
+
+Full suite: 283 tests, 0 failures. Typecheck clean.
 ## 6.160.6 - 2026-09-01
 
 dispatch-queues.ts held ONE PQueue at concurrency 1 and getQueue(_gatewayType?) ignored the

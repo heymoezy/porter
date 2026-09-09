@@ -15,7 +15,7 @@ export type GatewaySource = 'auto_detected' | 'env_bootstrap' | 'manual';
 
 export type GatewayAuthMethod = 'none' | 'bearer_token' | 'api_key';
 
-export type ErrorClass = 'transient' | 'persistent' | 'configuration';
+export type ErrorClass = 'transient' | 'persistent' | 'configuration' | 'timeout';
 export type CircuitState = 'closed' | 'open' | 'half_open';
 
 // ── Result interfaces ─────────────────────────────────────────────────────────

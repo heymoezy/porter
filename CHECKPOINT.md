@@ -1,3 +1,77 @@
+## 2026-08-31 - v6.161.0 - Messages that arrived and were never answered
+
+⚠️ **MERGED FORWARD 2026-09-09.** This entry is dated 08-31 but sits above 09-03: it is kept at
+the top because it is the newest release BY VERSION (6.161.0 > 6.160.8), which is the order
+`porter-releases.ts` mandates. Master shipped 6.160.4–6.160.8 while this branch sat unmerged, and
+the branch's `porter-releases.ts` diff would have DELETED all five from the announce feed. The
+merge restores them beneath this one. Bridge conflict in `routing-engine.ts` resolved to keep both
+sides: master's per-(gateway, lane) `runDispatch` AND this branch's retry-on-timeout budget.
+
+Backlog session with Moe. Three changes, and a ceremony violation to own first.
+
+⚠️ **THE RELEASE GATE NEVER RAN.** `0d416f8`, `b6621e8` and `07dff53` all landed with no version
+bump, no CHANGELOG entry and no `porter-releases.ts` entry. Not a decision — `core.hooksPath` is
+LOCAL config and a fresh clone does not carry it, so `deploy/git-hooks/pre-commit` was never wired
+here and the gate that refuses exactly this did not exist to refuse it. This entry is the catch-up.
+The hook's own header names the failure mode it was built for: eight releases (6.85 → 6.92) bumped
+`package.json` with no feed entry and the announcer kept re-announcing v6.84.0, because "a warning
+that never blocks is a warning nobody reads". It blocks now — but only where it is wired, and an
+unwired hook is a warning that does not even print.
+
+**Inbound WhatsApp messages were dropped, two ways (dev #108).** `entry[0].changes[0].messages[0]`,
+then `if (!from || !messageText) return 200`.
+- Meta batches: three messages sent quickly arrive in ONE POST and the 2nd and 3rd were discarded.
+- Only `text` carries `text.body`, so photos, voice notes, forwarded PDFs and quick-reply taps were
+  all treated as status updates.
+
+Both ended the same way — 200 to Meta, delivery ticks for the sender, silence from Tom. All three
+levels are flattened now, non-text types render a description, reactions and stickers are archived
+but deliberately not routed, each message is isolated so one bad one does not cost the rest, and
+anything still undeliverable lands in `intellect_events` as `whatsapp.inbound_dropped`. Meta still
+gets a 200 in every case: a non-200 replays the WHOLE batch.
+
+**A timeout was classified as permanent (dev #127/#113).** `classifyError()` filed timeouts with 500
+and ECONNREFUSED, so a gateway that timed out was never retried. Timeout is its own class now,
+retried ONCE, gated on the chain's remaining clock, with no backoff (the attempt already spent
+minutes).
+
+⚠️ **AND IT IS INERT ON THE DEFAULT CHAT PATH, DELIBERATELY.** `DEFAULT_CHAIN_BUDGET_MS` is 300s and
+the claude adapter's ceiling is also 300s, so one timeout consumes the whole budget and the retry is
+correctly refused. Raising the budget is NOT free: `job-executor`'s `DELEGATION_JOB_TIMEOUT_MS` is
+300s, and a server ceiling above the client's wall-clock is the precise defect v6.159.0 fixed —
+raising one without the other re-breaks delegation. Left for Moe to decide. Where the retry cannot
+fire, the error now names the budget left and the time an attempt needs, rather than failing mute.
+
+**The calendar was in two places (Moe: "make sure calendar is one place").** `services/calendar.ts`
+is deleted. It could never have run: nothing in Porter has ever INSERTed into `workspace_connections`
+— every reference is a SELECT — so the token-bearing row it needed had to be placed by hand, and it
+sat behind `FEATURE_EXTERNAL_CONNECTIONS` (off by default). Had it run it read the FIRST connection's
+primary calendar into a table nothing reads. Not competing on search, then — worse: a dead second
+implementation that LOOKED like the calendar, which is how a third gets built beside it. Same shape
+as `routing_rules` and `memory-injection-v2`, handled the same way. The `calendar_events` TABLE
+stays; dropping it is a data decision. CLAUDE.md records why the code went.
+
+The one calendar now lives in ymc.capital (`lib/tom-google.ts`), reading moe@ymc.partners AND
+moe@themozaic.com through each account's own credentials, and no longer proposing meeting times over
+the diary it could not previously see.
+
+**Verified here:** 283 tests / 0 failures. The in-repo release gate
+(`release-kit/cli.ts gate`) passes on the staged set: version + changelog + feed present.
+
+⚠️ **`npm run build` DOES NOT EXIT CLEAN HERE, and it is not this change.** One error, unchanged from
+the base: `tool-detector.ts` cannot find `puppeteer`, which is not in `package.json` at all — an
+optional runtime probe that resolves on the box and not in a clone. Confirmed pre-existing by
+stashing every edit and re-running. `dist/` still emits. Calling that "green" would have been a lie
+of exactly the kind CLAUDE.md's verification checklist exists to stop, so: step 1 of the ship process
+is RED here for a reason that predates the session, and wants one clean run on the box.
+
+Also worth knowing: the container had NO `node_modules` on arrival, so the first `tsc --noEmit` of
+the session passed while resolving nothing. A green check in a fresh clone proves nothing until
+`npm install` has run.
+
+**NOT VERIFIED — no live box.** No restart, no `/health`, no psql. Steps 2-3 of the ship process have
+not happened, so `/health` does not report 6.161.0 anywhere yet. The WhatsApp intake fix in
+particular has never seen a real Meta payload.
 ## 2026-09-03 - v6.160.8 - A hidden document stays hidden in search
 
 ymc's file scanner retired a private root (`dunross-crow-investments`) and `/reconcile` flipped all 43
