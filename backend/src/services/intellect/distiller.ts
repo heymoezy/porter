@@ -133,6 +133,13 @@ export async function runDistiller(opts: { agent?: string } = {}): Promise<Disti
   const eps = (await pool.query(
     `SELECT summary, session_id FROM episodes
       WHERE scope = 'agent' AND scope_id = $1
+        -- ⚠️ PRIVATE EPISODES NEVER REACH THE DISTILLER. A concept is durable,
+        -- firm-level and gets recited wherever the agent speaks, and the model
+        -- is handed every episode in ONE prompt with no mapping from a lesson
+        -- back to the episodes that produced it — so once private material is
+        -- in the input there is no way to attribute or withhold the output.
+        -- Excluding at the source is the only point where it can still be done.
+        AND private = false
         AND created_at > EXTRACT(EPOCH FROM NOW()) - ($2::int * 86400)
       ORDER BY salience DESC NULLS LAST, created_at DESC
       LIMIT $3`,

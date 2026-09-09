@@ -1,5 +1,12 @@
 ## 2026-08-31 - v6.161.0 - Messages that arrived and were never answered
 
+⚠️ **MERGED FORWARD 2026-09-09.** This entry is dated 08-31 but sits above 09-03: it is kept at
+the top because it is the newest release BY VERSION (6.161.0 > 6.160.8), which is the order
+`porter-releases.ts` mandates. Master shipped 6.160.4–6.160.8 while this branch sat unmerged, and
+the branch's `porter-releases.ts` diff would have DELETED all five from the announce feed. The
+merge restores them beneath this one. Bridge conflict in `routing-engine.ts` resolved to keep both
+sides: master's per-(gateway, lane) `runDispatch` AND this branch's retry-on-timeout budget.
+
 Backlog session with Moe. Three changes, and a ceremony violation to own first.
 
 ⚠️ **THE RELEASE GATE NEVER RAN.** `0d416f8`, `b6621e8` and `07dff53` all landed with no version
@@ -65,6 +72,144 @@ the session passed while resolving nothing. A green check in a fresh clone prove
 **NOT VERIFIED — no live box.** No restart, no `/health`, no psql. Steps 2-3 of the ship process have
 not happened, so `/health` does not report 6.161.0 anywhere yet. The WhatsApp intake fix in
 particular has never seen a real Meta payload.
+## 2026-09-03 - v6.160.8 - A hidden document stays hidden in search
+
+ymc's file scanner retired a private root (`dunross-crow-investments`) and `/reconcile` flipped all 43
+of its locations absent. The graph route hid the 36 documents; `porter_search_vault` kept returning
+them, because `mcp/vault-lookup.ts` filtered `status <> 'archived'` only and the tombstone is a
+location state, not a node status. Same class as 2026-07-14: two readers, one rule, one reader without
+it. `lib/vault-visibility.ts` now holds `visibleNodeSql()` (archived OR file-backed with every location
+absent), and both the graph query and the search query call it. Verified: the search for the retired
+root returns nothing from under it; db-backed documents unaffected.
+
+Hooks live in `deploy/git-hooks` (`core.hooksPath`), not `.git/hooks`; the post-commit there announced
+this release to the group.
+
+## 2026-09-01 - v6.160.7 - A memory can be marked as one that must not become a lesson
+
+⚠️ **THE DISTILLER READ EVERY EPISODE, INCLUDING PRIVATE ONES.** A concept is durable, firm-level and
+gets recited wherever the agent speaks, so private material reaching the distiller comes back out in
+a room the person never chose.
+
+⚠️ **AND IT CANNOT BE UNPICKED AFTERWARDS.** `distiller.ts` hands the model EVERY episode in ONE
+prompt and parses back a set of lessons with **no mapping from a lesson to the episodes that
+produced it**. Tainting per concept is impossible; tainting the whole run would mark nearly every
+concept private and destroy the feature. Excluding at the source is the only point where the
+decision can still be made.
+
+`episodes.private` (migration applied), settable on the agent-memory write, excluded by the
+distiller (`AND private = false`), and returned on recall beside `session_id`.
+
+⚠️ **PORTER DOES NOT DECIDE WHAT IS PRIVATE.** The caller marks the write. Porter cannot know which
+of an agent's rooms is which, and the same material is fine in one and not another — the same
+division as v6.160.3, where Porter reports provenance and the consumer holds the policy.
+
+⚠️ **CHANNEL WOULD HAVE BEEN THE WRONG SIGNAL.** Excluding a whole chat was the obvious fix and it is
+too blunt: most of what is said in a direct chat is ordinary work the agent SHOULD learn from.
+ymc.capital marks the individual turn that actually read a private project.
+
+Verified live: written with `private:true` → stored `t`, the distiller's own predicate returns 0 for
+it, recall hands back `private` and `session_id`, probe deleted.
+
+Default is false, so nothing changes for a caller that does not ask.
+
+## 2026-09-01 - v6.160.6 - every model call on this box was running one at a time
+
+Found while specifying the Lau Wang deal room: a buyer-facing question needs a predictable
+latency, and the bridge could not give one.
+
+⚠️ **`getQueue(_gatewayType?)` TOOK THE GATEWAY TYPE AND IGNORED IT.** One module-level
+`PQueue({concurrency: 1})` served claude_cli, codex_cli, grok_cli and antigravity_cli alike, so
+every bridge dispatch on the machine was strictly serial. A council fan-out to codex and grok
+"in parallel" ran sequentially. `routing-engine.ts` documents the method as "Dispatch through
+per-gateway concurrency queue" and it never was one; the underscore in the parameter name is the
+author recording the intent.
+
+⚠️ **AND `WORKSPACE_TIMEOUT_MS` IS 43,200,000ms.** Twelve hours, on that serial queue. One
+workspace job could block Tom's next chat turn, ops-chat, Recall and every interactive question
+for half a day.
+
+**The shape is copied, not invented**: `task-executor.ts:46` already keeps a
+`Map<string, PQueue>` for exactly this, 40 lines away in a sibling file.
+
+- Lane queues per `(gateway, lane)`, concurrency 1, so ordering within a lane survives.
+- The lane is derived at the call site from `req.workspace`, which is the SAME field
+  `resolveCwd()` uses to choose the adapter's ceiling. One signal, so the lane and the timeout
+  cannot disagree.
+- ⚠️ **A GLOBAL IN-FLIGHT CAP, and it is not decoration.** Removing the serial job queue in
+  `1d04e859` is what let two personas on thirty-second heartbeats run ~285 Claude CLI cold boots
+  an hour on Opus for 58 hours (`_ops/incidents/2026-08-14-token-burn`). Serialisation was
+  masking a runaway. `PORTER_BRIDGE_MAX_INFLIGHT` defaults to 3 on a 4 vCPU box.
+  Checked before shipping: 0 of 9 personas currently have heartbeats enabled.
+
+**8 checks in `backend/scripts/verify-dispatch-lanes.ts`**, and they assert the two things that
+were previously impossible: two gateways finishing in the time of one, and a short interactive
+call overtaking a long batch job on the same gateway. Plus that the cap actually holds (peak 3)
+and that it is not accidentally serial again (peak > 1).
+
+Porter tsc 0. **Committed, NOT restarted** — porter-fastify is the backbone for Tom and every
+model dispatch, so the bounce is Moe's call. Nothing changes until it restarts.
+
+## 2026-09-01 - v6.160.5 - eighteen days of finished work was sitting in a dirty working tree
+
+⚠️ **NOT AUTHORED IN THIS SESSION.** Found during a sweep of every git tree on the box, run
+because a session specifying the Lau Wang deal room needed the bridge dispatch area and found it
+mid-edit. Twelve tracked files, 233 insertions, last touched 11 to 14 August. It was finished and
+it typechecked; it had simply never been committed, so it existed in exactly one place and any
+`git checkout` would have taken it.
+
+What it does, verified by reading the diff rather than the ledger:
+
+- `claude-cli.ts` exports `TIMEOUT_MS`, and `job-executor.ts` derives `DELEGATION_JOB_TIMEOUT_MS`
+  and `HEARTBEAT_JOB_TIMEOUT_MS` from it instead of the bare literals 300000 and 120000. The
+  file's own comment records that both copies had already drifted short once, and a short client
+  budget aborts the fetch while this adapter keeps the subprocess alive to its own ceiling,
+  leaking an orphan for the difference. `WORKSPACE_TIMEOUT_MS` was exported for this reason and
+  never drifted again.
+- `model-catalog.ts` warns once per unknown model, by name, naming `MODEL_METADATA` as the place
+  to add it, rather than silently pricing it at zero. Plumbed through `cost-metrics.ts`,
+  `dispatch-scorer.ts` and `usage-collector.ts`.
+- `job-executor.ts` takes a heartbeat interval from the agent's own cron where it has one, falling
+  back to the template.
+- `migrate-consolidated.ts` stops recreating the three abandoned Forge tables and re-seeding
+  `tick_interval_ms` on every boot. The tables were already dropped by hand on 2026-08-14 per
+  `.coordination/SESSIONS.md`; this stops them coming back.
+
+⚠️ Untracked files in that tree were deliberately NOT committed: `ops/backups/`,
+`backend/src/scripts/`, `ops/ledger-snapshot.py`, `ops/repair-intel-feed-ms-timestamps.sql`.
+Backups and one-off repair SQL do not belong in the repo, and I did not write them.
+
+Porter tsc 0. **Committed, NOT restarted**: porter-fastify is the backbone for Tom and every
+model dispatch, and bouncing it mid-session is the operator's call.
+
+## 2026-09-01 - v6.160.4 - Removed a calendar sync that could never have run
+
+The Porter half of the ymc v2.144.x calendar work, which the phone session proposed and never landed
+anywhere. **Verified dead before deleting, not asserted:**
+
+- `workspace_connections` — **0 rows**, and there is no INSERT anywhere in Porter. The credentials
+  row `getCalendarClient` reads had to be placed by hand, and never was.
+- `calendar_events` — **0 rows**, and the deleted file was the only writer.
+- Gated on `featureFlags.externalConnections`, i.e. `FEATURE_EXTERNAL_CONNECTIONS === 'true'`, which
+  is set in neither `porter.env` nor `backend/.env`.
+
+Deleted `services/calendar.ts` and its two call sites: the 60-second sync tick in `scheduler.ts` and
+the `calendar` channel in `external-dispatcher.ts` (whose `service` union no longer accepts it, so a
+caller that tries fails the typecheck rather than at runtime). `calendar_events` is LEFT IN PLACE —
+dropping a table is destructive and is its own decision, and an empty table costs nothing.
+
+⚠️ **FOUND WHILE DOING THIS: PORTER HAS 12 UNCOMMITTED FILES, LAST TOUCHED 11-14 AUGUST, AND THEY
+ARE LIVE.** 233 insertions that exist in no commit. This is not an inference from timestamps —
+`porter-fastify` runs `npx tsx src/index.ts`, so it loads the working tree directly, and the service
+restarted at 06:12 today. The job-executor timeout-derivation work is among it. `dist/` is a stale
+artifact from 31 Aug and is not what runs.
+
+They are another session's and were not touched, staged or committed here. **This needs Moe:** the
+work is three weeks old, it is running in production, and it is one `git checkout` away from being
+gone with no record of what it was.
+
+Not restarted as part of this change beyond the verify below — the deletion is unreachable code, so
+nothing behaves differently either way.
 
 ## 2026-08-31 - v6.160.3 - Recall now says which conversation a memory came from
 

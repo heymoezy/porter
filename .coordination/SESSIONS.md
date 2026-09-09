@@ -1322,3 +1322,17 @@
   index.ts startup). ONE real dream run proven: 108 corpus items, completed on codex_cli after
   claude_cli timed out, 2 pending proposals traceable to 7 real contact notes. Silo left DISABLED.
   Nothing committed, pushed or deployed — operator runs the ship ceremony.
+
+## 2026-08-14 03:00–04:20 UTC — session f85663ef (token-burn incident)
+- Files touched: `backend/src/db/migrate-consolidated.ts` ONLY (removed forge_pipeline /
+  forge_station_runs / forge_settings creation, indexes and seeds — the migration was recreating
+  the abandoned Forge tables and re-seeding `tick_interval_ms=30000` on every boot).
+- DB: dropped the 3 forge tables; deleted 7 personas (warden, vigil, ledger, compass,
+  forge-anvil, forge-quill, forge-sage); set `heartbeat_enabled=0` on all remaining personas.
+  Backups: `_ops/incidents/2026-08-14-token-burn/{forge-tables-backup.sql,personas-deleted-backup.csv}`.
+- Why: warden + vigil held `heartbeat_cron = */30 * * * * *`. After commit 1d04e859 removed the
+  serial job queue, they ran ~285 Claude CLI cold boots/hour on Opus for 58 hours. Warden was
+  ticking an empty pipeline (0 rows since 2026-04-13).
+- Porter tsc 0. Restarted and verified: forge tables do NOT come back, 9 personas remain, 0 dispatches.
+- Status: **DONE** — NOT committed. Other sessions have uncommitted work in this repo; operator runs
+  the ship ceremony.

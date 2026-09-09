@@ -27,27 +27,60 @@ interface ModelMetadata {
 }
 
 const MODEL_METADATA: Record<string, ModelMetadata> = {
+  // Context windows and pricing verified against the Anthropic model catalog
+  // 2026-08-13. Every Claude model from the 4.6 generation on has a 1M context
+  // window — the 200000 values previously here predate that and were starving
+  // session-registry's token_budget (see note on DEFAULT_METADATA below).
+  'claude-fable-5': {
+    capabilities: ['coding', 'writing', 'analysis', 'reasoning'],
+    contextWindow: 1000000,
+    pricingInputPerM: 10.0,
+    pricingOutputPerM: 50.0,
+    benchmarkScores: {},
+  },
+  'claude-opus-5': {
+    capabilities: ['coding', 'writing', 'analysis', 'reasoning'],
+    contextWindow: 1000000,
+    pricingInputPerM: 5.0,
+    pricingOutputPerM: 25.0,
+    benchmarkScores: {},
+  },
+  'claude-opus-4-8': {
+    capabilities: ['coding', 'writing', 'analysis', 'reasoning'],
+    contextWindow: 1000000,
+    pricingInputPerM: 5.0,
+    pricingOutputPerM: 25.0,
+    benchmarkScores: {},
+  },
   'claude-opus-4-7': {
     capabilities: ['coding', 'writing', 'analysis', 'reasoning'],
-    contextWindow: 200000,
-    pricingInputPerM: 15.0,
-    pricingOutputPerM: 75.0,
+    contextWindow: 1000000,
+    pricingInputPerM: 5.0,
+    pricingOutputPerM: 25.0,
     benchmarkScores: {},
   },
   'claude-opus-4-6': {
     capabilities: ['coding', 'writing', 'analysis', 'reasoning'],
-    contextWindow: 200000,
-    pricingInputPerM: 15.0,
-    pricingOutputPerM: 75.0,
+    contextWindow: 1000000,
+    pricingInputPerM: 5.0,
+    pricingOutputPerM: 25.0,
     benchmarkScores: {},
   },
-  'claude-sonnet-4-6': {
+  'claude-sonnet-5': {
     capabilities: ['coding', 'writing', 'analysis'],
-    contextWindow: 200000,
+    contextWindow: 1000000,
     pricingInputPerM: 3.0,
     pricingOutputPerM: 15.0,
     benchmarkScores: {},
   },
+  'claude-sonnet-4-6': {
+    capabilities: ['coding', 'writing', 'analysis'],
+    contextWindow: 1000000,
+    pricingInputPerM: 3.0,
+    pricingOutputPerM: 15.0,
+    benchmarkScores: {},
+  },
+  // Haiku 4.5 is the one current Claude model still at 200K.
   'claude-haiku-4-5': {
     capabilities: ['coding', 'writing'],
     contextWindow: 200000,
@@ -64,6 +97,12 @@ const MODEL_METADATA: Record<string, ModelMetadata> = {
   },
 };
 
+// A null contextWindow is not cosmetic: it lands in models.context_window,
+// which routing-engine reads as the session's token_budget. Budget 0 makes
+// session-registry compute contextPct = 0 forever, so the 70%/85% compression
+// thresholds never fire and the session grows unbounded. Any model that falls
+// through to this default is therefore an UNMONITORED session — warn loudly
+// rather than degrade in silence.
 const DEFAULT_METADATA: ModelMetadata = {
   capabilities: ['chat'],
   contextWindow: null as unknown as number,
@@ -71,6 +110,8 @@ const DEFAULT_METADATA: ModelMetadata = {
   pricingOutputPerM: null,
   benchmarkScores: {},
 };
+
+const warnedUnknownModels = new Set<string>();
 
 /**
  * Resolve metadata for a model name.
@@ -83,6 +124,16 @@ function lookupMetadata(modelName: string): ModelMetadata {
     if (modelName.startsWith(key) || key.startsWith(modelName)) {
       return meta;
     }
+  }
+
+  // Warn once per process per model — this runs on every catalog refresh.
+  if (!warnedUnknownModels.has(modelName)) {
+    warnedUnknownModels.add(modelName);
+    console.warn(
+      `[model-catalog] No metadata for model "${modelName}" — context_window will be NULL, ` +
+      `so sessions on it get token_budget 0 and NEVER trigger context compression. ` +
+      `Add an entry to MODEL_METADATA in model-catalog.ts.`,
+    );
   }
 
   return DEFAULT_METADATA;

@@ -9,7 +9,11 @@
 import { pool } from '../../db/client.js';
 import { createAdapter } from './adapters/index.js';
 import { calculateCostUsd } from './model-catalog.js';
-import { getQueue } from './dispatch-queues.js';
+import { runDispatch, type DispatchLane } from './dispatch-queues.js';
+
+/** The lane a request belongs in. `req.workspace` is the same field resolveCwd()
+ *  uses to pick the adapter's ceiling, so the lane and the timeout cannot disagree. */
+const laneFor = (req: { workspace?: unknown }): DispatchLane => (req?.workspace ? 'batch' : 'interactive');
 import { buildContextStats } from '../context-stats-collector.js';
 import { getBreaker } from './circuit-breaker-registry.js';
 import { withRetry } from './retry.js';
@@ -434,9 +438,9 @@ export class RoutingEngine {
     decision: RoutingDecision,
     req: BridgeDispatchRequest,
   ): Promise<BridgeDispatchResult> {
-    return getQueue(decision.gatewayRow.type).add(
+    return runDispatch(decision.gatewayRow.type, laneFor(req),
       () => decision.adapter.dispatch(req),
-    ) as Promise<BridgeDispatchResult>;
+    );
   }
 
   /**
@@ -466,9 +470,9 @@ export class RoutingEngine {
 
     try {
       const result = await withRetry(() =>
-        getQueue(decision.gatewayRow.type).add(() =>
-          breaker.fire(async () => decision.adapter.dispatch(req))
-        ) as Promise<BridgeDispatchResult>,
+        runDispatch(decision.gatewayRow.type, laneFor(req), () =>
+          breaker.fire(async () => decision.adapter.dispatch(req)) as Promise<BridgeDispatchResult>,
+        ),
       );
 
       return { decision, result };
@@ -595,9 +599,9 @@ export class RoutingEngine {
         const result = await raceBudget(
           withRetry(
             () =>
-              getQueue(cand.row.type).add(() =>
-                breaker.fire(async () => cand.adapter.dispatch(req)),
-              ) as Promise<BridgeDispatchResult>,
+              runDispatch(cand.row.type, laneFor(req), () =>
+                breaker.fire(async () => cand.adapter.dispatch(req)) as Promise<BridgeDispatchResult>,
+              ),
             undefined,
             undefined,
             {

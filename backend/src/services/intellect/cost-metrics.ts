@@ -21,11 +21,17 @@ import { pool } from '../../db/client.js';
  * rather than silently costing zero (zero would flatter the metric).
  */
 const RATES: Record<string, { in: number; out: number; cacheRead: number; cacheWrite: number }> = {
-  'claude-opus-4-8':  { in: 5.00, out: 25.00, cacheRead: 0.50, cacheWrite: 6.25 },
-  'claude-fable-5':   { in: 3.00, out: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
-  'claude-sonnet-5':  { in: 3.00, out: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
-  'claude-haiku-4-5': { in: 1.00, out:  5.00, cacheRead: 0.10, cacheWrite: 1.25 },
-  __default:          { in: 3.00, out: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+  // cacheRead = 0.1x input, cacheWrite = 1.25x input (5-minute TTL).
+  'claude-fable-5':    { in: 10.00, out: 50.00, cacheRead: 1.00, cacheWrite: 12.50 },
+  'claude-mythos-5':   { in: 10.00, out: 50.00, cacheRead: 1.00, cacheWrite: 12.50 },
+  'claude-opus-5':     { in:  5.00, out: 25.00, cacheRead: 0.50, cacheWrite:  6.25 },
+  'claude-opus-4-8':   { in:  5.00, out: 25.00, cacheRead: 0.50, cacheWrite:  6.25 },
+  'claude-opus-4-7':   { in:  5.00, out: 25.00, cacheRead: 0.50, cacheWrite:  6.25 },
+  'claude-opus-4-6':   { in:  5.00, out: 25.00, cacheRead: 0.50, cacheWrite:  6.25 },
+  'claude-sonnet-5':   { in:  3.00, out: 15.00, cacheRead: 0.30, cacheWrite:  3.75 },
+  'claude-sonnet-4-6': { in:  3.00, out: 15.00, cacheRead: 0.30, cacheWrite:  3.75 },
+  'claude-haiku-4-5':  { in:  1.00, out:  5.00, cacheRead: 0.10, cacheWrite:  1.25 },
+  __default:           { in:  3.00, out: 15.00, cacheRead: 0.30, cacheWrite:  3.75 },
 };
 
 export interface SessionUsage {

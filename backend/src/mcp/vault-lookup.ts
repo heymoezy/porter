@@ -45,6 +45,7 @@
 
 import { promises as fs } from 'node:fs';
 import { pool } from '../db/client.js';
+import { visibleNodeSql } from '../lib/vault-visibility.js';
 
 export interface VaultNodeHit {
   id: string;
@@ -182,7 +183,12 @@ async function searchGraphNodes(
        -- 1,702 cold prospects, pruned personal documents and superseded rules as
        -- live knowledge ever since. Archiving that the reader ignores is not
        -- archiving; it is bookkeeping.
-       AND n.status <> 'archived'
+       -- 2026-09-03, same lesson again: the file scanner retired a private root,
+       -- /reconcile flipped all 43 of its locations absent, the graph hid its 36
+       -- documents, and this reader kept returning them (status was still
+       -- 'active'; only their locations were gone). visibleNodeSql() is the one
+       -- predicate the graph and this reader now share.
+       AND ${visibleNodeSql('n')}
        ${layerClause}
        AND ${tokenClauses.join('\n       AND ')}
      ORDER BY title_match_count DESC, n.title ASC
