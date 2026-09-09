@@ -22,6 +22,30 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.163.0',
+    date: '2026-09-09',
+    title: 'The limit that protects the box was not covering chat',
+    bullets: [
+      'Porter caps how many model processes can run at once, and that cap is what stops a repeat of the run that burned tokens for 58 hours. Chat was never counted against it. Every other kind of request went through the gate; the streaming path, which is what a live conversation uses, went around it. So the protection covered the background work and not the traffic most likely to arrive all at once.',
+      'Chat now takes its place in the queue like everything else. The tricky part was letting go of that place at the right moment: the step that runs after a reply finishes asks Porter a question of its own, so holding on until the very end would have had every conversation waiting for a turn that could never come. The place is given up the moment the words stop.',
+      'Someone closing a tab mid-answer used to leave their place in the queue occupied. It is released immediately now. This was found by a test that hung rather than by reading the code.',
+      'A job that has hung was only ever noticed when Porter restarted, so it could sit holding one of four slots for up to twelve hours. It is now checked for every five minutes.',
+      'The memory and CPU limits on the service were set in May, when only one model process could run at a time and none could last more than five minutes. Both are now true of neither. They have been raised to match, with the reasoning written down next to them. The memory one mattered most: it does not slow things down when exceeded, it kills Porter outright.',
+    ],
+  },
+  {
+    version: '6.162.0',
+    date: '2026-09-09',
+    title: 'Porter can now tell whether its memory got better',
+    bullets: [
+      'Until now there was no way to answer "did that change help". Memory could be altered and the only evidence was whether it felt sharper afterwards. There is now a proper measurement that runs against the real memory, scores whether the right thing came back, and saves each run so two of them can be compared directly.',
+      'It reports three numbers together and deliberately refuses to report just one: how often it found the right thing, how long that took, and how much of the prompt it used up. Getting better at recall is easy if you are allowed to spend more of the prompt on it, and a single score would hide that trade.',
+      'The measurement borrows from a public benchmark, but not its definition of success. That one works out its own pass mark from what it happened to find, so it can never score badly for missing something. Ours is told in advance what the right answer is, which is the only version of the question worth asking.',
+      'Separately: two operating rules that contradict each other could both sit in memory and both get used. The existing cleanup only catches rules that are worded almost identically, so a genuine conflict written in different words survived and the model quietly picked one. Conflicts are now found by meaning.',
+      'Nothing is deleted automatically. A conflict is a judgement call, so it is raised for review rather than acted on, and Moe\u2019s own rules can never be retired in favour of a weaker one no matter how recently the weaker one was written.',
+    ],
+  },
+  {
     version: '6.160.8',
     date: '2026-09-03',
     title: 'A hidden document stays hidden in search',

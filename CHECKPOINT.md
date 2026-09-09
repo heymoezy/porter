@@ -1,3 +1,152 @@
+## 2026-09-09 - v6.163.0 - The cap that makes the lanes safe was not covering chat
+
+⚠️ **`dispatchStream` TOOK NO SLOT AT ALL.** It called `adapter.stream()` directly, skipping both the
+lane queue and the global `MAX_INFLIGHT` gate. `dispatch-queues.ts`'s own header says callers must use
+`runDispatch` because "going through the lane queue alone would skip the global cap, which is the
+whole guardrail" — this path skipped both. And v6.160.6 rests its safety argument on that cap ("the
+thing that makes per-gateway lanes safe on a 4 vCPU box", against a repeat of the 58-hour token burn).
+Interactive chat IS the streaming path, so the guardrail was bounding background work and leaving the
+burstiest traffic unbounded. `acquireDispatchSlot()` holds a lane slot and a global slot for as long
+as tokens flow.
+
+⚠️ **RELEASED WHEN THE TOKENS STOP, NOT WHEN THE HANDLER RETURNS — AND THIS ONE NEARLY WENT WRONG.**
+The tail of `dispatchStream` calls `compressToolOutput`, which turns out to issue an **HTTP request
+back into Porter** (`127.0.0.1:3001/api/v1/chat/send`) and so needs a slot of its own. The obvious
+implementation — hold the slot for the whole generator — deadlocks the bridge at `MAX_INFLIGHT`
+concurrent streams: every slot held by a stream waiting on a compression call that can never be
+admitted. Checked before writing the code, not after. The slot bounds CLI SUBPROCESSES and the
+subprocess is finished when its stream is exhausted.
+
+⚠️ **THE TEST FOUND A DESIGN GAP IN THE FIX.** Check 9 hung on first run. An abort that lands while
+the caller is still QUEUED did not unblock it — on a concurrency-1 lane it sat out the entire dispatch
+in front of it and then took a slot nobody wanted. A browser closing mid-stream is the ordinary case.
+`doRelease()` now resolves the grant as well as the hold. `verify-dispatch-lanes.ts` goes 8 → 15 checks.
+
+**Wedged jobs are reclaimed on a timer.** `reclaimOrphanedJobs()` ran only in `start()`, so a wedged
+session held one of `MAX_CONCURRENT_JOBS` slots until the next restart — up to 12h — silently. It
+could NOT simply be put on an interval: its predicate is a bare `status = 'running'` with no owner and
+no age, which is correct exactly once (at startup, when this process has claimed nothing) and
+catastrophic on a timer, where it fails every job this process is currently running. `worker_id <> me`
+is no better — `FOR UPDATE SKIP LOCKED` tolerates multiple executors, which would then kill each
+other's live work. Age past `WORKSPACE_JOB_TIMEOUT_MS + 15min` is the predicate that is safe in every
+case: nothing legitimate can still be running there.
+
+⚠️ **THE CGROUP CEILINGS WERE SIZED FOR A SYSTEM THAT NO LONGER EXISTS, AND MEMORY WAS THE SHARP
+EDGE.** A spawned `claude` stays in `porter-fastify`'s cgroup, so `MemoryMax`/`CPUQuota` bound Porter
+AND everything it dispatches together. Both were set 2026-05-11 when dispatch was serial and a
+workspace job died at 5 minutes. Jobs now run 12 hours and three subprocesses run at once. `MemoryMax`
+does not throttle when exceeded — it **OOM-kills the backbone every CLI, the MCP server and the memory
+layer depend on** — and at 2G, three CLI processes (~270MB each) plus a workspace session were
+credibly inside a kill that would read as an unexplained restart. CPUQuota 180% → 350%, MemoryMax
+2G → 6G, MemoryHigh 1500M → 5G, with the derivation and the exact revert values in the unit file.
+
+⚠️ **THE UNIT FILE CHANGE IS INERT UNTIL APPLIED.** `systemctl --user daemon-reload && systemctl
+--user restart porter-fastify`. Editing the repo does nothing on its own. Keep `MAX_INFLIGHT` and
+these ceilings in step: raising concurrency without the ceilings puts the throttle back; raising the
+ceilings without a concurrency cap is 2026-08-14 again.
+
+**Supersession scan scheduled**, gated in the DB on a 24h gap and fired from the restart-proof
+30-minute tick — never a tick counter, which resets on every deploy and is exactly how Tom's distiller
+silently froze on 2026-06-20. It writes PENDING proposals only; nothing is retired without review.
+
+`npm` scripts added — `test`, `bench:memory`, `scan:supersession`, `verify:lanes`. The repo had no
+test script at all, so the suite was tribal knowledge.
+
+Verified: tsc 0; 330 tests / 186 pass / 0 fail; 15/15 lane checks pass. NOT verified on the box — no
+Postgres, no ollama, and the cgroup change cannot be exercised here at all.
+
+## 2026-09-09 - v6.162.0 - Memory can now be measured, and a rule can be contradicted
+
+⚠️ **THIS WAS v6.161.0 UNTIL THE SWEEP.** `claude/dev-backlog-review-9etzkn` claimed 6.161.0 on
+08-31 and is still unmerged, so two branches carried the same number and the same package.json bump.
+The earlier claim keeps it. Also caught in the same sweep: this release originally shipped with a
+CHECKPOINT entry and a version bump and NOTHING ELSE — no CHANGELOG, no `porter-releases.ts`. Same
+ceremony violation that branch documents, same root cause: `core.hooksPath` is LOCAL config, a fresh
+clone does not carry it, so `deploy/git-hooks/pre-commit` was never wired here and the gate that
+refuses exactly this did not exist to refuse it. Both entries are added below.
+
+⚠️ **DO NOT WIRE `core.hooksPath` IN A CLOUD CLONE.** The pre-commit hook shells out to
+`$HOME/projects/_ops/bin/secret-scan.sh` and hard-exits 1 when it is missing — which it is anywhere
+but Moe's box. Wiring it in an ephemeral container blocks every commit.
+
+
+Imported from `supermemoryai/memorybench` and `supermemoryai/supermemory` (both MIT). Not the runtime
+— their local engine is a second store on a second port with its own graph DB, against "one schema,
+one truth" and against `hot-context.ts`'s invariant that Porter's DB is the source of truth. What was
+worth taking is the **method**, and it lands in two places.
+
+⚠️ **THEIR BENCHMARKS DO NOT MEASURE WHAT PORTER'S MEMORY DOES.** LongMemEval, LoCoMo and ConvoMem all
+score recalling facts a *user stated about themselves* across chat sessions. Porter's directives are
+normative rules with a precedence lattice; nothing in those benchmarks would catch the inverted sort
+that cost Moe's rules their place in every Tom prompt until v6.123.0. The numbers are real and mostly
+irrelevant to the directive path. What they ARE relevant to is entity recall — and every one of the
+eight probes in `measure-paraphrase-miss.ts` is an entity-fact question, which is why the harness
+below is built around them.
+
+**1. `services/membench/` — the harness.** memorybench's shape: pluggable provider, pluggable probe
+set, a checkpointed pipeline, and a report carrying accuracy AND latency AND context-tokens together
+(their MemScore, `95% / 120ms / 720tok`). One string on purpose — retrieval quality is trivially
+bought with a wider token budget, and tier 6's budget is the thing most likely to be widened chasing
+a number. Their INGEST/INDEXING/ANSWER phases are dropped: Porter's corpus is live and written by the
+real system, so loading a fixture would measure the fixture, and relevance is settled by the probe's
+own ground truth rather than by a judge model — which makes a run free, offline and deterministic.
+
+⚠️ **THEIR RECALL IS NOT RECALL.** memorybench derives the denominator from what was retrieved
+(`totalRelevant = max(1, relevantRetrieved)`), so recall can never fall below 1.0 on a hit and is
+identical to hit@k in every report they publish. That is exactly wrong for Porter's failure mode: the
+compliance probe in `embeddings.ts:16` returns rows, just not Clement, and would score a perfect
+recall. Ours uses the probe's declared denominator and reports `recallBasis:'ground_truth'`; where
+none is known it falls back to their number and says `'hit_proxy'`, so the two are never averaged
+silently. Pinned by `__tests__/membench-metrics.test.ts`.
+
+`scripts/memory-bench.ts` replaces `measure-paraphrase-miss.ts` as the thing to run before and after
+touching retrieval — same eight probes, same needles, so the 4/8 paraphrase-miss figure stays
+comparable, but every run is checkpointed and `--compare <runId>` diffs probe by probe. Also
+`--verify-needles`: a needle that no longer matches any row reports as a retrieval miss, and telling
+those two apart by hand costs more than the check.
+
+**2. `services/concept-retrieval.ts` — tier 6, extracted.** The benchmark must score the REAL ranking
+path; one that re-implements the query it measures drifts within a change and then reads as evidence.
+So the SQL, the AND-then-OR fallback, the vault boost and the RRF fusion moved out of
+`memory-injection.ts` and both readers call the same function. Not a second builder — the ranking step
+the injector already contained, given a name. One behaviour change, deliberate: a failing FTS query
+now returns `[]` instead of throwing. The throw used to unwind to the builder's outer catch, so ONE
+malformed search query dropped the ENTIRE context — identity, directives, everything — not just the
+concept tier. The least important of the six tiers was taking the other five with it.
+
+**3. `services/intellect/supersession.ts` — contradiction, not duplication.** supermemory's real
+claim is that a store which only accumulates gets worse: what makes it memory is knowing "I moved to
+SF" RETIRES "I live in NYC". Porter had no such thing. `memory-pruner.ts` retires at pg_trgm 0.85 and
+`consolidation.ts` merges at 0.6 — both LEXICAL. "Always deploy from main after CI passes" and "Never
+ship without Moe's sign-off, regardless of CI" score ~0.1 on trigrams, so neither is retired and BOTH
+inject into the same prompt. This finds those pairs: semantically close (cosine ≥ 0.72 on the
+embeddings we already have) but lexically distinct (trigram < 0.85, so the pruner's territory is left
+alone), then adjudicated by a model.
+
+⚠️ **WE DID NOT IMPORT THEIR RESOLUTION POLICY AND MUST NOT.** supermemory resolves by RECENCY, which
+is right for a user's own facts and catastrophic here: it would let a directive an agent wrote this
+morning retire a rule Moe set in June, silently, in a background job. `gateSupersession()` enforces
+PRECEDENCE OVER RECENCY — nothing below priority 90 may ever retire anything at or above it, no
+binding rule is retired in favour of a weaker one, cross-scope pairs are refused (a workspace rule and
+a project rule on one subject are usually a general case and its exception), and `moe-direct` rows are
+untouchable at the query, at the gate and at apply, because the DB trigger that seals them aborts the
+whole transaction — the fault that broke the nightly pruner from 2026-05-09 until PR-1. Pure function,
+27 tests in `__tests__/supersession.test.ts`.
+
+**PROPOSES, NEVER APPLIES.** Findings land in `memory_proposals` (kind='supersede', status='pending'),
+the queue the dream worker already writes to. A contradiction is a judgement call in a way a duplicate
+is not, and the cost of being wrong is a rule silently leaving every prompt. `scripts/supersession-scan.ts`
+defaults to a dry run; `--write` is required to record anything.
+
+**NOT WIRED TO THE SCHEDULER.** The scan costs one model call per candidate pair (capped at 40). If it
+should run nightly, add it to the `every_24h` cadence in `scheduler.ts` alongside the pruner —
+deliberately left as Moe's call, not a background bill that appeared on its own.
+
+Verified: `npx tsc --noEmit` clean; 330 tests / 186 pass / 0 fail (144 pre-existing `it.todo`), which
+includes `directive-scorer.test.ts` still green after the tier-6 extraction. NOT verified against live
+data — this session has no Postgres and no ollama, so the first real `memory-bench` run and the first
+`supersession-scan --dry-run` still need to happen on the box.
+
 ## 2026-09-03 - v6.160.8 - A hidden document stays hidden in search
 
 ymc's file scanner retired a private root (`dunross-crow-investments`) and `/reconcile` flipped all 43

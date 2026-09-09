@@ -13,7 +13,7 @@
  *
  *   npx tsx scripts/verify-dispatch-lanes.ts
  */
-import { runDispatch, getQueueStats, MAX_INFLIGHT } from '../src/services/bridge/dispatch-queues.js';
+import { runDispatch, acquireDispatchSlot, getQueueStats, MAX_INFLIGHT } from '../src/services/bridge/dispatch-queues.js';
 
 let failures = 0;
 const pass = (m: string) => console.log(`  ✓ ${m}`);
@@ -75,6 +75,76 @@ async function main() {
   check('_global' in stats, 'the global gate is reported');
   check(Object.keys(stats).some(k => k.endsWith(':interactive')), 'interactive lanes are reported');
   check(Object.keys(stats).some(k => k.endsWith(':batch')), 'batch lanes are reported');
+
+  console.log('\n6. a STREAM occupies a slot for as long as its tokens flow');
+  // ⚠️ THE REGRESSION BASELINE. Until v6.163.0 dispatchStream called
+  // adapter.stream() directly and took NO slot at all, so interactive chat —
+  // the burstiest traffic on the box — was outside the cap that check 4 proves.
+  peak = 0; inFlight = 0;
+  const streamed = async (ms: number) => {
+    const slot = await acquireDispatchSlot('claude_cli', 'interactive');
+    inFlight++; peak = Math.max(peak, inFlight);
+    try { await sleep(ms); } finally { inFlight--; slot.release(); }
+  };
+  t0 = Date.now();
+  await Promise.all([streamed(150), streamed(150)]);
+  ms = Date.now() - t0;
+  check(ms >= 290, `two streams on one lane took ${ms}ms, i.e. they queued rather than both running`);
+
+  console.log('\n7. streams and non-streams share the SAME cap');
+  peak = 0; inFlight = 0;
+  await Promise.all([
+    ...['claude_cli', 'codex_cli', 'grok_cli', 'antigravity_cli'].map(g =>
+      runDispatch(g, 'interactive', () => task(120))),
+    ...['claude_cli', 'codex_cli', 'grok_cli', 'antigravity_cli'].map(async g => {
+      const slot = await acquireDispatchSlot(g, 'batch');
+      inFlight++; peak = Math.max(peak, inFlight);
+      try { await sleep(120); } finally { inFlight--; slot.release(); }
+    }),
+  ]);
+  check(peak <= MAX_INFLIGHT, `peak in-flight across both kinds was ${peak}, cap is ${MAX_INFLIGHT}`);
+  check(peak > 1, `and they still ran in parallel (peak ${peak})`);
+
+  console.log('\n8. a released slot is really given back, and releasing twice is safe');
+  const s1 = await acquireDispatchSlot('codex_cli', 'interactive');
+  s1.release();
+  s1.release(); // must not free a second slot it never held
+  t0 = Date.now();
+  const s2 = await acquireDispatchSlot('codex_cli', 'interactive');
+  ms = Date.now() - t0;
+  s2.release();
+  check(ms < 60, `the next acquire waited ${ms}ms, i.e. the slot was returned`);
+
+  console.log('\n9. aborting while QUEUED returns at once and does not strand the lane');
+  // The real hazard: a browser closes mid-stream while that stream is still
+  // waiting its turn. On a concurrency-1 lane a waiter that ignored the abort
+  // would sit out the entire dispatch in front of it, and a slot nobody wants
+  // would then be taken. MAX_INFLIGHT of those wedges the bridge.
+  const holder = await acquireDispatchSlot('grok_cli', 'batch');
+  const ac = new AbortController();
+  t0 = Date.now();
+  const queued = acquireDispatchSlot('grok_cli', 'batch', ac.signal); // parked behind holder
+  ac.abort();
+  (await queued).release();
+  ms = Date.now() - t0;
+  check(ms < 60, `the aborted waiter returned in ${ms}ms instead of waiting for its turn`);
+
+  holder.release();
+  await sleep(20);
+  t0 = Date.now();
+  const afterAbort = await acquireDispatchSlot('grok_cli', 'batch');
+  ms = Date.now() - t0;
+  afterAbort.release();
+  check(ms < 60, `and the lane was still usable afterwards (${ms}ms), not wedged`);
+
+  console.log('\n10. an already-aborted signal never takes a slot at all');
+  const pre = new AbortController();
+  pre.abort();
+  t0 = Date.now();
+  const dead = await acquireDispatchSlot('antigravity_cli', 'interactive', pre.signal);
+  dead.release();
+  ms = Date.now() - t0;
+  check(ms < 60, `acquire with a pre-aborted signal returned in ${ms}ms`);
 
   console.log(failures ? `\n${failures} FAILURE(S)\n` : '\nall checks passed\n');
   process.exit(failures ? 1 : 0);
