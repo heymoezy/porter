@@ -1,3 +1,22 @@
+## 6.160.6 - 2026-09-01
+
+dispatch-queues.ts held ONE PQueue at concurrency 1 and getQueue(_gatewayType?) ignored the
+argument, so all four gateways shared a single lane and every bridge dispatch on the box was
+serial. WORKSPACE_TIMEOUT_MS is 12h, so one workspace job could block every model call for half
+a day. Now per (gateway, lane) queues, lane derived from req.workspace at the call site so it
+cannot disagree with the adapter's ceiling, behind a global in-flight cap
+(PORTER_BRIDGE_MAX_INFLIGHT, default 3) which is the guardrail against the 2026-08-14 token
+burn. 8 checks in backend/scripts/verify-dispatch-lanes.ts. Porter tsc 0.
+
+## 6.160.5 - 2026-09-01
+
+Work found uncommitted for 18 days during a sweep of every working tree, not authored in this
+session. Timeout constants now derive from the adapter's exported ceiling instead of being
+re-typed by callers (a shorter client budget aborts the fetch while the subprocess lives on,
+leaking an orphan for the difference). Unknown models warn once by name with the fix. Heartbeat
+interval comes from the agent's own cron where present. migrate-consolidated no longer recreates
+the abandoned Forge tables or re-seeds them on boot. Porter tsc 0.
+
 ## v6.160.2 (2026-08-30) — document search said "nothing on file" about documents it held
 
 `retrieveChunks()` in `backend/src/services/recall-query.ts` built its query with

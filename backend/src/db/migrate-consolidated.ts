@@ -256,6 +256,38 @@ export async function migrateConsolidated(pool: pg.Pool): Promise<void> {
       )
     `);
 
+    // trackTokenUsage() upserts ON CONFLICT (model, date). The unique index is not
+    // optional — without it every write raises 42P10 and the daily meter silently
+    // records nothing. Fold any pre-existing duplicate rows before creating it.
+    await client.query(`
+      WITH ranked AS (
+        SELECT id, model, date,
+               min(id) OVER (PARTITION BY model, date) AS keep_id
+          FROM token_usage_daily
+      ), folded AS (
+        SELECT keep_id,
+               sum(t.input_tokens)  AS input_tokens,
+               sum(t.output_tokens) AS output_tokens,
+               sum(t.request_count) AS request_count
+          FROM ranked r JOIN token_usage_daily t ON t.id = r.id
+         GROUP BY keep_id HAVING count(*) > 1
+      )
+      UPDATE token_usage_daily u
+         SET input_tokens = f.input_tokens,
+             output_tokens = f.output_tokens,
+             request_count = f.request_count
+        FROM folded f WHERE u.id = f.keep_id
+    `);
+    await client.query(`
+      DELETE FROM token_usage_daily t
+       WHERE t.id > (SELECT min(id) FROM token_usage_daily x
+                      WHERE x.model = t.model AND x.date = t.date)
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS token_usage_daily_model_date_key
+        ON token_usage_daily (model, date)
+    `);
+
     // ── External Connections ──────────────────────────────────────────────────
 
     await client.query(`
@@ -720,65 +752,8 @@ export async function migrateConsolidated(pool: pg.Pool): Promise<void> {
       )
     `);
 
-    // ── Admin: Forge Pipeline ─────────────────────────────────────────────────
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS forge_pipeline (
-        id TEXT PRIMARY KEY,
-        template_id TEXT NOT NULL,
-        agent_id TEXT,
-        station INTEGER NOT NULL DEFAULT 0,
-        status TEXT NOT NULL DEFAULT 'queued',
-        flags JSONB DEFAULT '[]'::jsonb,
-        instance_learnings JSONB DEFAULT '{}'::jsonb,
-        wave INTEGER NOT NULL DEFAULT 0,
-        tokens_used INTEGER DEFAULT 0,
-        worker_id TEXT,
-        lease_expires_at DOUBLE PRECISION,
-        attempt_count INTEGER DEFAULT 0,
-        max_attempts INTEGER DEFAULT 3,
-        started_at DOUBLE PRECISION,
-        completed_at DOUBLE PRECISION,
-        error TEXT,
-        cycle INTEGER NOT NULL DEFAULT 1,
-        created_at DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
-        updated_at DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW())
-      )
-    `);
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS forge_station_runs (
-        id TEXT PRIMARY KEY,
-        pipeline_id TEXT NOT NULL REFERENCES forge_pipeline(id),
-        station INTEGER NOT NULL,
-        phase TEXT NOT NULL,
-        run_sequence INTEGER NOT NULL DEFAULT 1,
-        status TEXT NOT NULL DEFAULT 'running',
-        writer_model TEXT,
-        checker_model TEXT,
-        quality_score INTEGER,
-        rubric JSONB DEFAULT '{}'::jsonb,
-        qa_rationale TEXT,
-        files_touched JSONB DEFAULT '[]'::jsonb,
-        skills_assigned JSONB DEFAULT '[]'::jsonb,
-        tools_mapped JSONB DEFAULT '[]'::jsonb,
-        flags JSONB DEFAULT '[]'::jsonb,
-        tokens_used INTEGER DEFAULT 0,
-        cost_reserved DOUBLE PRECISION DEFAULT 0,
-        cost_actual DOUBLE PRECISION DEFAULT 0,
-        prompt_version TEXT,
-        duration_ms INTEGER,
-        started_at DOUBLE PRECISION DEFAULT EXTRACT(EPOCH FROM NOW()),
-        completed_at DOUBLE PRECISION
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS forge_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      )
-    `);
 
     // ── Admin: Audit Log ──────────────────────────────────────────────────────
 
@@ -874,9 +849,6 @@ export async function migrateConsolidated(pool: pg.Pool): Promise<void> {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_email_folder ON email_messages(folder)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_email_status ON email_messages(status)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_email_thread ON email_messages(thread_id)`);
-    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_forge_unique ON forge_pipeline(template_id, cycle)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_forge_station ON forge_pipeline(station, status)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_fsr_pipeline ON forge_station_runs(pipeline_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action)`);
@@ -925,11 +897,6 @@ export async function migrateConsolidated(pool: pg.Pool): Promise<void> {
 
     // ── Seed data ─────────────────────────────────────────────────────────────
 
-    await client.query(`INSERT INTO forge_settings (key, value) VALUES ('tick_interval_ms', '30000') ON CONFLICT DO NOTHING`);
-    await client.query(`INSERT INTO forge_settings (key, value) VALUES ('daily_token_budget', '500000') ON CONFLICT DO NOTHING`);
-    await client.query(`INSERT INTO forge_settings (key, value) VALUES ('quality_threshold', '60') ON CONFLICT DO NOTHING`);
-    await client.query(`INSERT INTO forge_settings (key, value) VALUES ('current_wave', '0') ON CONFLICT DO NOTHING`);
-    await client.query(`INSERT INTO forge_settings (key, value) VALUES ('running', 'false') ON CONFLICT DO NOTHING`);
 
     // ── Mark migration complete ───────────────────────────────────────────────
 

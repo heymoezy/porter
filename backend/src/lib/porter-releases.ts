@@ -22,6 +22,52 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.160.8',
+    date: '2026-09-03',
+    title: 'A hidden document stays hidden in search',
+    bullets: [
+      'A file that has been removed from every scanned folder no longer shows up in vault search. The graph already hid it; search did not.',
+      'Both readers now use one rule for what may be shown.',
+    ],
+  },
+  {
+    version: '6.160.7',
+    date: '2026-09-01',
+    title: 'A memory can be marked as one that must not become a lesson',
+    bullets: [
+      'The nightly pass that turns an agent\u2019s conversations into durable lessons was reading every conversation it had, including private ones. A lesson gets repeated wherever the agent speaks, so anything private that fed one could come back out in a room full of other people.',
+      'Attribution afterwards is not possible. Every conversation goes into a single request and what comes back is a set of lessons with no record of which conversations produced which. Once private material is in the input there is nothing left to filter on.',
+      'So a memory can now be marked at the point it is written, and marked memories are never read by that nightly pass. The caller decides what counts as private, which is the only place that decision can honestly be made.',
+      'The mark is also handed back on search, so a caller that wants to withhold something in one room and not another can do that too.',
+      'Nothing is marked unless a caller asks for it, so existing behaviour is unchanged.',
+    ],
+  },
+  {
+    version: '6.160.6',
+    date: '2026-09-01',
+    title: 'Every model call on this machine was running one at a time',
+    bullets: [
+      'There was a single queue for all four backends, and the function that hands out queues took the backend name and ignored it. So Claude, Codex, Grok and Antigravity all shared one lane. Sending a question to two of them at once ran them one after the other, and the code that calls it describes itself as a per-backend queue. It never was one.',
+      'Worse, a workspace job is allowed twelve hours. On a single lane that job could hold up every other model call on the box for half a day: a chat turn, a question in a data room, anything.',
+      'Each backend now has its own lane, and within each backend the work someone is waiting for is separated from long background jobs. A question no longer sits behind a twelve hour build.',
+      'The reason it was never simply set higher: taking the serial queue out once before is what let two agents on thirty second timers run roughly 285 cold starts an hour on the most expensive model for 58 hours. So this ships with a hard ceiling on how many can run at once, set to three on a four core box, and the ceiling is what makes the lanes safe rather than a repeat.',
+      'Proved rather than argued: eight checks that two backends now finish in the time of one, that the same backend still takes its turn in order, that a short question overtakes a long job beside it, and that the ceiling actually holds under load.',
+    ],
+  },
+  {
+    version: '6.160.5',
+    date: '2026-09-01',
+    title: 'Work that had been sitting uncommitted for eighteen days',
+    bullets: [
+      'Found during a sweep of every working tree, not written today. Twelve files had been finished and left uncommitted since the middle of August, which means none of it was backed up anywhere and any mistake in that tree would have taken it.',
+      'The largest piece stops a timeout from being copied. The adapter that runs the model has a five minute ceiling, and two callers had re-typed their own shorter numbers beside it. The shorter one wins silently: the caller gives up while the subprocess keeps running, and the difference is an orphan nobody sees. Both now derive from the adapter\u2019s own number, which is how the workspace path was fixed once already and has not drifted since.',
+      'A model with no cost entry now says so once, by name, and says where to add it, instead of being quietly priced at nothing.',
+      'A scheduled agent takes its interval from its own schedule where it has one, rather than only from the template it was made from.',
+      'And the database setup no longer recreates three tables belonging to a feature that was abandoned in April, nor re-seeds their settings on every boot.',
+      'Typechecks clean. This release commits it so it exists somewhere other than one folder on one machine.',
+    ],
+  },
+  {
     version: '6.160.4',
     date: '2026-09-01',
     title: 'Removed a calendar sync that could never have run',

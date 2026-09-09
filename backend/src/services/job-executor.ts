@@ -11,16 +11,17 @@
  *
  * Failure backoff: 3 attempts max per scheduled tick, exponential delay
  * between attempts. Permanent failure marks the job 'failed' with the error
- * captured for the Forge tab and Bridge dashboard.
+ * captured for the Bridge dashboard.
  */
 
 import crypto from 'node:crypto';
 import { pool } from '../db/client.js';
 import { createWorkspace, removeWorkspace, workspaceDiff, commitWorkspace, WORKSPACE_RULES, type Workspace } from './bridge/workspace.js';
 import { config } from '../config.js';
-// The SERVER's ceiling for a workspace dispatch. Imported so the client budget
-// below is derived from it and the two can never drift apart again.
-import { WORKSPACE_TIMEOUT_MS } from './bridge/adapters/claude-cli.js';
+// The SERVER's ceilings. Imported so every client budget below is DERIVED from
+// one of them and the two can never drift apart again. TIMEOUT_MS covers every
+// non-workspace dispatch — chat turn, delegation, heartbeat tick.
+import { WORKSPACE_TIMEOUT_MS, TIMEOUT_MS as CHAT_TIMEOUT_MS } from './bridge/adapters/claude-cli.js';
 
 const POLL_INTERVAL_MS = 5_000;
 const MAX_ATTEMPTS = 3;
@@ -38,17 +39,27 @@ const MAX_ATTEMPTS = 3;
  * A workspace dispatch is the adapter's long path (WORKSPACE_TIMEOUT_MS)
  * because a code-changing session is not a chat turn.
  *
- * ⚠️ The workspace budget is IMPORTED from the adapter, never re-declared here.
- * Twice now these two numbers have been set independently and disagreed, and
- * both times the shorter one won silently: v6.141.0 raised the client to 1,800s
- * while the adapter still killed at 300s, and v6.159.0 found the client at 240s
- * against the adapter's 300s. A constant copied into the caller is a constant
- * that will drift. Deriving it makes "the client must never be shorter than the
- * server" true by construction instead of by vigilance.
+ * ⚠️ EVERY budget here is IMPORTED from the adapter, never re-declared. Three
+ * times now these numbers have been set independently and disagreed, and every
+ * time the shorter one won silently: v6.141.0 raised the client to 1,800s while
+ * the adapter still killed at 300s; v6.159.0 found the client at 240s against
+ * the adapter's 300s; and v6.160.2 found HEARTBEAT still a bare 120s against
+ * the same 300s — the one path that fires on every agent, every few minutes.
+ *
+ * The first two fixes derived the workspace constant and hand-set the other two.
+ * That is why the bug came back: a constant copied into the caller is a constant
+ * that will drift, and "we fixed the one we were looking at" is not a mechanism.
+ * All three are now derived, so "the client must never be shorter than the
+ * server" is true by construction instead of by vigilance.
+ *
+ * The +60s margin is the client's, not the server's: the server kills its own
+ * subprocess at its ceiling, and the client must still be listening when that
+ * happens to record WHY. A client that gives up first turns a clean server-side
+ * kill into an orphaned child it can no longer see or reap.
  */
 const WORKSPACE_JOB_TIMEOUT_MS = WORKSPACE_TIMEOUT_MS + 60_000;
-const DELEGATION_JOB_TIMEOUT_MS = 300_000;
-const HEARTBEAT_JOB_TIMEOUT_MS = 120_000;
+const DELEGATION_JOB_TIMEOUT_MS = CHAT_TIMEOUT_MS + 60_000;
+const HEARTBEAT_JOB_TIMEOUT_MS = CHAT_TIMEOUT_MS + 60_000;
 const SERVICE_TOKEN = process.env.PORTER_SERVICE_TOKEN ?? ''; // no fallback: the old default leaked (public repo)
 
 /**
@@ -90,9 +101,13 @@ interface DueAgent {
   preferred_backend: string | null;
 }
 
-// Compute the heartbeat interval (seconds) for an agent. Prefers the
-// agent_template's heartbeat_interval column. Falls back to parsing the
-// persona's heartbeat_cron for the two formats Porter actually uses:
+// Compute the heartbeat interval (seconds) for an agent. The persona's own
+// heartbeat_cron WINS — it is the per-agent specification. agent_templates
+// .heartbeat_interval is only a template default and applies when the persona
+// has no readable cron of its own. (Reversed 2026-08-12: the template default
+// used to win, so Compass and Ledger — both specified `0 * * * *` — inherited
+// their template's 60s and ticked ~49x/hour, 85% of all claude_cli traffic.)
+// Formats Porter actually uses:
 //   "every-30s with seconds field" → 30
 //   "0 * * * *" hourly             → 3600
 // Anything else returns null and the agent is skipped.
@@ -107,12 +122,10 @@ function intervalFromCron(cron: string): number | null {
 }
 
 function isDue(agent: DueAgent): boolean {
-  const intervalSec =
-    (agent.heartbeat_interval && agent.heartbeat_interval > 0
-      ? agent.heartbeat_interval
-      : agent.heartbeat_cron
-        ? intervalFromCron(agent.heartbeat_cron)
-        : null) ?? null;
+  const fromCron = agent.heartbeat_cron ? intervalFromCron(agent.heartbeat_cron) : null;
+  const fromTemplate =
+    agent.heartbeat_interval && agent.heartbeat_interval > 0 ? agent.heartbeat_interval : null;
+  const intervalSec = fromCron ?? fromTemplate;
   if (!intervalSec) return false;
   const now = Date.now() / 1000;
   if (!agent.last_heartbeat_epoch) return true;

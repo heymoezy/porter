@@ -535,6 +535,9 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
     const body = (request.body || {}) as {
       agent?: string; kind?: string; content?: string; action?: string;
       query?: string; priority?: number; tags?: string[]; session_id?: string; force?: boolean;
+      /** Caller-declared: this episode carries material that must not be distilled
+       *  into durable concepts or recalled outside its own conversation. */
+      private?: boolean;
       /** 0..1, concept writes only. NULL when absent — see the concept branch. */
       confidence?: number;
     };
@@ -588,9 +591,9 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
         return reply.send(ok({ id: null, kind, agent, skipped: 'low_surprise', salience: Number(salience.toFixed(3)) }));
       }
       await pool.query(
-        `INSERT INTO episodes (id, scope, scope_id, session_id, gateway, summary, salience)
-         VALUES ($1, 'agent', $2, $3, 'agent-memory', $4, $5)`,
-        [id, agent, body.session_id ?? null, content, salience],
+        `INSERT INTO episodes (id, scope, scope_id, session_id, gateway, summary, salience, private)
+         VALUES ($1, 'agent', $2, $3, 'agent-memory', $4, $5, $6)`,
+        [id, agent, body.session_id ?? null, content, salience, body.private === true],
       );
       pool.query(
         `INSERT INTO intellect_events (id, event_type, source_type, details_json) VALUES ($1,$2,$3,$4::jsonb)`,
@@ -671,7 +674,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
 
     // session_id is present on episode hits and null on concepts/directives,
     // which are firm-level and belong to no single chat.
-    const hits: Array<{ kind: string; content: string; created_at: number; rank: number; session_id?: string | null }> = [];
+    const hits: Array<{ kind: string; content: string; created_at: number; rank: number; session_id?: string | null; private?: boolean }> = [];
     // websearch_to_tsquery ANDs every term, so a multiword natural-language ask
     // (e.g. a whole WhatsApp message) almost never matched any single memory row
     // — recall returned 0 FTS hits on ~99% of real turns and silently fell back
@@ -699,7 +702,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       // no attacker and nothing to detect. The column already existed; only the
       // projection did not, so nothing downstream could tell the two apart.
       const episodeRows = (await pool.query(
-        `SELECT summary AS content, created_at, session_id,
+        `SELECT summary AS content, created_at, session_id, private,
                 ts_rank(to_tsvector('english', summary), to_tsquery('english', $1))
                   * (0.5 + COALESCE(salience, 0.5)) AS rank
            FROM episodes
@@ -707,7 +710,7 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
           ORDER BY rank DESC, created_at DESC LIMIT $${baseArgs.length + 1}`,
         [...baseArgs, limit],
       )).rows;
-      for (const r of episodeRows) hits.push({ kind: 'episode', content: r.content, created_at: Number(r.created_at), rank: Number(r.rank), session_id: r.session_id ?? null });
+      for (const r of episodeRows) hits.push({ kind: 'episode', content: r.content, created_at: Number(r.created_at), rank: Number(r.rank), session_id: r.session_id ?? null, private: r.private === true });
       const directiveRows = (await pool.query(
         `SELECT content, created_at,
                 ts_rank(to_tsvector('english', content), to_tsquery('english', $1)) AS rank
@@ -721,10 +724,10 @@ export default async function intellectRoutes(fastify: FastifyInstance) {
       hits.splice(limit);
     }
     const recent = (await pool.query(
-      `SELECT summary AS content, created_at, session_id FROM episodes
+      `SELECT summary AS content, created_at, session_id, private FROM episodes
         WHERE scope='agent' AND scope_id=$1 ORDER BY created_at DESC LIMIT $2`,
       [agent, recentN],
-    )).rows.map((r) => ({ kind: 'episode', content: r.content, created_at: Number(r.created_at), session_id: r.session_id ?? null }));
+    )).rows.map((r) => ({ kind: 'episode', content: r.content, created_at: Number(r.created_at), session_id: r.session_id ?? null, private: r.private === true }));
     // Session-scoped "where we left off" — the current thread's last N episodes
     // (R2). Lets a consumer resume one conversation across tool-turn gaps without
     // re-explaining. Empty when no session_id is passed or the thread is new.

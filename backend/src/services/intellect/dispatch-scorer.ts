@@ -71,10 +71,21 @@ function heuristicScore(d: UnscoredDispatch, correctionNearby: boolean): number 
 
   if (correctionNearby) score -= 1.0;
 
+  // Resolve to the 1..5 smallint scale by rounding AWAY from the 3.0
+  // neutral point — not with Math.round. Math.round(2.5) is 3, so every
+  // -0.5 adjustment (the 10-30s latency band, the suspicious token ratio)
+  // collapsed straight back to neutral while every +0.5 survived as a 4.
+  // Measured 2026-08-13: 215 dispatches in the 10-30s band over 7 days,
+  // average score exactly 3.00 — indistinguishable from a 2-second call.
+  let resolved: number;
+  if (score > 3) resolved = Math.ceil(score);
+  else if (score < 3) resolved = Math.floor(score);
+  else resolved = 3;
+
   // Clamp to the 1..5 smallint range
-  if (score < 1) score = 1;
-  if (score > 5) score = 5;
-  return Math.round(score);
+  if (resolved < 1) resolved = 1;
+  if (resolved > 5) resolved = 5;
+  return resolved;
 }
 
 /**

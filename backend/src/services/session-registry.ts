@@ -155,7 +155,11 @@ export async function upsertSession(
   }
 
   const updatedTokens = currentTokens + tokensToAdd;
-  const contextPct = updatedTokens / Math.max(effectiveBudget, 1);
+  // Budget 0 = unknown context window (model row missing / null context_window).
+  // Must be 0, not tokens/1 — otherwise every dispatch reads as >100% and trips
+  // the compression thresholds below on every single message. Matches the
+  // `tokenBudget > 0` guard on the no-key path above.
+  const contextPct = effectiveBudget > 0 ? updatedTokens / effectiveBudget : 0;
 
   await pool.query(
     `UPDATE session_registry

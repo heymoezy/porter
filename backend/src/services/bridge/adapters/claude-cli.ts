@@ -29,7 +29,21 @@ import type {
   HealthResult,
 } from '../types.js';
 
-const TIMEOUT_MS = 300_000; // 5 min — research tasks need more time than simple queries
+/**
+ * The SERVER's ceiling for a NON-workspace dispatch — a chat turn, a delegated
+ * job, an agent heartbeat tick. 5 min: research tasks need more time than
+ * simple queries.
+ *
+ * ⚠️ EXPORTED ON PURPOSE. This number is the server's, and every client budget
+ * in job-executor.ts must be derived from it rather than re-typed beside it.
+ * It was private, so it got copied — twice as a bare literal (delegation at
+ * 240s in v6.159.0, heartbeat at 120s until v6.160.2) and both times the
+ * shorter copy won silently: the client aborted the fetch while THIS adapter
+ * kept the subprocess alive to TIMEOUT_MS, leaking an orphan for the
+ * difference. WORKSPACE_TIMEOUT_MS below was exported for exactly this reason
+ * and the workspace path never drifted again. Same treatment, same result.
+ */
+export const TIMEOUT_MS = 300_000;
 /**
  * A workspace dispatch is a code-changing session, not a query.
  *

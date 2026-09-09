@@ -362,14 +362,15 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
     username: req.username,
   }, decision, logId);
 
-  // 7. Track daily token usage (existing pattern — keep for aggregate view)
-  if (bridgeResult.inputTokens || bridgeResult.outputTokens) {
-    await trackTokenUsage(
-      decision.modelName,
-      bridgeResult.inputTokens ?? 0,
-      bridgeResult.outputTokens ?? 0,
-    );
-  }
+  // 7. Track daily token usage (existing pattern — keep for aggregate view).
+  // Unconditional: a dispatch that reported no token counts still burned a request
+  // against the gateway's request quota, and gateways that never report usage
+  // (grok, antigravity) would otherwise be invisible to the meter entirely.
+  await trackTokenUsage(
+    decision.modelName,
+    bridgeResult.inputTokens ?? 0,
+    bridgeResult.outputTokens ?? 0,
+  );
 
   // 8. Log agent-level decision (kept separate from bridge_dispatch_log)
   if (decision.alternatives.length > 0) {
@@ -390,7 +391,9 @@ export async function dispatch(req: DispatchRequest): Promise<DispatchResult> {
 
 /**
  * Upsert daily token usage for the given model.
- * Non-critical — failures are swallowed so dispatch is never blocked.
+ * Non-critical — failures never block dispatch, but they are always logged.
+ * A silent catch here hid a broken meter (missing unique index → 42P10 on every
+ * write) for four months and 12k dispatches. Never swallow this quietly again.
  */
 async function trackTokenUsage(model: string, inputTokens: number, outputTokens: number) {
   const today = new Date().toISOString().slice(0, 10);
@@ -403,7 +406,8 @@ async function trackTokenUsage(model: string, inputTokens: number, outputTokens:
         output_tokens = token_usage_daily.output_tokens + $4,
         request_count = token_usage_daily.request_count + 1
     `, [model, today, inputTokens, outputTokens]);
-  } catch {
-    // Non-critical — never block dispatch
+  } catch (e) {
+    // Never block dispatch — but a meter that stops must be loud.
+    console.error('[ai-router] token_usage_daily write FAILED (metering is blind):', e);
   }
 }

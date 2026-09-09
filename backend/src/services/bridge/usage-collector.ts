@@ -250,7 +250,11 @@ async function collectClaudeUsage(
     const resp = await fetch(CLAUDE_MESSAGES_API_URL, {
       method: 'POST',
       headers: {
-        'x-api-key': accessToken,
+        // Claude Max credentials are OAuth, not an sk-ant- API key. OAuth tokens
+        // go on Authorization: Bearer + the oauth beta header; sent as x-api-key
+        // the API returns 401 and no rate-limit headers.
+        'authorization': `Bearer ${accessToken}`,
+        'anthropic-beta': 'oauth-2025-04-20',
         'anthropic-version': '2023-06-01',
         'content-type': 'application/json',
       },
@@ -272,6 +276,16 @@ async function collectClaudeUsage(
     // Validate we got real data
     if (isNaN(fiveHourUtil) && isNaN(sevenDayUtil)) {
       console.warn('[usage-collector] Claude API returned no rate-limit headers (status %d)', resp.status);
+      // An auth failure here is permanent, not transient: quota tracking goes
+      // blind and stays blind. Surface it instead of only logging to journald.
+      if (resp.status === 401 || resp.status === 403) {
+        emitSSE('bridge:activity', {
+          gateway: 'Claude CLI',
+          type: 'claude_cli',
+          event: 'usage_collector_auth_failed',
+          text: `Claude quota collector auth failed (HTTP ${resp.status}) — 5h/7d utilisation is stale`,
+        }).catch(() => {});
+      }
       return;
     }
 
