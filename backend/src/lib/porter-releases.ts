@@ -22,6 +22,41 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.164.0',
+    date: '2026-09-10',
+    title: 'Asking for a document in a sentence found nothing',
+    bullets: [
+      'Yai asked Tom for the incorporation documents and structure of an entity, phrased as an ordinary sentence. Tom answered that he could not find them. The documents were there the whole time.',
+      'Document search took the first eight words of whatever it was given and required a document to match every one of them. In a polite question the first eight words are the greeting and the please \u2014 the name of the thing being asked about came later in the sentence and was thrown away before the search ran. It also kept punctuation, so two of the eight it did search for carried a full stop and a comma that no document title contains.',
+      'Search now ignores conversational filler, strips punctuation, and spends its budget on the words that actually name something. If requiring every word finds nothing, it falls back to ranking by how many of them each document matches, so the closest answer surfaces instead of silence.',
+      'The important part is what this stops: a report of "not found" that really meant "we searched for the wrong words". Those two are indistinguishable to whoever asked, and one of them sends someone away from a document that exists.',
+    ],
+  },
+  {
+    version: '6.163.0',
+    date: '2026-09-09',
+    title: 'The limit that protects the box was not covering chat',
+    bullets: [
+      'Porter caps how many model processes can run at once, and that cap is what stops a repeat of the run that burned tokens for 58 hours. Chat was never counted against it. Every other kind of request went through the gate; the streaming path, which is what a live conversation uses, went around it. So the protection covered the background work and not the traffic most likely to arrive all at once.',
+      'Chat now takes its place in the queue like everything else. The tricky part was letting go of that place at the right moment: the step that runs after a reply finishes asks Porter a question of its own, so holding on until the very end would have had every conversation waiting for a turn that could never come. The place is given up the moment the words stop.',
+      'Someone closing a tab mid-answer used to leave their place in the queue occupied. It is released immediately now. This was found by a test that hung rather than by reading the code.',
+      'A job that has hung was only ever noticed when Porter restarted, so it could sit holding one of four slots for up to twelve hours. It is now checked for every five minutes.',
+      'The memory and CPU limits on the service were set in May, when only one model process could run at a time and none could last more than five minutes. Both are now true of neither. They have been raised to match, with the reasoning written down next to them. The memory one mattered most: it does not slow things down when exceeded, it kills Porter outright.',
+    ],
+  },
+  {
+    version: '6.162.0',
+    date: '2026-09-09',
+    title: 'Porter can now tell whether its memory got better',
+    bullets: [
+      'Until now there was no way to answer "did that change help". Memory could be altered and the only evidence was whether it felt sharper afterwards. There is now a proper measurement that runs against the real memory, scores whether the right thing came back, and saves each run so two of them can be compared directly.',
+      'It reports three numbers together and deliberately refuses to report just one: how often it found the right thing, how long that took, and how much of the prompt it used up. Getting better at recall is easy if you are allowed to spend more of the prompt on it, and a single score would hide that trade.',
+      'The measurement borrows from a public benchmark, but not its definition of success. That one works out its own pass mark from what it happened to find, so it can never score badly for missing something. Ours is told in advance what the right answer is, which is the only version of the question worth asking.',
+      'Separately: two operating rules that contradict each other could both sit in memory and both get used. The existing cleanup only catches rules that are worded almost identically, so a genuine conflict written in different words survived and the model quietly picked one. Conflicts are now found by meaning.',
+      'Nothing is deleted automatically. A conflict is a judgement call, so it is raised for review rather than acted on, and Moe\u2019s own rules can never be retired in favour of a weaker one no matter how recently the weaker one was written.',
+    ],
+  },
+  {
     version: '6.160.8',
     date: '2026-09-03',
     title: 'A hidden document stays hidden in search',

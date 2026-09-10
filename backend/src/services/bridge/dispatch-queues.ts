@@ -81,6 +81,78 @@ export function runDispatch<T>(
   return getQueue(gatewayType, lane).add(() => _global.add(fn)) as Promise<T>;
 }
 
+/** A held place in the lane queue and the global gate. Release it exactly once. */
+export interface DispatchSlot {
+  release: () => void;
+}
+
+/**
+ * Acquire a slot and HOLD it until the caller releases — the streaming
+ * counterpart to `runDispatch`.
+ *
+ * ⚠️ WHY THIS EXISTS. `runDispatch` releases when its promise settles, which is
+ * useless for a stream: `adapter.stream()` returns an AsyncIterable more or less
+ * immediately, so wrapping it would take a slot and give it straight back while
+ * the subprocess it spawned ran on unbounded. Until v6.163.0 `dispatchStream`
+ * did not queue at all — it called `adapter.stream()` directly and skipped BOTH
+ * the lane queue and the global cap. Interactive chat is the streaming path, so
+ * the guardrail this module's header calls "the thing that makes per-gateway
+ * lanes safe on a 4 vCPU box" was bounding background work and not the traffic
+ * most able to arrive in bursts.
+ *
+ * ⚠️ RELEASE WHEN THE TOKENS STOP, NOT WHEN THE HANDLER FINISHES. The caller's
+ * work after the last token — `compressToolOutput` — issues an HTTP request back
+ * into Porter (`127.0.0.1:3001/api/v1/chat/send`), which needs a slot of its own.
+ * Hold this one across that and MAX_INFLIGHT concurrent streams each wait on a
+ * compression call that can never be admitted: total deadlock of the bridge.
+ * The slot bounds CLI SUBPROCESSES, and the subprocess is finished when its
+ * stream is exhausted. See the `finally` in routing-engine.ts dispatchStream.
+ *
+ * Releasing is idempotent, and an abort releases too, so a consumer that walks
+ * away mid-stream cannot strand a slot.
+ */
+export async function acquireDispatchSlot(
+  gatewayType: string,
+  lane: DispatchLane,
+  signal?: AbortSignal,
+): Promise<DispatchSlot> {
+  let release!: () => void;
+  const held = new Promise<void>((r) => { release = r; });
+  let granted!: () => void;
+  const grant = new Promise<void>((r) => { granted = r; });
+
+  let released = false;
+  const doRelease = () => {
+    if (released) return;
+    released = true;
+    signal?.removeEventListener('abort', doRelease);
+    // Resolve BOTH. `release()` alone frees the slot once the task is admitted,
+    // but a caller still queued behind a busy lane is parked on `grant` and
+    // would keep waiting for a turn it no longer wants — on a concurrency-1
+    // lane that means waiting out the whole dispatch in front of it. `granted()`
+    // lets an aborted caller return at once; the queued task, when it is finally
+    // admitted, finds `held` already resolved and completes immediately without
+    // occupying anything.
+    granted();
+    release();
+  };
+
+  // Registered BEFORE we wait, so an abort landing while we are still queued is
+  // not missed.
+  if (signal?.aborted) doRelease();
+  else signal?.addEventListener('abort', doRelease, { once: true });
+
+  // The task occupies its lane slot and then a global slot, and stays pending
+  // until released — which is precisely "this dispatch is in flight".
+  void getQueue(gatewayType, lane)
+    .add(() => _global.add(async () => { granted(); await held; }))
+    // A queue that rejects must not leave the caller waiting on `grant` forever.
+    .catch(() => granted());
+
+  await grant;
+  return { release: doRelease };
+}
+
 /** Stats for admin/debug. One row per live (gateway, lane), plus the global gate. */
 export function getQueueStats(): Record<string, { pending: number; size: number; concurrency: number }> {
   const out: Record<string, { pending: number; size: number; concurrency: number }> = {

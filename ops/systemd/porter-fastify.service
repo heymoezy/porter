@@ -30,14 +30,48 @@ Environment=FEATURE_EPHEMERAL_AGENTS=true
 Restart=always
 RestartSec=5
 
-# Resource ceilings (added 2026-05-11 after CPU saturation incident).
-# Hard memory cap: kernel OOM-kills the process if exceeded — better than
-# saturating swap and dragging the whole box down.
-MemoryMax=2G
-MemoryHigh=1500M
-# Soft CPU cap: 180% of one core (1.8 vCPUs out of 4 available). Lets Porter
-# handle bursts without monopolising the box and starving everything else.
-CPUQuota=180%
+# Resource ceilings. Originally added 2026-05-11 after a CPU saturation
+# incident; RESIZED 2026-09-09 (see below) because the shape of the workload
+# changed underneath them and nothing revisited the numbers.
+#
+# ⚠️ A SPAWNED `claude` STAYS IN THIS UNIT'S CGROUP. Every CLI subprocess Bridge
+# starts is accounted here, so these two lines bound Porter AND everything it
+# dispatches, together. That is the fact that makes the sizing history matter.
+#
+# ⚠️ THE MAY SIZING ASSUMED SERIAL DISPATCH. When 180%/2G were set, a workspace
+# dispatch could not outlive 5 minutes and dispatch-queues.ts ran everything on
+# ONE queue at concurrency 1 — so the cgroup effectively held Fastify plus at
+# most one CLI process. Since then a workspace job may run 12 hours
+# (WORKSPACE_TIMEOUT_MS) and PORTER_BRIDGE_MAX_INFLIGHT (default 3) subprocesses
+# run at once. The ceilings never moved. Lanes separate work logically while the
+# cgroup throttles it together, which is what
+# TOM-SLOWDOWN-2026-09-01.md ranks as a live cause of Tom feeling slow.
+#
+# THE DERIVATION, so the next person can redo it rather than guess:
+#   CPU:  PORTER_BRIDGE_MAX_INFLIGHT (3) × ~100% per CLI process
+#         + ~50% for Fastify/tsx itself            = ~350%
+#         on a 4 vCPU box, leaving ~50% for the rest of the system.
+#   MEM:  3 × ~270MB per CLI process (the figure in dispatch-queues.ts)
+#         + Node/tsx heap, with room for a heavy workspace session = 6G
+#         on a 15GB box. MemoryHigh throttles first; MemoryMax is the wall.
+#
+# ⚠️ MEMORY WAS THE SHARPER EDGE OF THE TWO. MemoryMax OOM-KILLS the unit, and
+# the unit is the backbone every CLI, the MCP server and the memory layer depend
+# on. At 2G, three concurrent CLI processes plus a workspace session were
+# credibly inside a kill, and the symptom would read as an unexplained restart
+# rather than as a cap.
+#
+# ⚠️ IF THESE NUMBERS ARE WRONG, THEY ARE WRONG UPWARD. Revert to
+# CPUQuota=180% / MemoryMax=2G / MemoryHigh=1500M to restore the May behaviour
+# exactly. Keep MAX_INFLIGHT and these ceilings in step: raising concurrency
+# without raising these puts the throttle back, and raising these without a cap
+# on concurrency is the 2026-08-14 token burn again.
+#
+# Editing this file changes nothing by itself:
+#   systemctl --user daemon-reload && systemctl --user restart porter-fastify
+MemoryMax=6G
+MemoryHigh=5G
+CPUQuota=350%
 # File-descriptor cap — defence in depth against another chokidar runaway.
 LimitNOFILE=8192
 

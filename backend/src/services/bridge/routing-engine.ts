@@ -9,7 +9,7 @@
 import { pool } from '../../db/client.js';
 import { createAdapter } from './adapters/index.js';
 import { calculateCostUsd } from './model-catalog.js';
-import { runDispatch, type DispatchLane } from './dispatch-queues.js';
+import { runDispatch, acquireDispatchSlot, type DispatchLane } from './dispatch-queues.js';
 
 /** The lane a request belongs in. `req.workspace` is the same field resolveCwd()
  *  uses to pick the adapter's ceiling, so the lane and the timeout cannot disagree. */
@@ -644,13 +644,29 @@ export class RoutingEngine {
 
     const wrappedStream = (async function* () {
       try {
-        const stream = decision.adapter.stream(req, signal);
-        for await (const token of stream) {
-          if (firstTokenAt === null) {
-            firstTokenAt = Date.now();
+        // ⚠️ THE STREAM PATH IS QUEUED TOO (v6.163.0). It previously called
+        // adapter.stream() directly and so skipped both the lane queue and the
+        // global MAX_INFLIGHT cap — and interactive chat is this path, so the
+        // guardrail was bounding background work and not the bursty traffic.
+        // Acquired inside the generator, so the slot is taken when the consumer
+        // actually starts pulling rather than when the generator is built.
+        const slot = await acquireDispatchSlot(decision.gatewayRow.type, laneFor(req), signal);
+        try {
+          const stream = decision.adapter.stream(req, signal);
+          for await (const token of stream) {
+            if (firstTokenAt === null) {
+              firstTokenAt = Date.now();
+            }
+            fullResponse += token;
+            yield token;
           }
-          fullResponse += token;
-          yield token;
+        } finally {
+          // ⚠️ RELEASED HERE, NOT AT THE END OF THE HANDLER. Everything below —
+          // compressToolOutput — makes an HTTP call back into Porter that needs
+          // a slot of its own. Holding this one across it deadlocks the bridge
+          // at MAX_INFLIGHT concurrent streams. The subprocess is done when its
+          // tokens stop; that is what this slot bounds.
+          slot.release();
         }
 
         const adapterTokens = (decision.adapter as any).lastStreamTokens as { inputTokens?: number; outputTokens?: number } | null;
