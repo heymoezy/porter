@@ -1,3 +1,38 @@
+## 6.164.0 - 2026-09-10
+
+porter_search_vault searched for the wrong words and reported the result as "not found".
+
+Yai asked Tom, over WhatsApp, in a normal sentence: "tom. can you give me the incorporation documents,
+the setup, and documents pertaining to the structure of nodal spc". The tokenizer was
+q.split(/\s+/).filter(t => t.length >= 2).slice(0, 8) and all three search arms AND their tokens, so
+the vault was queried for %tom.% AND %can% AND %you% AND %give% AND %me% AND %the% AND %incorporation%
+AND %documents,%. nodal and spc sit at positions 19 and 20 and were NEVER SEARCHED. Punctuation was
+never stripped, so two of the eight required a literal period and a literal comma. Zero rows from
+every arm, guaranteed. Tom reported he could not find the documents; they were there the whole time.
+
+Three changes, and the order matters: strip punctuation from token edges (keeping the inside, so
+nodal-spc and v6.1 survive); drop stopwords and dedupe BEFORE the cap, so the eight slots go to words
+that identify something; and when still over the cap keep the most selective tokens rather than the
+earliest, because the subject of a sentence is rarely its first word.
+
+AND-THEN-OR, which Porter already learned once. concept-retrieval.ts carries the same fallback with
+the measurement behind it — under AND-only, 3 of 8 probes could not find a concept using that
+concept's own words. This reader never got it: the same "two readers, one rule, one reader without it"
+shape that vault-visibility.ts exists to fix and that its own comments cite twice. All three arms now
+take a match mode, rank by how many asked-for words each row matched, and the tool widens to OR only
+when the precise reading returns nothing.
+
+Agent names are deliberately NOT stopwords. "tom" is a legitimate thing to have a document about, and
+guessing which proper nouns are address rather than subject is how a search starts silently ignoring
+what was asked. The OR ranking handles it instead.
+
+The doc comment on this function was written for keyword queries ("Edward Chen workout"). People ask
+agents in sentences and the agent passes the phrasing straight through, so that is the input the tool
+actually receives.
+
+13 tests in vault-lookup-tokenize.test.ts, the first five built on Yai's verbatim message. Porter tsc
+0, 343 tests / 199 pass / 0 fail.
+
 ## 6.163.0 - 2026-09-09
 
 Three findings from TOM-SLOWDOWN-2026-09-01.md that survived master's v6.160.5/6 fixes, plus the

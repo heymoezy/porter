@@ -1,3 +1,52 @@
+## 2026-09-10 - v6.164.0 - "Not found" meant "we searched for the wrong words"
+
+⚠️ **YAI ASKED FOR DOCUMENTS THAT EXIST AND WAS TOLD THEY DO NOT.** Over WhatsApp, in an ordinary
+sentence: *"tom. can you give me the incorporation documents, the setup, and documents pertaining to
+the structure of nodal spc"*. `porter_search_vault` tokenized it as
+`q.split(/\s+/).filter(t => t.length >= 2).slice(0, 8)` and ALL THREE arms AND their tokens, so the
+vault was queried for:
+
+    %tom.% AND %can% AND %you% AND %give% AND %me% AND %the% AND %incorporation% AND %documents,%
+
+**`nodal` and `spc` were never searched at all** — they sit at positions 19 and 20 and the positional
+slice took the polite opening instead. Two of the eight that survived required a literal full stop
+(`tom.`) and a literal comma (`documents,`), because nothing stripped punctuation. Zero rows, from
+every arm, guaranteed. This is arithmetic on the message, not a theory.
+
+⚠️ **THE CALLER CANNOT TELL THE TWO ANSWERS APART.** An empty result means "no such document" to
+whoever asked, and there is nothing in the response, the logs or the database that says "we searched
+for the wrong words". That is what makes this worse than a crash: it is a confident wrong answer, and
+it sent someone away from a document Porter holds.
+
+**Three changes, and the order matters.** Strip punctuation from token EDGES only (so `nodal-spc` and
+`v6.1` survive whole); drop stopwords and dedupe BEFORE the cap, so the eight slots go to words that
+identify something; and when still over the cap keep the MOST SELECTIVE tokens rather than the
+earliest — the subject of a sentence is rarely its first word, which is precisely how `nodal spc` was
+lost.
+
+⚠️ **AND-THEN-OR — PORTER ALREADY LEARNED THIS ONCE AND THIS READER NEVER GOT IT.**
+`concept-retrieval.ts` carries the same fallback with the measurement behind it: under AND-only, 3 of
+8 probes could not find a concept using that concept's OWN WORDS. This is the same "two readers, one
+rule, one reader without it" shape that `vault-visibility.ts` exists to fix and that its own comments
+cite TWICE (2026-07-14, 2026-09-03). Three times now. All three arms take a match mode, rank by how
+many asked-for words each row matched, and widen to OR only when the precise reading returns nothing.
+
+**Agent names are deliberately NOT stopwords.** "tom" is a legitimate thing to have a document about,
+and guessing which proper nouns are address rather than subject is how a search starts silently
+ignoring what was asked. The OR ranking handles it: a row matching `nodal`+`spc`+`incorporation`
+outranks one matching only `tom`.
+
+The doc comment on that function was written for keyword queries ("Edward Chen workout"). People ask
+agents in sentences and the agent passes the phrasing straight through, so a sentence is the input the
+tool actually receives — the comment described the caller we imagined, not the one we have.
+
+`src/__tests__/vault-lookup-tokenize.test.ts` — 13 tests, the first five built on Yai's verbatim
+message, so a positional slice cannot come back silently.
+
+Verified: tsc 0; 343 tests / 199 pass / 0 fail. **NOT verified against the live vault** — no Postgres
+here, so that `nodal spc` documents exist and now return is still unproven. Run
+`porter_search_vault` for "nodal spc incorporation" on the box before telling Yai anything.
+
 ## 2026-09-09 - v6.163.0 - The cap that makes the lanes safe was not covering chat
 
 ⚠️ **`dispatchStream` TOOK NO SLOT AT ALL.** It called `adapter.stream()` directly, skipping both the

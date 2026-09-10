@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.164.0',
+    date: '2026-09-10',
+    title: 'Asking for a document in a sentence found nothing',
+    bullets: [
+      'Yai asked Tom for the incorporation documents and structure of an entity, phrased as an ordinary sentence. Tom answered that he could not find them. The documents were there the whole time.',
+      'Document search took the first eight words of whatever it was given and required a document to match every one of them. In a polite question the first eight words are the greeting and the please \u2014 the name of the thing being asked about came later in the sentence and was thrown away before the search ran. It also kept punctuation, so two of the eight it did search for carried a full stop and a comma that no document title contains.',
+      'Search now ignores conversational filler, strips punctuation, and spends its budget on the words that actually name something. If requiring every word finds nothing, it falls back to ranking by how many of them each document matches, so the closest answer surfaces instead of silence.',
+      'The important part is what this stops: a report of "not found" that really meant "we searched for the wrong words". Those two are indistinguishable to whoever asked, and one of them sends someone away from a document that exists.',
+    ],
+  },
+  {
     version: '6.163.0',
     date: '2026-09-09',
     title: 'The limit that protects the box was not covering chat',

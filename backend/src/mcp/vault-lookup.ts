@@ -86,6 +86,107 @@ function isMemoryId(id: string): boolean {
  *
  * Results are MERGED with the memory arms below — see the module header.
  */
+/** Ceiling on tokens per query. Was applied to the RAW split — see tokenizeQuery. */
+const MAX_TOKENS = 8;
+
+/**
+ * Words that carry no selectivity in a vault of business documents. Conversational
+ * framing plus English function words — the shape of an ASKED question rather than
+ * a typed keyword.
+ *
+ * Agent names are NOT here. "tom" is a legitimate thing to have a document about,
+ * and guessing which proper nouns are address rather than subject is how a search
+ * starts silently ignoring the thing you asked for. The OR fallback handles it: a
+ * document matching `nodal`+`spc`+`incorporation` outranks one matching only `tom`.
+ */
+const STOPWORDS = new Set([
+  'can', 'could', 'would', 'will', 'shall', 'should', 'may', 'might', 'must',
+  'you', 'your', 'yours', 'me', 'my', 'mine', 'we', 'our', 'ours', 'us', 'it',
+  'the', 'and', 'or', 'but', 'for', 'to', 'of', 'in', 'on', 'at', 'by', 'with',
+  'from', 'about', 'into', 'over', 'under', 'is', 'are', 'was', 'were', 'be',
+  'been', 'do', 'does', 'did', 'have', 'has', 'had', 'get', 'give', 'send',
+  'show', 'find', 'pull', 'please', 'thanks', 'hi', 'hey', 'hello',
+  'that', 'this', 'these', 'those', 'there', 'here', 'what', 'which', 'who',
+  'any', 'all', 'some', 'if', 'so', 'as', 'also', 'too',
+]);
+
+/**
+ * Turn a query into the tokens actually worth searching for.
+ *
+ * ⚠️ THE BUG THIS REPLACES LOST THE SUBJECT OF THE QUESTION. It was
+ * `q.split(/\s+/).filter(t => t.length >= 2).slice(0, 8)`, and every arm below
+ * ANDs its tokens. On a real request —
+ *
+ *   "tom. can you give me the incorporation documents, the setup, and documents
+ *    pertaining to the structure of nodal spc"
+ *
+ * — the first eight tokens are `tom.` `can` `you` `give` `me` `the`
+ * `incorporation` `documents,`. **`nodal` and `spc` were never searched at all**:
+ * they sit at positions 19 and 20 and the slice took the polite opening instead.
+ * The surviving eight were then ANDed, including `%tom.%` WITH THE PERIOD and
+ * `%documents,%` WITH THE COMMA, because nothing stripped punctuation. Zero rows,
+ * from all three arms, guaranteed — and the caller cannot tell "no such document"
+ * from "we searched for the wrong words".
+ *
+ * Three things had to change together, and the order matters:
+ *   1. strip punctuation, so `tom.` and `documents,` are `tom` and `documents`;
+ *   2. drop stopwords and dedupe BEFORE the cap, so the cap spends its eight
+ *      slots on words that identify something;
+ *   3. when still over the cap, keep the MOST SELECTIVE tokens (longest first),
+ *      not the earliest — the subject of a sentence is rarely its first word.
+ *
+ * The doc comment above was written for keyword queries ("Edward Chen workout").
+ * People ask agents in sentences, and an agent passes the phrasing straight
+ * through, so this is the input the tool actually receives.
+ *
+ * Never returns empty for a non-empty query: if a query is nothing but stopwords
+ * ("what is the setup"), the stopwords are searched rather than nothing.
+ */
+export function tokenizeQuery(query: string): string[] {
+  const raw = query
+    .split(/\s+/)
+    // Trim punctuation from both ends, keeping the inside intact so hyphenated
+    // and dotted identifiers ("nodal-spc", "v6.1") survive as one token.
+    .map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
+    .filter((t) => t.length >= 2);
+
+  const seen = new Set<string>();
+  const dedupe = (list: string[]) =>
+    list.filter((t) => {
+      const k = t.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+
+  const meaningful = dedupe(raw.filter((t) => !STOPWORDS.has(t.toLowerCase())));
+  // A query made entirely of stopwords is still a query. Searching nothing would
+  // report "no such document", which is a different and wrong answer.
+  const chosen = meaningful.length > 0 ? meaningful : dedupe(raw);
+  if (chosen.length <= MAX_TOKENS) return chosen;
+
+  // Over the cap: keep the longest (most selective) tokens, then restore the
+  // order they were written in so the ranking below reads predictably.
+  const keep = new Set([...chosen].sort((a, b) => b.length - a.length).slice(0, MAX_TOKENS));
+  return chosen.filter((t) => keep.has(t));
+}
+
+/**
+ * How a set of tokens must match.
+ *
+ * ⚠️ AND-THEN-OR, AND PORTER ALREADY LEARNED THIS ONCE. `concept-retrieval.ts`
+ * carries the same fallback with the measurement behind it: under AND-only,
+ * 3 of 8 probes could not find a concept using that concept's OWN WORDS. This
+ * reader never got it — the same "two readers, one rule, one reader without it"
+ * shape that `vault-visibility.ts` exists to fix and that its own comments cite
+ * twice (2026-07-14, 2026-09-03).
+ *
+ * AND first, because when every term IS present that is the precise answer.
+ * OR only when AND finds nothing, so precision is preserved and recall stops
+ * failing on a politely-phrased question.
+ */
+export type MatchMode = 'and' | 'or';
+
 export async function searchVaultNodes(
   scope: string,
   query: string,
@@ -94,20 +195,27 @@ export async function searchVaultNodes(
   const q = query.trim();
   if (!q) return [];
   const limit = Math.max(1, Math.min(opts.limit ?? 15, 50));
-  const tokens = q.split(/\s+/).filter((t) => t.length >= 2).slice(0, 8);
+  const tokens = tokenizeQuery(q);
   if (tokens.length === 0) return [];
 
   // `layer:'data'` means "entities/documents only" — concepts and directives
   // are learning knowledge by construction, so that filter excludes them.
   const memoryWanted = opts.layer !== 'data';
 
-  const [graphHits, conceptHits, directiveHits] = await Promise.all([
-    searchGraphNodes(scope, tokens, opts.layer, limit),
-    memoryWanted ? searchConcepts(tokens, limit) : Promise.resolve([]),
-    memoryWanted ? searchDirectives(tokens, limit) : Promise.resolve([]),
-  ]);
+  const run = async (mode: MatchMode) => {
+    const [graphHits, conceptHits, directiveHits] = await Promise.all([
+      searchGraphNodes(scope, tokens, opts.layer, limit, mode),
+      memoryWanted ? searchConcepts(tokens, limit, mode) : Promise.resolve([]),
+      memoryWanted ? searchDirectives(tokens, limit, mode) : Promise.resolve([]),
+    ]);
+    return mergeHits(graphHits, [...directiveHits, ...conceptHits], limit);
+  };
 
-  return mergeHits(graphHits, [...directiveHits, ...conceptHits], limit);
+  // Widen only when the precise reading found nothing at all — see MatchMode.
+  // A single token cannot be narrowed further, so there is nothing to fall back to.
+  const strict = await run('and');
+  if (strict.length > 0 || tokens.length < 2) return strict;
+  return run('or');
 }
 
 /**
@@ -148,7 +256,8 @@ async function searchGraphNodes(
   scope: string,
   tokens: string[],
   layer: string | undefined,
-  limit: number
+  limit: number,
+  mode: MatchMode,
 ): Promise<VaultNodeHit[]> {
   const params: unknown[] = [scope];
   let layerClause = '';
@@ -159,21 +268,27 @@ async function searchGraphNodes(
 
   const tokenClauses: string[] = [];
   const titleMatchTerms: string[] = [];
+  const matchTerms: string[] = [];
   for (const t of tokens) {
     params.push(`%${t}%`);
     const idx = params.length;
-    tokenClauses.push(
-      `(n.title ILIKE $${idx} OR EXISTS (
+    const clause = `(n.title ILIKE $${idx} OR EXISTS (
          SELECT 1 FROM vault_artifacts a
          WHERE a.app_scope = n.app_scope AND a.node_id = n.id AND a.metadata::text ILIKE $${idx}
-       ))`
-    );
+       ))`;
+    tokenClauses.push(clause);
+    // How many of the asked-for words this row matched AT ALL. Constant under
+    // AND; under OR it is the ranking that keeps the fallback useful rather
+    // than a flood — a row matching `nodal`+`spc`+`incorporation` sorts above
+    // one matching only `tom`.
+    matchTerms.push(`(CASE WHEN ${clause} THEN 1 ELSE 0 END)`);
     titleMatchTerms.push(`(CASE WHEN n.title ILIKE $${idx} THEN 1 ELSE 0 END)`);
   }
 
   const rows = (await pool.query(
     `SELECT n.id, n.external_id, n.type, n.layer, n.title, n.status,
-            (${titleMatchTerms.join(' + ')}) AS title_match_count
+            (${titleMatchTerms.join(' + ')}) AS title_match_count,
+            (${matchTerms.join(' + ')}) AS match_count
      FROM vault_nodes n
      WHERE n.app_scope = $1
        -- ARCHIVED nodes are NOT results. routes/v1/vault.ts learned this on
@@ -190,13 +305,13 @@ async function searchGraphNodes(
        -- predicate the graph and this reader now share.
        AND ${visibleNodeSql('n')}
        ${layerClause}
-       AND ${tokenClauses.join('\n       AND ')}
-     ORDER BY title_match_count DESC, n.title ASC
+       AND (${tokenClauses.join(mode === 'and' ? '\n         AND ' : '\n         OR ')})
+     ORDER BY match_count DESC, title_match_count DESC, n.title ASC
      LIMIT ${limit}`,
     params
   )).rows as Array<{
     id: string; external_id: string; type: string; layer: string; title: string;
-    status: string; title_match_count: number;
+    status: string; title_match_count: number; match_count: number;
   }>;
 
   return rows.map((r) => ({
@@ -225,25 +340,28 @@ async function searchGraphNodes(
  * No app-scope filter — see the module header. `status='active'` only:
  * archived concepts are superseded knowledge and must never surface as current.
  */
-async function searchConcepts(tokens: string[], limit: number): Promise<VaultNodeHit[]> {
+async function searchConcepts(tokens: string[], limit: number, mode: MatchMode): Promise<VaultNodeHit[]> {
   const params: unknown[] = [];
   const tokenClauses: string[] = [];
   const titleMatchTerms: string[] = [];
+  const matchTerms: string[] = [];
   for (const t of tokens) {
     params.push(`%${t}%`);
     const idx = params.length;
     tokenClauses.push(`c.content ILIKE $${idx}`);
+    matchTerms.push(`(CASE WHEN c.content ILIKE $${idx} THEN 1 ELSE 0 END)`);
     titleMatchTerms.push(`(CASE WHEN split_part(c.content, E'\\n', 1) ILIKE $${idx} THEN 1 ELSE 0 END)`);
   }
 
   const rows = (await pool.query(
     `SELECT c.id, c.source_type, c.status, c.scope, c.scope_id,
             split_part(c.content, E'\\n', 1) AS title,
-            (${titleMatchTerms.join(' + ')}) AS title_match_count
+            (${titleMatchTerms.join(' + ')}) AS title_match_count,
+            (${matchTerms.join(' + ')}) AS match_count
      FROM concepts c
      WHERE c.status = 'active'
-       AND ${tokenClauses.join('\n       AND ')}
-     ORDER BY title_match_count DESC,
+       AND (${tokenClauses.join(mode === 'and' ? '\n         AND ' : '\n         OR ')})
+     ORDER BY match_count DESC, title_match_count DESC,
               -- vault rows are Moe-authored truth (trust_tier='high'); prefer
               -- them over harvested/distilled rows of equal token relevance,
               -- the same preference VAULT_RANK_BOOST encodes for injection.
@@ -253,7 +371,7 @@ async function searchConcepts(tokens: string[], limit: number): Promise<VaultNod
     params
   )).rows as Array<{
     id: string; source_type: string; status: string; scope: string; scope_id: string | null;
-    title: string; title_match_count: number;
+    title: string; title_match_count: number; match_count: number;
   }>;
 
   return rows.map((r) => ({
@@ -281,30 +399,33 @@ async function searchConcepts(tokens: string[], limit: number): Promise<VaultNod
  * `status='active'` only, for the same reason: an archived rule is a rule Moe
  * retired, and surfacing it as findable knowledge is exactly the drift removed.
  */
-async function searchDirectives(tokens: string[], limit: number): Promise<VaultNodeHit[]> {
+async function searchDirectives(tokens: string[], limit: number, mode: MatchMode): Promise<VaultNodeHit[]> {
   const params: unknown[] = [];
   const tokenClauses: string[] = [];
   const titleMatchTerms: string[] = [];
+  const matchTerms: string[] = [];
   for (const t of tokens) {
     params.push(`%${t}%`);
     const idx = params.length;
     tokenClauses.push(`d.content ILIKE $${idx}`);
+    matchTerms.push(`(CASE WHEN d.content ILIKE $${idx} THEN 1 ELSE 0 END)`);
     titleMatchTerms.push(`(CASE WHEN split_part(d.content, E'\\n', 1) ILIKE $${idx} THEN 1 ELSE 0 END)`);
   }
 
   const rows = (await pool.query(
     `SELECT d.id, d.scope, d.scope_id, d.priority, d.status,
             split_part(d.content, E'\\n', 1) AS title,
-            (${titleMatchTerms.join(' + ')}) AS title_match_count
+            (${titleMatchTerms.join(' + ')}) AS title_match_count,
+            (${matchTerms.join(' + ')}) AS match_count
      FROM directives d
      WHERE d.status = 'active'
-       AND ${tokenClauses.join('\n       AND ')}
-     ORDER BY title_match_count DESC, d.priority DESC, title ASC
+       AND (${tokenClauses.join(mode === 'and' ? '\n         AND ' : '\n         OR ')})
+     ORDER BY match_count DESC, title_match_count DESC, d.priority DESC, title ASC
      LIMIT ${limit}`,
     params
   )).rows as Array<{
     id: string; scope: string; scope_id: string | null; priority: number; status: string;
-    title: string; title_match_count: number;
+    title: string; title_match_count: number; match_count: number;
   }>;
 
   return rows.map((r) => ({
