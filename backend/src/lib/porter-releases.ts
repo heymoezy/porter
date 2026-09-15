@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.160.9',
+    date: '2026-09-15',
+    title: 'A Claude CLI bump no longer knocks Tom over',
+    bullets: [
+      'If the CLI binary is missing for a moment during an update, Porter says so instead of crashing.',
+      'Flags now match the binary that is actually running, so an older leftover Claude at /usr/bin no longer rejects the call.',
+    ],
+  },
+  {
     version: '6.160.8',
     date: '2026-09-03',
     title: 'A hidden document stays hidden in search',
