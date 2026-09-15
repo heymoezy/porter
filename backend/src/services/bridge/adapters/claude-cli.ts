@@ -12,9 +12,9 @@
  * context for cross-app consumers (e.g. YMC Tom).
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { mkdirSync, writeFileSync, unlinkSync, statSync } from 'node:fs';
+import { mkdirSync, writeFileSync, unlinkSync, statSync, existsSync } from 'node:fs';
 import { workspaceEnv } from '../workspace.js';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -91,6 +91,73 @@ const MAX_ARG_PROMPT_BYTES = 96 * 1024;
 
 /** Kernel limit, for reporting. 32 pages; PAGE_SIZE is 4096 on Linux x86-64. */
 const MAX_ARG_STRLEN = 32 * 4096;
+
+/**
+ * Pick a --permission-mode the running binary actually accepts.
+ *
+ * Claude Code 2.1.27x added `auto` (print-mode auto-approve). 2.1.50 — still
+ * sitting at /usr/bin/claude on this box — does not: allowed choices are
+ * acceptEdits, bypassPermissions, default, dontAsk, plan. Passing `auto` to
+ * 2.1.50 exits before any model call. `bypassPermissions` exists on both and
+ * is the non-interactive equivalent.
+ *
+ * Exported so a test can pin the mapping without spawning a binary.
+ */
+export function permissionModeArgs(helpText: string): string[] {
+  const block = helpText.match(/--permission-mode[\s\S]{0,500}?choices:\s*([^\n]+)/i);
+  const choices = (block?.[1] ?? '').toLowerCase();
+  if (/\bauto\b/.test(choices)) return ['--permission-mode', 'auto'];
+  if (choices.includes('bypasspermissions')) return ['--permission-mode', 'bypassPermissions'];
+  if (helpText.includes('--dangerously-skip-permissions')) return ['--dangerously-skip-permissions'];
+  return ['--permission-mode', 'bypassPermissions'];
+}
+
+let permissionCache: { bin: string; mtime: number; args: string[] } | null = null;
+
+export function permissionModeFor(binaryPath: string): string[] {
+  try {
+    const st = statSync(binaryPath);
+    if (permissionCache && permissionCache.bin === binaryPath && permissionCache.mtime === st.mtimeMs) {
+      return permissionCache.args;
+    }
+    const help = execFileSync(binaryPath, ['--help'], {
+      timeout: 8_000,
+      encoding: 'utf8',
+      maxBuffer: 2_000_000,
+    });
+    const args = permissionModeArgs(help);
+    permissionCache = { bin: binaryPath, mtime: st.mtimeMs, args };
+    return args;
+  } catch {
+    return ['--permission-mode', 'bypassPermissions'];
+  }
+}
+
+/**
+ * Use the stored path when it still exists. If it has vanished (npm updating
+ * the global CLI deletes the bin for a few seconds), fall through to PATH.
+ * Never crash the Porter process on ENOENT — that is what turned a CLI bump
+ * into Tom's `_porter.backend: fallback, error: fetch failed`.
+ */
+export function resolveClaudeBinary(stored: string | undefined): string {
+  if (stored && existsSync(stored)) return stored;
+  try {
+    return which.sync('claude');
+  } catch {
+    return stored || 'claude';
+  }
+}
+
+function waitForSpawn(child: ReturnType<typeof spawn>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onError = (err: Error) => reject(err);
+    child.once('error', onError);
+    child.once('spawn', () => {
+      child.removeListener('error', onError);
+      resolve();
+    });
+  });
+}
 
 /**
  * Decide how the system prompt travels, and say so out loud.
@@ -175,7 +242,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
   constructor(private readonly row: GatewayRow) {}
 
   private get binaryPath(): string {
-    return (this.row.metadata as Record<string, string>).binary_path ?? 'claude';
+    return resolveClaudeBinary((this.row.metadata as Record<string, string>).binary_path);
   }
 
   // ── detect ──────────────────────────────────────────────────────────────────
@@ -258,6 +325,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     const toolAllowList = Array.isArray(req.tools) && req.tools.length > 0 ? req.tools.join(',') : null;
     const { cwd, isWorkspace } = resolveCwd(req.workspace);
     const sysPrompt = systemPromptArgs(req.systemPrompt, 'dispatch');
+    const bin = this.binaryPath;
     const args = [
       '-p',
       '--output-format', 'stream-json',
@@ -271,7 +339,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       ...sysPrompt.args,
       ...(noTools
         ? ['--tools', '']
-        : ['--permission-mode', 'auto',
+        : [...permissionModeFor(bin),
            // A workspace dispatch is a code-changing job by definition, so it
            // gets the full agentic set. Without one, an explicit allow-list from
            // the caller still wins — that is how a research worker stays
@@ -295,7 +363,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       '--strict-mcp-config',
     ];
 
-    const child = spawn(this.binaryPath, args, {
+    const child = spawn(bin, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd,
       // ⚠️ A workspace session gets a SANITISED env, never Porter's own.
@@ -308,12 +376,20 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       env: { ...(isWorkspace ? workspaceEnv() : process.env), PORTER_BRIDGE_DISPATCH: '1' },
     });
 
+    const stderrChunks: Buffer[] = [];
+    child.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+
+    try {
+      await waitForSpawn(child);
+    } catch (err) {
+      sysPrompt.cleanup();
+      const why = err instanceof Error ? err.message : String(err);
+      throw new Error(`Claude CLI spawn failed (${bin}): ${why}`);
+    }
+
     // Write prompt to stdin and close it
     child.stdin.write(prompt, 'utf8');
     child.stdin.end();
-
-    // Drain stderr to prevent deadlock
-    child.stderr.resume();
 
     let streamText = '';
     let resultText = '';
@@ -401,7 +477,10 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     // Throwing lets the failover chain try the next gateway — the whole point
     // of having one.
     if (!response?.trim()) {
-      throw new Error('Claude CLI exited cleanly but returned an empty response');
+      const stderrTail = Buffer.concat(stderrChunks).toString('utf8').trim().slice(-400);
+      throw new Error(
+        `Claude CLI exited cleanly but returned an empty response${stderrTail ? `: ${stderrTail}` : ''}`,
+      );
     }
     const tokensUsed =
       inputTokens !== undefined && outputTokens !== undefined
@@ -439,6 +518,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     const toolAllowList = Array.isArray(req.tools) && req.tools.length > 0 ? req.tools.join(',') : null;
     const { cwd, isWorkspace } = resolveCwd(req.workspace);
     const sysPrompt = systemPromptArgs(req.systemPrompt, 'stream');
+    const bin = this.binaryPath;
     const args = [
       '-p',
       '--output-format', 'stream-json',
@@ -452,7 +532,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       ...sysPrompt.args,
       ...(noTools
         ? ['--tools', '']
-        : ['--permission-mode', 'auto',
+        : [...permissionModeFor(bin),
            // A workspace dispatch is a code-changing job by definition, so it
            // gets the full agentic set. Without one, an explicit allow-list from
            // the caller still wins — that is how a research worker stays
@@ -476,7 +556,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       '--strict-mcp-config',
     ];
 
-    const child = spawn(this.binaryPath, args, {
+    const child = spawn(bin, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd,
       // ⚠️ A workspace session gets a SANITISED env, never Porter's own.
@@ -489,12 +569,19 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
       env: { ...(isWorkspace ? workspaceEnv() : process.env), PORTER_BRIDGE_DISPATCH: '1' },
     });
 
+    child.stderr?.resume();
+
+    try {
+      await waitForSpawn(child);
+    } catch (err) {
+      sysPrompt.cleanup();
+      const why = err instanceof Error ? err.message : String(err);
+      throw new Error(`Claude CLI spawn failed (${bin}): ${why}`);
+    }
+
     // Write prompt to stdin and close it
     child.stdin.write(prompt, 'utf8');
     child.stdin.end();
-
-    // Drain stderr to prevent deadlock
-    child.stderr.resume();
 
     // Handle AbortSignal
     const onAbort = () => { child.kill('SIGTERM'); };

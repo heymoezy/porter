@@ -1,3 +1,10 @@
+## 6.160.9 - 2026-09-15
+
+Claude CLI adapter no longer crashes Porter when the binary is missing for a moment during an
+npm update, and no longer hardcodes `--permission-mode auto` (2.1.50 rejects it). Spawn errors
+throw; flags are probed from `--help`. 5 checks in backend/src/__tests__/claude-cli-flags.test.ts.
+Porter tsc 0.
+
 ## 6.160.6 - 2026-09-01
 
 dispatch-queues.ts held ONE PQueue at concurrency 1 and getQueue(_gatewayType?) ignored the

@@ -1,3 +1,17 @@
+## 2026-09-15 - v6.160.9 - A Claude CLI bump no longer knocks Tom over
+
+The watchdog emailed that the CLI moved from 2.1.271 to 2.1.50 and Tom's live smoke failed with
+`_porter.backend: fallback, error: fetch failed`. Two binaries: `~/.npm-global/bin/claude` is 2.1.272;
+`/usr/bin/claude` is 2.1.50 and rejects `--permission-mode auto`. During the npm update the current
+binary vanished for a few seconds. Porter spawned the stored path, hit ENOENT, and crashed because
+`dispatch()` had no spawn-error handler. Tom then could not reach Porter.
+
+The adapter now: waits for spawn and throws instead of crashing the process; captures stderr so a
+bad flag is the error, not an empty response; probes `--help` and uses `auto` only when the binary
+lists it, else `bypassPermissions`; if the stored path is gone, falls through to PATH.
+
+`backend/src/__tests__/claude-cli-flags.test.ts` pins 2.1.50 vs 2.1.272.
+
 ## 2026-09-03 - v6.160.8 - A hidden document stays hidden in search
 
 ymc's file scanner retired a private root (`dunross-crow-investments`) and `/reconcile` flipped all 43
