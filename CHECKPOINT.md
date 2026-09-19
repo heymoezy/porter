@@ -1,3 +1,25 @@
+## 2026-09-19 - v6.161.0 - A local model for routine work, free and on our own server
+
+Moe, asked whether the Claude filer was our own local LLM: "can we actually build our own local llm based
+on opensource stuff to handle a lot of the mundane and low intelligence stuff needed to run our infra?",
+then "R5 let's go" (ymc `planning/live-vault/RELEASES.md`). New gateway `local_llm`
+(`backend/src/services/bridge/adapters/local-llm.ts`): Ollama's HTTP API, default `qwen3:4b-instruct`
+(Apache-2.0, 2.5 GB), 2 threads. Detected at boot when Ollama answers and the model is pulled; priority 90.
+
+⚠️ **OPT-IN ONLY, IN CODE** (`OPT_IN_ONLY_GATEWAYS`, `failover.ts`): it is never in a chain it was not asked
+to lead, an env chain cannot list it back in, and a job sent to it does NOT fail over to the premium
+gateways, because routine work quietly becoming a paid Claude call is how a loop burns tokens unseen.
+Test: `backend/src/__tests__/local-llm-opt-in.test.ts` (5, with a control that a forced premium gateway keeps
+its fallbacks).
+
+⚠️ **`qwen3:4b` IS THE WRONG TAG.** It now resolves to the 2507 thinking variant, which reasons in plain text
+before every answer and ignored `think: false`, `/no_think` and a pre-filled empty think block. The
+instruct tag answers directly: four email subjects classified correctly at ~2.5 s each under load 8.
+The thinking model was removed.
+
+⚠️ **`learner.ts` IS GONE**; the config comment said it called Ollama with `qwen2.5-coder:1.5b`, a model never
+pulled here. Nothing calls it; the settings default now names the model that exists.
+
 ## 2026-09-15 - v6.160.9 - A Claude CLI bump no longer knocks Tom over
 
 The watchdog emailed that the CLI moved from 2.1.271 to 2.1.50 and Tom's live smoke failed with

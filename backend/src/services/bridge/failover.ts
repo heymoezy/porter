@@ -102,16 +102,31 @@ export interface FailoverRecord {
  * @param candidateTypes gateway types that are active+enabled, priority ASC
  * @param lead           forced gateway type (leads the chain when present)
  */
+/**
+ * Gateways that only ever answer when a caller names them. ⚠️ `local_llm` is a 4B model on a shared
+ * CPU: letting it into the chain by priority would make it the last resort for EVERY caller, so a
+ * morning when the premium gateways were down would have Tom's chats answered by it without anyone
+ * choosing that. Leading a chain it was asked for is the only way in.
+ */
+export const OPT_IN_ONLY_GATEWAYS = new Set(['local_llm']);
+
 export function orderChain(candidateTypes: string[], lead?: string): string[] {
   const envRaw = process.env.PORTER_BRIDGE_FALLBACK_CHAIN ?? '';
   const envChain = envRaw.split(',').map((s) => s.trim()).filter(Boolean);
 
-  // Env override is a strict allowlist+ordering; otherwise DB priority order.
-  const base = envChain.length > 0
+  // Env override is a strict allowlist+ordering; otherwise DB priority order. Opt-in-only gateways
+  // are never in the base chain; they appear only as the lead.
+  const base = (envChain.length > 0
     ? envChain.filter((t) => candidateTypes.includes(t))
-    : [...candidateTypes];
+    : [...candidateTypes]
+  ).filter((t) => !OPT_IN_ONLY_GATEWAYS.has(t));
 
   if (!lead) return base;
+  // ⚠️ A job sent to an opt-in-only gateway does NOT fall back to the premium chain. Those jobs were
+  // sent there because they are routine and should cost nothing; failing over would quietly turn
+  // each one into a paid Claude call, which is how a background loop burns tokens unseen. It fails,
+  // and the caller decides.
+  if (OPT_IN_ONLY_GATEWAYS.has(lead)) return [lead];
   return [lead, ...base.filter((t) => t !== lead)];
 }
 
