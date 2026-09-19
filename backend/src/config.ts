@@ -53,7 +53,8 @@ export const config = {
   //
   // TODO(v7.0): Bridge consolidation — since v6.9.0, claude_cli is the only Bridge
   // gateway. These keys are still consumed by direct (non-Bridge) callers:
-  //   - learner.ts          → calls ollama directly for concept extraction (live, ~2100 sessions)
+  //   - learner.ts          → DELETED; nothing calls ollama with ollamaModel any more (checked 2026-09-19).
+  //     The local model is reached through Bridge now: the `local_llm` gateway (adapters/local-llm.ts).
   //   - contact-analyzer.ts → calls ollama directly for CRM sentiment (dead-pathed, 0 jobs queued)
   //   - routes/v1/health.ts + routes/admin/{settings,models}.ts +
   //     routes/v1/templates.ts + routes/v1/chat.ts + routes/v1/admin/{settings,models}.ts
@@ -64,7 +65,9 @@ export const config = {
   // host-side service URLs. Rename + scope-narrow during v7.0 cleanup.
   ollamaUrl: process.env.OLLAMA_URL || 'http://127.0.0.1:11434',
   openclawUrl: process.env.OPENCLAW_URL || 'http://127.0.0.1:18789',
-  ollamaModel: process.env.OLLAMA_MODEL || 'qwen2.5-coder:1.5b',
+  // Shown on the settings screens only. qwen2.5-coder:1.5b was never pulled on this box; qwen3:4b-instruct is
+  // the model the local_llm gateway serves.
+  ollamaModel: process.env.OLLAMA_MODEL || process.env.PORTER_LOCAL_MODEL || 'qwen3:4b-instruct',
   openclawModel: process.env.OPENCLAW_MODEL || 'openclaw',
 
   // Auth token for openclaw gateway. Must be set via OPENCLAW_TOKEN env var.

@@ -12,6 +12,7 @@ import pg from 'pg';
 import crypto from 'node:crypto';
 import { refreshAllGateways } from './model-catalog.js';
 import { createAdapter } from './adapters/index.js';
+import { LOCAL_LLM_URL, LOCAL_LLM_MODEL } from './adapters/local-llm.js';
 import { GATEWAY_CAPABILITY_REGISTRY, getLegacyTags, normalizeCapabilities } from './capability-registry.js';
 import type { GatewayType, GatewayAuthMethod, GatewayRow } from './types.js';
 
@@ -274,6 +275,43 @@ export async function detectAndUpsertGateways(pool: pg.Pool): Promise<DetectionR
       );
       results.push({ type: 'grok_cli', name: 'Grok CLI', found: false, healthy: false, models: [] });
       console.log('[bridge] ✗ grok not found on PATH');
+    }
+
+    // Detect the local model: Ollama answering at OLLAMA_URL AND the model pulled. Priority 90, and
+    // OPT-IN ONLY (failover.ts OPT_IN_ONLY_GATEWAYS): the priority orders it among gateways a caller
+    // names, it never makes it anyone's fallback.
+    const localModels = await fetch(`${LOCAL_LLM_URL}/api/tags`, { signal: AbortSignal.timeout(5_000) })
+      .then((r) => (r.ok ? r.json() as Promise<{ models?: Array<{ name: string }> }> : null))
+      .then((b) => (b?.models ?? []).map((m) => m.name))
+      .catch(() => null as string[] | null);
+
+    if (localModels?.includes(LOCAL_LLM_MODEL)) {
+      await pool.query(
+        `INSERT INTO gateways (id, type, name, url, auth_method, status, source, priority, capabilities, metadata, enabled, created_at, updated_at)
+         VALUES ($1, 'local_llm', 'Local LLM (Ollama)', $2, 'none', 'active', 'auto_detected', 90, $3, $4, 1, EXTRACT(EPOCH FROM NOW()), EXTRACT(EPOCH FROM NOW()))
+         ON CONFLICT (type, source) WHERE source IN ('auto_detected', 'env_bootstrap')
+         DO UPDATE SET
+           status       = 'active',
+           capabilities = COALESCE(gateways.capabilities, EXCLUDED.capabilities),
+           metadata     = COALESCE(gateways.metadata, EXCLUDED.metadata),
+           updated_at   = EXTRACT(EPOCH FROM NOW())`,
+        [
+          crypto.randomUUID(),
+          LOCAL_LLM_URL,
+          JSON.stringify(GATEWAY_CAPABILITY_REGISTRY.local_llm),
+          JSON.stringify({ url: LOCAL_LLM_URL, default_model: LOCAL_LLM_MODEL }),
+        ],
+      );
+      console.log(`[bridge] ✓ local model ${LOCAL_LLM_MODEL} available at ${LOCAL_LLM_URL} (opt-in only)`);
+      const { rows } = await pool.query(`SELECT * FROM gateways WHERE type = 'local_llm' AND source = 'auto_detected'`);
+      if (rows.length > 0) results.push(await probeGateway(mapRawToGatewayRow(rows[0])));
+    } else {
+      await pool.query(
+        `UPDATE gateways SET status = 'stale', updated_at = EXTRACT(EPOCH FROM NOW())
+         WHERE type = 'local_llm' AND source = 'auto_detected' AND status != 'stale'`,
+      );
+      results.push({ type: 'local_llm', name: 'Local LLM (Ollama)', found: false, healthy: false, models: [] });
+      console.log(`[bridge] ✗ local model ${LOCAL_LLM_MODEL} not available at ${LOCAL_LLM_URL}`);
     }
 
     console.log('[bridge] Gateway detection complete');

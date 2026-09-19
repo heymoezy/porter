@@ -58,6 +58,17 @@ export const GATEWAY_CAPABILITY_REGISTRY: Record<GatewayType, GatewayCapabilityR
     tool_support: 'none',
     agentic: false,
   },
+  // Local open model through Ollama (adapters/local-llm.ts). OPT-IN ONLY: never in a failover chain
+  // it was not asked to lead. Small context on purpose — a 4B model on a shared CPU reads ~9 tokens a
+  // second, so it is for tagging, routing and short extractions, not documents or conversations.
+  local_llm: {
+    legacy_tags: ['chat', 'one_shot', 'no_tools', 'local', 'opt_in'],
+    strengths: ['analysis'],
+    cost_tier: 'budget',
+    context_window: 8_192,
+    tool_support: 'none',
+    agentic: false,
+  },
 };
 
 // ── Helper functions ──────────────────────────────────────────────────────────

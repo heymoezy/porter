@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.161.0',
+    date: '2026-09-19',
+    title: 'A local model for routine work, free and on our own server',
+    bullets: [
+      'Bridge has a new gateway, local_llm: an open model (Qwen3 4B) running on this server through Ollama. No tokens, nothing leaves the box.',
+      'It only answers when a job asks for it by name, and it never stands in for Claude or the others when they are down.',
+      'A job sent to it that fails stays failed, so routine work can never turn into a paid call without anyone choosing that.',
+    ],
+  },
+  {
     version: '6.160.9',
     date: '2026-09-15',
     title: 'A Claude CLI bump no longer knocks Tom over',
