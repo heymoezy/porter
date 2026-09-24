@@ -11,6 +11,8 @@ import { Calendar } from "~/components/ui/calendar"
 import { Input } from "~/components/ui/input"
 import { Label } from "~/components/ui/label"
 import { Badge } from "~/components/ui/badge"
+import { StatusBadge, StatusDot, STATUS_TONE } from "~/components/ui/status-badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table"
 import { Separator } from "~/components/ui/separator"
 import { Avatar, AvatarFallback } from "~/components/ui/avatar"
 import { Card, CardContent } from "~/components/ui/card"
@@ -1966,27 +1968,44 @@ function DesignSystemContent() {
             <Section id="badges" title="Badges & Status">
               <Sub title="Badge Variants">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge className="bg-accent-porter text-white">Active</Badge>
-                  <Badge className="bg-success/15 text-success">Online</Badge>
-                  <Badge className="bg-warning/15 text-warning">Pending</Badge>
-                  <Badge className="bg-danger/15 text-danger">Error</Badge>
-                  <Badge className="bg-raised text-text2">Idle</Badge>
-                  <Badge variant="outline" className="border-border2 text-text2">Draft</Badge>
+                  <Badge>default</Badge>
+                  <Badge variant="secondary">secondary</Badge>
+                  <Badge variant="success">success</Badge>
+                  <Badge variant="warning">warning</Badge>
+                  <Badge variant="info">info</Badge>
+                  <Badge variant="destructive">destructive</Badge>
+                  <Badge variant="outline">outline</Badge>
+                  <Badge variant="ghost">ghost</Badge>
+                </div>
+                <p className="text-2xs text-text3">
+                  success, warning and info read <code>--success</code>, <code>--warning</code> and <code>--info</code> from app.css. Status never passes colour through className.
+                </p>
+              </Sub>
+
+              <Sub title="StatusBadge (one shared status map)">
+                <p className="text-2xs text-text3">
+                  <code>components/ui/status-badge.tsx</code> holds every status, risk, severity, health and kind string the admin shows, mapped once to a tone. Unknown strings render neutral.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  {(["success", "warning", "info", "danger", "neutral"] as const).map(tone => (
+                    <div key={tone} className="flex flex-col gap-2">
+                      <span className="text-2xs font-semibold uppercase tracking-wide text-text3">{tone}</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.keys(STATUS_TONE).filter(k => STATUS_TONE[k] === tone).sort().map(k => (
+                          <StatusBadge key={k} status={k} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </Sub>
 
               <Sub title="Status Dots">
                 <div className="flex items-center gap-8">
-                  {[
-                    { label: "Online", color: "bg-success" },
-                    { label: "Working", color: "bg-accent-porter animate-pulse-badge" },
-                    { label: "Warning", color: "bg-warning" },
-                    { label: "Error", color: "bg-danger" },
-                    { label: "Offline", color: "bg-text3" },
-                  ].map(s => (
-                    <div key={s.label} className="flex items-center gap-2">
-                      <div className={`h-2 w-2 rounded-full ${s.color}`} />
-                      <span className="text-xs text-text2">{s.label}</span>
+                  {["idle", "working", "degraded", "error", "offline"].map(s => (
+                    <div key={s} className="flex items-center gap-2">
+                      <StatusDot status={s} pulse={s === "working"} />
+                      <span className="text-xs text-text2">{s}</span>
                     </div>
                   ))}
                 </div>
@@ -2808,6 +2827,36 @@ function DesignSystemContent() {
                 12. DATA
                 ============================================================ */}
             <Section id="data" title="Data">
+              <Sub title="Table (ui/table)">
+                <div className="max-w-2xl rounded-lg border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Task</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Agent</TableHead>
+                        <TableHead className="text-right">Duration</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {[
+                        { task: "Summarise the inbox", status: "completed", agent: "tom", ms: "4.2s" },
+                        { task: "Draft the release note", status: "running", agent: "codex", ms: "--" },
+                        { task: "Refresh vault index", status: "failed", agent: "porter", ms: "12.9s" },
+                        { task: "Classify new files", status: "pending", agent: "--", ms: "--" },
+                      ].map(r => (
+                        <TableRow key={r.task}>
+                          <TableCell>{r.task}</TableCell>
+                          <TableCell><StatusBadge status={r.status} /></TableCell>
+                          <TableCell className="text-text3">{r.agent}</TableCell>
+                          <TableCell className="text-right tabular-nums text-text3">{r.ms}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </Sub>
+
               <Sub title="Decision Log Table">
                 <div className="max-w-2xl overflow-hidden rounded-lg border border-border">
                   <div className="grid grid-cols-[80px_100px_1fr_120px] gap-3 border-b border-border bg-surface px-3 py-2 text-2xs font-semibold uppercase tracking-wide text-text3">

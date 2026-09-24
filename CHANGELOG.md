@@ -1,3 +1,19 @@
+## 6.162.0 - 2026-09-24
+
+Release P4 of `~/projects/_ops/design-system/RELEASES.md`. `app.css` gains `--info` (`#0369A1`, light theme)
+and `--color-info`. `ui/badge.tsx` gains `success`, `warning` and `info` variants on `--success`,
+`--warning` and `--info` (10% tint, token text). New `ui/table.tsx` from the shadcn registry (`npx shadcn add
+table --view`), sized to the house table: `text-xs` body, `text-2xs` uppercase `text-text3` headers on
+`bg-surface`, `border-border/30` row rules, cells wrap. New `ui/status-badge.tsx`: `STATUS_TONE`, the one
+status to tone map (59 strings collected from the ~20 local maps: STATUS_BADGE in home, skills, msg-bus and
+decomposition, STATUS_COLORS in mail-ops and ops-panels, statusColors in sessions-admin and pixel-portrait,
+RISK_COLORS, typeColors, DECISION_COLORS, severityColor, TIER_CONFIG, ProposalKindBadge STYLES, env-tools
+health), plus `StatusBadge`, `StatusDot`, `statusTone()`, `statusTextClass()` and `statusDotClass()`.
+Conflicts resolved once: `pending` is warning (skills, ops, approvals) not neutral (decomposition, msg-bus);
+`merge` is info; severity `warning` is warning and `error` is danger. `/design-system` Cards tab shows every
+variant and every status by tone; Data tab shows the table. Feature code is not touched here; P5 moves it.
+Ratchet unchanged at 848.
+
 ## 6.161.3 - 2026-09-24
 
 `app.css` section 9 (Forge palette, `.forge-panel`, `.forge-grid`, 17 `forge-*` keyframes and their
