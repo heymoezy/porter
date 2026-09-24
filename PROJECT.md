@@ -6,7 +6,7 @@ AI orchestration platform. Self-hosted SaaS that manages workers, projects, mode
 
 Porter is the AI orchestrator that runs on your machine -- routing requests across multiple AI models, injecting persistent memory into every call, managing failovers, and coordinating agents. You install it once, connect your API keys, and every AI tool on your machine becomes part of one intelligent system.
 
-Porter is headless (admin SPA archived 2026-07-04). The inline brain-ui dashboard on `:5176` shows memory, learning flow, and recent intellect events; everything else is API-first (`/api/v1/*`, `/api/admin/*`).
+Porter is API-first (`/api/v1/*`, `/api/admin/*`). The admin SPA in `admin/frontend.archived` (the name is historical) is a static build served at askporter.app, with `/api/*` proxied to :3001. The brain-ui dashboard that used `:5176` was deleted in v6.61.0.
 
 ## The Pillars
 
@@ -16,9 +16,9 @@ Porter is headless (admin SPA archived 2026-07-04). The inline brain-ui dashboar
 ## Stack
 
 - **Backend:** Fastify 5, TypeScript, Drizzle ORM, PostgreSQL 16
-- **Legacy:** `porter.py` — DELETED (was ~900KB Python monolith, fully replaced by Fastify); admin React SPA — ARCHIVED (`admin/frontend.archived`, 2026-07-04)
+- **Legacy:** `porter.py` — DELETED (was ~900KB Python monolith, fully replaced by Fastify); brain-ui on `:5176` — DELETED (v6.61.0)
 - **Repo:** `heymoezy/porter` (single monorepo)
-- **Port:** `:3001` (headless Fastify API) + `:5176` (inline brain-ui)
+- **Port:** `:3001` (Fastify API). The admin SPA is static files behind Caddy; no port of its own.
 
 ## Revenue Model
 

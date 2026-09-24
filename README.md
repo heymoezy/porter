@@ -8,9 +8,9 @@ Canonical Bridge contract: `BRIDGE.md` at repo root.
 | Component | Port | Path |
 |-----------|------|------|
 | Brain (headless Fastify API) | :3001 | `backend/` |
-| Brain UI (inline dashboard) | :5176 | `backend/src/routes/brain-ui.ts` |
+| Admin SPA (askporter.app, static build served by Caddy) | — | `admin/frontend.archived/` |
 
-Headless since 2026-07-04 — the old admin SPA is archived at `admin/frontend.archived`.
+The brain-ui on :5176 was deleted in v6.61.0. The admin SPA in `admin/frontend.archived` (the name is historical) is live at askporter.app.
 Business model: API metering. Any future UI/frontend is an API customer.
 
 ## Architecture

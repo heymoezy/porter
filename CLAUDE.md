@@ -99,6 +99,24 @@ nothing listens on that port. Earlier revisions of this file and
 `_ops/askporter-login-fix.md` said otherwise; following that advice turns a
 working site into a 502. The only Porter process is porter-fastify on :3001.
 
+## Design System — Non-Negotiable
+
+The admin SPA at askporter.app has one design system. Every UI change uses it; nothing is freehanded.
+Load the skill `design-system-guard` before touching any `.tsx` or `.css` in `admin/frontend.archived/`.
+
+- **Token truth:** `admin/frontend.archived/app/app.css` (`:root` values, mapped to Tailwind names in
+  `@theme inline`). Geist, indigo `--accent-porter` `#4F46E5`, light only. No hex, `rgb()`, default
+  Tailwind palette (`bg-blue-500`), `text-[13px]` or `dark:` in feature code.
+- **Primitives:** shadcn, in `admin/frontend.archived/app/components/ui/` (registered by
+  `components.json`). Use a component or variant before writing markup. A missing one is added to
+  `components/ui/` and shown on the `/design-system` route (`app/routes/design-system.tsx`, the living
+  style guide), then used.
+- **The ratchet:** `ds-ratchet` (`_ops/bin/ds-ratchet.mjs`) counts freehand styling per file against
+  `.ds-baseline.json`, configured by `.ds-ratchet.json` at the repo root. A count may fall and may never
+  rise; a new file starts at zero. It runs in `deploy/git-hooks/pre-commit`, in `ship`, and after every
+  Claude edit. When it refuses, use the component or token it names. Never raise the baseline, never add
+  an exemption to get past it. After a conversion, `ds-ratchet --write` lowers the baseline.
+
 ## Verification — Before Claiming Done
 
 - [ ] `npx tsc --noEmit` zero errors

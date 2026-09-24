@@ -21,8 +21,13 @@ WEB_DIR="/home/websites/porter/admin"
 echo "Baking release info from backend truth..."
 ( cd "/home/lobster/projects/Porter/backend" && npx tsx scripts/gen-admin-release-info.ts )
 
-echo "Building admin SPA..."
 cd "$FRONTEND_DIR"
+
+# A type error must stop the deploy, not ship. `react-router build` does not typecheck.
+echo "Type-checking admin SPA..."
+npx tsc --noEmit
+
+echo "Building admin SPA..."
 npm run build
 
 echo "Mirroring build/client → $WEB_DIR (for Caddy)..."
@@ -34,13 +39,3 @@ curl -s -o /dev/null -w 'https://askporter.app/: %{http_code}\n' https://askport
 curl -s -o /dev/null -w 'https://askporter.app/api/v1/health: %{http_code}\n' https://askporter.app/api/v1/health || true
 
 echo "Deploy complete."
-echo ""
-echo "NOTE: Caddy routing for askporter.app is DURABLE (in /etc/caddy/Caddyfile
-since 2026-07-29): static root + /api proxy + JSON access log. This script
-only ships the SPA bundle; it does not touch Caddy routing.
-'s askporter.app -> static-file-server + /api proxy routing is"
-echo "applied via the Caddy admin API and is EPHEMERAL (reverts if caddy is"
-echo "restarted/reloaded from the on-disk Caddyfile, which still points"
-echo "askporter.app straight at :3001). Durable persistence needs one sudo"
-echo "edit to /etc/caddy/Caddyfile — see _ops/askporter-login-fix.md. This"
-echo "script only ships the SPA bundle; it does not touch Caddy routing."

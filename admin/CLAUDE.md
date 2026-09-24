@@ -38,13 +38,23 @@ sudo). It is no longer an ephemeral admin-API patch, so it survives a
 - **Admin API routes:** `../backend/src/routes/admin/` — live on `:3001`
   (cookie auth, platform_admin only). The SPA calls these via `/api/*`.
 - ⚠️ **There is no brain-ui on `:5176`.** It was deleted as dead code in
-  v6.61.0 and nothing listens on that port. This SPA is the only admin surface.
+  v6.61.0. `:5176` survives only as the dev-server port in `vite.config.ts`
+  (`npm run dev` overrides it to 5173). Nothing in production listens there.
+  This SPA is the only admin surface.
+
+## Design system
+
+Read the "Design System" section in `../CLAUDE.md` and load the skill `design-system-guard` first.
+Short form: tokens live in `frontend.archived/app/app.css`, primitives in
+`frontend.archived/app/components/ui/` (shadcn, `components.json`), the living style guide is the
+`/design-system` route, and `ds-ratchet` blocks any commit that adds freehand styling.
+`deploy.sh` typechecks (`npx tsc --noEmit`) before it builds.
 
 ## Commands
 
 ```bash
 bash admin/deploy.sh                      # build + ship the admin SPA
-systemctl --user restart porter-fastify   # backend + brain-ui (backend changes only)
+systemctl --user restart porter-fastify   # backend only
 curl -s http://127.0.0.1:3001/health      # expect current version
 curl -s https://askporter.app/            # expect 200, admin SPA HTML
 tail -f /var/log/caddy/askporter-access.log  # who is hitting the public host
