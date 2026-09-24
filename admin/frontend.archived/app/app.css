@@ -47,6 +47,7 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-info: var(--info);
 
   /* Sidebar */
   --color-sidebar: var(--sidebar);
@@ -106,6 +107,7 @@
   --success: #15803D;
   --warning: #B45309;
   --danger:  #DC2626;
+  --info:    #0369A1;
 
   /* shadcn mappings */
   --foreground:           #1C2440;

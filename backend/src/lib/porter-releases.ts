@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.162.0',
+    date: '2026-09-24',
+    title: 'One status badge for the whole admin',
+    bullets: [
+      'Badges now come in success, warning and info as well as the existing styles, all drawn from the Porter colour tokens.',
+      'A single status badge knows every status the admin shows, from delivered and pending to critical and stale, and colours it the same way everywhere.',
+      'The admin has a proper table component, sized to match the tables it already has.',
+      'The Design System page shows all three, with every status grouped by colour.',
+    ],
+  },
+  {
     version: '6.161.3',
     date: '2026-09-24',
     title: 'The dead Forge styling is gone from the admin',

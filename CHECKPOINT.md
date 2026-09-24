@@ -1,3 +1,10 @@
+## 2026-09-24 - v6.162.0 - One status badge for the whole admin
+
+Release P4 of `~/projects/_ops/design-system/RELEASES.md`. Badge `success`/`warning`/`info` on semantic
+tokens (`--info` added), shadcn `ui/table` sized to the house table, `ui/status-badge.tsx` with the one
+status to tone map. Shown on `/design-system`. Ratchet 848. Next Porter row: P5 (move the local maps,
+StatCards and badges onto P4).
+
 ## 2026-09-24 - v6.161.3 - The dead Forge styling is gone from the admin
 
 Release P3 of `~/projects/_ops/design-system/RELEASES.md`. Forge palette, `.light`, `.deal-N`, undefined
