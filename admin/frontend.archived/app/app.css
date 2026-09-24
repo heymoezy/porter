@@ -273,16 +273,6 @@
   transform: translateY(1px) scale(0.98);
   box-shadow: 0 2px 8px rgba(0,0,0,.1), inset 0 2px 4px rgba(0,0,0,.12);
 }
-.light .btn-send {
-  box-shadow: 0 4px 14px rgba(79,70,229,.40), inset 0 1px 0 rgba(255,255,255,.25);
-}
-.light .btn-send:hover {
-  box-shadow: 0 8px 24px rgba(79,70,229,.50), 0 0 20px rgba(79,70,229,.30), inset 0 1px 0 rgba(255,255,255,.30);
-}
-.light .btn-send::after {
-  background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.18) 45%, transparent 60%);
-  background-size: 200% 100%;
-}
 
 /* Streaming Cursor */
 .streaming-cursor {
@@ -344,6 +334,12 @@
 @keyframes office-pulse {
   0%, 100% { box-shadow: 0 0 0 0.2px currentColor; }
   50%      { box-shadow: 0 0 12px 0.2px currentColor; }
+}
+
+/* ---- Connectors ---- */
+@keyframes conveyor-flow {
+  from { stroke-dashoffset: 24; }
+  to   { stroke-dashoffset: 0; }
 }
 
 /* ---- Card Entrances ---- */
@@ -533,14 +529,8 @@
 .animate-toast-exit      { animation: toast-exit 150ms var(--ease-in) both; }
 .animate-tab-crossfade   { animation: tab-crossfade var(--duration-normal) var(--ease-out) both; }
 .animate-sidebar-expand  { animation: sidebar-expand var(--duration-slow) var(--ease-out) both; }
+.animate-conveyor        { animation: conveyor-flow 1.5s linear infinite; }
 .animate-carousel-in     { animation: carousel-crossfade-in var(--duration-normal) var(--ease-out) both; }
-
-/* Deal delays (card stagger) */
-.deal-1 { animation-delay: 0s; }
-.deal-2 { animation-delay: 0.06s; }
-.deal-3 { animation-delay: 0.12s; }
-.deal-4 { animation-delay: 0.18s; }
-.deal-5 { animation-delay: 0.24s; }
 
 /* Stagger delays (list items) */
 .stagger-1 { animation-delay: calc(var(--stagger-delay) * 1); }
@@ -551,192 +541,6 @@
 .stagger-6 { animation-delay: calc(var(--stagger-delay) * 6); }
 .stagger-7 { animation-delay: calc(var(--stagger-delay) * 7); }
 .stagger-8 { animation-delay: calc(var(--stagger-delay) * 8); }
-
-
-/* ── 9. FORGE DESIGN SYSTEM ── */
-
-/* Forge palette — extends Porter dark theme for the Agent Forge */
-:root {
-  --forge-bg:      #0b0f14;
-  --forge-surface:  #121922;
-  --forge-steel:    #243244;
-  --forge-line:     rgba(120, 154, 191, 0.18);
-  --forge-ember:    #ff7a18;
-  --forge-flame:    #ffb347;
-  --forge-plasma:   #31c3ff;
-  --forge-mint:     #7dffb3;
-  --forge-danger:   #ff5d6c;
-  --forge-glow:     0 0 0 1px rgba(255,255,255,.03), 0 0 24px rgba(255,122,24,.18);
-  --forge-glow-active: 0 0 0 1px rgba(255,255,255,.06), 0 0 32px rgba(255,122,24,.28);
-  --forge-glow-plasma: 0 0 0 1px rgba(49,195,255,.1), 0 0 20px rgba(49,195,255,.15);
-  --forge-glow-mint:   0 0 0 1px rgba(125,255,179,.1), 0 0 20px rgba(125,255,179,.12);
-
-  /* Team colors */
-  --forge-team-forge:     var(--forge-ember);
-  --forge-team-product:   var(--forge-plasma);
-  --forge-team-admin:     var(--forge-mint);
-  --forge-team-marketing: #7c3aed;
-  --forge-team-marketing-light: #a78bfa;
-  --forge-team-memory:    #d97706;
-  --forge-team-memory-light: #fbbf24;
-
-  /* Model provider colors */
-  --forge-model-claude:  #d97706;
-  --forge-model-gpt:     #10b981;
-  --forge-model-gemini:  #6366f1;
-}
-
-/* Forge panel — uses theme surface, subtle accents */
-.forge-panel {
-  background:
-    radial-gradient(circle at 20% 0%, rgba(255,122,24,.04), transparent 30%),
-    radial-gradient(circle at 80% 20%, rgba(49,195,255,.03), transparent 28%),
-    var(--surface);
-  border: 1px solid var(--border);
-  backdrop-filter: blur(12px);
-}
-.forge-panel-active {
-  border-color: var(--forge-ember);
-  box-shadow: 0 0 20px rgba(255,122,24,.12);
-}
-
-/* Forge grid background */
-.forge-grid {
-  background-image:
-    linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px);
-  background-size: 24px 24px;
-  mask-image: radial-gradient(circle at center, black 55%, transparent 95%);
-}
-
-/* ---- Forge Keyframe Animations ---- */
-
-/* Conveyor belt flow — SVG stroke-dashoffset */
-@keyframes forge-conveyor-flow {
-  from { stroke-dashoffset: 24; }
-  to   { stroke-dashoffset: 0; }
-}
-
-/* Heat pulse — orange glow breathing on active stations */
-@keyframes forge-heat-pulse {
-  0%, 100% { box-shadow: 0 0 0 rgba(255,122,24,0); }
-  50%      { box-shadow: 0 0 30px rgba(255,122,24,.22); }
-}
-
-/* Data ping — packet moving along connector */
-@keyframes forge-data-ping {
-  0%   { transform: translateX(0) scale(.8); opacity: 0; }
-  15%  { opacity: 1; }
-  85%  { opacity: 1; }
-  100% { transform: translateX(var(--ping-distance, 100px)) scale(1.1); opacity: 0; }
-}
-
-/* Birth flash — radial burst on agent birth */
-@keyframes forge-birth-flash {
-  0%   { transform: scale(0); opacity: 0.8; }
-  50%  { transform: scale(1.5); opacity: 0.4; }
-  100% { transform: scale(2.5); opacity: 0; }
-}
-
-/* Birth resolve — portrait pixelation to crisp */
-@keyframes forge-birth-resolve {
-  0%   { filter: contrast(1.5) brightness(1.8); opacity: 0.3; }
-  40%  { filter: contrast(1.2) brightness(1.3); opacity: 0.7; }
-  100% { filter: contrast(1) brightness(1); opacity: 1; }
-}
-
-/* Scan line — cyan line sliding during QA */
-@keyframes forge-scan-line {
-  0%   { transform: translateY(-100%); opacity: 0; }
-  10%  { opacity: 1; }
-  90%  { opacity: 1; }
-  100% { transform: translateY(100%); opacity: 0; }
-}
-
-/* Text scramble — letter shuffle for bombastic verbs */
-@keyframes forge-text-scramble {
-  0%   { opacity: 0.4; filter: blur(2px); }
-  50%  { opacity: 0.8; filter: blur(0.5px); }
-  100% { opacity: 1; filter: blur(0); }
-}
-
-/* Ghost shimmer — blueprint lines on unborn org nodes */
-@keyframes forge-ghost-shimmer {
-  0%, 100% { border-color: rgba(120,154,191,.15); }
-  50%      { border-color: rgba(120,154,191,.35); }
-}
-
-/* Disintegrate — card dissolves when queued */
-@keyframes forge-disintegrate {
-  0%   { opacity: 0.6; transform: scale(1) translateY(0); filter: grayscale(1); }
-  30%  { opacity: 0.4; transform: scale(0.96) translateY(-4px); filter: grayscale(1) blur(1px); }
-  60%  { opacity: 0.15; transform: scale(0.9) translateY(-8px); filter: grayscale(1) blur(3px); }
-  100% { opacity: 0; transform: scale(0.85) translateY(-12px); filter: grayscale(1) blur(4px); pointer-events: none; }
-}
-.animate-forge-disintegrate {
-  animation: forge-disintegrate 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-/* Queue arrive — avatar materializes in the queue line */
-@keyframes forge-queue-arrive {
-  0%   { opacity: 0; transform: translateY(20px) scale(0.5); filter: blur(4px); }
-  40%  { opacity: 0.7; transform: translateY(-4px) scale(1.1); filter: blur(1px); }
-  70%  { opacity: 1; transform: translateY(2px) scale(0.98); filter: blur(0); }
-  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-}
-.animate-forge-queue-arrive {
-  animation: forge-queue-arrive 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-/* Energy propagation — light traveling down org connector */
-@keyframes forge-energy-propagate {
-  0%   { stroke-dashoffset: 100%; opacity: 0; }
-  20%  { opacity: 1; }
-  80%  { opacity: 1; }
-  100% { stroke-dashoffset: 0%; opacity: 0; }
-}
-
-/* Birth stamp — typewriter appearance */
-@keyframes forge-stamp-in {
-  0%   { transform: scale(1.3) rotate(-2deg); opacity: 0; }
-  60%  { transform: scale(0.98) rotate(0.5deg); opacity: 1; }
-  100% { transform: scale(1) rotate(0deg); opacity: 1; }
-}
-
-/* Utility classes for forge animations */
-.animate-forge-heat       { animation: forge-heat-pulse 2s ease-in-out infinite; }
-.animate-forge-conveyor   { animation: forge-conveyor-flow 1.5s linear infinite; }
-.animate-forge-ghost      { animation: forge-ghost-shimmer 3s ease-in-out infinite; }
-.animate-forge-scan       { animation: forge-scan-line 2s ease-in-out; }
-.animate-forge-birth      { animation: forge-birth-resolve 1s ease-out forwards; }
-.animate-forge-stamp      { animation: forge-stamp-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
-.animate-forge-scramble   { animation: forge-text-scramble 0.5s ease-out forwards; }
-
-/* Forge birth — grayscale to color reveal (FRG-06) */
-@keyframes forge-birth-grayscale-reveal {
-  0%   { filter: grayscale(1) brightness(0.7); opacity: 0; transform: scale(0.85); }
-  20%  { filter: grayscale(1) brightness(1.0); opacity: 0.5; transform: scale(1.0); }
-  55%  { filter: grayscale(0.4) brightness(1.1); opacity: 0.85; transform: scale(1.02); }
-  80%  { filter: grayscale(0) brightness(1.05); opacity: 1; transform: scale(1.0); }
-  100% { filter: grayscale(0) brightness(1); opacity: 1; transform: scale(1); }
-}
-
-/* Particle ring burst — radial scale-out ring */
-@keyframes forge-birth-ring {
-  0%   { transform: scale(0.5); opacity: 0.9; }
-  60%  { transform: scale(2.2); opacity: 0.3; }
-  100% { transform: scale(3.0); opacity: 0; }
-}
-
-/* Particle sparks — 8 pseudo-random rotations */
-@keyframes forge-birth-spark {
-  0%   { transform: translateY(0) scale(1); opacity: 1; }
-  100% { transform: translateY(-32px) scale(0); opacity: 0; }
-}
-
-.animate-forge-birth-grayscale { animation: forge-birth-grayscale-reveal 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-.animate-forge-birth-ring      { animation: forge-birth-ring 1.0s ease-out forwards; }
-.animate-forge-birth-spark     { animation: forge-birth-spark 0.8s ease-out forwards; }
 
 
 /* ── 10. ANIMATED LISTS (global) ── */

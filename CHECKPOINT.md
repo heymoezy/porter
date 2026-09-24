@@ -1,3 +1,9 @@
+## 2026-09-24 - v6.161.3 - The dead Forge styling is gone from the admin
+
+Release P3 of `~/projects/_ops/design-system/RELEASES.md`. Forge palette, `.light`, `.deal-N`, undefined
+`bg-bg` and `research/porter-ui-archive/` removed; three live Forge users moved to Porter tokens. Ratchet
+baseline 848. Next Porter row: P4 (Badge status variants, shadcn table, one StatusBadge).
+
 ## 2026-09-24 - v6.161.2 - The admin can no longer get less consistent
 
 Release P2 of `~/projects/_ops/design-system/RELEASES.md`. `ds-ratchet` baseline written (849 across 60

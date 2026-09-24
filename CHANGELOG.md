@@ -1,3 +1,17 @@
+## 6.161.3 - 2026-09-24
+
+`app.css` section 9 (Forge palette, `.forge-panel`, `.forge-grid`, 17 `forge-*` keyframes and their
+`animate-forge-*` utilities), the three `.light .btn-send` rules (nothing sets a `light` class; the SPA is
+light only) and `.deal-1..5` deleted. Live Forge users migrated: `components/org-connector.tsx` (the only
+caller, `/architecture`, used team "product"; `team` prop removed, strokes now `stroke-border` and
+`stroke-accent-porter`, keyframe kept as `animate-conveyor`), `routes/agent-detail.tsx` Forge button drops
+its `--forge-ember` override for the default variant, `routes/design-system.tsx` Forge tab removed and the
+card-deal demos use `stagger-N`. Undefined `bg-bg` fixed: `bg-background/50` (evolution-panel),
+`bg-background/80` (files drop overlay), override removed on the files rename Input. `research/porter-ui-archive/`
+(844K, unreferenced) deleted. Screens at 1440/390 before and after: dashboard, bridge and system differ
+only by live data (same noise as two runs of the old build); expected changes on /architecture,
+/agents/:id and /design-system. Ratchet 849 -> 848 (inline-style).
+
 ## 6.161.2 - 2026-09-24
 
 `.ds-ratchet.json` at the repo root: roots `admin/frontend.archived/app` (`.tsx .ts .jsx .css`), excludes

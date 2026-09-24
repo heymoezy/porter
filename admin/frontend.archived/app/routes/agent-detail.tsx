@@ -276,7 +276,7 @@ function AgentDetailContent() {
                 <Eye className="size-3" /> Who Is
               </Button>
               {!isBorn && (
-                <Button size="sm" className="h-7 text-xs gap-1 bg-[var(--forge-ember)] hover:bg-[var(--forge-ember)]/80 text-white border-0">
+                <Button size="sm" className="h-7 text-xs gap-1">
                   <Flame className="size-3" /> Forge
                 </Button>
               )}

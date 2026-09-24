@@ -2,7 +2,7 @@
 // Do NOT edit. Source of truth: backend/package.json (version) +
 // backend/src/lib/porter-releases.ts (PORTER_RELEASES — same feed as the group announce).
 
-export const PORTER_VERSION = "6.161.2";
+export const PORTER_VERSION = "6.161.3";
 
 export interface PorterRelease {
   version: string;
@@ -12,6 +12,16 @@ export interface PorterRelease {
 }
 
 export const PORTER_RELEASES: PorterRelease[] = [
+  {
+    "version": "6.161.3",
+    "date": "2026-09-24",
+    "title": "The dead Forge styling is gone from the admin",
+    "bullets": [
+      "The orange-and-cyan Forge palette left over from the abandoned Agent Forge is deleted, along with about 200 lines of styling nothing used.",
+      "The Forge button on an agent page and the connector line on Architecture now use Porter indigo like everything else.",
+      "Three places asked for a background colour that did not exist; they now use the real one."
+    ]
+  },
   {
     "version": "6.161.2",
     "date": "2026-09-24",
