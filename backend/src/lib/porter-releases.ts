@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.162.1',
+    date: '2026-09-24',
+    title: 'The Bridge checks its AI tools every 10 minutes, not every 30 seconds',
+    bullets: [
+      'Each check starts every AI command-line tool just to read its version, which cost about 750 seconds of CPU an hour on a server the host throttles when it stays busy.',
+      'A tool that breaks between checks still fails over when a message is sent to it.',
+    ],
+  },
+  {
     version: '6.162.0',
     date: '2026-09-24',
     title: 'One status badge for the whole admin',

@@ -21,7 +21,9 @@ const POLL_INTERVAL_MS = 2000;
 const MAX_ATTEMPTS = 3;
 const DEADLINE_CHECK_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
 const CALENDAR_SYNC_INTERVAL = 30; // Every 60 seconds (30 ticks * 2s)
-const HEALTH_PROBE_INTERVAL = 15; // 15 × 2000ms = 30s
+// 300 x 2s = 10 min. Each probe spawns every CLI with --version; at 30s that was ~750 s of CPU an hour
+// (agy alone ~5 s a probe) on a host that throttles sustained use. A real failure shows up at dispatch.
+const HEALTH_PROBE_INTERVAL = 300;
 const MODEL_REFRESH_INTERVAL = 43200; // 43200 ticks x 2s = 24h
 const MEMORY_VALIDATION_INTERVAL = 900;  // 900 ticks x 2s = 30 min — validate memory references
 const DISPATCH_SCORING_INTERVAL = 10800; // 10800 ticks x 2s = 6h — auto-score recent dispatches
