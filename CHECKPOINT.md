@@ -1,3 +1,9 @@
+## 2026-09-24 - v6.162.1 - The Bridge health probe runs every 10 minutes
+
+`HEALTH_PROBE_INTERVAL` 15 ticks (30 s) to 300 (10 min). The probe spawns every CLI with `--version`; measured
+`agy` ~5 s CPU, `codex` ~1 s, so 30 s cost ~750 CPU-s an hour under 90%+ host steal. Nothing reads
+`last_health_at` freshness; dispatch failover still catches a broken gateway.
+
 ## 2026-09-24 - v6.162.0 - One status badge for the whole admin
 
 Release P4 of `~/projects/_ops/design-system/RELEASES.md`. Badge `success`/`warning`/`info` on semantic

@@ -1,3 +1,10 @@
+## 6.162.1 - 2026-09-24
+
+The Bridge health probe runs every 10 minutes instead of every 30 seconds. Each probe starts every AI CLI
+with `--version`; measured on the box, `agy` costs about 5 s of CPU per call and `codex` about 1 s, so the
+30-second cadence spent about 750 CPU-seconds an hour on a host that throttles sustained use. A gateway that
+breaks between probes still fails over at dispatch.
+
 ## 6.162.0 - 2026-09-24
 
 Release P4 of `~/projects/_ops/design-system/RELEASES.md`. `app.css` gains `--info` (`#0369A1`, light theme)
