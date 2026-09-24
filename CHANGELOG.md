@@ -1,3 +1,13 @@
+## 6.161.2 - 2026-09-24
+
+`.ds-ratchet.json` at the repo root: roots `admin/frontend.archived/app` (`.tsx .ts .jsx .css`), excludes
+`app.css`, `components/ui/`, `routes/design-system.tsx`; hex exempt in `lib/agent-registry.ts` (avatar
+colours). Patterns: hex, rgb-hsl, arbitrary-color, arbitrary-size, palette, inline-style, raw-button,
+raw-input, raw-select, raw-textarea, raw-table, overlay, dark-variant. Baseline `.ds-baseline.json`: 849
+across 60 files. `deploy/git-hooks/pre-commit` runs `_ops/bin/ds-ratchet.mjs` as a blocking gate, before
+and independent of `SKIP_RELEASE_GATE`. Proved: a planted `bg-blue-500` in `routes/login.tsx` was refused
+(`palette: 0 → 1`).
+
 ## 6.161.1 - 2026-09-24
 
 Design system named in `CLAUDE.md` and `admin/CLAUDE.md` (token truth `admin/frontend.archived/app/app.css`,

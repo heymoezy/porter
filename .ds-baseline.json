@@ -1,0 +1,292 @@
+{
+  "admin/frontend.archived/app/components/DiffBlock.tsx": {
+    "palette": 6
+  },
+  "admin/frontend.archived/app/components/ProposalDetailDrawer.tsx": {
+    "arbitrary-size": 3
+  },
+  "admin/frontend.archived/app/components/ProposalKindBadge.tsx": {
+    "palette": 12
+  },
+  "admin/frontend.archived/app/components/bridge/cli-activity.tsx": {
+    "raw-table": 1
+  },
+  "admin/frontend.archived/app/components/bridge/cost-analytics.tsx": {
+    "inline-style": 1,
+    "raw-table": 3
+  },
+  "admin/frontend.archived/app/components/bridge/dispatch-log.tsx": {
+    "inline-style": 1,
+    "palette": 3,
+    "raw-button": 1,
+    "raw-table": 4
+  },
+  "admin/frontend.archived/app/components/bridge/model-catalog.tsx": {
+    "palette": 8,
+    "raw-table": 2
+  },
+  "admin/frontend.archived/app/components/bridge/session-pressure-chart.tsx": {
+    "hex": 9
+  },
+  "admin/frontend.archived/app/components/character-card.tsx": {
+    "inline-style": 2,
+    "palette": 5
+  },
+  "admin/frontend.archived/app/components/chat-panel.tsx": {
+    "arbitrary-size": 5,
+    "dark-variant": 1,
+    "hex": 4,
+    "inline-style": 3,
+    "palette": 4,
+    "raw-button": 9,
+    "raw-textarea": 1
+  },
+  "admin/frontend.archived/app/components/dashboard/active-work-panel.tsx": {
+    "hex": 22,
+    "inline-style": 1,
+    "palette": 12
+  },
+  "admin/frontend.archived/app/components/dashboard/approvals-panel.tsx": {
+    "hex": 8,
+    "palette": 15
+  },
+  "admin/frontend.archived/app/components/dashboard/dispatch-feed.tsx": {
+    "arbitrary-size": 1,
+    "hex": 11,
+    "palette": 1
+  },
+  "admin/frontend.archived/app/components/dashboard/intel-panel.tsx": {
+    "hex": 20,
+    "inline-style": 1,
+    "palette": 11
+  },
+  "admin/frontend.archived/app/components/dashboard/ops-panels.tsx": {
+    "hex": 17,
+    "inline-style": 1,
+    "palette": 13
+  },
+  "admin/frontend.archived/app/components/dashboard/verdict-bar.tsx": {
+    "hex": 16,
+    "inline-style": 1,
+    "palette": 7
+  },
+  "admin/frontend.archived/app/components/file-type-icon.tsx": {
+    "arbitrary-color": 4,
+    "arbitrary-size": 1,
+    "hex": 4,
+    "inline-style": 2
+  },
+  "admin/frontend.archived/app/components/layout/context-switcher.tsx": {
+    "arbitrary-color": 1,
+    "arbitrary-size": 2,
+    "hex": 1,
+    "palette": 2,
+    "raw-button": 3
+  },
+  "admin/frontend.archived/app/components/layout/sidebar.tsx": {
+    "arbitrary-size": 5,
+    "hex": 4,
+    "inline-style": 1,
+    "raw-button": 2
+  },
+  "admin/frontend.archived/app/components/layout/top-bar.tsx": {
+    "arbitrary-size": 2,
+    "raw-button": 3
+  },
+  "admin/frontend.archived/app/components/mail-ops.tsx": {
+    "arbitrary-size": 9,
+    "overlay": 1,
+    "palette": 66,
+    "raw-button": 10,
+    "raw-table": 4
+  },
+  "admin/frontend.archived/app/components/model-combobox.tsx": {
+    "arbitrary-size": 2,
+    "raw-button": 1
+  },
+  "admin/frontend.archived/app/components/org-connector.tsx": {
+    "inline-style": 1
+  },
+  "admin/frontend.archived/app/components/pixel-portrait-editor.tsx": {
+    "arbitrary-size": 1,
+    "hex": 40,
+    "inline-style": 2,
+    "raw-button": 2,
+    "raw-input": 1
+  },
+  "admin/frontend.archived/app/components/pixel-portrait.tsx": {
+    "inline-style": 1
+  },
+  "admin/frontend.archived/app/components/porter-logo.tsx": {
+    "arbitrary-size": 1
+  },
+  "admin/frontend.archived/app/components/product-overview.tsx": {
+    "palette": 2
+  },
+  "admin/frontend.archived/app/components/skill-effectiveness-bar.tsx": {
+    "inline-style": 1,
+    "palette": 6
+  },
+  "admin/frontend.archived/app/components/skill-quality-badge.tsx": {
+    "palette": 4
+  },
+  "admin/frontend.archived/app/components/studio/evolution-panel.tsx": {
+    "arbitrary-size": 1,
+    "palette": 4,
+    "raw-button": 2
+  },
+  "admin/frontend.archived/app/components/studio/skill-edit-sheet.tsx": {
+    "arbitrary-size": 2,
+    "hex": 1,
+    "raw-button": 1
+  },
+  "admin/frontend.archived/app/components/studio/skill-import-dialog.tsx": {
+    "arbitrary-size": 3,
+    "raw-button": 1,
+    "raw-table": 1
+  },
+  "admin/frontend.archived/app/components/studio/skills-studio.tsx": {
+    "arbitrary-size": 2,
+    "palette": 2,
+    "raw-button": 4
+  },
+  "admin/frontend.archived/app/components/studio/tools-studio.tsx": {
+    "raw-table": 3
+  },
+  "admin/frontend.archived/app/components/template-skills-tab.tsx": {
+    "arbitrary-size": 2,
+    "raw-button": 4,
+    "raw-table": 1
+  },
+  "admin/frontend.archived/app/components/vitals-bar.tsx": {
+    "inline-style": 1,
+    "palette": 9
+  },
+  "admin/frontend.archived/app/hooks/use-chat-panel.ts": {
+    "arbitrary-size": 1
+  },
+  "admin/frontend.archived/app/routes/agent-detail.tsx": {
+    "arbitrary-size": 3,
+    "hex": 8,
+    "overlay": 1,
+    "raw-button": 1,
+    "raw-table": 1,
+    "raw-textarea": 1
+  },
+  "admin/frontend.archived/app/routes/approvals.tsx": {
+    "palette": 28,
+    "raw-button": 1,
+    "raw-table": 1
+  },
+  "admin/frontend.archived/app/routes/architecture.tsx": {
+    "hex": 4,
+    "raw-button": 1
+  },
+  "admin/frontend.archived/app/routes/brain.tsx": {
+    "raw-button": 7,
+    "raw-select": 1
+  },
+  "admin/frontend.archived/app/routes/bridge.tsx": {
+    "inline-style": 1,
+    "palette": 3
+  },
+  "admin/frontend.archived/app/routes/changelog.tsx": {
+    "raw-button": 1
+  },
+  "admin/frontend.archived/app/routes/decisions.tsx": {
+    "arbitrary-size": 2,
+    "palette": 10,
+    "raw-button": 1,
+    "raw-input": 1,
+    "raw-select": 2,
+    "raw-table": 1
+  },
+  "admin/frontend.archived/app/routes/decomposition.tsx": {
+    "inline-style": 1,
+    "palette": 21,
+    "raw-button": 1,
+    "raw-table": 1
+  },
+  "admin/frontend.archived/app/routes/env-tools.tsx": {
+    "palette": 20
+  },
+  "admin/frontend.archived/app/routes/files.tsx": {
+    "arbitrary-size": 8,
+    "hex": 4,
+    "inline-style": 4,
+    "overlay": 2,
+    "raw-button": 15,
+    "raw-input": 2
+  },
+  "admin/frontend.archived/app/routes/home.tsx": {
+    "hex": 11,
+    "palette": 6
+  },
+  "admin/frontend.archived/app/routes/layout.tsx": {
+    "arbitrary-size": 5,
+    "hex": 8,
+    "inline-style": 4,
+    "overlay": 1,
+    "rgb-hsl": 4
+  },
+  "admin/frontend.archived/app/routes/login.tsx": {
+    "arbitrary-size": 4,
+    "inline-style": 1,
+    "raw-button": 7
+  },
+  "admin/frontend.archived/app/routes/mcp.tsx": {
+    "palette": 22
+  },
+  "admin/frontend.archived/app/routes/msg-bus.tsx": {
+    "palette": 12,
+    "raw-input": 1,
+    "raw-select": 1,
+    "raw-table": 1
+  },
+  "admin/frontend.archived/app/routes/routing.tsx": {
+    "arbitrary-size": 2,
+    "inline-style": 1,
+    "palette": 11,
+    "raw-button": 1,
+    "raw-table": 2
+  },
+  "admin/frontend.archived/app/routes/sessions-admin.tsx": {
+    "inline-style": 1,
+    "palette": 10,
+    "raw-select": 2,
+    "raw-table": 1
+  },
+  "admin/frontend.archived/app/routes/settings.tsx": {
+    "arbitrary-size": 2,
+    "hex": 4,
+    "raw-button": 1
+  },
+  "admin/frontend.archived/app/routes/skill-pack-explorer.tsx": {
+    "arbitrary-size": 2,
+    "overlay": 1,
+    "raw-button": 2
+  },
+  "admin/frontend.archived/app/routes/skills.tsx": {
+    "palette": 32,
+    "raw-button": 1,
+    "raw-table": 2
+  },
+  "admin/frontend.archived/app/routes/system.tsx": {
+    "arbitrary-size": 3,
+    "inline-style": 1,
+    "palette": 4,
+    "raw-button": 3,
+    "raw-table": 1
+  },
+  "admin/frontend.archived/app/routes/vault-files.tsx": {
+    "arbitrary-size": 13,
+    "inline-style": 1,
+    "palette": 6,
+    "raw-button": 4
+  },
+  "admin/frontend.archived/app/routes/vault.tsx": {
+    "arbitrary-size": 2,
+    "raw-button": 2,
+    "raw-select": 1
+  }
+}
