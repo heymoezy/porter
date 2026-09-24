@@ -1,3 +1,11 @@
+## 6.161.1 - 2026-09-24
+
+Design system named in `CLAUDE.md` and `admin/CLAUDE.md` (token truth `admin/frontend.archived/app/app.css`,
+shadcn primitives in `app/components/ui` via `components.json`, `/design-system` style guide, `ds-ratchet`,
+skill `design-system-guard`). `admin/deploy.sh` runs `npx tsc --noEmit` before `npm run build` and drops
+its stale "Caddy routing is ephemeral" footer. README/PROJECT no longer claim brain-ui on :5176 (deleted
+in 6.61.0). `.ship.conf` added (`VERSION_FILE=backend/package.json`, `HEALTH_URL=http://127.0.0.1:3001/health`).
+
 ## 6.160.9 - 2026-09-15
 
 Claude CLI adapter no longer crashes Porter when the binary is missing for a moment during an

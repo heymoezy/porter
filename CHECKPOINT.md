@@ -1,3 +1,12 @@
+## 2026-09-24 - v6.161.1 - Porter names its design system, and a type error stops the admin deploy
+
+Release P1 of `~/projects/_ops/design-system/RELEASES.md`. Design-system section in both CLAUDE.md files,
+typecheck in `admin/deploy.sh`, README/PROJECT :5176 claims removed, `.ship.conf` added.
+
+⚠️ **`ship` DOES NOT LAND PORTER YET.** It assumes `main` and `scripts/land.sh`; Porter's default branch is
+`master` and it has no `land.sh`. Porter lands by hand: merge the session branch into `master` in the primary
+checkout, push, `backend` build + restart, `bash admin/deploy.sh`, check `/health`.
+
 ## 2026-09-19 - v6.161.0 - A local model for routine work, free and on our own server
 
 Moe, asked whether the Claude filer was our own local LLM: "can we actually build our own local llm based

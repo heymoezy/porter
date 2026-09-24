@@ -2,7 +2,7 @@
 // Do NOT edit. Source of truth: backend/package.json (version) +
 // backend/src/lib/porter-releases.ts (PORTER_RELEASES — same feed as the group announce).
 
-export const PORTER_VERSION = "6.133.0";
+export const PORTER_VERSION = "6.161.1";
 
 export interface PorterRelease {
   version: string;
@@ -12,6 +12,409 @@ export interface PorterRelease {
 }
 
 export const PORTER_RELEASES: PorterRelease[] = [
+  {
+    "version": "6.161.1",
+    "date": "2026-09-24",
+    "title": "Porter names its design system, and a type error stops the admin deploy",
+    "bullets": [
+      "CLAUDE.md and admin/CLAUDE.md now say where the admin design system lives: tokens in app.css, components in components/ui, the /design-system page, and the ratchet that holds them.",
+      "The admin deploy runs a type check before it builds, so a type error can no longer reach askporter.app.",
+      "README and PROJECT no longer say a dashboard runs on port 5176. It was deleted in 6.61.0."
+    ]
+  },
+  {
+    "version": "6.161.0",
+    "date": "2026-09-19",
+    "title": "A local model for routine work, free and on our own server",
+    "bullets": [
+      "Bridge has a new gateway, local_llm: an open model (Qwen3 4B) running on this server through Ollama. No tokens, nothing leaves the box.",
+      "It only answers when a job asks for it by name, and it never stands in for Claude or the others when they are down.",
+      "A job sent to it that fails stays failed, so routine work can never turn into a paid call without anyone choosing that."
+    ]
+  },
+  {
+    "version": "6.160.9",
+    "date": "2026-09-15",
+    "title": "A Claude CLI bump no longer knocks Tom over",
+    "bullets": [
+      "If the CLI binary is missing for a moment during an update, Porter says so instead of crashing.",
+      "Flags now match the binary that is actually running, so an older leftover Claude at /usr/bin no longer rejects the call."
+    ]
+  },
+  {
+    "version": "6.160.8",
+    "date": "2026-09-03",
+    "title": "A hidden document stays hidden in search",
+    "bullets": [
+      "A file that has been removed from every scanned folder no longer shows up in vault search. The graph already hid it; search did not.",
+      "Both readers now use one rule for what may be shown."
+    ]
+  },
+  {
+    "version": "6.160.7",
+    "date": "2026-09-01",
+    "title": "A memory can be marked as one that must not become a lesson",
+    "bullets": [
+      "The nightly pass that turns an agent’s conversations into durable lessons was reading every conversation it had, including private ones. A lesson gets repeated wherever the agent speaks, so anything private that fed one could come back out in a room full of other people.",
+      "Attribution afterwards is not possible. Every conversation goes into a single request and what comes back is a set of lessons with no record of which conversations produced which. Once private material is in the input there is nothing left to filter on.",
+      "So a memory can now be marked at the point it is written, and marked memories are never read by that nightly pass. The caller decides what counts as private, which is the only place that decision can honestly be made.",
+      "The mark is also handed back on search, so a caller that wants to withhold something in one room and not another can do that too.",
+      "Nothing is marked unless a caller asks for it, so existing behaviour is unchanged."
+    ]
+  },
+  {
+    "version": "6.160.6",
+    "date": "2026-09-01",
+    "title": "Every model call on this machine was running one at a time",
+    "bullets": [
+      "There was a single queue for all four backends, and the function that hands out queues took the backend name and ignored it. So Claude, Codex, Grok and Antigravity all shared one lane. Sending a question to two of them at once ran them one after the other, and the code that calls it describes itself as a per-backend queue. It never was one.",
+      "Worse, a workspace job is allowed twelve hours. On a single lane that job could hold up every other model call on the box for half a day: a chat turn, a question in a data room, anything.",
+      "Each backend now has its own lane, and within each backend the work someone is waiting for is separated from long background jobs. A question no longer sits behind a twelve hour build.",
+      "The reason it was never simply set higher: taking the serial queue out once before is what let two agents on thirty second timers run roughly 285 cold starts an hour on the most expensive model for 58 hours. So this ships with a hard ceiling on how many can run at once, set to three on a four core box, and the ceiling is what makes the lanes safe rather than a repeat.",
+      "Proved rather than argued: eight checks that two backends now finish in the time of one, that the same backend still takes its turn in order, that a short question overtakes a long job beside it, and that the ceiling actually holds under load."
+    ]
+  },
+  {
+    "version": "6.160.5",
+    "date": "2026-09-01",
+    "title": "Work that had been sitting uncommitted for eighteen days",
+    "bullets": [
+      "Found during a sweep of every working tree, not written today. Twelve files had been finished and left uncommitted since the middle of August, which means none of it was backed up anywhere and any mistake in that tree would have taken it.",
+      "The largest piece stops a timeout from being copied. The adapter that runs the model has a five minute ceiling, and two callers had re-typed their own shorter numbers beside it. The shorter one wins silently: the caller gives up while the subprocess keeps running, and the difference is an orphan nobody sees. Both now derive from the adapter’s own number, which is how the workspace path was fixed once already and has not drifted since.",
+      "A model with no cost entry now says so once, by name, and says where to add it, instead of being quietly priced at nothing.",
+      "A scheduled agent takes its interval from its own schedule where it has one, rather than only from the template it was made from.",
+      "And the database setup no longer recreates three tables belonging to a feature that was abandoned in April, nor re-seeds their settings on every boot.",
+      "Typechecks clean. This release commits it so it exists somewhere other than one folder on one machine."
+    ]
+  },
+  {
+    "version": "6.160.4",
+    "date": "2026-09-01",
+    "title": "Removed a calendar sync that could never have run",
+    "bullets": [
+      "Porter carried its own Google Calendar sync. It needed a stored set of Google credentials, and nothing in Porter has ever written one, so the row it read had to be placed by hand and never was. It also sat behind a switch that defaults to off.",
+      "Both of its tables are empty and always have been. Nothing outside the deleted file ever wrote to either.",
+      "Tom has been the one calendar integration all along, on ymc, and that is where the work to read both of Moe’s diaries landed this week. Two of them was one too many."
+    ]
+  },
+  {
+    "version": "6.160.3",
+    "date": "2026-08-31",
+    "title": "Recall now says which conversation a memory came from",
+    "bullets": [
+      "Memory search returns matches from every conversation an agent has had. That is right for an assistant with one user and wrong the moment the same assistant also speaks in a room with other people in it, because something said in a private chat can come back up in a group one days later.",
+      "The record has always stored which conversation each memory came from. It was simply never handed back, so nothing reading memory could tell a private exchange from a shared one.",
+      "It is returned now, on memories and on the recent list. What to do with it is the caller’s decision, which is the right place for it: the same memory is fine in one room and not in another, and only the caller knows which room it is in.",
+      "Firm-level notes and standing rules are unaffected. They belong to no conversation and are returned as before."
+    ]
+  },
+  {
+    "version": "6.160.2",
+    "date": "2026-08-30",
+    "title": "Document search said \"nothing on file\" about documents it held",
+    "bullets": [
+      "Asking the document store a question in ordinary English required every word of that question to appear inside a single passage before anything matched. Short, precise queries worked. Whole questions mostly did not, and the answer came back as \"nothing on file\", which reads exactly like an empty archive.",
+      "Measured on a live store of roughly six thousand passages: one natural question matched nothing at all, while the same question treated as \"any of these words\" matched several thousand, and the best-ranked results were the right documents. Ranking already rewards a passage that covers more of the question, so a wider candidate set does not make the answer noisier.",
+      "The precise form still runs first, because when it works it is the better answer. The wider form only runs when the precise one found nothing, and the fuzzy match stays behind both.",
+      "That fuzzy match was never reaching anything. It compares a whole passage against a short question, and at the default threshold a passage of three thousand characters is never similar enough to a sentence. It only ever ran when the step above it returned nothing, so it looked like a safety net and was not one.",
+      "Each answer now reports which of the three steps produced it, so how often the wider form is carrying the work is a number rather than a guess. That number is what decides whether this store ever needs semantic search.",
+      "Words from the question are normalised and quoted before the query is built, so punctuation and search operators typed into a question cannot change its meaning. A question made only of common words matches nothing instead of erroring."
+    ]
+  },
+  {
+    "version": "6.160.1",
+    "date": "2026-08-11",
+    "title": "Sixty jobs had been marked \"in progress\" since April",
+    "bullets": [
+      "A job is marked as being worked on when it is picked up, and marked finished by the code that finishes it. If the process stops in between, the record sits there saying work is underway forever. Nothing ever checked. Sixty of them had been in that state since April.",
+      "Fifty-two belonged to a feature that no longer exists — nothing schedules that work and nothing runs it — so the code that created them has been deleted rather than left to make more.",
+      "The check runs at startup and asks whether anyone is actually working the job, never how long it has been going. Age would have been the wrong question: a coding session is now allowed to run for twelve hours, so a sweep based on how long something has been running would kill exactly the long sessions the last release exists to protect.",
+      "They are recorded as failed rather than retried. There is no way to know how long one has been abandoned, and re-running a routine check from four months ago is noise. It also means Tom finds out a delegated job died with the process instead of waiting on it indefinitely."
+    ]
+  },
+  {
+    "version": "6.160.0",
+    "date": "2026-08-11",
+    "title": "A dev session can now take as long as the work takes",
+    "bullets": [
+      "A coding session handed to a background worker was killed after thirty minutes, whatever it was doing. Real work does not fit a deadline set by our impatience, and cutting it off destroyed what it had written and reported a failure that had not happened. It now runs until it is done.",
+      "The reason thirty minutes existed at all: jobs were run strictly one after another, so a long one blocked everything queued beside it, including the routine checks. Simply raising the limit would have turned \"dev sessions get killed\" into \"one dev session freezes Porter for the rest of the day\". Jobs now run alongside each other, four at a time, so a long session occupies one place and nothing waits behind it.",
+      "Measured, not assumed: two jobs queued together now start in the same second and finish in the same four-second window. Run one after the other they would have taken twice as long, with the second not starting until the first had finished.",
+      "The limit the client waits for is now derived from the limit the server enforces, so the two cannot drift apart. They have disagreed twice — once at 1,800 against 300 seconds, once at 240 against 300 — and both times the shorter number won silently and the work was thrown away."
+    ]
+  },
+  {
+    "version": "6.159.0",
+    "date": "2026-08-11",
+    "title": "Delegated jobs were being cut off early by a limit we set ourselves",
+    "bullets": [
+      "When Tom hands work to a background worker, the job was being abandoned after four minutes — while the system running it was willing to allow five. The last minute of every delegated job was unreachable, so work that was still progressing was killed and reported as a timeout.",
+      "Only two jobs have been attempted in the last ten days and both failed this way. Both were requests to BUILD something, and real coding does not finish in five minutes.",
+      "The failure message said only \"the operation was aborted due to timeout\", which explained nothing — working out the cause meant reading three separate files. It now states which limit was hit and why it was that low.",
+      "Honest note: this makes the real problem visible rather than solving it. A job that writes code needs to be given a repository when it is handed over, which unlocks a thirty-minute budget instead of five. The system has accepted that since July and whatever hands the job over has never supplied it — filed as its own fix rather than quietly bundled in here."
+    ]
+  },
+  {
+    "version": "6.158.0",
+    "date": "2026-08-04",
+    "title": "Two paths written down eight times, and settings that reset on restart",
+    "bullets": [
+      "The location of the projects folder and the vault was hardcoded in eight separate files. Moving either would have broken whichever ones were missed, silently. Both now come from one place.",
+      "Gateway capabilities were rewritten from code on every restart, so any change made in the admin was quietly undone the next time Porter started. Detection now fills in a gateway that has no settings and never overrules ones that do."
+    ]
+  },
+  {
+    "version": "6.157.0",
+    "date": "2026-08-03",
+    "title": "One place to ask what happened",
+    "bullets": [
+      "Answering \"what happened today\" meant checking ten different logs across two databases. There is now one searchable stream everything writes to, and Tom’s messages reach it for the first time.",
+      "It reuses the event log that already existed rather than adding an eleventh one, and it does not merge the tables that are not logs — a task queue and a compliance record with a named reviewer keep their own meaning.",
+      "Writing to it can never fail or slow down the thing being logged, and nothing is allowed to read it to decide whether an action already happened."
+    ]
+  },
+  {
+    "version": "6.156.0",
+    "date": "2026-08-03",
+    "title": "Mirrored knowledge now keeps its confidence score",
+    "bullets": [
+      "When Tom records something he knows about a person, a copy is kept in Porter. That copy was losing the confidence attached to it, so there was no way to tell a fact he is sure about from one that has faded. It now carries across.",
+      "The two systems store confidence on different scales — 0 to 1 in one, 0 to 100 in the other. A first attempt wrote every value as 1, reported success five times, and was only caught by reading the result back. The conversion now happens in one place."
+    ]
+  },
+  {
+    "version": "6.155.0",
+    "date": "2026-08-02",
+    "title": "Checked whether memory has a duplicates problem. It does not.",
+    "bullets": [
+      "A planned piece of work assumed the memory store was filling with duplicate entries and needed automatic merging. Measured it: of 216 entries, zero real duplicates above the level where merging would be safe, and two below it.",
+      "Almost everything that looks like a duplicate is not — consecutive Ollama release notes read as 99% identical to a computer but are different releases. Merging at the level needed to catch the two real duplicates would have deleted 52 genuine records.",
+      "Not building it. The check is saved so the next person sees the evidence rather than the assumption."
+    ]
+  },
+  {
+    "version": "6.154.0",
+    "date": "2026-08-02",
+    "title": "Memory can now be found by meaning, not just by matching words",
+    "bullets": [
+      "Asking \"who should I ask about anti money laundering paperwork\" found nothing, even though there is a note about who handles compliance and KYC. The two phrasings share no words, so word-matching could never connect them. Search now also compares meaning.",
+      "Measured, not assumed: 8 test questions asked in different words than the notes use. Word-matching alone missed 4 of 8. With meaning-matching added, 3 — and one of those three is the test being too strict, not the search failing.",
+      "It runs on this machine and nothing is sent anywhere. If it is unavailable the old search answers exactly as before, so it can never make a reply slower or break one."
+    ]
+  },
+  {
+    "version": "6.153.0",
+    "date": "2026-08-02",
+    "title": "Documentation that described a system we do not have",
+    "bullets": [
+      "The project notes said Bridge had two AI backends. It has four, and failover runs across all of them. Corrected.",
+      "A settings table that looks like it controls routing is read by nothing at all — the feature was never built. Five entries in it pointed at a backend removed months ago and appeared to be steering live traffic. Removed, and the file now says plainly that changing that table does nothing."
+    ]
+  },
+  {
+    "version": "6.152.0",
+    "date": "2026-08-02",
+    "title": "Correction: the previous release would have made ten pending items do nothing",
+    "bullets": [
+      "v6.151.0 stopped writing a vault copy for rules that already take effect in Porter. But the ten worker-knowledge items waiting for review are a special case: their rule is deliberately inert, and the vault copy is the only thing accepting them actually does. Under v6.151.0, approving one would have had no effect at all.",
+      "Fixed before any were approved. Caught while testing the weekly note that surfaces them — two of the ten expire in two days."
+    ]
+  },
+  {
+    "version": "6.151.0",
+    "date": "2026-08-02",
+    "title": "The drafts folder was making applied rules look unapplied",
+    "bullets": [
+      "Accepting a learning proposal wrote the rule into Porter, where it takes effect, and ALSO dropped a copy into the vault drafts folder. The copy does nothing. Five had built up, and they made it look like five accepted rules had never been applied — an audit this morning concluded exactly that. All five had been live the whole time.",
+      "Only genuinely new knowledge goes to the vault now; rules stay in Porter, which is where the design always put them. The five redundant copies were removed after checking each one individually against the live rule it duplicated."
+    ]
+  },
+  {
+    "version": "6.150.0",
+    "date": "2026-08-02",
+    "title": "Release registration had been failing on every ship since it was built",
+    "bullets": [
+      "Every time a project shipped, it tried to record the release with Porter and was rejected as unauthorised. The line said \"non-fatal\" and scrolled past in otherwise-green deploy output, so nobody looked — and no release was ever recorded.",
+      "The cause: it read the service token from an environment variable, but it runs from a git hook, which does not get one. It now falls back to Porter’s own config file. Verified by registering a real release."
+    ]
+  },
+  {
+    "version": "6.149.0",
+    "date": "2026-08-02",
+    "title": "Three of the four learning silos were producing nothing",
+    "bullets": [
+      "An audit found the nightly learning had been broken for months. The software silo failed 659 of 681 runs. The admin silo completed 36 runs and produced nothing at all because it was reading an empty set. The data room silo did the same across 22 runs. Only the newest one worked.",
+      "A failed run was not counted as an attempt, so a broken silo retried every hour instead of waiting for its next scheduled slot. That is where 594 identical timeout errors came from.",
+      "The admin silo looked for a marker file that did not exist anywhere, and the detector only checked the exact folder rather than the folders above it — so working one level deeper meant no match. Both fixed.",
+      "Self-monitoring could not see any of this because it watched the wrong table. It now reports each silo’s real numbers, and flags a silo that completes every run while producing nothing — the failure that looks most like success.",
+      "A weekly job that duplicated the schedule was being recreated on every restart by an old setup step, undoing a deliberate deletion each time. Removed at source."
+    ]
+  },
+  {
+    "version": "6.148.0",
+    "date": "2026-08-01",
+    "title": "Vault search was returning deleted records, and now covers memory too",
+    "bullets": [
+      "Vault search never checked whether a record was archived, so it has been returning deleted material as current — including the 1,702 cold prospects Moe removed from the graph in July. Fixed.",
+      "Search now covers the document graph, concepts and directives together instead of the graph alone. Most queries return more than before; a few return fewer because the extra results were archived rows that should never have appeared.",
+      "Vault pages under flows/ are now indexed — 3 pages that previously existed only as a title with no content."
+    ]
+  },
+  {
+    "version": "6.147.0",
+    "date": "2026-08-01",
+    "title": "Accepted dream rules now reach Tom",
+    "bullets": [
+      "Accepting a proposal from the CRM learning loop wrote a rule nothing ever read. Same for the four safety rules seeded with the silo — no unattended contact messaging, KYC never auto-filed, never infer a record, never reveal internal identifiers. All of them were inert.",
+      "Tom now reads them. Verified with a real accepted proposal: it appears in his rules, ranked below his existing ones.",
+      "Dream proposals could also set their own priority, which would have let one outrank Moe’s own rules. Now clamped to 89, below his 90+. Test added.",
+      "The silo rules get their own space in the prompt. Merged into the shared budget they used every slot and pushed out all seven rules Tom actually runs on."
+    ]
+  },
+  {
+    "version": "6.146.0",
+    "date": "2026-08-01",
+    "title": "Names are stripped before anything leaves the box — and the CRM learning loop is ON",
+    "bullets": [
+      "Porter falls over to another provider when one times out, which is the entire point of it. The first CRM learning run did exactly that: our own client records went to an outside model because the first one was slow. Rather than switch the safety net off, the names now come out before anything is sent — real names read from our own records, not guessed at, and each replaced consistently so “A introduced B to C” still reads as a fact worth learning instead of collapsing into nonsense.",
+      "The first attempt still leaked one name: Moe’s legal name, which appears throughout our documents while his contact record uses the short form. Legal names are now included. Checked against the real corpus afterwards — no name of any of the three principals survives, in any spelling.",
+      "A long-standing fault in the same code was destroying every date it touched, mistaking them for phone numbers. Every date in the corpus was being replaced before anyone read it, and the rules we most want learned are about dates — when something is due, which document expired, how long a reply has waited. Fixed for everything that uses it, not just this one feature.",
+      "With that in place the CRM learning loop is switched on. It proposes; nothing it suggests governs anything until Moe accepts it."
+    ]
+  },
+  {
+    "version": "6.145.0",
+    "date": "2026-08-01",
+    "title": "Memory search was failing to find things using their own words",
+    "bullets": [
+      "Searching Tom’s memory required EVERY word of the question to appear in the stored note. One absent word returned nothing at all. Measured against his 147 real memories: three of eight searches could not find a note using that note’s own wording, and every rephrased question found nothing whatsoever.",
+      "Searches now fall back to matching any of the words when matching all of them finds nothing. Exact matches still rank first, so precision is unchanged where it was working. All three failures that could not find their own words now succeed.",
+      "This was measured rather than assumed, because it was the gate on a much larger piece of work — running a language model permanently in memory to match meaning rather than words. That work is still justified on the remaining half of the gap, but it is now a smaller and better-understood gap, and this fix cost one query."
+    ]
+  },
+  {
+    "version": "6.144.0",
+    "date": "2026-08-01",
+    "title": "Tom can now learn from the CRM itself — built, and switched off until Moe says otherwise",
+    "bullets": [
+      "The plan for Tom getting smarter by reading our own files was written in May and parked as blocked on a Porter feature that, on inspection, has existed for months. It is now built: Tom’s overnight reflection can read documents, contact notes and activity from the CRM and propose operating rules from what it finds.",
+      "Proposals go to the same review screen everything else does, and nothing becomes a rule without being accepted. That restraint is deliberate — unreviewed promotion of “learnings” is exactly what buried real instructions under complaints a few days ago.",
+      "A trial run over 108 real items produced one genuine rule: when a reply needs follow-up, record the next action and who owns it rather than treating an outreach thread as finished because the first message went out. It traces back to seven real contact notes saying precisely that.",
+      "Two faults surfaced during that run and are fixed for every silo, not just this one: the privacy scrubber was destroying every date in the corpus by mistaking it for a phone number, and the frustration detector was flagging 106 of 107 items.",
+      "It is enrolled but OFF. One line turns it on, and that is Moe’s call — see the note about names in documents before making it."
+    ]
+  },
+  {
+    "version": "6.143.0",
+    "date": "2026-08-01",
+    "title": "The branch a code session leaves behind now actually contains its work",
+    "bullets": [
+      "Two days ago Porter learned to run a job that changes code, in a throwaway copy of the repository, and it promised to keep the branch afterwards so nothing was lost. That promise was empty. The session is barred from committing — correctly, since a session should not decide what ships — but nothing was committing on its behalf either, so the copy was deleted with the work still unsaved and the branch pointed at exactly the same place as before. Every branch left by that release was empty.",
+      "The work is now saved onto the branch before the copy is removed, so what it claims to preserve is what it holds. Our own bookkeeping files are excluded, so a one-file job leaves one file.",
+      "And a code-changing job now genuinely gets its longer time budget. The previous release set a thirty-minute limit in one place while another cut every session off at five, so code work was being stopped a quarter of the way in."
+    ]
+  },
+  {
+    "version": "6.142.0",
+    "date": "2026-07-31",
+    "title": "Two holes in yesterday’s code-changing sessions, closed",
+    "bullets": [
+      "The session that edits code was still being handed Porter’s entire environment — database password, service token, every provider key. The module that runs these sessions documents a stripped-down environment as one of its guarantees, and that part had been written but never actually connected. It is connected now: a session sees 22 operational variables and none of our credentials. Confirmed by asking a live one to look.",
+      "A job could also name ANY directory on the machine that happened to be a repository, and Porter would run a write-enabled session inside it. Permitted locations are now checked against the resolved real path, so a path that climbs out through a symlink or dot-dot is refused, as is anything shaped like a command-line flag. A bad location is rejected immediately with a clear error rather than failing obscurely once the job starts."
+    ]
+  },
+  {
+    "version": "6.141.0",
+    "date": "2026-07-31",
+    "title": "Porter can now run a job that changes code — one harness instead of two",
+    "bullets": [
+      "Porter could dispatch a Claude session, but only ever into an empty scratch directory with read-only tools. That is right for a research job and it meant a job that needs to EDIT CODE could not go through Porter at all — so YMC had grown its own runner that starts Claude directly, going around the router entirely. Two harnesses, because there was no third option.",
+      "A job can now name a repository. Porter makes a throwaway copy of it on its own branch, runs the session in there, reports exactly which files changed, and cleans the copy up afterwards — keeping the branch, because it holds the only copy of the work.",
+      "The live code is protected by a check, not by good intentions: the session refuses to start anywhere that is a real checkout rather than a throwaway copy, and it is barred from deploying, committing, pushing or restarting anything. It also runs without any of Porter’s credentials.",
+      "Nothing changes for existing jobs — a job that does not name a repository behaves exactly as before."
+    ]
+  },
+  {
+    "version": "6.140.0",
+    "date": "2026-07-29",
+    "title": "Tom was one long instruction away from going silent, and nothing was watching",
+    "bullets": [
+      "Tom’s instructions are handed to the model as a single command-line value, and Linux refuses any single value over 128KB — it fails before the model is even started. Tom’s instructions currently measure somewhere between 100KB and 128KB, and nothing anywhere recorded that number, so nobody knew how close he was. Crossing it would not have made him worse; it would have made him stop answering.",
+      "This exact fault took out one of the other models yesterday and was fixed there. The fix was never applied to the one Tom actually uses.",
+      "Long instructions now travel in a file instead of on the command line, and the size is reported with the remaining headroom whenever it gets close. Proven by reproducing the failure against the real program and confirming the new path succeeds where the old one refused to start.",
+      "This also explains why adding Porter’s skill library to Tom would have been dangerous: the skill text measured 22,000 characters, which is more than the headroom he had. That work stays parked until this is in.",
+      "Protects every part of the system that talks to this model, not just Tom."
+    ]
+  },
+  {
+    "version": "6.139.0",
+    "date": "2026-07-29",
+    "title": "The login form had no limit on how many passwords you could try",
+    "bullets": [
+      "Anyone could guess passwords against askporter.app as fast as the server would answer — there was no limit of any kind, and the only administrator account is reachable through that form. Now eight wrong attempts from the same place, for the same address, means a fifteen-minute wait.",
+      "The wait is per address AND per location, so someone else guessing badly can never lock you out of your own account.",
+      "The six-digit codes emailed for password resets were being generated by a shuffler that is predictable once you have seen a few of its outputs. They now come from proper cryptographic randomness — these six digits are the only thing standing between an email address and a password reset.",
+      "Those codes also had no limit on guesses. A million possibilities sounds like a lot until a script can try them all in fifteen minutes; five wrong guesses now cancels the code and a new one has to be requested.",
+      "The public status page was listing internal service addresses, database details and a week of usage figures to anyone who asked. It now confirms Porter is running and nothing more — the full picture still shows for a signed-in administrator.",
+      "Cleared up a duplicate administrator account that shared Moe’s email address. It exists only to sign background activity, so it can no longer be logged into at all.",
+      "Deliberately NOT changed: changing your password still does not ask for your old one. Porter cannot currently send email, so requiring it would leave no way back into an account."
+    ]
+  },
+  {
+    "version": "6.138.0",
+    "date": "2026-07-29",
+    "title": "Porter’s skill library has never once been used",
+    "bullets": [
+      "Porter has a library of 207 written skills — focused instructions for particular kinds of work, like diagnosing a failing service or curating rules. Twenty of them are assigned and switched on. Not one has ever actually been read.",
+      "The cause was a wrong folder: the code looked for the skills one directory below where they live. Everything else worked — the right skills were picked every time, then their contents came back empty and nothing noticed.",
+      "Fixed, and the two places that disagreed about where skills live now share one answer. One of them had the location of this specific machine written into it, which would break on any other installation.",
+      "Confirmed by actually loading them rather than by checking the code compiles: the instructions handed to Porter go from an empty heading to a full set of relevant guidance.",
+      "Honest note: this makes those requests meaningfully larger, since real content now loads where there was none. It affects only Porter’s own internal workers — Tom and coding sessions are unaffected."
+    ]
+  },
+  {
+    "version": "6.137.0",
+    "date": "2026-07-29",
+    "title": "There is now one memory system instead of two",
+    "bullets": [
+      "Porter had two separate pieces of code for deciding what a model is told at the start of a task — a working one and a replacement that had been built, tested against the original, and then never actually used. The records are unambiguous: 486 out of 486 times, the original did the work and the replacement’s answer was thrown away.",
+      "The replacement has been removed, along with the machinery for comparing the two. Roughly 900 lines gone, and one place to look instead of two.",
+      "It existed to prepare for a future change in how knowledge is stored, but it was reading exactly the same data as the original — so it added a second thing to maintain and no benefit today. If that change ever happens it should be built fresh, not from this.",
+      "Checked properly rather than assumed: ran both versions side by side on the live system and confirmed the text handed to a model is identical, character for character, across every project."
+    ]
+  },
+  {
+    "version": "6.136.0",
+    "date": "2026-07-29",
+    "title": "Porter can now use its own mail server instead of demanding a password for it",
+    "bullets": [
+      "Porter refused to use any mail server unless given a username and password. A mail server on the same machine needs neither — nothing outside the machine can reach it, which is the point. So a correctly set-up local mail server would have been ignored as \"not configured\" and every message would have quietly gone nowhere.",
+      "It was also presenting credentials to servers that do not ask for them, which counts as an error rather than being politely ignored — so a local mail server could never have worked.",
+      "Checking the domain settings confirmed standalone is the right choice here: askporter.app is set up to permit mail from this machine only, and explicitly not from Google, with the strictest possible policy for anything else. Sending through Google would have landed in spam.",
+      "The mail server itself still needs one command run as administrator. This release is the part that had to be right first, so that running it is enough rather than the start of more debugging."
+    ]
+  },
+  {
+    "version": "6.135.0",
+    "date": "2026-07-29",
+    "title": "Every scheduled job stopped whenever Porter was deployed often",
+    "bullets": [
+      "The DEGRADED alert was right, and it was worse than the one job it named. Deciding whether a job is due was counted from how long Porter had been running, and that count restarts from zero on every deploy. Six deploys in an afternoon meant the count never reached thirty minutes, so every half-hourly job simply stopped — five of them, idle for over an hour, including the one that promotes what Tom has learned.",
+      "This exact fault was found and fixed once before for the daily and weekly jobs, and the fix was then put behind the same kind of uptime count, half an hour long. It is not a matter of choosing a better interval: a job must never be scheduled on how long the process has been alive.",
+      "Due-ness is now read from when each job last actually ran, checked once a minute. Anything overdue runs within a minute of a restart rather than waiting for uninterrupted uptime that a working day never provides. Confirmed by restarting and watching all five run 75 seconds later."
+    ]
+  },
+  {
+    "version": "6.134.0",
+    "date": "2026-07-29",
+    "title": "Three internal guides described a fix that would have broken the site",
+    "bullets": [
+      "Porter keeps written instructions for how the website is served. All three still described a second dashboard that was deleted back in June, and one of them told you to point the website at it — so following the documented fix for this week’s outage would have replaced a broken homepage with a completely dead site.",
+      "They also warned that the website routing was temporary and needed re-applying after any restart. That stopped being true when you applied the permanent fix — the deploy script was still printing the outdated warning.",
+      "All three corrected, and the working setup written down properly, including how to see who is visiting the site.",
+      "No change to how anything runs. This is the same problem as the code faults found this week: a guide that states something untrue is worse than no guide, because it gets followed under pressure."
+    ]
+  },
   {
     "version": "6.133.0",
     "date": "2026-07-29",

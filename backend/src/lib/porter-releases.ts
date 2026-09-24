@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.161.1',
+    date: '2026-09-24',
+    title: 'Porter names its design system, and a type error stops the admin deploy',
+    bullets: [
+      'CLAUDE.md and admin/CLAUDE.md now say where the admin design system lives: tokens in app.css, components in components/ui, the /design-system page, and the ratchet that holds them.',
+      'The admin deploy runs a type check before it builds, so a type error can no longer reach askporter.app.',
+      'README and PROJECT no longer say a dashboard runs on port 5176. It was deleted in 6.61.0.',
+    ],
+  },
+  {
     version: '6.161.0',
     date: '2026-09-19',
     title: 'A local model for routine work, free and on our own server',
