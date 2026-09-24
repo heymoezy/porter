@@ -566,7 +566,7 @@ function MotionSpecDemos() {
             {[1, 2, 3, 4, 5].map(i => (
               <div
                 key={i}
-                className={`animate-card-deal-in deal-${i} h-20 w-14 rounded-lg border border-border bg-surface`}
+                className={`animate-card-deal-in stagger-${i} h-20 w-14 rounded-lg border border-border bg-surface`}
               />
             ))}
           </div>
@@ -1210,7 +1210,6 @@ function DesignSystemContent() {
           <TabsTrigger value="feedback">Feedback</TabsTrigger>
           <TabsTrigger value="motion">Motion</TabsTrigger>
           <TabsTrigger value="screens">Screens</TabsTrigger>
-          <TabsTrigger value="forge">Forge</TabsTrigger>
         </TabsList>
 
         {/* ── Foundation: Layout, Brand, Typography ── */}
@@ -1720,7 +1719,7 @@ function DesignSystemContent() {
                   ].map((p, i) => (
                     <div
                       key={p.name}
-                      className={`animate-card-deal-in deal-${i + 1} group w-[190px] cursor-pointer overflow-hidden rounded-[10px] border border-border bg-gradient-to-b from-surface to-background shadow-[inset_0_1px_0_var(--inset-highlight)] transition-all duration-200 hover:border-[color-mix(in_srgb,var(--accent-porter)_40%,var(--border))] hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-0.5`}
+                      className={`animate-card-deal-in stagger-${i + 1} group w-[190px] cursor-pointer overflow-hidden rounded-[10px] border border-border bg-gradient-to-b from-surface to-background shadow-[inset_0_1px_0_var(--inset-highlight)] transition-all duration-200 hover:border-[color-mix(in_srgb,var(--accent-porter)_40%,var(--border))] hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-0.5`}
                     >
                       {/* Banner with gradient pattern */}
                       <div className={`relative h-14 overflow-hidden bg-${p.color}/15`}>
@@ -4474,156 +4473,6 @@ function DesignSystemContent() {
                   ))}
                 </div>
               </Sub>
-            </Section>
-          </div>
-        </TabsContent>
-
-        {/* ── Forge: Agent Forge Design System ── */}
-        <TabsContent value="forge">
-          <div className="space-y-10">
-            {/* Forge Palette */}
-            <Section id="forge-palette" title="Forge Palette">
-              <div className="grid grid-cols-5 gap-3">
-                {[
-                  { name: "--forge-bg", label: "Background", sample: "var(--forge-bg)" },
-                  { name: "--forge-surface", label: "Surface", sample: "var(--forge-surface)" },
-                  { name: "--forge-steel", label: "Steel", sample: "var(--forge-steel)" },
-                  { name: "--forge-ember", label: "Ember", sample: "var(--forge-ember)" },
-                  { name: "--forge-flame", label: "Flame", sample: "var(--forge-flame)" },
-                  { name: "--forge-plasma", label: "Plasma", sample: "var(--forge-plasma)" },
-                  { name: "--forge-mint", label: "Mint", sample: "var(--forge-mint)" },
-                  { name: "--forge-danger", label: "Danger", sample: "var(--forge-danger)" },
-                  { name: "--forge-team-marketing", label: "Marketing", sample: "var(--forge-team-marketing)" },
-                  { name: "--forge-team-memory", label: "Memory", sample: "var(--forge-team-memory)" },
-                ].map(c => (
-                  <div key={c.name} className="rounded-lg border border-border overflow-hidden">
-                    <div className="h-10" style={{ background: c.sample }} />
-                    <div className="px-2 py-1.5 bg-surface">
-                      <p className="text-2xs font-bold text-foreground">{c.label}</p>
-                      <p className="text-2xs text-text3 font-mono">{c.name}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* Forge Panel */}
-            <Section id="forge-panel" title="ForgePanel">
-              <div className="flex gap-3 flex-wrap">
-                {(["default", "active", "plasma", "mint"] as const).map(v => (
-                  <div key={v} className={`forge-panel ${v === "active" ? "forge-panel-active" : ""} ${v === "plasma" ? "border-[rgba(49,195,255,.25)] shadow-[var(--forge-glow-plasma)]" : ""} ${v === "mint" ? "border-[rgba(125,255,179,.25)] shadow-[var(--forge-glow-mint)]" : ""} rounded-xl p-4 w-[160px]`}>
-                    <p className="text-xs font-bold text-text">{v}</p>
-                    <p className="text-2xs text-text2 mt-1">Frosted glass container</p>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* Model Badges */}
-            <Section id="forge-model-badge" title="ModelBadge">
-              <div className="flex items-center gap-2">
-                <Badge className="text-2xs px-1.5 py-0 h-4 font-medium border-0 bg-[var(--forge-model-claude)]/15 text-[var(--forge-model-claude)]">Claude Opus</Badge>
-                <Badge className="text-2xs px-1.5 py-0 h-4 font-medium border-0 bg-[var(--forge-model-gpt)]/15 text-[var(--forge-model-gpt)]">GPT-5.4</Badge>
-                <Badge className="text-2xs px-1.5 py-0 h-4 font-medium border-0 bg-[var(--forge-model-gemini)]/15 text-[var(--forge-model-gemini)]">Gemini</Badge>
-              </div>
-            </Section>
-
-            {/* Status Pulse */}
-            <Section id="forge-status-pulse" title="StatusPulse">
-              <div className="flex items-center gap-6">
-                {(["born", "forging", "ghost", "error", "idle"] as const).map(s => (
-                  <div key={s} className="flex items-center gap-2">
-                    <span className="relative flex size-2">
-                      {(s === "forging" || s === "error") && <span className={`absolute inline-flex size-full animate-ping rounded-full opacity-50 ${s === "forging" ? "bg-[var(--forge-ember)]" : "bg-[var(--forge-danger)]"}`} />}
-                      <span className={`relative inline-flex size-2 rounded-full ${
-                        s === "born" ? "bg-[var(--forge-mint)]" :
-                        s === "forging" ? "bg-[var(--forge-ember)]" :
-                        s === "ghost" ? "bg-[var(--forge-steel)]" :
-                        s === "error" ? "bg-[var(--forge-danger)]" :
-                        "bg-text3"
-                      }`} />
-                    </span>
-                    <span className="text-xs text-text2">{s}</span>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* Pipeline Progress */}
-            <Section id="forge-pipeline-progress" title="PipelineProgress">
-              <div className="flex items-center gap-6">
-                {[0, 1, 2, 3, 4].map(station => (
-                  <div key={station} className="flex items-center gap-1">
-                    <span className="text-2xs text-text3 w-14">Station {station}:</span>
-                    <div className="flex items-center gap-0.5">
-                      {["Q", "W", "T", "O"].map((label, i) => {
-                        const done = i < station
-                        const active = i === station && station < 4
-                        return (
-                          <div key={i} className="flex items-center gap-0.5">
-                            <div className={`size-4 rounded-full flex items-center justify-center text-2xs font-bold ${
-                              done ? "bg-success text-white" : active ? "bg-[var(--forge-ember)] text-white animate-pulse" : "bg-raised text-text3"
-                            }`}>
-                              {done ? "✓" : label}
-                            </div>
-                            {i < 3 && <div className={`w-2 h-px ${done ? "bg-success" : "bg-raised"}`} />}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* Animations */}
-            <Section id="forge-animations" title="Forge Animations">
-              <div className="grid grid-cols-4 gap-3">
-                {[
-                  { name: "heat-pulse", cls: "animate-forge-heat", desc: "Active station glow" },
-                  { name: "ghost-shimmer", cls: "animate-forge-ghost border border-dashed border-[var(--forge-line)]", desc: "Unborn node" },
-                  { name: "birth-resolve", cls: "animate-forge-birth", desc: "Portrait materializing" },
-                  { name: "stamp-in", cls: "animate-forge-stamp", desc: "Birth stamp landing" },
-                ].map(a => (
-                  <div key={a.name} className={`rounded-lg p-4 bg-[var(--forge-surface)] border border-[var(--forge-line)] ${a.cls}`}>
-                    <p className="text-xs font-bold text-text">{a.name}</p>
-                    <p className="text-2xs text-text2 mt-0.5">{a.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* Conveyor */}
-            <Section id="forge-conveyor-line" title="ConveyorLine">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xs text-text3">Idle:</span>
-                  <svg width={80} height={4}><line x1={0} y1={2} x2={80} y2={2} stroke="var(--forge-line)" strokeWidth={2} /></svg>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-2xs text-text3">Active:</span>
-                  <svg width={80} height={4}>
-                    <line x1={0} y1={2} x2={80} y2={2} stroke="var(--forge-line)" strokeWidth={2} />
-                    <line x1={0} y1={2} x2={80} y2={2} stroke="var(--forge-ember)" strokeWidth={2} strokeDasharray="8 12" className="animate-forge-conveyor" style={{ opacity: 0.7 }} />
-                  </svg>
-                </div>
-              </div>
-            </Section>
-
-            {/* Component inventory */}
-            <Section id="forge-inventory" title="Component Inventory">
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  "ForgePanel", "StationCard", "ConveyorLine", "OrgNode", "OrgConnector",
-                  "StatusPulse", "ModelBadge", "QualityScore", "PipelineProgress",
-                  "TextScramble", "BurnRate", "BirthAnimation",
-                ].map(name => (
-                  <div key={name} className="rounded-lg border border-border bg-surface px-3 py-2">
-                    <p className="text-xs font-bold text-foreground">{name}</p>
-                    <p className="text-2xs text-text3 font-mono">components/forge/{name.replace(/([A-Z])/g, (m, c, i) => i ? `-${c.toLowerCase()}` : c.toLowerCase())}.tsx</p>
-                  </div>
-                ))}
-              </div>
             </Section>
           </div>
         </TabsContent>

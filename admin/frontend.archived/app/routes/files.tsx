@@ -520,7 +520,7 @@ export default function FilesPage() {
       {/* Drop overlay — receives drop events directly */}
       {dragging && (
         <div
-          className="absolute inset-0 z-30 flex items-center justify-center bg-bg/80 backdrop-blur-sm border-2 border-dashed border-accent-porter rounded-xl m-2"
+          className="absolute inset-0 z-30 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-accent-porter rounded-xl m-2"
           onDragOver={(e) => e.preventDefault()}
           onDragLeave={(e) => {
             e.preventDefault()
@@ -848,7 +848,7 @@ export default function FilesPage() {
                             <Input
                               value={renameValue}
                               onChange={(e) => setRenameValue(e.target.value)}
-                              className="h-6 text-xs bg-bg border-border flex-1"
+                              className="h-6 text-xs flex-1"
                               autoFocus
                               onKeyDown={(e) => { if (e.key === "Escape") setRenaming(null) }}
                             />

@@ -3,25 +3,16 @@ import { cn } from "~/lib/utils"
 interface OrgConnectorProps {
   direction?: "vertical" | "horizontal"
   active?: boolean
-  team?: "forge" | "product" | "admin"
   length?: number
   className?: string
-}
-
-const teamStroke: Record<string, string> = {
-  forge:   "var(--forge-ember)",
-  product: "var(--forge-plasma)",
-  admin:   "var(--forge-mint)",
 }
 
 function OrgConnector({
   direction = "vertical",
   active = false,
-  team = "product",
   length = 40,
   className,
 }: OrgConnectorProps) {
-  const stroke = teamStroke[team] ?? teamStroke.product
   const isVertical = direction === "vertical"
 
   const w = isVertical ? 2 : length
@@ -41,7 +32,7 @@ function OrgConnector({
         y1={isVertical ? 0 : 1}
         x2={isVertical ? 1 : w}
         y2={isVertical ? h : 1}
-        stroke="var(--forge-line)"
+        className="stroke-border"
         strokeWidth={isVertical ? 2 : 2}
       />
       {/* Active energy pulse */}
@@ -51,11 +42,9 @@ function OrgConnector({
           y1={isVertical ? 0 : 1}
           x2={isVertical ? 1 : w}
           y2={isVertical ? h : 1}
-          stroke={stroke}
           strokeWidth={isVertical ? 2 : 2}
           strokeDasharray="6 6"
-          className="animate-forge-conveyor"
-          style={{ opacity: 0.7 }}
+          className="stroke-accent-porter opacity-70 animate-conveyor"
         />
       )}
     </svg>

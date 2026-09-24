@@ -104,9 +104,6 @@
     "arbitrary-size": 2,
     "raw-button": 1
   },
-  "admin/frontend.archived/app/components/org-connector.tsx": {
-    "inline-style": 1
-  },
   "admin/frontend.archived/app/components/pixel-portrait-editor.tsx": {
     "arbitrary-size": 1,
     "hex": 40,

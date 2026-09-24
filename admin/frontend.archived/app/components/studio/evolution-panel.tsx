@@ -169,7 +169,7 @@ export function EvolutionPanel() {
                     )}
 
                     {/* Proposed change diff */}
-                    <pre className="bg-bg/50 rounded p-2 text-[10px] font-mono max-h-32 overflow-auto text-text2">
+                    <pre className="bg-background/50 rounded p-2 text-[10px] font-mono max-h-32 overflow-auto text-text2">
                       {JSON.stringify(proposal.proposed_change, null, 2)}
                     </pre>
 

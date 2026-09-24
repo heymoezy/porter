@@ -38,7 +38,7 @@ function PillarCard({ icon: Icon, name, tagline, color, children }: {
 function Connector({ vertical = true }: { vertical?: boolean }) {
   return (
     <div className="flex justify-center">
-      <OrgConnector direction={vertical ? "vertical" : "horizontal"} active length={vertical ? 20 : 32} team="product" />
+      <OrgConnector direction={vertical ? "vertical" : "horizontal"} active length={vertical ? 20 : 32} />
     </div>
   )
 }
