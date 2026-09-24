@@ -1,4 +1,5 @@
 import { cn } from "~/lib/utils"
+import { statusDotClass } from "~/components/ui/status-badge"
 
 interface PixelPortraitProps {
   hair: string
@@ -78,13 +79,6 @@ function HairSvg({ style, color, w, h }: { style: string; color: string; w: numb
     default:
       return null
   }
-}
-
-const statusColors: Record<string, string> = {
-  idle: "bg-success",
-  working: "bg-accent-porter animate-pulse-badge",
-  error: "bg-danger",
-  offline: "bg-text3",
 }
 
 export function PixelPortrait({
@@ -171,7 +165,8 @@ export function PixelPortrait({
           className={cn(
             "rounded-full",
             size === "sm" ? "h-1.5 w-1.5" : size === "md" ? "h-2 w-2" : "h-2.5 w-2.5",
-            statusColors[status]
+            statusDotClass(status),
+            status === "working" && "animate-pulse-badge"
           )}
         />
       )}

@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { AgentPresenceSummary } from "~/components/agent-presence"
 import { SkillsStudio } from "~/components/studio/skills-studio"
-import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Check, X, Dna, History, Sparkles } from "lucide-react"
+import { StatusBadge } from "~/components/ui/status-badge"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // ── Evolution Types ─────────────────────────────────────
 
@@ -25,20 +26,6 @@ interface EvolutionEvent {
 }
 
 function fmtDate(epoch: number) { return new Date(epoch * 1000).toLocaleString() }
-
-const STATUS_BADGE: Record<string, string> = {
-  pending:  "bg-yellow-500/15 text-yellow-400 border-yellow-500/20",
-  approved: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20",
-  rejected: "bg-red-500/15 text-red-400 border-red-500/20",
-  applied:  "bg-blue-500/15 text-blue-400 border-blue-500/20",
-}
-
-const TYPE_BADGE: Record<string, string> = {
-  enhance:    "bg-blue-500/15 text-blue-400 border-blue-500/20",
-  specialize: "bg-purple-500/15 text-purple-400 border-purple-500/20",
-  merge:      "bg-orange-500/15 text-orange-400 border-orange-500/20",
-  deprecate:  "bg-red-500/15 text-red-400 border-red-500/20",
-}
 
 export default function SkillsPage() {
   const [tab, setTab] = useState<"studio" | "proposals" | "history">("studio")
@@ -110,47 +97,47 @@ export default function SkillsPage() {
           {!loadingP && proposals.length > 0 && (
             <div className="rounded-lg border border-border overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-surface/50">
-                      <th className="text-left font-medium text-text3 px-4 py-2.5">Skill</th>
-                      <th className="text-left font-medium text-text3 px-4 py-2.5">Type</th>
-                      <th className="text-left font-medium text-text3 px-4 py-2.5">Reasoning</th>
-                      <th className="text-left font-medium text-text3 px-4 py-2.5">Status</th>
-                      <th className="text-left font-medium text-text3 px-4 py-2.5">Created</th>
-                      <th className="text-right font-medium text-text3 px-4 py-2.5">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table size="sm">
+                  <TableHeader>
+                    <TableRow className="bg-surface/50">
+                      <TableHead className="px-4 py-2.5">Skill</TableHead>
+                      <TableHead className="px-4 py-2.5">Type</TableHead>
+                      <TableHead className="px-4 py-2.5">Reasoning</TableHead>
+                      <TableHead className="px-4 py-2.5">Status</TableHead>
+                      <TableHead className="px-4 py-2.5">Created</TableHead>
+                      <TableHead className="text-right px-4 py-2.5">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {proposals.map(p => (
-                      <tr key={p.id} className="border-b border-border/50 hover:bg-surface/30 transition-colors">
-                        <td className="px-4 py-2.5 font-medium text-accent-porter">{p.skill_name}</td>
-                        <td className="px-4 py-2.5">
-                          <Badge variant="outline" className={`text-2xs ${TYPE_BADGE[p.change_type] ?? "bg-text3/15 text-text3"}`}>{p.change_type}</Badge>
-                        </td>
-                        <td className="px-4 py-2.5 text-text2 max-w-sm"><span className="line-clamp-2">{p.reasoning}</span></td>
-                        <td className="px-4 py-2.5">
-                          <Badge variant="outline" className={`text-2xs ${STATUS_BADGE[p.status] ?? "bg-text3/15 text-text3"}`}>{p.status}</Badge>
-                        </td>
-                        <td className="px-4 py-2.5 text-text3 tabular-nums text-xs">{fmtDate(p.created_at)}</td>
-                        <td className="px-4 py-2.5 text-right">
+                      <TableRow key={p.id}>
+                        <TableCell className="px-4 py-2.5 font-medium text-accent-porter">{p.skill_name}</TableCell>
+                        <TableCell className="px-4 py-2.5">
+                          <StatusBadge status={p.change_type} />
+                        </TableCell>
+                        <TableCell className="px-4 py-2.5 text-text2 max-w-sm"><span className="line-clamp-2">{p.reasoning}</span></TableCell>
+                        <TableCell className="px-4 py-2.5">
+                          <StatusBadge status={p.status} />
+                        </TableCell>
+                        <TableCell className="px-4 py-2.5 text-text3 tabular-nums text-xs">{fmtDate(p.created_at)}</TableCell>
+                        <TableCell className="px-4 py-2.5 text-right">
                           {p.status === "pending" ? (
                             <div className="flex items-center justify-end gap-1.5">
-                              <Button variant="ghost" size="sm" className="h-7 px-2.5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                              <Button variant="ghost" size="sm" className="h-7 px-2.5 text-success hover:bg-success/10"
                                 onClick={() => approve.mutate(p.id)} disabled={approve.isPending || reject.isPending}>
                                 <Check className="size-3.5 mr-1" />Approve
                               </Button>
-                              <Button variant="ghost" size="sm" className="h-7 px-2.5 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                              <Button variant="ghost" size="sm" className="h-7 px-2.5 text-danger hover:bg-danger/10"
                                 onClick={() => reject.mutate(p.id)} disabled={approve.isPending || reject.isPending}>
                                 <X className="size-3.5 mr-1" />Reject
                               </Button>
                             </div>
                           ) : <span className="text-2xs text-text3">--</span>}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </div>
           )}
@@ -170,39 +157,39 @@ export default function SkillsPage() {
           {!loadingE && events.length > 0 && (
             <div className="rounded-lg border border-border overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-surface/50">
-                      <th className="text-left font-medium text-text3 px-4 py-2.5">Skill</th>
-                      <th className="text-left font-medium text-text3 px-4 py-2.5">Change</th>
-                      <th className="text-left font-medium text-text3 px-4 py-2.5">Detail</th>
-                      <th className="text-left font-medium text-text3 px-4 py-2.5">Effectiveness</th>
-                      <th className="text-left font-medium text-text3 px-4 py-2.5">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table size="sm">
+                  <TableHeader>
+                    <TableRow className="bg-surface/50">
+                      <TableHead className="px-4 py-2.5">Skill</TableHead>
+                      <TableHead className="px-4 py-2.5">Change</TableHead>
+                      <TableHead className="px-4 py-2.5">Detail</TableHead>
+                      <TableHead className="px-4 py-2.5">Effectiveness</TableHead>
+                      <TableHead className="px-4 py-2.5">Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {events.map(e => {
                       const delta = e.effectiveness_before != null && e.effectiveness_after != null
                         ? (e.effectiveness_after - e.effectiveness_before).toFixed(2) : null
                       const pos = delta != null && parseFloat(delta) >= 0
                       return (
-                        <tr key={e.id} className="border-b border-border/50 hover:bg-surface/30 transition-colors">
-                          <td className="px-4 py-2.5 font-medium text-accent-porter">{e.skill_name}</td>
-                          <td className="px-4 py-2.5">
-                            <Badge variant="outline" className={`text-2xs ${TYPE_BADGE[e.change_type] ?? "bg-text3/15 text-text3"}`}>{e.change_type}</Badge>
-                          </td>
-                          <td className="px-4 py-2.5 text-text2 max-w-sm">
+                        <TableRow key={e.id}>
+                          <TableCell className="px-4 py-2.5 font-medium text-accent-porter">{e.skill_name}</TableCell>
+                          <TableCell className="px-4 py-2.5">
+                            <StatusBadge status={e.change_type} />
+                          </TableCell>
+                          <TableCell className="px-4 py-2.5 text-text2 max-w-sm">
                             <span className="line-clamp-2 text-xs">{typeof e.change_detail === "object" ? JSON.stringify(e.change_detail) : String(e.change_detail)}</span>
-                          </td>
-                          <td className="px-4 py-2.5 tabular-nums text-xs">
-                            {delta != null ? <span className={pos ? "text-emerald-400" : "text-red-400"}>{pos ? "+" : ""}{delta}</span> : <span className="text-text3">--</span>}
-                          </td>
-                          <td className="px-4 py-2.5 text-text3 tabular-nums text-xs">{fmtDate(e.created_at)}</td>
-                        </tr>
+                          </TableCell>
+                          <TableCell className="px-4 py-2.5 tabular-nums text-xs">
+                            {delta != null ? <span className={pos ? "text-success" : "text-danger"}>{pos ? "+" : ""}{delta}</span> : <span className="text-text3">--</span>}
+                          </TableCell>
+                          <TableCell className="px-4 py-2.5 text-text3 tabular-nums text-xs">{fmtDate(e.created_at)}</TableCell>
+                        </TableRow>
                       )
                     })}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </div>
           )}

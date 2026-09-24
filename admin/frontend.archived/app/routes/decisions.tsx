@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router"
 import { api } from "~/lib/api"
 import { ChevronDown, ChevronRight, Search } from "lucide-react"
+import { StatusBadge } from "~/components/ui/status-badge"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -35,22 +37,6 @@ interface AgentStat {
 function formatDate(ts: number | null) {
   if (!ts) return "--"
   return new Date(ts * 1000).toLocaleString()
-}
-
-const typeColors: Record<string, string> = {
-  routing: "bg-blue-500/10 text-blue-400",
-  delegation: "bg-purple-500/10 text-purple-400",
-  model_selection: "bg-green-500/10 text-green-400",
-  tool_selection: "bg-yellow-500/10 text-yellow-400",
-  escalation: "bg-red-500/10 text-red-400",
-}
-
-function TypeBadge({ type }: { type: string }) {
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[type] ?? "bg-text3/10 text-text3"}`}>
-      {type.replace(/_/g, " ")}
-    </span>
-  )
 }
 
 // ── Page ───────────────────────────────────────────────
@@ -164,43 +150,43 @@ export default function DecisionsPage() {
       {isLoading && <div className="text-text3">Loading...</div>}
 
       <div className="rounded-lg border border-border bg-surface p-4">
-        <table className="w-full text-sm">
-          <thead className="text-text3 text-xs">
-            <tr className="border-b border-border">
-              <th className="text-left py-2 pr-2 w-6"></th>
-              <th className="text-left py-2 pr-4">Date</th>
-              <th className="text-left py-2 pr-4">Agent</th>
-              <th className="text-left py-2 pr-4">Type</th>
-              <th className="text-left py-2 pr-4">Chosen</th>
-              <th className="text-left py-2 pr-4">Reasoning</th>
-              <th className="text-right py-2">Alts</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table size="sm">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pr-2 w-6"></TableHead>
+              <TableHead className="pr-4">Date</TableHead>
+              <TableHead className="pr-4">Agent</TableHead>
+              <TableHead className="pr-4">Type</TableHead>
+              <TableHead className="pr-4">Chosen</TableHead>
+              <TableHead className="pr-4">Reasoning</TableHead>
+              <TableHead className="text-right">Alts</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {filtered.map(d => {
               const isExpanded = expandedId === d.id
               const alts = Array.isArray(d.alternatives) ? d.alternatives : []
 
               return (
                 <>
-                  <tr
+                  <TableRow
                     key={d.id}
-                    className="border-b border-border/50 hover:bg-raised/50 cursor-pointer"
+                    className="cursor-pointer"
                     onClick={() => setExpandedId(isExpanded ? null : d.id)}
                   >
-                    <td className="py-2 pr-2 text-text3">
+                    <TableCell className="pr-2 text-text3">
                       {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                    </td>
-                    <td className="py-2 pr-4 text-text3 text-xs whitespace-nowrap">{formatDate(d.created_at)}</td>
-                    <td className="py-2 pr-4 text-text">{d.agent_id ? <Link to={`/agents/${d.agent_id}`} className="text-accent-porter hover:underline">{d.agent_name ?? d.agent_id.slice(0, 8)}</Link> : "system"}</td>
-                    <td className="py-2 pr-4"><TypeBadge type={d.decision_type} /></td>
-                    <td className="py-2 pr-4 text-text max-w-[200px] truncate">{d.chosen}</td>
-                    <td className="py-2 pr-4 text-text2 max-w-[300px] truncate">{d.reasoning}</td>
-                    <td className="py-2 text-right text-text3">{alts.length}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="pr-4 text-text3 text-xs whitespace-nowrap">{formatDate(d.created_at)}</TableCell>
+                    <TableCell className="pr-4 text-text">{d.agent_id ? <Link to={`/agents/${d.agent_id}`} className="text-accent-porter hover:underline">{d.agent_name ?? d.agent_id.slice(0, 8)}</Link> : "system"}</TableCell>
+                    <TableCell className="pr-4"><StatusBadge status={d.decision_type} /></TableCell>
+                    <TableCell className="pr-4 text-text max-w-[200px] truncate">{d.chosen}</TableCell>
+                    <TableCell className="pr-4 text-text2 max-w-[300px] truncate">{d.reasoning}</TableCell>
+                    <TableCell className="text-right text-text3">{alts.length}</TableCell>
+                  </TableRow>
                   {isExpanded && (
-                    <tr key={`${d.id}-detail`}>
-                      <td colSpan={7} className="p-0">
+                    <TableRow key={`${d.id}-detail`}>
+                      <TableCell colSpan={7} className="p-0">
                         <div className="p-4 bg-raised/30 border-b border-border space-y-3">
                           <div>
                             <div className="text-xs font-semibold text-text3 mb-1">Full Reasoning</div>
@@ -219,14 +205,14 @@ export default function DecisionsPage() {
                             <div className="text-xs text-text3">Job: {d.job_id}</div>
                           )}
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
                 </>
               )
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
 
         {!isLoading && filtered.length === 0 && (
           <div className="text-center py-12 text-text3">No decisions found</div>

@@ -1,22 +1,10 @@
-import { Badge } from "~/components/ui/badge"
+import { StatusBadge } from "~/components/ui/status-badge"
 
 export type QualityTier = "scaffold" | "baseline" | "production" | "high-performing" | "stale"
 
-const TIER_CONFIG: Record<QualityTier, { label: string; cls: string }> = {
-  "scaffold":        { label: "scaffold",        cls: "bg-danger/15 text-danger" },
-  "baseline":        { label: "baseline",        cls: "bg-warning/15 text-warning" },
-  "production":      { label: "production",      cls: "bg-success/15 text-success" },
-  "high-performing": { label: "high-performing", cls: "bg-blue-500/15 text-blue-400" },
-  "stale":           { label: "stale",           cls: "bg-slate-500/15 text-slate-400" },
-}
+const TIERS: ReadonlySet<string> = new Set<QualityTier>(["scaffold", "baseline", "production", "high-performing", "stale"])
 
 export function SkillQualityBadge({ tier }: { tier: QualityTier | undefined | null }) {
-  if (!tier) return null
-  const config = TIER_CONFIG[tier]
-  if (!config) return null
-  return (
-    <Badge className={`text-2xs border-0 ${config.cls}`}>
-      {config.label}
-    </Badge>
-  )
+  if (!tier || !TIERS.has(tier)) return null
+  return <StatusBadge status={tier} label={tier} />
 }

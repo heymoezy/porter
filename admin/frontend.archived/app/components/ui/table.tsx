@@ -3,7 +3,11 @@
 import * as React from "react"
 import { cn } from "~/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+  className,
+  size = "xs",
+  ...props
+}: React.ComponentProps<"table"> & { size?: "xs" | "sm" }) {
   return (
     <div
       data-slot="table-container"
@@ -11,7 +15,8 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-xs", className)}
+        data-size={size}
+        className={cn("w-full caption-bottom", size === "sm" ? "text-sm" : "text-xs", className)}
         {...props}
       />
     </div>

@@ -11,6 +11,7 @@ import { DispatchFeed } from "~/components/dashboard/dispatch-feed"
 import { OpsPanel } from "~/components/dashboard/ops-panels"
 import { IntelPanel } from "~/components/dashboard/intel-panel"
 import { FolderKanban } from "lucide-react"
+import { StatusBadge } from "~/components/ui/status-badge"
 
 /* ── Types ── */
 
@@ -29,13 +30,6 @@ function relativeTime(ts: number): string {
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
   if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
   return `${Math.floor(secs / 86400)}d ago`
-}
-
-const STATUS_BADGE: Record<string, string> = {
-  active: "bg-green-500/15 text-green-400",
-  paused: "bg-yellow-500/15 text-yellow-400",
-  completed: "bg-blue-500/15 text-blue-400",
-  archived: "bg-[var(--text3,#8a95a8)]/15 text-[var(--text3,#8a95a8)]",
 }
 
 /* ── Projects Compact ── */
@@ -79,9 +73,7 @@ function ProjectsCompact() {
                 <span className="text-2xs font-semibold text-[var(--foreground,#f6f8fb)] truncate flex-1 min-w-0">
                   {p.name}
                 </span>
-                <Badge className={`text-2xs px-1.5 py-0 ${STATUS_BADGE[p.status] ?? STATUS_BADGE.active}`}>
-                  {p.status}
-                </Badge>
+                <StatusBadge status={p.status} className="px-1.5 py-0" />
                 {p.updated_at && (
                   <span className="text-2xs text-[var(--text3,#8a95a8)] shrink-0">{relativeTime(p.updated_at)}</span>
                 )}

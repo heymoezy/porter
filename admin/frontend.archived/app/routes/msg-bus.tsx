@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
 import { Radio, ChevronDown, ChevronRight } from "lucide-react"
+import { StatusBadge } from "~/components/ui/status-badge"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -36,14 +38,6 @@ interface MsgBusStats {
 function fmtDate(epoch: number | null) {
   if (!epoch) return "--"
   return new Date(epoch * 1000).toLocaleString()
-}
-
-const STATUS_BADGE: Record<string, string> = {
-  sent:      "bg-blue-500/15 text-blue-400 border-blue-500/20",
-  delivered: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20",
-  failed:    "bg-red-500/15 text-red-400 border-red-500/20",
-  timeout:   "bg-yellow-500/15 text-yellow-400 border-yellow-500/20",
-  pending:   "bg-text3/15 text-text3 border-text3/20",
 }
 
 // ── Component ──────────────────────────────────────────
@@ -153,39 +147,39 @@ export default function MsgBusPage() {
       {!loadingEvents && events.length > 0 && (
         <div className="rounded-lg border border-border overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-surface/50">
-                  <th className="w-6 px-2 py-2.5" />
-                  <th className="text-left font-medium text-text3 px-4 py-2.5">Time</th>
-                  <th className="text-left font-medium text-text3 px-4 py-2.5">Route</th>
-                  <th className="text-left font-medium text-text3 px-4 py-2.5">Intent</th>
-                  <th className="text-left font-medium text-text3 px-4 py-2.5">Status</th>
-                  <th className="text-right font-medium text-text3 px-4 py-2.5">Hops</th>
-                  <th className="text-right font-medium text-text3 px-4 py-2.5">Latency</th>
-                  <th className="text-left font-medium text-text3 px-4 py-2.5">Correlation</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table size="sm">
+              <TableHeader>
+                <TableRow className="bg-surface/50">
+                  <TableHead className="w-6 px-2 py-2.5" />
+                  <TableHead className="px-4 py-2.5">Time</TableHead>
+                  <TableHead className="px-4 py-2.5">Route</TableHead>
+                  <TableHead className="px-4 py-2.5">Intent</TableHead>
+                  <TableHead className="px-4 py-2.5">Status</TableHead>
+                  <TableHead className="text-right px-4 py-2.5">Hops</TableHead>
+                  <TableHead className="text-right px-4 py-2.5">Latency</TableHead>
+                  <TableHead className="px-4 py-2.5">Correlation</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {events.map(ev => {
                   const isExpanded = expanded.has(ev.id)
                   return (
                     <>
-                      <tr
+                      <TableRow
                         key={ev.id}
-                        className="border-b border-border/50 hover:bg-surface/30 transition-colors cursor-pointer"
+                        className="cursor-pointer"
                         onClick={() => toggleExpand(ev.id)}
                       >
-                        <td className="px-2 py-2.5 text-text3">
+                        <TableCell className="px-2 py-2.5 text-text3">
                           {isExpanded
                             ? <ChevronDown className="size-3.5" />
                             : <ChevronRight className="size-3.5" />
                           }
-                        </td>
-                        <td className="px-4 py-2.5 text-text3 tabular-nums text-xs whitespace-nowrap">
+                        </TableCell>
+                        <TableCell className="px-4 py-2.5 text-text3 tabular-nums text-xs whitespace-nowrap">
                           {fmtDate(ev.created_at)}
-                        </td>
-                        <td className="px-4 py-2.5 text-xs">
+                        </TableCell>
+                        <TableCell className="px-4 py-2.5 text-xs">
                           {ev.source_agent ? (
                             <Link to={`/agents/${ev.source_agent}`} className="text-accent-porter hover:underline font-medium">
                               {ev.source_agent}
@@ -211,26 +205,24 @@ export default function MsgBusPage() {
                               {ev.target_gateway}
                             </Badge>
                           )}
-                        </td>
-                        <td className="px-4 py-2.5 text-text2 text-xs">{ev.intent ?? "--"}</td>
-                        <td className="px-4 py-2.5">
-                          <Badge variant="outline" className={`text-2xs ${STATUS_BADGE[ev.status ?? ""] ?? "bg-text3/15 text-text3"}`}>
-                            {ev.status ?? "unknown"}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-text3 tabular-nums text-xs">
+                        </TableCell>
+                        <TableCell className="px-4 py-2.5 text-text2 text-xs">{ev.intent ?? "--"}</TableCell>
+                        <TableCell className="px-4 py-2.5">
+                          <StatusBadge status={ev.status ?? "unknown"} />
+                        </TableCell>
+                        <TableCell className="px-4 py-2.5 text-right text-text3 tabular-nums text-xs">
                           {ev.hop_count ?? 0}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-text3 tabular-nums text-xs">
+                        </TableCell>
+                        <TableCell className="px-4 py-2.5 text-right text-text3 tabular-nums text-xs">
                           {ev.latency_ms != null ? `${ev.latency_ms}ms` : "--"}
-                        </td>
-                        <td className="px-4 py-2.5 text-text3 text-xs font-mono">
+                        </TableCell>
+                        <TableCell className="px-4 py-2.5 text-text3 text-xs font-mono">
                           {ev.correlation_id ? ev.correlation_id.slice(0, 8) : "--"}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                       {isExpanded && (
-                        <tr key={`${ev.id}-detail`} className="border-b border-border/50 bg-surface/20">
-                          <td colSpan={8} className="px-6 py-3">
+                        <TableRow key={`${ev.id}-detail`} className="bg-surface/20">
+                          <TableCell colSpan={8} className="px-6 py-3">
                             <div className="grid grid-cols-2 gap-4">
                               <div>
                                 <p className="text-2xs font-semibold uppercase tracking-wide text-text3 mb-1">Payload</p>
@@ -248,14 +240,14 @@ export default function MsgBusPage() {
                                 </pre>
                               </div>
                             </div>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       )}
                     </>
                   )
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Check, X, CheckCircle2 } from "lucide-react"
+import { StatusBadge } from "~/components/ui/status-badge"
 
 interface ApprovalRequest {
   id: string
@@ -20,13 +21,6 @@ function relativeTime(ts: number): string {
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
   if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
   return `${Math.floor(secs / 86400)}d ago`
-}
-
-const RISK_COLORS: Record<string, string> = {
-  low: "bg-green-500/15 text-green-400",
-  medium: "bg-yellow-500/15 text-yellow-400",
-  high: "bg-orange-500/15 text-orange-400",
-  critical: "bg-red-500/15 text-red-400",
 }
 
 export function ApprovalsPanel() {
@@ -56,14 +50,14 @@ export function ApprovalsPanel() {
         <CardTitle className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[var(--foreground,#f6f8fb)]">
           Approvals
           {pending.length > 0 && (
-            <Badge className="bg-orange-500/15 text-orange-400 text-2xs px-1.5 py-0">{pending.length}</Badge>
+            <Badge variant="warning" className="px-1.5 py-0">{pending.length}</Badge>
           )}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-2 pb-3">
         {pending.length === 0 ? (
           <div className="flex items-center gap-2 py-4 justify-center text-[var(--text3,#8a95a8)]">
-            <CheckCircle2 className="size-5 text-green-400" />
+            <CheckCircle2 className="size-5 text-success" />
             <span className="text-xs">All clear</span>
           </div>
         ) : (
@@ -74,9 +68,7 @@ export function ApprovalsPanel() {
                   <div className="flex-1 min-w-0">
                     <p className="text-2xs text-[var(--foreground,#f6f8fb)] truncate">{a.task_description}</p>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <Badge className={`text-2xs px-1.5 py-0 ${RISK_COLORS[a.risk_category] ?? RISK_COLORS.low}`}>
-                        {a.risk_category}
-                      </Badge>
+                      <StatusBadge status={a.risk_category} className="px-1.5 py-0" />
                       <span className="text-2xs text-[var(--text3,#8a95a8)]">{relativeTime(a.created_at)}</span>
                     </div>
                   </div>
@@ -85,7 +77,7 @@ export function ApprovalsPanel() {
                       size="icon-xs"
                       variant="ghost"
                       onClick={() => approve.mutate(a.id)}
-                      className="text-green-400 hover:bg-green-500/10"
+                      className="text-success hover:bg-success/10"
                     >
                       <Check className="size-3" />
                     </Button>
@@ -93,7 +85,7 @@ export function ApprovalsPanel() {
                       size="icon-xs"
                       variant="ghost"
                       onClick={() => reject.mutate(a.id)}
-                      className="text-red-400 hover:bg-red-500/10"
+                      className="text-danger hover:bg-danger/10"
                     >
                       <X className="size-3" />
                     </Button>

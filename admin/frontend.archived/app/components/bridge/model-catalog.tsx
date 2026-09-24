@@ -21,6 +21,7 @@ import {
   Server,
 } from "lucide-react"
 import { Button } from "~/components/ui/button"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -90,15 +91,15 @@ function capabilityColor(cap: string): string {
 
 function TableRowSkeleton() {
   return (
-    <tr className="border-b border-border/20">
-      <td className="px-3 py-2"><div className="h-3 w-32 rounded bg-muted animate-pulse" /></td>
-      <td className="px-3 py-2"><div className="h-3 w-20 rounded bg-muted animate-pulse" /></td>
-      <td className="px-3 py-2"><div className="h-5 w-28 rounded-full bg-muted animate-pulse" /></td>
-      <td className="px-3 py-2"><div className="h-3 w-12 rounded bg-muted animate-pulse" /></td>
-      <td className="px-3 py-2"><div className="h-3 w-12 rounded bg-muted animate-pulse" /></td>
-      <td className="px-3 py-2"><div className="h-3 w-12 rounded bg-muted animate-pulse" /></td>
-      <td className="px-3 py-2"><div className="size-3.5 rounded bg-muted animate-pulse" /></td>
-    </tr>
+    <TableRow>
+      <TableCell><div className="h-3 w-32 rounded bg-muted animate-pulse" /></TableCell>
+      <TableCell><div className="h-3 w-20 rounded bg-muted animate-pulse" /></TableCell>
+      <TableCell><div className="h-5 w-28 rounded-full bg-muted animate-pulse" /></TableCell>
+      <TableCell><div className="h-3 w-12 rounded bg-muted animate-pulse" /></TableCell>
+      <TableCell><div className="h-3 w-12 rounded bg-muted animate-pulse" /></TableCell>
+      <TableCell><div className="h-3 w-12 rounded bg-muted animate-pulse" /></TableCell>
+      <TableCell><div className="size-3.5 rounded bg-muted animate-pulse" /></TableCell>
+    </TableRow>
   )
 }
 
@@ -121,7 +122,7 @@ function SortHeader({
 }) {
   const active = sortCol === col
   return (
-    <th
+    <TableHead
       className={`px-3 py-2 text-2xs font-semibold uppercase text-text3 cursor-pointer select-none hover:text-text2 transition-colors ${className}`}
       onClick={() => onSort(col)}
     >
@@ -135,7 +136,7 @@ function SortHeader({
           <SortAsc className="size-3 opacity-20" />
         )}
       </span>
-    </th>
+    </TableHead>
   )
 }
 
@@ -268,26 +269,26 @@ export function ModelCatalog() {
           <div className="h-8 w-40 rounded-lg bg-muted animate-pulse" />
         </div>
         <div className="rounded-xl border border-border overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border/50 bg-surface">
-                <th className="px-3 py-2"><div className="h-3 w-12 rounded bg-muted animate-pulse" /></th>
-                <th className="px-3 py-2"><div className="h-3 w-16 rounded bg-muted animate-pulse" /></th>
-                <th className="px-3 py-2"><div className="h-3 w-20 rounded bg-muted animate-pulse" /></th>
-                <th className="px-3 py-2"><div className="h-3 w-14 rounded bg-muted animate-pulse" /></th>
-                <th className="px-3 py-2"><div className="h-3 w-14 rounded bg-muted animate-pulse" /></th>
-                <th className="px-3 py-2"><div className="h-3 w-14 rounded bg-muted animate-pulse" /></th>
-                <th className="px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead><div className="h-3 w-12 rounded bg-muted animate-pulse" /></TableHead>
+                <TableHead><div className="h-3 w-16 rounded bg-muted animate-pulse" /></TableHead>
+                <TableHead><div className="h-3 w-20 rounded bg-muted animate-pulse" /></TableHead>
+                <TableHead><div className="h-3 w-14 rounded bg-muted animate-pulse" /></TableHead>
+                <TableHead><div className="h-3 w-14 rounded bg-muted animate-pulse" /></TableHead>
+                <TableHead><div className="h-3 w-14 rounded bg-muted animate-pulse" /></TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               <TableRowSkeleton />
               <TableRowSkeleton />
               <TableRowSkeleton />
               <TableRowSkeleton />
               <TableRowSkeleton />
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
     )
@@ -348,22 +349,22 @@ export function ModelCatalog() {
 
       {/* Table */}
       <div className="rounded-xl border border-border overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border/50 text-left bg-surface">
+        <Table>
+          <TableHeader>
+            <TableRow>
               <SortHeader col="model_name" label="Name" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
               <SortHeader col="gateway_name" label="Gateway" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3">Capabilities</th>
+              <TableHead>Capabilities</TableHead>
               <SortHeader col="context_window" label="Context" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="text-right" />
               <SortHeader col="pricing_input_per_m" label="Price In" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="text-right" />
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Price Out</th>
-              <th className="px-3 py-2 w-6" />
-            </tr>
-          </thead>
-          <tbody>
+              <TableHead className="text-right">Price Out</TableHead>
+              <TableHead className="w-6" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {filteredSorted.length === 0 && (
-              <tr>
-                <td colSpan={7}>
+              <TableRow>
+                <TableCell colSpan={7}>
                   <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
                     <div className="flex items-center justify-center size-10 rounded-xl bg-muted">
                       <Server className="size-5 text-text3" />
@@ -374,30 +375,30 @@ export function ModelCatalog() {
                     </div>
                     <Button variant="outline" size="sm" onClick={resetFilters}>Reset filters</Button>
                   </div>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
             {filteredSorted.map(model => (
               <React.Fragment key={model.id}>
-                <tr
-                  className="border-b border-border/20 last:border-0 hover:bg-surface/50 cursor-pointer transition-colors"
+                <TableRow
+                  className="cursor-pointer"
                   onClick={() => handleRowClick(model.id)}
                 >
                   {/* Model name */}
-                  <td className="px-3 py-2">
+                  <TableCell>
                     <span className="text-xs font-medium text-text">{model.model_name}</span>
-                  </td>
+                  </TableCell>
 
                   {/* Gateway */}
-                  <td className="px-3 py-2">
+                  <TableCell>
                     <div>
                       <span className="text-xs text-text2">{model.gateway_name}</span>
                       <p className="text-2xs text-text3 mt-0.5">{model.gateway_type}</p>
                     </div>
-                  </td>
+                  </TableCell>
 
                   {/* Capability badges */}
-                  <td className="px-3 py-2">
+                  <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {model.capabilities.length === 0 ? (
                         <span className="text-2xs text-text3">—</span>
@@ -409,44 +410,44 @@ export function ModelCatalog() {
                         ))
                       )}
                     </div>
-                  </td>
+                  </TableCell>
 
                   {/* Context window */}
-                  <td className="px-3 py-2 text-right">
+                  <TableCell className="text-right">
                     <span className="text-xs tabular-nums text-text2">{fmtContext(model.context_window)}</span>
-                  </td>
+                  </TableCell>
 
                   {/* Price in */}
-                  <td className="px-3 py-2 text-right">
+                  <TableCell className="text-right">
                     <span className="text-xs tabular-nums text-text2">{fmtPrice(model.pricing_input_per_m)}</span>
-                  </td>
+                  </TableCell>
 
                   {/* Price out */}
-                  <td className="px-3 py-2 text-right">
+                  <TableCell className="text-right">
                     <span className="text-xs tabular-nums text-text2">{fmtPrice(model.pricing_output_per_m)}</span>
-                  </td>
+                  </TableCell>
 
                   {/* Expand toggle */}
-                  <td className="px-3 py-2">
+                  <TableCell>
                     {expandedId === model.id
                       ? <ChevronDown className="size-3.5 text-text3" />
                       : <ChevronRight className="size-3.5 text-text3" />
                     }
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
 
                 {/* Version history expansion row */}
                 {expandedId === model.id && (
-                  <tr>
-                    <td colSpan={7} className="bg-raised/50 px-4 py-3">
+                  <TableRow>
+                    <TableCell colSpan={7} className="bg-raised/50 px-4 py-3">
                       <VersionPanel modelId={model.id} />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
               </React.Fragment>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   )

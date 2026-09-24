@@ -18,6 +18,7 @@ import { VitalsBar } from "~/components/vitals-bar"
 import { PassiveTreeView } from "~/components/passive-tree-view"
 import { SkillEffectivenessBar } from "~/components/skill-effectiveness-bar"
 import { TemplateSkillsTab } from "~/components/template-skills-tab"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // ── Types ────────────────────────────────────────────────
 
@@ -423,19 +424,19 @@ function AgentDetailContent() {
                     {skills.length === 0 ? (
                       <div className="px-3 py-6 text-center text-xs text-text3">No skills assigned</div>
                     ) : (
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-border/50 bg-muted/50 text-left">
-                            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Skill</th>
-                            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Category</th>
-                            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Source</th>
-                            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 text-right">Enabled</th>
-                          </tr>
-                        </thead>
-                        <tbody>
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/50">
+                            <TableHead className="py-1.5">Skill</TableHead>
+                            <TableHead className="py-1.5">Category</TableHead>
+                            <TableHead className="py-1.5">Source</TableHead>
+                            <TableHead className="py-1.5 text-right">Enabled</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
                           {skills.map(s => (
-                            <tr key={s.name} className="border-b border-border/20 last:border-0">
-                              <td className="px-3 py-1.5">
+                            <TableRow key={s.name}>
+                              <TableCell className="py-1.5">
                                 <Link
                                   to={`/skills/${s.name}/pack`}
                                   className="text-xs font-medium text-foreground hover:text-accent-porter hover:underline transition-colors"
@@ -443,18 +444,18 @@ function AgentDetailContent() {
                                   {s.name}
                                 </Link>
                                 {s.description && <p className="text-2xs text-text3 truncate max-w-[280px]">{s.description}</p>}
-                              </td>
-                              <td className="px-3 py-1.5 text-2xs text-text3">{s.category || "—"}</td>
-                              <td className="px-3 py-1.5">
+                              </TableCell>
+                              <TableCell className="py-1.5 text-2xs text-text3">{s.category || "—"}</TableCell>
+                              <TableCell className="py-1.5">
                                 <Badge className="text-2xs border-0 bg-text3/15 text-text3">{s.source || "detected"}</Badge>
-                              </td>
-                              <td className="px-3 py-1.5 text-right">
+                              </TableCell>
+                              <TableCell className="py-1.5 text-right">
                                 <Switch checked={s.enabled} onCheckedChange={() => toggleSkill.mutate(s.name)} className="scale-75" />
-                              </td>
-                            </tr>
+                              </TableCell>
+                            </TableRow>
                           ))}
-                        </tbody>
-                      </table>
+                        </TableBody>
+                      </Table>
                     )}
                   </Card>
 

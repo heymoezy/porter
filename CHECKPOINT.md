@@ -1,3 +1,9 @@
+## 2026-09-24 - v6.162.2 - Every status in the admin uses the same colours
+
+Release P5 of `~/projects/_ops/design-system/RELEASES.md`. ~16 local status maps, the local badges and the
+sessions StatCard moved onto P4 (`StatusBadge`, `MiniMetric variant="card"`); all 26 raw tables on `ui/table`;
+mail-ops.tsx (dead) deleted. Ratchet 848 -> 528. Next Porter row: P6 (one token vocabulary).
+
 ## 2026-09-24 - v6.162.0 - One status badge for the whole admin
 
 Release P4 of `~/projects/_ops/design-system/RELEASES.md`. Badge `success`/`warning`/`info` on semantic

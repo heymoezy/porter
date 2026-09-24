@@ -3,6 +3,9 @@ import { Link } from "react-router"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Activity, Pause, Database, MessageSquare, BookOpen } from "lucide-react"
+import { StatusBadge } from "~/components/ui/status-badge"
+import { MiniMetric } from "~/components/ui/mini-metric"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -42,27 +45,12 @@ function formatDate(ts: number | null) {
   return new Date(ts * 1000).toLocaleString()
 }
 
-const statusColors: Record<string, string> = {
-  active: "bg-green-500/10 text-green-400",
-  paused: "bg-yellow-500/10 text-yellow-400",
-  completed: "bg-blue-500/10 text-blue-400",
-  expired: "bg-red-500/10 text-red-400",
-}
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[status] ?? "bg-text3/10 text-text3"}`}>
-      {status}
-    </span>
-  )
-}
-
 function TokenBar({ used, budget }: { used: number; budget: number }) {
   if (!budget) {
     return <span className="text-text3 text-xs font-mono">{used.toLocaleString()}</span>
   }
   const pct = Math.min(100, (used / budget) * 100)
-  const color = pct > 90 ? "bg-red-500" : pct > 70 ? "bg-yellow-500" : "bg-accent-porter"
+  const color = pct > 90 ? "bg-danger" : pct > 70 ? "bg-warning" : "bg-accent-porter"
 
   return (
     <div className="flex items-center gap-2">
@@ -78,20 +66,6 @@ function formatTokens(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return n.toString()
-}
-
-// ── Stat Card ──────────────────────────────────────────
-
-function StatCard({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string | number }) {
-  return (
-    <div className="rounded-lg border border-border bg-surface p-4">
-      <div className="flex items-center gap-2 mb-1">
-        <Icon className="size-3.5 text-text3" />
-        <span className="text-xs text-text3">{label}</span>
-      </div>
-      <div className="text-2xl font-semibold text-text">{value}</div>
-    </div>
-  )
 }
 
 // ── Page ───────────────────────────────────────────────
@@ -156,12 +130,13 @@ export default function SessionsAdminPage() {
 
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatCard icon={Activity} label="Active Sessions" value={stats.active} />
-        <StatCard icon={Database} label="Total Tokens" value={formatTokens(stats.totalTokens)} />
-        <StatCard icon={MessageSquare} label="Avg Context" value={`${stats.avgContext} msgs`} />
-        <StatCard icon={Pause} label="Paused" value={stats.paused} />
+        <MiniMetric variant="card" icon={Activity} label="Active Sessions" value={stats.active} />
+        <MiniMetric variant="card" icon={Database} label="Total Tokens" value={formatTokens(stats.totalTokens)} />
+        <MiniMetric variant="card" icon={MessageSquare} label="Avg Context" value={`${stats.avgContext} msgs`} />
+        <MiniMetric variant="card" icon={Pause} label="Paused" value={stats.paused} />
         <Link to="/intelligence" className="block">
-          <StatCard
+          <MiniMetric
+            variant="card"
             icon={BookOpen}
             label="Intellect coverage"
             value={`${coveragePct}% (${sessionsWithEpisodes}/${sessions.length})`}
@@ -200,29 +175,29 @@ export default function SessionsAdminPage() {
       {isLoading && <div className="text-text3">Loading...</div>}
 
       <div className="rounded-lg border border-border bg-surface p-4 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-text3 text-xs">
-            <tr className="border-b border-border">
-              <th className="text-left py-2 pr-4">ID</th>
-              <th className="text-left py-2 pr-4">Agent</th>
-              <th className="text-left py-2 pr-4">Gateway</th>
-              <th className="text-left py-2 pr-4">Status</th>
-              <th className="text-left py-2 pr-4">Episode</th>
-              <th className="text-left py-2 pr-4">Tokens</th>
-              <th className="text-right py-2 pr-4">Context</th>
-              <th className="text-left py-2 pr-4">Model</th>
-              <th className="text-right py-2 pr-4">Created</th>
-              <th className="text-right py-2">Last Active</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table size="sm">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pr-4">ID</TableHead>
+              <TableHead className="pr-4">Agent</TableHead>
+              <TableHead className="pr-4">Gateway</TableHead>
+              <TableHead className="pr-4">Status</TableHead>
+              <TableHead className="pr-4">Episode</TableHead>
+              <TableHead className="pr-4">Tokens</TableHead>
+              <TableHead className="text-right pr-4">Context</TableHead>
+              <TableHead className="pr-4">Model</TableHead>
+              <TableHead className="text-right pr-4">Created</TableHead>
+              <TableHead className="text-right">Last Active</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {sessions.map(s => {
               const sid = s.chat_id || s.id
               const hasEpisode = episodeSessionIds.has(sid)
               return (
-              <tr key={s.id} className="border-b border-border/50 hover:bg-raised/50">
-                <td className="py-2 pr-4 text-text3 font-mono text-xs">{s.id.slice(0, 8)}</td>
-                <td className="py-2 pr-4 text-text">
+              <TableRow key={s.id}>
+                <TableCell className="pr-4 text-text3 font-mono text-xs">{s.id.slice(0, 8)}</TableCell>
+                <TableCell className="pr-4 text-text">
                   {s.agent_id ? (
                     <Link to={`/agents/${s.agent_id}`} className="text-accent-porter hover:underline">
                       {s.agent_name ?? s.agent_id.slice(0, 8)}
@@ -230,16 +205,16 @@ export default function SessionsAdminPage() {
                   ) : (
                     s.username || "--"
                   )}
-                </td>
-                <td className="py-2 pr-4 text-text2">
+                </TableCell>
+                <TableCell className="pr-4 text-text2">
                   {s.gateway_type ? (
                     <Link to="/bridge" className="text-accent-porter hover:underline">
                       {s.gateway_type}
                     </Link>
                   ) : "--"}
-                </td>
-                <td className="py-2 pr-4"><StatusBadge status={s.status} /></td>
-                <td className="py-2 pr-4">
+                </TableCell>
+                <TableCell className="pr-4"><StatusBadge status={s.status} /></TableCell>
+                <TableCell className="pr-4">
                   {hasEpisode ? (
                     <Link to="/intelligence" className="inline-flex items-center gap-1 text-xs text-accent-porter hover:underline" title="Intellect has analyzed this session">
                       <BookOpen className="size-3" /> yes
@@ -247,17 +222,17 @@ export default function SessionsAdminPage() {
                   ) : (
                     <span className="text-text3 text-xs">—</span>
                   )}
-                </td>
-                <td className="py-2 pr-4"><TokenBar used={s.tokens_used} budget={s.token_budget} /></td>
-                <td className="py-2 pr-4 text-right text-text2">{s.context_msgs}</td>
-                <td className="py-2 pr-4 text-text3 text-xs">{s.model_name ?? "--"}</td>
-                <td className="py-2 pr-4 text-right text-text3 text-xs whitespace-nowrap">{formatDate(s.created_at)}</td>
-                <td className="py-2 text-right text-text3 text-xs whitespace-nowrap">{formatDate(s.last_active_at)}</td>
-              </tr>
+                </TableCell>
+                <TableCell className="pr-4"><TokenBar used={s.tokens_used} budget={s.token_budget} /></TableCell>
+                <TableCell className="pr-4 text-right text-text2">{s.context_msgs}</TableCell>
+                <TableCell className="pr-4 text-text3 text-xs">{s.model_name ?? "--"}</TableCell>
+                <TableCell className="pr-4 text-right text-text3 text-xs whitespace-nowrap">{formatDate(s.created_at)}</TableCell>
+                <TableCell className="text-right text-text3 text-xs whitespace-nowrap">{formatDate(s.last_active_at)}</TableCell>
+              </TableRow>
               )
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
 
         {!isLoading && sessions.length === 0 && (
           <div className="text-center py-12 text-text3">No sessions found</div>

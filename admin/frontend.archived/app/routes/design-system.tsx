@@ -12,6 +12,7 @@ import { Input } from "~/components/ui/input"
 import { Label } from "~/components/ui/label"
 import { Badge } from "~/components/ui/badge"
 import { StatusBadge, StatusDot, STATUS_TONE } from "~/components/ui/status-badge"
+import { MiniMetric } from "~/components/ui/mini-metric"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table"
 import { Separator } from "~/components/ui/separator"
 import { Avatar, AvatarFallback } from "~/components/ui/avatar"
@@ -2854,6 +2855,19 @@ function DesignSystemContent() {
                       ))}
                     </TableBody>
                   </Table>
+                </div>
+              </Sub>
+
+              <Sub title="MiniMetric (ui/mini-metric)">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    <MiniMetric label="Dispatches" value={1284} />
+                    <MiniMetric label="Tokens In" value="4.2M" colorClass="text-accent-porter" />
+                  </div>
+                  <div className="grid max-w-2xl grid-cols-2 gap-3 md:grid-cols-3">
+                    <MiniMetric variant="card" icon={Activity} label="Active Sessions" value={12} />
+                    <MiniMetric variant="card" label="Delivered" value="1,902" sub="last 24 hours" />
+                  </div>
                 </div>
               </Sub>
 
