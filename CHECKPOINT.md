@@ -1,3 +1,8 @@
+## 2026-09-24 - v6.162.2 - A landing restarts the brain
+
+`.ship.conf` `DEPLOY_CMD` restarts `porter-fastify`; `MAIN_BRANCH=master`. 6.162.1 had landed without a
+restart and `ship` wrongly called 6.162.0 "at or past" it; `_ops/bin/ship.sh` now compares versions.
+
 ## 2026-09-24 - v6.162.1 - The Bridge health probe runs every 10 minutes
 
 `HEALTH_PROBE_INTERVAL` 15 ticks (30 s) to 300 (10 min). The probe spawns every CLI with `--version`; measured
