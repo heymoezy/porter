@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.162.2',
+    date: '2026-09-24',
+    title: 'A Porter release goes live the moment it lands',
+    bullets: [
+      'Landing a Porter release now restarts the brain, so the new version is what answers. Before, 6.162.1 landed and the old version kept running until someone restarted it by hand.',
+    ],
+  },
+  {
     version: '6.162.1',
     date: '2026-09-24',
     title: 'The Bridge checks its AI tools every 10 minutes, not every 30 seconds',

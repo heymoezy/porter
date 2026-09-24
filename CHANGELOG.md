@@ -1,3 +1,10 @@
+## 6.162.2 - 2026-09-24
+
+`.ship.conf` gains `DEPLOY_CMD` (restart `porter-fastify`, which runs from source through tsx) and
+`MAIN_BRANCH=master`. A landing is a merge commit, and the post-commit hook deploys nothing for a merge,
+so 6.162.1 landed while the brain kept serving 6.162.0 and `ship` called that live. `ship` now compares
+the versions instead (`_ops/bin/ship.sh`).
+
 ## 6.162.1 - 2026-09-24
 
 The Bridge health probe runs every 10 minutes instead of every 30 seconds. Each probe starts every AI CLI
