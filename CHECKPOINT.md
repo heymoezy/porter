@@ -1,3 +1,9 @@
+## 2026-09-24 - v6.161.2 - The admin can no longer get less consistent
+
+Release P2 of `~/projects/_ops/design-system/RELEASES.md`. `ds-ratchet` baseline written (849 across 60
+files) and wired into `deploy/git-hooks/pre-commit` as a blocking gate. A planted `bg-blue-500` was refused.
+When it refuses: use the component or token it names. Never raise the baseline or add an exemption to pass.
+
 ## 2026-09-24 - v6.161.1 - Porter names its design system, and a type error stops the admin deploy
 
 Release P1 of `~/projects/_ops/design-system/RELEASES.md`. Design-system section in both CLAUDE.md files,

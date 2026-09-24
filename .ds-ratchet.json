@@ -1,0 +1,12 @@
+{
+  "roots": ["admin/frontend.archived/app"],
+  "extensions": [".tsx", ".ts", ".jsx", ".css"],
+  "exclude": [
+    "admin/frontend.archived/app/app.css",
+    "admin/frontend.archived/app/components/ui/",
+    "admin/frontend.archived/app/routes/design-system.tsx"
+  ],
+  "baseline": ".ds-baseline.json",
+  "use": ["hex", "rgb-hsl", "arbitrary-color", "arbitrary-size", "palette", "inline-style", "raw-button", "raw-input", "raw-select", "raw-textarea", "raw-table", "overlay", "dark-variant"],
+  "patternExclude": { "hex": ["admin/frontend.archived/app/lib/agent-registry.ts"] }
+}

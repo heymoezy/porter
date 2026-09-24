@@ -2,7 +2,7 @@
 // Do NOT edit. Source of truth: backend/package.json (version) +
 // backend/src/lib/porter-releases.ts (PORTER_RELEASES — same feed as the group announce).
 
-export const PORTER_VERSION = "6.161.1";
+export const PORTER_VERSION = "6.161.2";
 
 export interface PorterRelease {
   version: string;
@@ -12,6 +12,16 @@ export interface PorterRelease {
 }
 
 export const PORTER_RELEASES: PorterRelease[] = [
+  {
+    "version": "6.161.2",
+    "date": "2026-09-24",
+    "title": "The admin can no longer get less consistent",
+    "bullets": [
+      "Every commit now counts the hand-made styling in the askporter.app admin: raw colours, default Tailwind colours, one-off sizes, hand-built buttons, inputs and tables.",
+      "The count can go down and never up. A commit that adds any is refused and told which component or token to use.",
+      "Today it stands at 849 across 60 files. Each clean-up release lowers it."
+    ]
+  },
   {
     "version": "6.161.1",
     "date": "2026-09-24",

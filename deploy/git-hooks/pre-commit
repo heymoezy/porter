@@ -26,6 +26,20 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 # Attention is not a control.
 "$HOME/projects/_ops/bin/secret-scan.sh" || exit 1
 
+# DESIGN-SYSTEM RATCHET — also not bypassable by SKIP_RELEASE_GATE (that hatch is for the ceremony only).
+# Moe 2026-09-24: "tighten this up so we never break the design systems and components are done properly
+# not freehanded." ds-ratchet counts freehand styling per file in the admin SPA (raw hex, bg-blue-500,
+# text-[13px], hand-rolled <button>/<table>…) against .ds-baseline.json. A count may fall, never rise.
+# Config: .ds-ratchet.json. When it refuses, use the component or token it names; never raise the baseline.
+if [ -f "$REPO_ROOT/.ds-ratchet.json" ]; then
+  DS_RATCHET="$HOME/projects/_ops/bin/ds-ratchet.mjs"
+  if [ ! -f "$DS_RATCHET" ]; then
+    echo "[ds-ratchet] REFUSED — $DS_RATCHET is missing, so the design-system gate cannot run."
+    exit 1
+  fi
+  ( cd "$REPO_ROOT" && node "$DS_RATCHET" ) || exit 1
+fi
+
 if [ "${SKIP_RELEASE_GATE:-}" = "1" ]; then
   if [ -z "${SKIP_REASON:-}" ]; then
     echo "[porter-release gate] SKIP_RELEASE_GATE=1 requires SKIP_REASON. REFUSED."
