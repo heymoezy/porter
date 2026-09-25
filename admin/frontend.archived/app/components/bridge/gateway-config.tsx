@@ -433,7 +433,6 @@ export function GatewayConfig() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ollama">ollama</SelectItem>
-                  <SelectItem value="openclaw">openclaw</SelectItem>
                   <SelectItem value="codex_cli">codex_cli</SelectItem>
                   <SelectItem value="claude_cli">claude_cli</SelectItem>
                   <SelectItem value="gemini_cli">gemini_cli</SelectItem>

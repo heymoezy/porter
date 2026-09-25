@@ -49,7 +49,7 @@ const _queues = new Map<string, PQueue>();
 
 /**
  * ⚠️ THE GUARDRAIL. Total CLI subprocesses in flight across every gateway and
- * lane. 3 on a 4 vCPU box with 15GB, where an openclaw process runs ~270MB.
+ * lane. 3 on a 4 vCPU box with 15GB, where each CLI subprocess runs ~270MB.
  * Raising this is a decision about the machine, not about throughput.
  */
 export const MAX_INFLIGHT = Math.max(1, Number(process.env.PORTER_BRIDGE_MAX_INFLIGHT || 3));

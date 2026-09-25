@@ -1810,7 +1810,7 @@ function DesignSystemContent() {
                 <div className="flex flex-wrap gap-3">
                   {[
                     { name: "Ollama", model: "qwen2.5", status: "up", ms: 11 },
-                    { name: "OpenClaw", model: "gpt-5.4", status: "up", ms: 145 },
+                    { name: "Codex", model: "gpt-5", status: "up", ms: 145 },
                     { name: "Database", model: "SQLite", status: "up", ms: 2 },
                     { name: "Gemini", model: "2.0-flash", status: "down", ms: null },
                   ].map(s => (

@@ -42,9 +42,9 @@ export interface BridgeDispatchRequest {
   /**
    * Tool surface for backends that expose one (claude_cli).
    *   'none'    — spawn with no tool access; the model can ONLY emit text.
-   *               Required for cross-app consumers (Tom on openclaw, Recall
-   *               summarize/query) where tools are managed UPSTREAM of the
-   *               adapter (openclaw MCPs, application-side logic). Without
+   *               Required for cross-app consumers (Tom via ymc tom-service,
+   *               Recall summarize/query) where tools are managed UPSTREAM of
+   *               the adapter (application-side logic). Without
    *               this, claude_cli's default agentic mode tries to call
    *               WebSearch/Read/Bash and either deadlocks or bubbles back
    *               "I don't have ymc-tom__* tools" — see Tom-bug 2026-05-18.

@@ -1,3 +1,16 @@
+## 6.162.4 - 2026-09-25
+
+OpenClaw removed from Porter's runtime. The daemon (:18789) is stopped and uninstalled, and Moe does not want
+Porter to depend on it. Gone: `config.openclawUrl/openclawModel/openclawToken`, the OpenClaw probe on
+`/api/v1/health` and `/api/admin/models`, the `openclaw_url/_model/_token` settings and their
+test-connection branch, `openclaw` as a valid gateway type in both setup routes and the gateway form, the
+`openclaw` chat-panel option, the architecture-page node, the `tools` seed row in `migrate-15`, the
+`openclaw` CASE arms in `migrate-bridge-v7` (applied long ago, no such gateway row exists), and
+`scripts/generate-persona-openclaw.ts`. Comments that said Tom runs on OpenClaw now say ymc tom-service.
+`stream-service.test.ts` asserted hints the selector has ignored for months; it now pins that every hint
+routes to `claude_cli`. Database rows left in place: `tools.openclaw` (catalogue row), 184
+`bridge_dispatch_log` and 127 `intelligence_patterns` rows, 3 stale `session_registry` rows.
+
 ## 6.162.3 - 2026-09-25
 
 The claude-cli stream yields an empty token at most every `STREAM_PROGRESS_EVERY_MS` (5 s) while the child

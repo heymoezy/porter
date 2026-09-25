@@ -208,7 +208,7 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
       agent_id?: string;
       chat_id?: string;
       project_id?: string;  // COLLAB-03: project context for identity injection
-      backend?: 'ollama' | 'openclaw' | 'auto';
+      backend?: string;  // ignored: every stream routes through Bridge (see selectStreamBackend)
       raw?: boolean;  // v6.15.0: when true, skip identity prefix + Memory V3 + skill
                       // selection + delegation doctrine. Pure passthrough for
                       // cross-app consumers (e.g. YMC Tom). The caller owns the
@@ -220,8 +220,8 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
                       // in the user turn as a prompt-injection attempt.
       tools?: 'none' | 'default' | string[];  // v6.21.0 (Tom-bug fix 2026-05-18): tool surface; string[] = bounded worker allow-list
       workspace?: string;                     // a git worktree to run in; omitted = the /tmp sandbox (see DispatchRequest.workspace)
-                      // on the underlying adapter. Cross-app callers (Tom on
-                      // openclaw, Recall summarize/query) MUST pass 'none' so
+                      // on the underlying adapter. Cross-app callers (Tom via
+                      // ymc tom-service, Recall summarize/query) MUST pass 'none' so
                       // claude doesn't try to use its agentic tools (WebSearch,
                       // Read, etc.) on a prompt that lists upstream MCP tools.
                       // raw:true defaults tools to 'none' automatically — direct

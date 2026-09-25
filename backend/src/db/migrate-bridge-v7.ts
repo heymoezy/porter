@@ -26,7 +26,6 @@ export async function migrateBridgeV7(pool: pg.Pool): Promise<void> {
           WHEN 'claude_cli'    THEN '["reasoning","coding","analysis","writing"]'::jsonb
           WHEN 'codex_cli'     THEN '["coding"]'::jsonb
           WHEN 'gemini_cli'    THEN '["reasoning","coding","analysis","writing"]'::jsonb
-          WHEN 'openclaw'      THEN '["reasoning","coding","analysis"]'::jsonb
           WHEN 'ollama'        THEN '["coding"]'::jsonb
           WHEN 'openai_compat' THEN '["coding","analysis"]'::jsonb
           ELSE                      '[]'::jsonb
@@ -35,7 +34,6 @@ export async function migrateBridgeV7(pool: pg.Pool): Promise<void> {
           WHEN 'claude_cli'    THEN 'premium'
           WHEN 'codex_cli'     THEN 'premium'
           WHEN 'gemini_cli'    THEN 'standard'
-          WHEN 'openclaw'      THEN 'premium'
           WHEN 'ollama'        THEN 'budget'
           WHEN 'openai_compat' THEN 'standard'
           ELSE                      'standard'
@@ -44,7 +42,6 @@ export async function migrateBridgeV7(pool: pg.Pool): Promise<void> {
           WHEN 'claude_cli'    THEN 200000
           WHEN 'codex_cli'     THEN 128000
           WHEN 'gemini_cli'    THEN 1000000
-          WHEN 'openclaw'      THEN 128000
           WHEN 'ollama'        THEN 32768
           WHEN 'openai_compat' THEN 128000
           ELSE                      128000
@@ -53,7 +50,6 @@ export async function migrateBridgeV7(pool: pg.Pool): Promise<void> {
           WHEN 'claude_cli'    THEN 'full'
           WHEN 'codex_cli'     THEN 'full'
           WHEN 'gemini_cli'    THEN 'full'
-          WHEN 'openclaw'      THEN 'full'
           WHEN 'ollama'        THEN 'limited'
           WHEN 'openai_compat' THEN 'full'
           ELSE                      'none'
@@ -62,7 +58,6 @@ export async function migrateBridgeV7(pool: pg.Pool): Promise<void> {
           WHEN 'claude_cli'    THEN true
           WHEN 'codex_cli'     THEN true
           WHEN 'gemini_cli'    THEN true
-          WHEN 'openclaw'      THEN true
           WHEN 'ollama'        THEN false
           WHEN 'openai_compat' THEN false
           ELSE                      false

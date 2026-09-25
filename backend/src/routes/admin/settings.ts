@@ -45,9 +45,6 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
     const models = {
       ollama_url: (await getSetting('ollama_url')) || config.ollamaUrl,
       ollama_model: (await getSetting('ollama_model')) || 'qwen2.5-coder:1.5b',
-      openclaw_url: (await getSetting('openclaw_url')) || config.openclawUrl,
-      openclaw_model: (await getSetting('openclaw_model')) || 'openai-codex/gpt-5.4',
-      has_openclaw_token: !!(await getSetting('openclaw_token')),
       preferred_model: (await getSetting('preferred_model')) || 'ollama',
     };
 
@@ -102,13 +99,9 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
     }
 
     if (category === 'models') {
-      const fields = ['ollama_url', 'ollama_model', 'openclaw_url', 'openclaw_model', 'preferred_model'];
+      const fields = ['ollama_url', 'ollama_model', 'preferred_model'];
       for (const f of fields) {
         if (body[f] !== undefined && body[f] !== '') await setSetting(f, String(body[f]));
-      }
-      // Token: empty string = keep existing
-      if (body.openclaw_token !== undefined && body.openclaw_token !== '') {
-        await setSetting('openclaw_token', String(body.openclaw_token));
       }
     }
 
@@ -141,8 +134,6 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
     let url: string;
     if (provider === 'ollama') {
       url = (body?.url || (await getSetting('ollama_url')) || config.ollamaUrl) + '/api/tags';
-    } else if (provider === 'openclaw') {
-      url = (body?.url || (await getSetting('openclaw_url')) || config.openclawUrl) + '/health';
     } else {
       reply.status(400);
       return err('INVALID_PROVIDER', `Unknown provider: ${provider}`);

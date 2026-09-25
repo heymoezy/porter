@@ -15,18 +15,10 @@ describe('selectStreamBackend (unified)', () => {
     assert.equal(typeof backend.stream, 'function');
   });
 
-  it('respects ollama hint', async () => {
-    const backend = await selectStreamBackend('test', 'ollama');
-    assert.equal(backend.name, 'ollama');
-  });
-
-  it('respects openclaw hint', async () => {
-    const backend = await selectStreamBackend('test', 'openclaw');
-    assert.equal(backend.name, 'openclaw');
-  });
-
-  it('defaults to auto routing', async () => {
-    const backend = await selectStreamBackend('test', 'auto');
-    assert.ok(['ollama', 'openclaw', 'auto'].includes(backend.name));
+  it('ignores the backend hint: every stream routes through Bridge', async () => {
+    for (const hint of [undefined, 'auto', 'ollama', 'anything']) {
+      const backend = await selectStreamBackend('test', hint);
+      assert.equal(backend.name, 'claude_cli');
+    }
   });
 });
