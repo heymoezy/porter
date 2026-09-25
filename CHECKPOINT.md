@@ -1,3 +1,11 @@
+## 2026-09-25 - v6.162.4 - Porter no longer depends on OpenClaw
+
+Every runtime OpenClaw path removed (config keys, health + models probes, settings, gateway type, chat option,
+migrate-15 seed, generate-persona-openclaw.ts). DB rows left untouched: `tools` id `openclaw`, historical
+dispatch/pattern rows, 3 stale `session_registry` heartbeats. Still referencing OpenClaw, deliberately left:
+`backend/scripts/birth-templates.ts` (the born-check trigger's error message names it; needs a Bridge rewrite)
+and `backend/scripts/seed-autonomy-agents.ts` (one-off seed for personas deleted 2026-08-14).
+
 ## 2026-09-25 - v6.162.3 - A thinking model says it is still working
 
 claude-cli `stream()` yields `''` at most every 5 s while the child writes non-text lines; the chat route sends

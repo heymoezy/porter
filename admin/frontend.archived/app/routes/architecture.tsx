@@ -180,7 +180,6 @@ export default function ArchitecturePage() {
             {/* Bottom: gateways */}
             <div className="flex items-center justify-center gap-3 flex-wrap">
               {[
-                { name: "OpenClaw", sub: "GPT-5.4" },
                 { name: "Ollama", sub: "Qwen 1.5B" },
                 { name: "Claude", sub: "Anthropic" },
                 { name: "Codex", sub: "OpenAI" },

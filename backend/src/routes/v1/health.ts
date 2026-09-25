@@ -58,7 +58,6 @@ export default async function healthV1Routes(fastify: FastifyInstance) {
     // Probe AI backends in parallel
     const backends = await Promise.all([
       probeBackend('Ollama', config.ollamaUrl, config.ollamaModel),
-      probeBackend('OpenClaw', config.openclawUrl, config.openclawModel),
     ]);
 
     // DB health — quick query

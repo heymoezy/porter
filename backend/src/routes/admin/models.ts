@@ -39,10 +39,7 @@ export default async function modelsRoutes(fastify: FastifyInstance) {
 
   // GET /api/admin/models — AI gateways only (not Porter runtimes)
   fastify.get('/', async () => {
-    const [ollama, openclaw] = await Promise.all([
-      probe(`${config.ollamaUrl}/api/tags`),
-      probe(`${config.openclawUrl}/health`),
-    ]);
+    const ollama = await probe(`${config.ollamaUrl}/api/tags`);
 
     // Extract Ollama models
     let ollamaModels: string[] = [];
@@ -79,14 +76,6 @@ export default async function modelsRoutes(fastify: FastifyInstance) {
         status: 'configured',
         latencyMs: 0,
         activeModel: activeModels.claude || null,
-      },
-      {
-        name: 'OpenClaw',
-        type: 'Multi-model gateway',
-        url: config.openclawUrl,
-        status: openclaw.ok ? 'healthy' : 'down',
-        latencyMs: openclaw.latencyMs,
-        activeModel: activeModels.openclaw || activeModels.codex || null,
       },
       {
         name: 'Gemini',

@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.162.4',
+    date: '2026-09-25',
+    title: 'Porter no longer depends on OpenClaw',
+    bullets: [
+      'OpenClaw is switched off, so Porter stopped checking it, offering it as a gateway or a chat option, and showing its settings. Health no longer reports it as down.',
+    ],
+  },
+  {
     version: '6.162.3',
     date: '2026-09-25',
     title: 'A thinking model now says it is still working',

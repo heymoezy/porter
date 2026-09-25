@@ -326,7 +326,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     // tools at all. Without this, claude in agent mode tries to call
     // Read/WebSearch/etc on prompts that reference filenames or external
     // info, and bubbles "I don't have ymc-tom__* tools" back at the user.
-    // Cross-app consumers (Tom on openclaw, Recall summarize/query)
+    // Cross-app consumers (Tom via ymc tom-service, Recall summarize/query)
     // manage tools UPSTREAM of this adapter — claude just emits text.
     const noTools = req.tools === 'none';
     // Bounded worker sandbox: an explicit string[] allow-list restricts claude
@@ -519,7 +519,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     // tools at all. Without this, claude in agent mode tries to call
     // Read/WebSearch/etc on prompts that reference filenames or external
     // info, and bubbles "I don't have ymc-tom__* tools" back at the user.
-    // Cross-app consumers (Tom on openclaw, Recall summarize/query)
+    // Cross-app consumers (Tom via ymc tom-service, Recall summarize/query)
     // manage tools UPSTREAM of this adapter — claude just emits text.
     const noTools = req.tools === 'none';
     // Bounded worker sandbox: an explicit string[] allow-list restricts claude
