@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.162.3',
+    date: '2026-09-25',
+    title: 'A thinking model now says it is still working',
+    bullets: [
+      'While Claude thinks, the chat stream sends a progress line every few seconds, so Tom can tell a slow answer from a stuck one.',
+    ],
+  },
+  {
     version: '6.162.2',
     date: '2026-09-24',
     title: 'A Porter release goes live the moment it lands',
