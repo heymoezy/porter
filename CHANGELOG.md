@@ -1,3 +1,12 @@
+## 6.162.3 - 2026-09-25
+
+The claude-cli stream yields an empty token at most every `STREAM_PROGRESS_EVERY_MS` (5 s) while the child
+writes lines that carry no text (thinking deltas, tool steps). `/api/v1/chat/stream` sends it as
+`{progress:true}`; the routing engine skips it for first-token timing. A thinking turn looked silent to the
+caller until the answer, so a slow turn could not be told from a hung one (ymc Tom rebuild W2c). Measured: the
+CLI's longest gap between lines on a thinking turn was 1.5 s. Test `src/__tests__/stream-progress.test.ts`
+drives the adapter against a fake binary, proved failing without the yield.
+
 ## 6.162.2 - 2026-09-24
 
 `.ship.conf` gains `DEPLOY_CMD` (restart `porter-fastify`, which runs from source through tsx) and

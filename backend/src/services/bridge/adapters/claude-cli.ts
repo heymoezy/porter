@@ -44,6 +44,15 @@ import type {
  * and the workspace path never drifted again. Same treatment, same result.
  */
 export const TIMEOUT_MS = 300_000;
+
+/**
+ * How often stream() yields an empty token while the child is writing lines that carry no text.
+ * An empty token is a progress mark, not content: concatenating it changes nothing, and the chat
+ * route writes it as `{progress:true}`. Measured 2026-09-25: the CLI's longest gap between lines on
+ * a thinking turn was 1.5 s, so a caller watching for silence sees one of these well inside any
+ * sensible window.
+ */
+export const STREAM_PROGRESS_EVERY_MS = 5_000;
 /**
  * A workspace dispatch is a code-changing session, not a query.
  *
@@ -592,10 +601,19 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     try {
       const rl = createInterface({ input: child.stdout!, terminal: false });
       let lastYieldedLength = 0;
+      let lastYieldAt = Date.now();
 
       for await (const line of rl) {
         if (signal.aborted) return;
         if (!line.trim()) continue;
+        // ⚠️ THINKING IS PROGRESS. The child writes a line for every thinking delta, tool step and
+        // system event, and only text reaches the caller, so a turn that is thinking looked silent
+        // downstream and a caller could not tell it from a hung one. An empty token at most every
+        // STREAM_PROGRESS_EVERY_MS says the child is still writing; a text token says it anyway.
+        if (Date.now() - lastYieldAt >= STREAM_PROGRESS_EVERY_MS) {
+          lastYieldAt = Date.now();
+          yield '';
+        }
 
         let event: Record<string, any>;
         try {
@@ -616,6 +634,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
           if (fullText.length > lastYieldedLength) {
             const delta = fullText.slice(lastYieldedLength);
             yield delta;
+            lastYieldAt = Date.now();
             lastYieldedLength = fullText.length;
           }
         }
@@ -628,6 +647,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
           const text = event.event.delta?.text as string | undefined;
           if (text) {
             yield text;
+            lastYieldAt = Date.now();
             // Advance the shared cursor so the final `type: assistant` event
             // (which carries the FULL accumulated text) reconciles to the tail
             // instead of re-yielding everything → exact-doubled output. Both

@@ -507,6 +507,12 @@ export default async function chatV1Routes(fastify: FastifyInstance, _opts: Fast
           } catch { /* malformed meta — ignore */ }
           continue;
         }
+        // An empty token is the adapter saying the model is still working (thinking, a tool step):
+        // it is sent as progress so a caller can tell a slow turn from a hung one.
+        if (token === '') {
+          reply.raw.write(`data: ${JSON.stringify({ progress: true })}\n\n`);
+          continue;
+        }
         fullResponse += token;
         reply.raw.write(`data: ${JSON.stringify({ token })}\n\n`);
       }

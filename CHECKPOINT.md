@@ -1,3 +1,9 @@
+## 2026-09-25 - v6.162.3 - A thinking model says it is still working
+
+claude-cli `stream()` yields `''` at most every 5 s while the child writes non-text lines; the chat route sends
+`{progress:true}`. For the ymc Tom rebuild (W2c): Tom's service will time a round by silence, not the clock.
+Test `backend/src/__tests__/stream-progress.test.ts` (fake binary, proved failing without the yield).
+
 ## 2026-09-24 - v6.162.2 - A landing restarts the brain
 
 `.ship.conf` `DEPLOY_CMD` restarts `porter-fastify`; `MAIN_BRANCH=master`. 6.162.1 had landed without a
