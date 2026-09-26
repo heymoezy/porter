@@ -1,3 +1,9 @@
+## 6.162.5 - 2026-09-26
+
+The nightly recap carries dates. Each episode goes to the distiller with the day it happened, and the recap Tom
+reads every turn dates each item, keeps only the later of two statements that correct each other, and says when
+it was written.
+
 ## 6.162.4 - 2026-09-25
 
 OpenClaw removed from Porter's runtime. The daemon (:18789) is stopped and uninstalled, and Moe does not want
