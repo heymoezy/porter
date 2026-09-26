@@ -1,3 +1,12 @@
+## 2026-09-26 - v6.162.5 - The nightly recap carries dates
+
+For ymc H3 (`planning/tom-hygiene/RELEASES.md` in ymc.capital). `backend/src/services/intellect/distiller.ts`
+hands the model each episode as `[YYYY-MM-DD, Singapore] [session] summary` and tells it today's date; the
+self-summary must date every item, never say "this week", call a thread open only if an episode from the last
+3 days shows it, and keep only the later of two episodes that correct each other. The stored recap reads
+`RECAP WRITTEN <date> FROM EPISODES DATED <first> TO <last>:`. Tom's weekly summary had presented August
+verdicts and a July "gone dark" as this week's news. Gate `backend/scripts/verify-distiller-dates.ts`.
+
 ## 2026-09-25 - v6.162.4 - Porter no longer depends on OpenClaw
 
 Every runtime OpenClaw path removed (config keys, health + models probes, settings, gateway type, chat option,

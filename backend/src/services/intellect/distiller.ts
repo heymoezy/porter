@@ -40,22 +40,30 @@ export interface DistillResult {
 interface Lesson { lesson: string; confidence: number }
 interface Consolidation { lessons: Lesson[]; selfSummary: string; curiosities: string[] }
 
-function buildPrompt(agent: string, episodes: string[], existing: string[]): string {
+/** YYYY-MM-DD in Singapore, the firm's clock. */
+function sgtDay(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+
+export function buildPrompt(agent: string, episodes: string[], existing: string[], today: string): string {
   const epBlock = episodes.map((e, i) => `${i + 1}. ${e}`).join('\n');
   const exBlock = existing.length
     ? existing.map((c, i) => `${i + 1}. ${c}`).join('\n')
     : '(none yet)';
-  return `You are consolidating the working memory of an AI agent named "${agent}" — its nightly "dream". Episodes are short records of what it did, prefixed with [session] (the conversation/chat they belong to), highest-salience first.
+  return `You are consolidating the working memory of an AI agent named "${agent}" — its nightly "dream". Today is ${today}. Episodes are short records of what it did, each prefixed with the date it happened [YYYY-MM-DD] and [session] (the conversation/chat it belongs to), highest-salience first.
 
 Produce THREE things:
 1. LESSONS — a few DURABLE, GENERALIZABLE insights about how this agent's domain, people, and work behave ("when Y happens it usually means Z"). NOT one-off task logs. Skip anything already in EXISTING LESSONS or a paraphrase. Each ≤200 chars, specific, no hedging. Empty array is fine — fewer sharper beats padding. confidence 0-100 = how well episodes support it.
-2. SELF_SUMMARY — 2-4 sentences in the agent's own first person: what it is currently working on and the live open threads, AS OF NOW. Concrete (real names, deals, numbers). This REPLACES yesterday's summary and is shown to the agent every turn, so make it a crisp "here's where I am". ≤500 chars.
-3. CURIOSITIES — 0 to ${MAX_CURIOSITIES} short open questions the agent should chase next (unresolved threads worth following up). One line each.
+2. SELF_SUMMARY — 2-4 sentences in the agent's own first person: the live open threads. Concrete (real names, deals, numbers). ≤500 chars. It is shown to the agent every turn, so it must not turn old events into current ones:
+   - Give every item the date of the episode it comes from, e.g. "(18 Aug)". Never write "this week", "today" or "recently".
+   - Only call a thread open if an episode from the last 3 days shows it still open; older threads are named with their date as last seen.
+   - When a later episode corrects, closes or contradicts an earlier one on the same subject, keep only the later one. A claim someone corrected is dropped, not repeated.
+3. CURIOSITIES — 0 to ${MAX_CURIOSITIES} short open questions the agent should chase next (unresolved threads worth following up). One line each, with the date the thread was last seen.
 
 EXISTING LESSONS (do not repeat):
 ${exBlock}
 
-RECENT EPISODES (salience-ordered, [session]-tagged):
+RECENT EPISODES (salience-ordered, [date] [session]-tagged):
 ${epBlock}
 
 Return STRICT JSON only, no prose, no code fence:
@@ -131,7 +139,7 @@ export async function runDistiller(opts: { agent?: string } = {}): Promise<Disti
   // carry session_id so the model can group a thread. salience NULLS LAST so
   // pre-R3 episodes still participate.
   const eps = (await pool.query(
-    `SELECT summary, session_id FROM episodes
+    `SELECT summary, session_id, to_char(to_timestamp(created_at) AT TIME ZONE 'Asia/Singapore', 'YYYY-MM-DD') AS day FROM episodes
       WHERE scope = 'agent' AND scope_id = $1
         -- ⚠️ PRIVATE EPISODES NEVER REACH THE DISTILLER. A concept is durable,
         -- firm-level and gets recited wherever the agent speaks, and the model
@@ -144,7 +152,7 @@ export async function runDistiller(opts: { agent?: string } = {}): Promise<Disti
       ORDER BY salience DESC NULLS LAST, created_at DESC
       LIMIT $3`,
     [agent, LOOKBACK_DAYS, MAX_EPISODES],
-  )).rows as { summary: string; session_id: string | null }[];
+  )).rows as { summary: string; session_id: string | null; day: string }[];
   if (eps.length < MIN_EPISODES) {
     logDistillRun(agent, eps.length, 0, 0, 0, 'too few episodes');
     return { agent, episodes: eps.length, created: 0, skipped: 'too few episodes' };
@@ -157,8 +165,13 @@ export async function runDistiller(opts: { agent?: string } = {}): Promise<Disti
     [agent],
   )).rows as { content: string }[];
 
-  const epLines = eps.map((e) => (e.session_id ? `[${e.session_id}] ` : '') + e.summary);
-  const response = await dispatch(buildPrompt(agent, epLines, existing.map((c) => c.content)));
+  // ⚠️ EVERY EPISODE CARRIES ITS DATE (2026-09-26). Undated, a fortnight of episodes read as one
+  // present: Tom's summary called August proposal verdicts and a service provider "gone dark" in
+  // July things that happened this week, and a corrected claim came back because nothing said
+  // which statement was the later one.
+  const epLines = eps.map((e) => `[${e.day}] ` + (e.session_id ? `[${e.session_id}] ` : '') + e.summary);
+  const today = sgtDay(new Date());
+  const response = await dispatch(buildPrompt(agent, epLines, existing.map((c) => c.content), today));
   const { lessons, selfSummary, curiosities } = parseConsolidation(response);
 
   // (1) durable concepts — genuinely new, confident lessons.
@@ -181,7 +194,9 @@ export async function runDistiller(opts: { agent?: string } = {}): Promise<Disti
   // every turn → exactly one active, dated). (3) ≤3 decaying curiosity concepts.
   let summarised = 0;
   if (selfSummary.trim()) {
-    const dated = `AS OF ${new Date().toISOString().slice(0, 10)}: ${selfSummary.trim()}`;
+    // A recap, labelled as one: read every turn, it must say when it was written and what it covers.
+    const days = eps.map((e) => e.day).sort();
+    const dated = `RECAP WRITTEN ${today} FROM EPISODES DATED ${days[0]} TO ${days[days.length - 1]}: ${selfSummary.trim()}`;
     await replaceConcepts(agent, 'self_summary', [dated], 70);
     summarised = 1;
   }

@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.162.5',
+    date: '2026-09-26',
+    title: 'The nightly recap carries dates',
+    bullets: [
+      "Tom's nightly recap dates every item and keeps only the later of two statements that correct each other.",
+    ],
+  },
+  {
     version: '6.162.4',
     date: '2026-09-25',
     title: 'Porter no longer depends on OpenClaw',
