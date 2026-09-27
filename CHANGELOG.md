@@ -1,3 +1,8 @@
+## 6.162.6 - 2026-09-28
+
+A tool allow-list on a sandbox dispatch now limits the tools. It used to pre-approve the listed tools and leave
+Write and Bash loaded, so a "read-only" worker was read-only only while the auto-mode classifier refused.
+
 ## 6.162.5 - 2026-09-26
 
 The nightly recap carries dates. Each episode goes to the distiller with the day it happened, and the recap Tom
