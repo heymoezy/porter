@@ -244,6 +244,22 @@ function resolveCwd(workspace: string | undefined): { cwd: string; isWorkspace: 
   }
 }
 
+/**
+ * The `--tools` flag that makes an explicit allow-list an actual limit.
+ *
+ * ⚠️ `--allowedTools` ALONE IS AN AUTO-APPROVE LIST, NOT A TOOL SET. Measured 2026-09-28 on CLI
+ * 2.1.283 with the exact flags below (`--permission-mode auto --allowedTools Read,Grep,Glob`): asked
+ * to create a file, the model answered "I have both the Write tool and Bash tool available". Write
+ * and Bash were still loaded, and whether they ran was left to the auto-mode classifier, so the
+ * "read-only research worker" this field documents was read-only only while the classifier said no.
+ * `--tools` restricts the built-in set itself; with it the same model lists only Glob, Grep, Read.
+ *
+ * A workspace dispatch keeps the full set: it is a code-changing session by definition.
+ */
+export function allowListToolsArgs(isWorkspace: boolean, toolAllowList: string | null): string[] {
+  return !isWorkspace && toolAllowList ? ['--tools', toolAllowList] : [];
+}
+
 export class ClaudeCLIAdapter implements GatewayAdapter {
   readonly name = 'Claude CLI';
   readonly gatewayType = 'claude_cli' as const;
@@ -353,7 +369,8 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
            // gets the full agentic set. Without one, an explicit allow-list from
            // the caller still wins — that is how a research worker stays
            // read-only.
-           '--allowedTools', (isWorkspace ? null : toolAllowList) ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
+           '--allowedTools', (isWorkspace ? null : toolAllowList) ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent',
+           ...allowListToolsArgs(isWorkspace, toolAllowList)]),
       // Isolation: skip user-level settings (hooks like porter-session-start
       // that inject Porter Memory/directives). Combined with cwd=SANDBOX_CWD
       // (no CLAUDE.md ancestors), this keeps cross-app consumers (e.g. YMC
@@ -546,7 +563,8 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
            // gets the full agentic set. Without one, an explicit allow-list from
            // the caller still wins — that is how a research worker stays
            // read-only.
-           '--allowedTools', (isWorkspace ? null : toolAllowList) ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
+           '--allowedTools', (isWorkspace ? null : toolAllowList) ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent',
+           ...allowListToolsArgs(isWorkspace, toolAllowList)]),
       // Isolation: skip user-level settings (hooks like porter-session-start
       // that inject Porter Memory/directives). Combined with cwd=SANDBOX_CWD
       // (no CLAUDE.md ancestors), this keeps cross-app consumers (e.g. YMC

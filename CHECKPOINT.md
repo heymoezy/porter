@@ -1,3 +1,11 @@
+## 2026-09-28 - v6.162.6 - A tool allow-list is a limit, not a pre-approval
+
+For the ymc analyst (`planning/analyst/RELEASES.md` in ymc.capital), which reads code unattended and must not
+change it. `claude-cli.ts` passes an explicit `tools: string[]` as `--tools` as well as `--allowedTools` on a
+sandbox dispatch (`allowListToolsArgs`); measured on CLI 2.1.283, `--allowedTools` alone left Write and Bash
+loaded under `--permission-mode auto`. Workspace dispatches unchanged. Gate
+`backend/scripts/verify-claude-tool-allowlist.ts`.
+
 ## 2026-09-26 - v6.162.5 - The nightly recap carries dates
 
 For ymc H3 (`planning/tom-hygiene/RELEASES.md` in ymc.capital). `backend/src/services/intellect/distiller.ts`

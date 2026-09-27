@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.162.6',
+    date: '2026-09-28',
+    title: 'A tool allow-list is a limit',
+    bullets: [
+      'A worker given a list of tools can use only those tools; before, other tools stayed loaded.',
+    ],
+  },
+  {
     version: '6.162.5',
     date: '2026-09-26',
     title: 'The nightly recap carries dates',
