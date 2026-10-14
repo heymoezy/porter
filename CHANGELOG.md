@@ -1,3 +1,9 @@
+## 6.163.1 - 2026-10-14
+
+Faces hold up at full size. Seen at 640px for a WhatsApp introduction, 6.163.0 showed a long neck, hard shading
+edges across the cheeks, heavy blush and bead-like curls. `portrait.ts` raises the shoulders, shades the face with a
+radial vignette, draws blush as a soft gradient and builds curly hair from many small overlapping curls.
+
 ## 6.163.0 - 2026-10-14
 
 Avatars look like people. `backend/src/lib/portrait.ts` is the one renderer: a spec in, an SVG string out,

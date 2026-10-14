@@ -171,6 +171,8 @@ function defs(c: Ctx): string {
 <linearGradient id="${c.id('hair')}" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="${lighten(s.hair, luma(s.hair) < 0.2 ? 0.22 : 0.14)}"/><stop offset="0.55" stop-color="${s.hair}"/><stop offset="1" stop-color="${darken(s.hair, 0.22)}"/></linearGradient>
 <linearGradient id="${c.id('cloth')}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${lighten(s.shirt, 0.1)}"/><stop offset="1" stop-color="${darken(s.shirt, 0.18)}"/></linearGradient>
 <radialGradient id="${c.id('iris')}" cx="45%" cy="40%" r="60%"><stop offset="0" stop-color="${lighten(s.eyes, 0.3)}"/><stop offset="1" stop-color="${darken(s.eyes, 0.25)}"/></radialGradient>
+<radialGradient id="${c.id('vignette')}" cx="50%" cy="45%" r="55%"><stop offset="0.62" stop-color="${darken(s.skin, 0.3)}" stop-opacity="0"/><stop offset="1" stop-color="${darken(s.skin, 0.3)}" stop-opacity="0.28"/></radialGradient>
+<radialGradient id="${c.id('blush')}" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#e3735f" stop-opacity="0.16"/><stop offset="1" stop-color="#e3735f" stop-opacity="0"/></radialGradient>
 <clipPath id="${c.id('disc')}"><circle cx="100" cy="100" r="100"/></clipPath>
 <clipPath id="${c.id('face')}"><path d="${facePath(s.face)}"/></clipPath>
 </defs>`;
@@ -214,12 +216,20 @@ function hairFront(c: Ctx): string {
       return `<path d="M61,84 C60,60 76,44 100,44 C124,44 140,60 139,84 C134,70 122,60 100,59 C78,60 66,70 61,84 Z" fill="${f}" opacity="0.88"/>`
         + `<path d="M70,62 C82,52 118,52 130,62" fill="none" stroke="${sheen}" stroke-width="1.6" opacity="0.3"/>`;
     case 'curly': {
-      const curls = [
-        [64, 78, 10], [68, 64, 11], [78, 52, 12], [92, 45, 12], [108, 45, 12], [122, 52, 12], [132, 64, 11], [136, 78, 10],
-        [84, 60, 9], [100, 56, 10], [116, 60, 9],
-      ];
-      return curls.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${f}"/>`).join('')
-        + curls.map(([x, y, r]) => `<path d="M${x - r * 0.5},${y - r * 0.2} a${r * 0.5},${r * 0.5} 0 0 1 ${r},0" fill="none" stroke="${sheen}" stroke-width="1.3" opacity="0.4"/>`).join('');
+      // Many small overlapping curls read as hair; a few large ones read as beads.
+      const curls: [number, number, number][] = [];
+      for (let i = 0; i <= 12; i++) {
+        const a = Math.PI * (1.05 - (i / 12) * 1.1);
+        curls.push([100 + Math.cos(a) * 38, 82 - Math.sin(a) * 36, 8.5]);
+      }
+      for (let i = 0; i <= 7; i++) {
+        const a = Math.PI * (0.92 - (i / 7) * 0.84);
+        curls.push([100 + Math.cos(a) * 24, 72 - Math.sin(a) * 22, 8]);
+      }
+      const dark = darken(c.s.hair, 0.3);
+      return `<path d="M62,84 C58,52 78,40 100,40 C124,40 144,54 138,84 C132,70 120,62 100,61 C82,62 68,70 62,84 Z" fill="${dark}"/>`
+        + curls.map(([x, y, r]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${f}"/>`).join('')
+        + curls.map(([x, y, r]) => `<path d="M${(x - r * 0.45).toFixed(1)},${(y + r * 0.1).toFixed(1)} q${(r * 0.45).toFixed(1)},${(-r * 0.7).toFixed(1)} ${(r * 0.9).toFixed(1)},0" fill="none" stroke="${dark}" stroke-width="1.1" opacity="0.5"/>`).join('');
     }
     case 'wavy':
       return `<path d="M60,94 C54,60 74,40 100,40 C128,40 147,60 140,94 C136,80 130,70 120,64 C110,68 98,62 90,66 C80,70 72,66 68,74 C63,80 61,88 60,94 Z" fill="${f}"/>`
@@ -289,7 +299,7 @@ function torso(c: Ctx): string {
 
 function neck(c: Ctx): string {
   if (c.s.outfit === 'turtleneck') return `<path d="M86,124 L114,124 L115,140 L85,140 Z" fill="${c.url('neck')}"/>`;
-  return `<path d="M86,124 L114,124 L116,160 C110,166 90,166 84,160 Z" fill="${c.url('neck')}"/>`;
+  return `<path d="M85,124 L115,124 L117,154 C110,160 90,160 83,154 Z" fill="${c.url('neck')}"/>`;
 }
 
 function ears(c: Ctx): string {
@@ -355,12 +365,12 @@ function mouth(c: Ctx): string {
 
 function cheeksAndAge(c: Ctx): string {
   const { s } = c;
-  const blush = `<ellipse cx="75" cy="110" rx="9" ry="5" fill="#e3735f" opacity="0.13"/><ellipse cx="125" cy="110" rx="9" ry="5" fill="#e3735f" opacity="0.13"/>`;
-  // Shadow under the brow ridge and down each side of the face, clipped to the face.
+  const blush = `<ellipse cx="76" cy="109" rx="10" ry="6" fill="${c.url('blush')}"/><ellipse cx="124" cy="109" rx="10" ry="6" fill="${c.url('blush')}"/>`;
+  // Shading is a soft radial vignette inside the face, not drawn shapes: shapes leave edges a
+  // viewer reads as lines across the cheek once the face is shown large.
   const contour = `<g clip-path="${c.url('face')}">`
-    + `<path d="M60,70 C64,100 72,124 92,140 L60,140 Z" fill="${darken(s.skin, 0.3)}" opacity="0.14"/>`
-    + `<path d="M140,70 C136,100 128,124 108,140 L140,140 Z" fill="${darken(s.skin, 0.3)}" opacity="0.16"/>`
-    + `<ellipse cx="100" cy="140" rx="22" ry="6" fill="${darken(s.skin, 0.3)}" opacity="0.18"/>`
+    + `<ellipse cx="100" cy="92" rx="47" ry="56" fill="${c.url('vignette')}"/>`
+    + `<ellipse cx="100" cy="141" rx="20" ry="5" fill="${darken(s.skin, 0.3)}" opacity="0.12"/>`
     + `</g>`;
   const lines = s.age === 'senior'
     ? `<path d="M84,68 Q100,64 116,68 M86,73 Q100,70 114,73" fill="none" stroke="${darken(s.skin, 0.22)}" stroke-width="1" opacity="0.6"/>`
@@ -444,7 +454,8 @@ export function renderPortraitSvg(input: unknown, opts: RenderOptions = {}): str
     + bg
     + `<g clip-path="${c.url('disc')}"><g transform="translate(100 120) scale(1.12) translate(-100 -120)">`
     + hairBack(c)
-    + torso(c)
+    // The shoulders sit 6 units higher than they are drawn, so the neck reads as a neck.
+    + `<g transform="translate(0 -6)">${torso(c)}</g>`
     + neck(c)
     + ears(c)
     + `<path d="${facePath(s.face)}" fill="${c.url('skin')}"/>`
