@@ -1,84 +1,25 @@
+import { useId, useMemo } from "react"
 import { cn } from "~/lib/utils"
+import { renderPortraitSvg, type PortraitSpec } from "../../../../backend/src/lib/portrait"
 
-interface PixelPortraitProps {
-  hair: string
-  skin: string
-  eyes: string
-  shirt: string
-  hairStyle: "short" | "long" | "mohawk" | "bald" | "parted" | "buzz" | "curly" | "ponytail"
+/**
+ * An agent's or a person's face. The name is historical: this was a 16x24 pixel figure until
+ * v6.163.0. The drawing now comes from `backend/src/lib/portrait.ts`, the same renderer behind
+ * `GET /api/v1/portraits/render.svg`, so a face here and a face sent anywhere else are one drawing.
+ *
+ * The renderer validates every colour and style before it writes markup, which is what makes the
+ * injection below safe: nothing the caller passes reaches the HTML unchecked.
+ */
+export type PixelPortraitProps = Partial<PortraitSpec> & {
   size?: "xs" | "sm" | "md" | "lg"
   isAnimated?: boolean
   status?: "idle" | "working" | "error" | "offline"
+  /** Accessible name; without one the face is decorative. */
+  title?: string
   className?: string
 }
 
 const sizePx = { xs: 28, sm: 48, md: 72, lg: 96 }
-
-// Hair path data for each style (designed on 16x24 grid, head region 2-14 x 0-12)
-function HairSvg({ style, color, w, h }: { style: string; color: string; w: number; h: number }) {
-  // All hair is drawn on a 16x24 viewBox
-  const px = w / 16
-  switch (style) {
-    case "short":
-      return (
-        <>
-          <rect x={2 * px} y={0} width={12 * px} height={3 * px} rx={1} fill={color} />
-          <rect x={1 * px} y={1 * px} width={2 * px} height={4 * px} rx={0.5} fill={color} />
-          <rect x={13 * px} y={1 * px} width={2 * px} height={4 * px} rx={0.5} fill={color} />
-        </>
-      )
-    case "long":
-      return (
-        <>
-          <rect x={2 * px} y={0} width={12 * px} height={3 * px} rx={1} fill={color} />
-          <rect x={1 * px} y={1 * px} width={2 * px} height={10 * px} rx={0.5} fill={color} />
-          <rect x={13 * px} y={1 * px} width={2 * px} height={10 * px} rx={0.5} fill={color} />
-        </>
-      )
-    case "mohawk":
-      return (
-        <>
-          <rect x={6 * px} y={0} width={4 * px} height={1 * px} fill={color} />
-          <rect x={5 * px} y={-2 * px} width={6 * px} height={3 * px} rx={1} fill={color} />
-        </>
-      )
-    case "parted":
-      return (
-        <>
-          <rect x={2 * px} y={0} width={5 * px} height={3 * px} rx={1} fill={color} />
-          <rect x={9 * px} y={0} width={5 * px} height={2 * px} rx={1} fill={color} />
-          <rect x={1 * px} y={1 * px} width={2 * px} height={5 * px} rx={0.5} fill={color} />
-          <rect x={13 * px} y={1 * px} width={2 * px} height={4 * px} rx={0.5} fill={color} />
-        </>
-      )
-    case "buzz":
-      return (
-        <rect x={2 * px} y={0} width={12 * px} height={2 * px} rx={1} fill={color} opacity={0.7} />
-      )
-    case "curly":
-      return (
-        <>
-          <rect x={2 * px} y={0} width={3 * px} height={3 * px} rx={1.5} fill={color} />
-          <rect x={5 * px} y={-0.5 * px} width={3 * px} height={3.5 * px} rx={1.5} fill={color} />
-          <rect x={8 * px} y={0} width={3 * px} height={3 * px} rx={1.5} fill={color} />
-          <rect x={11 * px} y={0} width={3 * px} height={3 * px} rx={1.5} fill={color} />
-          <rect x={1 * px} y={1 * px} width={2 * px} height={5 * px} rx={1} fill={color} />
-          <rect x={13 * px} y={1 * px} width={2 * px} height={5 * px} rx={1} fill={color} />
-        </>
-      )
-    case "ponytail":
-      return (
-        <>
-          <rect x={2 * px} y={0} width={12 * px} height={3 * px} rx={1} fill={color} />
-          <rect x={12 * px} y={3 * px} width={3 * px} height={2 * px} rx={0.5} fill={color} />
-          <rect x={14 * px} y={5 * px} width={2 * px} height={6 * px} rx={0.5} fill={color} />
-        </>
-      )
-    case "bald":
-    default:
-      return null
-  }
-}
 
 const statusColors: Record<string, string> = {
   idle: "bg-success",
@@ -88,89 +29,33 @@ const statusColors: Record<string, string> = {
 }
 
 export function PixelPortrait({
-  hair,
-  skin,
-  eyes,
-  shirt,
-  hairStyle,
   size = "md",
   isAnimated = false,
   status,
+  title,
   className,
+  ...spec
 }: PixelPortraitProps) {
-  const h = sizePx[size]
-  const w = Math.round(h * 0.667) // 2:3 aspect ratio
-  const px = w / 16 // pixel unit
+  const uid = useId()
+  const px = sizePx[size]
+  const svg = useMemo(
+    () => renderPortraitSvg(spec, { uid, size: px, title }),
+    // The spec is a handful of strings; serialising it is the stable key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(spec), uid, px, title],
+  )
 
   return (
     <div className={cn("flex flex-col items-center gap-1", className)}>
-      <svg
-        width={w}
-        height={h}
-        viewBox={`0 0 ${w} ${h}`}
-        fill="none"
-        className={cn(
-          isAnimated && status === "working" && "animate-pixel-walk"
-        )}
-        style={{ imageRendering: "pixelated" }}
-      >
-        {/* Head */}
-        <rect
-          x={2 * px}
-          y={2 * px}
-          width={12 * px}
-          height={10 * px}
-          rx={2}
-          fill={skin}
-        />
-
-        {/* Hair */}
-        <HairSvg style={hairStyle} color={hair} w={w} h={h} />
-
-        {/* Eyes */}
-        <rect
-          x={4 * px}
-          y={6 * px}
-          width={2 * px}
-          height={2 * px}
-          rx={0.5}
-          fill={eyes}
-        />
-        <rect
-          x={10 * px}
-          y={6 * px}
-          width={2 * px}
-          height={2 * px}
-          rx={0.5}
-          fill={eyes}
-        />
-
-        {/* Body / shirt */}
-        <rect
-          x={1 * px}
-          y={13 * px}
-          width={14 * px}
-          height={11 * px}
-          rx={2}
-          fill={shirt}
-        />
-
-        {/* Neck */}
-        <rect
-          x={6 * px}
-          y={11 * px}
-          width={4 * px}
-          height={3 * px}
-          fill={skin}
-        />
-      </svg>
-
-      {/* Status dot */}
+      <span
+        className={cn("block shrink-0 leading-none", isAnimated && status === "working" && "animate-pixel-walk")}
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
       {status && (
         <div
           className={cn(
             "rounded-full",
-            size === "sm" ? "h-1.5 w-1.5" : size === "md" ? "h-2 w-2" : "h-2.5 w-2.5",
+            size === "xs" || size === "sm" ? "h-1.5 w-1.5" : size === "md" ? "h-2 w-2" : "h-2.5 w-2.5",
             statusColors[status]
           )}
         />

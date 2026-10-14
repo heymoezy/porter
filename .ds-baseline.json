@@ -106,13 +106,9 @@
   },
   "admin/frontend.archived/app/components/pixel-portrait-editor.tsx": {
     "arbitrary-size": 1,
-    "hex": 40,
     "inline-style": 2,
-    "raw-button": 2,
+    "raw-button": 1,
     "raw-input": 1
-  },
-  "admin/frontend.archived/app/components/pixel-portrait.tsx": {
-    "inline-style": 1
   },
   "admin/frontend.archived/app/components/porter-logo.tsx": {
     "arbitrary-size": 1
