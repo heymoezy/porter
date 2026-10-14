@@ -1,3 +1,13 @@
+## 6.163.0 - 2026-10-14
+
+Avatars look like people. `backend/src/lib/portrait.ts` is the one renderer: a spec in, an SVG string out,
+with shading, eyes, brows, nose, mouth, ears, neck and shoulders on a 200x200 disc. It reads the old
+PixelPortrait props, a persona's `appearance_spec` and its own fields (face, outfit, accessory, facial hair,
+expression, age, accent, background), and validates every colour and style before writing markup. The admin
+`PixelPortrait` component and the editor are rebuilt on it (names kept), the editor's swatches moved into the
+renderer, and `GET /api/v1/portraits/render.svg?spec=` serves the same drawing to other products. Gate
+`backend/scripts/verify-portrait.ts`.
+
 ## 6.162.6 - 2026-09-28
 
 A tool allow-list on a sandbox dispatch now limits the tools. It used to pre-approve the listed tools and leave

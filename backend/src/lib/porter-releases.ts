@@ -22,6 +22,16 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.163.0',
+    date: '2026-10-14',
+    title: 'Avatars look like people',
+    bullets: [
+      'Every avatar is drawn as a shaded face with eyes, a nose, a mouth, ears and shoulders, in place of the old block figure.',
+      'The editor adds face shape, expression, age, facial hair, outfit, glasses, headset or earpiece, an accent colour and a background.',
+      'Other products can draw the same faces through one address, so an agent looks the same everywhere it appears.',
+    ],
+  },
+  {
     version: '6.162.6',
     date: '2026-09-28',
     title: 'A tool allow-list is a limit',

@@ -1,3 +1,13 @@
+## 2026-10-14 - v6.163.0 - Avatars look like people
+
+Moe asked for the avatar tool to make faces a little more lifelike, then for faces for Tom's desk in ymc.
+`backend/src/lib/portrait.ts` replaces the 16x24 block figure: one pure renderer, every input validated
+(hex colours, closed style lists, escaped title, per-drawing id prefix). The admin imports it by relative
+path (`admin/frontend.archived/app/components/pixel-portrait.tsx`, the editor beside it), so the SPA and
+`GET /api/v1/portraits/render.svg` draw from one copy; it sits outside the ds-ratchet root, which is right
+for drawing data and took the editor's 40 hex swatches out of the count. Gate `backend/scripts/verify-portrait.ts`,
+proved failing with the colour check removed. Next: ymc draws Tom's desk through the endpoint.
+
 ## 2026-09-28 - v6.162.6 - A tool allow-list is a limit, not a pre-approval
 
 For the ymc analyst (`planning/analyst/RELEASES.md` in ymc.capital), which reads code unattended and must not
