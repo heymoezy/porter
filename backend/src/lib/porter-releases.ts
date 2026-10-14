@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.163.1',
+    date: '2026-10-14',
+    title: 'Faces hold up at full size',
+    bullets: [
+      'Shorter necks, soft shading in place of hard edges, gentler cheeks and curly hair that reads as hair, so a face shown large looks right.',
+    ],
+  },
+  {
     version: '6.163.0',
     date: '2026-10-14',
     title: 'Avatars look like people',

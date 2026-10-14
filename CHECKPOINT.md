@@ -1,3 +1,8 @@
+## 2026-10-14 - v6.163.1 - Faces hold up at full size
+
+Patch to 6.163.0's renderer after looking at the desk faces at 640px: shoulders 6 units higher, a radial vignette
+in place of the side shading shapes, gradient blush, curly hair as many small curls. `verify-portrait.ts` green.
+
 ## 2026-10-14 - v6.163.0 - Avatars look like people
 
 Moe asked for the avatar tool to make faces a little more lifelike, then for faces for Tom's desk in ymc.
