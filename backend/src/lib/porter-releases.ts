@@ -22,6 +22,15 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.163.2',
+    date: '2026-10-14',
+    title: 'Faces as cut-outs',
+    bullets: [
+      'A face can be drawn as a cut-out with no circle and no background, ready to sit on any page.',
+      'Long hair no longer draws strands across the face.',
+    ],
+  },
+  {
     version: '6.163.1',
     date: '2026-10-14',
     title: 'Faces hold up at full size',

@@ -40,6 +40,12 @@ check('bad style falls back', (HAIR_STYLES as readonly string[]).includes(n.hair
 const persona = normalizeSpec({ hair_style: 'curly', palette: { skin: '#f1c27d', shirt: '#1e3a5f' } });
 check('persona spec read', persona.hairStyle === 'curly' && persona.skin === '#f1c27d' && persona.shirt === '#1e3a5f');
 
+const cut = renderPortraitSvg({}, { cutout: true });
+const disc = renderPortraitSvg({});
+check('cut-out has no background disc', !cut.includes('fill="url(#p-bg)"'));
+check('cut-out is not clipped to a circle', !cut.includes('clip-path="url(#p-disc)"'));
+check('normal render keeps the disc and the clip (control)', disc.includes('fill="url(#p-bg)"') && disc.includes('clip-path="url(#p-disc)"'));
+
 // 4. Every style draws, and ids are prefixed.
 const lists: [string, readonly string[]][] = [
   ['hairStyle', HAIR_STYLES], ['face', FACE_SHAPES], ['outfit', OUTFITS], ['accessory', ACCESSORIES],

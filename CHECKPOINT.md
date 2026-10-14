@@ -1,3 +1,10 @@
+## 2026-10-14 - v6.163.2 - Faces as cut-outs
+
+Moe asked for the desk faces as PNGs with no circle and no white background. `renderPortraitSvg` takes
+`cutout` (route `&cutout=1`): no disc, no circular clip, the figure at 0.92 seated on the bottom edge. Long hair's
+strand lines now stay on the hair mass; two of them crossed the face and read as a beard on Iris. `verify-portrait.ts`
+holds the cut-out (no disc fill, no disc clip) with the normal render as its control.
+
 ## 2026-10-14 - v6.163.1 - Faces hold up at full size
 
 Patch to 6.163.0's renderer after looking at the desk faces at 640px: shoulders 6 units higher, a radial vignette
