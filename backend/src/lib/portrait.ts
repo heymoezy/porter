@@ -239,7 +239,7 @@ function hairFront(c: Ctx): string {
         + strands('M70,62 C84,50 112,46 132,58 M68,70 C86,58 116,54 136,68') + shine('M76,52 C92,44 114,44 128,52');
     case 'long':
       return `<path d="M60,96 C55,60 74,40 100,40 C126,40 145,60 140,96 C136,80 128,66 112,60 C106,58 102,60 100,64 C98,60 94,58 88,60 C72,66 64,80 60,96 Z" fill="${f}"/>`
-        + strands('M100,44 L100,62 M86,50 C80,58 72,70 66,86 M114,50 C120,58 128,70 134,86') + shine('M78,52 C86,46 94,44 100,44');
+        + strands('M100,44 L100,52 M74,58 C68,68 64,80 62,94 M126,58 C132,68 136,80 138,94') + shine('M78,52 C86,46 94,44 100,44');
     case 'bob':
       return `<path d="M59,96 C55,60 74,40 100,40 C126,40 145,60 141,96 C138,84 136,74 130,68 C116,72 98,68 84,70 C74,72 66,78 62,86 C60,90 59,93 59,96 Z" fill="${f}"/>`
         + shine('M80,50 C92,44 108,44 120,50');
@@ -434,6 +434,9 @@ export interface RenderOptions {
   title?: string;
   /** Leave out the background disc (for a transparent cut-out). */
   transparent?: boolean;
+  /** A cut-out: no disc, no circular clip, a transparent background. The figure stands on its own
+   *  and is cut only by the bottom edge, the way a photo cut-out is. Implies `transparent`. */
+  cutout?: boolean;
 }
 
 function escapeText(t: string): string {
@@ -448,11 +451,12 @@ export function renderPortraitSvg(input: unknown, opts: RenderOptions = {}): str
   const size = Number.isFinite(opts.size) && (opts.size as number) > 0 ? Math.round(opts.size as number) : 200;
   const title = opts.title ? `<title>${escapeText(opts.title.slice(0, 120))}</title>` : '';
   const role = opts.title ? 'role="img"' : 'aria-hidden="true"';
-  const bg = opts.transparent ? '' : `<circle cx="100" cy="100" r="100" fill="${c.url('bg')}"/>`;
+  const bg = opts.transparent || opts.cutout ? '' : `<circle cx="100" cy="100" r="100" fill="${c.url('bg')}"/>`;
+  const clip = opts.cutout ? '' : ` clip-path="${c.url('disc')}"`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="${size}" height="${size}" ${role}>${title}`
     + defs(c)
     + bg
-    + `<g clip-path="${c.url('disc')}"><g transform="translate(100 120) scale(1.12) translate(-100 -120)">`
+    + `<g${clip}><g transform="translate(100 ${opts.cutout ? 127 : 120}) scale(${opts.cutout ? 0.92 : 1.12}) translate(-100 -120)">`
     + hairBack(c)
     // The shoulders sit 6 units higher than they are drawn, so the neck reads as a neck.
     + `<g transform="translate(0 -6)">${torso(c)}</g>`
