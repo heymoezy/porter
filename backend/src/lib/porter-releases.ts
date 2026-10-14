@@ -22,6 +22,14 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.164.0',
+    date: '2026-10-14',
+    title: 'The avatar tool lists its choices',
+    bullets: [
+      'A product can ask the avatar tool which hair, faces, outfits and colours it draws, so a change someone asks for is checked against the real list.',
+    ],
+  },
+  {
     version: '6.163.2',
     date: '2026-10-14',
     title: 'Faces as cut-outs',

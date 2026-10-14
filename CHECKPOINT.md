@@ -1,3 +1,9 @@
+## 2026-10-14 - v6.164.0 - The avatar tool lists its choices
+
+`GET /api/v1/portraits/options` (requireAuth) returns the renderer's own style lists, the colour fields and the
+preset palette. ymc's agent-appearance change validates a requested look against it, so no second copy of the lists
+exists to drift.
+
 ## 2026-10-14 - v6.163.2 - Faces as cut-outs
 
 Moe asked for the desk faces as PNGs with no circle and no white background. `renderPortraitSvg` takes
