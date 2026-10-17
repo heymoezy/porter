@@ -171,8 +171,7 @@ export async function migrateSkillsTools(pool: pg.Pool): Promise<void> {
         ('whatsapp', 'WhatsApp', 'communication', 'integration', 'WhatsApp messaging', 'WhatsApp', 'whatsapp', 34),
         ('brave-search', 'Brave Search', 'research', 'integration', 'Web search via Brave API', 'Search', 'search', 35),
         ('gemini', 'Gemini', 'ai', 'integration', 'Google Gemini AI', 'Gemini', 'gemini', 40),
-        ('ollama', 'Ollama', 'ai', 'integration', 'Local LLM runner', 'Ollama', 'ollama', 41),
-        ('openclaw', 'OpenClaw', 'ai', 'integration', 'OpenClaw AI gateway', 'OpenClaw', 'claw', 42)
+        ('ollama', 'Ollama', 'ai', 'integration', 'Local LLM runner', 'Ollama', 'ollama', 41)
       ON CONFLICT DO NOTHING
     `);
 

@@ -116,7 +116,7 @@ describe('selectWithFallback()', () => {
 
   it('falls to second gateway when first throws a persistent error', async () => {
     const gw1 = makeGatewayRow({ id: 'gw-fail-aa', type: 'ollama', priority: 1 });
-    const gw2 = makeGatewayRow({ id: 'gw-good-bb', type: 'openclaw', priority: 2 });
+    const gw2 = makeGatewayRow({ id: 'gw-good-bb', type: 'codex_cli', priority: 2 });
 
     let gw2Called = false;
     const adapter1 = makeAdapter(async () => { throw new Error('500 Internal Server Error'); });
@@ -156,7 +156,7 @@ describe('selectWithFallback()', () => {
 
   it('throws with descriptive message when ALL gateways fail', async () => {
     const gw1 = makeGatewayRow({ id: 'gw-down1aa', type: 'ollama', priority: 1 });
-    const gw2 = makeGatewayRow({ id: 'gw-down2bb', type: 'openclaw', priority: 2 });
+    const gw2 = makeGatewayRow({ id: 'gw-down2bb', type: 'codex_cli', priority: 2 });
 
     const adapter1 = makeAdapter(async () => { throw new Error('ECONNREFUSED: ollama down'); });
     const adapter2 = makeAdapter(async () => { throw new Error('503 Service Unavailable'); });
@@ -192,12 +192,12 @@ describe('selectWithFallback()', () => {
     assert.ok(thrown, 'An error should be thrown when all gateways fail');
     assert.match(thrown!.message, /All 2 gateways failed/, 'Error message should contain count');
     assert.match(thrown!.message, /ollama/, 'Error message should include ollama failure');
-    assert.match(thrown!.message, /openclaw/, 'Error message should include openclaw failure');
+    assert.match(thrown!.message, /codex_cli/, 'Error message should include codex_cli failure');
   });
 
   it('error message includes per-gateway failure reasons with id prefix', async () => {
     const gw1 = makeGatewayRow({ id: 'gw-abc12345', type: 'ollama', priority: 1 });
-    const gw2 = makeGatewayRow({ id: 'gw-def56789', type: 'openclaw', priority: 2 });
+    const gw2 = makeGatewayRow({ id: 'gw-def56789', type: 'codex_cli', priority: 2 });
 
     const adapter1 = makeAdapter(async () => { throw new Error('connection refused'); });
     const adapter2 = makeAdapter(async () => { throw new Error('auth failed'); });
@@ -226,7 +226,7 @@ describe('selectWithFallback()', () => {
     // id.slice(0, 8) of 'gw-abc12345' = 'gw-abc12'
     assert.match(errors[0], /ollama\(gw-abc12\).*connection refused/, 'First error shows 8-char id prefix and reason');
     // id.slice(0, 8) of 'gw-def56789' = 'gw-def56'
-    assert.match(errors[1], /openclaw\(gw-def56\).*auth failed/, 'Second error shows 8-char id prefix and reason');
+    assert.match(errors[1], /codex_cli\(gw-def56\).*auth failed/, 'Second error shows 8-char id prefix and reason');
   });
 
   it('verifies circuit breaker "opened" property is checkable', async () => {
@@ -259,7 +259,7 @@ describe('selectWithFallback()', () => {
 
     // Verify healthy gateway (gw2) is dispatched when gw1 breaker is open
     const gw1 = makeGatewayRow({ id: gw1Id, type: 'ollama', priority: 1 });
-    const gw2 = makeGatewayRow({ id: gw2Id, type: 'openclaw', priority: 2 });
+    const gw2 = makeGatewayRow({ id: gw2Id, type: 'codex_cli', priority: 2 });
 
     let gw2Dispatched = false;
     const adapter2 = makeAdapter(async () => {
@@ -334,7 +334,7 @@ describe('selectWithFallback()', () => {
 
   it('returns correct RoutingDecision shape for the winning gateway', async () => {
     const gw1 = makeGatewayRow({ id: 'gw-winner1', type: 'ollama', priority: 1 });
-    const gw2 = makeGatewayRow({ id: 'gw-loserr1', type: 'openclaw', priority: 2 });
+    const gw2 = makeGatewayRow({ id: 'gw-loserr1', type: 'codex_cli', priority: 2 });
 
     const adapter1 = makeAdapter(async () => SUCCESS_RESULT);
     const candidates = [
@@ -387,7 +387,7 @@ describe('selectWithFallback()', () => {
     assert.strictEqual(decision.gatewayRow.id, 'gw-winner1', 'decision.gatewayRow.id is correct');
     assert.strictEqual(decision.reason, 'Primary: ollama (priority=1)', 'Primary reason set correctly');
     assert.strictEqual(decision.alternatives.length, 1, 'One alternative in decision');
-    assert.strictEqual(decision.alternatives[0].gatewayType, 'openclaw', 'Alternative is openclaw');
+    assert.strictEqual(decision.alternatives[0].gatewayType, 'codex_cli', 'Alternative is codex_cli');
     assert.match(decision.alternatives[0].reasonSkipped, /lower priority/, 'Alternative reason indicates lower priority');
   });
 

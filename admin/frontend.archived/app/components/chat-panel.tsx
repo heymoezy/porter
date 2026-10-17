@@ -81,11 +81,10 @@ interface ChatPanelProps {
 }
 
 const DEFAULT_PORTRAIT = { skin: "#F5D0A9", hair: "#2C1810", eyes: "#1A1A2E", shirt: "#8B5CF6", hairStyle: "short" as const }
-const AVAILABLE_BACKENDS = ["auto", "ollama", "openclaw"] as const
+const AVAILABLE_BACKENDS = ["auto", "ollama"] as const
 const MODEL_LABELS: Record<string, string> = {
   auto: "Smart routing — picks the best available model",
   ollama: "Local — qwen2.5-coder:1.5b (fast, basic)",
-  openclaw: "Cloud — GPT-5.4 via OpenClaw gateway",
 }
 
 // ── Component ────────────────────────────────────────────

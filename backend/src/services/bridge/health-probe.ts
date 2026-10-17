@@ -1,7 +1,7 @@
 /**
  * Bridge Health Probe — Background gateway health monitoring
  *
- * Runs every 30 seconds (via scheduler tick-counter at 15-tick interval).
+ * Runs every 10 minutes (via scheduler tick-counter at 300-tick interval).
  * Queries all enabled gateways, calls adapter.health() for each, and:
  *   - Updates DB status to active/stale/unavailable based on health result
  *   - Updates circuit_state column from in-memory circuit breaker state

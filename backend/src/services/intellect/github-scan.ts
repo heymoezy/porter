@@ -287,8 +287,8 @@ export async function runGithubScan(opts: { triggeredBy: 'schedule' | 'manual' }
     const prompt = [
       'You are summarizing a GitHub watchlist digest for an ops review queue. Our stack: Porter',
       '(Fastify/TypeScript/Postgres backbone with claude_cli + codex_cli gateways), ymc.capital',
-      '(Fastify + React Router + Drizzle), Tom (WhatsApp agent on the openclaw gateway — we carry',
-      'local patches + PR #100500 against openclaw/openclaw). In ONE short paragraph (<120 words),',
+      '(Fastify + React Router + Drizzle), Tom (WhatsApp agent on ymc.capital\'s own ymc-whatsapp',
+      'line and tom-service). In ONE short paragraph (<120 words),',
       'plain declarative register: what below matters for us, what is ignorable, and whether anything',
       'looks breaking or security-relevant. No preamble, no bullets.',
       '',

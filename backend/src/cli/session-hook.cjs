@@ -12,7 +12,7 @@
 //      (cwd > session pin > global pin > none). When 'none', we ASK MOE
 //      with recent-by-mtime hints. We NEVER default to Porter-the-project.
 //
-// Called by Claude, Codex, Gemini, OpenClaw session hooks. JSON event
+// Called by Claude, Codex, Gemini session hooks. JSON event
 // payload arrives on stdin (claude-code wire format with cwd + session_id).
 
 const http = require('http');

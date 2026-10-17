@@ -56,7 +56,7 @@ function ownerOf(unit: string): string {
   if (unit.startsWith('ymc-') || unit.startsWith('tom-')) return 'ymc';
   if (unit.startsWith('porter')) return 'porter';
   if (unit.startsWith('journeyful')) return 'journeyful';
-  if (unit.startsWith('openclaw') || unit.startsWith('vps-')) return 'infra';
+  if (unit.startsWith('vps-')) return 'infra';
   return 'unknown';
 }
 

@@ -1,8 +1,78 @@
-## 2026-09-24 - v6.162.2 - Every status in the admin uses the same colours
+## 2026-10-17 - v6.164.1 - Every status in the admin uses the same colours
 
 Release P5 of `~/projects/_ops/design-system/RELEASES.md`. ~16 local status maps, the local badges and the
 sessions StatCard moved onto P4 (`StatusBadge`, `MiniMetric variant="card"`); all 26 raw tables on `ui/table`;
 mail-ops.tsx (dead) deleted. Ratchet 848 -> 528. Next Porter row: P6 (one token vocabulary).
+
+## 2026-10-14 - v6.164.0 - The avatar tool lists its choices
+
+`GET /api/v1/portraits/options` (requireAuth) returns the renderer's own style lists, the colour fields and the
+preset palette. ymc's agent-appearance change validates a requested look against it, so no second copy of the lists
+exists to drift.
+
+## 2026-10-14 - v6.163.2 - Faces as cut-outs
+
+Moe asked for the desk faces as PNGs with no circle and no white background. `renderPortraitSvg` takes
+`cutout` (route `&cutout=1`): no disc, no circular clip, the figure at 0.92 seated on the bottom edge. Long hair's
+strand lines now stay on the hair mass; two of them crossed the face and read as a beard on Iris. `verify-portrait.ts`
+holds the cut-out (no disc fill, no disc clip) with the normal render as its control.
+
+## 2026-10-14 - v6.163.1 - Faces hold up at full size
+
+Patch to 6.163.0's renderer after looking at the desk faces at 640px: shoulders 6 units higher, a radial vignette
+in place of the side shading shapes, gradient blush, curly hair as many small curls. `verify-portrait.ts` green.
+
+## 2026-10-14 - v6.163.0 - Avatars look like people
+
+Moe asked for the avatar tool to make faces a little more lifelike, then for faces for Tom's desk in ymc.
+`backend/src/lib/portrait.ts` replaces the 16x24 block figure: one pure renderer, every input validated
+(hex colours, closed style lists, escaped title, per-drawing id prefix). The admin imports it by relative
+path (`admin/frontend.archived/app/components/pixel-portrait.tsx`, the editor beside it), so the SPA and
+`GET /api/v1/portraits/render.svg` draw from one copy; it sits outside the ds-ratchet root, which is right
+for drawing data and took the editor's 40 hex swatches out of the count. Gate `backend/scripts/verify-portrait.ts`,
+proved failing with the colour check removed. Next: ymc draws Tom's desk through the endpoint.
+
+## 2026-09-28 - v6.162.6 - A tool allow-list is a limit, not a pre-approval
+
+For the ymc analyst (`planning/analyst/RELEASES.md` in ymc.capital), which reads code unattended and must not
+change it. `claude-cli.ts` passes an explicit `tools: string[]` as `--tools` as well as `--allowedTools` on a
+sandbox dispatch (`allowListToolsArgs`); measured on CLI 2.1.283, `--allowedTools` alone left Write and Bash
+loaded under `--permission-mode auto`. Workspace dispatches unchanged. Gate
+`backend/scripts/verify-claude-tool-allowlist.ts`.
+
+## 2026-09-26 - v6.162.5 - The nightly recap carries dates
+
+For ymc H3 (`planning/tom-hygiene/RELEASES.md` in ymc.capital). `backend/src/services/intellect/distiller.ts`
+hands the model each episode as `[YYYY-MM-DD, Singapore] [session] summary` and tells it today's date; the
+self-summary must date every item, never say "this week", call a thread open only if an episode from the last
+3 days shows it, and keep only the later of two episodes that correct each other. The stored recap reads
+`RECAP WRITTEN <date> FROM EPISODES DATED <first> TO <last>:`. Tom's weekly summary had presented August
+verdicts and a July "gone dark" as this week's news. Gate `backend/scripts/verify-distiller-dates.ts`.
+
+## 2026-09-25 - v6.162.4 - Porter no longer depends on OpenClaw
+
+Every runtime OpenClaw path removed (config keys, health + models probes, settings, gateway type, chat option,
+migrate-15 seed, generate-persona-openclaw.ts). DB rows left untouched: `tools` id `openclaw`, historical
+dispatch/pattern rows, 3 stale `session_registry` heartbeats. Still referencing OpenClaw, deliberately left:
+`backend/scripts/birth-templates.ts` (the born-check trigger's error message names it; needs a Bridge rewrite)
+and `backend/scripts/seed-autonomy-agents.ts` (one-off seed for personas deleted 2026-08-14).
+
+## 2026-09-25 - v6.162.3 - A thinking model says it is still working
+
+claude-cli `stream()` yields `''` at most every 5 s while the child writes non-text lines; the chat route sends
+`{progress:true}`. For the ymc Tom rebuild (W2c): Tom's service will time a round by silence, not the clock.
+Test `backend/src/__tests__/stream-progress.test.ts` (fake binary, proved failing without the yield).
+
+## 2026-09-24 - v6.162.2 - A landing restarts the brain
+
+`.ship.conf` `DEPLOY_CMD` restarts `porter-fastify`; `MAIN_BRANCH=master`. 6.162.1 had landed without a
+restart and `ship` wrongly called 6.162.0 "at or past" it; `_ops/bin/ship.sh` now compares versions.
+
+## 2026-09-24 - v6.162.1 - The Bridge health probe runs every 10 minutes
+
+`HEALTH_PROBE_INTERVAL` 15 ticks (30 s) to 300 (10 min). The probe spawns every CLI with `--version`; measured
+`agy` ~5 s CPU, `codex` ~1 s, so 30 s cost ~750 CPU-s an hour under 90%+ host steal. Nothing reads
+`last_health_at` freshness; dispatch failover still catches a broken gateway.
 
 ## 2026-09-24 - v6.162.0 - One status badge for the whole admin
 

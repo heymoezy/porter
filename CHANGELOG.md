@@ -1,6 +1,6 @@
-## 6.162.2 - 2026-09-24
+## 6.164.1 - 2026-10-17
 
-Release P5 of `~/projects/_ops/design-system/RELEASES.md` (6.162.1 is held by G8). Local status maps moved
+Release P5 of `~/projects/_ops/design-system/RELEASES.md`. Local status maps moved
 onto `ui/status-badge.tsx`: STATUS_BADGE (home, skills, msg-bus, decomposition), TYPE_BADGE (skills),
 STATUS_COLORS (ops-panels), DECISION_COLORS (active-work-panel), RISK_COLORS (approvals-panel), RISK_BADGE and
 the inline status ternary (approvals), statusColors (sessions-admin, pixel-portrait), typeColors (decisions),
@@ -16,6 +16,69 @@ views: same layout, badges now token colours, table headers uppercase text3. Rat
 377 -> 113, raw-table 30 -> 0, raw-button 92 -> 82, hex 196 -> 190, arbitrary-size 89 -> 80).
 Left for P8: categorical source maps in mcp, env-tools SOURCE_BADGE, model-catalog CAPABILITY_COLORS,
 vitals-bar, intel-panel, character-card.
+
+## 6.163.1 - 2026-10-14
+
+Faces hold up at full size. Seen at 640px for a WhatsApp introduction, 6.163.0 showed a long neck, hard shading
+edges across the cheeks, heavy blush and bead-like curls. `portrait.ts` raises the shoulders, shades the face with a
+radial vignette, draws blush as a soft gradient and builds curly hair from many small overlapping curls.
+
+## 6.163.0 - 2026-10-14
+
+Avatars look like people. `backend/src/lib/portrait.ts` is the one renderer: a spec in, an SVG string out,
+with shading, eyes, brows, nose, mouth, ears, neck and shoulders on a 200x200 disc. It reads the old
+PixelPortrait props, a persona's `appearance_spec` and its own fields (face, outfit, accessory, facial hair,
+expression, age, accent, background), and validates every colour and style before writing markup. The admin
+`PixelPortrait` component and the editor are rebuilt on it (names kept), the editor's swatches moved into the
+renderer, and `GET /api/v1/portraits/render.svg?spec=` serves the same drawing to other products. Gate
+`backend/scripts/verify-portrait.ts`.
+
+## 6.162.6 - 2026-09-28
+
+A tool allow-list on a sandbox dispatch now limits the tools. It used to pre-approve the listed tools and leave
+Write and Bash loaded, so a "read-only" worker was read-only only while the auto-mode classifier refused.
+
+## 6.162.5 - 2026-09-26
+
+The nightly recap carries dates. Each episode goes to the distiller with the day it happened, and the recap Tom
+reads every turn dates each item, keeps only the later of two statements that correct each other, and says when
+it was written.
+
+## 6.162.4 - 2026-09-25
+
+OpenClaw removed from Porter's runtime. The daemon (:18789) is stopped and uninstalled, and Moe does not want
+Porter to depend on it. Gone: `config.openclawUrl/openclawModel/openclawToken`, the OpenClaw probe on
+`/api/v1/health` and `/api/admin/models`, the `openclaw_url/_model/_token` settings and their
+test-connection branch, `openclaw` as a valid gateway type in both setup routes and the gateway form, the
+`openclaw` chat-panel option, the architecture-page node, the `tools` seed row in `migrate-15`, the
+`openclaw` CASE arms in `migrate-bridge-v7` (applied long ago, no such gateway row exists), and
+`scripts/generate-persona-openclaw.ts`. Comments that said Tom runs on OpenClaw now say ymc tom-service.
+`stream-service.test.ts` asserted hints the selector has ignored for months; it now pins that every hint
+routes to `claude_cli`. Database rows left in place: `tools.openclaw` (catalogue row), 184
+`bridge_dispatch_log` and 127 `intelligence_patterns` rows, 3 stale `session_registry` rows.
+
+## 6.162.3 - 2026-09-25
+
+The claude-cli stream yields an empty token at most every `STREAM_PROGRESS_EVERY_MS` (5 s) while the child
+writes lines that carry no text (thinking deltas, tool steps). `/api/v1/chat/stream` sends it as
+`{progress:true}`; the routing engine skips it for first-token timing. A thinking turn looked silent to the
+caller until the answer, so a slow turn could not be told from a hung one (ymc Tom rebuild W2c). Measured: the
+CLI's longest gap between lines on a thinking turn was 1.5 s. Test `src/__tests__/stream-progress.test.ts`
+drives the adapter against a fake binary, proved failing without the yield.
+
+## 6.164.1 - 2026-10-17
+
+`.ship.conf` gains `DEPLOY_CMD` (restart `porter-fastify`, which runs from source through tsx) and
+`MAIN_BRANCH=master`. A landing is a merge commit, and the post-commit hook deploys nothing for a merge,
+so 6.162.1 landed while the brain kept serving 6.162.0 and `ship` called that live. `ship` now compares
+the versions instead (`_ops/bin/ship.sh`).
+
+## 6.162.1 - 2026-09-24
+
+The Bridge health probe runs every 10 minutes instead of every 30 seconds. Each probe starts every AI CLI
+with `--version`; measured on the box, `agy` costs about 5 s of CPU per call and `codex` about 1 s, so the
+30-second cadence spent about 750 CPU-seconds an hour on a host that throttles sustained use. A gateway that
+breaks between probes still fails over at dispatch.
 
 ## 6.162.0 - 2026-09-24
 

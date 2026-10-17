@@ -49,7 +49,7 @@ interface MockRoutingEngine {
 const mockRoutingEngine: MockRoutingEngine = {
   _synthesisResponse: 'Synthesized response from Porter.',
   async select(_ctx: unknown) {
-    return { gatewayRow: { type: 'openclaw' } };
+    return { gatewayRow: { type: 'codex_cli' } };
   },
   async dispatchWithQueue(_decision: unknown, _req: unknown) {
     return {

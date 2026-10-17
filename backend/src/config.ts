@@ -59,21 +59,14 @@ export const config = {
   //   - routes/v1/health.ts + routes/admin/{settings,models}.ts +
   //     routes/v1/templates.ts + routes/v1/chat.ts + routes/v1/admin/{settings,models}.ts
   //     → all expose these URLs in diagnostic/settings endpoints (no-op gracefully when
-  //       the underlying daemon is offline — the ollama and openclaw daemons happen to be
-  //       running on this host so probes still succeed).
-  // The names "ollamaUrl/openclawUrl" no longer reflect Bridge concepts — they're just
-  // host-side service URLs. Rename + scope-narrow during v7.0 cleanup.
+  //       the underlying daemon is offline).
+  // "ollamaUrl" no longer reflects a Bridge concept — it is just a host-side service URL.
+  // The OpenClaw gateway (openclawUrl/openclawModel/openclawToken) was removed in 6.162.4:
+  // the daemon is uninstalled and Porter no longer depends on it.
   ollamaUrl: process.env.OLLAMA_URL || 'http://127.0.0.1:11434',
-  openclawUrl: process.env.OPENCLAW_URL || 'http://127.0.0.1:18789',
   // Shown on the settings screens only. qwen2.5-coder:1.5b was never pulled on this box; qwen3:4b-instruct is
   // the model the local_llm gateway serves.
   ollamaModel: process.env.OLLAMA_MODEL || process.env.PORTER_LOCAL_MODEL || 'qwen3:4b-instruct',
-  openclawModel: process.env.OPENCLAW_MODEL || 'openclaw',
-
-  // Auth token for openclaw gateway. Must be set via OPENCLAW_TOKEN env var.
-  // No hardcoded fallback — if unset, openclaw dispatch will fail with a clear error.
-  // TODO(v7.0): no in-repo callers since v6.9.0 — consumed only by external tools.
-  openclawToken: process.env.OPENCLAW_TOKEN ?? '',
 
   // Credential encryption key for external connections (Phase 7).
   // Generate with: openssl rand -hex 32

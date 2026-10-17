@@ -2,7 +2,7 @@
 // Do NOT edit. Source of truth: backend/package.json (version) +
 // backend/src/lib/porter-releases.ts (PORTER_RELEASES — same feed as the group announce).
 
-export const PORTER_VERSION = "6.162.2";
+export const PORTER_VERSION = "6.164.1";
 
 export interface PorterRelease {
   version: string;
@@ -13,14 +13,98 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
-    "version": "6.162.2",
-    "date": "2026-09-24",
+    "version": "6.164.1",
+    "date": "2026-10-17",
     "title": "Every status in the admin uses the same colours",
     "bullets": [
       "Statuses, risk levels and decision types on the dashboard, Skills, Sessions, Decisions, Approvals, Message Bus, Decomposition, System and Env Tools now use the shared status badge.",
       "The pale green, yellow and red text that was hard to read on the light theme is gone; the colours now come from Porter tokens.",
       "Every table in the admin uses the same table component, so headers, spacing and row lines match.",
       "The Sessions stat cards use the shared metric component, and the unused mail screen is deleted."
+    ]
+  },
+  {
+    "version": "6.164.0",
+    "date": "2026-10-14",
+    "title": "The avatar tool lists its choices",
+    "bullets": [
+      "A product can ask the avatar tool which hair, faces, outfits and colours it draws, so a change someone asks for is checked against the real list."
+    ]
+  },
+  {
+    "version": "6.163.2",
+    "date": "2026-10-14",
+    "title": "Faces as cut-outs",
+    "bullets": [
+      "A face can be drawn as a cut-out with no circle and no background, ready to sit on any page.",
+      "Long hair no longer draws strands across the face."
+    ]
+  },
+  {
+    "version": "6.163.1",
+    "date": "2026-10-14",
+    "title": "Faces hold up at full size",
+    "bullets": [
+      "Shorter necks, soft shading in place of hard edges, gentler cheeks and curly hair that reads as hair, so a face shown large looks right."
+    ]
+  },
+  {
+    "version": "6.163.0",
+    "date": "2026-10-14",
+    "title": "Avatars look like people",
+    "bullets": [
+      "Every avatar is drawn as a shaded face with eyes, a nose, a mouth, ears and shoulders, in place of the old block figure.",
+      "The editor adds face shape, expression, age, facial hair, outfit, glasses, headset or earpiece, an accent colour and a background.",
+      "Other products can draw the same faces through one address, so an agent looks the same everywhere it appears."
+    ]
+  },
+  {
+    "version": "6.162.6",
+    "date": "2026-09-28",
+    "title": "A tool allow-list is a limit",
+    "bullets": [
+      "A worker given a list of tools can use only those tools; before, other tools stayed loaded."
+    ]
+  },
+  {
+    "version": "6.162.5",
+    "date": "2026-09-26",
+    "title": "The nightly recap carries dates",
+    "bullets": [
+      "Tom's nightly recap dates every item and keeps only the later of two statements that correct each other."
+    ]
+  },
+  {
+    "version": "6.162.4",
+    "date": "2026-09-25",
+    "title": "Porter no longer depends on OpenClaw",
+    "bullets": [
+      "OpenClaw is switched off, so Porter stopped checking it, offering it as a gateway or a chat option, and showing its settings. Health no longer reports it as down."
+    ]
+  },
+  {
+    "version": "6.162.3",
+    "date": "2026-09-25",
+    "title": "A thinking model now says it is still working",
+    "bullets": [
+      "While Claude thinks, the chat stream sends a progress line every few seconds, so Tom can tell a slow answer from a stuck one."
+    ]
+  },
+  {
+    "version": "6.162.2",
+    "date": "2026-09-24",
+    "title": "A Porter release goes live the moment it lands",
+    "bullets": [
+      "Landing a Porter release now restarts the brain, so the new version is what answers. Before, 6.162.1 landed and the old version kept running until someone restarted it by hand."
+    ]
+  },
+  {
+    "version": "6.162.1",
+    "date": "2026-09-24",
+    "title": "The Bridge checks its AI tools every 10 minutes, not every 30 seconds",
+    "bullets": [
+      "Each check starts every AI command-line tool just to read its version, which cost about 750 seconds of CPU an hour on a server the host throttles when it stays busy.",
+      "A tool that breaks between checks still fails over when a message is sent to it."
     ]
   },
   {

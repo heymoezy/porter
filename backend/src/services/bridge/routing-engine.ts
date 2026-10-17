@@ -646,6 +646,8 @@ export class RoutingEngine {
       try {
         const stream = decision.adapter.stream(req, signal);
         for await (const token of stream) {
+          // An empty token is a progress mark (claude-cli STREAM_PROGRESS_EVERY_MS), not the first token.
+          if (token === '') { yield token; continue; }
           if (firstTokenAt === null) {
             firstTokenAt = Date.now();
           }

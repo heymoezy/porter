@@ -1,16 +1,18 @@
 import { useState, useCallback } from "react"
 import { PixelPortrait } from "~/components/pixel-portrait"
+import { TogglePillGroup } from "~/components/ui/toggle-pill-group"
 import { cn } from "~/lib/utils"
+import {
+  ACCESSORIES, AGES, DEFAULT_SPEC, EXPRESSIONS, FACE_SHAPES, FACIAL_HAIR, HAIR_STYLES, OUTFITS, PRESETS,
+  type PortraitSpec,
+} from "../../../../backend/src/lib/portrait"
 
-type HairStyle = "short" | "long" | "mohawk" | "bald" | "parted" | "buzz" | "curly" | "ponytail"
-
-interface AppearanceSpec {
-  skin: string
-  hair: string
-  eyes: string
-  shirt: string
-  hairStyle: HairStyle
-}
+/**
+ * The avatar editor. Every option list and swatch comes from the renderer module, so the editor
+ * cannot offer a style the renderer does not draw. A stored spec missing the newer fields (face,
+ * outfit and the rest) renders with the renderer's defaults, so older avatars keep working.
+ */
+export type AppearanceSpec = Partial<PortraitSpec> & Pick<PortraitSpec, "skin" | "hair" | "eyes" | "shirt" | "hairStyle">
 
 interface PixelPortraitEditorProps {
   value: AppearanceSpec
@@ -18,34 +20,8 @@ interface PixelPortraitEditorProps {
   className?: string
 }
 
-const HAIR_STYLES: { id: HairStyle; label: string }[] = [
-  { id: "short", label: "Short" },
-  { id: "long", label: "Long" },
-  { id: "mohawk", label: "Mohawk" },
-  { id: "parted", label: "Parted" },
-  { id: "buzz", label: "Buzz" },
-  { id: "curly", label: "Curly" },
-  { id: "ponytail", label: "Ponytail" },
-  { id: "bald", label: "Bald" },
-]
-
-const SKIN_PRESETS = [
-  "#FFDBB4", "#F5C6A0", "#E0AC69", "#C68642", "#8D5524", "#5C3317",
-]
-
-const HAIR_PRESETS = [
-  "#2C1B18", "#4A2912", "#8B4513", "#D4A76A", "#E8C86A", "#C0392B",
-  "#7F8C8D", "#F5F5F5", "#6366F1", "#EC4899", "#10B981", "#F59E0B",
-]
-
-const EYE_PRESETS = [
-  "#1E3A5F", "#334155", "#3B82F6", "#10B981", "#8B4513", "#1A1A1A",
-]
-
-const SHIRT_PRESETS = [
-  "#6366F1", "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#EC4899",
-  "#8B5CF6", "#64748B", "#1E293B", "#F5F5F5", "#D946EF", "#14B8A6",
-]
+const label = (v: string) => v.charAt(0).toUpperCase() + v.slice(1)
+const options = (list: readonly string[]) => list.map((v) => ({ value: v, label: label(v) }))
 
 function ColorGrid({
   colors,
@@ -53,7 +29,7 @@ function ColorGrid({
   onSelect,
   label,
 }: {
-  colors: string[]
+  colors: readonly string[]
   selected: string
   onSelect: (color: string) => void
   label: string
@@ -96,80 +72,58 @@ function ColorGrid({
   )
 }
 
+function OptionRow({ title, list, value, onChange }: {
+  title: string
+  list: readonly string[]
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="space-y-1.5">
+      <span className="text-2xs font-semibold uppercase tracking-wide text-text3">{title}</span>
+      <TogglePillGroup options={options(list)} value={value} onChange={onChange} className="flex-wrap" />
+    </div>
+  )
+}
+
 export function PixelPortraitEditor({ value, onChange, className }: PixelPortraitEditorProps) {
   const update = useCallback(
     (patch: Partial<AppearanceSpec>) => onChange({ ...value, ...patch }),
     [value, onChange]
   )
+  const v = { ...DEFAULT_SPEC, ...value }
 
   return (
     <div className={cn("flex gap-6", className)}>
       {/* Preview */}
       <div className="flex flex-col items-center gap-3">
-        <div className="rounded-xl border border-border bg-surface p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-          <PixelPortrait
-            {...value}
-            size="lg"
-            isAnimated
-          />
+        <div className="rounded-xl border border-border bg-surface p-5">
+          <PixelPortrait {...value} size="lg" />
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex items-end gap-1.5">
           <PixelPortrait {...value} size="md" />
           <PixelPortrait {...value} size="sm" />
+          <PixelPortrait {...value} size="xs" />
         </div>
-        <p className="text-2xs text-text3">Live preview — all sizes</p>
+        <p className="text-2xs text-text3">Live preview at every size</p>
       </div>
 
       {/* Controls */}
       <div className="flex-1 space-y-4">
-        {/* Hair Style */}
-        <div className="space-y-1.5">
-          <span className="text-2xs font-semibold uppercase tracking-wide text-text3">
-            Hair Style
-          </span>
-          <div className="flex flex-wrap gap-1">
-            {HAIR_STYLES.map((hs) => (
-              <button
-                key={hs.id}
-                onClick={() => update({ hairStyle: hs.id })}
-                className={cn(
-                  "rounded-md px-2.5 py-1 text-2xs font-medium transition-all duration-150",
-                  value.hairStyle === hs.id
-                    ? "bg-accent-porter/15 text-accent-porter border border-accent-porter/30"
-                    : "bg-raised text-text2 border border-transparent hover:bg-border hover:text-foreground"
-                )}
-              >
-                {hs.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <OptionRow title="Hair style" list={HAIR_STYLES} value={v.hairStyle} onChange={(hairStyle) => update({ hairStyle: hairStyle as PortraitSpec["hairStyle"] })} />
+        <OptionRow title="Face" list={FACE_SHAPES} value={v.face} onChange={(face) => update({ face: face as PortraitSpec["face"] })} />
+        <OptionRow title="Expression" list={EXPRESSIONS} value={v.expression} onChange={(expression) => update({ expression: expression as PortraitSpec["expression"] })} />
+        <OptionRow title="Age" list={AGES} value={v.age} onChange={(age) => update({ age: age as PortraitSpec["age"] })} />
+        <OptionRow title="Facial hair" list={FACIAL_HAIR} value={v.facialHair} onChange={(facialHair) => update({ facialHair: facialHair as PortraitSpec["facialHair"] })} />
+        <OptionRow title="Outfit" list={OUTFITS} value={v.outfit} onChange={(outfit) => update({ outfit: outfit as PortraitSpec["outfit"] })} />
+        <OptionRow title="Accessory" list={ACCESSORIES} value={v.accessory} onChange={(accessory) => update({ accessory: accessory as PortraitSpec["accessory"] })} />
 
-        {/* Color pickers */}
-        <ColorGrid
-          label="Skin"
-          colors={SKIN_PRESETS}
-          selected={value.skin}
-          onSelect={(skin) => update({ skin })}
-        />
-        <ColorGrid
-          label="Hair Color"
-          colors={HAIR_PRESETS}
-          selected={value.hair}
-          onSelect={(hair) => update({ hair })}
-        />
-        <ColorGrid
-          label="Eyes"
-          colors={EYE_PRESETS}
-          selected={value.eyes}
-          onSelect={(eyes) => update({ eyes })}
-        />
-        <ColorGrid
-          label="Shirt"
-          colors={SHIRT_PRESETS}
-          selected={value.shirt}
-          onSelect={(shirt) => update({ shirt })}
-        />
+        <ColorGrid label="Skin" colors={PRESETS.skin} selected={v.skin} onSelect={(skin) => update({ skin })} />
+        <ColorGrid label="Hair colour" colors={PRESETS.hair} selected={v.hair} onSelect={(hair) => update({ hair })} />
+        <ColorGrid label="Eyes" colors={PRESETS.eyes} selected={v.eyes} onSelect={(eyes) => update({ eyes })} />
+        <ColorGrid label="Clothes" colors={PRESETS.cloth} selected={v.shirt} onSelect={(shirt) => update({ shirt })} />
+        <ColorGrid label="Accent" colors={PRESETS.accent} selected={v.accent} onSelect={(accent) => update({ accent })} />
+        <ColorGrid label="Background" colors={PRESETS.background} selected={v.background} onSelect={(background) => update({ background })} />
       </div>
     </div>
   )
@@ -177,13 +131,6 @@ export function PixelPortraitEditor({ value, onChange, className }: PixelPortrai
 
 /** Standalone demo wrapper with internal state */
 export function PixelPortraitEditorDemo() {
-  const [spec, setSpec] = useState<AppearanceSpec>({
-    skin: "#E0AC69",
-    hair: "#2C1B18",
-    eyes: "#334155",
-    shirt: "#6366F1",
-    hairStyle: "short",
-  })
-
+  const [spec, setSpec] = useState<AppearanceSpec>({ ...DEFAULT_SPEC })
   return <PixelPortraitEditor value={spec} onChange={setSpec} />
 }

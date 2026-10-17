@@ -65,7 +65,7 @@ describe('getBreaker()', () => {
 
   it('returns the SAME instance for the same id (singleton)', () => {
     const first = getBreaker('gw-002', 'ollama');
-    const second = getBreaker('gw-002', 'openclaw');
+    const second = getBreaker('gw-002', 'codex_cli');
     assert.equal(first, second, 'Expected identical breaker instances for same gatewayId');
   });
 

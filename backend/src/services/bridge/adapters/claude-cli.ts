@@ -44,6 +44,15 @@ import type {
  * and the workspace path never drifted again. Same treatment, same result.
  */
 export const TIMEOUT_MS = 300_000;
+
+/**
+ * How often stream() yields an empty token while the child is writing lines that carry no text.
+ * An empty token is a progress mark, not content: concatenating it changes nothing, and the chat
+ * route writes it as `{progress:true}`. Measured 2026-09-25: the CLI's longest gap between lines on
+ * a thinking turn was 1.5 s, so a caller watching for silence sees one of these well inside any
+ * sensible window.
+ */
+export const STREAM_PROGRESS_EVERY_MS = 5_000;
 /**
  * A workspace dispatch is a code-changing session, not a query.
  *
@@ -235,6 +244,22 @@ function resolveCwd(workspace: string | undefined): { cwd: string; isWorkspace: 
   }
 }
 
+/**
+ * The `--tools` flag that makes an explicit allow-list an actual limit.
+ *
+ * ⚠️ `--allowedTools` ALONE IS AN AUTO-APPROVE LIST, NOT A TOOL SET. Measured 2026-09-28 on CLI
+ * 2.1.283 with the exact flags below (`--permission-mode auto --allowedTools Read,Grep,Glob`): asked
+ * to create a file, the model answered "I have both the Write tool and Bash tool available". Write
+ * and Bash were still loaded, and whether they ran was left to the auto-mode classifier, so the
+ * "read-only research worker" this field documents was read-only only while the classifier said no.
+ * `--tools` restricts the built-in set itself; with it the same model lists only Glob, Grep, Read.
+ *
+ * A workspace dispatch keeps the full set: it is a code-changing session by definition.
+ */
+export function allowListToolsArgs(isWorkspace: boolean, toolAllowList: string | null): string[] {
+  return !isWorkspace && toolAllowList ? ['--tools', toolAllowList] : [];
+}
+
 export class ClaudeCLIAdapter implements GatewayAdapter {
   readonly name = 'Claude CLI';
   readonly gatewayType = 'claude_cli' as const;
@@ -317,7 +342,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     // tools at all. Without this, claude in agent mode tries to call
     // Read/WebSearch/etc on prompts that reference filenames or external
     // info, and bubbles "I don't have ymc-tom__* tools" back at the user.
-    // Cross-app consumers (Tom on openclaw, Recall summarize/query)
+    // Cross-app consumers (Tom via ymc tom-service, Recall summarize/query)
     // manage tools UPSTREAM of this adapter — claude just emits text.
     const noTools = req.tools === 'none';
     // Bounded worker sandbox: an explicit string[] allow-list restricts claude
@@ -344,7 +369,8 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
            // gets the full agentic set. Without one, an explicit allow-list from
            // the caller still wins — that is how a research worker stays
            // read-only.
-           '--allowedTools', (isWorkspace ? null : toolAllowList) ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
+           '--allowedTools', (isWorkspace ? null : toolAllowList) ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent',
+           ...allowListToolsArgs(isWorkspace, toolAllowList)]),
       // Isolation: skip user-level settings (hooks like porter-session-start
       // that inject Porter Memory/directives). Combined with cwd=SANDBOX_CWD
       // (no CLAUDE.md ancestors), this keeps cross-app consumers (e.g. YMC
@@ -510,7 +536,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     // tools at all. Without this, claude in agent mode tries to call
     // Read/WebSearch/etc on prompts that reference filenames or external
     // info, and bubbles "I don't have ymc-tom__* tools" back at the user.
-    // Cross-app consumers (Tom on openclaw, Recall summarize/query)
+    // Cross-app consumers (Tom via ymc tom-service, Recall summarize/query)
     // manage tools UPSTREAM of this adapter — claude just emits text.
     const noTools = req.tools === 'none';
     // Bounded worker sandbox: an explicit string[] allow-list restricts claude
@@ -537,7 +563,8 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
            // gets the full agentic set. Without one, an explicit allow-list from
            // the caller still wins — that is how a research worker stays
            // read-only.
-           '--allowedTools', (isWorkspace ? null : toolAllowList) ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent']),
+           '--allowedTools', (isWorkspace ? null : toolAllowList) ?? 'WebSearch,WebFetch,Read,Write,Edit,Bash,Glob,Grep,Agent',
+           ...allowListToolsArgs(isWorkspace, toolAllowList)]),
       // Isolation: skip user-level settings (hooks like porter-session-start
       // that inject Porter Memory/directives). Combined with cwd=SANDBOX_CWD
       // (no CLAUDE.md ancestors), this keeps cross-app consumers (e.g. YMC
@@ -592,10 +619,19 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
     try {
       const rl = createInterface({ input: child.stdout!, terminal: false });
       let lastYieldedLength = 0;
+      let lastYieldAt = Date.now();
 
       for await (const line of rl) {
         if (signal.aborted) return;
         if (!line.trim()) continue;
+        // ⚠️ THINKING IS PROGRESS. The child writes a line for every thinking delta, tool step and
+        // system event, and only text reaches the caller, so a turn that is thinking looked silent
+        // downstream and a caller could not tell it from a hung one. An empty token at most every
+        // STREAM_PROGRESS_EVERY_MS says the child is still writing; a text token says it anyway.
+        if (Date.now() - lastYieldAt >= STREAM_PROGRESS_EVERY_MS) {
+          lastYieldAt = Date.now();
+          yield '';
+        }
 
         let event: Record<string, any>;
         try {
@@ -616,6 +652,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
           if (fullText.length > lastYieldedLength) {
             const delta = fullText.slice(lastYieldedLength);
             yield delta;
+            lastYieldAt = Date.now();
             lastYieldedLength = fullText.length;
           }
         }
@@ -628,6 +665,7 @@ export class ClaudeCLIAdapter implements GatewayAdapter {
           const text = event.event.delta?.text as string | undefined;
           if (text) {
             yield text;
+            lastYieldAt = Date.now();
             // Advance the shared cursor so the final `type: assistant` event
             // (which carries the FULL accumulated text) reconciles to the tail
             // instead of re-yielding everything → exact-doubled output. Both
