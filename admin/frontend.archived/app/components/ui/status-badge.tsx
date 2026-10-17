@@ -27,6 +27,7 @@ export const STATUS_TONE: Record<string, StatusTone> = {
   trusted: "success",
   new_directive: "success",
   model_selection: "success",
+  "auth.login.ok": "success",
 
   // waiting, degraded, needs a look
   baseline: "warning",
@@ -55,6 +56,10 @@ export const STATUS_TONE: Record<string, StatusTone> = {
   routing: "info",
   sent: "info",
   working: "info",
+  "chat.message": "info",
+  "persona.create": "info",
+  "project.create": "info",
+  "project.update": "info",
 
   // failed, refused, removed
   blocked: "danger",
@@ -69,6 +74,7 @@ export const STATUS_TONE: Record<string, StatusTone> = {
   rejected: "danger",
   scaffold: "danger",
   unavailable: "danger",
+  "auth.login.fail": "danger",
 
   // ended or inert
   archived: "neutral",
@@ -78,6 +84,9 @@ export const STATUS_TONE: Record<string, StatusTone> = {
   offline: "neutral",
   specialize: "neutral",
   stale: "neutral",
+  hidden: "neutral",
+  unknown: "neutral",
+  "auth.logout": "neutral",
 }
 
 export function statusTone(status: string | null | undefined): StatusTone {

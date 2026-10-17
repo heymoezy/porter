@@ -1,5 +1,6 @@
 import { useId, useMemo } from "react"
 import { cn } from "~/lib/utils"
+import { statusDotClass } from "~/components/ui/status-badge"
 import { renderPortraitSvg, type PortraitSpec } from "../../../../backend/src/lib/portrait"
 
 /**
@@ -20,13 +21,6 @@ export type PixelPortraitProps = Partial<PortraitSpec> & {
 }
 
 const sizePx = { xs: 28, sm: 48, md: 72, lg: 96 }
-
-const statusColors: Record<string, string> = {
-  idle: "bg-success",
-  working: "bg-accent-porter animate-pulse-badge",
-  error: "bg-danger",
-  offline: "bg-text3",
-}
 
 export function PixelPortrait({
   size = "md",
@@ -56,7 +50,8 @@ export function PixelPortrait({
           className={cn(
             "rounded-full",
             size === "xs" || size === "sm" ? "h-1.5 w-1.5" : size === "md" ? "h-2 w-2" : "h-2.5 w-2.5",
-            statusColors[status]
+            statusDotClass(status),
+            status === "working" && "animate-pulse-badge"
           )}
         />
       )}

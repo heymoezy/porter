@@ -3,6 +3,7 @@ import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Wrench, RefreshCw } from "lucide-react"
+import { StatusDot, statusTextClass } from "~/components/ui/status-badge"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -20,24 +21,6 @@ interface EnvTool {
 function fmtDate(epoch: number) {
   if (!epoch) return "Never"
   return new Date(epoch * 1000).toLocaleString()
-}
-
-const HEALTH_DOT: Record<string, string> = {
-  healthy:     "bg-emerald-400",
-  ok:          "bg-emerald-400",
-  degraded:    "bg-yellow-400",
-  unavailable: "bg-red-400",
-  unknown:     "bg-text3/50",
-  hidden:      "bg-text3/30",
-}
-
-const HEALTH_TEXT: Record<string, string> = {
-  healthy:     "text-emerald-400",
-  ok:          "text-emerald-400",
-  degraded:    "text-yellow-400",
-  unavailable: "text-red-400",
-  unknown:     "text-text3",
-  hidden:      "text-text3/50",
 }
 
 const SOURCE_BADGE: Record<string, string> = {
@@ -111,7 +94,7 @@ export default function EnvToolsPage() {
             >
               {/* Header row: name + health dot */}
               <div className="flex items-center gap-2 mb-2">
-                <div className={`size-2 rounded-full ${HEALTH_DOT[tool.health] ?? HEALTH_DOT.unknown}`} />
+                <StatusDot status={tool.health} />
                 <h3 className="text-sm font-semibold text-foreground flex-1 truncate">{tool.key}</h3>
               </div>
 
@@ -129,7 +112,7 @@ export default function EnvToolsPage() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-2xs text-text3">Health</span>
-                  <span className={`text-xs font-medium ${HEALTH_TEXT[tool.health] ?? HEALTH_TEXT.unknown}`}>
+                  <span className={`text-xs font-medium ${statusTextClass(tool.health)}`}>
                     {tool.health}
                   </span>
                 </div>

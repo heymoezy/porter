@@ -14,6 +14,7 @@ import {
   SelectItem,
 } from "~/components/ui/select"
 import { XCircle, ChevronDown, ChevronRight, GitBranch, Zap, Layers, BookOpen, Cpu } from "lucide-react"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -128,13 +129,13 @@ function reasonBadgeClass(reason: string): string {
 
 function DispatchRowSkeleton() {
   return (
-    <tr className="border-b border-border/20">
+    <TableRow>
       {[32, 20, 28, 14, 14, 20, 16, 6].map((w, i) => (
-        <td key={i} className="px-3 py-2">
+        <TableCell key={i}>
           <div className={`h-3 w-${w} rounded bg-muted animate-pulse`} />
-        </td>
+        </TableCell>
       ))}
-    </tr>
+    </TableRow>
   )
 }
 
@@ -205,31 +206,31 @@ function AgentStats({ agentId }: { agentId: string }) {
       <Card>
         <CardContent className="pt-4 pb-3">
           <div className="rounded-xl border border-border overflow-hidden">
-            <table className="w-full">
-              <tbody>
-                <tr className="border-b border-border/20">
+            <Table>
+              <TableBody>
+                <TableRow>
                   {[28, 20, 14, 16, 14, 14, 14].map((w, i) => (
-                    <td key={i} className="px-3 py-2">
+                    <TableCell key={i}>
                       <div className={`h-3 w-${w} rounded bg-muted animate-pulse`} />
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
-                <tr className="border-b border-border/20">
+                </TableRow>
+                <TableRow>
                   {[28, 20, 14, 16, 14, 14, 14].map((w, i) => (
-                    <td key={i} className="px-3 py-2">
+                    <TableCell key={i}>
                       <div className={`h-3 w-${w} rounded bg-muted animate-pulse`} />
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
-                <tr>
+                </TableRow>
+                <TableRow>
                   {[28, 20, 14, 16, 14, 14, 14].map((w, i) => (
-                    <td key={i} className="px-3 py-2">
+                    <TableCell key={i}>
                       <div className={`h-3 w-${w} rounded bg-muted animate-pulse`} />
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
-              </tbody>
-            </table>
+                </TableRow>
+              </TableBody>
+            </Table>
           </div>
         </CardContent>
       </Card>
@@ -280,46 +281,46 @@ function AgentStats({ agentId }: { agentId: string }) {
 
         {/* Per-model table */}
         <div className="rounded-xl border border-border overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border/50 bg-surface text-left">
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3">Model</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3">Gateway</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Dispatches</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Avg Latency</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Total Cost</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Tokens In</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Tokens Out</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Model</TableHead>
+                <TableHead>Gateway</TableHead>
+                <TableHead className="text-right">Dispatches</TableHead>
+                <TableHead className="text-right">Avg Latency</TableHead>
+                <TableHead className="text-right">Total Cost</TableHead>
+                <TableHead className="text-right">Tokens In</TableHead>
+                <TableHead className="text-right">Tokens Out</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {stats.map((row, idx) => (
-                <tr key={idx} className="border-b border-border/20 last:border-0">
-                  <td className="px-3 py-2">
+                <TableRow key={idx}>
+                  <TableCell>
                     <span className="text-xs font-medium text-text">{row.model_name}</span>
-                  </td>
-                  <td className="px-3 py-2">
+                  </TableCell>
+                  <TableCell>
                     <span className="text-xs text-text2">{row.gateway_type}</span>
-                  </td>
-                  <td className="px-3 py-2 text-right">
+                  </TableCell>
+                  <TableCell className="text-right">
                     <span className="text-xs tabular-nums text-text">{row.dispatch_count}</span>
-                  </td>
-                  <td className="px-3 py-2 text-right">
+                  </TableCell>
+                  <TableCell className="text-right">
                     <span className="text-xs tabular-nums text-text2">{fmtMs(row.avg_latency_ms)}</span>
-                  </td>
-                  <td className="px-3 py-2 text-right">
+                  </TableCell>
+                  <TableCell className="text-right">
                     <span className="text-xs tabular-nums text-warning">{fmtCost(row.total_cost_usd)}</span>
-                  </td>
-                  <td className="px-3 py-2 text-right">
+                  </TableCell>
+                  <TableCell className="text-right">
                     <span className="text-xs tabular-nums text-text2">{fmtTokens(row.total_input_tokens)}</span>
-                  </td>
-                  <td className="px-3 py-2 text-right">
+                  </TableCell>
+                  <TableCell className="text-right">
                     <span className="text-xs tabular-nums text-text2">{fmtTokens(row.total_output_tokens)}</span>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </CardContent>
     </Card>
@@ -559,24 +560,24 @@ export function DispatchLog() {
           <div className="h-8 w-44 rounded-lg bg-muted animate-pulse" />
         </div>
         <div className="rounded-xl border border-border overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border/50 bg-surface">
+          <Table>
+            <TableHeader>
+              <TableRow>
                 {["Model", "Gateway", "Reason", "Cost", "Latency", "Agent", "Time", ""].map((h, i) => (
-                  <th key={i} className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-left">
+                  <TableHead key={i}>
                     {h}
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               <DispatchRowSkeleton />
               <DispatchRowSkeleton />
               <DispatchRowSkeleton />
               <DispatchRowSkeleton />
               <DispatchRowSkeleton />
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
     )
@@ -679,23 +680,23 @@ export function DispatchLog() {
 
       {/* Table */}
       <div className="rounded-xl border border-border overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border/50 bg-surface text-left">
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3">Model</th>
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3">Gateway</th>
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3">Reason</th>
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Cost</th>
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Latency</th>
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3">Agent</th>
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Time</th>
-              <th className="px-3 py-2 w-6" />
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Model</TableHead>
+              <TableHead>Gateway</TableHead>
+              <TableHead>Reason</TableHead>
+              <TableHead className="text-right">Cost</TableHead>
+              <TableHead className="text-right">Latency</TableHead>
+              <TableHead>Agent</TableHead>
+              <TableHead className="text-right">Time</TableHead>
+              <TableHead className="w-6" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {entries.length === 0 && (
-              <tr>
-                <td colSpan={8}>
+              <TableRow>
+                <TableCell colSpan={8}>
                   <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
                     <div className="flex items-center justify-center size-10 rounded-xl bg-muted">
                       <GitBranch className="size-5 text-text3" />
@@ -707,45 +708,45 @@ export function DispatchLog() {
                       </p>
                     </div>
                   </div>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
             {entries.map(entry => (
               <React.Fragment key={entry.id}>
-                <tr className="border-b border-border/20 last:border-0 hover:bg-surface/50 transition-colors">
+                <TableRow>
                   {/* Model */}
-                  <td className="px-3 py-2">
+                  <TableCell>
                     <span className="text-xs font-medium text-text">{entry.model_name}</span>
-                  </td>
+                  </TableCell>
 
                   {/* Gateway */}
-                  <td className="px-3 py-2">
+                  <TableCell>
                     <span className="text-xs text-text2">{entry.gateway_type}</span>
-                  </td>
+                  </TableCell>
 
                   {/* Reason badge */}
-                  <td className="px-3 py-2">
+                  <TableCell>
                     <Badge className={`text-2xs ${reasonBadgeClass(entry.chosen_reason)}`}>
                       {entry.chosen_reason}
                     </Badge>
-                  </td>
+                  </TableCell>
 
                   {/* Cost */}
-                  <td className="px-3 py-2 text-right">
+                  <TableCell className="text-right">
                     <span className="text-xs tabular-nums text-warning">
                       {fmtCost(entry.estimated_cost_usd)}
                     </span>
-                  </td>
+                  </TableCell>
 
                   {/* Latency */}
-                  <td className="px-3 py-2 text-right">
+                  <TableCell className="text-right">
                     <span className="text-xs tabular-nums text-text2">
                       {fmtMs(entry.latency_ms)}
                     </span>
-                  </td>
+                  </TableCell>
 
                   {/* Agent */}
-                  <td className="px-3 py-2">
+                  <TableCell>
                     {entry.agent_id ? (
                       <span
                         className="text-2xs text-text3 font-mono"
@@ -756,16 +757,16 @@ export function DispatchLog() {
                     ) : (
                       <span className="text-2xs text-text3">—</span>
                     )}
-                  </td>
+                  </TableCell>
 
                   {/* Time */}
-                  <td className="px-3 py-2 text-right">
+                  <TableCell className="text-right">
                     <span className="text-2xs text-text3">{fmtTime(entry.created_at)}</span>
-                  </td>
+                  </TableCell>
 
                   {/* Expand toggle — always available */}
-                  <td
-                    className="px-3 py-2 cursor-pointer"
+                  <TableCell
+                    className="cursor-pointer"
                     onClick={() => {
                       setExpandedRowId(prev => (prev === entry.id ? null : entry.id))
                     }}
@@ -774,13 +775,13 @@ export function DispatchLog() {
                       ? <ChevronDown className="size-3.5 text-text3" />
                       : <ChevronRight className="size-3.5 text-text3" />
                     }
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
 
                 {/* Expanded row: context pressure + session pressure chart + session routing */}
                 {expandedRowId === entry.id && (
-                  <tr>
-                    <td colSpan={8} className="bg-raised/50 px-4 py-3">
+                  <TableRow>
+                    <TableCell colSpan={8} className="bg-raised/50 px-4 py-3">
                       <div className="space-y-4">
                         <ContextPanel dispatchId={entry.id} />
                         {entry.chat_id && (
@@ -794,13 +795,13 @@ export function DispatchLog() {
                           </>
                         )}
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
               </React.Fragment>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {/* Pagination controls */}

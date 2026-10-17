@@ -21,6 +21,8 @@ import {
   AGENT_REGISTRY, getAgentsByTeam, agentStatusCounts,
   type AgentDef, type AgentStatus,
 } from "~/lib/agent-registry"
+import { StatusBadge } from "~/components/ui/status-badge"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // ── Shared Types ────────────────────────────────────────
 
@@ -487,16 +489,6 @@ function MonitorTab() {
 // TAB 2: Activity (from activity.tsx)
 // ══════════════════════════════════════════════════════════
 
-const actionColors: Record<string, string> = {
-  "auth.login.ok": "bg-success/15 text-success",
-  "auth.logout": "bg-text3/15 text-text3",
-  "auth.login.fail": "bg-danger/15 text-danger",
-  "project.create": "bg-accent-porter/15 text-accent-porter",
-  "project.update": "bg-accent-porter/15 text-accent-porter",
-  "persona.create": "bg-purple-500/15 text-purple-400",
-  "chat.message": "bg-blue-500/15 text-blue-400",
-}
-
 function ActivityTab() {
   const [subtab, setSubtab] = useState<"feed" | "learnings">("feed")
   const [actionFilter, setActionFilter] = useState("")
@@ -592,30 +584,28 @@ function ActivityTab() {
             {!feedData?.entries?.length ? (
               <div className="px-3 py-6 text-center text-xs text-text3">No activity</div>
             ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border/50 text-left">
-                    <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Time</th>
-                    <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Actor</th>
-                    <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Action</th>
-                    <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Target</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="py-1.5">Time</TableHead>
+                    <TableHead className="py-1.5">Actor</TableHead>
+                    <TableHead className="py-1.5">Action</TableHead>
+                    <TableHead className="py-1.5">Target</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {feedData.entries.map(e => (
-                    <tr key={e.id} className="border-b border-border/20 last:border-0">
-                      <td className="px-3 py-1 text-2xs text-text3 whitespace-nowrap">{fmtRel(e.ts)}</td>
-                      <td className="px-3 py-1 text-xs font-medium text-text">{e.actor}</td>
-                      <td className="px-3 py-1">
-                        <Badge className={`text-2xs border-0 ${actionColors[e.action] || "bg-text3/15 text-text3"}`}>
-                          {e.action}
-                        </Badge>
-                      </td>
-                      <td className="px-3 py-1 text-xs text-text2 truncate max-w-[200px]">{e.target}</td>
-                    </tr>
+                    <TableRow key={e.id}>
+                      <TableCell className="py-1 text-2xs text-text3 whitespace-nowrap">{fmtRel(e.ts)}</TableCell>
+                      <TableCell className="py-1 text-xs font-medium text-text">{e.actor}</TableCell>
+                      <TableCell className="py-1">
+                        <StatusBadge status={e.action} />
+                      </TableCell>
+                      <TableCell className="py-1 text-xs text-text2 truncate max-w-[200px]">{e.target}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
           </div>
         </>
@@ -652,12 +642,6 @@ const sourceIcon: Record<string, React.ElementType> = {
   server_api: Server,
   agent_error: Bot,
   server_unhandled: Bug,
-}
-
-const severityColor: Record<string, string> = {
-  critical: "bg-danger/15 text-danger",
-  error: "bg-warning/15 text-warning",
-  warning: "bg-text3/15 text-text3",
 }
 
 function DiagnosticsTab() {
@@ -754,9 +738,7 @@ function DiagnosticsTab() {
             <div className="space-y-1.5">
               {stats.topErrors.map((e, i) => (
                 <div key={i} className="flex items-center gap-2 rounded-lg bg-background px-3 py-2">
-                  <Badge className={`text-2xs ${severityColor[e.severity] ?? "bg-text3/15 text-text3"} border-0`}>
-                    {e.severity}
-                  </Badge>
+                  <StatusBadge status={e.severity} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-text truncate">{e.message}</p>
                     <p className="text-2xs text-text3">{e.source} · {fmtRel(e.last_seen)}</p>
@@ -792,9 +774,7 @@ function DiagnosticsTab() {
                       onClick={() => setExpanded(isExpanded ? null : e.id)}
                     >
                       <Icon className="size-3.5 text-text3 shrink-0" />
-                      <Badge className={`text-2xs ${severityColor[e.severity] ?? ""} border-0 shrink-0`}>
-                        {e.severity}
-                      </Badge>
+                      <StatusBadge status={e.severity} className="shrink-0" />
                       <p className="text-xs text-text flex-1 min-w-0 truncate">{e.message}</p>
                       {e.username && <span className="text-2xs text-text3 shrink-0">@{e.username}</span>}
                       <span className="text-2xs text-text3 shrink-0">{fmtRel(e.created_at)}</span>

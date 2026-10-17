@@ -22,6 +22,7 @@ import {
   GitBranch,
   Globe,
 } from "lucide-react"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -258,29 +259,29 @@ export function SkillImportDialog({ open, onOpenChange }: SkillImportDialogProps
               </div>
             ) : (
               <div className="max-h-[320px] overflow-y-auto rounded-lg border border-border">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border/50 bg-surface text-left">
-                      <th className="w-8 px-2 py-1.5" />
-                      <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Skill</th>
-                      <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Category</th>
-                      <th className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 text-right">Files</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-8 px-2 py-1.5" />
+                      <TableHead className="px-2 py-1.5">Skill</TableHead>
+                      <TableHead className="px-2 py-1.5">Category</TableHead>
+                      <TableHead className="px-2 py-1.5 text-right">Files</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {candidates.map(c => (
-                      <tr
+                      <TableRow
                         key={c.id}
                         onClick={() => toggleCandidate(c.id)}
-                        className="border-b border-border/20 last:border-0 cursor-pointer hover:bg-surface/60 transition-colors"
+                        className="cursor-pointer hover:bg-surface/60"
                       >
-                        <td className="px-2 py-1.5">
+                        <TableCell className="px-2 py-1.5">
                           <Checkbox
                             checked={selected.has(c.id)}
                             onCheckedChange={() => toggleCandidate(c.id)}
                           />
-                        </td>
-                        <td className="px-2 py-1.5">
+                        </TableCell>
+                        <TableCell className="px-2 py-1.5">
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs font-medium text-text">{c.name}</span>
                             {c.conflict && (
@@ -290,17 +291,17 @@ export function SkillImportDialog({ open, onOpenChange }: SkillImportDialogProps
                           {c.description && (
                             <p className="text-2xs text-text3 truncate max-w-[250px]">{c.description}</p>
                           )}
-                        </td>
-                        <td className="px-2 py-1.5">
+                        </TableCell>
+                        <TableCell className="px-2 py-1.5">
                           <Badge className="text-2xs border-0 bg-text3/15 text-text3">{c.category}</Badge>
-                        </td>
-                        <td className="px-2 py-1.5 text-right">
+                        </TableCell>
+                        <TableCell className="px-2 py-1.5 text-right">
                           <span className="text-xs text-text3">{c.files.length}</span>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
           </div>

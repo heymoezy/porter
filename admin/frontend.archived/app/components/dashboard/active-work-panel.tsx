@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card"
-import { Badge } from "~/components/ui/badge"
 import { ListTodo, MessageSquare, GitBranch } from "lucide-react"
+import { StatusBadge } from "~/components/ui/status-badge"
 
 interface RootTask {
   id: string
@@ -29,14 +29,6 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return String(n)
-}
-
-const DECISION_COLORS: Record<string, string> = {
-  routing: "bg-blue-500/15 text-blue-400",
-  delegation: "bg-purple-500/15 text-purple-400",
-  model_selection: "bg-green-500/15 text-green-400",
-  tool_selection: "bg-yellow-500/15 text-yellow-400",
-  escalation: "bg-red-500/15 text-red-400",
 }
 
 export function ActiveWorkPanel() {
@@ -100,7 +92,7 @@ export function ActiveWorkPanel() {
         {/* Sessions */}
         <div>
           <div className="flex items-center gap-1.5 mb-1">
-            <MessageSquare className="size-3 text-green-400" />
+            <MessageSquare className="size-3 text-success" />
             <span className="text-2xs font-semibold text-[var(--foreground,#f6f8fb)]">Sessions</span>
           </div>
           <div className="flex items-center gap-3">
@@ -118,14 +110,12 @@ export function ActiveWorkPanel() {
         {/* Decisions */}
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
-            <GitBranch className="size-3 text-purple-400" />
+            <GitBranch className="size-3 text-accent-porter" />
             <span className="text-2xs font-semibold text-[var(--foreground,#f6f8fb)]">Decisions</span>
           </div>
           <div className="flex flex-wrap gap-1">
             {(decisionsData?.byType ?? []).map((d) => (
-              <Badge key={d.decision_type} className={`text-2xs px-1.5 py-0 ${DECISION_COLORS[d.decision_type] ?? "bg-[var(--raised,#2b3444)] text-[var(--text3,#8a95a8)]"}`}>
-                {d.decision_type.replace(/_/g, " ")} {d.cnt}
-              </Badge>
+              <StatusBadge key={d.decision_type} status={d.decision_type} label={`${d.decision_type.replace(/_/g, " ")} ${d.cnt}`} className="px-1.5 py-0" />
             ))}
             {(!decisionsData?.byType || decisionsData.byType.length === 0) && (
               <span className="text-2xs text-[var(--text3,#8a95a8)]">No decisions yet</span>

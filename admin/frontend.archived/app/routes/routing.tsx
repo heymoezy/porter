@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router"
 import { api } from "~/lib/api"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // --- Types ---
 
@@ -57,7 +58,7 @@ function fmtMs(ms: number | null | undefined): string {
 }
 
 function ScoreDisplay({ score }: { score: number }) {
-  const color = score >= 4 ? "text-green-400" : score >= 3 ? "text-yellow-400" : "text-red-400"
+  const color = score >= 4 ? "text-success" : score >= 3 ? "text-warning" : "text-danger"
   return (
     <span className={`font-mono font-medium ${color}`}>
       {score.toFixed(1)}
@@ -70,8 +71,8 @@ function TrendIndicator({ current, recent }: { current: number; recent: number |
   if (recent === null || recent === undefined) return <span className="text-text3 text-xs">-</span>
   const diff = recent - current
   if (Math.abs(diff) < 0.1) return <span className="text-text3 text-xs">Stable</span>
-  if (diff > 0) return <span className="text-green-400 text-xs">+{diff.toFixed(1)} (7d)</span>
-  return <span className="text-red-400 text-xs">{diff.toFixed(1)} (7d)</span>
+  if (diff > 0) return <span className="text-success text-xs">+{diff.toFixed(1)} (7d)</span>
+  return <span className="text-danger text-xs">{diff.toFixed(1)} (7d)</span>
 }
 
 // --- Tabs ---
@@ -110,34 +111,34 @@ function DecisionsTab() {
 
   return (
     <div className="rounded-xl border border-border overflow-hidden">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-border/50 text-left bg-surface">
-            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Time</th>
-            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Session</th>
-            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Gateway</th>
-            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Model</th>
-            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 text-right">Seq #</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="py-1.5">Time</TableHead>
+            <TableHead className="py-1.5">Session</TableHead>
+            <TableHead className="py-1.5">Gateway</TableHead>
+            <TableHead className="py-1.5">Model</TableHead>
+            <TableHead className="py-1.5 text-right">Seq #</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {decisions.map((d) => (
-            <tr key={d.id} className="border-b border-border/30 last:border-0 hover:bg-surface/50">
-              <td className="px-3 py-1.5 text-xs text-text2 whitespace-nowrap">{fmtDate(d.created_at)}</td>
-              <td className="px-3 py-1.5 text-xs text-text3 font-mono truncate max-w-[120px]">
+            <TableRow key={d.id}>
+              <TableCell className="py-1.5 text-xs text-text2 whitespace-nowrap">{fmtDate(d.created_at)}</TableCell>
+              <TableCell className="py-1.5 text-xs text-text3 font-mono truncate max-w-[120px]">
                 {d.session_id?.slice(0, 8) ?? "-"}
-              </td>
-              <td className="px-3 py-1.5 text-xs">
+              </TableCell>
+              <TableCell className="py-1.5 text-xs">
                 <Link to="/bridge" className="text-accent-porter hover:underline">
                   {d.gateway_name ?? d.gateway_type}
                 </Link>
-              </td>
-              <td className="px-3 py-1.5 text-xs font-medium text-text">{d.model_name}</td>
-              <td className="px-3 py-1.5 text-xs text-text2 text-right">{d.message_sequence}</td>
-            </tr>
+              </TableCell>
+              <TableCell className="py-1.5 text-xs font-medium text-text">{d.model_name}</TableCell>
+              <TableCell className="py-1.5 text-xs text-text2 text-right">{d.message_sequence}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -171,30 +172,30 @@ function FeedbackTab() {
 
   return (
     <div className="rounded-xl border border-border overflow-hidden">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-border/50 text-left bg-surface">
-            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Time</th>
-            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Model</th>
-            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Score</th>
-            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 text-right">Latency</th>
-            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Agent</th>
-            <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Intent</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="py-1.5">Time</TableHead>
+            <TableHead className="py-1.5">Model</TableHead>
+            <TableHead className="py-1.5">Score</TableHead>
+            <TableHead className="py-1.5 text-right">Latency</TableHead>
+            <TableHead className="py-1.5">Agent</TableHead>
+            <TableHead className="py-1.5">Intent</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {feedback.map((f) => (
-            <tr key={f.id} className="border-b border-border/30 last:border-0 hover:bg-surface/50">
-              <td className="px-3 py-1.5 text-xs text-text2 whitespace-nowrap">{fmtDate(f.created_at)}</td>
-              <td className="px-3 py-1.5 text-xs font-medium text-text">{f.model_name}</td>
-              <td className="px-3 py-1.5 text-xs"><ScoreDisplay score={f.outcome_score} /></td>
-              <td className="px-3 py-1.5 text-xs text-text2 text-right">{fmtMs(f.latency_ms)}</td>
-              <td className="px-3 py-1.5 text-xs text-text3">{f.source_agent ?? "-"}</td>
-              <td className="px-3 py-1.5 text-xs text-text3 truncate max-w-[150px]">{f.intent ?? "-"}</td>
-            </tr>
+            <TableRow key={f.id}>
+              <TableCell className="py-1.5 text-xs text-text2 whitespace-nowrap">{fmtDate(f.created_at)}</TableCell>
+              <TableCell className="py-1.5 text-xs font-medium text-text">{f.model_name}</TableCell>
+              <TableCell className="py-1.5 text-xs"><ScoreDisplay score={f.outcome_score} /></TableCell>
+              <TableCell className="py-1.5 text-xs text-text2 text-right">{fmtMs(f.latency_ms)}</TableCell>
+              <TableCell className="py-1.5 text-xs text-text3">{f.source_agent ?? "-"}</TableCell>
+              <TableCell className="py-1.5 text-xs text-text3 truncate max-w-[150px]">{f.intent ?? "-"}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -229,7 +230,7 @@ function ConfidenceTab() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {confidence.map((c) => {
-        const scoreColor = c.avg_score >= 4 ? "text-green-400" : c.avg_score >= 3 ? "text-yellow-400" : "text-red-400"
+        const scoreColor = c.avg_score >= 4 ? "text-success" : c.avg_score >= 3 ? "text-warning" : "text-danger"
         return (
           <div key={c.gateway_id} className="rounded-xl border border-border bg-surface p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -248,7 +249,7 @@ function ConfidenceTab() {
             <div className="h-2 bg-raised rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full ${
-                  c.avg_score >= 4 ? "bg-green-500" : c.avg_score >= 3 ? "bg-yellow-500" : "bg-red-500"
+                  c.avg_score >= 4 ? "bg-success" : c.avg_score >= 3 ? "bg-warning" : "bg-danger"
                 }`}
                 style={{ width: `${(c.avg_score / 5) * 100}%` }}
               />

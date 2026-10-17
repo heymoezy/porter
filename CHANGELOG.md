@@ -1,3 +1,22 @@
+## 6.164.1 - 2026-10-17
+
+Release P5 of `~/projects/_ops/design-system/RELEASES.md`. Local status maps moved
+onto `ui/status-badge.tsx`: STATUS_BADGE (home, skills, msg-bus, decomposition), TYPE_BADGE (skills),
+STATUS_COLORS (ops-panels), DECISION_COLORS (active-work-panel), RISK_COLORS (approvals-panel), RISK_BADGE and
+the inline status ternary (approvals), statusColors (sessions-admin, pixel-portrait), typeColors (decisions),
+actionColors and severityColor (system), HEALTH_DOT/HEALTH_TEXT (env-tools). Local `TypeBadge` and
+`StatusBadge` deleted; `ProposalKindBadge` and `SkillQualityBadge` are thin wrappers over `StatusBadge`.
+`STATUS_TONE` gains the audit actions, `hidden` and `unknown`. `ui/mini-metric.tsx` gains `variant="card"`
+(icon, sub line); the sessions-admin `StatCard` uses it. `components/mail-ops.tsx` deleted (unreferenced
+since 6.48.0; its StatCard went with it). All 26 raw `<table>` in 16 files converted to `ui/table`
+(mechanical swap, house classes stripped); `Table` gains `size="sm"` for the five pages that used `text-sm`.
+The `-400` dark-theme shades in the touched files (routing, decomposition, approvals, skills, dashboard
+panels) moved to `success`/`warning`/`danger`/`info` tokens. Screens at 1440 before and after on 19 route/tab
+views: same layout, badges now token colours, table headers uppercase text3. Ratchet 848 -> 528 (palette
+377 -> 113, raw-table 30 -> 0, raw-button 92 -> 82, hex 196 -> 190, arbitrary-size 89 -> 80).
+Left for P8: categorical source maps in mcp, env-tools SOURCE_BADGE, model-catalog CAPABILITY_COLORS,
+vitals-bar, intel-panel, character-card.
+
 ## 6.163.1 - 2026-10-14
 
 Faces hold up at full size. Seen at 640px for a WhatsApp introduction, 6.163.0 showed a long neck, hard shading
@@ -47,7 +66,7 @@ caller until the answer, so a slow turn could not be told from a hung one (ymc T
 CLI's longest gap between lines on a thinking turn was 1.5 s. Test `src/__tests__/stream-progress.test.ts`
 drives the adapter against a fake binary, proved failing without the yield.
 
-## 6.162.2 - 2026-09-24
+## 6.164.1 - 2026-10-17
 
 `.ship.conf` gains `DEPLOY_CMD` (restart `porter-fastify`, which runs from source through tsx) and
 `MAIN_BRANCH=master`. A landing is a merge commit, and the post-commit hook deploys nothing for a merge,

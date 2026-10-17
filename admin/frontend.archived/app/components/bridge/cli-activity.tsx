@@ -4,6 +4,7 @@ import { api } from "~/lib/api"
 import { Badge } from "~/components/ui/badge"
 import { Card, CardContent } from "~/components/ui/card"
 import { Button } from "~/components/ui/button"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 interface CliEntry {
   id: string
@@ -78,30 +79,30 @@ export function CliActivity() {
 
       <Card>
         <CardContent className="p-0">
-          <table className="w-full text-xs">
-            <thead className="border-b border-border bg-surface text-left text-2xs uppercase tracking-wider text-text3">
-              <tr>
-                <th className="px-3 py-2">When</th>
-                <th className="px-3 py-2">Tool</th>
-                <th className="px-3 py-2">Agent</th>
-                <th className="px-3 py-2">Session</th>
-                <th className="px-3 py-2 text-right">Input</th>
-                <th className="px-3 py-2 text-right">Output</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>When</TableHead>
+                <TableHead>Tool</TableHead>
+                <TableHead>Agent</TableHead>
+                <TableHead>Session</TableHead>
+                <TableHead className="text-right">Input</TableHead>
+                <TableHead className="text-right">Output</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-border">
               {data.entries.map(e => (
-                <tr key={e.id} className="hover:bg-surface/50">
-                  <td className="px-3 py-2 text-text3">{fmtTime(e.created_at)}</td>
-                  <td className="px-3 py-2"><Badge variant="outline" className="text-2xs font-mono">{e.tool_name ?? e.intent ?? "—"}</Badge></td>
-                  <td className="px-3 py-2 text-text2">{e.source_agent ?? "—"}</td>
-                  <td className="px-3 py-2 font-mono text-text3">{e.chat_id ? e.chat_id.slice(0, 8) : "—"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-text2">{fmtBytes(e.input_bytes)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-text2">{fmtBytes(e.output_bytes)}</td>
-                </tr>
+                <TableRow key={e.id}>
+                  <TableCell className="text-text3">{fmtTime(e.created_at)}</TableCell>
+                  <TableCell><Badge variant="outline" className="text-2xs font-mono">{e.tool_name ?? e.intent ?? "—"}</Badge></TableCell>
+                  <TableCell className="text-text2">{e.source_agent ?? "—"}</TableCell>
+                  <TableCell className="font-mono text-text3">{e.chat_id ? e.chat_id.slice(0, 8) : "—"}</TableCell>
+                  <TableCell className="text-right tabular-nums text-text2">{fmtBytes(e.input_bytes)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-text2">{fmtBytes(e.output_bytes)}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 

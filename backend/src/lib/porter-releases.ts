@@ -22,6 +22,17 @@ export interface PorterRelease {
 
 export const PORTER_RELEASES: PorterRelease[] = [
   {
+    version: '6.164.1',
+    date: '2026-10-17',
+    title: 'Every status in the admin uses the same colours',
+    bullets: [
+      'Statuses, risk levels and decision types on the dashboard, Skills, Sessions, Decisions, Approvals, Message Bus, Decomposition, System and Env Tools now use the shared status badge.',
+      'The pale green, yellow and red text that was hard to read on the light theme is gone; the colours now come from Porter tokens.',
+      'Every table in the admin uses the same table component, so headers, spacing and row lines match.',
+      'The Sessions stat cards use the shared metric component, and the unused mail screen is deleted.',
+    ],
+  },
+  {
     version: '6.164.0',
     date: '2026-10-14',
     title: 'The avatar tool lists its choices',

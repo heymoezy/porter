@@ -1,3 +1,9 @@
+## 2026-10-17 - v6.164.1 - Every status in the admin uses the same colours
+
+Release P5 of `~/projects/_ops/design-system/RELEASES.md`. ~16 local status maps, the local badges and the
+sessions StatCard moved onto P4 (`StatusBadge`, `MiniMetric variant="card"`); all 26 raw tables on `ui/table`;
+mail-ops.tsx (dead) deleted. Ratchet 848 -> 528. Next Porter row: P6 (one token vocabulary).
+
 ## 2026-10-14 - v6.164.0 - The avatar tool lists its choices
 
 `GET /api/v1/portraits/options` (requireAuth) returns the renderer's own style lists, the colour fields and the

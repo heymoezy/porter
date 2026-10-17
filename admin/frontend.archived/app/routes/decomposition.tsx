@@ -1,9 +1,10 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
-import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { GitBranch, ChevronDown, ChevronRight, RefreshCw } from "lucide-react"
+import { StatusBadge } from "~/components/ui/status-badge"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -56,38 +57,26 @@ function truncate(s: string, len: number) {
   return s.length > len ? s.slice(0, len) + "..." : s
 }
 
-const STATUS_BADGE: Record<string, { cls: string }> = {
-  pending:   { cls: "bg-zinc-500/15 text-zinc-400 border-zinc-500/20" },
-  ready:     { cls: "bg-blue-500/15 text-blue-400 border-blue-500/20" },
-  running:   { cls: "bg-amber-500/15 text-amber-400 border-amber-500/20" },
-  completed: { cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" },
-  failed:    { cls: "bg-red-500/15 text-red-400 border-red-500/20" },
-  cancelled: { cls: "bg-zinc-500/15 text-zinc-400 border-zinc-500/20" },
-}
-
 // ── Subtask Row ────────────────────────────────────────
 
 function SubtaskRow({ subtask }: { subtask: Subtask }) {
-  const badge = STATUS_BADGE[subtask.status] ?? STATUS_BADGE.pending
 
   return (
     <>
-      <tr className="border-b border-border/30 hover:bg-surface/20 transition-colors">
-        <td className="px-4 py-2 text-text2">
+      <TableRow>
+        <TableCell className="px-4 text-text2">
           <span style={{ paddingLeft: `${subtask.depth * 20}px` }} className="inline-flex items-center gap-1.5">
             <GitBranch className="size-3 text-text3 shrink-0" />
             <span className="text-xs">{subtask.description}</span>
           </span>
-        </td>
-        <td className="px-4 py-2">
-          <Badge variant="outline" className={`text-2xs ${badge.cls}`}>
-            {subtask.status}
-          </Badge>
-        </td>
-        <td className="px-4 py-2 text-2xs text-text3">{subtask.assigned_agent || "--"}</td>
-        <td className="px-4 py-2 text-2xs text-text3">{subtask.gateway || "--"}</td>
-        <td className="px-4 py-2 text-2xs text-text3 tabular-nums text-right">{fmtDuration(subtask.duration_ms)}</td>
-      </tr>
+        </TableCell>
+        <TableCell className="px-4">
+          <StatusBadge status={subtask.status} />
+        </TableCell>
+        <TableCell className="px-4 text-2xs text-text3">{subtask.assigned_agent || "--"}</TableCell>
+        <TableCell className="px-4 text-2xs text-text3">{subtask.gateway || "--"}</TableCell>
+        <TableCell className="px-4 text-2xs text-text3 tabular-nums text-right">{fmtDuration(subtask.duration_ms)}</TableCell>
+      </TableRow>
       {subtask.children?.map(child => (
         <SubtaskRow key={child.id} subtask={child} />
       ))}
@@ -99,7 +88,6 @@ function SubtaskRow({ subtask }: { subtask: Subtask }) {
 
 function RootRow({ task }: { task: RootTask }) {
   const [expanded, setExpanded] = useState(false)
-  const badge = STATUS_BADGE[task.status] ?? STATUS_BADGE.pending
 
   const tree = useQuery({
     queryKey: ["decomposition", "tree", task.id],
@@ -111,56 +99,54 @@ function RootRow({ task }: { task: RootTask }) {
 
   return (
     <>
-      <tr
-        className="border-b border-border/50 hover:bg-surface/30 transition-colors cursor-pointer"
+      <TableRow
+        className="cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
-        <td className="px-4 py-2.5 text-foreground">
+        <TableCell className="px-4 py-2.5 text-foreground">
           <span className="inline-flex items-center gap-1.5">
             {expanded
               ? <ChevronDown className="size-3.5 text-text3 shrink-0" />
               : <ChevronRight className="size-3.5 text-text3 shrink-0" />}
             <span className="line-clamp-1">{truncate(task.description, 80)}</span>
           </span>
-        </td>
-        <td className="px-4 py-2.5">
-          <Badge variant="outline" className={`text-2xs ${badge.cls}`}>
-            {task.status}
-          </Badge>
-        </td>
-        <td className="px-4 py-2.5 text-text3 tabular-nums text-right">{task.subtask_count}</td>
-        <td className="px-4 py-2.5 tabular-nums text-right">
-          <span className="text-emerald-400">{task.completed_count}</span>
-        </td>
-        <td className="px-4 py-2.5 tabular-nums text-right">
-          <span className={task.failed_count > 0 ? "text-red-400" : "text-text3"}>{task.failed_count}</span>
-        </td>
-        <td className="px-4 py-2.5 text-text3 tabular-nums">{fmtRel(task.created_at)}</td>
-      </tr>
+        </TableCell>
+        <TableCell className="px-4 py-2.5">
+          <StatusBadge status={task.status} />
+        </TableCell>
+        <TableCell className="px-4 py-2.5 text-text3 tabular-nums text-right">{task.subtask_count}</TableCell>
+        <TableCell className="px-4 py-2.5 tabular-nums text-right">
+          <span className="text-success">{task.completed_count}</span>
+        </TableCell>
+        <TableCell className="px-4 py-2.5 tabular-nums text-right">
+          <span className={task.failed_count > 0 ? "text-danger" : "text-text3"}>{task.failed_count}</span>
+        </TableCell>
+        <TableCell className="px-4 py-2.5 text-text3 tabular-nums">{fmtRel(task.created_at)}</TableCell>
+      </TableRow>
 
       {/* Expanded subtask tree */}
       {expanded && (
         tree.isLoading ? (
-          <tr>
-            <td colSpan={6} className="px-4 py-4">
+          <TableRow>
+            <TableCell colSpan={6} className="px-4 py-4">
               <div className="flex items-center justify-center">
                 <div className="size-4 animate-spin rounded-full border-2 border-accent-porter border-t-transparent" />
               </div>
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         ) : subtasks.length === 0 ? (
-          <tr>
-            <td colSpan={6} className="px-8 py-3 text-2xs text-text3">No subtasks</td>
-          </tr>
+          <TableRow>
+            <TableCell colSpan={6} className="px-8 py-3 text-2xs text-text3">No subtasks</TableCell>
+          </TableRow>
         ) : (
           <>
-            <tr className="bg-surface/20">
-              <td className="px-4 py-1.5 text-2xs font-medium text-text3">Subtask</td>
-              <td className="px-4 py-1.5 text-2xs font-medium text-text3">Status</td>
-              <td className="px-4 py-1.5 text-2xs font-medium text-text3">Agent</td>
-              <td className="px-4 py-1.5 text-2xs font-medium text-text3">Gateway</td>
-              <td className="px-4 py-1.5 text-2xs font-medium text-text3 text-right">Duration</td>
-            </tr>
+            <TableRow className="bg-surface/20">
+              <TableCell className="px-4 py-1.5 text-2xs font-medium text-text3">Subtask</TableCell>
+              <TableCell className="px-4 py-1.5 text-2xs font-medium text-text3">Status</TableCell>
+              <TableCell className="px-4 py-1.5 text-2xs font-medium text-text3">Agent</TableCell>
+              <TableCell className="px-4 py-1.5 text-2xs font-medium text-text3">Gateway</TableCell>
+              <TableCell className="px-4 py-1.5 text-2xs font-medium text-text3 text-right">Duration</TableCell>
+            </TableRow>
             {subtasks.map(st => (
               <SubtaskRow key={st.id} subtask={st} />
             ))}
@@ -208,7 +194,7 @@ export default function DecompositionPage() {
       {/* Error */}
       {isError && (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <p className="text-sm text-red-400">{(error as Error)?.message || "Failed to load tasks"}</p>
+          <p className="text-sm text-danger">{(error as Error)?.message || "Failed to load tasks"}</p>
           <button onClick={() => refetch()} className="text-sm text-accent-porter hover:underline">
             Retry
           </button>
@@ -228,23 +214,23 @@ export default function DecompositionPage() {
       {!isLoading && !isError && tasks.length > 0 && (
         <div className="rounded-lg border border-border overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-surface/50">
-                  <th className="text-left font-medium text-text3 px-4 py-2.5">Description</th>
-                  <th className="text-left font-medium text-text3 px-4 py-2.5">Status</th>
-                  <th className="text-right font-medium text-text3 px-4 py-2.5">Subtasks</th>
-                  <th className="text-right font-medium text-text3 px-4 py-2.5">Done</th>
-                  <th className="text-right font-medium text-text3 px-4 py-2.5">Failed</th>
-                  <th className="text-left font-medium text-text3 px-4 py-2.5">Created</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table size="sm">
+              <TableHeader>
+                <TableRow className="bg-surface/50">
+                  <TableHead className="px-4 py-2.5">Description</TableHead>
+                  <TableHead className="px-4 py-2.5">Status</TableHead>
+                  <TableHead className="text-right px-4 py-2.5">Subtasks</TableHead>
+                  <TableHead className="text-right px-4 py-2.5">Done</TableHead>
+                  <TableHead className="text-right px-4 py-2.5">Failed</TableHead>
+                  <TableHead className="px-4 py-2.5">Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {tasks.map(t => (
                   <RootRow key={t.id} task={t} />
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}

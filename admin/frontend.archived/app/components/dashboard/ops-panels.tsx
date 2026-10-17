@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { api } from "~/lib/api"
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card"
-import { Badge } from "~/components/ui/badge"
 import { Radio, BarChart3 } from "lucide-react"
+import { StatusBadge } from "~/components/ui/status-badge"
 
 interface MsgBusStats {
   total: number
@@ -19,17 +19,10 @@ interface ConfidenceEntry {
   recent_avg: number
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  sent: "bg-blue-500/15 text-blue-400",
-  delivered: "bg-green-500/15 text-green-400",
-  failed: "bg-red-500/15 text-red-400",
-  pending: "bg-yellow-500/15 text-yellow-400",
-}
-
 function scoreColor(score: number): string {
-  if (score >= 4) return "bg-green-400"
-  if (score >= 3) return "bg-yellow-400"
-  return "bg-red-400"
+  if (score >= 4) return "bg-success"
+  if (score >= 3) return "bg-warning"
+  return "bg-danger"
 }
 
 export function OpsPanel() {
@@ -58,7 +51,7 @@ export function OpsPanel() {
         {/* Message Bus */}
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
-            <Radio className="size-3 text-blue-400" />
+            <Radio className="size-3 text-info" />
             <span className="text-2xs font-semibold text-[var(--foreground,#f6f8fb)]">Message Bus</span>
           </div>
           {busData ? (
@@ -73,9 +66,7 @@ export function OpsPanel() {
               </div>
               <div className="flex flex-wrap gap-1">
                 {busData.byStatus.map((s) => (
-                  <Badge key={s.status} className={`text-2xs px-1.5 py-0 ${STATUS_COLORS[s.status] ?? "bg-[var(--raised,#2b3444)] text-[var(--text3,#8a95a8)]"}`}>
-                    {s.status} {s.count}
-                  </Badge>
+                  <StatusBadge key={s.status} status={s.status} label={`${s.status} ${s.count}`} className="px-1.5 py-0" />
                 ))}
               </div>
             </>
@@ -89,7 +80,7 @@ export function OpsPanel() {
         {/* Routing Confidence */}
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
-            <BarChart3 className="size-3 text-green-400" />
+            <BarChart3 className="size-3 text-success" />
             <span className="text-2xs font-semibold text-[var(--foreground,#f6f8fb)]">Routing</span>
           </div>
           {entries.length > 0 ? (

@@ -12,6 +12,7 @@ import { SkillEffectivenessBar } from "~/components/skill-effectiveness-bar"
 import {
   ChevronUp, ChevronDown, X, Lock, Search, Zap, Plus,
 } from "lucide-react"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // ── Types ────────────────────────────────────────────────
 
@@ -238,22 +239,22 @@ export function TemplateSkillsTab({ templateId }: TemplateSkillsTabProps) {
             No skills assigned to this template yet.
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border/50 bg-muted/50 text-left">
-                <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 w-6">#</th>
-                <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3">Skill</th>
-                <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 w-[180px]">Rationale</th>
-                <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 w-16 text-center">Req</th>
-                <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 w-16 text-center">Order</th>
-                <th className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-text3 w-8" />
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="py-1.5 w-6">#</TableHead>
+                <TableHead className="py-1.5">Skill</TableHead>
+                <TableHead className="py-1.5 w-[180px]">Rationale</TableHead>
+                <TableHead className="py-1.5 w-16 text-center">Req</TableHead>
+                <TableHead className="py-1.5 w-16 text-center">Order</TableHead>
+                <TableHead className="py-1.5 w-8" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {skills.map((skill, idx) => (
-                <tr key={skill.skill_id} className="border-b border-border/20 last:border-0">
-                  <td className="px-3 py-2 text-2xs text-text3">{idx + 1}</td>
-                  <td className="px-3 py-2">
+                <TableRow key={skill.skill_id}>
+                  <TableCell className="text-2xs text-text3">{idx + 1}</TableCell>
+                  <TableCell>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {skill.is_mandatory === 1 && (
                         <Lock className="size-3 text-warning shrink-0" />
@@ -269,8 +270,8 @@ export function TemplateSkillsTab({ templateId }: TemplateSkillsTabProps) {
                     {skill.description && (
                       <p className="text-2xs text-text3 truncate max-w-[240px] mt-0.5">{skill.description}</p>
                     )}
-                  </td>
-                  <td className="px-3 py-2">
+                  </TableCell>
+                  <TableCell>
                     {editingSkillId === skill.skill_id ? (
                       <Input
                         autoFocus
@@ -292,15 +293,15 @@ export function TemplateSkillsTab({ templateId }: TemplateSkillsTabProps) {
                         {skill.assignment_rationale || <span className="italic opacity-50">add rationale...</span>}
                       </span>
                     )}
-                  </td>
-                  <td className="px-3 py-2 text-center">
+                  </TableCell>
+                  <TableCell className="text-center">
                     <Switch
                       checked={skill.is_mandatory === 1}
                       onCheckedChange={checked => handleMandatoryToggle(skill, checked)}
                       className="scale-75"
                     />
-                  </td>
-                  <td className="px-3 py-2">
+                  </TableCell>
+                  <TableCell>
                     <div className="flex items-center gap-0.5 justify-center">
                       <button
                         className="flex items-center justify-center size-5 rounded text-text3 hover:text-foreground hover:bg-raised disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
@@ -319,8 +320,8 @@ export function TemplateSkillsTab({ templateId }: TemplateSkillsTabProps) {
                         <ChevronDown className="size-3" />
                       </button>
                     </div>
-                  </td>
-                  <td className="px-3 py-2">
+                  </TableCell>
+                  <TableCell>
                     <button
                       className="flex items-center justify-center size-5 rounded text-text3 hover:text-danger hover:bg-danger/10 transition-colors"
                       onClick={() => detachMutation.mutate(skill.skill_id)}
@@ -328,11 +329,11 @@ export function TemplateSkillsTab({ templateId }: TemplateSkillsTabProps) {
                     >
                       <X className="size-3" />
                     </button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </Card>
 

@@ -7,6 +7,7 @@ import { Input } from "~/components/ui/input"
 import { MiniMetric } from "~/components/ui/mini-metric"
 import { AreaChart } from "~/components/ui/area-chart"
 import { XCircle, TrendingUp, Server, Cpu, Users, FolderOpen, Bot } from "lucide-react"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "~/components/ui/table"
 
 // ── Types ──────────────────────────────────────────────
 
@@ -234,43 +235,43 @@ export function CostAnalytics() {
             <Server className="size-3 text-accent-porter" />
             <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Cost by Gateway</span>
           </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border/50 bg-surface text-left">
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3">Gateway</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Dispatches</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Cost</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Share</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Gateway</TableHead>
+                <TableHead className="text-right">Dispatches</TableHead>
+                <TableHead className="text-right">Cost</TableHead>
+                <TableHead className="text-right">Share</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {byGateway.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-3 py-6 text-center text-xs text-text3">No gateway cost data</td>
-                </tr>
+                <TableRow>
+                  <TableCell colSpan={4} className="py-6 text-center text-xs text-text3">No gateway cost data</TableCell>
+                </TableRow>
               ) : (
                 byGateway.map((row, idx) => {
                   const pct = totalGatewayCost > 0 ? (row.total_cost_usd / totalGatewayCost * 100) : 0
                   return (
-                    <tr key={idx} className="border-b border-border/20 last:border-0">
-                      <td className="px-3 py-2">
+                    <TableRow key={idx}>
+                      <TableCell>
                         <span className="text-xs font-medium text-text">{row.gateway_type}</span>
-                      </td>
-                      <td className="px-3 py-2 text-right">
+                      </TableCell>
+                      <TableCell className="text-right">
                         <span className="text-xs tabular-nums text-text2">{row.dispatch_count}</span>
-                      </td>
-                      <td className="px-3 py-2 text-right">
+                      </TableCell>
+                      <TableCell className="text-right">
                         <span className="text-xs tabular-nums text-warning">{fmtCost(row.total_cost_usd)}</span>
-                      </td>
-                      <td className="px-3 py-2 text-right">
+                      </TableCell>
+                      <TableCell className="text-right">
                         <ShareBar pct={pct} />
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )
                 })
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
         {/* By Model */}
@@ -279,47 +280,47 @@ export function CostAnalytics() {
             <Cpu className="size-3 text-accent-porter" />
             <span className="text-2xs font-semibold uppercase tracking-wide text-text3">Cost by Model</span>
           </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border/50 bg-surface text-left">
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3">Model</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3">Gateway</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Dispatches</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Cost</th>
-                <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Share</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Model</TableHead>
+                <TableHead>Gateway</TableHead>
+                <TableHead className="text-right">Dispatches</TableHead>
+                <TableHead className="text-right">Cost</TableHead>
+                <TableHead className="text-right">Share</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {byModel.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-xs text-text3">No model cost data</td>
-                </tr>
+                <TableRow>
+                  <TableCell colSpan={5} className="py-6 text-center text-xs text-text3">No model cost data</TableCell>
+                </TableRow>
               ) : (
                 byModel.map((row, idx) => {
                   const pct = totalModelCost > 0 ? (row.total_cost_usd / totalModelCost * 100) : 0
                   return (
-                    <tr key={idx} className="border-b border-border/20 last:border-0">
-                      <td className="px-3 py-2">
+                    <TableRow key={idx}>
+                      <TableCell>
                         <span className="text-xs font-medium text-text">{row.model_name}</span>
-                      </td>
-                      <td className="px-3 py-2">
+                      </TableCell>
+                      <TableCell>
                         <span className="text-xs text-text2">{row.gateway_type}</span>
-                      </td>
-                      <td className="px-3 py-2 text-right">
+                      </TableCell>
+                      <TableCell className="text-right">
                         <span className="text-xs tabular-nums text-text2">{row.dispatch_count}</span>
-                      </td>
-                      <td className="px-3 py-2 text-right">
+                      </TableCell>
+                      <TableCell className="text-right">
                         <span className="text-xs tabular-nums text-warning">{fmtCost(row.total_cost_usd)}</span>
-                      </td>
-                      <td className="px-3 py-2 text-right">
+                      </TableCell>
+                      <TableCell className="text-right">
                         <ShareBar pct={pct} />
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )
                 })
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
 
@@ -356,63 +357,63 @@ export function CostAnalytics() {
             </Button>
           </div>
         </div>
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border/50 bg-surface text-left">
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>
                 {groupBy === "agent" ? "Agent" : groupBy === "project" ? "Project" : "User"}
-              </th>
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Dispatches</th>
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Cost</th>
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Tokens In</th>
-              <th className="px-3 py-2 text-2xs font-semibold uppercase text-text3 text-right">Tokens Out</th>
-            </tr>
-          </thead>
-          <tbody>
+              </TableHead>
+              <TableHead className="text-right">Dispatches</TableHead>
+              <TableHead className="text-right">Cost</TableHead>
+              <TableHead className="text-right">Tokens In</TableHead>
+              <TableHead className="text-right">Tokens Out</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {attrQuery.isLoading ? (
-              <tr className="border-b border-border/20">
+              <TableRow>
                 {[48, 16, 20, 16, 16].map((w, i) => (
-                  <td key={i} className="px-3 py-2">
+                  <TableCell key={i}>
                     <div className={`h-3 w-${w} rounded bg-muted animate-pulse`} />
-                  </td>
+                  </TableCell>
                 ))}
-              </tr>
+              </TableRow>
             ) : attrRows.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-xs text-text3">
+              <TableRow>
+                <TableCell colSpan={5} className="py-6 text-center text-xs text-text3">
                   No attribution data — dispatch some requests first
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               attrRows.map((row, idx) => {
                 const pct = totalAttrCost > 0 ? (row.total_cost_usd / totalAttrCost * 100) : 0
                 return (
-                  <tr key={idx} className="border-b border-border/20 last:border-0">
-                    <td className="px-3 py-2">
+                  <TableRow key={idx}>
+                    <TableCell>
                       {row.group_key ? (
                         <span className="text-xs font-medium text-text font-mono">{row.group_key}</span>
                       ) : (
                         <span className="text-xs text-text3 italic">unknown</span>
                       )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
+                    </TableCell>
+                    <TableCell className="text-right">
                       <span className="text-xs tabular-nums text-text2">{row.dispatch_count}</span>
-                    </td>
-                    <td className="px-3 py-2 text-right">
+                    </TableCell>
+                    <TableCell className="text-right">
                       <span className="text-xs tabular-nums text-warning">{fmtCost(row.total_cost_usd)}</span>
-                    </td>
-                    <td className="px-3 py-2 text-right">
+                    </TableCell>
+                    <TableCell className="text-right">
                       <span className="text-xs tabular-nums text-text2">{fmtTokens(row.total_input_tokens)}</span>
-                    </td>
-                    <td className="px-3 py-2 text-right">
+                    </TableCell>
+                    <TableCell className="text-right">
                       <span className="text-xs tabular-nums text-text2">{fmtTokens(row.total_output_tokens)}</span>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )
               })
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
         {!attrQuery.isLoading && attrRows.length > 0 && (
           <div className="px-3 py-1.5 bg-surface border-t border-border flex items-center gap-2">
             <span className="text-2xs text-text3">
