@@ -1,3 +1,8 @@
+
+## Grok — Claude CLI adapter flags — 2026-09-15 — IN FLIGHT
+Worktree ~/.worktrees/porter-claude-flags, branch session/claude-cli-flags. PATCH 6.160.9.
+Spawn ENOENT no longer crashes Porter; permission-mode probed from --help.
+
 # Porter — Active Sessions
 
 ## R1 release-kit skeleton — unified release system (Opus 4.8 1M) — 2026-07-08 (SGT)
@@ -1336,3 +1341,17 @@
 - Porter tsc 0. Restarted and verified: forge tables do NOT come back, 9 personas remain, 0 dispatches.
 - Status: **DONE** — NOT committed. Other sessions have uncommitted work in this repo; operator runs
   the ship ceremony.
+
+## 2026-09-19 — local-llm-gateway — local_llm Bridge gateway (Ollama qwen3:4b-instruct), opt-in only — DONE (v6.161.0)
+Worktree ~/.worktrees/porter-local-llm, branch session/local-llm-gateway.
+Files: backend/src/services/bridge/{types.ts,adapters/local-llm.ts [NEW],adapters/index.ts,capability-registry.ts,startup-detector.ts,failover.ts}, backend/src/config.ts, backend/package.json, CHECKPOINT.md.
+
+## 2026-09-25 — drop-openclaw — remove OpenClaw from Porter runtime — DONE (v6.162.4, landed 8e1c4de4)
+Worktree ~/.worktrees/porter-drop-openclaw, branch session/drop-openclaw.
+
+## 2026-10-14 — lifelike-portraits — avatar renderer rebuild (P1) — done (v6.163.0, landed eb6ed67b)
+Worktree ~/.worktrees/porter-portraits, branch session/lifelike-portraits.
+Files: backend/src/lib/portrait.ts [NEW], backend/src/routes/v1/portraits.ts [NEW], admin/frontend.archived/app/components/pixel-portrait*.tsx, admin call sites, backend/package.json, CHECKPOINT.md, CHANGELOG.md.
+
+## 2026-10-17 — porter-ds2 — DS P5 status colours — DONE (v6.164.1, landed 93536777)
+Worktree ~/.worktrees/porter-ds2, branch session/porter-ds2.
